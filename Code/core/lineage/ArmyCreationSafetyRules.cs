@@ -12,5 +12,11 @@ namespace AncientWarfare3.core.lineage
         {
             return objectAllocated && !initializationSucceeded;
         }
+
+        public static bool ShouldDetachCityReference(bool isSpecialArmy,
+            bool usesDetachedRole)
+        {
+            return isSpecialArmy && usesDetachedRole;
+        }
     }
 }

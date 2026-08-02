@@ -236,41 +236,21 @@ namespace AncientWarfare3.core.lineage
                 state.StartTime, pNow);
             bool deadlineReached = pNow >= state.DeadlineTime;
             bool confirmedExhausted = false;
+            Kingdom kingdom = SafeKingdom(army);
+            City preferredCity = FindCity(state.SourceCityId);
             if (requested > 0)
             {
-                Kingdom kingdom = SafeKingdom(army);
-                City preferredCity = FindCity(state.SourceCityId);
                 var candidates = new List<Actor>(requested);
-                if (!deadlineReached)
-                {
-                    CityReservePoolService.TryConsumeBatch(kingdom,
-                        preferredCity, requested, army, candidates,
-                        out confirmedExhausted);
-                }
-                else
-                {
-                    int previousAvailable = CityReservePoolService.
-                        CountAvailable(kingdom);
-                    while (candidates.Count < requested)
-                    {
-                        int added = CityReservePoolService.TryConsumeBatch(
-                            kingdom, preferredCity,
-                            requested - candidates.Count, army, candidates,
-                            out confirmedExhausted);
-                        if (candidates.Count >= requested ||
-                            confirmedExhausted) break;
-                        int available = CityReservePoolService.CountAvailable(
-                            kingdom);
-                        if (added <= 0 && available >= previousAvailable)
-                            break;
-                        previousAvailable = available;
-                    }
-                }
+                CityReservePoolService.TryConsumeFromSourceCity(kingdom,
+                    preferredCity, requested, army, candidates,
+                    out confirmedExhausted);
 
                 int enlisted = TemporaryLevyService.EnlistReserveActors(
                     kingdom, preferredCity, army, candidates,
                     preparationRecruitment: false,
                     pTrackReplenishmentArrival: false);
+                CityReservePoolService.RestoreRejectedCandidates(kingdom,
+                    preferredCity, army, candidates);
                 if (enlisted > 0)
                 {
                     state.EnlistedCount =
@@ -290,13 +270,16 @@ namespace AncientWarfare3.core.lineage
                 Clear(army);
                 return;
             }
-            if (ArmyReplenishmentOperationRules.ShouldFinishEarly(
-                    liveShortage) || deadlineReached)
+            bool reservesConfirmedExhausted = confirmedExhausted ||
+                deadlineReached && CityReservePoolService.
+                    CountAvailable(preferredCity) <= 0;
+            if (ArmyReplenishmentOperationRules.ShouldFinish(
+                    liveShortage <= 0, reservesConfirmedExhausted,
+                    deadlineReached))
             {
-                if (deadlineReached && liveShortage > 0 &&
-                    confirmedExhausted)
+                if (liveShortage > 0 && reservesConfirmedExhausted)
                     TemporaryLevyService.RecordConfirmedReserveExhaustion(
-                        SafeKingdom(army), army, liveShortage);
+                        kingdom, army, liveShortage);
                 Clear(army);
                 ArmyReplenishmentCompletionService.Complete(army);
             }

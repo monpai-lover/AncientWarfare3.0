@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.multiplayer
 {
@@ -42,6 +43,7 @@ namespace AncientWarfare3.core.multiplayer
                 _generatedWorldQueued = false;
                 _strictDispatchDepth = 0;
             }
+            CityReservePoolService.EndWorldLoadRestore();
         }
 
         internal static AW3MultiplayerWorldLoadStartResult
@@ -166,6 +168,7 @@ namespace AncientWarfare3.core.multiplayer
                 _normalWorldDataQueued = false;
                 _generatedWorldQueued = true;
             }
+            CityReservePoolService.EndWorldLoadRestore();
         }
 
         private static void OnWorldLoaded()
@@ -214,6 +217,7 @@ namespace AncientWarfare3.core.multiplayer
                         operation.Snapshot.OperationId + ": " + error);
                     operation.FailAw3Restore(
                         "runtime_restore: " + error.Message);
+                    CityReservePoolService.EndWorldLoadRestore();
                     return;
                 }
                 if (result.Success)
@@ -223,7 +227,10 @@ namespace AncientWarfare3.core.multiplayer
                         if (!ReferenceEquals(_operation, operation) ||
                             operation.Snapshot.State !=
                             AW3MultiplayerWorldLoadState.RestoringAw3)
+                        {
+                            CityReservePoolService.EndWorldLoadRestore();
                             return;
+                        }
                         try
                         {
                             AWAsyncWorldLifecycle.StartWorld();
@@ -238,6 +245,7 @@ namespace AncientWarfare3.core.multiplayer
                 }
                 else
                     operation.FailAw3Restore(RestoreFailureDetail(result));
+                CityReservePoolService.EndWorldLoadRestore();
                 return;
             }
 
@@ -248,6 +256,7 @@ namespace AncientWarfare3.core.multiplayer
                         strict: false);
                 if (result.Success) AWAsyncWorldLifecycle.StartWorld();
                 LogNormalFailure("generated world", result);
+                CityReservePoolService.EndWorldLoadRestore();
                 return;
             }
 
@@ -259,6 +268,7 @@ namespace AncientWarfare3.core.multiplayer
                 if (result.Success) AWAsyncWorldLifecycle.StartWorld();
                 LogNormalFailure("save load", result);
             }
+            CityReservePoolService.EndWorldLoadRestore();
         }
 
         private static void LogNormalFailure(string context,

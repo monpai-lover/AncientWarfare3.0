@@ -210,8 +210,18 @@ namespace AncientWarfare3.core.lineage
                 if (own < target * 1.25f) continue;
                 bool diplomaticBlocked = DiplomacyProposalService.
                     HasActiveWarBlocker(pKingdom, other);
-                if (!WarAiGoalSelectionRules.ShouldLaunchDedicatedSubjugationWar(
-                        ResolvePeopleRelation(pKingdom, other),
+                WarAiPeopleRelation relation = ResolvePeopleRelation(
+                    pKingdom, other);
+                SamePeopleWarRoute route = SamePeopleWarIntentRules.Resolve(
+                    relation, pKingdom.id, other.id, Date.getCurrentYear(),
+                    WarClaimPreparationService.IsLockedTo(pKingdom, other));
+                bool samePeopleRoute = route ==
+                                           SamePeopleWarRoute.Territorial ||
+                                       route == SamePeopleWarRoute
+                                           .SubjugationCompetition;
+                if (!samePeopleRoute &&
+                    !WarAiGoalSelectionRules.ShouldLaunchDedicatedSubjugationWar(
+                        relation,
                         directlyAdjacent: true, attackerIsSubject: false,
                         targetIndependent, diplomaticBlocked, own / target))
                     continue;
@@ -272,7 +282,8 @@ namespace AncientWarfare3.core.lineage
             if (pAttacker == pDefender || pAttacker.hasEnemies() || pDefender.hasEnemies()) return false;
             if (pWarType != "independence_war" &&
                 !KingdomAdjacency.AreDirectNeighbors(pAttacker, pDefender)) return false;
-            if (DiplomaticWarDeclarationService.HasPending(pAttacker))
+            if (DiplomaticWarDeclarationService.HasPendingForPair(
+                    pAttacker, pDefender))
                 return false;
 
             try
@@ -290,6 +301,20 @@ namespace AncientWarfare3.core.lineage
         private static bool StartSubjugationWar(Kingdom pAttacker,
             Kingdom pDefender, CourtSnapshot pCourt)
         {
+            WarAiPeopleRelation relation = ResolvePeopleRelation(pAttacker,
+                pDefender);
+            SamePeopleWarRoute route = SamePeopleWarIntentRules.Resolve(
+                relation, pAttacker.id, pDefender.id,
+                Date.getCurrentYear(),
+                WarClaimPreparationService.IsLockedTo(pAttacker,
+                    pDefender));
+            if (route == SamePeopleWarRoute.Territorial)
+            {
+                WarClaimPreparationService.TryBeginWeakClaim(pAttacker,
+                    pDefender);
+                return false;
+            }
+
             float own = Math.Max(1f, VassalService.GetWarPowerScore(
                 pAttacker, pIncludeVassals: true));
             float target = Math.Max(1f, VassalService.GetWarPowerScore(
@@ -315,8 +340,6 @@ namespace AncientWarfare3.core.lineage
                     pAttacker),
                 targetTitleRank: (int)KingdomTitleService.GetTitle(
                     pDefender));
-            WarAiPeopleRelation relation = ResolvePeopleRelation(pAttacker,
-                pDefender);
             int currentSubjectCount = VassalService.GetVassals(pAttacker,
                 pRecursive: true).Count;
             int subjectSoftCap = CourtInstitutionEffectService.Read(pAttacker)

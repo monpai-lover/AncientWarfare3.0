@@ -4,6 +4,21 @@ using HarmonyLib;
 
 namespace AncientWarfare3.patch
 {
+    internal readonly struct OccupationResistancePatchState
+    {
+        public OccupationResistancePatchState(bool pActive,
+            float pBefore, float pResistance)
+        {
+            Active = pActive;
+            Before = pBefore;
+            Resistance = pResistance;
+        }
+
+        public bool Active { get; }
+        public float Before { get; }
+        public float Resistance { get; }
+    }
+
     internal readonly struct RebellionDirectCaptureState
     {
         public RebellionDirectCaptureState(Kingdom pOldOwner,
@@ -24,10 +39,18 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_CityOccupationAccelerationPatch
     {
+        [System.ThreadStatic] private static City _captureResistanceCity;
+        [System.ThreadStatic] private static float _captureBefore;
+        [System.ThreadStatic] private static float _captureResistance;
+        [System.ThreadStatic] private static bool _finishAdjusted;
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(City), "updateCapture")]
-        public static bool UpdateCapture_Prefix(City __instance, float pElapsed)
+        public static bool UpdateCapture_Prefix(City __instance,
+            float pElapsed, out OccupationResistancePatchState __state)
         {
+            __state = default;
+            ClearCaptureResistanceContext();
             long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
@@ -35,6 +58,21 @@ namespace AncientWarfare3.patch
                     return false;
                 if (WarScoreService.ShouldHoldFrozenOccupation(__instance))
                     return false;
+                Kingdom defender = __instance?.kingdom;
+                if (defender?.data != null && !defender.isRekt())
+                {
+                    float resistance = KingdomPolicyEffectService
+                        .Read(defender).OccupationResistance;
+                    if (resistance > 0f)
+                    {
+                        float before = __instance.getCaptureTicks();
+                        __state = new OccupationResistancePatchState(
+                            pActive: true, before, resistance);
+                        _captureResistanceCity = __instance;
+                        _captureBefore = before;
+                        _captureResistance = resistance;
+                    }
+                }
                 return true;
             }
             finally
@@ -46,9 +84,29 @@ namespace AncientWarfare3.patch
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(City), "updateCapture")]
-        public static void UpdateCapture_Postfix(City __instance)
+        public static void UpdateCapture_Postfix(City __instance,
+            OccupationResistancePatchState __state)
         {
-            KingdomWarDirectorService.OnCityThreatStateObserved(__instance);
+            try
+            {
+                if (__state.Active && !_finishAdjusted &&
+                    __instance?.data != null)
+                {
+                    float current = __instance.getCaptureTicks();
+                    float adjusted = __state.Before +
+                        CityOccupationAccelerationRules.ApplyResistance(
+                            current - __state.Before,
+                            __state.Resistance);
+                    CityOccupationAccelerationService.TrySetCaptureProgress(
+                        __instance, adjusted);
+                }
+                KingdomWarDirectorService.OnCityThreatStateObserved(
+                    __instance);
+            }
+            finally
+            {
+                ClearCaptureResistanceContext();
+            }
         }
 
         [HarmonyPostfix]
@@ -119,8 +177,29 @@ namespace AncientWarfare3.patch
             Kingdom oldOwner = __instance?.kingdom;
             __state = new RebellionDirectCaptureState(oldOwner,
                 pNewKingdom, -1L, pDirect: false);
+            if (_captureResistanceCity == __instance &&
+                _captureResistance > 0f)
+            {
+                float current = __instance.getCaptureTicks();
+                float adjusted = _captureBefore +
+                    CityOccupationAccelerationRules.ApplyResistance(
+                        current - _captureBefore, _captureResistance);
+                _finishAdjusted = true;
+                CityOccupationAccelerationService.TrySetCaptureProgress(
+                    __instance, adjusted);
+                if (adjusted < 100f) return false;
+            }
             if (!CityOccupationAccelerationService.HasReachedNaturalCaptureLimit(__instance))
                 return false;
+            if (ZhuluWarService.TryResolveCaptureRecipient(__instance,
+                    pNewKingdom, out War zhuluWar,
+                    out Kingdom principal))
+            {
+                pNewKingdom = principal;
+                __state = new RebellionDirectCaptureState(oldOwner,
+                    principal, zhuluWar.data.id, pDirect: true);
+                return true;
+            }
             if (RebellionDirectTerritoryTransferService.TryResolve(
                     __instance, pNewKingdom, out War rebellionWar))
             {
@@ -201,10 +280,24 @@ namespace AncientWarfare3.patch
             ref Kingdom pNewSetKingdom, bool pCaptured)
         {
             if (!pCaptured) return;
+            if (ZhuluWarService.TryResolveCaptureRecipient(__instance,
+                    pNewSetKingdom, out _, out Kingdom principal))
+            {
+                pNewSetKingdom = principal;
+                return;
+            }
             if (RebellionDirectTerritoryTransferService.TryResolve(
                     __instance, pNewSetKingdom, out _)) return;
             pNewSetKingdom = VassalCaptureService.ResolveCaptureRecipient(
                 __instance, pNewSetKingdom);
+        }
+
+        private static void ClearCaptureResistanceContext()
+        {
+            _captureResistanceCity = null;
+            _captureBefore = 0f;
+            _captureResistance = 0f;
+            _finishAdjusted = false;
         }
     }
 }

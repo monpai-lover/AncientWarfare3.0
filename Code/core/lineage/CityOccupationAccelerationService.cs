@@ -22,6 +22,22 @@ namespace AncientWarfare3.core.lineage
             PendingSettlementByCity.Clear();
         }
 
+        internal static bool TrySetCaptureProgress(City pCity,
+            float pProgress)
+        {
+            if (pCity == null || CaptureTicksField == null) return false;
+            try
+            {
+                CaptureTicksField.SetValue(pCity,
+                    Math.Max(0f, Math.Min(100f, pProgress)));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static void ClearActiveMilitaryPresence(City pCity)
         {
             if (pCity?.data == null) return;

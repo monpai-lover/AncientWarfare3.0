@@ -470,11 +470,16 @@ namespace AncientWarfare3.core.lineage
                 if (!_active.TryGetValue(pWarId, out WarScoreSnapshot current))
                     return false;
                 WarScoreSnapshot rewarded = current.CloneCanonical();
+                int battleDelta = WarScoreRules.BattleDelta(pWinnerSide,
+                    pIntensity);
+                rewarded.BattleScore = WarScoreRules.ClampBattleScore(
+                    rewarded.BattleScore + battleDelta);
                 int requested = WarVictoryExhaustionRules.BattleRelief(
                     pIntensity);
                 int applied = ApplyReliefAward(rewarded, pWinnerSide,
                     requested);
                 RecalculateLossesAndExhaustion(rewarded);
+                RecalculateTotal(rewarded);
                 Touch(rewarded, pWorldTime);
                 var reliefEvent = new WarScoreReliefEventState
                 {
@@ -562,9 +567,6 @@ namespace AncientWarfare3.core.lineage
                 WarScoreSnapshot next = current.CloneCanonical();
                 next.AttackerLosses = attackers;
                 next.DefenderLosses = defenders;
-                next.BattleScore =
-                    WarScoreRules.BattleScoreFromCasualties(attackers,
-                        defenders);
                 RecalculateLossesAndExhaustion(next);
                 RecalculateTotal(next);
                 Touch(next, pWorldTime);

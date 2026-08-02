@@ -5,6 +5,7 @@ using AncientWarfare3.content;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui.windows;
@@ -148,10 +149,17 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("figure_state", FigureStateStore.Load),
                 new AW3RestoreStage("kingdom_archive",
                     KingdomArchiveWriter.BackfillAll),
+                new AW3RestoreStage("vassal_projection",
+                    VassalService.RebuildRuntimeProjections),
                 new AW3RestoreStage("ruler_cache",
                     RulerAppellationService.RebuildLivingCache),
                 new AW3RestoreStage("year_names",
                     YearNameService.RebuildCommittedProjections),
+                new AW3RestoreStage("localized_name_projection",
+                    AWLocalizedNameMigrationService.
+                        RebuildVisibleProjections),
+                new AW3RestoreStage("western_lineage_migration", () =>
+                    WesternLineageMigrationService.Request()),
                 new AW3RestoreStage("runtime_cache_reset", () =>
                 {
                     AW3RestoreResult reset = ResetRuntimeCaches(strict);
@@ -171,6 +179,10 @@ namespace AncientWarfare3.core.multiplayer
                     FeudatoryService.LoadActiveCache),
                 new AW3RestoreStage("mandate_phase",
                     MandatePhaseService.RebuildRuntime),
+                new AW3RestoreStage("zhulu_settlement_rebuild",
+                    ZhuluWarSettlementService.RebuildRuntime),
+                new AW3RestoreStage("zhulu_age_director",
+                    ZhuluAgeDirectorService.RebuildRuntime),
                 new AW3RestoreStage("royal_asylum",
                     RoyalAsylumService.LoadRuntimeState),
                 new AW3RestoreStage("school_runtime",
@@ -266,6 +278,10 @@ namespace AncientWarfare3.core.multiplayer
                     CityTechService.RebuildZoneExpansionCache),
                 new AW3RestoreStage("mandate_phase",
                     MandatePhaseService.RebuildRuntime),
+                new AW3RestoreStage("zhulu_settlement_rebuild",
+                    ZhuluWarSettlementService.RebuildRuntime),
+                new AW3RestoreStage("zhulu_age_director",
+                    ZhuluAgeDirectorService.RebuildRuntime),
                 new AW3RestoreStage("royal_asylum",
                     RoyalAsylumService.LoadRuntimeState),
                 new AW3RestoreStage("school_runtime",
@@ -289,7 +305,12 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("army_rts_controllers",
                     ArmyRtsControllerService.RebuildRuntime),
                 new AW3RestoreStage("ruler_cache",
-                    RulerAppellationService.RebuildLivingCache)
+                    RulerAppellationService.RebuildLivingCache),
+                new AW3RestoreStage("localized_name_projection",
+                    AWLocalizedNameMigrationService.
+                        RebuildVisibleProjections),
+                new AW3RestoreStage("western_lineage_migration", () =>
+                    WesternLineageMigrationService.Request())
             };
 
             return AW3RuntimeRestoreStageRunner.Run(stages, strict);
@@ -388,6 +409,10 @@ namespace AncientWarfare3.core.multiplayer
                     WarRecordWriter.ClearRuntime),
                 new AW3RestoreStage("war_territory",
                     WarTerritoryService.ClearRuntime),
+                new AW3RestoreStage("zhulu_settlement",
+                    ZhuluWarSettlementService.ClearRuntime),
+                new AW3RestoreStage("zhulu_age_director",
+                    ZhuluAgeDirectorService.Reset),
                 new AW3RestoreStage("xia_contacts",
                     XiaContactService.ClearRuntime),
                 new AW3RestoreStage("school_map_bar",

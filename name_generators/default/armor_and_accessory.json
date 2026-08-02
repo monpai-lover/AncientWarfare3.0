@@ -1,0 +1,92 @@
+[
+    {
+        "id": "armor_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 60
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "boots_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 60
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "helmet_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 60
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "ring_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 60
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "amulet_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 60
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    }
+]

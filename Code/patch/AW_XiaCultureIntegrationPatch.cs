@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -30,6 +31,11 @@ namespace AncientWarfare3.patch
             if (World.world.kingdoms != null)
                 foreach (Kingdom kingdom in World.world.kingdoms)
                     XiaizationService.ProjectCultureIntegration(kingdom);
+
+            int initialized = KingdomPolicyService.EnsureWorldInitialized();
+            if (initialized > 0)
+                ModClass.LogInfo("AW3 policy profiles restored for " +
+                                 initialized + " kingdoms.");
         }
     }
 }

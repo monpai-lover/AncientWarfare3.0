@@ -27,6 +27,8 @@ namespace AncientWarfare3.core.lineage
             Actor father = RulerHouseholdPregnancyService
                 .ResolveManagedFather(pMother, out pConceptionKind);
             if (father?.data == null) return false;
+            if (!FamilyExpansionService.NeedsExpansion(pMother, father))
+                return false;
             bool motherEligible = IsEligibleNoble(pMother);
             bool fatherEligible = IsEligibleNoble(father);
             float duration = NobleHeirPregnancyRules
@@ -206,18 +208,19 @@ namespace AncientWarfare3.core.lineage
             Actor father = ResolveActor(fatherId);
             bool eligible = IsEligibleNoble(pMother) ||
                             IsEligibleNoble(father);
-            bool hasLivingSon = EligibleParentHasLivingSon(pMother, father);
+            bool needsExpansion = FamilyExpansionService.NeedsExpansion(
+                pMother, father);
             pMother.data.get(LineageKeys.DYNASTIC_HEIR_RETRY_PENDING,
                 out bool alreadyPending, false);
 
-            if (hasLivingSon || !eligible)
+            if (!needsExpansion || !eligible)
             {
                 ClearAll(pMother);
                 return;
             }
 
             if (NobleHeirPregnancyRules.ShouldCreateRetryRequest(
-                    managed, eligible, hasLivingSon, alreadyPending))
+                    managed, eligible, needsExpansion, alreadyPending))
             {
                 pMother.data.set(LineageKeys.DYNASTIC_HEIR_RETRY_PENDING,
                     true);
@@ -428,9 +431,9 @@ namespace AncientWarfare3.core.lineage
                                      pMother.isAdult() && father.isAdult() &&
                                      pMother.isBreedingAge() &&
                                      father.isBreedingAge();
-            bool retry = DynasticLoverConceptionRules
-                .ShouldContinueAfterBirth(active, sonBorn) &&
-                         relationshipValid;
+            bool needsExpansion = FamilyExpansionService.NeedsExpansion(
+                pMother, father);
+            bool retry = active && needsExpansion && relationshipValid;
             if (retry)
             {
                 pMother.data.removeBool(
@@ -445,7 +448,7 @@ namespace AncientWarfare3.core.lineage
 
             pMother.data.get(LineageKeys.DYNASTIC_LOVER_HEIR_RELATION_TOKEN,
                 out string token, "");
-            bool completed = sonBorn && relationshipValid;
+            bool completed = !needsExpansion && relationshipValid;
             if (completed && !string.IsNullOrEmpty(token))
                 pMother.data.set(
                     LineageKeys.DYNASTIC_LOVER_HEIR_LAST_RELATION_TOKEN,
@@ -479,7 +482,8 @@ namespace AncientWarfare3.core.lineage
                                 !currentPartner.isFighting();
             bool nobleCouple = IsEligibleNoble(pMother) ||
                                IsEligibleNoble(father);
-            bool hasLivingSon = EligibleParentHasLivingSon(pMother, father);
+            bool needsExpansion = FamilyExpansionService.NeedsExpansion(
+                pMother, father);
             pMother.data.get(LineageKeys.DYNASTIC_HEIR_RETRY_REQUEST_TIME,
                 out float requestTime, -1f);
             float now = CurrentWorldTime();
@@ -495,7 +499,7 @@ namespace AncientWarfare3.core.lineage
             bool personalRoom = motherAlive &&
                                 !pMother.hasReachedOffspringLimit();
             bool continuationBypass = motherAlive &&
-                (DynasticMaleLineContinuityService.NeedsContinuation(
+                (needsExpansion || DynasticMaleLineContinuityService.NeedsContinuation(
                      pMother) ||
                  DynasticMaleLineContinuityService.NeedsContinuation(
                      father));
@@ -510,7 +514,7 @@ namespace AncientWarfare3.core.lineage
                     pNextCycleReached: now > requestTime,
                     pMotherAlive: motherAlive,
                     pNobleCoupleEligible: nobleCouple,
-                    pEitherEligibleParentHasLivingSon: hasLivingSon,
+                    pNeedsExpansion: needsExpansion,
                     pPartnerReady: partnerReady,
                     pPregnancyRemoved: pregnancyRemoved,
                     pMotherAdult: adult,

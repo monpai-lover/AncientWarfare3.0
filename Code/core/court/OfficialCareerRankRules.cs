@@ -154,11 +154,19 @@ namespace AncientWarfare3.core.court
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (string raw in pParts ?? Array.Empty<string>())
             {
-                string part = (raw ?? "").Trim();
+                string part = CanonicalOfficeLabel((raw ?? "").Trim());
                 if (part.Length == 0 || !seen.Add(part)) continue;
                 parts.Add(part);
             }
             return string.Join(" · ", parts.ToArray());
+        }
+
+        private static string CanonicalOfficeLabel(string pLabel)
+        {
+            return string.Equals(pLabel, "太守", StringComparison.Ordinal) ||
+                   string.Equals(pLabel, "郡守", StringComparison.Ordinal)
+                ? "郡守"
+                : pLabel;
         }
 
         public static string ComposeCareerTitle(string namedRank, string grade,

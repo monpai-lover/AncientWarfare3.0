@@ -1,0 +1,155 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ZhuluAgeRulesTests
+{
+    public static void Run()
+    {
+        Equal(620L, ZhuluAgeRules.DirectScore(
+                cityCount: 2, zoneCount: 30, population: 100,
+                recruitableWarriors: 20),
+            "the comprehensive realm score uses the designed weights");
+        Equal(0L, ZhuluAgeRules.DirectScore(-1, -1, -1, -1),
+            "negative world data cannot reduce a realm score");
+        Equal(50L, ZhuluAgeRules.VassalContribution(100L),
+            "each vassal layer contributes one half");
+        False(ZhuluAgeRules.HasMandateLead(199L, 100L, 2),
+            "a 199 percent lead is below the forced Mandate threshold");
+        True(ZhuluAgeRules.HasMandateLead(200L, 100L, 2),
+            "a 200 percent lead force-grants Mandate");
+        True(ZhuluAgeRules.HasMandateLead(1L, 0L, 1),
+            "the sole independent realm receives Mandate");
+        False(ZhuluAgeRules.HasMandateLead(0L, 0L, 0),
+            "an empty world cannot receive Mandate");
+
+        var adjacent = Target(2L, adjacent: true, distance: 900L,
+            score: 500L);
+        var near = Target(3L, adjacent: false, distance: 100L,
+            score: 100L);
+        True(ZhuluAgeRules.CompareTargets(adjacent, near) < 0,
+            "an adjacent realm is targeted before an overseas realm");
+
+        var nearer = Target(4L, adjacent: true, distance: 25L,
+            score: 500L);
+        True(ZhuluAgeRules.CompareTargets(nearer, adjacent) < 0,
+            "distance orders targets within the same adjacency tier");
+
+        var weaker = Target(5L, adjacent: true, distance: 25L,
+            score: 300L);
+        True(ZhuluAgeRules.CompareTargets(weaker, nearer) < 0,
+            "weaker targets win a distance tie");
+
+        var lowerId = Target(1L, adjacent: true, distance: 25L,
+            score: 300L);
+        True(ZhuluAgeRules.CompareTargets(lowerId, weaker) < 0,
+            "kingdom id makes target ordering deterministic");
+
+        True(ZhuluAgeRules.IsEligibleTarget(Target(7L, false, 1L, 1L)),
+            "a valid unrelated peace target is eligible");
+        False(ZhuluAgeRules.IsEligibleTarget(Target(7L, false, 1L, 1L,
+                isSelf: true)),
+            "a realm cannot target itself");
+        False(ZhuluAgeRules.IsEligibleTarget(Target(7L, false, 1L, 1L,
+                sameRoot: true)),
+            "members of one subject tree cannot target each other");
+        False(ZhuluAgeRules.IsEligibleTarget(Target(7L, false, 1L, 1L,
+                alreadyAtWar: true)),
+            "an existing war blocks a duplicate declaration");
+        False(ZhuluAgeRules.IsEligibleTarget(Target(7L, false, 1L, 1L,
+                diplomaticBlocked: true)),
+            "a hard diplomatic blocker remains authoritative");
+        False(ZhuluAgeRules.IsEligibleTarget(Target(7L, false, 1L, 1L,
+                sameAlliance: true)),
+            "allies are not selected for Zhulu war");
+
+        False(ZhuluAgeRules.ShouldLeaveAllianceForUnification(
+                hasNonAllianceTarget: true, hasAllianceTarget: true),
+            "a realm keeps its alliance while a non-allied target remains");
+        True(ZhuluAgeRules.ShouldLeaveAllianceForUnification(
+                hasNonAllianceTarget: false, hasAllianceTarget: true),
+            "a realm leaves its alliance when allies are the only remaining unification targets");
+        False(ZhuluAgeRules.ShouldLeaveAllianceForUnification(
+                hasNonAllianceTarget: false, hasAllianceTarget: false),
+            "a realm does not leave an alliance without another independent target");
+
+        True(ZhuluAgeRules.ShouldIncludeDistantTargets(
+                isZhuluAge: true, MandatePhase.Renewal,
+                sourceCanUseMandateSystem: false),
+            "Zhulu age includes distant realms for every civilization");
+        True(ZhuluAgeRules.ShouldIncludeDistantTargets(
+                isZhuluAge: false, MandatePhase.Chaos,
+                sourceCanUseMandateSystem: true),
+            "the legacy Mandate chaos path still includes distant realms");
+        False(ZhuluAgeRules.ShouldIncludeDistantTargets(
+                isZhuluAge: false, MandatePhase.Renewal,
+                sourceCanUseMandateSystem: true),
+            "ordinary renewal does not broaden the global target scan");
+        False(ZhuluAgeRules.ShouldIncludeDistantTargets(
+                isZhuluAge: false, MandatePhase.Chaos,
+                sourceCanUseMandateSystem: false),
+            "ordinary non-Mandate realms keep the local candidate scope");
+        Equal(int.MaxValue, ZhuluAgeRules.WarCandidateLimit(
+                isZhuluAge: true),
+            "Zhulu age does not hide an eligible realm behind the normal scan cap");
+        Equal(24, ZhuluAgeRules.WarCandidateLimit(
+                isZhuluAge: false),
+            "ordinary war AI keeps its bounded candidate scan");
+        True(ZhuluAgeRules.CanUseUnificationWarAi(
+                isZhuluAge: true, normalWarAiSupported: false),
+            "Zhulu age enables unification AI for every civilization");
+        True(ZhuluAgeRules.CanUseUnificationWarAi(
+                isZhuluAge: false, normalWarAiSupported: true),
+            "normally supported realms keep their war AI");
+        False(ZhuluAgeRules.CanUseUnificationWarAi(
+                isZhuluAge: false, normalWarAiSupported: false),
+            "unsupported realms remain unchanged outside Zhulu age");
+        True(ZhuluAgeRules.IsIndependentAiAttacker(
+                isZhuluAge: true, hasVassalSuzerain: false,
+                hasDiplomaticSuzerain: true),
+            "a tributary remains an independent Zhulu contender");
+        False(ZhuluAgeRules.IsIndependentAiAttacker(
+                isZhuluAge: true, hasVassalSuzerain: true,
+                hasDiplomaticSuzerain: true),
+            "a true vassal cannot independently issue Zhulu declarations");
+        False(ZhuluAgeRules.IsIndependentAiAttacker(
+                isZhuluAge: false, hasVassalSuzerain: false,
+                hasDiplomaticSuzerain: true),
+            "ordinary war AI keeps the existing diplomatic-subject gate");
+        True(ZhuluAgeRules.IsEligibleDistantTarget(
+                isZhuluAge: true, targetCanUseMandateSystem: false),
+            "Zhulu global scanning includes distant non-Mandate civilizations");
+        True(ZhuluAgeRules.IsEligibleDistantTarget(
+                isZhuluAge: false, targetCanUseMandateSystem: true),
+            "ordinary Chaos scanning keeps Mandate-capable distant targets");
+        False(ZhuluAgeRules.IsEligibleDistantTarget(
+                isZhuluAge: false, targetCanUseMandateSystem: false),
+            "ordinary scanning does not broaden its species scope");
+    }
+
+    private static ZhuluAgeTargetFacts Target(long kingdomId,
+        bool adjacent, long distance, long score, bool valid = true,
+        bool isSelf = false, bool sameRoot = false,
+        bool alreadyAtWar = false, bool diplomaticBlocked = false,
+        bool sameAlliance = false)
+    {
+        return new ZhuluAgeTargetFacts(kingdomId, valid, isSelf, sameRoot,
+            alreadyAtWar, diplomaticBlocked, sameAlliance, adjacent,
+            distance, score);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                ": expected=" + expected + " actual=" + actual);
+    }
+}

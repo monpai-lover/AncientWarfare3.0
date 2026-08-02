@@ -224,6 +224,33 @@ namespace AncientWarfare3.core.lineage
             return restorationCreationActive && requestedKingdomId >= 0 &&
                    requestedKingdomId == actualKingdomId;
         }
+
+        public static bool ShouldFoundRestorationCadetBranch(
+            bool restorationActive, bool hasLineage, bool hasShi,
+            bool isHistoricalFigure, bool isLineageRootFounder,
+            bool alreadyFoundedForDestination)
+        {
+            return restorationActive && hasLineage && hasShi &&
+                   !isHistoricalFigure && !isLineageRootFounder &&
+                   !alreadyFoundedForDestination;
+        }
+
+        public static string ResolveRestoredKingdomName(
+            string continuityName, string archiveName, string originalName,
+            string boundStateName, string requestStateName)
+        {
+            string[] candidates =
+            {
+                continuityName, archiveName, originalName,
+                boundStateName, requestStateName
+            };
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                string candidate = candidates[i] ?? "";
+                if (StateNameRules.IsValid(candidate)) return candidate;
+            }
+            return "";
+        }
     }
 
     public sealed class RestorationKingdomIdLease : IDisposable

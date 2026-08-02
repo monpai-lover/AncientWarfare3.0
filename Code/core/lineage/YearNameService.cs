@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
@@ -350,6 +351,29 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pKingdom.isRekt() ||
                 ruler?.data == null || ruler.isRekt()) return "";
 
+            ActorAsset actorAsset;
+            try
+            {
+                actorAsset = pKingdom.getActorAsset();
+            }
+            catch
+            {
+                return "";
+            }
+
+            RegnalChronologyProfile profile =
+                RegnalChronologyRules.ResolveProfile(
+                    valid: !pKingdom.isNeutral(),
+                    civilized: actorAsset != null && actorAsset.civ,
+                    biologicalXia: LineageService.IsXiaKingdom(
+                        pKingdom, actorAsset),
+                    monkey: CivMonkeyPolicyRules.IsNativePolicySpecies(
+                        pKingdom.data.original_actor_asset,
+                        pKingdom.asset?.id, actorAsset?.id),
+                    enteredXia: XiaCultureIntegrationService.IsIntegrated(
+                        pKingdom.culture));
+            if (profile == RegnalChronologyProfile.None) return "";
+
             bool republic = RepublicGovernmentService.IsRepublic(pKingdom) ||
                             RepublicGovernmentService.IsRepublicLeader(ruler);
             bool hereditary = !republic;
@@ -370,15 +394,41 @@ namespace AncientWarfare3.core.lineage
             }
             if (reignStart < 0f || recordedRulerId != ruler.data.id) return "";
 
-            ruler.data.get(LineageKeys.GIVEN_NAME, out string givenName, "");
-            if (string.IsNullOrWhiteSpace(givenName))
-                givenName = ruler.getName();
+            string rulerName = profile == RegnalChronologyProfile.Xia
+                ? ReadXiaRulerName(ruler)
+                : ReadWesternLocalizedRulerName(ruler);
+            if (string.IsNullOrWhiteSpace(rulerName)) return "";
             int reignYear = Math.Max(1, Date.getYearsSince(reignStart) + 1);
-            return RegnalChronologyRules.Format(
-                pKingdom.name,
-                KingdomTitleService.GetTitleChar(
-                    KingdomTitleService.GetTitle(pKingdom)),
-                givenName, reignYear, hereditary, republic);
+            KingdomTitle rank = KingdomTitleService.GetTitle(pKingdom);
+            string stateName = profile == RegnalChronologyProfile.Western
+                ? RulerAppellationService.GetProjectedStateName(pKingdom)
+                : pKingdom.name;
+            return RegnalChronologyRules.Format(profile, stateName,
+                (int)rank, KingdomTitleService.GetTitleChar(rank),
+                rulerName, reignYear, hereditary, republic);
+        }
+
+        private static string ReadXiaRulerName(Actor pRuler)
+        {
+            if (pRuler?.data == null) return "";
+            pRuler.data.get(LineageKeys.GIVEN_NAME, out string givenName, "");
+            if (!string.IsNullOrWhiteSpace(givenName))
+                return givenName.Trim();
+            pRuler.data.get(AWNameDataKeys.GivenName,
+                out givenName, "");
+            return (givenName ?? "").Trim();
+        }
+
+        private static string ReadWesternLocalizedRulerName(Actor pRuler)
+        {
+            if (pRuler?.data == null) return "";
+            pRuler.data.get(AWNameDataKeys.NativeName,
+                out string nativeName, "");
+            pRuler.data.get(AWNameDataKeys.ChineseName,
+                out string chineseName, "");
+            return AWLocalizedNameProjectionRules.Select(
+                AWLocalizedNameService.CurrentLanguage(), nativeName,
+                chineseName);
         }
 
         public static bool RetryCommittedProjection(Kingdom pKingdom)

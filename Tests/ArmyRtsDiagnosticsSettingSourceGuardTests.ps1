@@ -43,7 +43,9 @@ function Require-DiagnosticGate([string]$source, [string]$startToken,
 $settings = Read-Source `
     'Code/core/performance/AWPerformanceSettings.cs'
 $configText = Read-Source 'default_config.json'
-$localeText = Read-Source 'Locales/aw3_performance.csv'
+$localeCzText = Read-Source 'Locales/cz.json'
+$localeEnText = Read-Source 'Locales/en.json'
+$localeChText = Read-Source 'Locales/ch.json'
 $controller = Read-Source `
     'Code/core/lineage/ArmyRtsControllerService.cs'
 $transport = Read-Source `
@@ -150,13 +152,18 @@ catch {
 }
 
 try {
-    $locale = @($localeText | ConvertFrom-Csv)
-    $label = $locale |
-        Where-Object { $_.key -eq 'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS' }
-    $description = $locale |
-        Where-Object {
-            $_.key -eq 'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description'
-        }
+    $localeCz = $localeCzText | ConvertFrom-Json
+    $localeEn = $localeEnText | ConvertFrom-Json
+    $localeCh = $localeChText | ConvertFrom-Json
+    $labelCz = $localeCz.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS'
+    $labelEn = $localeEn.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS'
+    $labelCh = $localeCh.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS'
+    $descriptionCz =
+        $localeCz.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description'
+    $descriptionEn =
+        $localeEn.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description'
+    $descriptionCh =
+        $localeCh.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description'
     $simplifiedLabel = 'RTS ' + [char]0x8BCA + [char]0x65AD +
         [char]0x8F93 + [char]0x51FA
     $simplifiedLog = [string]([char]0x8BCA) + [char]0x65AD +
@@ -165,40 +172,45 @@ try {
     $traditionalLog = [string]([char]0x8A3A) + [char]0x65B7 +
         [char]0x65E5 + [char]0x8A8C
     $traditionalTactical = [string]([char]0x6230) + [char]0x8853
-    if ($null -eq $label) {
+    if ([string]::IsNullOrWhiteSpace($labelCz) -or
+        [string]::IsNullOrWhiteSpace($labelEn) -or
+        [string]::IsNullOrWhiteSpace($labelCh)) {
         $failures.Add('the RTS diagnostics label localization is missing')
     }
     else {
-        if ($label.cz -ne $simplifiedLabel) {
+        if ($labelCz -ne $simplifiedLabel) {
             $failures.Add('the Simplified Chinese RTS diagnostics label is incorrect')
         }
-        if ([string]::IsNullOrWhiteSpace($label.en)) {
+        if ([string]::IsNullOrWhiteSpace($labelEn)) {
             $failures.Add('the English RTS diagnostics label is missing')
         }
-        if ([string]::IsNullOrWhiteSpace($label.ch)) {
+        if ([string]::IsNullOrWhiteSpace($labelCh)) {
             $failures.Add('the Traditional Chinese RTS diagnostics label is missing')
         }
     }
-    if ($null -eq $description) {
+    if ([string]::IsNullOrWhiteSpace($descriptionCz) -or
+        [string]::IsNullOrWhiteSpace($descriptionEn) -or
+        [string]::IsNullOrWhiteSpace($descriptionCh)) {
         $failures.Add('the RTS diagnostics description localization is missing')
     }
     else {
-        if ($description.cz -notmatch
+        if ($descriptionCz -notmatch
             "RTS.*$simplifiedLog.*$simplifiedTactical GIF") {
             $failures.Add('the Simplified Chinese description must cover RTS diagnostic logs and tactical GIF output')
         }
-        if ($description.en -notmatch
+        if ($descriptionEn -notmatch
             '(?i)RTS diagnostic logs.*tactical GIF output') {
             $failures.Add('the English description must cover RTS diagnostic logs and tactical GIF output')
         }
-        if ($description.ch -notmatch
+        if ($descriptionCh -notmatch
             "RTS.*$traditionalLog.*$traditionalTactical GIF") {
             $failures.Add('the Traditional Chinese description must cover RTS diagnostic logs and tactical GIF output')
         }
     }
 }
 catch {
-    $failures.Add('aw3_performance.csv is not valid CSV: ' + $_.Exception.Message)
+    $failures.Add('RTS diagnostics locale JSON is invalid: ' +
+        $_.Exception.Message)
 }
 
 $routeFailure = Method-Body $controller `

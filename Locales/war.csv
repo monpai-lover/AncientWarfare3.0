@@ -95,3 +95,9 @@ task_unit_aw_army_rts_retreat,撤退整补,Retreating to recover,撤退整補
 task_unit_aw_army_rts_regroup,重整军队,Regrouping the army,重整軍隊
 task_unit_aw_army_rts_formation,保持军队阵型,Holding army formation,保持軍隊陣型
 task_unit_aw_army_rts_front_hold,前线驻守,Front hold,前線駐守
+war_type_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
+war_name_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
+aw_war_goal_zhulu_annexation,逐鹿天下,Contest All Under Heaven,逐鹿天下
+aw_hist_label_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
+aw_zhulu_peace_blocked,逐鹿之战必须打到一方灭亡,Zhulu wars continue until one principal realm is destroyed,逐鹿之戰必須打到一方滅亡
+zhulu_requires_total_annexation,逐鹿之战必须打到一方灭亡,Zhulu wars continue until one principal realm is destroyed,逐鹿之戰必須打到一方滅亡

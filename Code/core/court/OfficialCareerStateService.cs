@@ -206,10 +206,15 @@ namespace AncientWarfare3.core.court
             bool freshTerm = existing == null || existing.TermEndYear <= currentYear ||
                              existing.CityId != targetCityId ||
                              existing.OfficeId != (pOfficeId ?? "");
-            int termEndYear = pActing ? pYearAfter(currentYear) : freshTerm
-                ? CourtAuxiliaryLawService.ResolveTermEndYear(pKingdom, age,
-                    lastEvaluation, pActor.data.id, currentYear)
-                : existing.TermEndYear;
+            int termEndYear = pActing
+                ? pYearAfter(currentYear)
+                : freshTerm
+                    ? pLayer == CourtOfficeLayer.Central &&
+                      CourtService.IsWesternElective(pKingdom)
+                        ? WesternCourtElectionRules.TermEndYear(currentYear)
+                        : CourtAuxiliaryLawService.ResolveTermEndYear(pKingdom,
+                            age, lastEvaluation, pActor.data.id, currentYear)
+                    : existing.TermEndYear;
             int waitingSinceYear = pActing ? currentYear : -1;
             var state = new OfficialCareerStateView
             {
@@ -284,7 +289,7 @@ namespace AncientWarfare3.core.court
                     (!string.IsNullOrEmpty(pOfficeId) && state.OfficeId != pOfficeId))
                 {
                     transaction.Rollback();
-                    return false;
+                    return true;
                 }
 
                 float merit = state.Merit;
@@ -489,6 +494,21 @@ namespace AncientWarfare3.core.court
                     CourtService.TryExpireActingCityGovernor(actor, pKingdom,
                         state.CityId))
                     continue;
+                bool westernElectiveCentral =
+                    CourtService.IsWesternElectiveCentralOffice(pKingdom,
+                        state.OfficeId);
+                int effectiveTermEndYear = westernElectiveCentral
+                    ? CourtService.ResolveWesternElectiveTermEndYear(pKingdom,
+                        state.OfficeId, state.ActorId, year)
+                    : state.TermEndYear;
+                if (westernElectiveCentral && effectiveTermEndYear <= year)
+                {
+                    if (CourtService.TryExpireWesternElectiveCentralOfficial(
+                            actor, pKingdom, state.OfficeId))
+                        WesternCourtElectionService.EnqueueVacancy(pKingdom,
+                            state.OfficeId, state.ActorId);
+                    continue;
+                }
                 if (petitions <
                     CourtPetitionRules.MaximumPetitionsPerKingdomYear &&
                     CourtPetitionService.TryPetition(actor, state, pKingdom,
@@ -514,7 +534,7 @@ namespace AncientWarfare3.core.court
                         ? state.Rank
                         : OfficialCareerRankRules.Unranked,
                     Merit = merit,
-                    TermEndYear = state.TermEndYear,
+                    TermEndYear = effectiveTermEndYear,
                     LastEvaluation = state.LastEvaluation,
                     EvaluationModifierUntil = state.EvaluationModifierUntil,
                     Seniority = state.Seniority,
@@ -537,7 +557,8 @@ namespace AncientWarfare3.core.court
                         mutation.LocalGrade, SafeAge(actor));
                 }
 
-                bool migratedLifetime = termLaw != CourtTermLaw.Lifetime &&
+                bool migratedLifetime = !westernElectiveCentral &&
+                    termLaw != CourtTermLaw.Lifetime &&
                     state.TermEndYear == int.MaxValue &&
                     lifetimeMigrations <
                     CourtAuxiliaryLawRules.MaximumLifetimeMigrationsPerYear;
@@ -551,7 +572,7 @@ namespace AncientWarfare3.core.court
                 }
 
                 bool termDue = !migratedLifetime &&
-                               state.TermEndYear <= year;
+                               mutation.TermEndYear <= year;
                 if (termDue && nineRankSystem &&
                     mutation.Rank > OfficialCareerRankRules.Unranked)
                     EvaluateDueOfficial(mutation, economy, year, pKingdom);
@@ -1670,28 +1691,17 @@ namespace AncientWarfare3.core.court
 
         internal static int OfficeGradeForOffice(string pOfficeId)
         {
-            if (pOfficeId == CourtOfficeId.TaiZai || pOfficeId == CourtOfficeId.SiTu ||
-                pOfficeId == CourtOfficeId.ZongBo || pOfficeId == CourtOfficeId.SiMa ||
-                pOfficeId == CourtOfficeId.SiKou || pOfficeId == CourtOfficeId.SiKong ||
-                pOfficeId == CourtOfficeId.Chancellor || pOfficeId == CourtOfficeId.Marshal ||
-                pOfficeId == CourtOfficeId.Censor || pOfficeId == CourtOfficeId.Zhongshu ||
-                pOfficeId == CourtOfficeId.Menxia || pOfficeId == CourtOfficeId.Shangshu)
-                return 10;
-            if (pOfficeId == CourtOfficeId.Justice || pOfficeId == CourtOfficeId.Steward ||
-                pOfficeId == CourtOfficeId.Erudite || pOfficeId == CourtOfficeId.Libu ||
-                pOfficeId == CourtOfficeId.Hubu || pOfficeId == CourtOfficeId.Ribu ||
-                pOfficeId == CourtOfficeId.Bingbu || pOfficeId == CourtOfficeId.Xingbu ||
-                pOfficeId == CourtOfficeId.Gongbu)
-                return 20;
+            CourtOfficeDefinition definition =
+                CourtProfileRegistry.FindOfficeAcrossProfiles(pOfficeId);
+            if (definition != null) return definition.Grade;
             return string.IsNullOrEmpty(pOfficeId) ? 0 : 30;
         }
 
         private static bool IsMilitaryOffice(string pLayer, string pOfficeId)
         {
             return pLayer == CourtOfficeLayer.Military ||
-                   pOfficeId == CourtOfficeId.SiMa ||
-                   pOfficeId == CourtOfficeId.Marshal ||
-                   pOfficeId == CourtOfficeId.Bingbu || pOfficeId == CourtPyramidRoleId.General;
+                   CourtProfileRegistry.IsMilitaryOfficeAcrossProfiles(pOfficeId) ||
+                   pOfficeId == CourtPyramidRoleId.General;
         }
 
         private static bool IsRoyal(Actor pActor, Kingdom pKingdom)

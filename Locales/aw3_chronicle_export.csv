@@ -1,0 +1,8 @@
+key,cz,en,ch
+aw_chronicle_export_txt,导出 TXT,Export TXT,匯出 TXT
+aw_chronicle_export_desc,导出当前对象的完整编年史和纪年,Export the complete chronicle with historical dates,匯出目前對象的完整編年史與紀年
+aw_chronicle_export_save_first,请先保存世界后再导出编年史,Save the world before exporting its chronicle,請先儲存世界再匯出編年史
+aw_chronicle_export_pending,正在导出完整编年史,Exporting complete chronicle,正在匯出完整編年史
+aw_chronicle_export_success,已导出：,Exported: ,已匯出：
+aw_chronicle_export_archive_unavailable,编年史档案暂不可用,Chronicle archive is unavailable,編年史檔案暫不可用
+aw_chronicle_export_failed,编年史导出失败：,Chronicle export failed: ,編年史匯出失敗：

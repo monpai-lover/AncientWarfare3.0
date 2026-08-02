@@ -1,0 +1,115 @@
+using AncientWarfare3.core.policy;
+
+internal static class WesternPolicyAiRulesTests
+{
+    public static void Run()
+    {
+        WesternPolicyCandidate[] technologies =
+        {
+            Candidate("aw_west_tech_irrigation", 0),
+            Candidate("aw_west_tech_iron_casting", 1),
+            Candidate("aw_west_tech_tax_office", 2),
+            Candidate("aw_tech_city_defense", 3),
+            Candidate("aw_west_tech_office_system", 4),
+            Candidate("aw_west_tech_enfeoffment_study", 5),
+            Candidate("aw_west_tech_ritual_order", 6)
+        };
+
+        Equal("aw_west_tech_irrigation", Select(technologies,
+                new WesternPolicyNeedFacts(foodSecurity: 0.05f,
+                    equipmentQuality: 1f, treasuryRatio: 1f,
+                    royalAuthority: 100)),
+            "low food security prioritizes irrigation");
+        Equal("aw_west_tech_iron_casting", Select(technologies,
+                new WesternPolicyNeedFacts(foodSecurity: 1f,
+                    equipmentQuality: 0.05f, treasuryRatio: 1f,
+                    royalAuthority: 100)),
+            "weak equipment prioritizes casting");
+        Equal("aw_tech_city_defense", Select(technologies,
+                new WesternPolicyNeedFacts(foodSecurity: 1f,
+                    equipmentQuality: 1f, treasuryRatio: 1f,
+                    atWar: true, borderThreat: true,
+                    royalAuthority: 100)),
+            "active border threat prioritizes city defense");
+        Equal("aw_west_tech_tax_office", Select(technologies,
+                new WesternPolicyNeedFacts(foodSecurity: 1f,
+                    equipmentQuality: 1f, treasuryRatio: 0.05f,
+                    royalAuthority: 100)),
+            "poor treasury prioritizes fiscal administration");
+        Equal("aw_west_tech_office_system", Select(technologies,
+                new WesternPolicyNeedFacts(foodSecurity: 1f,
+                    equipmentQuality: 1f, treasuryRatio: 1f,
+                    courtVacancies: 8, royalAuthority: 100)),
+            "court vacancies prioritize an office system");
+        Equal("aw_west_tech_enfeoffment_study", Select(technologies,
+                new WesternPolicyNeedFacts(foodSecurity: 1f,
+                    equipmentQuality: 1f, treasuryRatio: 1f,
+                    cityCount: 12, royalAuthority: 100)),
+            "large realms prioritize enfeoffment administration");
+        Equal("aw_west_tech_ritual_order", Select(technologies,
+                new WesternPolicyNeedFacts(foodSecurity: 1f,
+                    equipmentQuality: 1f, treasuryRatio: 1f,
+                    royalAuthority: 0)),
+            "weak royal authority prioritizes ritual legitimacy");
+
+        WesternPolicyCandidate[] institutions =
+        {
+            Candidate("aw_west_policy_noble_council", 0),
+            Candidate("aw_west_policy_elective_offices", 1),
+            Candidate("aw_west_policy_feudal_retainers", 2),
+            Candidate("aw_west_policy_royal_direct_rule", 3)
+        };
+        Equal("aw_west_policy_noble_council", Select(institutions,
+                new WesternPolicyNeedFacts(nobleOpposition: 90,
+                    royalAuthority: 70)),
+            "strong noble opposition prioritizes council compromise");
+
+        WesternPolicyCandidate[] filtered =
+        {
+            new WesternPolicyCandidate("aw_west_tech_irrigation",
+                profileEligible: true, available: true,
+                playerLocked: true, layoutOrder: 0),
+            new WesternPolicyCandidate("aw_west_tech_iron_casting",
+                profileEligible: false, available: true,
+                playerLocked: false, layoutOrder: 1),
+            Candidate("aw_tech_city_defense", 2)
+        };
+        Equal("aw_tech_city_defense", Select(filtered,
+                new WesternPolicyNeedFacts(foodSecurity: 0f,
+                    equipmentQuality: 0f, treasuryRatio: 1f)),
+            "locked and foreign-profile nodes never become candidates");
+
+        WesternPolicyCandidate[] slavery =
+        {
+            Candidate("aw_policy_household_registry", 0),
+            Candidate("aw_policy_start_slavery", 1)
+        };
+        Equal("aw_policy_household_registry", Select(slavery,
+                new WesternPolicyNeedFacts(slaveShare: 0f)),
+            "slavery has no positive preference without labor pressure");
+        Equal("aw_policy_start_slavery", Select(slavery,
+                new WesternPolicyNeedFacts(slaveShare: 0.35f,
+                    atWar: true)),
+            "substantial slave labor and war can justify slavery");
+    }
+
+    private static WesternPolicyCandidate Candidate(string pId,
+        int pLayoutOrder)
+    {
+        return new WesternPolicyCandidate(pId, profileEligible: true,
+            available: true, playerLocked: false, pLayoutOrder);
+    }
+
+    private static string Select(WesternPolicyCandidate[] pCandidates,
+        WesternPolicyNeedFacts pFacts)
+    {
+        return WesternPolicyAiRules.SelectBest(pCandidates, pFacts);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

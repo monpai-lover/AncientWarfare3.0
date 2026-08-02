@@ -1,3 +1,5 @@
+using AncientWarfare3.content.figures;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 using HarmonyLib;
@@ -34,6 +36,7 @@ namespace AncientWarfare3.patch
         public static bool GenerateNewName_Prefix(Actor __instance)
         {
             if (__instance?.data == null) return true;
+            if (TryRestoreHistoricalFigureName(__instance)) return false;
             if (HistoricalSchoolDescentService.IsCanonicalMaster(__instance))
             {
                 RestoreCanonicalName(__instance);
@@ -57,11 +60,56 @@ namespace AncientWarfare3.patch
 
         private static void RestoreCanonicalName(Actor pActor)
         {
+            if (TryRestoreHistoricalFigureName(pActor)) return;
             if (!HistoricalSchoolDescentService.TryGetIndexedDefinition(
                     pActor, out var definition)) return;
             pActor.data.set(LineageKeys.GIVEN_NAME, definition.CanonicalGivenName);
             if (pActor.data.name != definition.CanonicalName)
                 pActor.setName(definition.CanonicalName);
+        }
+
+        private static bool TryRestoreHistoricalFigureName(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            bool isHistoricalFigure = false;
+            try
+            {
+                isHistoricalFigure =
+                    pActor.hasTrait(HistoricalFigureService.TRAIT_FIGURE) ||
+                    pActor.hasTrait(HistoricalFigureService.TRAIT_FIRST);
+            }
+            catch { }
+            if (!isHistoricalFigure) return false;
+
+            int figureIndex = FigureStateStore.IndexOfActor(pActor.data.id);
+            HistoricalFigureDef definition = HistoricalFigureDef.Get(figureIndex);
+            if (definition != null)
+            {
+                // FigureState is the durable source of truth. A vanilla name
+                // regeneration or an old save must never replace 姓/氏.
+                pActor.data.set(LineageKeys.FAMILY_NAME,
+                    definition.FamilyName);
+                pActor.data.set(LineageKeys.CLAN_NAME,
+                    definition.ClanName);
+                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME,
+                    definition.FamilyName);
+                pActor.data.set(LineageKeys.GIVEN_NAME,
+                    definition.GivenName);
+            }
+
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
+            pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
+            if (!HistoricalFigureNameRules.ShouldProtect(
+                    hasHistoricalFigureTrait: true, familyName: family,
+                    givenName: given)) return false;
+
+            string canonical = HistoricalFigureNameRules.ResolveDisplayName(
+                family, given, pActor.data.name);
+            pActor.data.set(LineageKeys.GIVEN_NAME, given.Trim());
+            if (!string.Equals(pActor.data.name, canonical,
+                    System.StringComparison.Ordinal))
+                pActor.setName(canonical);
+            return true;
         }
     }
 }

@@ -1,0 +1,346 @@
+using AncientWarfare3.core.naming;
+
+internal static class WesternLineageNamingRulesTests
+{
+    public static void Run()
+    {
+        Equal(NamingProfileId.None,
+            AWNamingProfileRules.Resolve(false, false, false,
+                civilized: false, valid: true),
+            "animals have no AW naming profile");
+        Equal(NamingProfileId.None,
+            AWNamingProfileRules.Resolve(false, false, false,
+                civilized: true, valid: false),
+            "invalid objects have no AW naming profile");
+        Equal(NamingProfileId.Xia,
+            AWNamingProfileRules.Resolve(true, false, false,
+                civilized: true, valid: true),
+            "biological Xia uses the Xia profile");
+        Equal(NamingProfileId.Monkey,
+            AWNamingProfileRules.Resolve(false, true, false,
+                civilized: true, valid: true),
+            "civilized monkey uses the monkey profile");
+        Equal(NamingProfileId.OrcNomadic,
+            AWNamingProfileRules.Resolve(false, false, true,
+                civilized: true, valid: true),
+            "civilized orc uses the nomadic profile");
+        Equal(NamingProfileId.Western,
+            AWNamingProfileRules.Resolve(false, false, false,
+                civilized: true, valid: true),
+            "other civilized actors use a western profile");
+        Equal(NamingProfileId.Xia,
+            AWNamingProfileRules.Resolve(true, true, true,
+                civilized: true, valid: true),
+            "biological Xia wins contradictory profile flags");
+        Equal(NamingProfileId.Monkey,
+            AWNamingProfileRules.Resolve(false, true, true,
+                civilized: true, valid: true),
+            "civilized monkey wins before orc");
+
+        WesternNamingTradition firstTradition =
+            AWCultureNamingTraditionRules.SelectWesternTradition(314159L);
+        Equal(firstTradition,
+            AWCultureNamingTraditionRules.SelectWesternTradition(314159L),
+            "the same stable culture id selects the same western tradition");
+        Equal(true,
+            AWCultureNamingTraditionRules.IsWesternTradition(firstTradition),
+            "stable western selection always returns a concrete tradition");
+        Equal(false,
+            AWCultureNamingTraditionRules.ShouldPersistWesternTradition(
+                NamingProfileId.Xia),
+            "Xia cultures never persist a western tradition");
+        Equal(false,
+            AWCultureNamingTraditionRules.ShouldPersistWesternTradition(
+                NamingProfileId.Monkey),
+            "monkey cultures never persist a western tradition");
+        Equal(false,
+            AWCultureNamingTraditionRules.ShouldPersistWesternTradition(
+                NamingProfileId.OrcNomadic),
+            "orc cultures use the nomadic profile without a western tradition");
+        Equal(true,
+            AWCultureNamingTraditionRules.ShouldPersistWesternTradition(
+                NamingProfileId.Western),
+            "western cultures persist their selected tradition");
+        Equal("orc_nomadic",
+            AWCultureNamingTraditionRules.SerializeProfile(
+                NamingProfileId.OrcNomadic),
+            "the nomadic profile has a stable persisted id");
+        Equal(NamingProfileId.Western,
+            AWCultureNamingTraditionRules.ParseProfile("western"),
+            "a persisted western profile is restored");
+        Equal(NamingProfileId.None,
+            AWCultureNamingTraditionRules.ParseProfile("invalid"),
+            "an invalid persisted profile is rejected");
+        Equal("van",
+            AWCultureNamingTraditionRules.SerializeTradition(
+                WesternNamingTradition.Van),
+            "western traditions have stable persisted ids");
+        Equal(WesternNamingTradition.Di,
+            AWCultureNamingTraditionRules.ParseTradition(
+                "di", WesternNamingTradition.Von),
+            "a persisted western tradition is restored");
+        Equal(NamingProfileId.Xia,
+            AWCultureNamingTraditionRules.ResolveEffectiveProfile(
+                NamingProfileId.Western, NamingProfileId.Xia,
+                fullyXiaized: false),
+            "a persisted Xia culture never automatically reverts to western");
+        Equal(NamingProfileId.Xia,
+            AWCultureNamingTraditionRules.ResolveEffectiveProfile(
+                NamingProfileId.Western, NamingProfileId.Western,
+                fullyXiaized: true),
+            "a fully Xiaized foreign culture upgrades to the Xia profile");
+        Equal(NamingProfileId.Western,
+            AWCultureNamingTraditionRules.ResolveEffectiveProfile(
+                NamingProfileId.Western, NamingProfileId.Western,
+                fullyXiaized: false),
+            "level-four integration does not switch naming before full entry");
+        Equal(NamingProfileId.Monkey,
+            AWCultureNamingTraditionRules.ResolveInheritedProfile(
+                NamingProfileId.Monkey, NamingProfileId.Western,
+                fullyXiaized: false),
+            "a monkey culture does not inherit a western profile");
+        Equal(NamingProfileId.OrcNomadic,
+            AWCultureNamingTraditionRules.ResolveInheritedProfile(
+                NamingProfileId.OrcNomadic, NamingProfileId.Western,
+                fullyXiaized: false),
+            "an orc culture keeps the nomadic profile on creation");
+        Equal(NamingProfileId.Western,
+            AWCultureNamingTraditionRules.ResolveInheritedProfile(
+                NamingProfileId.Western, NamingProfileId.Western,
+                fullyXiaized: false),
+            "a western culture split inherits its parent's profile");
+        Equal(NamingProfileId.Xia,
+            AWCultureNamingTraditionRules.ResolveActorProfile(
+                NamingProfileId.OrcNomadic, NamingProfileId.Xia),
+            "a fully Xiaized orc culture routes its actors through Xia");
+        Equal(NamingProfileId.OrcNomadic,
+            AWCultureNamingTraditionRules.ResolveActorProfile(
+                NamingProfileId.OrcNomadic, NamingProfileId.Western),
+            "an orc actor in an ordinary foreign culture stays nomadic");
+        Equal(NamingProfileId.Monkey,
+            AWCultureNamingTraditionRules.ResolveActorProfile(
+                NamingProfileId.Monkey, NamingProfileId.Xia),
+            "monkey keeps its dedicated naming profile inside Xia culture");
+        Equal(WesternNamingTradition.Van,
+            AWCultureNamingTraditionRules.ResolveInheritedTradition(
+                NamingProfileId.Western, WesternNamingTradition.Van,
+                stableCultureId: 99L),
+            "a western culture split inherits its parent's tradition");
+        Equal(WesternNamingTradition.De,
+            AWCultureNamingTraditionRules.ResolvePersistedTradition(
+                "van", WesternNamingTradition.De,
+                stableCultureId: 99L),
+            "an explicit split inheritance overrides an early child assignment");
+        Equal(WesternNamingTradition.Van,
+            AWCultureNamingTraditionRules.ResolvePersistedTradition(
+                "van", null, stableCultureId: 99L),
+            "Ensure preserves an already persisted western tradition");
+
+        Equal("western_von_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.Von,
+                AWNamingObjectKind.Actor, "human", "human_name"),
+            "western human given names follow the persisted Von tradition");
+        Equal("western_de_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.De,
+                AWNamingObjectKind.Actor, "human", "human_name"),
+            "western human given names follow the persisted De tradition");
+        Equal("western_van_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.Van,
+                AWNamingObjectKind.Actor, "human", "human_name"),
+            "western human given names follow the persisted Van tradition");
+        Equal("western_di_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.Di,
+                AWNamingObjectKind.Actor, "human", "human_name"),
+            "western human given names follow the persisted Di tradition");
+        Equal("elf_given_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.Von,
+                AWNamingObjectKind.Actor, "elf", "elf_name"),
+            "western elves use a species-only given-name generator");
+        Equal("dwarf_given_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.De,
+                AWNamingObjectKind.Actor, "dwarf", "dwarf_name"),
+            "western dwarves use a species-only given-name generator");
+        Equal("elf_given_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.Van,
+                AWNamingObjectKind.Actor, "elf", "human_name"),
+            "an elf in another western culture still uses elf given names");
+        Equal("Xia_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Xia, WesternNamingTradition.Von,
+                AWNamingObjectKind.Actor, "human", "human_name"),
+            "a fully Xiaized foreign actor uses the Xia given-name route");
+        Equal("Xia_kingdom",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Xia, WesternNamingTradition.Von,
+                AWNamingObjectKind.Kingdom, "orc", "orc_kingdom"),
+            "a fully Xiaized foreign kingdom uses the Xia kingdom route");
+        Equal("civ_monkey_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Monkey, WesternNamingTradition.Von,
+                AWNamingObjectKind.Actor, "civ_monkey",
+                "civ_monkey_name"),
+            "monkey keeps its dedicated actor generator");
+        Equal("civ_monkey_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Monkey, WesternNamingTradition.Von,
+                AWNamingObjectKind.Actor, "civ_monkey", "Xia_name"),
+            "a monkey actor in Xia culture cannot acquire the Xia generator");
+        Equal("civ_monkey_kingdom",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Monkey, WesternNamingTradition.Von,
+                AWNamingObjectKind.Kingdom, "civ_monkey", "human_kingdom"),
+            "a monkey kingdom keeps its dedicated kingdom generator");
+
+        Equal("orc_nomadic_name",
+            AWOrcNomadicNamingRules.ResolveGeneratorId(
+                AWNamingObjectKind.Actor),
+            "orc actors route to the nomadic given-name generator");
+        Equal("orc_nomadic_alliance",
+            AWOrcNomadicNamingRules.ResolveGeneratorId(
+                AWNamingObjectKind.Alliance),
+            "orc alliances route to nomadic resources");
+        Equal("orc_nomadic_city",
+            AWOrcNomadicNamingRules.ResolveGeneratorId(
+                AWNamingObjectKind.City),
+            "orc cities route to nomadic resources");
+        Equal("orc_nomadic_clan",
+            AWOrcNomadicNamingRules.ResolveGeneratorId(
+                AWNamingObjectKind.Clan),
+            "orc clans route to nomadic resources");
+        Equal("orc_nomadic_culture",
+            AWOrcNomadicNamingRules.ResolveGeneratorId(
+                AWNamingObjectKind.Culture),
+            "orc cultures route to nomadic resources");
+        Equal("orc_nomadic_kingdom",
+            AWOrcNomadicNamingRules.ResolveGeneratorId(
+                AWNamingObjectKind.Kingdom),
+            "orc kingdoms route to nomadic resources");
+        Equal("orc_nomadic_language",
+            AWOrcNomadicNamingRules.ResolveGeneratorId(
+                AWNamingObjectKind.Language),
+            "orc languages route to nomadic resources");
+        Equal("orc_nomadic_religion",
+            AWOrcNomadicNamingRules.ResolveGeneratorId(
+                AWNamingObjectKind.Religion),
+            "orc religions route to nomadic resources");
+        Equal("orc_nomadic_subspecies",
+            AWOrcNomadicNamingRules.ResolveGeneratorId(
+                AWNamingObjectKind.Subspecies),
+            "orc subspecies route to nomadic resources");
+        Equal("orc_name",
+            AWCultureNamingTraditionRules.ResolveFallbackGeneratorId(
+                NamingProfileId.OrcNomadic, AWNamingObjectKind.Actor,
+                "orc", "human_name"),
+            "a missing orc actor generator falls back within the orc profile");
+        Equal("orc_kingdom",
+            AWCultureNamingTraditionRules.ResolveFallbackGeneratorId(
+                NamingProfileId.OrcNomadic, AWNamingObjectKind.Kingdom,
+                "orc", "human_kingdom"),
+            "a missing orc kingdom generator never crosses to human");
+        Equal("elf_given_name",
+            AWCultureNamingTraditionRules.ResolveFallbackGeneratorId(
+                NamingProfileId.Western, AWNamingObjectKind.Actor,
+                "elf", "elf_name"),
+            "a western fallback preserves species-only elf given names");
+        Equal("dwarf_given_name",
+            AWCultureNamingTraditionRules.ResolveFallbackGeneratorId(
+                NamingProfileId.Western, AWNamingObjectKind.Actor,
+                "dwarf", "human_name"),
+            "a western fallback preserves species-only dwarf given names");
+        Equal("Xia_language",
+            AWCultureNamingTraditionRules.ResolveFallbackGeneratorId(
+                NamingProfileId.Xia, AWNamingObjectKind.Language,
+                "human", "human_lang"),
+            "a missing Xia generator never crosses back to human");
+        Equal("civ_monkey_clan",
+            AWCultureNamingTraditionRules.ResolveFallbackGeneratorId(
+                NamingProfileId.Monkey, AWNamingObjectKind.Clan,
+                "civ_monkey", "Xia_clan"),
+            "a monkey fallback keeps its dedicated clan generator");
+        Equal("book_name_history",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.OrcNomadic, WesternNamingTradition.Von,
+                AWNamingObjectKind.Book, "orc", "book_name_history"),
+            "books retain their explicit template under an orc founder");
+        Equal("sword_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.OrcNomadic, WesternNamingTradition.Von,
+                AWNamingObjectKind.Item, "orc", "sword_name"),
+            "items retain their explicit template under an orc creator");
+        Equal("war_conquest",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.OrcNomadic, WesternNamingTradition.Von,
+                AWNamingObjectKind.War, "orc", "war_conquest"),
+            "wars retain their explicit war-type template");
+
+        Equal("路易",
+            AWWesternFamilyNameRules.BuildActor("路易", string.Empty,
+                noble: false),
+            "a western commoner displays only the given name");
+        Equal("路易 德·巴黎",
+            AWWesternFamilyNameRules.BuildActor("路易", "德·巴黎",
+                noble: true),
+            "a western noble displays given name and family stem");
+        Equal("路易",
+            AWWesternFamilyNameRules.BuildActor("  路易  ", " 德·巴黎 ",
+                noble: false),
+            "a commoner does not acquire a supplied family stem");
+        Equal("路易 德·巴黎",
+            AWWesternFamilyNameRules.BuildActor("  路易  ", " 德·巴黎 ",
+                noble: true),
+            "actor components normalize surrounding whitespace");
+
+        Equal("冯·维也纳家族",
+            AWWesternFamilyNameRules.BuildFamilyTitle(
+                WesternNamingTradition.Von, "维也纳"),
+            "Von maps to the Chinese Feng particle");
+        Equal("德·巴黎家族",
+            AWWesternFamilyNameRules.BuildFamilyTitle(
+                WesternNamingTradition.De, "巴黎"),
+            "De maps to the Chinese De particle");
+        Equal("范·阿姆斯特丹家族",
+            AWWesternFamilyNameRules.BuildFamilyTitle(
+                WesternNamingTradition.Van, "阿姆斯特丹"),
+            "Van maps to the Chinese Fan particle");
+        Equal("迪·佛罗伦萨家族",
+            AWWesternFamilyNameRules.BuildFamilyTitle(
+                WesternNamingTradition.Di, "佛罗伦萨"),
+            "Di maps to the Chinese Di particle");
+        Equal("德·里昂家族",
+            AWWesternFamilyNameRules.BuildFamilyTitle(
+                WesternNamingTradition.De, "里昂"),
+            "a landed branch uses its new origin city");
+        Equal("德·新 巴黎家族",
+            AWWesternFamilyNameRules.BuildFamilyTitle(
+                WesternNamingTradition.De, "  新   巴黎  "),
+            "family origins normalize whitespace");
+        Equal(string.Empty,
+            AWWesternFamilyNameRules.BuildFamilyTitle(
+                WesternNamingTradition.De, "   "),
+            "a blank family origin is rejected");
+
+        Equal("孛儿只斤部落",
+            AWOrcNomadicNamingRules.BuildClanTitle("孛儿只斤"),
+            "an orc family heading uses the nomadic clan suffix");
+        Equal("孛儿 只斤部落",
+            AWOrcNomadicNamingRules.BuildClanTitle("  孛儿   只斤  "),
+            "an orc clan stem normalizes whitespace");
+        Equal(string.Empty,
+            AWOrcNomadicNamingRules.BuildClanTitle("   "),
+            "a blank orc clan stem is rejected");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

@@ -395,24 +395,16 @@ namespace AncientWarfare3.core.court
 
         public static int RankForOffice(string pOfficeId)
         {
+            CourtOfficeDefinition definition =
+                CourtProfileRegistry.FindOfficeAcrossProfiles(pOfficeId);
+            if (definition != null)
+            {
+                if (definition.Grade <= 10) return HighOfficeRank;
+                if (definition.Grade <= 20) return MinistryRank;
+                return SpecialistRank;
+            }
             switch (pOfficeId ?? "")
             {
-                case CourtOfficeId.TaiZai:
-                case CourtOfficeId.SiTu:
-                case CourtOfficeId.ZongBo:
-                case CourtOfficeId.SiMa:
-                case CourtOfficeId.SiKou:
-                case CourtOfficeId.SiKong:
-                case CourtOfficeId.Chancellor:
-                case CourtOfficeId.Censor:
-                case CourtOfficeId.Marshal:
-                case CourtOfficeId.Zhongshu:
-                case CourtOfficeId.Menxia:
-                case CourtOfficeId.Shangshu:
-                    return HighOfficeRank;
-                case CourtOfficeId.ImperialPhysician:
-                case CourtOfficeId.ImperialAstrologer:
-                    return SpecialistRank;
                 case CourtOfficeId.FeudatoryChiefClerk:
                     return FeudatoryOfficeRules.InspectorRank;
                 default:

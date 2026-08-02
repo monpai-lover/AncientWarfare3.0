@@ -1,0 +1,60 @@
+using AncientWarfare3.core.lineage;
+
+internal static class XiaizationStatusDisplayRulesTests
+{
+    public static void Run()
+    {
+        False(XiaizationStatusDisplayRules.ShouldShow(nativeXia: true),
+            "native Xia hides the redundant status row");
+        True(XiaizationStatusDisplayRules.ShouldShow(nativeXia: false),
+            "every non-Xia realm shows the status row");
+        Equal("夏化：0级 · 未入夏",
+            XiaizationStatusDisplayRules.Format("夏化", 0, "未入夏"),
+            "zero level remains visible");
+        Equal("夏化：4级 · 行夏制",
+            XiaizationStatusDisplayRules.Format("夏化", 4, "行夏制"),
+            "institution level is compact");
+
+        RuntimeRowIsComplete();
+    }
+
+    private static void RuntimeRowIsComplete()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string window = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "KingdomWindowAddition.cs"));
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "XiaizationService.cs"));
+        string locales = File.ReadAllText(Path.Combine(root, "Locales",
+            "aw3_xiaization_generals.csv"));
+
+        True(window.Contains("AW_XiaizationStatus") &&
+             window.Contains("new Vector2(206, 14)") &&
+             window.Contains("XiaizationStatusDisplayRules.Format("),
+            "the kingdom window owns a fixed compact xiaization row");
+        False(service.Contains(
+                "if (level <= LevelNone && !nativeXiaCulture) return \"\";"),
+            "zero-level foreign realms retain a tooltip");
+        True(locales.Contains("aw_xiaization_status,"),
+            "the xiaization status prefix is localized");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal(string expected, string actual,
+        string message)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(message + ": expected=" +
+                                                expected + " actual=" +
+                                                actual);
+    }
+}

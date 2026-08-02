@@ -41,18 +41,23 @@ False(KingdomPolicySplitInheritanceRules.ShouldCaptureSplitSource(
 True(KingdomPolicySplitInheritanceRules.ShouldInheritFromSplit(
         pHasCapturedSource: true, pNewKingdomValid: true,
         pSourceValid: true, pSourceAlive: true,
-        pCultureIntegrated: true),
-    "an integrated founding culture may inherit from the captured mother");
+        pChildHasPolicyProfile: true),
+    "a Xia-profile split may inherit from the captured mother");
+True(KingdomPolicySplitInheritanceRules.ShouldInheritFromSplit(
+        pHasCapturedSource: true, pNewKingdomValid: true,
+        pSourceValid: true, pSourceAlive: true,
+        pChildHasPolicyProfile: true),
+    "a non-Xia western-profile split inherits its mother's progress");
 False(KingdomPolicySplitInheritanceRules.ShouldInheritFromSplit(
         pHasCapturedSource: true, pNewKingdomValid: true,
         pSourceValid: true, pSourceAlive: true,
-        pCultureIntegrated: false),
-    "an unintegrated culture remains unchanged even when splitting from Xia");
+        pChildHasPolicyProfile: false),
+    "a non-civilized split without an AW3 profile cannot inherit nodes");
 False(KingdomPolicySplitInheritanceRules.ShouldInheritFromSplit(
         pHasCapturedSource: false, pNewKingdomValid: true,
         pSourceValid: true, pSourceAlive: true,
-        pCultureIntegrated: true),
-    "an integrated culture does not authorize regional or parent guessing");
+        pChildHasPolicyProfile: true),
+    "a valid profile does not authorize regional or parent guessing");
 
 False(KingdomPolicySplitInheritanceRules.ShouldMarkCultureIntegrated(
         pNativeXiaCulture: false, pPersistedXiaizationLevel: 3),
@@ -66,6 +71,12 @@ False(KingdomPolicySplitInheritanceRules.ShouldMarkCultureIntegrated(
 True(KingdomPolicySplitInheritanceRules.ShouldMarkCultureIntegrated(
         pNativeXiaCulture: true, pPersistedXiaizationLevel: 0),
     "native Xia culture projects the same authoritative marker");
+False(KingdomPolicySplitInheritanceRules.ShouldMarkCultureFullyIntegrated(4),
+    "Xia institutions alone do not mark full Xia entry");
+True(KingdomPolicySplitInheritanceRules.ShouldMarkCultureFullyIntegrated(5),
+    "the completed Xiaized-dynasty level marks full Xia entry");
+True(KingdomPolicySplitInheritanceRules.ShouldMarkCultureFullyIntegrated(8),
+    "a corrupt high persisted level still restores the one-way full marker");
 
 Equal(0,
     KingdomPolicySplitInheritanceRules.NormalizeInheritedXiaizationLevel(-4),
@@ -76,5 +87,31 @@ Equal(3,
 Equal(5,
     KingdomPolicySplitInheritanceRules.NormalizeInheritedXiaizationLevel(8),
     "corrupt source levels cannot exceed the supported maximum");
+
+Equal("western_feudal",
+    KingdomPolicySplitInheritanceRules.ResolveInheritedGovernmentState(
+        "western_general", "western_feudal"),
+    "a western child keeps a valid western government institution");
+Equal("default",
+    KingdomPolicySplitInheritanceRules.ResolveInheritedGovernmentState(
+        "xia", "western_feudal"),
+    "a child that entered Xia cannot retain a western government state");
+Equal("default",
+    KingdomPolicySplitInheritanceRules.ResolveInheritedGovernmentState(
+        "western_general", "invalid_state"),
+    "unknown inherited government states are repaired");
+
+Equal(15,
+    KingdomPolicySplitInheritanceRules.ResolveInheritedRoyalAuthority(
+        "western_general", "western_general", 30),
+    "a western split inherits half of the mother realm's authority reserve");
+Equal(0,
+    KingdomPolicySplitInheritanceRules.ResolveInheritedRoyalAuthority(
+        "xia", "western_general", 30),
+    "cross-profile splits do not retain western royal authority");
+Equal(0,
+    KingdomPolicySplitInheritanceRules.ResolveInheritedRoyalAuthority(
+        "western_general", "western_general", -20),
+    "invalid negative authority cannot be inherited");
 
 Console.WriteLine("Kingdom policy split inheritance rules passed.");

@@ -72,7 +72,7 @@ namespace AncientWarfare3.core.lineage
         public const int MaximumPregnancyStartsPerKingdomYear = 2;
         public const int MinimumCandidateAge = 18;
         public const int MaximumCandidateAge = 33;
-        public const int MinimumConsortRequestOpinion = 60;
+        public const int MinimumConsortRequestOpinion = 30;
         public const string ConsortRequestDetailId = "consort_request";
 
         public static int ConsortCapacity(RulerHouseholdRealmTier pTier)
@@ -88,8 +88,16 @@ namespace AncientWarfare3.core.lineage
         public static string TitleKey(RulerHouseholdRealmTier pTier,
             RulerHouseholdKind pKind)
         {
+            return TitleKey(pTier, pKind, rulerIsFemale: false);
+        }
+
+        public static string TitleKey(RulerHouseholdRealmTier pTier,
+            RulerHouseholdKind pKind, bool rulerIsFemale)
+        {
             if (pKind == RulerHouseholdKind.PrincipalWife)
             {
+                if (rulerIsFemale)
+                    return "aw_household_title_royal_husband";
                 return pTier switch
                 {
                     RulerHouseholdRealmTier.Empire =>
@@ -108,6 +116,14 @@ namespace AncientWarfare3.core.lineage
                     "aw_household_title_royal_consort",
                 _ => "aw_household_title_secondary_consort"
             };
+        }
+
+        public static bool ShouldChildFollowPromotedParent(
+            bool parentIsMale, bool parentIsReigningRuler,
+            bool fatherIsMatrilocal)
+        {
+            return parentIsMale || parentIsReigningRuler ||
+                   fatherIsMatrilocal;
         }
 
         public static bool IsRoyalMarriageCandidate(bool otherwiseEligible,
@@ -172,6 +188,12 @@ namespace AncientWarfare3.core.lineage
             }
             pKind = default;
             return false;
+        }
+
+        public static int AiProposalUrgency(bool hasPrincipalWife,
+            int activeConsorts)
+        {
+            return !hasPrincipalWife || activeConsorts <= 0 ? 30 : 0;
         }
 
         public static bool CanUpperRealmOfferToSubject(

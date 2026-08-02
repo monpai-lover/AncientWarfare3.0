@@ -26,12 +26,16 @@ $xiaSource = Get-Content -Raw -LiteralPath $xiaPath
 
 Assert-True ($traitSource.Contains('public const string IntegratedTraitId')) `
     'the culture marker has one stable persisted trait id'
+Assert-True ($traitSource.Contains('public const string FullyIntegratedTraitId')) `
+    'full Xia entry has a separate stable persisted culture trait id'
 Assert-True ($traitSource.Contains('saved_traits')) `
     'the marker documents vanilla CultureData.saved_traits persistence'
 Assert-True ($rulesSource.Contains('ShouldCaptureSplitSource')) `
     'pure rules distinguish rebellion/collapse splits from ordinary creation'
 Assert-True ($rulesSource.Contains('ShouldInheritFromSplit')) `
-    'pure rules require an authoritative integrated culture marker'
+    'pure rules require an authoritative child policy profile'
+Assert-True ($rulesSource.Contains('ShouldMarkCultureFullyIntegrated')) `
+    'pure rules distinguish level-four institutions from level-five full entry'
 Assert-True ($patchSource.Contains('bool pRebellion') -and
              $patchSource.Contains('bool pFellApart')) `
     'the makeOwnKingdom prefix observes both vanilla split flags'
@@ -39,8 +43,15 @@ Assert-True (-not $patchSource.Contains('MakeNewCivKingdom_PolicyPostfix')) `
     'ordinary makeNewCivKingdom creation cannot trigger inheritance'
 Assert-True (-not $serviceSource.Contains('FindRegionalSource')) `
     'inheritance never guesses a regional source kingdom'
-Assert-True ($serviceSource.Contains('XiaCultureIntegrationService.IsIntegrated')) `
-    'the founder culture marker gates split inheritance'
+Assert-True (-not $serviceSource.Contains(
+        'bool integratedCulture = XiaCultureIntegrationService.IsIntegrated')) `
+    'ordinary western cultures must not be rejected before policy inheritance'
+Assert-True ($serviceSource.Contains(
+        'KingdomPolicyProfileService.Resolve(pNewKingdom)')) `
+    'split inheritance resolves the child profile from its actual culture'
+Assert-True ($serviceSource.Contains(
+        'IsResolvableKingdomProfile(childProfile)')) `
+    'both Xia and WesternGeneral profiles may inherit compatible progress'
 Assert-True ($serviceSource.Contains('XiaizationService.InheritForSplit')) `
     'Xiaization is projected before policy eligibility is checked'
 $xiaInheritanceIndex = $serviceSource.IndexOf(
@@ -56,6 +67,12 @@ Assert-True ($serviceSource.Contains('locked_nodes = ""')) `
 Assert-True ($serviceSource.Contains('pIncludeDecision: false')) `
     'current decisions, queues, targets and one-time completions stay local'
 Assert-True ($serviceSource.Contains(
+        'ResolveInheritedGovernmentState')) `
+    'split government state must be sanitized for the child profile'
+Assert-True ($serviceSource.Contains(
+        'ResolveInheritedRoyalAuthority')) `
+    'split royal authority inheritance must be explicit and bounded'
+Assert-True ($serviceSource.Contains(
         'XiaizationService.UsesXiaizedInstitutionSystem')) `
     'inherited name integration is projected for non-Xia institutional realms'
 Assert-True ($xiaSource.Contains(
@@ -69,5 +86,7 @@ Assert-True ($xiaSource.Contains(
     'old-save migration does not infer culture identity from the current kingdom'
 Assert-True ($xiaSource.Contains('XiaCultureIntegrationService.MarkIntegrated')) `
     'reaching permanent Xia institutions projects the culture marker'
+Assert-True ($xiaSource.Contains('XiaCultureIntegrationService.MarkFullyIntegrated')) `
+    'reaching level-five full entry projects the independent full marker'
 
 Write-Host 'Kingdom policy split inheritance source guard passed.'

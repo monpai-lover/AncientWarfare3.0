@@ -5,35 +5,35 @@ internal static class ArmyReplenishmentOperationRulesTests
 {
     internal static void Run()
     {
-        Equal(15d, ArmyReplenishmentOperationRules.DurationWorldSeconds,
-            "three game months equal fifteen world seconds");
+        Equal(20d, ArmyReplenishmentOperationRules.DurationWorldSeconds,
+            "a replenishment operation has one bounded twenty-second window");
         Equal(9, ArmyReplenishmentOperationRules.ResolveApprovedShortage(
             existingApproved: 9, requestedShortage: 20),
             "a repeated request cannot enlarge approval");
         Equal(20, ArmyReplenishmentOperationRules.ResolveApprovedShortage(
             existingApproved: 0, requestedShortage: 20),
             "the first request records its full shortage");
-        Equal(3, ArmyReplenishmentOperationRules.AllowedCumulative(
+        Equal(2, ArmyReplenishmentOperationRules.AllowedCumulative(
             approved: 9, start: 100d, now: 105d),
-            "one month allows one third");
-        Equal(6, ArmyReplenishmentOperationRules.AllowedCumulative(
+            "the legacy progress projection follows the bounded window");
+        Equal(4, ArmyReplenishmentOperationRules.AllowedCumulative(
             approved: 9, start: 100d, now: 110d),
-            "two months allow two thirds");
+            "the legacy progress projection remains bounded");
         Equal(9, ArmyReplenishmentOperationRules.AllowedCumulative(
-            approved: 9, start: 100d, now: 115d),
-            "three months force all approved actors");
-        Equal(2, ArmyReplenishmentOperationRules.BatchRequest(
+            approved: 9, start: 100d, now: 120d),
+            "the bounded window eventually exposes the full approval");
+        Equal(5, ArmyReplenishmentOperationRules.BatchRequest(
             approved: 9, enlisted: 4, liveShortage: 7,
             start: 100d, now: 110d),
-            "only accrued unfilled approval is consumed");
+            "the first authority cycle consumes every approved missing slot");
         Equal(true, ArmyReplenishmentOperationRules.ShouldFinishEarly(
             liveShortage: 0), "a filled shortage finishes immediately");
         Equal(9, ArmyReplenishmentOperationRules.ClampEnlisted(
             approved: 9, persistedEnlisted: 40),
             "restore cannot overstate progress");
-        Equal(115d, ArmyReplenishmentOperationRules.ResolveDeadline(
+        Equal(120d, ArmyReplenishmentOperationRules.ResolveDeadline(
             start: 100d, persistedDeadline: 120d),
-            "restore cannot extend the three-month deadline");
+            "restore cannot extend the twenty-second deadline");
         Equal(true, ArmyReplenishmentOperationRules.ShouldResumeAttack(
             living: 2, minimum: 2),
             "a viable army leaves at the deadline");

@@ -249,6 +249,33 @@ aw_court_institution_zhou,周制,Zhou institutions,周制
 aw_court_institution_han,汉制,Han institutions,漢制
 aw_court_institution_tang,唐制,Tang institutions,唐制
 aw_court_institution_song,宋制,Song institutions,宋制
+aw_court_institution_western_primitive,家臣议事,Household Council,家臣議事
+aw_court_institution_western_base,王廷官制,Royal Council,王廷官制
+aw_court_institution_western_elective,选举官制,Elective Offices,選舉官制
+aw_court_institution_western_feudal,封建宫廷,Feudal Court,封建宮廷
+aw_court_institution_western_royal_direct,王室直辖官署,Royal Administration,王室直轄官署
+aw_court_tier_western_primitive,家臣议事,Household Council,家臣議事
+aw_court_tier_western_base,王廷官制,Royal Council,王廷官制
+aw_court_tier_western_elective,选举官制,Elective Offices,選舉官制
+aw_court_tier_western_feudal,封建宫廷,Feudal Court,封建宮廷
+aw_court_tier_western_royal_direct,王室直辖官署,Royal Administration,王室直轄官署
+aw_court_institution_effect_western_primitive,尚未建立正式官职体系,No formal office system,尚未建立正式官職體系
+aw_court_institution_effect_western_base,建立常设王廷与地方官职,Standing royal and local offices,建立常設王廷與地方官職
+aw_court_institution_effect_western_elective,官员任期六年 · 空缺通过选举补任,Six-year terms · vacancies filled by election,官員任期六年 · 空缺通過選舉補任
+aw_court_institution_effect_western_feudal,地方贵族与受教育家臣优先任官,Landed nobles and educated retainers favored,地方貴族與受教育家臣優先任官
+aw_court_institution_effect_western_royal_direct,王室直接任免 · 行政与税收提高 · 贵族和附庸不满,Royal appointment · higher administration and tax · noble and vassal discontent,王室直接任免 · 行政與稅收提高 · 貴族和附庸不滿
+aw_court_office_west_executive,执政官,Executive Magistrate,執政官
+aw_court_office_west_senate_elder,元老院长老,Senate Elder,元老院長老
+aw_court_office_west_high_priest,祭司长,High Priest,祭司長
+aw_court_office_west_field_general,前线将军,Field General,前線將軍
+aw_court_office_west_mayor,市长,Mayor,市長
+aw_court_office_west_high_justice,大法官,High Justice,大法官
+aw_court_office_west_treasurer,财政大臣,Treasurer,財政大臣
+aw_court_office_west_palace_steward,宫禁总管,Palace Steward,宮禁總管
+aw_court_office_west_royal_chamberlain,王室事务长,Royal Chamberlain,王室事務長
+aw_court_office_west_marshal,元帅,Marshal,元帥
+aw_court_office_west_secretary,文书官,Secretary,文書官
+aw_court_office_west_count,郡长,Count,郡長
 aw_court_office_han_chancellor,丞相,Chancellor,丞相
 aw_court_office_han_censor,御史大夫,Imperial Censor,御史大夫
 aw_court_office_han_marshal,太尉,Grand Commandant,太尉

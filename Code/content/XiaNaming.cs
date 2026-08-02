@@ -1,89 +1,79 @@
-#if 一米_中文名
 using System;
 using System.Collections.Generic;
-using Chinese_Name;
+using System.IO;
+using AncientWarfare3.core.naming;
 using NeoModLoader.General;
 
 namespace AncientWarfare3.content
 {
     /// <summary>
-    ///     夏朝中文命名接入(仅在编译符号 一米_中文名 启用时)。
-    ///     移植自 AW2 Code/CustomNameGenerator.cs。
-    ///
-    ///     职责(阶段2 后已收窄):
-    ///     1. 注册 mod 自带的 name_generators/Xia(国名/城名/文化/氏族 json)与 lib 词库目录;
-    ///     2. 注册 Xia_name 人名生成器 —— 只产"单名/双名"素材(不带姓)。
-    ///
-    ///     姓/氏的赋予、父系继承、贵族晋升、显示名拼接 全部交给 core/lineage/LineageService,
-    ///     本文件不再写 family_name/clan_name(那会与谱系系统冲突)。
-    ///     无中文名时:本文件整体不编译,Xia 沿用 clone human 命名;姓氏逻辑仍由 LineageService 跑
-    ///     (用 LineageNamePool 内置古姓/氏池,不依赖中文名 mod 词库)。
+    /// Registers Xia-specific resources into AW3's integrated naming engine.
+    /// Family and Shi identity remain owned by LineageService.
     /// </summary>
     internal static class XiaNaming
     {
-        /// <summary>由 ModClass.OnModLoad 调用:注册命名资源目录 + 人名生成器。</summary>
         public static void Init()
         {
             string modPath = ModClass.Instance.GetDeclaration().FolderPath;
+            string wordDirectory = Path.Combine(modPath, "name_generators", "lib");
+            foreach (AWWordLibraryAsset library in
+                     AWNamingResourceLoader.LoadWordLibraries(wordDirectory,
+                         ModClass.LogWarning))
+                AWWordLibraryManager.Instance.Submit(library);
 
-            // 消除 "duplicate asset - overwriting" 警告:ChineseName(OptionalDependency,先加载)的 default
-            // 包自带同名 Xia_city/clan/culture/kingdom/name 生成器。AW3 后注册同名会触发游戏基类
-            // AssetLibrary.add 的 overwriting 日志(AssetLibrary.cs:69)。提交前先**静默移除**已存在的同名条目
-            // (直接清 dict/list,不走 add),这样 AW3 注册时 dict 无同名 → 不再打警告。AW3 模板与 ChineseName
-            // 不同(用 Xia 真实城名、先秦诸侯国词库),是有意覆盖,故必须用 AW3 版本而非复用。
-            RemoveExistingGenerators("Xia_city", "Xia_clan", "Xia_culture", "Xia_kingdom", "Xia_name",
-                "Xia_language", "Xia_religion", "Xia_subspecies", "Xia_alliance");
-
-            CN_NameGeneratorLibrary.SubmitDirectoryToLoad(modPath + "/name_generators/Xia");
-            WordLibraryManager.SubmitDirectoryToLoad(modPath + "/name_generators/lib");
+            AWNameGeneratorLibrary.SubmitDirectoryToLoad(
+                Path.Combine(modPath, "name_generators", "Xia"),
+                ModClass.LogWarning);
 
             InitActorNameGenerator();
             OverrideClanParameterGetter();
             OverrideAllianceParameterGetter();
 
-            CN_NameGeneratorAsset allianceGenerator = CN_NameGeneratorLibrary.Get(XiaNameSets.AllianceGenerator);
+            AWNameGeneratorAsset allianceGenerator =
+                AWNameGeneratorLibrary.Get(XiaNameSets.AllianceGenerator);
             if (allianceGenerator == null)
-                ModClass.LogWarning("[Xia alliance naming] Chinese Name route unavailable: Xia_alliance missing");
+                ModClass.LogWarning(
+                    "[Xia alliance naming] integrated route unavailable: Xia_alliance missing");
             else
-                ModClass.LogInfo("[Xia alliance naming] Chinese Name route ready: generator=" +
-                                 allianceGenerator.id + " templates=" + allianceGenerator.templates.Count);
+                ModClass.LogInfo(
+                    "[Xia alliance naming] integrated route ready: generator=" +
+                    allianceGenerator.Id + " templates=" +
+                    allianceGenerator.Templates.Count);
 
             LM.AddToCurrentLocale("familyname", "姓");
             LM.AddToCurrentLocale("clanname", "氏");
             LM.ApplyLocale();
         }
 
-        /// <summary>
-        ///     修复"原版 Clan(氏族)命名把姓当氏":ChineseName 的 Xia_clan 模板用 $founder_family_name$,
-        ///     其 default_clan_parameter_getter 把该参数填成 actor.data["chinese_family_name"](=我们的**姓**)
-        ///     → 氏族名变成 "城名+姓+家/氏/族"(如 泾阳滕家,滕是姓不是氏)。
-        ///     这里覆盖 clan 参数 getter:对 Xia,founder_family_name 改填该人**氏(clan_name)**;
-        ///     非 Xia 或无氏时回退原行为(姓)。ParameterGetters 是 Chinese_Name.dll 的 public API,可直接覆盖 "default"。
-        /// </summary>
         private static void OverrideClanParameterGetter()
         {
             try
             {
-                ParameterGetters.PutClanParameterGetter("default", (pClan, pActor, pParameters) =>
-                {
-                    pParameters["race"] = pClan.data.original_actor_asset;
-                    pParameters["founder_home"] = string.IsNullOrEmpty(pClan.data.founder_city_name)
-                        ? pClan.data.founder_kingdom_name
-                        : pClan.data.founder_city_name;
-
-                    // 优先取"氏"(clan_name);无氏回退"姓"(chinese_family_name),保证模板有值。
-                    string shi = ResolveClanShi(pClan, pActor);
-                    if (XiaNameRepairRules.IsInvalidGeneratedMetaName(shi))
+                AWNameParameterGetters.PutClanParameterGetter("default",
+                    (pClan, pActor, pParameters) =>
                     {
-                        long seed = pActor?.data?.id ?? pClan?.getID() ?? 0L;
-                        shi = XiaFallbackNameRules.LocalClanShiName(seed);
-                    }
-                    pParameters["founder_family_name"] = shi;
-                });
+                        pParameters["race"] =
+                            pClan?.data?.original_actor_asset ?? string.Empty;
+                        pParameters["founder_home"] = string.IsNullOrEmpty(
+                            pClan?.data?.founder_city_name)
+                            ? pClan?.data?.founder_kingdom_name ?? string.Empty
+                            : pClan.data.founder_city_name;
+
+                        string shi = ResolveClanShi(pClan, pActor);
+                        if (XiaNameRepairRules.IsInvalidGeneratedMetaName(shi))
+                        {
+                            long seed = pActor?.data?.id ??
+                                        pClan?.getID() ?? 0L;
+                            shi = XiaFallbackNameRules.LocalClanShiName(seed);
+                        }
+                        pParameters["founder_family_name"] = shi;
+                    });
             }
-            catch (Exception e)
+            catch (Exception error)
             {
-                ModClass.LogWarning("覆盖 Clan 命名参数 getter 失败(氏族名可能仍用姓): " + e.Message);
+                ModClass.LogWarning(
+                    "Failed to register Xia clan naming parameters: " +
+                    error.Message);
             }
         }
 
@@ -91,21 +81,27 @@ namespace AncientWarfare3.content
         {
             try
             {
-                ParameterGetters.PutAllianceParameterGetter("aw_xia_alliance", (pAlliance, pParameters) =>
-                {
-                    ParameterGetters.GetAllianceParameterGetter("default")(pAlliance, pParameters);
-                    pParameters["meeting_city"] = ResolveAllianceMeetingCity(pAlliance);
-                });
+                AWNameParameterGetters.PutAllianceParameterGetter(
+                    "aw_xia_alliance", (pAlliance, pParameters) =>
+                    {
+                        AWNameParameterGetters
+                            .GetAllianceParameterGetter("default")
+                            (pAlliance, pParameters);
+                        pParameters["meeting_city"] =
+                            ResolveAllianceMeetingCity(pAlliance);
+                    });
             }
-            catch (Exception e)
+            catch (Exception error)
             {
-                ModClass.LogWarning("注册 Xia 会盟城市参数失败: " + e.Message);
+                ModClass.LogWarning(
+                    "Failed to register Xia alliance naming parameters: " +
+                    error.Message);
             }
         }
 
         private static string ResolveAllianceMeetingCity(Alliance pAlliance)
         {
-            if (pAlliance?.data == null) return "";
+            if (pAlliance?.data == null) return string.Empty;
             Kingdom founder = null;
             foreach (Kingdom kingdom in pAlliance.kingdoms_list)
             {
@@ -117,130 +113,60 @@ namespace AncientWarfare3.content
                 }
                 if (founder == null) founder = kingdom;
             }
-            if (founder?.data == null) return "";
+            if (founder?.data == null) return string.Empty;
 
             string capital = founder.capital?.data?.name;
-            string firstCity = "";
+            string firstCity = string.Empty;
             foreach (City city in founder.cities)
             {
-                if (city?.data == null || city.isRekt() || string.IsNullOrWhiteSpace(city.data.name)) continue;
+                if (city?.data == null || city.isRekt() ||
+                    string.IsNullOrWhiteSpace(city.data.name))
+                    continue;
                 firstCity = city.data.name;
                 break;
             }
             return XiaAllianceNamingRules.ResolveMeetingCity(capital, firstCity);
         }
 
-        /// <summary>取氏族命名用的"氏":pActor 优先;motto 路径 pActor==null 时遍历 clan 成员找第一个有氏者。</summary>
         private static string ResolveClanShi(Clan pClan, Actor pActor)
         {
-            if (pActor != null)
+            if (pActor?.data != null)
             {
-                pActor.data.get("clan_name", out string clan, "");
+                pActor.data.get("clan_name", out string clan, string.Empty);
                 if (!string.IsNullOrEmpty(clan)) return clan;
-                pActor.data.get("chinese_family_name", out string fam, "");
-                return fam; // 无氏回退姓
+                pActor.data.get("chinese_family_name", out string family,
+                    string.Empty);
+                return family;
             }
 
-            foreach (var unit in pClan.units)
+            if (pClan?.units == null) return string.Empty;
+            foreach (Actor unit in pClan.units)
             {
-                unit.data.get("clan_name", out string clan, "");
+                if (unit?.data == null) continue;
+                unit.data.get("clan_name", out string clan, string.Empty);
                 if (!string.IsNullOrEmpty(clan)) return clan;
             }
-            foreach (var unit in pClan.units)
+            foreach (Actor unit in pClan.units)
             {
-                unit.data.get("chinese_family_name", out string fam, "");
-                if (!string.IsNullOrEmpty(fam)) return fam;
+                if (unit?.data == null) continue;
+                unit.data.get("chinese_family_name", out string family,
+                    string.Empty);
+                if (!string.IsNullOrEmpty(family)) return family;
             }
-            return "";
-        }
-
-        /// <summary>
-        ///     从 CN_NameGeneratorLibrary 静默移除指定 id 的已注册生成器。
-        ///     用于消除 AW3 覆盖 ChineseName 同名 Xia 生成器时的 overwriting 警告——AW3 提交前先清掉旧的。
-        ///     Chinese_Name.dll 非 publicized,Instance(internal)/dict/list(protected)编译期不可访问,故用反射。
-        /// </summary>
-        private static void RemoveExistingGenerators(params string[] pIds)
-        {
-            try
-            {
-                var libType = typeof(CN_NameGeneratorLibrary);
-                // internal static CN_NameGeneratorLibrary Instance
-                var instanceField = libType.GetField("Instance",
-                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic |
-                    System.Reflection.BindingFlags.Public);
-                object lib = instanceField?.GetValue(null);
-                if (lib == null) return;
-
-                // protected Dictionary<string,T> dict; protected List<T> list (AssetLibrary<T> 基类)
-                var dict = GetMemberValue(lib, "dict") as System.Collections.IDictionary;
-                var list = GetMemberValue(lib, "list") as System.Collections.IList;
-                if (dict == null) return;
-
-                foreach (string id in pIds)
-                {
-                    if (!dict.Contains(id)) continue;
-                    object asset = dict[id];
-                    dict.Remove(id);
-                    list?.Remove(asset);
-                }
-            }
-            catch (Exception e)
-            {
-                // 反射失败不影响功能(只是 overwriting 警告仍会出现),不崩。
-                ModClass.LogWarning("移除 ChineseName 同名 Xia 生成器失败(overwriting 警告将保留): " + e.Message);
-            }
-        }
-
-        /// <summary>反射取字段或属性值(沿继承链向上找,含 protected/private)。</summary>
-        private static object GetMemberValue(object pObj, string pName)
-        {
-            var t = pObj.GetType();
-            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance |
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
-            while (t != null)
-            {
-                var f = t.GetField(pName, flags);
-                if (f != null) return f.GetValue(pObj);
-                var p = t.GetProperty(pName, flags);
-                if (p != null) return p.GetValue(pObj);
-                t = t.BaseType;
-            }
-            return null;
+            return string.Empty;
         }
 
         private static void InitActorNameGenerator()
         {
-            // Xia_name always emits two-character material. LineageService shortens it only for Clan members.
-            var generator = new XiaActorNameGenerator("Xia_name", "default");
-            generator.AddTemplate("{千字文}{千字文}", 4);
-            generator.AddTemplate("{中文名字}{千字文}", 3);
-            generator.AddTemplate("{千字文}{中文名字}", 2);
-            CN_NameGeneratorLibrary.Submit(generator);
-
-            // 不再追加写 family_name/clan_name 的 ParameterGetter ——
-            // 姓氏的赋予/继承/显示完全由 core/lineage/LineageService 负责(出生 hook + 晋升 + ApplyDisplayName)。
-        }
-
-        /// <summary>Xia 人名生成器:只产单名/双名,姓氏由 LineageService 后置拼接。</summary>
-        private class XiaActorNameGenerator : CN_NameGeneratorAsset
-        {
-            public XiaActorNameGenerator(string pId, string pParameterGetter)
+            var templates = new List<AWNameTemplate>
             {
-                id = pId;
-                parameter_getter = pParameterGetter;
-                templates ??= new List<CN_NameTemplate>();
-            }
-
-            public void AddTemplate(string pFormat, float pWeight)
-            {
-                templates.Add(CN_NameTemplate.Create(pFormat, pWeight));
-            }
-
-            public override string GenerateName(Dictionary<string, string> pParameters)
-            {
-                return base.GenerateName(pParameters);
-            }
+                AWNameTemplate.Create("{千字文}{千字文}", 4f),
+                AWNameTemplate.Create("{中文名字}{千字文}", 3f),
+                AWNameTemplate.Create("{千字文}{中文名字}", 2f)
+            };
+            AWNameGeneratorLibrary.Submit(new AWNameGeneratorAsset(
+                XiaNameSets.UnitGenerator, templates,
+                AWNameTemplate.Create("{千字文}", 1f), "default"));
         }
     }
 }
-#endif

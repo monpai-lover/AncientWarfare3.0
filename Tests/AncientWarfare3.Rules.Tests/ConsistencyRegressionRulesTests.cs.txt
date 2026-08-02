@@ -162,6 +162,15 @@ internal static class ConsistencyRegressionRulesTests
         Equal(false, ArmyCreationSafetyRules.ShouldSkipSave(
                 hasData: true, alive: true),
             "valid armies use normal save");
+        Equal(true, ArmyCreationSafetyRules.ShouldDetachCityReference(
+                isSpecialArmy: true, usesDetachedRole: true),
+            "detached special armies never persist a runtime city link");
+        Equal(false, ArmyCreationSafetyRules.ShouldDetachCityReference(
+                isSpecialArmy: true, usesDetachedRole: false),
+            "anchored special armies retain their city link");
+        Equal(false, ArmyCreationSafetyRules.ShouldDetachCityReference(
+                isSpecialArmy: false, usesDetachedRole: true),
+            "ordinary armies retain vanilla city ownership");
 
         Equal(false, RecentFeatureBenchmarkRules.ShouldLogSnapshot(
                 diagnosticSwitch: null, totalMilliseconds: 3.5),

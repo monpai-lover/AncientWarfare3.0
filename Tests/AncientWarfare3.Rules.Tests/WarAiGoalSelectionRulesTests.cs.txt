@@ -31,7 +31,7 @@ internal static class WarAiGoalSelectionRulesTests
         FabricatableTerritoryCompetesWithImmediateSubjugation();
         IndependenceRequiresTheActualSuzerainTarget();
         NoCbIsOnlyALegalFallback();
-        ForcedVassalageRequiresTwoTitleRanks();
+        ForcedVassalageRequiresDukeAgainstBaron();
         VassalRelationRetainsItsStrictTitleGate();
         TributaryWarRequiresRoyalOrImperialAttacker();
         DedicatedVassalWarRequiresEligibleAdjacentTarget();
@@ -1234,7 +1234,7 @@ internal static class WarAiGoalSelectionRulesTests
             "a losing war leader offers liquid compensation to induce the opposing ally to exit");
     }
 
-    private static void ForcedVassalageRequiresTwoTitleRanks()
+    private static void ForcedVassalageRequiresDukeAgainstBaron()
     {
         False(WarAiGoalSelectionRules.CanAiForceVassal(
                 attackerTitleRank: 1, targetTitleRank: 0),
@@ -1245,9 +1245,15 @@ internal static class WarAiGoalSelectionRulesTests
         False(WarAiGoalSelectionRules.CanAiForceVassal(
                 attackerTitleRank: 3, targetTitleRank: 2),
             "a king cannot force-vassalize a duke through AI");
-        True(WarAiGoalSelectionRules.CanAiForceVassal(
+        False(WarAiGoalSelectionRules.CanAiForceVassal(
                 attackerTitleRank: 4, targetTitleRank: 2),
-            "an emperor may force-vassalize a duke through AI");
+            "an emperor cannot use the duke-against-baron vassal war");
+        False(WarAiGoalSelectionRules.CanAiForceVassal(
+                attackerTitleRank: 3, targetTitleRank: 0),
+            "a king must use territorial conquest rather than vassal war");
+        False(WarAiGoalSelectionRules.CanAiForceVassal(
+                attackerTitleRank: 2, targetTitleRank: 1),
+            "a duke cannot use vassal war against a marquis");
 
         var oneRankGap = new WarAiGoalContext(
             directlyAdjacent: true, attackerIsSubject: false,

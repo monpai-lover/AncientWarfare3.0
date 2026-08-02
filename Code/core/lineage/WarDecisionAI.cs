@@ -11,7 +11,8 @@ namespace AncientWarfare3.core.lineage
     {
         private const string LAST_CHECK_YEAR = "aw_war_ai_last_check_year";
         private const string LAST_ACTION_YEAR = "aw_war_ai_last_action_year";
-        private const string CLAIM_TARGET_ID = "aw_war_ai_claim_target_id";
+        private const string CLAIM_TARGET_ID =
+            WarClaimPreparationService.TargetKey;
         private const int CHECK_INTERVAL = 6;
         private const int ACTION_COOLDOWN = 18;
         private static readonly Random Rng = new Random();
@@ -53,8 +54,24 @@ namespace AncientWarfare3.core.lineage
                 traceCandidates);
             if (target?.data == null)
                 return AsyncStrategyAuthorityTrace.Planned(trace);
-            if (!Chance(0.28f * WarMultiplier(pKingdom, target, court)))
+            WarStrategyCandidateKind selectedKind =
+                traceCandidates.Count > 0
+                    ? traceCandidates[0].WarKind
+                    : WarStrategyCandidateKind.None;
+            bool shouldIssue = selectedKind ==
+                               WarStrategyCandidateKind.Zhulu
+                ? ZhuluWarRules.ShouldIssueDiplomaticDeclaration(
+                    Rng.NextDouble())
+                : Chance(0.28f * WarMultiplier(pKingdom, target, court));
+            if (!shouldIssue)
                 return AsyncStrategyAuthorityTrace.Planned(trace);
+            if (selectedKind == WarStrategyCandidateKind.Zhulu)
+            {
+                if (DiplomaticWarDeclarationService.IssueZhulu(
+                        pKingdom, target))
+                    pKingdom.data.set(LAST_ACTION_YEAR, year);
+                return AsyncStrategyAuthorityTrace.Planned(trace);
+            }
             WarTerritoryService.WarTargetOption option =
                 PickBestImmediateOption(pKingdom, target);
             if (option != null && DiplomaticWarDeclarationService.Issue(
@@ -65,9 +82,8 @@ namespace AncientWarfare3.core.lineage
                 return AsyncStrategyAuthorityTrace.Planned(trace);
             }
 
-            City targetCity = WarTerritoryService
-                .FindFirstFabricationTargetCity(pKingdom, target);
-            if (!TryAcquireWeakClaim(pKingdom, target, targetCity))
+            if (!WarClaimPreparationService.TryBeginWeakClaim(pKingdom,
+                    target))
                 return AsyncStrategyAuthorityTrace.Planned(trace);
             pKingdom.data.set(CLAIM_TARGET_ID, target.id);
             pKingdom.data.set(LAST_ACTION_YEAR, year);
@@ -247,9 +263,23 @@ namespace AncientWarfare3.core.lineage
                     liveCandidate.Kind))
                 return false;
             if (pShadowOnly) return false;
-            float chance = Math.Max(0f, Math.Min(1f,
-                .28f * WarMultiplier(source, target, court)));
-            if (pPlan.Roll >= chance) return false;
+            bool shouldIssue = pPlan.WarKind ==
+                               WarStrategyCandidateKind.Zhulu
+                ? ZhuluWarRules.ShouldIssueDiplomaticDeclaration(pPlan.Roll)
+                : pPlan.Roll < Math.Max(0f, Math.Min(1f,
+                    .28f * WarMultiplier(source, target, court)));
+            if (!shouldIssue) return false;
+
+            if (pPlan.WarKind == WarStrategyCandidateKind.Zhulu)
+            {
+                if (!DiplomaticWarDeclarationService.IssueZhulu(
+                        source, target))
+                    return false;
+                source.data.set(LAST_ACTION_YEAR, pPlan.CaptureYear);
+                KingdomStrategyRevisionService.MarkChanged(source.id,
+                    target.id);
+                return true;
+            }
 
             WarTerritoryService.WarTargetOption option =
                 PickBestImmediateOption(source, target);
@@ -258,9 +288,8 @@ namespace AncientWarfare3.core.lineage
                                option);
             if (!started && pPlan.WarKind == WarStrategyCandidateKind.Normal)
             {
-                City targetCity = WarTerritoryService
-                    .FindFirstFabricationTargetCity(source, target);
-                started = TryAcquireWeakClaim(source, target, targetCity);
+                started = WarClaimPreparationService.TryBeginWeakClaim(
+                    source, target);
             }
             if (!started) return false;
             source.data.set(CLAIM_TARGET_ID, target.id);
@@ -281,14 +310,13 @@ namespace AncientWarfare3.core.lineage
                 !KingdomPolicyService.SetPolicyEnabled(kingdom, true))
                 return false;
 
-            if (DiplomaticWarDeclarationService.HasPending(kingdom))
-                return true;
-
             CourtSnapshot court = CourtService.GetSnapshot(kingdom);
             Kingdom target = IsUsableRedirectTarget(kingdom, pPreferredTarget)
                 ? pPreferredTarget
                 : PickNormalWarTarget(kingdom, court, out _);
             if (target?.data == null) return false;
+            if (DiplomaticWarDeclarationService.HasPendingForPair(kingdom,
+                    target)) return true;
 
             WarTerritoryService.WarTargetOption option =
                 PickBestImmediateOption(kingdom, target,
@@ -301,25 +329,10 @@ namespace AncientWarfare3.core.lineage
                 return queued;
             }
 
-            City targetCity = WarTerritoryService.FindFirstFabricationTargetCity(kingdom, target);
-            if (targetCity?.data == null) return false;
-            bool started = TryAcquireWeakClaim(kingdom, target, targetCity);
+            bool started = WarClaimPreparationService.TryBeginWeakClaim(
+                kingdom, target);
             if (started) kingdom.data.set(CLAIM_TARGET_ID, target.id);
             return started;
-        }
-
-        private static bool TryAcquireWeakClaim(Kingdom pSource,
-            Kingdom pTarget, City pTargetCity)
-        {
-            if (pTargetCity?.data == null) return false;
-            if (DiplomaticOperationService.HasActiveSpyNetwork(pSource,
-                    pTarget, out _, out _))
-                return DiplomaticOperationService.TryStartForgeDocuments(
-                    pSource, pTarget, pTargetCity,
-                    WarTerritoryService.PROJECT_WEAK_CLAIM,
-                    pPlayerInitiated: false, out _, out _);
-            return DiplomaticOperationService.TryStartSpyNetwork(pSource,
-                pTarget, pPlayerInitiated: false, out _, out _);
         }
 
         private static bool TryDeclarePreparedWar(Kingdom pKingdom, CourtSnapshot pCourt)
@@ -350,7 +363,8 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (!StillWantsWar(pKingdom, target, pCourt)) return false;
-            if (DiplomaticWarDeclarationService.HasPending(pKingdom))
+            if (DiplomaticWarDeclarationService.HasPendingForPair(pKingdom,
+                    target))
                 return false;
 
             WarTerritoryService.WarTargetOption option = PickBestImmediateOption(pKingdom, target);
@@ -409,8 +423,14 @@ namespace AncientWarfare3.core.lineage
             Kingdom pTarget, Kingdom pMandate, MandateReport pMandateReport,
             Kingdom pSourceRoot, float pSourceAlliancePower)
         {
+            bool isZhuluAge = World.world?.map_stats?.world_age_id ==
+                              ZhuluAgeRules.AgeId;
             bool targetIsMandate = pTarget == pMandate;
-            WarStrategyCandidateKind preferredKind = targetIsMandate
+            bool zhuluEligible = ZhuluWarService.CanDeclare(pSource,
+                pTarget, out _);
+            WarStrategyCandidateKind preferredKind = zhuluEligible
+                ? WarStrategyCandidateKind.Zhulu
+                : targetIsMandate
                 ? WarStrategyCandidateKind.TakeMandate
                 : pSource == pMandate
                     ? WarStrategyCandidateKind.MandateConquest
@@ -428,6 +448,7 @@ namespace AncientWarfare3.core.lineage
             bool sameAlliance = false;
             float targetAlliancePower = 0f;
             bool neighbor = false;
+            float capitalDistance = CapitalDistance(pSource, pTarget);
             int opinion = 0;
             bool needsFabrication = preferredKind ==
                                     WarStrategyCandidateKind.Normal;
@@ -459,6 +480,12 @@ namespace AncientWarfare3.core.lineage
                         opinion = Opinion(pSource, pTarget);
                 }
             }
+            if (preferredKind == WarStrategyCandidateKind.Zhulu)
+            {
+                neighbor = AreNeighbors(pSource, pTarget);
+                sameAlliance = WarTerritoryService.AreInSameAlliance(
+                    pSource, pTarget);
+            }
             bool fabricationAvailable = false;
             if (needsFabrication)
                 fabricationAvailable = WarTerritoryService
@@ -472,7 +499,10 @@ namespace AncientWarfare3.core.lineage
                 sourceAlliancePower: pSourceAlliancePower,
                 targetAlliancePower: targetAlliancePower,
                 mandateValue: pMandateReport?.mandate_value ?? 0,
-                mandateCoreControl: pMandateReport?.core_control ?? 1f);
+                mandateCoreControl: pMandateReport?.core_control ?? 1f,
+                zhuluEligible: zhuluEligible,
+                capitalDistance: capitalDistance,
+                zhuluAge: isZhuluAge);
         }
 
         private static WarTerritoryService.WarTargetOption
@@ -485,12 +515,17 @@ namespace AncientWarfare3.core.lineage
             int noCbFallbackScore = int.MinValue;
             WarAiPeopleRelation relation = ResolvePeopleRelation(
                 pKingdom, pTarget);
+            SamePeopleWarRoute route = SamePeopleWarIntentRules.Resolve(
+                relation, pKingdom.id, pTarget.id, Date.getCurrentYear(),
+                WarClaimPreparationService.IsLockedTo(pKingdom, pTarget));
             WarAiGoalContext context = BuildGoalContext(pKingdom, pTarget);
             foreach (WarTerritoryService.WarTargetOption option in WarTerritoryService.BuildTargetOptions(pKingdom, pTarget))
             {
                 if (option == null || (!pAllowNoCb &&
                     option.goal_type == WarTerritoryService.GOAL_NO_CB))
                     continue;
+                if (SamePeopleWarIntentRules.ShouldSuppressSubjugation(
+                        route, option.goal_type)) continue;
                 if (!DiplomaticWarDeclarationService.CanIssue(pKingdom,
                         option, out _)) continue;
                 if (option.goal_type == WarTerritoryService.GOAL_RESTORE_KINGDOM &&
@@ -511,11 +546,7 @@ namespace AncientWarfare3.core.lineage
                 bestScore = strategicScore;
                 best = option;
             }
-            WarTerritoryService.WarTargetOption selected =
-                best ?? noCbFallback;
-            if (ShouldPrepareTerritorialClaim(pKingdom, pTarget, selected,
-                    relation, context)) return null;
-            return selected;
+            return best ?? noCbFallback;
         }
 
         private static bool ShouldPrepareTerritorialClaim(Kingdom pSource,
@@ -646,8 +677,11 @@ namespace AncientWarfare3.core.lineage
 
         private static IEnumerable<Kingdom> CandidateKingdoms(Kingdom pKingdom)
         {
+            bool isZhuluAge = World.world?.map_stats?.world_age_id ==
+                              ZhuluAgeRules.AgeId;
             return CandidateKingdomsWithMandate(pKingdom,
-                MandateService.GetCurrentMandateKingdom()).Take(24);
+                    MandateService.GetCurrentMandateKingdom())
+                .Take(ZhuluAgeRules.WarCandidateLimit(isZhuluAge));
         }
 
         private static IEnumerable<Kingdom> CandidateKingdomsReadOnly(
@@ -685,6 +719,52 @@ namespace AncientWarfare3.core.lineage
                     yield return other;
                 }
             }
+
+            bool isZhuluAge = World.world?.map_stats?.world_age_id ==
+                              ZhuluAgeRules.AgeId;
+            if (!ZhuluAgeRules.ShouldIncludeDistantTargets(isZhuluAge,
+                    MandatePhaseService.CurrentPhase,
+                    XiaizationService.CanUseMandateSystem(pKingdom)))
+                yield break;
+            var distant = new List<Kingdom>();
+            try
+            {
+                foreach (Kingdom other in World.world.kingdoms)
+                {
+                    if (other?.data == null || other == pKingdom ||
+                        other.isRekt() || !other.isCiv() ||
+                        other.isNeutral() || seen.Contains(other.id) ||
+                        !ZhuluAgeRules.IsEligibleDistantTarget(isZhuluAge,
+                            XiaizationService.CanUseMandateSystem(other)))
+                        continue;
+                    distant.Add(other);
+                }
+            }
+            catch { yield break; }
+            distant.Sort((left, right) => CapitalDistance(pKingdom, left)
+                .CompareTo(CapitalDistance(pKingdom, right)));
+            for (int index = 0; index < distant.Count; index++)
+            {
+                Kingdom other = distant[index];
+                if (seen.Add(other.id)) yield return other;
+            }
+        }
+
+        private static float CapitalDistance(Kingdom pSource,
+            Kingdom pTarget)
+        {
+            try
+            {
+                WorldTile source = pSource?.capital?.getTile();
+                WorldTile target = pTarget?.capital?.getTile();
+                return source == null || target == null
+                    ? float.MaxValue
+                    : Toolbox.DistTile(source, target);
+            }
+            catch
+            {
+                return float.MaxValue;
+            }
         }
 
         private static bool AreNeighbors(Kingdom pA, Kingdom pB)
@@ -720,9 +800,21 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral()) return false;
             if (!pKingdom.hasKing() || pKingdom.hasEnemies()) return false;
-            if (VassalService.GetDiplomaticSuzerain(pKingdom)?.data != null)
+            bool isZhuluAge = World.world?.map_stats?.world_age_id ==
+                              ZhuluAgeRules.AgeId;
+            bool hasVassalSuzerain = VassalService.GetSuzerain(pKingdom)
+                                          ?.data != null;
+            bool hasDiplomaticSuzerain = VassalService
+                                              .GetDiplomaticSuzerain(pKingdom)
+                                          ?.data != null;
+            if (!ZhuluAgeRules.IsIndependentAiAttacker(isZhuluAge,
+                    hasVassalSuzerain, hasDiplomaticSuzerain))
                 return false;
-            return KingdomPolicyService.CanUsePolicySystem(pKingdom) || LineageService.IsXiaKingdom(pKingdom);
+            bool normalWarAiSupported = KingdomPolicyService
+                                            .CanUsePolicySystem(pKingdom) ||
+                                        LineageService.IsXiaKingdom(pKingdom);
+            return ZhuluAgeRules.CanUseUnificationWarAi(isZhuluAge,
+                normalWarAiSupported);
         }
 
         private static bool CanRunForPlotRedirect(Kingdom pKingdom)

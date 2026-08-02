@@ -58,6 +58,8 @@ namespace AncientWarfare3.core.lineage
         public bool SurvivalException { get; set; }
         public bool PursuitComplete { get; set; }
         public bool PursuitRequiresRegroup { get; set; }
+        public bool LocalForceAdvantage { get; set; }
+        public bool OpenObjective { get; set; }
         public int Supply { get; set; } = 100;
         public int Organization { get; set; } = 100;
     }

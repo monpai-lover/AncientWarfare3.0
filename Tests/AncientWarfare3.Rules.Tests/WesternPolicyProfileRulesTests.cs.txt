@@ -1,0 +1,151 @@
+using AncientWarfare3.core.policy;
+
+internal static class WesternPolicyProfileRulesTests
+{
+    public static void Run()
+    {
+        Equal(0, (int)KingdomPolicyProfileId.None,
+            "None keeps its stable enum value");
+        Equal(1, (int)KingdomPolicyProfileId.Xia,
+            "Xia keeps its stable enum value");
+        Equal(2, (int)KingdomPolicyProfileId.WesternGeneral,
+            "WesternGeneral keeps its stable enum value");
+        Equal(3, (int)KingdomPolicyProfileId.Common,
+            "Common keeps its stable enum value");
+        Equal("xia", KingdomPolicyProfileRules.XiaPersistedId,
+            "Xia uses its canonical persisted id");
+        Equal("western_general",
+            KingdomPolicyProfileRules.WesternGeneralPersistedId,
+            "WesternGeneral uses its canonical persisted id");
+
+        Equal(KingdomPolicyProfileId.Xia,
+            KingdomPolicyProfileRules.Resolve(valid: true,
+                civilized: true, nativeXia: true, monkey: false,
+                enteredXia: false),
+            "native Xia kingdoms resolve to Xia");
+        Equal(KingdomPolicyProfileId.Xia,
+            KingdomPolicyProfileRules.Resolve(valid: true,
+                civilized: true, nativeXia: false, monkey: true,
+                enteredXia: false),
+            "civilized monkeys use the Xia policy profile");
+        Equal(KingdomPolicyProfileId.Xia,
+            KingdomPolicyProfileRules.Resolve(valid: true,
+                civilized: true, nativeXia: false, monkey: false,
+                enteredXia: true),
+            "fully integrated cultures use the Xia policy profile");
+        Equal(KingdomPolicyProfileId.WesternGeneral,
+            KingdomPolicyProfileRules.Resolve(valid: true,
+                civilized: true, nativeXia: false, monkey: false,
+                enteredXia: false),
+            "other civilized kingdoms, including orcs, use WesternGeneral");
+        Equal(KingdomPolicyProfileId.None,
+            KingdomPolicyProfileRules.Resolve(valid: true,
+                civilized: false, nativeXia: true, monkey: true,
+                enteredXia: true),
+            "non-civilized assets never receive a policy profile");
+        Equal(KingdomPolicyProfileId.None,
+            KingdomPolicyProfileRules.Resolve(valid: false,
+                civilized: true, nativeXia: true, monkey: true,
+                enteredXia: true),
+            "invalid kingdoms never receive a policy profile");
+
+        Equal(true, KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                KingdomPolicyProfileId.Xia),
+            "Xia is a resolvable kingdom profile");
+        Equal(true, KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                KingdomPolicyProfileId.WesternGeneral),
+            "WesternGeneral is a resolvable kingdom profile");
+        Equal(false, KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                KingdomPolicyProfileId.None),
+            "None is not a resolvable kingdom profile");
+        Equal(false, KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                KingdomPolicyProfileId.Common),
+            "Common is catalog membership, not a kingdom profile");
+        Equal(true, KingdomPolicyProfileRules.UsesWesternCourtLabel(
+                KingdomPolicyProfileId.WesternGeneral),
+            "western realms label the policy-state entry as court");
+        Equal(false, KingdomPolicyProfileRules.UsesWesternCourtLabel(
+                KingdomPolicyProfileId.Xia),
+            "Xia realms keep the political-state entry label");
+
+        Equal(true, KingdomPolicyProfileRules.TryParsePersisted("xia",
+                out KingdomPolicyProfileId parsedXia),
+            "the canonical Xia id parses");
+        Equal(KingdomPolicyProfileId.Xia, parsedXia,
+            "the canonical Xia id maps to Xia");
+        Equal(true, KingdomPolicyProfileRules.TryParsePersisted(
+                "western_general", out KingdomPolicyProfileId parsedWestern),
+            "the canonical WesternGeneral id parses");
+        Equal(KingdomPolicyProfileId.WesternGeneral, parsedWestern,
+            "the canonical WesternGeneral id maps to WesternGeneral");
+        Equal(false, KingdomPolicyProfileRules.TryParsePersisted("XIA",
+                out KingdomPolicyProfileId invalidCase),
+            "non-canonical casing is repaired instead of silently accepted");
+        Equal(KingdomPolicyProfileId.None, invalidCase,
+            "invalid persisted ids parse to None");
+        Equal(false, KingdomPolicyProfileRules.TryParsePersisted("common",
+                out _),
+            "Common is never a persisted kingdom profile");
+        Equal(string.Empty, KingdomPolicyProfileRules.ToPersistedId(
+                KingdomPolicyProfileId.None),
+            "None has no persisted id");
+        Equal(string.Empty, KingdomPolicyProfileRules.ToPersistedId(
+                KingdomPolicyProfileId.Common),
+            "Common has no persisted id");
+
+        AssertDecision(
+            KingdomPolicyProfileRules.DecideAssignment(
+                KingdomPolicyProfileId.WesternGeneral, string.Empty),
+            KingdomPolicyProfileId.WesternGeneral, "western_general", true,
+            "a missing profile receives its runtime assignment");
+        AssertDecision(
+            KingdomPolicyProfileRules.DecideAssignment(
+                KingdomPolicyProfileId.Xia, "western_general"),
+            KingdomPolicyProfileId.Xia, "xia", true,
+            "full Xia integration upgrades a persisted western profile");
+        AssertDecision(
+            KingdomPolicyProfileRules.DecideAssignment(
+                KingdomPolicyProfileId.WesternGeneral, "xia"),
+            KingdomPolicyProfileId.Xia, "xia", false,
+            "a persisted Xia profile cannot revert to WesternGeneral");
+        AssertDecision(
+            KingdomPolicyProfileRules.DecideAssignment(
+                KingdomPolicyProfileId.WesternGeneral, "unknown"),
+            KingdomPolicyProfileId.WesternGeneral, "western_general", true,
+            "an unknown stored value is repaired to the runtime profile");
+        AssertDecision(
+            KingdomPolicyProfileRules.DecideAssignment(
+                KingdomPolicyProfileId.Xia, "xia"),
+            KingdomPolicyProfileId.Xia, "xia", false,
+            "a canonical matching profile does not rewrite storage");
+        AssertDecision(
+            KingdomPolicyProfileRules.DecideAssignment(
+                KingdomPolicyProfileId.None, "western_general"),
+            KingdomPolicyProfileId.None, string.Empty, false,
+            "an invalid runtime kingdom performs no persistence write");
+        AssertDecision(
+            KingdomPolicyProfileRules.DecideAssignment(
+                KingdomPolicyProfileId.Common, string.Empty),
+            KingdomPolicyProfileId.Common, string.Empty, false,
+            "Common catalog membership is never persisted as a kingdom profile");
+    }
+
+    private static void AssertDecision(
+        KingdomPolicyProfileAssignmentDecision pActual,
+        KingdomPolicyProfileId pProfileId, string pPersistedId,
+        bool pShouldWrite, string pMessage)
+    {
+        Equal(pProfileId, pActual.ProfileId, pMessage + " profile");
+        Equal(pPersistedId, pActual.PersistedId,
+            pMessage + " persisted id");
+        Equal(pShouldWrite, pActual.ShouldWrite,
+            pMessage + " write decision");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

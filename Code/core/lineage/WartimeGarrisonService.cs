@@ -987,6 +987,10 @@ namespace AncientWarfare3.core.lineage
             int target = WartimeGarrisonRules.TargetSize(atWar,
                 city == kingdom.capital, HasForeignBorder(city, kingdom),
                 IsUnderAttack(city));
+            float garrisonMultiplier = KingdomPolicyEffectService
+                .Read(kingdom).GarrisonMultiplier;
+            target = WartimeGarrisonRules.ScaleTarget(target,
+                garrisonMultiplier);
             if (atWar && HasSortieReserveRequest(pCityId))
                 target = Math.Max(target,
                     GarrisonSortieRules.RequiredGarrisonForSortie(minimumDefense));

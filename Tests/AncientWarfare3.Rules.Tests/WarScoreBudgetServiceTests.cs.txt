@@ -93,6 +93,47 @@ internal static class WarScoreBudgetServiceTests
             "the attacker baseline survives SQLite reload");
         Equal(80, persisted.DefenderMobilizationBaseline,
             "the defender baseline survives SQLite reload");
+
+        True(WarBattleEpisodeRules.TryResolve(0, 5,
+                out WarScoreSide oneSidedWinner, out int oneSidedIntensity),
+            "a one-sided military defeat still resolves as a battle");
+        Equal(WarScoreSide.Attackers, oneSidedWinner,
+            "defender-only deaths award the attacker coalition");
+        Equal(5, oneSidedIntensity,
+            "one-sided battle intensity uses total deaths");
+
+        True(restored.StartWar(404, 7, 8, 50d),
+            "episode score preservation war starts");
+        True(restored.RecordBattleVictoryRelief(404, "episode-1",
+                WarScoreSide.Attackers, 16, 51d),
+            "attacker episode atomically records score and relief");
+        True(restored.TryGetSnapshot(404, WarScoreSide.Attackers,
+                out WarScoreSnapshot battleWon),
+            "attacker episode snapshot can be read");
+        True(battleWon.BattleScore > 0,
+            "attacker episode adds attacker-perspective score");
+        int battleScore = battleWon.BattleScore;
+        True(restored.SynchronizeDeaths(404, 1, 9, 52d),
+            "later casualty synchronization records absolute losses");
+        True(restored.TryGetSnapshot(404, WarScoreSide.Attackers,
+                out WarScoreSnapshot synchronized),
+            "synchronized episode snapshot can be read");
+        Equal(battleScore, synchronized.BattleScore,
+            "casualty synchronization cannot replace episode score");
+        Equal(false, restored.RecordBattleVictoryRelief(404, "episode-1",
+                WarScoreSide.Attackers, 16, 53d),
+            "replayed episode identifier cannot score twice");
+
+        True(restored.StartWar(405, 7, 8, 60d),
+            "defender episode direction war starts");
+        True(restored.RecordBattleVictoryRelief(405, "episode-2",
+                WarScoreSide.Defenders, 25, 61d),
+            "defender episode atomically records score and relief");
+        True(restored.TryGetSnapshot(405, WarScoreSide.Attackers,
+                out WarScoreSnapshot battleLost),
+            "defender episode snapshot can be read");
+        True(battleLost.BattleScore < 0,
+            "defender victory subtracts attacker-perspective score");
     }
 
     private static WarScoreCityFacts City(long pCityId)

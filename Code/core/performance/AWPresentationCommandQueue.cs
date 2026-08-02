@@ -140,7 +140,7 @@ internal static class AWPresentationCommandQueue
             catch (Exception exception)
             {
                 Interlocked.Increment(ref failedCommands);
-                ModClass.LogErrorConcurrent(
+                ModClass.LogWarning(
                     "[PresentationCommand] 执行失败 sequence=" +
                     command.Sequence +
                     " kind=" +

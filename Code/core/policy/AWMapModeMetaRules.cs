@@ -39,6 +39,8 @@ namespace AncientWarfare3.core.policy
                     return AWMapModeMetaTypes.School;
                 case FeudatoryMapModeService.POWER_ID:
                     return AWMapModeMetaTypes.Feudatory;
+                case HierarchicalVassalMapModeRules.POWER_ID:
+                    return AWMapModeMetaTypes.HierarchicalVassal;
                 default:
                     return MetaType.Kingdom;
             }
@@ -114,6 +116,19 @@ namespace AncientWarfare3.core.policy
                    pMapMode == AWMapModeMetaTypes.MandateCore ||
                    pMapMode == AWMapModeMetaTypes.School ||
                    pMapMode == AWMapModeMetaTypes.Feudatory;
+        }
+
+        public static bool ShouldUseKingdomTooltipForPowerId(string pPowerId)
+        {
+            return string.Equals(pPowerId,
+                HierarchicalVassalMapModeRules.POWER_ID,
+                System.StringComparison.Ordinal);
+        }
+
+        public static bool ShouldUseKingdomTooltipForMapMode(
+            MetaType pMapMode)
+        {
+            return pMapMode == AWMapModeMetaTypes.HierarchicalVassal;
         }
 
         public static string BuildFocusedCityStatusCacheKey(long pFocusId, long pCityId)

@@ -1,0 +1,328 @@
+[
+    {
+        "id":  "human_name",
+        "templates":  [
+                          {
+                              "format":  "{法兰西男名:given_name}# #{法兰西姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{法兰西女名:given_name}# #{法兰西姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{法兰西男名:given_name}# #{西方贵族姓名中缀:middle_name}#·#{法兰西姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}# #{不列颠姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{不列颠女名:given_name}# #{不列颠姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}# #{西方贵族姓名中缀:middle_name}#·#{不列颠姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{中欧男名:given_name}# #{中欧姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{中欧女名:given_name}# #{中欧姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{中欧男名:given_name}# #{西方贵族姓名中缀:middle_name}#·#{中欧姓氏:family_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{罗斯男名:given_name}# #{罗斯姓氏:family_name}#夫#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{罗斯女名:given_name}# #{罗斯姓氏:family_name}#娃#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁男名:given_name}# #{拉丁姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁女名:given_name}# #{拉丁姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{阿拉伯男名:given_name}# #{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯女名:given_name}# #{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{犹太男名:given_name}# #{犹太姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}# #{犹太姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{兽人名字:given_name}# #{兽人姓氏:family_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{游牧男名:given_name}# #{游牧姓氏:family_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{游牧女名:given_name}# #{游牧姓氏:family_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "elf_name",
+        "templates":  [
+                          {
+                              "format":  "{中文百家姓:family_name}{中文名字:middle_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{中文名字:middle_name}{中文名字:given_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "elf_given_name",
+        "default_template":  {
+                                 "format":  "{精灵名字:given_name}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{精灵名字:given_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_name",
+        "templates":  [
+                          {
+                              "format":  "{兽人名字:given_name}# #{兽人姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{游牧男名:given_name}# #{游牧姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{游牧女名:given_name}# #{游牧姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "dwarf_name",
+        "templates":  [
+                          {
+                              "format":  "{中欧姓氏:given_name}# #{中欧姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{中欧姓氏:given_name} #冯##·#{中欧姓氏:family_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{罗斯男名:given_name}# #{罗斯姓氏:family_name}#夫#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{罗斯女名:given_name}# #{罗斯姓氏:family_name}#娃#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "dwarf_given_name",
+        "default_template":  {
+                                 "format":  "{矮人名字:given_name}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{矮人名字:given_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "Xia_name",
+        "templates":  [
+                          {
+                              "format":  "{中文百家姓:family_name}{中文名字:given_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{中文名字:middle_name}{中文名字:given_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "Rome_name",
+        "templates":  [
+                          {
+                              "format":  "{拉丁男名:given_name}# #{拉丁姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{拉丁女名:given_name}# #{拉丁姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "Arab_name",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯名字:given_name}# #{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "Russia_name",
+        "templates":  [
+                          {
+                              "format":  "{罗斯名字:given_name}# #{罗斯姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{中欧姓氏:given_name}# #{中欧姓氏:family_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中欧姓氏:given_name} #冯##·#{中欧姓氏:family_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "Goblins_name",
+        "templates":  [
+                          {
+                              "format":  "{犹太人名:given_name}# #{犹太姓氏:family_name}",
+                              "weight":  4
+                          }
+                      ]
+    },
+    {
+        "id":  "Lizard_name",
+        "templates":  [
+                          {
+                              "format":  "{外号:given_name}#的#{蜥蜴人姓名:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "hive_name",
+        "templates":  [
+                          {
+                              "format":  "{古埃及名字:given_name}# #{古埃及姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "western_von_name",
+        "default_template":  {
+                                 "format":  "{中欧男名:given_name}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{中欧男名:given_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中欧女名:given_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "western_de_name",
+        "default_template":  {
+                                 "format":  "{法兰西男名:given_name}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{法兰西男名:given_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{法兰西女名:given_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "western_van_name",
+        "default_template":  {
+                                 "format":  "{低地男名:given_name}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{低地男名:given_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{低地女名:given_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "western_di_name",
+        "default_template":  {
+                                 "format":  "{拉丁男名:given_name}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{拉丁男名:given_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{拉丁女名:given_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_nomadic_name",
+        "default_template":  {
+                                 "format":  "{兽人名字:given_name}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{游牧男名:given_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{游牧女名:given_name}",
+                              "weight":  1
+                          }
+                      ]
+    }
+]

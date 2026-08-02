@@ -49,7 +49,7 @@ namespace AncientWarfare3.core.presentation
         private static long _selectionAfterArmyId = -1L;
         private static bool _selectionInProgress;
         private static int _reserveSupplyFrame = -1;
-        private static long _reserveSupplyKingdomId = -1L;
+        private static long _reserveSupplyCityId = -1L;
         private static int _reserveSupplyValue;
 
         static ArmyMapInformationService()
@@ -108,7 +108,7 @@ namespace AncientWarfare3.core.presentation
             _reportedFailure = false;
             _initializationFailed = false;
             _reserveSupplyFrame = -1;
-            _reserveSupplyKingdomId = -1L;
+            _reserveSupplyCityId = -1L;
             _reserveSupplyValue = 0;
         }
 
@@ -392,25 +392,35 @@ namespace AncientWarfare3.core.presentation
                     ArmyLogisticsRules.MinimumOperationalForce -
                     Math.Max(0, pMemberCount));
 
-            Kingdom kingdom = null;
-            try { kingdom = pArmy?.getKingdom(); }
-            catch { }
-            pReserveSupply = ResolveAuthoritativeReserveSupply(kingdom);
+            City sourceCity = ResolveReserveSourceCity(pArmy);
+            pReserveSupply = ResolveAuthoritativeReserveSupply(sourceCity);
         }
 
         private static int ResolveAuthoritativeReserveSupply(
-            Kingdom pKingdom)
+            City sourceCity)
         {
-            if (pKingdom?.data == null) return 0;
+            if (sourceCity?.data == null) return 0;
             int frame = Time.frameCount;
             if (_reserveSupplyFrame == frame &&
-                _reserveSupplyKingdomId == pKingdom.id)
+                _reserveSupplyCityId == sourceCity.id)
                 return _reserveSupplyValue;
             _reserveSupplyFrame = frame;
-            _reserveSupplyKingdomId = pKingdom.id;
+            _reserveSupplyCityId = sourceCity.id;
             _reserveSupplyValue =
-                CityReservePoolService.CountAvailable(pKingdom);
+                CityReservePoolService.CountAvailable(sourceCity);
             return _reserveSupplyValue;
+        }
+
+        private static City ResolveReserveSourceCity(Army pArmy)
+        {
+            if (ArmyReplenishmentOperationService.TryRead(pArmy,
+                    out ArmyReplenishmentOperationState operation))
+            {
+                try { return World.world?.cities?.get(operation.SourceCityId); }
+                catch { }
+            }
+            try { return AWArmyService.FindAnchorCity(pArmy); }
+            catch { return null; }
         }
 
         private static bool TryResolveLiveCaptain(long pArmyId,

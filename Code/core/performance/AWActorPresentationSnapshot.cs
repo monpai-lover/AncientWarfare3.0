@@ -552,7 +552,7 @@ internal sealed class AWActorPresentationSnapshot
                     actorSpriteStartedAt;
             }
 
-            float visualScale = actor.stats[strings.S.scale];
+            float visualScale = actor.stats["scale"];
             Sprite flyingVehicleSprite = null;
             bool flyingVehicleVertical = false;
             Sprite flyingScaleReferenceSprite = null;
@@ -661,7 +661,7 @@ internal sealed class AWActorPresentationSnapshot
             }
 
             Sprite taskSprite = null;
-            ai.behaviours.BehaviourTaskActor task = actor.ai?.task;
+            global::ai.behaviours.BehaviourTaskActor task = actor.ai?.task;
             if (!actor.isInsideSomething() &&
                 asset.show_task_icon &&
                 task?.show_icon == true)
@@ -1192,7 +1192,7 @@ internal sealed class AWActorPresentationSnapshot
         sample.ZoneId = actor.current_tile?.zone?.id ?? -1;
         sample.HealthRatio = actor.getHealthRatio();
         sample.ScaleMod = actor.getScaleMod();
-        sample.VisualScale = actor.stats[strings.S.scale];
+        sample.VisualScale = actor.stats["scale"];
         sample.BannerColor = actor.kingdom == null
             ? Color.white
             : actor.kingdom.getColor().getColorText();
@@ -2036,7 +2036,7 @@ internal sealed class AWActorPresentationSnapshot
 
     private static bool IsSocializing(Actor actor)
     {
-        ai.behaviours.BehaviourActionActor action = actor.ai.action;
+        global::ai.behaviours.BehaviourActionActor action = actor.ai.action;
         if (action?.socialize == true)
         {
             return true;

@@ -11,6 +11,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pWar?.data == null || pWar.hasEnded() ||
+                ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
                 RebellionDirectTerritoryTransferService.
                     BlocksOrdinarySettlement(pWar) ||
                 WarPeaceSettlementService.Instance.HasActionableSettlement(
@@ -40,6 +41,7 @@ namespace AncientWarfare3.core.lineage
             Kingdom attacker = MainAttacker(war);
             Kingdom defender = MainDefender(war);
             if (war?.data == null || war.hasEnded() ||
+                ZhuluPeaceGuard.BlocksOrdinarySettlement(war) ||
                 RebellionDirectTerritoryTransferService.
                     BlocksOrdinarySettlement(war) ||
                 attacker?.data == null || defender?.data == null ||

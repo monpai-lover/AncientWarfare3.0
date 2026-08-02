@@ -184,6 +184,19 @@ internal static class AW3RuntimeRestorePipelineTests
         Contains(savePatch,
             "AW3WorldLoadCoordinator.ObserveGeneratedWorldQueued()",
             "generated-world hook forwards fallback identity");
+        int generatedPrefix = savePatch.IndexOf(
+            "public static void GenerateNewMap_Prefix()",
+            StringComparison.Ordinal);
+        int generatedQueued = savePatch.IndexOf(
+            "AW3WorldLoadCoordinator.ObserveGeneratedWorldQueued()",
+            StringComparison.Ordinal);
+        int generatedPostfix = savePatch.IndexOf(
+            "public static void GenerateNewMap_Postfix()",
+            StringComparison.Ordinal);
+        Equal(true, generatedPrefix >= 0 &&
+                    generatedQueued > generatedPrefix &&
+                    generatedPostfix > generatedQueued,
+            "generated-world identity is queued before on_world_loaded can fire");
         Equal(false, savePatch.Contains(
                 "LineageArchiveManager.Instance.LoadFromSaveDirectory(pPath)"),
             "loadWorld hook does not restore before SmoothLoader completes");

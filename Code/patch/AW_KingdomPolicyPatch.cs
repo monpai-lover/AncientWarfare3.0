@@ -43,6 +43,14 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(KingdomManager), nameof(KingdomManager.makeNewCivKingdom))]
+        public static void MakeNewCivKingdom_Postfix(Kingdom __result)
+        {
+            if (__result?.data == null || __result.isRekt()) return;
+            KingdomPolicyService.EnsureInitialized(__result);
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.getMaxCities))]
         public static void GetMaxCities_Postfix(Kingdom __instance,
             ref int __result)

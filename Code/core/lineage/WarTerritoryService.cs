@@ -35,6 +35,8 @@ namespace AncientWarfare3.core.lineage
         public const string GOAL_REUNIFY_SUCCESSION =
             WarGoalTypeIds.ReunifySuccession;
         public const string GOAL_NO_CB = WarGoalTypeIds.NoCb;
+        public const string GOAL_ZHULU_ANNEXATION =
+            ZhuluWarRules.GoalTypeId;
 
         private const double DEFAULT_PROJECT_COST = 100.0;
 
@@ -1147,6 +1149,14 @@ namespace AncientWarfare3.core.lineage
             if (!IsCivil(pSource) || pTarget?.data == null) return result;
 
             bool vassalBlocked = IsVassalDecisionOnlyTarget(pSource, pTarget);
+            if (!vassalBlocked && WarDecisionService.HasValidCasusBelli(
+                    pSource, pTarget, WarDecisionService.WAR_ZHULU))
+                result.Add(MakeOption(pTarget,
+                    pTarget.capital ?? FindFirstTargetCity(pTarget),
+                    GOAL_ZHULU_ANNEXATION,
+                    GoalLabel(GOAL_ZHULU_ANNEXATION), -1, -1, -1, null,
+                    hasCore: false, hasStrongClaim: false,
+                    hasWeakClaim: false, restorationStrength: 0));
             if (!vassalBlocked &&
                 SuccessionDisputeService.CanDeclareReunification(
                     pSource, pTarget))
@@ -1421,10 +1431,8 @@ namespace AncientWarfare3.core.lineage
         public static bool IsVassalDecisionOnlyTarget(Kingdom pSource, Kingdom pTarget)
         {
             if (pSource?.data == null || pTarget?.data == null || pSource == pTarget) return false;
-            Kingdom sourceSuzerain =
-                VassalService.GetDiplomaticSuzerain(pSource);
-            Kingdom targetSuzerain =
-                VassalService.GetDiplomaticSuzerain(pTarget);
+            Kingdom sourceSuzerain = VassalService.GetSuzerain(pSource);
+            Kingdom targetSuzerain = VassalService.GetSuzerain(pTarget);
             bool sourceSubject = sourceSuzerain?.data != null &&
                                  !sourceSuzerain.isRekt();
             bool targetSubject = targetSuzerain?.data != null &&
@@ -1885,6 +1893,8 @@ namespace AncientWarfare3.core.lineage
                 case GOAL_REUNIFY_SUCCESSION:
                     return T("aw_hist_goal_reunify_succession");
                 case GOAL_NO_CB: return T("aw_hist_goal_no_cb");
+                case GOAL_ZHULU_ANNEXATION:
+                    return T("aw_hist_goal_zhulu_annexation");
                 default: return T("aw_hist_goal_generic");
             }
         }
@@ -2284,7 +2294,9 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.DECISION_WAR_TARGET_CITY_ID, out long targetCityId, -1L);
             if (targetCityId != pCityId) return result;
 
-            KingdomPolicyDef def = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
+            KingdomPolicyDef def = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Decision));
             if (def == null) return result;
 
             result.project_id = -2L;

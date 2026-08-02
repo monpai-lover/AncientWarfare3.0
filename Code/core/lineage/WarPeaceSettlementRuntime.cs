@@ -1133,6 +1133,11 @@ namespace AncientWarfare3.core.lineage
                 reason = "war_no_longer_active";
                 return false;
             }
+            if (ZhuluPeaceGuard.BlocksOrdinarySettlement(war))
+            {
+                reason = ZhuluPeaceGuard.Reason(war);
+                return false;
+            }
             if (RebellionDirectTerritoryTransferService.
                     BlocksOrdinarySettlement(war))
             {

@@ -24,7 +24,8 @@ namespace AncientWarfare3.core.lineage
             "fief_independence_war",
             "jingnan_war",
             "succession_dispute_war",
-            "coup_restoration_war"
+            "coup_restoration_war",
+            "zhulu_war"
         };
 
         private static readonly string[] RoyalMarriageLanguages =
@@ -245,6 +246,10 @@ namespace AncientWarfare3.core.lineage
                 case "coup_restoration_war":
                     pLabel = T("aw_hist_label_coup_restoration_war",
                         pLanguage);
+                    return true;
+                case "zhulu_war":
+                case "zhulu_annexation":
+                    pLabel = T("aw_hist_label_zhulu_war", pLanguage);
                     return true;
                 default:
                     pLabel = "";

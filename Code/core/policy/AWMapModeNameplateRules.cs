@@ -32,6 +32,12 @@ namespace AncientWarfare3.core.policy
             "aw_war_mapmode_option_claim"
         };
 
+        private static readonly string[] HierarchicalVassalZoneOptionLocaleIds =
+        {
+            "aw3_hierarchical_vassal_map_option_country",
+            "aw3_hierarchical_vassal_map_option_city"
+        };
+
         internal static MetaType[] GetRequiredNameplateMetaTypes()
         {
             return RequiredNameplateMetaTypes;
@@ -58,6 +64,11 @@ namespace AncientWarfare3.core.policy
         public static string[] GetWarZoneOptionLocaleIds()
         {
             return WarZoneOptionLocaleIds;
+        }
+
+        public static string[] GetHierarchicalVassalZoneOptionLocaleIds()
+        {
+            return HierarchicalVassalZoneOptionLocaleIds;
         }
     }
 }

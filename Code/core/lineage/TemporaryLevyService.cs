@@ -57,13 +57,15 @@ namespace AncientWarfare3.core.lineage
                 new Dictionary<long, int>();
             public readonly HashSet<long> ExhaustedCandidateCityIds =
                 new HashSet<long>();
+            public readonly HashSet<long> ExhaustedTargetArmyIds =
+                new HashSet<long>();
             public int PendingDemand;
             public int CompletedWorkItems;
             public long PreferredCityId = -1L;
             public long CurrentCityId = -1L;
             public long TargetDemandCursor = -1L;
             public bool ForceEstablishment;
-            public bool ReserveExhausted;
+            public bool RealmReserveExhausted;
 
             public CasualtyReinforcementPlan(long pKingdomId)
             {
@@ -396,7 +398,8 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pTargetArmy?.data == null ||
                 !CasualtyReinforcementPlans.TryGetValue(pKingdom.id,
                     out CasualtyReinforcementPlan plan) ||
-                !plan.ReserveExhausted) return false;
+                !plan.ExhaustedTargetArmyIds.Contains(pTargetArmy.id))
+                return false;
             return plan.TargetDemandsByArmy.TryGetValue(pTargetArmy.id,
                        out int demand) && demand > 0;
         }
@@ -413,7 +416,7 @@ namespace AncientWarfare3.core.lineage
                 CasualtyReinforcementPlans[pKingdom.id] = plan;
             }
             plan.TargetDemandsByArmy[pTargetArmy.id] = pRemainingDemand;
-            plan.ReserveExhausted = true;
+            plan.ExhaustedTargetArmyIds.Add(pTargetArmy.id);
         }
 
         public static void RequestCaptainRecovery(Kingdom pKingdom,
@@ -1100,7 +1103,7 @@ namespace AncientWarfare3.core.lineage
 
             var candidates = new List<Actor>(
                 TemporaryLevyRules.MaxRecruitsPerWorkItem);
-            int scanned = CityReservePoolService.TryConsumeBatch(
+            int scanned = CityReservePoolService.TryConsumeFromSourceCity(
                 kingdom, city, TemporaryLevyRules.MaxRecruitsPerWorkItem,
                 establishmentArmy, candidates,
                 out bool confirmedExhausted);
@@ -1383,7 +1386,7 @@ namespace AncientWarfare3.core.lineage
         private static void ScheduleCasualtyReinforcement(
             CasualtyReinforcementPlan pPlan)
         {
-            if (pPlan == null || pPlan.ReserveExhausted) return;
+            if (pPlan == null || RecoverableDemand(pPlan) <= 0) return;
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 DeferredRuntimeWorkRules.CoalescingKey(
                     "levy_casualty_reinforce", pPlan.KingdomId),
@@ -1412,7 +1415,7 @@ namespace AncientWarfare3.core.lineage
                        out plan) && plan.TargetDemandsByArmy.Count > 0)
             {
                 Kingdom kingdom = ResolveKingdom(pKingdomId);
-                bool coverageComplete = plan.ReserveExhausted;
+                bool coverageComplete = DirectedDemand(plan) <= 0;
                 if (coverageComplete)
                 {
                     ProcessCasualtyReinforcement(pKingdomId,
@@ -1444,16 +1447,17 @@ namespace AncientWarfare3.core.lineage
         {
             if (!CasualtyReinforcementPlans.TryGetValue(pKingdomId,
                     out CasualtyReinforcementPlan plan)) return;
-            if (plan.ReserveExhausted) return;
             Kingdom kingdom = ResolveKingdom(pKingdomId);
             bool emergency = kingdom?.data != null && !kingdom.isRekt() &&
                              MilitaryEmergencyService.HasAny(kingdom);
+            int recoverableDemand = RecoverableDemand(plan);
             if (!TemporaryLevyRules.
                     ShouldContinueCasualtyRecoveryUntilCoverage(
-                        emergency, PendingDemand(plan),
-                        plan.ReserveExhausted))
+                        emergency, recoverableDemand,
+                        recoverableDemand <= 0))
             {
-                CasualtyReinforcementPlans.Remove(pKingdomId);
+                if (!emergency || PendingDemand(plan) <= 0)
+                    CasualtyReinforcementPlans.Remove(pKingdomId);
                 return;
             }
 
@@ -1478,27 +1482,39 @@ namespace AncientWarfare3.core.lineage
                     ScheduleCasualtyReinforcement(plan);
                 return;
             }
-            City city = ResolveCity(plan.CurrentCityId);
-            if (!IsCasualtyCandidateCity(kingdom, plan, city))
+            bool directedReplenishment = targetArmy?.data != null;
+            City city = directedReplenishment &&
+                        TemporaryLevyRules.
+                            ShouldUseDirectedReplenishmentAnchor(
+                                plan.CompletedWorkItems)
+                ? AWArmyService.FindAnchorCity(targetArmy)
+                : ResolveCity(plan.CurrentCityId);
+            if (!directedReplenishment &&
+                !IsCasualtyCandidateCity(kingdom, plan, city))
             {
                 plan.CurrentCityId = -1L;
-                city = targetArmy?.data != null
-                    ? AWArmyService.FindAnchorCity(targetArmy)
-                    : plan.CompletedWorkItems == 0
-                        ? ResolveCity(plan.PreferredCityId)
-                        : null;
+                city = plan.CompletedWorkItems == 0
+                    ? ResolveCity(plan.PreferredCityId)
+                    : null;
             }
-            if (!IsCasualtyCandidateCity(kingdom, plan, city))
+            if (!directedReplenishment &&
+                !IsCasualtyCandidateCity(kingdom, plan, city))
             {
                 if (!ArmyDeploymentService.TryGetPreferredLevyCity(
                         kingdom, plan.CompletedWorkItems, out city))
                     city = null;
             }
-            if (!IsCasualtyCandidateCity(kingdom, plan, city))
+            if (!directedReplenishment &&
+                !IsCasualtyCandidateCity(kingdom, plan, city))
                 city = NextUnexhaustedCasualtyCity(kingdom, plan);
-            if (city?.data == null)
+            if (!IsCasualtyCandidateCity(kingdom, plan, city))
             {
-                CasualtyReinforcementPlans.Remove(pKingdomId);
+                if (directedReplenishment)
+                    plan.ExhaustedTargetArmyIds.Add(targetArmy.id);
+                else
+                    plan.RealmReserveExhausted = true;
+                if (pScheduleContinuation)
+                    ScheduleCasualtyReinforcement(plan);
                 return;
             }
 
@@ -1528,7 +1544,7 @@ namespace AncientWarfare3.core.lineage
             bool confirmedExhausted = false;
             int scanned = 0;
             if (establishmentReady)
-                scanned = CityReservePoolService.TryConsumeBatch(
+                scanned = CityReservePoolService.TryConsumeFromSourceCity(
                     kingdom, city,
                     TemporaryLevyRules.CasualtyReinforcementBatchLimit(
                         demand), establishmentArmy, candidates,
@@ -1567,7 +1583,10 @@ namespace AncientWarfare3.core.lineage
                 if (remaining > 0)
                     plan.TargetDemandsByArmy[targetArmy.id] = remaining;
                 else
+                {
                     plan.TargetDemandsByArmy.Remove(targetArmy.id);
+                    plan.ExhaustedTargetArmyIds.Remove(targetArmy.id);
+                }
             }
             else
                 plan.PendingDemand = Math.Max(0,
@@ -1575,14 +1594,16 @@ namespace AncientWarfare3.core.lineage
             plan.CompletedWorkItems++;
             if (confirmedExhausted && PendingDemand(plan) > 0)
             {
-                plan.ReserveExhausted = true;
-                return;
+                if (directedReplenishment)
+                    plan.ExhaustedTargetArmyIds.Add(targetArmy.id);
+                else
+                    plan.RealmReserveExhausted = true;
             }
+            recoverableDemand = RecoverableDemand(plan);
             if (TemporaryLevyRules.
                     ShouldContinueCasualtyRecoveryUntilCoverage(
                         MilitaryEmergencyService.HasAny(kingdom),
-                        PendingDemand(plan),
-                        plan.ReserveExhausted))
+                        recoverableDemand, recoverableDemand <= 0))
             {
                 if (pScheduleContinuation)
                     ScheduleCasualtyReinforcement(plan);
@@ -1635,12 +1656,33 @@ namespace AncientWarfare3.core.lineage
         {
             if (pPlan == null) return 0;
             long total = 0L;
-            foreach (int demand in pPlan.TargetDemandsByArmy.Values)
+            foreach (KeyValuePair<long, int> entry in
+                     pPlan.TargetDemandsByArmy)
             {
-                total += Math.Max(0, demand);
+                if (TemporaryLevyRules.IsReplenishmentDemandExhausted(
+                        directedReplenishment: true,
+                        realmReserveExhausted:
+                            pPlan.RealmReserveExhausted,
+                        targetReserveExhausted:
+                            pPlan.ExhaustedTargetArmyIds.Contains(entry.Key)))
+                    continue;
+                total += Math.Max(0, entry.Value);
                 if (total >= int.MaxValue) return int.MaxValue;
             }
             return (int)total;
+        }
+
+        private static int RecoverableDemand(CasualtyReinforcementPlan pPlan)
+        {
+            if (pPlan == null) return 0;
+            long total = TemporaryLevyRules.IsReplenishmentDemandExhausted(
+                directedReplenishment: false,
+                realmReserveExhausted: pPlan.RealmReserveExhausted,
+                targetReserveExhausted: false)
+                ? 0L
+                : Math.Max(0, pPlan.PendingDemand);
+            total += DirectedDemand(pPlan);
+            return total >= int.MaxValue ? int.MaxValue : (int)total;
         }
 
         private static bool IsCasualtyCandidateCity(Kingdom pKingdom,
@@ -1787,6 +1829,8 @@ namespace AncientWarfare3.core.lineage
             for (int offset = 0; offset < targetIds.Count; offset++)
             {
                 long armyId = targetIds[(start + offset) % targetIds.Count];
+                if (pPlan.ExhaustedTargetArmyIds.Contains(armyId))
+                    continue;
                 int demand = pPlan.TargetDemandsByArmy.TryGetValue(armyId,
                     out int pending) ? pending : 0;
                 bool eligible = StandingArmyService.
@@ -1801,6 +1845,7 @@ namespace AncientWarfare3.core.lineage
                     return target;
                 }
                 pPlan.TargetDemandsByArmy.Remove(armyId);
+                pPlan.ExhaustedTargetArmyIds.Remove(armyId);
                 // An Army can become a non-alive shell after its final
                 // casualty. Keep its demand alive so the same wartime
                 // recovery plan establishes a replacement rather than
@@ -1844,15 +1889,9 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            City city = plan.CompletedWorkItems == 0
-                ? ResolveCity(plan.PreferredCityId)
-                : null;
+            City city = ResolveCity(plan.PreferredCityId);
             if (city?.data == null || city.kingdom != kingdom || city.isRekt())
-            {
-                if (!ArmyDeploymentService.TryGetPreferredLevyCity(
-                        kingdom, plan.CompletedWorkItems, out city))
-                    city = NextCursorCity(kingdom);
-            }
+                city = null;
 
             int scanned = 0;
             int recruited = 0;
@@ -1922,7 +1961,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pTargetArmy?.data == null)
                 return false;
             var candidates = new List<Actor>(1);
-            pScanned += CityReservePoolService.TryConsumeBatch(
+            pScanned += CityReservePoolService.TryConsumeFromSourceCity(
                 pKingdom, pCity, 1, pTargetArmy, candidates,
                 out bool confirmedExhausted);
             if (candidates.Count == 0) return confirmedExhausted;

@@ -33,9 +33,16 @@ namespace AncientWarfare3.core.lineage
             if (!string.IsNullOrWhiteSpace(pArchive.asset_id))
                 pNode.asset_id = pArchive.asset_id;
             pNode.subspecies_id = pArchive.subspecies_id;
-            pNode.display_name = string.IsNullOrEmpty(pArchive.display_name)
-                ? pArchive.given_name
-                : pArchive.display_name;
+            ShiBranchInfo branch = pArchive.shi_id >= 0L
+                ? LineageQuery.GetShiBranchInfo(pArchive.shi_id)
+                : null;
+            pNode.display_name = LineageDisplayNameRules.ProjectArchive(
+                pArchive.display_name, pArchive.given_name,
+                pArchive.family_name, pArchive.clan_name, pArchive.status,
+                pArchive.sex == 0, pArchive.name_integrated != 0,
+                branch?.naming_profile, branch?.western_naming_tradition,
+                branch?.origin_city_name ?? branch?.origin_city_chinese_name,
+                branch?.display_stem);
             pNode.sex = pArchive.sex;
             pNode.status = pArchive.status ?? string.Empty;
             pNode.clan_name = pArchive.clan_name ?? string.Empty;

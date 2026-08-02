@@ -121,6 +121,9 @@ namespace AncientWarfare3.core.lineage
             }
             if (army == null) return null;
 
+            if (detached)
+                DetachArmyFromCity(army, anchor);
+
             MarkArmy(army, pKingdom, anchor, pRole, pName);
             if (!pCaptain.isRekt())
             {
@@ -620,11 +623,7 @@ namespace AncientWarfare3.core.lineage
                     TrySetRuntimeCity(army, anchor, kingdom);
                 else if (AWArmyRoleRules.ShouldUseDetachedArmy(role))
                 {
-                    try
-                    {
-                        if (army.hasCity()) army.clearCity();
-                    }
-                    catch { }
+                    DetachArmyFromCity(army, anchor);
                 }
                 CacheArmy(army, kingdom, role);
                 DedupePastCaptains(army);
@@ -799,7 +798,7 @@ namespace AncientWarfare3.core.lineage
             return null;
         }
 
-        private static void DetachArmyFromCity(Army pArmy,
+        internal static void DetachArmyFromCity(Army pArmy,
             City pCityHint = null)
         {
             if (pArmy == null) return;
@@ -810,10 +809,7 @@ namespace AncientWarfare3.core.lineage
                     city.setArmy(null);
             }
             catch { }
-            try
-            {
-                if (pArmy.hasCity()) pArmy.clearCity();
-            }
+            try { pArmy.clearCity(); }
             catch { }
         }
 

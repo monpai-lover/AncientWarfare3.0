@@ -14,12 +14,6 @@ namespace AncientWarfare3.patch
         {
             if (!CivMonkeyNamingRules.IsCivilizedMonkey(pActor?.asset?.id)) return true;
 
-#if 一米_中文名
-            // ChineseName's actor/city/clan/kingdom patches own these paths. This prefix is
-            // deliberately last and only supplies the original-game fallback.
-            if (CivMonkeyNamingContent.ChineseNameOwns(pType)) return true;
-#endif
-
             if (pType == MetaType.Unit)
                 __result = CivMonkeyNamingRules.BuildActorName(
                     CivMonkeyNamingContent.ResolveInheritedFamily(pActor), pSeed, (int)pType);

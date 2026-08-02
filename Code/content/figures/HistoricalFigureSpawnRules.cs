@@ -117,6 +117,17 @@ namespace AncientWarfare3.content.figures
                 : kingdomName;
         }
 
+        public static string ProjectLocalizedStateName(
+            string canonicalStateName, string localizedDynastyName,
+            bool chinesePresentation)
+        {
+            string canonical = canonicalStateName ?? string.Empty;
+            if (chinesePresentation ||
+                string.IsNullOrWhiteSpace(localizedDynastyName))
+                return canonical;
+            return localizedDynastyName;
+        }
+
         public static int NextSpawnableRegistryIndex(int[] registryOrder,
             bool[] spawned, bool[] dead)
         {

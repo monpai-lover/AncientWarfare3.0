@@ -1,0 +1,139 @@
+[
+    {
+        "id":  "human_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{奇幻人类国名}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{奇幻人类国名}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{奇幻人类国名}{民主国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{西方国名}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{西方国名}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{西方国名}{民主国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{西方城名上}{西方城名下}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{西方城名上}{西方城名下}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{西方城名上}{西方城名下}{民主国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "elf_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{拉丁国名}{专制国名后缀}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁国名}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{拉丁国名}{民主国名后缀}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁国名}#帝国#",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{奇幻完整国名}",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏}{游牧国名后缀}"
+                          }
+                      ]
+    },
+    {
+        "id":  "dwarf_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{矮人国名前缀}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{矮人国名前缀}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{矮人国名前缀}{民主国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{罗斯姓氏}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{罗斯姓氏}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{罗斯姓氏}{民主国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "Xia_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{真实国名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "western_kingdom",
+        "default_template":  {
+                                 "format":  "{奇幻人类国名}{专制国名后缀}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{西方国名}{专制国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_nomadic_kingdom",
+        "default_template":  {
+                                 "format":  "{兽人国名}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏}{游牧国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    }
+]

@@ -7,6 +7,7 @@ namespace AncientWarfare3.core.lineage
     {
         internal static void Complete(Army pArmy)
         {
+            ArmyRtsControllerService.OnReplenishmentOperationCompleted(pArmy);
             if (!IsOrdinaryArmy(pArmy, out Kingdom kingdom)) return;
             KingdomWarDirectorService.QueueArmyChanged(kingdom);
             KingdomWarDirectorService.EnsureOffensiveContinuity(kingdom);
@@ -15,11 +16,12 @@ namespace AncientWarfare3.core.lineage
         internal static bool HasViableAttack(Kingdom pKingdom)
         {
             IReadOnlyList<Army> armies = CollectOrdinaryArmies(pKingdom);
-            int minimum = ArmyLogisticsRules.MinimumOperationalForce;
             for (int i = 0; i < armies.Count; i++)
-                if (ArmyReplenishmentOperationRules.ShouldResumeAttack(
-                        SafeUnitCount(armies[i]), minimum) &&
-                    HasAttackAssignment(armies[i])) return true;
+            {
+                Army army = armies[i];
+                if (HasViableAttackAssignment(army, pKingdom,
+                        SafeUnitCount(army))) return true;
+            }
             return false;
         }
 
@@ -75,9 +77,7 @@ namespace AncientWarfare3.core.lineage
                     bestAvailableLiving = living;
                     bestAvailableId = army.id;
                 }
-                if (HasAttackAssignment(army) &&
-                    ArmyReplenishmentOperationRules.ShouldResumeAttack(
-                        living, minimum) &&
+                if (HasViableAttackAssignment(army, pKingdom, living) &&
                     (living > bestAttackLiving ||
                      living == bestAttackLiving &&
                      army.id < bestAttackId))
@@ -179,6 +179,37 @@ namespace AncientWarfare3.core.lineage
                    mission.ProposalKind == ArmyRtsProposalKind.Attack;
         }
 
+        private static bool HasViableAttackAssignment(Army pArmy,
+            Kingdom pKingdom, int pLiving)
+        {
+            bool attackAssignment = ArmyRtsControllerService.TryGetMission(
+                pArmy, out ArmyRtsMission mission) && mission != null &&
+                mission.ProposalKind == ArmyRtsProposalKind.Attack;
+            War war = FindWar(mission?.WarId ?? -1L);
+            City target = FindCity(mission?.TargetCityId ?? -1L);
+            bool warActive;
+            ArmyRtsObjectiveState objectiveState;
+            try
+            {
+                warActive = war?.data != null && !war.hasEnded() &&
+                            war.hasKingdom(pKingdom);
+                objectiveState = warActive && target?.data != null
+                    ? ArmyRtsObjectiveService.Classify(war, pKingdom, target)
+                    : ArmyRtsObjectiveState.Unavailable;
+            }
+            catch
+            {
+                warActive = false;
+                objectiveState = ArmyRtsObjectiveState.Unavailable;
+            }
+            int targetStrength = Math.Max(pLiving,
+                CityArmyReinforcementService.ApprovedTarget(pArmy,
+                    pKingdom));
+            return ArmyRtsRules.IsViableAttackAssignment(
+                attackAssignment, warActive, objectiveState, pLiving,
+                targetStrength, ArmyLogisticsRules.MinimumOperationalForce);
+        }
+
         private static bool CanRepurpose(Army pArmy)
         {
             if (!ArmyRtsControllerService.TryGetMission(pArmy,
@@ -192,6 +223,20 @@ namespace AncientWarfare3.core.lineage
         {
             try { return Math.Max(0, pArmy?.countUnits() ?? 0); }
             catch { return 0; }
+        }
+
+        private static War FindWar(long pWarId)
+        {
+            if (pWarId < 0L) return null;
+            try { return World.world?.wars?.get(pWarId); }
+            catch { return null; }
+        }
+
+        private static City FindCity(long pCityId)
+        {
+            if (pCityId < 0L) return null;
+            try { return World.world?.cities?.get(pCityId); }
+            catch { return null; }
         }
     }
 }

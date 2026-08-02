@@ -1,0 +1,301 @@
+[
+    {
+        "id": "weapon_name_city",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "$city$#之魂#"
+            },
+            {
+                "format": "$city$#守护者#"
+            },
+            {
+                "format": "$city$#之子#"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "weapon_name_kingdom",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "$kingdom$#之魂#"
+            },
+            {
+                "format": "$kingdom$#守护者#"
+            },
+            {
+                "format": "$kingdom$#之子#"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "weapon_name_culture",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "$culture$#之魂#"
+            },
+            {
+                "format": "$culture$#守护者#"
+            },
+            {
+                "format": "$culture$#之子#"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "weapon_name_enemy_kingdom",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "$enemy_kingdom$#之泪#"
+            },
+            {
+                "format": "$enemy_kingdom$#终结者#"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "weapon_name_enemy_king",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "$enemy_king$#之泪#"
+            },
+            {
+                "format": "$enemy_king$#终结者#"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "sword_name_king",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<天子$type$名>"
+            },
+            {
+                "format": "$king$#之#<$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "axe_name_king",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<天子$type$名>"
+            },
+            {
+                "format": "$king$#之#<$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "stick_name",
+        "templates": [
+            {
+                "format": "#木棍#"
+            },
+            {
+                "format": "#树枝#"
+            }
+        ]
+    },
+    {
+        "id": "flame_sword_name",
+        "templates": [
+            {
+                "format": "{烈焰之剑}"
+            }
+        ]
+    },
+    {
+        "id": "plague_doctor_staff_name",
+        "templates": [
+            {
+                "format": "{疫医杖}"
+            }
+        ]
+    },
+    {
+        "id": "necromancer_staff_name",
+        "templates": [
+            {
+                "format": "{死灵法杖}"
+            }
+        ]
+    },
+    {
+        "id": "evil_staff_name",
+        "templates": [
+            {
+                "format": "{邪恶法杖}"
+            }
+        ]
+    },
+    {
+        "id": "white_staff_name",
+        "templates": [
+            {
+                "format": "{白色法杖}"
+            }
+        ]
+    },
+    {
+        "id": "druid_staff_name",
+        "templates": [
+            {
+                "format": "{德鲁伊法杖}"
+            }
+        ]
+    },
+    {
+        "id": "shotgun_name",
+        "templates": [
+            {
+                "format": "{霰弹枪}{数字}{数字}{数字}"
+            }
+        ]
+    },
+    {
+        "id": "blaster_name",
+        "templates": [
+            {
+                "format": "{异形冲击波}{数字}{数字}{数字}"
+            }
+        ]
+    },
+    {
+        "id": "bow_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 50
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "sword_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 50
+            },
+            {
+                "format": "<$type$名>"
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "hammer_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 50
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "axe_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 50
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    },
+    {
+        "id": "spear_name",
+        "default_template": {
+            "format": "$locale$"
+        },
+        "templates": [
+            {
+                "format": "<$material$的$type$前缀><$type$后缀>",
+                "weight": 50
+            },
+            {
+                "format": "<$type$名>"
+            },
+            {
+                "format": "<$material$><$type$后缀>"
+            },
+            {
+                "format": "$locale$"
+            }
+        ]
+    }
+]

@@ -1,10 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
-
-#if 一米_中文名
-using Chinese_Name;
-#endif
+using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.content
 {
@@ -29,19 +26,22 @@ namespace AncientWarfare3.content
         internal static bool TryRenameKingdom(Kingdom pKingdom, Actor pActor, bool pForce)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
+            if (IsCivilizedMonkeyKingdom(pKingdom, pActor)) return false;
             if (!IsXiaKingdom(pKingdom, pActor)) return false;
             if (!pForce && XiaPreQinKingdomNameRules.IsKnown(pKingdom.data.name)) return false;
 
             string name = GenerateKingdomName(pKingdom);
             if (XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return false;
 
-            pKingdom.setName(name, pTrack: false);
-            return true;
+            return AWLocalizedNameService.CommitChineseName(
+                pKingdom.data, name,
+                "Kingdom", pKingdom.getID());
         }
 
         internal static bool TryApplyFullyXiaizedKingdomName(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
+            if (IsCivilizedMonkeyKingdom(pKingdom)) return false;
             pKingdom.data.get(LineageKeys.XIA_FULL_NAME_APPLIED, out bool applied, false);
             bool originalXia = pKingdom.data.original_actor_asset == XiaRace.ID ||
                                pKingdom.asset?.id == XiaRace.ID;
@@ -52,7 +52,12 @@ namespace AncientWarfare3.content
             string preferredName = GenerateKingdomName(pKingdom);
             if (XiaNameRepairRules.IsInvalidGeneratedMetaName(preferredName))
                 return false;
+            AWLocalizedNameService.CaptureNative(pKingdom.data);
             if (!TryApplyFullyXiaizedStateName(pKingdom, preferredName))
+                return false;
+            string committedName = pKingdom.name ?? pKingdom.data.name ?? "";
+            if (!AWLocalizedNameService.CommitChineseName(pKingdom.data,
+                    committedName, "Kingdom", pKingdom.getID()))
                 return false;
             pKingdom.data.set(LineageKeys.XIA_FULL_NAME_APPLIED, true);
             string newName = pKingdom.name ?? pKingdom.data.name ?? "";
@@ -149,6 +154,27 @@ namespace AncientWarfare3.content
                    XiaizationService.GetLevel(pKingdom) >= XiaizationService.LevelXiaizedDynasty;
         }
 
+        private static bool IsCivilizedMonkeyKingdom(Kingdom pKingdom,
+            Actor pActor = null)
+        {
+            if (CivMonkeyNamingRules.IsCivilizedMonkey(pActor?.asset?.id))
+                return true;
+            if (pKingdom?.data == null) return false;
+            if (CivMonkeyNamingRules.IsCivilizedMonkey(
+                    pKingdom.data.original_actor_asset) ||
+                CivMonkeyNamingRules.IsCivilizedMonkey(pKingdom.asset?.id))
+                return true;
+            try
+            {
+                return CivMonkeyNamingRules.IsCivilizedMonkey(
+                    pKingdom.getActorAsset()?.id);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static bool IsXiaReligion(Religion pReligion, Actor pActor)
         {
             if (pActor?.asset?.id == XiaRace.ID) return true;
@@ -226,14 +252,16 @@ namespace AncientWarfare3.content
 
         private static string GenerateKingdomName(Kingdom pKingdom)
         {
-#if 一米_中文名
-            string chineseName = GenerateChineseName(XiaNameSets.KingdomGenerator, p =>
+            string chineseName = GenerateIntegratedName(
+                XiaNameSets.KingdomGenerator, pKingdom?.getID() ?? 0L,
+                pKingdom?.data?.name_culture_id ?? -1L, p =>
             {
-                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.KingdomGenerator);
-                ParameterGetters.GetKingdomParameterGetter(generator.parameter_getter)(pKingdom, p);
+                AWNameGeneratorAsset generator = AWNameGeneratorLibrary.Get(
+                    XiaNameSets.KingdomGenerator);
+                AWNameParameterGetters.GetKingdomParameterGetter(
+                    generator.ParameterGetter)(pKingdom, p);
             });
             if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(chineseName)) return chineseName;
-#endif
 
             string name = GenerateVanillaName(XiaNameSets.KingdomGenerator, pKingdom?.getID() ?? 0L);
             if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
@@ -243,14 +271,16 @@ namespace AncientWarfare3.content
 
         private static string GenerateLanguageName(Language pLanguage)
         {
-#if 一米_中文名
-            string chineseName = GenerateChineseName(XiaNameSets.LanguageGenerator, p =>
+            string chineseName = GenerateIntegratedName(
+                XiaNameSets.LanguageGenerator, pLanguage?.getID() ?? 0L,
+                pLanguage?.data?.name_culture_id ?? -1L, p =>
             {
-                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.LanguageGenerator);
-                ParameterGetters.GetLanguageParameterGetter(generator.parameter_getter)(pLanguage, p);
+                AWNameGeneratorAsset generator = AWNameGeneratorLibrary.Get(
+                    XiaNameSets.LanguageGenerator);
+                AWNameParameterGetters.GetLanguageParameterGetter(
+                    generator.ParameterGetter)(pLanguage, p);
             });
             if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(chineseName)) return chineseName;
-#endif
 
             string name = GenerateVanillaName(XiaNameSets.LanguageGenerator, pLanguage?.getID() ?? 0L);
             if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
@@ -260,14 +290,16 @@ namespace AncientWarfare3.content
 
         private static string GenerateReligionName(Religion pReligion)
         {
-#if 一米_中文名
-            string chineseName = GenerateChineseName(XiaNameSets.ReligionGenerator, p =>
+            string chineseName = GenerateIntegratedName(
+                XiaNameSets.ReligionGenerator, pReligion?.getID() ?? 0L,
+                pReligion?.data?.name_culture_id ?? -1L, p =>
             {
-                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.ReligionGenerator);
-                ParameterGetters.GetReligionParameterGetter(generator.parameter_getter)(pReligion, p);
+                AWNameGeneratorAsset generator = AWNameGeneratorLibrary.Get(
+                    XiaNameSets.ReligionGenerator);
+                AWNameParameterGetters.GetReligionParameterGetter(
+                    generator.ParameterGetter)(pReligion, p);
             });
             if (!XiaNameRepairRules.IsInvalidXiaReligionName(chineseName)) return chineseName;
-#endif
 
             string name = GenerateVanillaName(XiaNameSets.ReligionGenerator, pReligion?.getID() ?? 0L);
             if (!XiaNameRepairRules.IsInvalidXiaReligionName(name)) return name;
@@ -280,14 +312,16 @@ namespace AncientWarfare3.content
             string originName = GenerateOriginCultureName(pCulture);
             if (!string.IsNullOrEmpty(originName)) return originName;
 
-#if 一米_中文名
-            string chineseName = GenerateChineseName(XiaNameSets.CultureGenerator, p =>
+            string chineseName = GenerateIntegratedName(
+                XiaNameSets.CultureGenerator, pCulture?.getID() ?? 0L,
+                pCulture?.data?.name_culture_id ?? -1L, p =>
             {
-                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.CultureGenerator);
-                ParameterGetters.GetCultureParameterGetter(generator.parameter_getter)(pCulture, p);
+                AWNameGeneratorAsset generator = AWNameGeneratorLibrary.Get(
+                    XiaNameSets.CultureGenerator);
+                AWNameParameterGetters.GetCultureParameterGetter(
+                    generator.ParameterGetter)(pCulture, p);
             });
             if (!IsInvalidGeneratedName(chineseName)) return chineseName;
-#endif
 
             string name = GenerateVanillaName(XiaNameSets.CultureGenerator, pCulture?.getID() ?? 0L);
             if (!IsInvalidGeneratedName(name)) return name;
@@ -326,14 +360,16 @@ namespace AncientWarfare3.content
 
         private static string GenerateSubspeciesName(Subspecies pSubspecies)
         {
-#if 一米_中文名
-            string chineseName = GenerateChineseName(XiaNameSets.SubspeciesGenerator, p =>
+            string chineseName = GenerateIntegratedName(
+                XiaNameSets.SubspeciesGenerator, pSubspecies?.getID() ?? 0L,
+                pSubspecies?.data?.name_culture_id ?? -1L, p =>
             {
-                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.SubspeciesGenerator);
-                ParameterGetters.GetSubspeciesParameterGetter(generator.parameter_getter)(pSubspecies, p);
+                AWNameGeneratorAsset generator = AWNameGeneratorLibrary.Get(
+                    XiaNameSets.SubspeciesGenerator);
+                AWNameParameterGetters.GetSubspeciesParameterGetter(
+                    generator.ParameterGetter)(pSubspecies, p);
             });
             if (IsUsefulSubspeciesName(chineseName)) return chineseName;
-#endif
 
             string name = GenerateVanillaName(XiaNameSets.SubspeciesGenerator, pSubspecies?.getID() ?? 0L);
             if (IsUsefulSubspeciesName(name)) return name;
@@ -352,44 +388,53 @@ namespace AncientWarfare3.content
             return XiaNameRepairRules.IsInvalidXiaSubspeciesName(pName);
         }
 
-#if 一米_中文名
-        private static string GenerateChineseName(string pGeneratorId, Action<Dictionary<string, string>> pFillParameters)
+        private static string GenerateIntegratedName(string pGeneratorId,
+            long pObjectId, long pCultureId,
+            Action<Dictionary<string, string>> pFillParameters)
         {
             try
             {
-                var generator = CN_NameGeneratorLibrary.Get(pGeneratorId);
+                AWNameGeneratorAsset generator =
+                    AWNameGeneratorLibrary.Get(pGeneratorId);
                 if (generator == null) return null;
 
-                var parameters = new Dictionary<string, string>();
-                pFillParameters(parameters);
-                string name = generator.GenerateName(parameters);
+                var parameters = new Dictionary<string, string>(
+                    StringComparer.Ordinal);
+                pFillParameters?.Invoke(parameters);
+                long seed = AWNamingSeedRules.Combine(pObjectId, pCultureId,
+                    pGeneratorId, 1);
+                var context = new AWNameGenerationContext(seed, parameters,
+                    AWNameParameterGetters.CreateGlobalSnapshot());
+                string name = generator.GenerateName(context,
+                    AWWordLibraryManager.Instance);
                 return string.IsNullOrEmpty(name) ? null : name;
             }
-            catch (Exception e)
+            catch (Exception error)
             {
-                ModClass.LogWarning("Xia Chinese naming failed: " + pGeneratorId + " - " + e.Message);
+                ModClass.LogWarning("Xia integrated naming failed: " +
+                                    pGeneratorId + " - " + error.Message);
                 return null;
             }
         }
-#endif
 
         internal static string GenerateAllianceName(Alliance pAlliance)
         {
             long id = pAlliance?.getID() ?? 0L;
-#if 一米_中文名
-            string chineseName = GenerateChineseName(XiaNameSets.AllianceGenerator, p =>
+            string chineseName = GenerateIntegratedName(
+                XiaNameSets.AllianceGenerator, id, -1L, p =>
             {
-                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.AllianceGenerator);
-                ParameterGetters.GetAllianceParameterGetter(generator.parameter_getter)(pAlliance, p);
+                AWNameGeneratorAsset generator = AWNameGeneratorLibrary.Get(
+                    XiaNameSets.AllianceGenerator);
+                AWNameParameterGetters.GetAllianceParameterGetter(
+                    generator.ParameterGetter)(pAlliance, p);
             });
             if (IsUsefulAllianceName(chineseName))
             {
                 chineseName = ResolveUniqueAllianceName(pAlliance, chineseName);
-                ModClass.LogInfo("[Xia alliance naming] route=ChineseName alliance=" + id +
+                ModClass.LogInfo("[Xia alliance naming] route=integrated alliance=" + id +
                                  " name=" + chineseName);
                 return chineseName;
             }
-#endif
 
             string name = GenerateVanillaName(XiaNameSets.AllianceGenerator, id);
             if (IsUsefulAllianceName(name))

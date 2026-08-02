@@ -1,0 +1,105 @@
+using AncientWarfare3.core.court;
+
+internal static class WesternCourtElectionRulesTests
+{
+    public static void Run()
+    {
+        Equal(6, WesternCourtElectionRules.TermYears,
+            "Western term is exactly six years");
+        Equal(112, WesternCourtElectionRules.TermEndYear(106),
+            "term end year");
+        Equal(true, WesternCourtElectionRules.ShouldQueueVacancy(
+                hasIncumbent: false, termEndYear: -1, currentYear: 100),
+            "vacancy queues immediately");
+        Equal(true, WesternCourtElectionRules.ShouldQueueVacancy(
+                hasIncumbent: true, termEndYear: 100, currentYear: 100),
+            "expired term queues election");
+        Equal(false, WesternCourtElectionRules.ShouldQueueVacancy(
+                hasIncumbent: true, termEndYear: 101, currentYear: 100),
+            "active term stays in office");
+        Equal(2, WesternCourtElectionRules.MaxVacanciesPerCycle,
+            "bounded vacancy batch");
+        Equal(32, WesternCourtElectionRules.MaxCandidatesPerVacancy,
+            "bounded candidate batch");
+
+        Equal(false, WesternCourtElectionRules.CanStand(
+                eligible: true, isKing: true),
+            "king is never an official candidate");
+        Equal(true, WesternCourtElectionRules.CanStand(
+                eligible: true, isKing: false),
+            "eligible incumbent may stand again");
+
+        var incumbent = Candidate(10, incumbent: true, ability: 20,
+            merit: 20, family: 20, school: 20, faction: 20);
+        var challenger = Candidate(11, incumbent: false, ability: 10,
+            merit: 10, family: 10, school: 10, faction: 10);
+        Equal(10L, WesternCourtElectionRules.SelectWinner(
+                new[] { challenger, incumbent }).ActorId,
+            "incumbent may win reelection");
+
+        AssertFactor("ability", Candidate(20, ability: 30),
+            Candidate(21));
+        AssertFactor("merit", Candidate(20, merit: 30),
+            Candidate(21));
+        AssertFactor("family", Candidate(20, family: 30),
+            Candidate(21));
+        AssertFactor("school", Candidate(20, school: 30),
+            Candidate(21));
+        AssertFactor("faction", Candidate(20, faction: 30),
+            Candidate(21));
+
+        Equal(5L, WesternCourtElectionRules.SelectWinner(new[]
+            {
+                Candidate(7, ability: 20), Candidate(5, ability: 20)
+            }).ActorId, "actor id breaks ties");
+
+        Equal(CourtInstitutionId.WesternBase,
+            WesternCourtElectionRules.ResolveGovernmentInstitution(
+                elective: false, feudal: false, royalDirect: false),
+            "base government");
+        Equal(CourtInstitutionId.WesternElective,
+            WesternCourtElectionRules.ResolveGovernmentInstitution(
+                elective: true, feudal: false, royalDirect: false),
+            "elective government");
+        Equal(CourtInstitutionId.WesternFeudal,
+            WesternCourtElectionRules.ResolveGovernmentInstitution(
+                elective: true, feudal: true, royalDirect: false),
+            "feudal supersedes elective while completion remains recorded");
+        Equal(CourtInstitutionId.WesternRoyalDirect,
+            WesternCourtElectionRules.ResolveGovernmentInstitution(
+                elective: true, feudal: true, royalDirect: true),
+            "royal direct is the active mutually-exclusive state");
+        Equal(false, WesternCourtElectionRules.CanManualAppoint(
+                CourtInstitutionId.WesternElective),
+            "elective offices reject manual appointment");
+        Equal(true, WesternCourtElectionRules.CanManualAppoint(
+                CourtInstitutionId.WesternRoyalDirect),
+            "royal direct allows manual appointment");
+    }
+
+    private static void AssertFactor(string message,
+        WesternCourtElectionCandidate stronger,
+        WesternCourtElectionCandidate weaker)
+    {
+        Equal(stronger.ActorId,
+            WesternCourtElectionRules.SelectWinner(
+                new[] { weaker, stronger }).ActorId,
+            message + " contributes to election score");
+    }
+
+    private static WesternCourtElectionCandidate Candidate(long id,
+        bool incumbent = false, float ability = 0f, float merit = 0f,
+        float family = 0f, float school = 0f, float faction = 0f)
+    {
+        return new WesternCourtElectionCandidate(id, eligible: true,
+            isKing: false, incumbent, ability, merit, family, school,
+            faction);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

@@ -32,6 +32,15 @@ namespace AncientWarfare3.core.lineage
             return capital || foreignBorder ? PriorityTarget : BaseTarget;
         }
 
+        public static int ScaleTarget(int pBaseTarget,
+            float pGarrisonMultiplier)
+        {
+            if (pBaseTarget <= 0) return 0;
+            float multiplier = Math.Max(1f,
+                Math.Min(2f, pGarrisonMultiplier));
+            return (int)Math.Ceiling(pBaseTarget * multiplier);
+        }
+
         public static bool CanEnlist(bool originalEligible,
             bool protectedIdentity, bool localCitizen, bool civilian,
             float age)

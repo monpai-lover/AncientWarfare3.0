@@ -277,6 +277,92 @@ namespace AncientWarfare3.core.lineage
             return GetSuzerain(pKingdom) ?? GetTributarySuzerain(pKingdom);
         }
 
+        public static void RebuildRuntimeProjections()
+        {
+            if (!Ready)
+                throw new InvalidOperationException(
+                    "Vassal archive is unavailable during projection rebuild.");
+
+            List<ActiveVassalRelationIdentity> relations =
+                ReadRuntimeProjectionIdentities();
+            if (World.world?.kingdoms == null) return;
+
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null) continue;
+                ClearRelationProjection(kingdom);
+                kingdom.data.set(LineageKeys.VASSAL_DIRECT_COUNT, 0);
+                kingdom.data.set(LineageKeys.TRIBUTARY_DIRECT_COUNT, 0);
+            }
+
+            foreach (ActiveVassalRelationIdentity relation in relations)
+            {
+                Kingdom vassal = FindKingdom(relation.VassalId);
+                Kingdom suzerain = FindKingdom(relation.SuzerainId);
+                if (vassal?.data == null || suzerain?.data == null ||
+                    vassal.isRekt() || suzerain.isRekt() ||
+                    vassal == suzerain) continue;
+
+                VassalRuntimeProjection projection =
+                    VassalRuntimeProjectionRules.Resolve(
+                        relation.SuzerainId, relation.RelationId,
+                        relation.ContractTier);
+                vassal.data.set(LineageKeys.VASSAL_CONTRACT_TIER,
+                    projection.ContractTier);
+                vassal.data.set(LineageKeys.VASSAL_SUZERAIN_ID,
+                    projection.VassalSuzerainId);
+                vassal.data.set(LineageKeys.VASSAL_RELATION_ID,
+                    projection.VassalRelationId);
+                vassal.data.set(LineageKeys.TRIBUTARY_SUZERAIN_ID,
+                    projection.TributarySuzerainId);
+                vassal.data.set(LineageKeys.TRIBUTARY_RELATION_ID,
+                    projection.TributaryRelationId);
+
+                if (VassalContractTierRules.CountsAsVassal(
+                        projection.ContractTier))
+                    AdjustDirectVassalCount(suzerain, 1);
+                else
+                    AdjustDirectTributaryCount(suzerain, 1);
+            }
+
+            DirtyVassalMap();
+        }
+
+        private static List<ActiveVassalRelationIdentity>
+            ReadRuntimeProjectionIdentities()
+        {
+            var result = new List<ActiveVassalRelationIdentity>();
+            var appliedVassals = new HashSet<long>();
+            using var command = new SQLiteCommand(DB);
+            command.CommandText = "SELECT RELATION_ID,VASSAL_ID," +
+                "SUZERAIN_ID,CONTRACT_TIER FROM " +
+                VassalRelationTableItem.GetTableName() +
+                " WHERE ACTIVE=1 AND END_TIME<0 ORDER BY VASSAL_ID," +
+                "START_TIME DESC,RELATION_ID DESC";
+            using SQLiteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                long relationId = reader.IsDBNull(0)
+                    ? -1L
+                    : reader.GetInt64(0);
+                long vassalId = reader.IsDBNull(1)
+                    ? -1L
+                    : reader.GetInt64(1);
+                long suzerainId = reader.IsDBNull(2)
+                    ? -1L
+                    : reader.GetInt64(2);
+                int contractTier = reader.IsDBNull(3)
+                    ? VassalContractTierRules.Outer
+                    : VassalContractTierRules.NormalizeTier(
+                        (int)reader.GetInt64(3));
+                if (relationId < 0 || vassalId < 0 || suzerainId < 0 ||
+                    !appliedVassals.Add(vassalId)) continue;
+                result.Add(new ActiveVassalRelationIdentity(relationId,
+                    vassalId, suzerainId, contractTier, "", false));
+            }
+            return result;
+        }
+
         internal static bool TryReadActiveRelationIdentity(long pVassalId,
             out ActiveVassalRelationIdentity pIdentity,
             out bool pExists)
@@ -757,6 +843,8 @@ namespace AncientWarfare3.core.lineage
 
             List<City> cities = pVassal.getCities().Where(c => c?.data != null && !c.isRekt()).ToList();
             if (cities.Count == 0) return false;
+            List<Actor> formerGuards = RoyalGuardService.CaptureForVassalAbsorption(
+                pVassal);
             foreach (City city in cities)
                 city.joinAnotherKingdom(pSuzerain);
 
@@ -772,6 +860,10 @@ namespace AncientWarfare3.core.lineage
                 RollBackCityTransfer(pVassal, pSuzerain, cities);
                 return false;
             }
+
+            VassalAnnexGuardReconciliationService.Reconcile(pSuzerain,
+                pVassal, formerGuards, pCityTransferCommitted: true,
+                pRelationClosed: true);
 
             foreach (Kingdom child in GetVassals(pVassal).ToList())
                 SetVassal(child, pSuzerain, "absorbed_reparent");

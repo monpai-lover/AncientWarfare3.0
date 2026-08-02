@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.performance
         private static bool _configShowArmyRtsVisuals;
         private static bool _configShowArmyMapInformation;
         private static bool _configAw3ArmyRtsScheduler;
+        private static bool _configDiplomacyAiEnabled = true;
 
         internal static event Action ArmyRtsDiagnosticsDisabled;
         internal static event Action ArmyMapInformationDisabled;
@@ -31,6 +32,7 @@ namespace AncientWarfare3.core.performance
             _configShowArmyMapInformation;
         public static bool UseAw3ArmyRtsScheduler =>
             _configAw3ArmyRtsScheduler;
+        public static bool EnableDiplomacyAi => _configDiplomacyAiEnabled;
 
         public const float RenderReserveMilliseconds = 2f;
         public const float MinimumSliceMilliseconds = 0.15f;
@@ -101,6 +103,11 @@ namespace AncientWarfare3.core.performance
         {
             ArmyRtsDiagnosticsEnabled = pValue;
             if (!pValue) ArmyRtsDiagnosticsDisabled?.Invoke();
+        }
+
+        public static void SwitchDiplomacyAi(bool pValue)
+        {
+            _configDiplomacyAiEnabled = pValue;
         }
 
         public static void SetTargetRenderFps(float pValue)

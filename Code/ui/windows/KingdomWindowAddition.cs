@@ -28,11 +28,15 @@ namespace AncientWarfare3.ui.windows
     internal class KingdomWindowAddition : MonoBehaviour
     {
         private const string MIDDLE_OBJ = "AW_KingdomMiddle";
+        private const string XIAIZATION_OBJ = "AW_XiaizationStatus";
         private const float AvatarColumnWidth = 44f;
 
         private bool _inited;
         private KingdomWindow _window;
         private GameObject _middle;
+        private GameObject _xiaizationRow;
+        private Text _xiaizationText;
+        private TipButton _xiaizationTip;
         private Text _yearText;
         private Text _policyStateText;
         private Text _policyExecText;
@@ -140,6 +144,8 @@ namespace AncientWarfare3.ui.windows
             //    无继承人时 Refresh 里整列隐藏(不顶国王位 —— 用户报"继承人顶替了国王显示位")。
             _heirCol = BuildAvatarColumn(custom, avatarTemplate, "AW_HeirAvatar", "aw_label_heir", out _heirAvatar);
             custom.AddChild(_heirCol);
+
+            EnsureXiaizationRow(content, root);
         }
 
         /// <summary>头像竖列:头像(克隆)在上 + 身份标签在下,整列作为 HoriGroup 的一个固定宽度子项。</summary>
@@ -275,6 +281,38 @@ namespace AncientWarfare3.ui.windows
             Transform hc = middle.transform.Find("AW_HeirAvatar_Col");
             _kingCol = kc != null ? kc.gameObject : (_kingAvatar != null ? _kingAvatar.transform.parent.gameObject : null);
             _heirCol = hc != null ? hc.gameObject : (_heirAvatar != null ? _heirAvatar.transform.parent.gameObject : null);
+            Transform content = middle.transform.parent;
+            if (content != null)
+            {
+                var root = content.GetComponent<AutoVertLayoutGroup>() ??
+                           content.gameObject.AddComponent<AutoVertLayoutGroup>();
+                EnsureXiaizationRow(content, root);
+            }
+        }
+
+        private void EnsureXiaizationRow(Transform pContent,
+            AutoVertLayoutGroup pRoot)
+        {
+            if (pContent == null) return;
+            Transform existing = pContent.Find(XIAIZATION_OBJ);
+            if (existing != null)
+            {
+                _xiaizationRow = existing.gameObject;
+                SetLayoutSize(existing, 206f, 14f);
+                CacheTextButton(existing, out _xiaizationText,
+                    out _xiaizationTip, null);
+            }
+            else
+            {
+                _xiaizationRow = BuildTextButton(XIAIZATION_OBJ,
+                    new Vector2(206, 14), out _xiaizationText,
+                    out _xiaizationTip, null);
+                if (pRoot != null) pRoot.AddChild(_xiaizationRow);
+                else _xiaizationRow.transform.SetParent(pContent, false);
+            }
+            if (_middle != null)
+                _xiaizationRow.transform.SetSiblingIndex(
+                    _middle.transform.GetSiblingIndex() + 1);
         }
 
         /// <summary>克隆现成头像;show(actor) 自带 banner 显隐 + 点击 openUnitWindow,无需手绑。</summary>
@@ -550,7 +588,7 @@ namespace AncientWarfare3.ui.windows
                 SetPolicyIcon(_policyDecisionIcon, "ui/icons/iconPlotsList");
                 if (_policyStateText != null)
                 {
-                    _policyStateText.text = AW_L10n.Text("aw_policy_state_short", "\u653F");
+                    _policyStateText.text = PolicyStateButtonLabel(pKingdom);
                     _policyStateText.color = DirectKingdomTextColor(pKingdom);
                 }
                 if (_policyExecText != null)
@@ -584,7 +622,7 @@ namespace AncientWarfare3.ui.windows
             string className = AW_L10n.Text(KingdomPolicyService.GetClassLocaleKey(classId), ClassFallbackName(classId));
             if (_policyStateText != null)
             {
-                _policyStateText.text = AW_L10n.Text("aw_policy_state_short", "\u653F");
+                _policyStateText.text = PolicyStateButtonLabel(pKingdom);
                 _policyStateText.color = DirectKingdomTextColor(pKingdom);
             }
 
@@ -621,6 +659,36 @@ namespace AncientWarfare3.ui.windows
             }
             SetPolicyTip(_vassalStatusTip, AW_L10n.Text("aw_vassal_relations", "\u9644\u5EB8\u5173\u7CFB"),
                 VassalService.GetStatusTooltip(pKingdom));
+        }
+
+        private void RefreshXiaizationStatus(Kingdom pKingdom)
+        {
+            if (_xiaizationRow == null || pKingdom?.data == null) return;
+            bool nativeXia = XiaizationService.IsNativePolicyKingdom(
+                pKingdom);
+            bool show = XiaizationStatusDisplayRules.ShouldShow(nativeXia);
+            _xiaizationRow.SetActive(show);
+            if (!show) return;
+            int level = XiaizationService.GetLevel(pKingdom);
+            if (_xiaizationText != null)
+            {
+                _xiaizationText.text = XiaizationStatusDisplayRules.Format(
+                    AW_L10n.Text("aw_xiaization_status", "夏化"), level,
+                    XiaizationService.GetLevelLabel(pKingdom));
+                _xiaizationText.color = DirectKingdomTextColor(pKingdom);
+            }
+            SetPolicyTip(_xiaizationTip,
+                AW_L10n.Text("aw_xiaization_level", "入夏等级"),
+                XiaizationService.BuildTooltip(pKingdom));
+        }
+
+        private static string PolicyStateButtonLabel(Kingdom pKingdom)
+        {
+            bool western = KingdomPolicyProfileRules.UsesWesternCourtLabel(
+                KingdomPolicyService.GetPolicyProfile(pKingdom));
+            return western
+                ? AW_L10n.Text("aw_policy_court_short", "Court")
+                : AW_L10n.Text("aw_policy_state_short", "\u653F");
         }
 
         private void RefreshCourtButton(Kingdom pKingdom)
@@ -716,8 +784,12 @@ namespace AncientWarfare3.ui.windows
 
         private static string BuildCurrentPolicyText(Kingdom pKingdom)
         {
-            KingdomPolicyDef tech = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Tech));
-            KingdomPolicyDef social = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Social));
+            KingdomPolicyDef tech = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Tech));
+            KingdomPolicyDef social = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Social));
             string techName = tech == null ? "" : AW_L10n.Text(tech.NameKey, tech.FallbackName);
             string socialName = social == null ? "" : AW_L10n.Text(social.NameKey, social.FallbackName);
             if (string.IsNullOrEmpty(techName) && string.IsNullOrEmpty(socialName))
@@ -729,7 +801,9 @@ namespace AncientWarfare3.ui.windows
 
         private static string BuildCurrentDecisionText(Kingdom pKingdom)
         {
-            KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
+            KingdomPolicyDef decision = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Decision));
             if (decision == null)
                 return AW_L10n.Text("aw_policy_no_current_decision", "\u5F53\u524D\u6CA1\u6709\u51B3\u7B56");
 
@@ -748,10 +822,14 @@ namespace AncientWarfare3.ui.windows
 
         private static string CurrentResearchIcon(Kingdom pKingdom)
         {
-            KingdomPolicyDef tech = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Tech));
+            KingdomPolicyDef tech = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Tech));
             if (tech != null && !string.IsNullOrEmpty(tech.IconPath)) return tech.IconPath;
 
-            KingdomPolicyDef social = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Social));
+            KingdomPolicyDef social = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Social));
             if (social != null && !string.IsNullOrEmpty(social.IconPath)) return social.IconPath;
 
             return "ui/icons/iconKnowledge";
@@ -759,7 +837,9 @@ namespace AncientWarfare3.ui.windows
 
         private static string CurrentDecisionIcon(Kingdom pKingdom)
         {
-            KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
+            KingdomPolicyDef decision = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Decision));
             if (decision != null && !string.IsNullOrEmpty(decision.IconPath)) return decision.IconPath;
             return "ui/icons/iconPlotsList";
         }
@@ -835,8 +915,15 @@ namespace AncientWarfare3.ui.windows
         {
             if (!_inited || _middle == null) return;
             Kingdom kingdom = _window != null ? _window.meta_object : null;
-            if (kingdom == null || kingdom.isRekt()) { _middle.SetActive(false); return; }
+            if (kingdom == null || kingdom.isRekt())
+            {
+                _middle.SetActive(false);
+                if (_xiaizationRow != null)
+                    _xiaizationRow.SetActive(false);
+                return;
+            }
             _middle.SetActive(true);
+            RefreshXiaizationStatus(kingdom);
 
             // 年号
             if (_yearText != null)

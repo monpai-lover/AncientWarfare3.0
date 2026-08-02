@@ -41,6 +41,7 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (KingdomIdentityContinuityService.ShouldSuppressNewKingdomEffects(__result)) return;
             ChronicleEvents.OnKingdomFounded(__result);
+            WesternLineageMigrationService.Request();
         }
 
         // 亡国(removeObject 是 KingdomManager 自身的 public override,typeof(KingdomManager) 正确)

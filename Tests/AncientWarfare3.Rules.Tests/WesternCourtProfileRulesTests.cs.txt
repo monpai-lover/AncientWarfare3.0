@@ -1,0 +1,122 @@
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.policy;
+
+internal static class WesternCourtProfileRulesTests
+{
+    public static void Run()
+    {
+        ICourtProfile western = CourtProfileRegistry.For(
+            KingdomPolicyProfileId.WesternGeneral);
+        Equal(CourtProfileId.Western, western.Id,
+            "Western policy profile selects Western court");
+
+        CourtOfficeDefinition executive = Require(western,
+            CourtOfficeId.WestExecutive);
+        Equal(CourtOfficeLayer.Central, executive.Layer,
+            "executive is central");
+        Equal(10, executive.Grade, "executive grade");
+        Equal("aw_court_office_west_executive", executive.LocalizationKey,
+            "executive localization");
+        Equal(CourtSchoolId.Diplomat, executive.PreferredSchoolId,
+            "executive school");
+
+        CourtOfficeDefinition mayor = Require(western,
+            CourtOfficeId.WestMayor);
+        Equal(CourtOfficeLayer.City, mayor.Layer, "mayor is city office");
+        Equal(30, mayor.Grade, "mayor grade");
+
+        CourtOfficeDefinition count = Require(western,
+            CourtOfficeId.WestCount);
+        Equal(CourtOfficeLayer.City, count.Layer, "count is city office");
+        Equal(true, count.AvailableIn(CourtInstitutionId.WesternFeudal),
+            "count unlocks under feudal institution");
+        Equal(false, count.AvailableIn(CourtInstitutionId.WesternBase),
+            "count is not a base office");
+
+        CourtOfficeDefinition fieldGeneral = Require(western,
+            CourtOfficeId.WestFieldGeneral);
+        Equal(CourtOfficeLayer.Military, fieldGeneral.Layer,
+            "field general is military");
+        Equal(true, fieldGeneral.MilitaryCapable,
+            "field general supports military careers");
+
+        CourtOfficeDefinition marshal = Require(western,
+            CourtOfficeId.WestMarshal);
+        Equal(CourtOfficeLayer.Military, marshal.Layer,
+            "marshal is military");
+        Equal(true, marshal.MilitaryCapable,
+            "marshal supports military careers");
+        Equal(false, marshal.AvailableIn(CourtInstitutionId.WesternBase),
+            "marshal requires the feudal stage");
+
+        Equal(CourtInstitutionId.WesternPrimitive,
+            western.ResolveInstitution(false, false, false, false),
+            "office system gates the Western court");
+        Equal(CourtInstitutionId.WesternBase,
+            western.ResolveInstitution(true, false, false, false),
+            "office system opens the base court");
+        Equal(CourtInstitutionId.WesternElective,
+            western.ResolveInstitution(true, true, false, false),
+            "elective policy selects elective court");
+        Equal(CourtInstitutionId.WesternFeudal,
+            western.ResolveInstitution(true, false, true, false),
+            "feudal policy selects feudal court");
+        Equal(CourtInstitutionId.WesternRoyalDirect,
+            western.ResolveInstitution(true, false, false, true),
+            "direct rule selects royal court");
+
+        ICourtProfile xia = CourtProfileRegistry.For(
+            KingdomPolicyProfileId.Xia);
+        Equal(CourtProfileId.Xia, xia.Id,
+            "Xia profile keeps Xia court");
+        Sequence(new[]
+            {
+                CourtOfficeId.TaiZai, CourtOfficeId.SiTu,
+                CourtOfficeId.ZongBo, CourtOfficeId.SiMa,
+                CourtOfficeId.SiKou, CourtOfficeId.SiKong
+            }, xia.OfficeIdsForInstitution(CourtInstitutionId.Zhou),
+            "Zhou offices stay unchanged");
+        Sequence(CourtTierRules.CentralOfficesForTier(
+                CourtTier.SanGongJiuQing),
+            xia.OfficeIdsForInstitution(CourtInstitutionId.Han),
+            "Han offices stay unchanged");
+        Sequence(CourtTierRules.CentralOfficesForTier(
+                CourtTier.SanShengLiuBu),
+            xia.OfficeIdsForInstitution(CourtInstitutionId.Tang),
+            "Tang offices stay unchanged");
+
+        Equal(false, CourtProfileRules.CanHoldTogether(
+                CourtProfileId.Xia, CourtOfficeLayer.Central,
+                CourtProfileId.Western, CourtOfficeLayer.Central),
+            "one actor cannot hold central offices from both profiles");
+        Equal(true, CourtProfileRules.CanHoldTogether(
+                CourtProfileId.Xia, CourtOfficeLayer.Central,
+                CourtProfileId.Xia, CourtOfficeLayer.City),
+            "same profile can combine central and city layers");
+    }
+
+    private static CourtOfficeDefinition Require(ICourtProfile profile,
+        string id)
+    {
+        CourtOfficeDefinition result = profile.FindOffice(id);
+        if (result == null)
+            throw new InvalidOperationException("missing office: " + id);
+        return result;
+    }
+
+    private static void Sequence(IReadOnlyList<string> expected,
+        IReadOnlyList<string> actual, string message)
+    {
+        if (expected.Count != actual.Count)
+            throw new InvalidOperationException(message + ": count mismatch");
+        for (int index = 0; index < expected.Count; index++)
+            Equal(expected[index], actual[index], message + "[" + index + "]");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

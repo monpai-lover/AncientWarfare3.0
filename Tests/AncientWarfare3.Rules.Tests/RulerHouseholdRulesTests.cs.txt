@@ -17,6 +17,17 @@ internal static class RulerHouseholdRulesTests
         Equal(2, RulerHouseholdRules.ConsortCapacity(
                 RulerHouseholdRealmTier.Lower),
             "a lower realm may maintain two active consorts");
+        Equal(30, RulerHouseholdRules.MinimumConsortRequestOpinion,
+            "friendly realms may request a consort without requiring alliance-level opinion");
+        Equal(30, RulerHouseholdRules.AiProposalUrgency(
+                hasPrincipalWife: true, activeConsorts: 0),
+            "a ruler with no consort receives urgent household diplomacy");
+        Equal(30, RulerHouseholdRules.AiProposalUrgency(
+                hasPrincipalWife: false, activeConsorts: 0),
+            "a ruler without a principal spouse receives urgent household diplomacy");
+        Equal(0, RulerHouseholdRules.AiProposalUrgency(
+                hasPrincipalWife: true, activeConsorts: 1),
+            "household diplomacy returns to normal priority after the first consort");
 
         Equal("aw_household_title_empress", RulerHouseholdRules.TitleKey(
                 RulerHouseholdRealmTier.Empire,
@@ -34,6 +45,25 @@ internal static class RulerHouseholdRulesTests
             RulerHouseholdRules.TitleKey(RulerHouseholdRealmTier.Lower,
                 RulerHouseholdKind.Consort),
             "a lower-rank consort is a secondary consort");
+        Equal("aw_household_title_royal_husband",
+            RulerHouseholdRules.TitleKey(RulerHouseholdRealmTier.Kingdom,
+                RulerHouseholdKind.PrincipalWife,
+                rulerIsFemale: true),
+            "a reigning queen's principal male spouse is the royal husband");
+        Equal("aw_household_title_royal_husband",
+            RulerHouseholdRules.TitleKey(RulerHouseholdRealmTier.Empire,
+                RulerHouseholdKind.PrincipalWife,
+                rulerIsFemale: true),
+            "a reigning empress's principal male spouse is the royal husband");
+
+        True(RulerHouseholdRules.ShouldChildFollowPromotedParent(
+                parentIsMale: false, parentIsReigningRuler: true,
+                fatherIsMatrilocal: false),
+            "existing children follow a reigning queen when her noble lineage is created");
+        Equal(false, RulerHouseholdRules.ShouldChildFollowPromotedParent(
+                parentIsMale: false, parentIsReigningRuler: false,
+                fatherIsMatrilocal: false),
+            "ordinary maternal lineage still requires a matrilocal marriage");
 
         True(RulerHouseholdRules.IsRoyalMarriageCandidate(
                 otherwiseEligible: true, reigningRuler: false),

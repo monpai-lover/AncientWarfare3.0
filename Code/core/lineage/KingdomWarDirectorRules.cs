@@ -642,6 +642,28 @@ namespace AncientWarfare3.core.lineage
                 : ArmyRtsRole.Reinforcement;
         }
 
+        public static ArmyRtsRole ResolveMissionRole(
+            ArmyRtsRole pAllocatedRole, bool hasStrategicTarget,
+            bool forceReady, bool friendlyDefenseTarget,
+            ArmyRtsProposalKind pProposalKind)
+        {
+            if (pProposalKind == ArmyRtsProposalKind.Defend)
+                return ArmyRtsRole.Defense;
+            if (pProposalKind == ArmyRtsProposalKind.Attack)
+                return ResolveMissionRole(ArmyRtsRole.Assault,
+                    hasStrategicTarget, forceReady,
+                    friendlyDefenseTarget: false);
+            return ResolveMissionRole(pAllocatedRole, hasStrategicTarget,
+                forceReady, friendlyDefenseTarget);
+        }
+
+        public static bool ShouldUsePriorityDefenseTarget(
+            ArmyRtsObjectiveState pState)
+        {
+            return pState == ArmyRtsObjectiveState.OpenDefense ||
+                   pState == ArmyRtsObjectiveState.OpenAttack;
+        }
+
         public static bool ShouldAdmitFriendlyDefenseTarget(
             bool frozenControlledByEnemy, bool activelyCapturedByEnemy)
         {

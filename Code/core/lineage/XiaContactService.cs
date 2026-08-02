@@ -38,6 +38,17 @@ namespace AncientWarfare3.core.lineage
             int occupied = CountOccupiedXiaCities(cities);
             bool official = HasOfficialXiaContact(pKingdom, cities);
 
+            pKingdom.data.get(LineageKeys.XIA_CONTACT_LAST_SOURCE_MASK,
+                out string previousSources, string.Empty);
+            bool currentContact = borders || nearby || diplomacy || vassal ||
+                                  occupied > 0 || mixedChildren > 0 || official;
+            if (XiaContactRules.ShouldClearLegacyFalseOfficialContact(
+                    LineageService.IsXiaKingdom(pKingdom),
+                    XiaizationService.GetContactProgress(pKingdom),
+                    XiaizationService.GetLevel(pKingdom), previousSources,
+                    currentContact))
+                XiaizationService.RepairInvalidContactState(pKingdom);
+
             float gain = XiaContactRules.CalculateYearlyGain(borders, diplomacy, vassal, occupied, mixedChildren,
                 official, nearby);
             if (gain <= 0f) return;
@@ -179,7 +190,9 @@ namespace AncientWarfare3.core.lineage
         private static bool IsXiaContactOfficial(Actor pActor)
         {
             if (pActor?.data == null || pActor.isRekt()) return false;
-            return LineageService.IsXia(pActor) || LineageService.UsesAwLineageSystem(pActor);
+            return XiaContactRules.CanPropagateFromOfficial(
+                LineageService.IsXia(pActor),
+                LineageService.UsesAwLineageSystem(pActor));
         }
 
         private static int CountOccupiedXiaCities(List<City> pCities)
@@ -219,14 +232,18 @@ namespace AncientWarfare3.core.lineage
 
         private static bool IsXiaContactActor(Actor pActor)
         {
-            return LineageService.IsXia(pActor) || IsXiaContactKingdom(pActor?.kingdom);
+            return pActor?.data != null &&
+                   XiaContactRules.CanPropagateFromOfficial(
+                       LineageService.IsXia(pActor),
+                       LineageService.UsesAwLineageSystem(pActor));
         }
 
         private static bool IsXiaContactKingdom(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
-            return LineageService.IsXiaKingdom(pKingdom) ||
-                   XiaizationService.UsesXiaizedInstitutionSystem(pKingdom);
+            return XiaContactRules.CanPropagateFromKingdom(
+                LineageService.IsXiaKingdom(pKingdom),
+                XiaizationService.UsesXiaizedInstitutionSystem(pKingdom));
         }
 
         private static bool IsXiaCulture(Culture pCulture)

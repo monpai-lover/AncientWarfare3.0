@@ -243,7 +243,6 @@ namespace AncientWarfare3.core.lineage
                 StringComparison.Ordinal);
             if (changed)
                 pKingdom.setName(pStateName, pTrack: false);
-            pKingdom.data.set(LineageKeys.XIA_FULL_NAME_APPLIED, true);
             if (!changed) KingdomRenameProjectionService.Refresh(pKingdom);
         }
 

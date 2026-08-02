@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -25,6 +26,21 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldShowInBigTree(int pSex, string pStatus)
         {
             if (pSex != 0) return false; // 非男性(女性)不进氏族大树
+            return ShouldShowStatusInGenealogy(pStatus);
+        }
+
+        public static bool UsesBilateralBigTree(NamingProfileId pProfile)
+        {
+            return pProfile == NamingProfileId.Western ||
+                   pProfile == NamingProfileId.OrcNomadic;
+        }
+
+        public static bool ShouldShowInBigTree(int pSex, string pStatus,
+            NamingProfileId pProfile, bool pHasHeldTitle)
+        {
+            if (pSex != 0 &&
+                (!UsesBilateralBigTree(pProfile) || !pHasHeldTitle))
+                return false;
             return ShouldShowStatusInGenealogy(pStatus);
         }
 
@@ -59,6 +75,21 @@ namespace AncientWarfare3.core.lineage
         {
             return pParentId >= 0 && pParentId == pFatherId &&
                    ShouldShowInBigTree(pChildSex, pChildStatus);
+        }
+
+        public static bool ShouldIncludeBigTreeEdge(long pParentId,
+            long pFatherId, long pMotherId, int pParentSex,
+            bool pParentHasHeldTitle, int pChildSex, string pChildStatus,
+            bool pChildHasHeldTitle, NamingProfileId pProfile)
+        {
+            if (pParentId < 0 ||
+                !ShouldShowInBigTree(pChildSex, pChildStatus, pProfile,
+                    pChildHasHeldTitle)) return false;
+            if (!UsesBilateralBigTree(pProfile))
+                return pParentId == pFatherId;
+            if (pParentId == pFatherId) return true;
+            return pParentId == pMotherId && pParentSex != 0 &&
+                   pParentHasHeldTitle;
         }
 
         public static long ResolveLocateTarget(long pRequestedId, bool pRequestedVisible,

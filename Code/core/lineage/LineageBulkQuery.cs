@@ -6,6 +6,7 @@ using System.Data.SQLite;
 using System.Linq;
 using System.Threading;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -93,10 +94,16 @@ namespace AncientWarfare3.core.lineage
         internal LineageTreeNodeSnapshot(ActorArchiveTableItem actor,
             LineageTreeShiSnapshot shi, LineageTreeShiSnapshot foundedBranch,
             string ritualAppellation, string retrospectiveRelation,
-            LineageTreeStringBudget strings)
+            bool hasHeldTitle, LineageTreeStringBudget strings)
         {
             Id = actor?.id ?? -1L;
-            DisplayName = strings.Take(actor?.display_name ?? actor?.given_name);
+            DisplayName = strings.Take(LineageDisplayNameRules.ProjectArchive(
+                actor?.display_name ?? actor?.given_name,
+                actor?.given_name, actor?.family_name, actor?.clan_name,
+                actor?.status, actor?.sex == 0, actor?.name_integrated != 0,
+                shi?.NamingProfile, shi?.WesternNamingTradition,
+                shi?.OriginCityName ?? shi?.OriginCityChineseName,
+                shi?.DisplayStem));
             AssetId = strings.Take(actor?.asset_id);
             FamilyName = strings.Take(actor?.family_name);
             ClanName = strings.Take(actor?.clan_name);
@@ -120,6 +127,12 @@ namespace AncientWarfare3.core.lineage
             ParentShiId = shi?.ParentShiId ?? -1L;
             ShiFounderActorId = shi?.FounderActorId ?? -1L;
             ShiDisplay = strings.Take(shi?.Display);
+            ShiNamingProfile = strings.Take(shi?.NamingProfile);
+            ShiWesternNamingTradition = strings.Take(
+                shi?.WesternNamingTradition);
+            ShiOriginCityChineseName = strings.Take(
+                shi?.OriginCityChineseName);
+            ShiDisplayStem = strings.Take(shi?.DisplayStem);
             NobleDistance = actor?.noble_distance ?? 99;
             Head = actor?.head ?? 0;
             Skin = actor?.skin ?? 0;
@@ -135,8 +148,16 @@ namespace AncientWarfare3.core.lineage
             OriginCityName = strings.Take(shi?.OriginCityName);
             StateName = strings.Take(shi?.StateName);
             BranchDisplay = strings.Take(foundedBranch?.Display);
+            BranchNamingProfile = strings.Take(
+                foundedBranch?.NamingProfile);
+            BranchWesternNamingTradition = strings.Take(
+                foundedBranch?.WesternNamingTradition);
+            BranchOriginCityChineseName = strings.Take(
+                foundedBranch?.OriginCityChineseName);
+            BranchDisplayStem = strings.Take(foundedBranch?.DisplayStem);
             RitualAppellation = strings.Take(ritualAppellation);
             RetrospectiveRelation = strings.Take(retrospectiveRelation);
+            HasHeldTitle = hasHeldTitle;
         }
 
         public long Id { get; }
@@ -164,6 +185,10 @@ namespace AncientWarfare3.core.lineage
         public long ParentShiId { get; }
         public long ShiFounderActorId { get; }
         public string ShiDisplay { get; }
+        public string ShiNamingProfile { get; }
+        public string ShiWesternNamingTradition { get; }
+        public string ShiOriginCityChineseName { get; }
+        public string ShiDisplayStem { get; }
         public int NobleDistance { get; }
         public int Head { get; }
         public int Skin { get; }
@@ -179,8 +204,13 @@ namespace AncientWarfare3.core.lineage
         public string OriginCityName { get; }
         public string StateName { get; }
         public string BranchDisplay { get; }
+        public string BranchNamingProfile { get; }
+        public string BranchWesternNamingTradition { get; }
+        public string BranchOriginCityChineseName { get; }
+        public string BranchDisplayStem { get; }
         public string RitualAppellation { get; }
         public string RetrospectiveRelation { get; }
+        public bool HasHeldTitle { get; }
     }
 
     internal sealed class LineageTreeShiSnapshot
@@ -193,6 +223,10 @@ namespace AncientWarfare3.core.lineage
         public string RootDisplay = string.Empty;
         public string OriginCityName = string.Empty;
         public string StateName = string.Empty;
+        public string NamingProfile = "xia";
+        public string WesternNamingTradition = string.Empty;
+        public string OriginCityChineseName = string.Empty;
+        public string DisplayStem = string.Empty;
     }
 
     internal sealed class LineageTreeStringBudget
@@ -280,6 +314,18 @@ namespace AncientWarfare3.core.lineage
         public IReadOnlyList<long> LocatePath => _locatePath;
         public LineageTreeOverflow Overflow { get; }
 
+        public NamingProfileId BigTreeProfile
+        {
+            get
+            {
+                return _treeNodes.TryGetValue(RootActorId,
+                           out LineageTreeNodeSnapshot root)
+                    ? AWCultureNamingTraditionRules.ParseProfile(
+                        root.ShiNamingProfile)
+                    : NamingProfileId.None;
+            }
+        }
+
         public bool ContainsNode(long pActorId)
         {
             return _nodes.Contains(pActorId);
@@ -311,6 +357,29 @@ namespace AncientWarfare3.core.lineage
                     return parentId;
             }
             return -1L;
+        }
+
+        public long MotherId(long pActorId)
+        {
+            IReadOnlyList<long> parents = ParentIds(pActorId);
+            for (int index = 0; index < parents.Count; index++)
+            {
+                long parentId = parents[index];
+                if (_treeNodes.TryGetValue(parentId,
+                        out LineageTreeNodeSnapshot node) && node.Sex != 0)
+                    return parentId;
+                if (_actors.TryGetValue(parentId,
+                        out ActorArchiveTableItem actor) && actor.sex != 0)
+                    return parentId;
+            }
+            return -1L;
+        }
+
+        public bool HasHeldTitle(long pActorId)
+        {
+            return _treeNodes.TryGetValue(pActorId,
+                       out LineageTreeNodeSnapshot node) &&
+                   node.HasHeldTitle;
         }
 
         public IReadOnlyList<long> ParentIds(long pActorId)
@@ -561,8 +630,15 @@ namespace AncientWarfare3.core.lineage
                 }
                 _visited.Add(candidateId);
                 Current = candidateId;
-                if (_snapshot.FatherId(candidateId) == frame.ActorId &&
-                    _snapshot.TryGetNode(candidateId, out _))
+                if (_snapshot.TryGetNode(frame.ActorId,
+                        out LineageTreeNodeSnapshot parent) &&
+                    _snapshot.TryGetNode(candidateId,
+                        out LineageTreeNodeSnapshot child) &&
+                    FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+                        frame.ActorId, _snapshot.FatherId(candidateId),
+                        _snapshot.MotherId(candidateId), parent.Sex,
+                        parent.HasHeldTitle, child.Sex, child.Status,
+                        child.HasHeldTitle, _snapshot.BigTreeProfile))
                     _frames.Push(CreateFrame(candidateId));
                 return true;
             }
@@ -692,9 +768,13 @@ namespace AncientWarfare3.core.lineage
                 }
             }
 
+            ReadRootFamilyEdges(pDb, transaction, rootActorId, edgeMaximum,
+                rawEdges, rawEdgeSet, resolvedParentSlots, actorIds,
+                actorOrder);
+
             var actors = new Dictionary<long, ActorArchiveTableItem>();
-            long[] seedIds = BuildActorSeedIds(actorOrder, rawEdges,
-                requestedLocateActorId, maximum + 1);
+            long[] seedIds = BuildActorSeedIds(rootActorId, actorOrder,
+                rawEdges, requestedLocateActorId, maximum + 1);
             if (seedIds.Length > 0)
             {
                 using var actorCommand = new SQLiteCommand(pDb);
@@ -764,9 +844,12 @@ namespace AncientWarfare3.core.lineage
 
             bool nodeOverflow = actorOrder.Count > maximum;
             bool edgeOverflow = rawEdges.Count > edgeMaximum;
-            List<long> prioritizedActorOrder = PrioritizeRootAncestors(
-                rootActorId, requestedLocateActorId, actorOrder, actors,
-                rawEdges);
+            List<long> prioritizedActorOrder = backShiId < 0L &&
+                requestedLocateActorId < 0L
+                ? PrioritizeFamilyRelations(rootActorId, actorOrder, actors,
+                    rawEdges)
+                : PrioritizeRootAncestors(rootActorId,
+                    requestedLocateActorId, actorOrder, actors, rawEdges);
             var allowedIds = new HashSet<long>(
                 prioritizedActorOrder.Take(maximum));
             actorIds = allowedIds;
@@ -790,6 +873,8 @@ namespace AncientWarfare3.core.lineage
             Dictionary<long, LineageTreeShiSnapshot> shiById =
                 ReadShiSnapshots(pDb, transaction, actors.Values,
                     maximum);
+            HashSet<long> titleHolderIds = ReadTitleHolderIds(pDb,
+                transaction, orderedIds);
             ReadPosthumousSnapshots(pDb, transaction, orderedIds,
                 out Dictionary<long, string> appellations,
                 out Dictionary<long, string> retrospectiveRelations);
@@ -810,13 +895,14 @@ namespace AncientWarfare3.core.lineage
                     out string retrospectiveRelation);
                 treeNodes[actor.id] = new LineageTreeNodeSnapshot(actor,
                     shi, foundedBranch, appellation,
-                    retrospectiveRelation, stringBudget);
+                    retrospectiveRelation,
+                    titleHolderIds.Contains(actor.id), stringBudget);
             }
 
             List<long> locatePath = BuildLocatePath(requestedLocateActorId,
-                rootActorId, parents, actors);
+                rootActorId, parents, treeNodes);
             long locateActorId = ResolveLocateActorId(requestedLocateActorId,
-                rootActorId, locatePath, actors);
+                rootActorId, locatePath, treeNodes);
             var overflow = new LineageTreeOverflow(nodeOverflow,
                 edgeOverflow, stringBudget.Overflowed);
             return new LineageBulkSnapshot(actors, parents, children,
@@ -860,22 +946,34 @@ namespace AncientWarfare3.core.lineage
                 command.CommandText =
                     "WITH RECURSIVE chain(SHI_ID,PARENT_SHI_ID," +
                     "FOUNDER_ACTOR_ID,CLAN_NAME,SOURCE_TYPE," +
-                    "ORIGIN_CITY_ID,STATE_NAME) AS (" +
+                    "ORIGIN_CITY_ID,STATE_NAME,NAMING_PROFILE," +
+                    "WESTERN_NAMING_TRADITION," +
+                    "ORIGIN_CITY_CHINESE_NAME,DISPLAY_STEM) AS (" +
                     "SELECT SHI_ID,IFNULL(PARENT_SHI_ID,-1)," +
                     "IFNULL(FOUNDER_ACTOR_ID,-1),IFNULL(CLAN_NAME,'')," +
                     "IFNULL(SOURCE_TYPE,''),IFNULL(ORIGIN_CITY_ID,-1)," +
-                    "IFNULL(STATE_NAME,'') FROM ShiBranch WHERE SHI_ID IN (" +
+                    "IFNULL(STATE_NAME,''),IFNULL(NAMING_PROFILE,'xia')," +
+                    "IFNULL(WESTERN_NAMING_TRADITION,'')," +
+                    "IFNULL(ORIGIN_CITY_CHINESE_NAME,'')," +
+                    "IFNULL(DISPLAY_STEM,'') FROM ShiBranch " +
+                    "WHERE SHI_ID IN (" +
                     ids + ") UNION SELECT parent.SHI_ID," +
                     "IFNULL(parent.PARENT_SHI_ID,-1)," +
                     "IFNULL(parent.FOUNDER_ACTOR_ID,-1)," +
                     "IFNULL(parent.CLAN_NAME,'')," +
                     "IFNULL(parent.SOURCE_TYPE,'')," +
                     "IFNULL(parent.ORIGIN_CITY_ID,-1)," +
-                    "IFNULL(parent.STATE_NAME,'') FROM ShiBranch parent " +
+                    "IFNULL(parent.STATE_NAME,'')," +
+                    "IFNULL(parent.NAMING_PROFILE,'xia')," +
+                    "IFNULL(parent.WESTERN_NAMING_TRADITION,'')," +
+                    "IFNULL(parent.ORIGIN_CITY_CHINESE_NAME,'')," +
+                    "IFNULL(parent.DISPLAY_STEM,'') FROM ShiBranch parent " +
                     "JOIN chain child ON parent.SHI_ID=child.PARENT_SHI_ID " +
                     "LIMIT @limit) SELECT SHI_ID,PARENT_SHI_ID," +
                     "FOUNDER_ACTOR_ID,CLAN_NAME,SOURCE_TYPE,ORIGIN_CITY_ID," +
-                    "STATE_NAME,IFNULL((SELECT archived.CITY_NAME FROM " +
+                    "STATE_NAME,NAMING_PROFILE,WESTERN_NAMING_TRADITION," +
+                    "ORIGIN_CITY_CHINESE_NAME,DISPLAY_STEM," +
+                    "IFNULL((SELECT archived.CITY_NAME FROM " +
                     "ActorArchive archived WHERE archived.ID=" +
                     "chain.FOUNDER_ACTOR_ID LIMIT 1),'') " +
                     "FROM chain ORDER BY SHI_ID";
@@ -887,7 +985,15 @@ namespace AncientWarfare3.core.lineage
                     string clanName = reader.GetString(3);
                     string sourceType = reader.GetString(4);
                     string stateName = reader.GetString(6);
-                    string originCityName = reader.GetString(7);
+                    string namingProfile = reader.GetString(7);
+                    string westernNamingTradition = reader.GetString(8);
+                    string originCityChineseName = reader.GetString(9);
+                    string displayStem = reader.GetString(10);
+                    string archivedOriginCityName = reader.GetString(11);
+                    string originCityName =
+                        string.IsNullOrWhiteSpace(originCityChineseName)
+                            ? archivedOriginCityName
+                            : originCityChineseName;
                     result[reader.GetInt64(0)] = new LineageTreeShiSnapshot
                     {
                         ShiId = reader.GetInt64(0),
@@ -896,7 +1002,11 @@ namespace AncientWarfare3.core.lineage
                         Display = ShiBranchRules.BuildDisplayName(
                             originCityName, clanName, sourceType, stateName),
                         OriginCityName = originCityName,
-                        StateName = stateName
+                        StateName = stateName,
+                        NamingProfile = namingProfile,
+                        WesternNamingTradition = westernNamingTradition,
+                        OriginCityChineseName = originCityChineseName,
+                        DisplayStem = displayStem
                     };
                 }
             }
@@ -967,6 +1077,40 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        private static HashSet<long> ReadTitleHolderIds(
+            SQLiteConnection connection, SQLiteTransaction transaction,
+            IEnumerable<long> actorIds)
+        {
+            var result = new HashSet<long>();
+            long[] ids = (actorIds ?? Enumerable.Empty<long>())
+                .Where(id => id >= 0L).Distinct().Take(512).ToArray();
+            if (ids.Length == 0) return result;
+
+            try
+            {
+                using var command = new SQLiteCommand(connection);
+                command.Transaction = transaction;
+                command.CommandText =
+                    "SELECT candidate.ID FROM ActorArchive candidate " +
+                    "WHERE candidate.ID IN (" + string.Join(",", ids) +
+                    ") AND (EXISTS (SELECT 1 FROM " +
+                    KingdomReignTableItem.GetTableName() +
+                    " reign WHERE reign.KING_ACTOR_ID=candidate.ID) OR " +
+                    "EXISTS (SELECT 1 FROM " +
+                    EnfeoffmentTableItem.GetTableName() +
+                    " grant_row WHERE grant_row.ACTOR_ID=candidate.ID " +
+                    "AND grant_row.NOBLE_RANK>0))";
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read()) result.Add(reader.GetInt64(0));
+            }
+            catch (SQLiteException)
+            {
+                // Legacy saves without either title table retain the
+                // agnatic fallback until normal schema initialization.
+            }
+            return result;
+        }
+
         private static void ReadPosthumousSnapshots(
             SQLiteConnection connection, SQLiteTransaction transaction,
             IEnumerable<long> actorIds,
@@ -1009,32 +1153,80 @@ namespace AncientWarfare3.core.lineage
 
         private static List<long> BuildLocatePath(long requestedActorId,
             long rootActorId, Dictionary<long, List<long>> parents,
-            IReadOnlyDictionary<long, ActorArchiveTableItem> actors)
+            IReadOnlyDictionary<long, LineageTreeNodeSnapshot> nodes)
         {
-            return FamilyTreeRelationRules.BuildAgnaticPath(
-                requestedActorId, rootActorId,
-                actorId => FindFatherId(actorId, parents, actors));
+            var result = new List<long>();
+            if (requestedActorId < 0L || rootActorId < 0L ||
+                !nodes.TryGetValue(rootActorId,
+                    out LineageTreeNodeSnapshot root)) return result;
+            NamingProfileId profile =
+                AWCultureNamingTraditionRules.ParseProfile(
+                    root.ShiNamingProfile);
+            var visited = new HashSet<long> { requestedActorId };
+            var queue = new Queue<long>();
+            var nextTowardRequested = new Dictionary<long, long>();
+            queue.Enqueue(requestedActorId);
+            while (queue.Count > 0 && visited.Count <= 512)
+            {
+                long childId = queue.Dequeue();
+                if (childId == rootActorId) break;
+                if (!parents.TryGetValue(childId,
+                        out List<long> parentIds) ||
+                    !nodes.TryGetValue(childId,
+                        out LineageTreeNodeSnapshot child)) continue;
+                long fatherId = FindParentId(parentIds, nodes, 0);
+                long motherId = FindParentId(parentIds, nodes, 1);
+                foreach (long parentId in parentIds)
+                {
+                    if (!nodes.TryGetValue(parentId,
+                            out LineageTreeNodeSnapshot parent) ||
+                        !FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+                            parentId, fatherId, motherId, parent.Sex,
+                            parent.HasHeldTitle, child.Sex, child.Status,
+                            child.HasHeldTitle, profile) ||
+                        !visited.Add(parentId)) continue;
+                    nextTowardRequested[parentId] = childId;
+                    queue.Enqueue(parentId);
+                }
+            }
+            if (!visited.Contains(rootActorId)) return result;
+            long current = rootActorId;
+            result.Add(current);
+            while (current != requestedActorId &&
+                   nextTowardRequested.TryGetValue(current,
+                       out long child))
+            {
+                current = child;
+                result.Add(current);
+            }
+            if (current != requestedActorId) result.Clear();
+            return result;
         }
 
         private static long ResolveLocateActorId(long requestedActorId,
             long rootActorId, IReadOnlyList<long> locatePath,
-            IReadOnlyDictionary<long, ActorArchiveTableItem> actors)
+            IReadOnlyDictionary<long, LineageTreeNodeSnapshot> nodes)
         {
             if (locatePath == null || locatePath.Count == 0)
                 return rootActorId;
-            if (actors.TryGetValue(requestedActorId,
-                    out ActorArchiveTableItem requested) &&
-                FamilyTreeRelationRules.ShouldShowInBigTree(requested.sex,
-                    requested.status))
+            NamingProfileId profile = nodes.TryGetValue(rootActorId,
+                    out LineageTreeNodeSnapshot root)
+                ? AWCultureNamingTraditionRules.ParseProfile(
+                    root.ShiNamingProfile)
+                : NamingProfileId.None;
+            if (nodes.TryGetValue(requestedActorId,
+                    out LineageTreeNodeSnapshot requested) &&
+                FamilyTreeRelationRules.ShouldShowInBigTree(requested.Sex,
+                    requested.Status, profile, requested.HasHeldTitle))
                 return requestedActorId;
 
             for (int index = locatePath.Count - 2; index >= 0; index--)
             {
                 long actorId = locatePath[index];
-                if (actors.TryGetValue(actorId,
-                        out ActorArchiveTableItem actor) &&
-                    FamilyTreeRelationRules.ShouldShowInBigTree(actor.sex,
-                        actor.status))
+                if (nodes.TryGetValue(actorId,
+                        out LineageTreeNodeSnapshot actor) &&
+                    FamilyTreeRelationRules.ShouldShowInBigTree(actor.Sex,
+                        actor.Status, profile, actor.HasHeldTitle))
                     return actorId;
             }
             return rootActorId;
@@ -1053,6 +1245,18 @@ namespace AncientWarfare3.core.lineage
                         out ActorArchiveTableItem parent) && parent.sex == 0)
                     return parentId;
             }
+            return -1L;
+        }
+
+        private static long FindParentId(IEnumerable<long> parentIds,
+            IReadOnlyDictionary<long, LineageTreeNodeSnapshot> nodes,
+            int sex)
+        {
+            foreach (long parentId in parentIds ?? Enumerable.Empty<long>())
+                if (nodes.TryGetValue(parentId,
+                        out LineageTreeNodeSnapshot parent) &&
+                    (parent.Sex == 0 ? 0 : 1) == sex)
+                    return parentId;
             return -1L;
         }
 
@@ -1127,15 +1331,95 @@ namespace AncientWarfare3.core.lineage
             if (edgeSet.Add(edge)) edges.Add(edge);
         }
 
-        private static long[] BuildActorSeedIds(
+        private static void ReadRootFamilyEdges(SQLiteConnection connection,
+            SQLiteTransaction transaction, long rootActorId, int edgeLimit,
+            List<LineageTreeEdge> edges,
+            HashSet<LineageTreeEdge> edgeSet,
+            HashSet<LineageTreeParentSlot> resolvedParentSlots,
+            HashSet<long> actorIds, List<long> actorOrder)
+        {
+            if (connection == null || rootActorId < 0L) return;
+            using (var command = new SQLiteCommand(connection))
+            {
+                command.Transaction = transaction;
+                command.CommandText =
+                    "SELECT CHILD_ID,PARENT_ID,PARENT_SLOT FROM FamilyEdge " +
+                    "WHERE CHILD_ID=@root OR PARENT_ID=@root " +
+                    "ORDER BY CREATED_TIME,CHILD_ID,PARENT_SLOT LIMIT @limit";
+                command.Parameters.AddWithValue("@root", rootActorId);
+                command.Parameters.AddWithValue("@limit", edgeLimit + 1);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    long childId = reader.GetInt64(0);
+                    long parentId = reader.GetInt64(1);
+                    int parentSlot = reader.GetInt32(2);
+                    AddRawEdge(edges, edgeSet, childId, parentId);
+                    resolvedParentSlots.Add(new LineageTreeParentSlot(
+                        childId, parentSlot));
+                    AddActorId(actorIds, actorOrder, childId);
+                    AddActorId(actorIds, actorOrder, parentId);
+                }
+            }
+
+            using (var command = new SQLiteCommand(connection))
+            {
+                command.Transaction = transaction;
+                command.CommandText =
+                    "SELECT ID,PARENT_ID_1,PARENT_ID_2 FROM ActorArchive " +
+                    "WHERE ID=@root OR PARENT_ID_1=@root OR PARENT_ID_2=@root " +
+                    "ORDER BY ID LIMIT @limit";
+                command.Parameters.AddWithValue("@root", rootActorId);
+                command.Parameters.AddWithValue("@limit", edgeLimit + 1);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    long childId = reader.GetInt64(0);
+                    long parent1 = reader.IsDBNull(1) ? -1L :
+                        reader.GetInt64(1);
+                    long parent2 = reader.IsDBNull(2) ? -1L :
+                        reader.GetInt64(2);
+                    if (parent1 >= 0L && !resolvedParentSlots.Contains(
+                            new LineageTreeParentSlot(childId, 1)))
+                        AddRawEdge(edges, edgeSet, childId, parent1);
+                    if (parent2 >= 0L && !resolvedParentSlots.Contains(
+                            new LineageTreeParentSlot(childId, 2)))
+                        AddRawEdge(edges, edgeSet, childId, parent2);
+                    AddActorId(actorIds, actorOrder, childId);
+                    AddActorId(actorIds, actorOrder, parent1);
+                    AddActorId(actorIds, actorOrder, parent2);
+                }
+            }
+        }
+
+        private static long[] BuildActorSeedIds(long rootActorId,
             IEnumerable<long> actorOrder,
             IReadOnlyList<LineageTreeEdge> edges,
             long requestedLocateActorId, int ordinarySeedLimit)
         {
             var result = new List<long>();
             var seen = new HashSet<long>();
+            if (rootActorId >= 0L && seen.Add(rootActorId))
+                result.Add(rootActorId);
+            foreach (LineageTreeEdge edge in edges)
+            {
+                if (result.Count >= ordinarySeedLimit) break;
+                if (edge.ChildId != rootActorId || edge.ParentId < 0L ||
+                    !seen.Add(edge.ParentId)) continue;
+                result.Add(edge.ParentId);
+            }
+            foreach (LineageTreeEdge edge in edges)
+            {
+                if (result.Count >= ordinarySeedLimit) break;
+                if (edge.ParentId != rootActorId || edge.ChildId < 0L ||
+                    !seen.Add(edge.ChildId)) continue;
+                result.Add(edge.ChildId);
+            }
             foreach (long actorId in actorOrder.Take(ordinarySeedLimit))
+            {
+                if (result.Count >= ordinarySeedLimit) break;
                 if (actorId >= 0L && seen.Add(actorId)) result.Add(actorId);
+            }
             if (requestedLocateActorId < 0L ||
                 !seen.Add(requestedLocateActorId)) return result.ToArray();
 
@@ -1160,6 +1444,62 @@ namespace AncientWarfare3.core.lineage
                 }
             }
             return result.ToArray();
+        }
+
+        private static List<long> PrioritizeFamilyRelations(long rootActorId,
+            IEnumerable<long> actorOrder,
+            IReadOnlyDictionary<long, ActorArchiveTableItem> actors,
+            IReadOnlyList<LineageTreeEdge> edges)
+        {
+            var result = new List<long>();
+            var seen = new HashSet<long>();
+            AppendFamilyActor(result, seen, actors, rootActorId);
+
+            foreach (LineageTreeEdge edge in edges)
+                if (edge.ChildId == rootActorId)
+                    AppendFamilyActor(result, seen, actors, edge.ParentId);
+
+            var pendingAncestors = new Queue<long>();
+            var expandedAncestors = new HashSet<long>();
+            pendingAncestors.Enqueue(rootActorId);
+            while (pendingAncestors.Count > 0)
+            {
+                long childId = pendingAncestors.Dequeue();
+                if (!expandedAncestors.Add(childId)) continue;
+                foreach (LineageTreeEdge edge in edges)
+                {
+                    if (edge.ChildId != childId) continue;
+                    AppendFamilyActor(result, seen, actors, edge.ParentId);
+                    pendingAncestors.Enqueue(edge.ParentId);
+                }
+            }
+
+            var directChildren = new List<long>();
+            foreach (LineageTreeEdge edge in edges)
+            {
+                if (edge.ParentId != rootActorId) continue;
+                directChildren.Add(edge.ChildId);
+                AppendFamilyActor(result, seen, actors, edge.ChildId);
+            }
+
+            foreach (long parentId in directChildren)
+                foreach (LineageTreeEdge edge in edges)
+                    if (edge.ParentId == parentId)
+                        AppendFamilyActor(result, seen, actors,
+                            edge.ChildId);
+
+            foreach (long actorId in actorOrder)
+                AppendFamilyActor(result, seen, actors, actorId);
+            return result;
+        }
+
+        private static void AppendFamilyActor(List<long> result,
+            HashSet<long> seen,
+            IReadOnlyDictionary<long, ActorArchiveTableItem> actors,
+            long actorId)
+        {
+            if (actorId >= 0L && actors.ContainsKey(actorId) &&
+                seen.Add(actorId)) result.Add(actorId);
         }
 
         private static List<long> PrioritizeRootAncestors(long rootActorId,

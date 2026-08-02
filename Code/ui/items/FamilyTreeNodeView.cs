@@ -1099,8 +1099,18 @@ namespace AncientWarfare3.ui.items
                 sb.AppendLine(AW_L10n.Text("aw_social_title_label", "\u8EAB\u4EFD:") + pNode.social_title);
 
             // 生卒
-            string birth = pNode.birth_time > 0 ? Date.getYear(pNode.birth_time) + AW_L10n.Text("aw_year_suffix", "年") : "?";
-            string death = pNode.is_alive ? "—" : (pNode.death_time > 0 ? Date.getYear(pNode.death_time) + AW_L10n.Text("aw_year_suffix", "年") : "?");
+            string birth = FamilyTreeChronologyRules.HasKnownBirthTime(
+                    pNode.birth_time)
+                ? Date.getYear(pNode.birth_time) +
+                  AW_L10n.Text("aw_year_suffix", "年")
+                : "?";
+            string death = pNode.is_alive
+                ? "—"
+                : FamilyTreeChronologyRules.HasKnownDeathTime(
+                    pNode.death_time)
+                    ? Date.getYear(pNode.death_time) +
+                      AW_L10n.Text("aw_year_suffix", "年")
+                    : "?";
             sb.AppendLine(AW_L10n.Text("aw_birth_label", "生:") + birth + "   " +
                           AW_L10n.Text("aw_death_label", "卒:") + death);
 
@@ -1138,14 +1148,17 @@ namespace AncientWarfare3.ui.items
 
         private static int CalculateAge(FamilyTreeNode pNode)
         {
-            if (pNode == null || pNode.birth_time <= 0) return -1;
+            if (pNode == null ||
+                !FamilyTreeChronologyRules.HasKnownBirthTime(
+                    pNode.birth_time)) return -1;
 
             Actor live = World.world?.units?.get(pNode.id);
             if (live != null && !live.isRekt() && live.isAlive())
                 return System.Math.Max(0, live.getAge());
 
             double end;
-            if (pNode.death_time > 0)
+            if (FamilyTreeChronologyRules.HasKnownDeathTime(
+                    pNode.death_time))
                 end = pNode.death_time;
             else if (pNode.is_alive && World.world != null)
                 end = World.world.getCurWorldTime();

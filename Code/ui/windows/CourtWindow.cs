@@ -802,6 +802,16 @@ namespace AncientWarfare3.ui.windows
                     return AW_L10n.Text("aw_court_tier_sangongjiuqing", "Three Excellencies and Nine Ministers");
                 case CourtTier.EasternZhou:
                     return AW_L10n.Text("aw_court_tier_easternzhou", "Eastern Zhou Six Ministers");
+                case CourtInstitutionId.WesternPrimitive:
+                    return AW_L10n.Text("aw_court_tier_western_primitive", "Household Council");
+                case CourtInstitutionId.WesternBase:
+                    return AW_L10n.Text("aw_court_tier_western_base", "Royal Council");
+                case CourtInstitutionId.WesternElective:
+                    return AW_L10n.Text("aw_court_tier_western_elective", "Elective Offices");
+                case CourtInstitutionId.WesternFeudal:
+                    return AW_L10n.Text("aw_court_tier_western_feudal", "Feudal Court");
+                case CourtInstitutionId.WesternRoyalDirect:
+                    return AW_L10n.Text("aw_court_tier_western_royal_direct", "Royal Administration");
                 default:
                     return AW_L10n.Text("aw_court_button_locked", "Court Locked");
             }

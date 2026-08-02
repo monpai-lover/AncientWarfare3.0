@@ -1,0 +1,51 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WesternGoalRegressionRulesTests
+{
+    public static void Run()
+    {
+        Equal(false, XiaContactRules.CanPropagateFromKingdom(
+                nativeXiaKingdom: false, usesXiaInstitutions: true),
+            "a non-Xia Xia-institution kingdom cannot spread Xiaization");
+        Equal(true, XiaContactRules.CanPropagateFromKingdom(
+                nativeXiaKingdom: true, usesXiaInstitutions: false),
+            "a native Xia kingdom can spread Xiaization");
+        Equal(false, XiaContactRules.CanPropagateFromOfficial(
+                biologicalXia: false, usesAwLineageSystem: true),
+            "a western official with an AW3 family tree is not a Xia contact");
+        Equal(true, XiaContactRules.CanPropagateFromOfficial(
+                biologicalXia: true, usesAwLineageSystem: false),
+            "a biological Xia official is a Xia contact");
+        Equal(true, XiaContactRules.ShouldClearLegacyFalseOfficialContact(
+                nativeXiaKingdom: false, progress: 42f, level: 1,
+                sourceMask: "official", hasCurrentQualifyingContact: false),
+            "legacy western-lineage official progress is cleared");
+        Equal(false, XiaContactRules.ShouldClearLegacyFalseOfficialContact(
+                nativeXiaKingdom: false, progress: 42f, level: 1,
+                sourceMask: "official;border",
+                hasCurrentQualifyingContact: false),
+            "real historical contact is never erased");
+        Equal(false, XiaContactRules.ShouldClearLegacyFalseOfficialContact(
+                nativeXiaKingdom: false, progress: 100f, level: 2,
+                sourceMask: "official", hasCurrentQualifyingContact: false),
+            "an adopted Xia policy state is not silently rolled back");
+
+        Equal(true, FamilyTreeChronologyRules.HasKnownBirthTime(-25d),
+            "a pre-world-start birth time is valid");
+        Equal(true, FamilyTreeChronologyRules.HasKnownBirthTime(0d),
+            "a world-start birth time is valid");
+        Equal(false, FamilyTreeChronologyRules.HasKnownBirthTime(double.NaN),
+            "NaN remains an unknown birth time");
+        Equal(false, FamilyTreeChronologyRules.HasKnownDeathTime(-1d),
+            "the archive death sentinel remains unknown");
+        Equal(true, FamilyTreeChronologyRules.HasKnownDeathTime(0d),
+            "a death at world start is valid");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

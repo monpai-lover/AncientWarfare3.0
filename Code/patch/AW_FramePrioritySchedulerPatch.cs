@@ -1034,10 +1034,10 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(QuantumSpriteLibrary),
             "drawUnexploredAugmentationSprite")]
         private static bool DrawSnapshotUnexploredAugmentations(
-            QuantumSpriteAsset pAsset)
+            QuantumSpriteAsset __0)
         {
             if (AWActorPresentationOverlays
-                .TryDrawUnexploredAugmentations(pAsset))
+                .TryDrawUnexploredAugmentations(__0))
             {
                 return false;
             }

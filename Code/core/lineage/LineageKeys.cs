@@ -7,6 +7,11 @@ namespace AncientWarfare3.core.lineage
         public const string CHINESE_FAMILY_NAME = "chinese_family_name";
 
         public const string GIVEN_NAME = "aw_given_name";
+        public const string NAMING_PROFILE = "aw_naming_profile";
+        public const string WESTERN_NAMING_TRADITION =
+            "aw_western_naming_tradition";
+        public const string CULTURE_PARENT_ID =
+            "aw_naming_parent_culture_id";
         public const string LINEAGE_ID = "aw_lineage_id";
         public const string SHI_ID = "aw_shi_id";
         public const string NOBLE_DISTANCE = "aw_noble_distance";
@@ -325,6 +330,15 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_ASYLUM_ROSTER_IDS = "aw_royal_asylum_roster_ids";
 
         public const string POLICY_CLASS_STATE = "aw_policy_class_state";
+        public const string POLICY_PROFILE_ID = "aw_policy_profile_id";
+        public const string POLICY_GOVERNMENT_STATE =
+            "aw_policy_government_state";
+        public const string WESTERN_ROYAL_AUTHORITY =
+            "aw_western_royal_authority";
+        public const string POLICY_MIGRATION_VERSION =
+            "aw_policy_migration_version";
+        public const string POLICY_OBSOLETE_NODE_IDS =
+            "aw_policy_obsolete_node_ids";
         public const string REPUBLIC_LEADER = "aw_republic_leader";
         public const string POLICY_ARMY_STATE = "aw_policy_army_state";
         public const string POLICY_NAME_STATE = "aw_policy_name_state";
@@ -379,6 +393,8 @@ namespace AncientWarfare3.core.lineage
         public const string DIPLOMATIC_WAR_NOTICE_RECORDED = "aw_diplomatic_war_notice_recorded";
         public const string DIPLOMATIC_WAR_LAST_CANCEL_REASON = "aw_diplomatic_war_last_cancel_reason";
         public const string DIPLOMATIC_WAR_LAST_CANCEL_YEAR = "aw_diplomatic_war_last_cancel_year";
+        public const string DIPLOMATIC_WAR_LEDGER =
+            "aw_diplomatic_war_ledger";
         public const string DEPLOYMENT_NOTICE_SIGNATURE = "aw_deployment_notice_signature";
         public const string DEPLOYMENT_TARGET_CITY_ID = "aw_deployment_target_city_id";
         public const string DEPLOYMENT_TARGET_X = "aw_deployment_target_x";
@@ -389,6 +405,8 @@ namespace AncientWarfare3.core.lineage
         public const string CORE_FAB_PROGRESS = "aw_core_fab_progress";
         public const string CORE_FAB_QUEUE = "aw_core_fab_queue";
         public const string POLICY_LAST_YEAR = "aw_policy_last_year";
+        public const string POLICY_LAST_DECISION_MONTH =
+            "aw_policy_last_decision_month";
         public const string POLICY_ENABLED = "aw_policy_enabled";
         public const string POLICY_AI_ENABLED = "aw_policy_ai_enabled";
         public const string POLICY_LOCKED_NODES = "aw_policy_locked_nodes";
@@ -397,7 +415,11 @@ namespace AncientWarfare3.core.lineage
         public const string POLICY_AI_LAST_CAPITAL_MOVE_YEAR = "aw_policy_ai_last_capital_move_year";
         public const string POLICY_AI_LAST_SLAVE_CONTROL_YEAR = "aw_policy_ai_last_slave_control_year";
         public const string POLICY_AI_LAST_ROYAL_EXPANSION_YEAR = "aw_policy_ai_last_royal_expansion_year";
-        public const string POLICY_AI_LAST_XIA_APPEASE_YEAR = "aw_policy_ai_last_xia_appease_year";
+        public const string POLICY_AI_LAST_FOREIGN_APPEASE_YEAR =
+            "aw_policy_ai_last_foreign_appease_year";
+        public const string POLICY_AI_LAST_XIA_APPEASE_YEAR =
+            "aw_policy_ai_last_xia_appease_year";
+        public const string COURT_PROFILE_ID = "aw_court_profile_id";
         public const string COURT_MODE = "aw_court_mode";
         public const string COURT_TIER = "aw_court_tier";
         public const string COURT_INSTITUTION = "aw_court_institution";
@@ -634,6 +656,8 @@ namespace AncientWarfare3.core.lineage
             "aw_inheritance_candidate_reference_king_id";
         public const string INHERITANCE_RULER_COURT_INFLUENCE =
             "aw_inheritance_ruler_court_influence";
+        public const string INHERITANCE_INSTITUTIONAL_AUTHORITY_BONUS =
+            "aw_inheritance_institutional_authority_bonus";
         public const string ACTIVE_SUCCESSION_DISPUTE_ID =
             "aw_active_succession_dispute_id";
         public const string SUCCESSION_DISPUTE_ID =

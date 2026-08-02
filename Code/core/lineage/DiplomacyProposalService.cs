@@ -3033,10 +3033,25 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
+                if (pRequester?.data == null || pResponder?.data == null)
+                    return "alliance_unavailable";
                 Alliance requesterAlliance = pRequester?.getAlliance();
                 Alliance responderAlliance = pResponder?.getAlliance();
                 if (requesterAlliance != null &&
                     requesterAlliance == responderAlliance) return "";
+                WorldTile requesterCapital = pRequester.capital?.getTile();
+                WorldTile responderCapital = pResponder.capital?.getTile();
+                bool hasBothCapitals = requesterCapital != null &&
+                                       responderCapital != null;
+                float capitalDistance = hasBothCapitals
+                    ? Toolbox.DistTile(requesterCapital, responderCapital)
+                    : float.PositiveInfinity;
+                string distanceFailure =
+                    DiplomacyProposalRules.AllianceDistanceFailure(
+                        KingdomAdjacency.AreDirectNeighbors(pRequester,
+                            pResponder), hasBothCapitals, capitalDistance);
+                if (!string.IsNullOrEmpty(distanceFailure))
+                    return distanceFailure;
                 if (requesterAlliance != null && responderAlliance != null &&
                     requesterAlliance != responderAlliance)
                     return "alliance_conflict";
@@ -4691,7 +4706,10 @@ namespace AncientWarfare3.core.lineage
                     pOpinion, pRequesterPowerRatio, false, 0f, false,
                     targetKingdomId: pResponder.id,
                     principalHouseholdOffer: preview.Kind ==
-                        RulerHouseholdKind.PrincipalWife),
+                        RulerHouseholdKind.PrincipalWife,
+                    urgency: RulerHouseholdRules.AiProposalUrgency(
+                        preview.HasPrincipalWife,
+                        preview.ActiveConsorts)),
                 Selection = selection
             };
             return true;
@@ -4728,7 +4746,10 @@ namespace AncientWarfare3.core.lineage
                     pOpinion, pRequesterPowerRatio, false, 0f, false,
                     targetKingdomId: pResponder.id,
                     principalHouseholdOffer: preview.Kind ==
-                        RulerHouseholdKind.PrincipalWife),
+                        RulerHouseholdKind.PrincipalWife,
+                    urgency: RulerHouseholdRules.AiProposalUrgency(
+                        preview.HasPrincipalWife,
+                        preview.ActiveConsorts)),
                 Selection = selection
             };
             return true;
@@ -4761,7 +4782,10 @@ namespace AncientWarfare3.core.lineage
                     DiplomacyProposalType.HouseholdOffering, true,
                     pOpinion, pRequesterPowerRatio, false, 0f, false,
                     targetKingdomId: pSupplierRealm.id,
-                    principalHouseholdOffer: false),
+                    principalHouseholdOffer: false,
+                    urgency: RulerHouseholdRules.AiProposalUrgency(
+                        hasPrincipalWife: true,
+                        activeConsorts: preview.ActiveConsorts)),
                 Selection = selection
             };
             return true;
@@ -4791,7 +4815,10 @@ namespace AncientWarfare3.core.lineage
                     pOpinion, pRequesterPowerRatio, false, 0f, false,
                     targetKingdomId: pResponder.id,
                     principalHouseholdOffer: preview.Kind ==
-                        RulerHouseholdKind.PrincipalWife),
+                        RulerHouseholdKind.PrincipalWife,
+                    urgency: RulerHouseholdRules.AiProposalUrgency(
+                        preview.HasPrincipalWife,
+                        preview.ActiveConsorts)),
                 Selection = selection
             };
             return true;
@@ -4829,7 +4856,10 @@ namespace AncientWarfare3.core.lineage
                     pOpinion, pRequesterPowerRatio, false, 0f, false,
                     targetKingdomId: pResponder.id,
                     principalHouseholdOffer: preview.Kind ==
-                        RulerHouseholdKind.PrincipalWife),
+                        RulerHouseholdKind.PrincipalWife,
+                    urgency: RulerHouseholdRules.AiProposalUrgency(
+                        preview.HasPrincipalWife,
+                        preview.ActiveConsorts)),
                 Selection = selection
             };
             return true;
@@ -4863,7 +4893,10 @@ namespace AncientWarfare3.core.lineage
                     DiplomacyProposalType.HouseholdOffering, true,
                     pOpinion, pRequesterPowerRatio, false, 0f, false,
                     targetKingdomId: pSupplierRealm.id,
-                    principalHouseholdOffer: false),
+                    principalHouseholdOffer: false,
+                    urgency: RulerHouseholdRules.AiProposalUrgency(
+                        hasPrincipalWife: true,
+                        activeConsorts: preview.ActiveConsorts)),
                 Selection = selection
             };
             return true;
@@ -5539,32 +5572,10 @@ namespace AncientWarfare3.core.lineage
             pTruceUntil = -1;
             if (!Ready || pKingdomA?.data == null ||
                 pKingdomB?.data == null) return;
-            try
-            {
-                using var command = new SQLiteCommand(DB);
-                command.CommandText = "SELECT PROPOSAL_TYPE," +
-                    "MAX(TREATY_UNTIL_YEAR) FROM " +
-                    DiplomacyProposalTableItem.GetTableName() +
-                    " WHERE PROPOSAL_TYPE IN ('non_aggression','truce') AND " +
-                    "STATUS='accepted' AND TREATY_UNTIL_YEAR>=@year AND " +
-                    "((REQUESTER_KINGDOM_ID=@a AND RESPONDER_KINGDOM_ID=@b) " +
-                    "OR (REQUESTER_KINGDOM_ID=@b AND " +
-                    "RESPONDER_KINGDOM_ID=@a)) GROUP BY PROPOSAL_TYPE";
-                command.Parameters.AddWithValue("@year", SafeYear());
-                command.Parameters.AddWithValue("@a", pKingdomA.id);
-                command.Parameters.AddWithValue("@b", pKingdomB.id);
-                using SQLiteDataReader reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    string type = ReadString(reader, 0);
-                    int until = reader.IsDBNull(1) ? -1 : reader.GetInt32(1);
-                    if (type == "non_aggression")
-                        pNonAggressionUntil = until;
-                    else if (type == "truce")
-                        pTruceUntil = until;
-                }
-            }
-            catch { }
+            DiplomacyTreatyPersistence.TryReadActiveTreatyYears(DB,
+                DiplomacyProposalTableItem.GetTableName(), pKingdomA.id,
+                pKingdomB.id, SafeYear(), out pNonAggressionUntil,
+                out pTruceUntil);
         }
 
         private static bool HasRecentAiRejectionForSelection(long pKingdomA,
@@ -6083,6 +6094,11 @@ namespace AncientWarfare3.core.lineage
             pReason = "not_war_leader";
             if (pWar?.data == null || pRequester?.data == null ||
                 pResponder?.data == null || pWar.hasEnded()) return false;
+            if (ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar))
+            {
+                pReason = ZhuluPeaceGuard.Reason(pWar);
+                return false;
+            }
 
             bool requesterLeader = IsWarLeader(pWar, pRequester);
             bool responderLeader = IsWarLeader(pWar, pResponder);

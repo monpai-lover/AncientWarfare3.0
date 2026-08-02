@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.content.policies
 {
@@ -26,8 +27,11 @@ namespace AncientWarfare3.content.policies
         public string ArmyStateAfter;
         public string NameStateAfter;
         public string EnfeoffmentStateAfter;
+        public string GovernmentStateAfter;
         public string[] RequiredPolicies = Array.Empty<string>();
         public string[] RequiredTechs = Array.Empty<string>();
+        public KingdomPolicyProfileId[] ProfileIds =
+            { KingdomPolicyProfileId.Xia };
         public bool Repeatable;
         public int Column;
         public int Row;
@@ -35,6 +39,11 @@ namespace AncientWarfare3.content.policies
 
     internal static class KingdomPolicyDefs
     {
+        private static readonly KingdomPolicyProfileId[] CommonProfiles =
+            { KingdomPolicyProfileId.Common };
+        private static readonly KingdomPolicyProfileId[] WesternProfiles =
+            { KingdomPolicyProfileId.WesternGeneral };
+
         public const string ClassDefault = "default";
         public const string ClassSlaveOwner = "slaveowner";
         public const string ClassHalfAristocrat = "halfaristocrat";
@@ -68,6 +77,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_tech_writing",
                 Kind = PolicyNodeKind.Tech,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_tech_writing",
                 DescKey = "aw_tech_writing_desc",
                 FallbackName = "\u6587\u5B57\u8BB0\u4E8B",
@@ -81,6 +91,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_tech_bronze_casting",
                 Kind = PolicyNodeKind.Tech,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_tech_bronze_casting",
                 DescKey = "aw_tech_bronze_casting_desc",
                 FallbackName = "\u9752\u94DC\u94F8\u9020",
@@ -95,6 +106,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_tech_pottery_casting",
                 Kind = PolicyNodeKind.Tech,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_tech_pottery_casting",
                 DescKey = "aw_tech_pottery_casting_desc",
                 FallbackName = "\u9676\u8303\u94F8\u9020",
@@ -123,6 +135,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_tech_well_field_survey",
                 Kind = PolicyNodeKind.Tech,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_tech_well_field_survey",
                 DescKey = "aw_tech_well_field_survey_desc",
                 FallbackName = "\u4E95\u7530\u6D4B\u7ED8",
@@ -137,13 +150,14 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_tech_granary_accounting",
                 Kind = PolicyNodeKind.Tech,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_tech_granary_accounting",
                 DescKey = "aw_tech_granary_accounting_desc",
                 FallbackName = "\u4ED3\u50A8\u8BB0\u8D26",
                 FallbackDesc = "\u7528\u7B26\u7C4D\u7BA1\u7406\u4ED3\u5EEA\u548C\u8D21\u8D4B\uFF0C\u4F7F\u5927\u56FD\u52A8\u5458\u66F4\u7A33\u5B9A\u3002",
                 IconPath = "ui/icons/iconKnowledge",
                 Cost = 68f,
-                RequiredTechs = new[] { "aw_tech_well_field_survey", "aw_tech_iron_plow" },
+                RequiredTechs = new[] { "aw_tech_well_field_survey" },
                 Column = 4,
                 Row = 0
             },
@@ -165,6 +179,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_tech_city_defense",
                 Kind = PolicyNodeKind.Tech,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_tech_city_defense",
                 DescKey = "aw_tech_city_defense_desc",
                 FallbackName = "\u57CE\u9632\u8425\u9020",
@@ -275,8 +290,187 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
+                Id = "aw_west_tech_iron_casting",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_iron_casting",
+                DescKey = "aw_west_tech_iron_casting_desc",
+                FallbackName = "\u94C1\u5668\u94F8\u9020",
+                FallbackDesc = "\u6539\u826F\u70BC\u94C1\u4E0E\u94F8\u9020\u5DE5\u827A\uFF0C\u4E3A\u519C\u5177\u548C\u6B66\u5668\u63D0\u4F9B\u66F4\u7A33\u5B9A\u7684\u6750\u6599\u3002",
+                IconPath = "ui/icons/icon_ore",
+                Cost = 78f,
+                RequiredTechs = new[] { "aw_tech_bronze_casting" },
+                Column = 3,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_coin_minting",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_coin_minting",
+                DescKey = "aw_west_tech_coin_minting_desc",
+                FallbackName = "\u94F8\u9020\u91D1\u5E01",
+                FallbackDesc = "\u4EE5\u7EDF\u4E00\u5E01\u5236\u652F\u6491\u7A0E\u6536\u3001\u5E02\u573A\u4E0E\u5B98\u5E9C\u652F\u4ED8\u3002",
+                IconPath = "ui/icons/iconGold",
+                Cost = 72f,
+                RequiredTechs = new[] { "aw_tech_bronze_casting" },
+                Column = 3,
+                Row = 1
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_irrigation",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_irrigation",
+                DescKey = "aw_west_tech_irrigation_desc",
+                FallbackName = "\u704C\u6E89\u6E20",
+                FallbackDesc = "\u5F00\u51FF\u6C9F\u6E20\u5E76\u6574\u7406\u519C\u7530\uFF0C\u7A33\u5B9A\u57CE\u9091\u7CAE\u98DF\u751F\u4EA7\u3002",
+                IconPath = "ui/icons/iconFood",
+                Cost = 70f,
+                RequiredTechs = new[] { "aw_tech_well_field_survey" },
+                Column = 2,
+                Row = 2
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_enfeoffment_study",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_enfeoffment_study",
+                DescKey = "aw_west_tech_enfeoffment_study_desc",
+                FallbackName = "\u5206\u5C01\u8003",
+                FallbackDesc = "\u4EE5\u5C01\u571F\u3001\u4E49\u52A1\u548C\u7EE7\u627F\u89C4\u5219\u7EC4\u7EC7\u5C01\u5EFA\u9886\u5730\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 82f,
+                RequiredTechs = new[] { "aw_west_tech_irrigation" },
+                Column = 3,
+                Row = 2
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_tax_office",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_tax_office",
+                DescKey = "aw_west_tech_tax_office_desc",
+                FallbackName = "\u7A0E\u52A1\u5B98",
+                FallbackDesc = "\u5EFA\u7ACB\u4E13\u804C\u7A0E\u52A1\u4E66\u540F\uFF0C\u767B\u8BB0\u571F\u5730\u3001\u8D27\u5E01\u4E0E\u8D21\u8D4B\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 68f,
+                RequiredTechs = new[] { "aw_tech_writing" },
+                Column = 1,
+                Row = 3
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_landlord_tax",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_landlord_tax",
+                DescKey = "aw_west_tech_landlord_tax_desc",
+                FallbackName = "\u5730\u4E3B\u7A0E",
+                FallbackDesc = "\u628A\u571F\u5730\u6301\u6709\u4E0E\u8D22\u653F\u8D23\u4EFB\u7ED3\u5408\uFF0C\u63D0\u9AD8\u7A33\u5B9A\u7A0E\u6E90\u3002",
+                IconPath = "ui/icons/iconGold",
+                Cost = 88f,
+                RequiredTechs = new[]
+                {
+                    "aw_west_tech_tax_office",
+                    "aw_west_tech_coin_minting"
+                },
+                Column = 4,
+                Row = 3
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_office_system",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_office_system",
+                DescKey = "aw_west_tech_office_system_desc",
+                FallbackName = "\u5B98\u804C\u4F53\u7CFB",
+                FallbackDesc = "\u5C06\u5BAB\u5EF7\u804C\u8D23\u5212\u5206\u4E3A\u7A33\u5B9A\u5B98\u804C\uFF0C\u5F62\u6210\u53EF\u7EE7\u7EED\u7684\u884C\u653F\u79E9\u5E8F\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 76f,
+                RequiredTechs = new[] { "aw_tech_writing" },
+                Column = 1,
+                Row = 4
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_elective_offices",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_elective_offices",
+                DescKey = "aw_west_tech_elective_offices_desc",
+                FallbackName = "\u9009\u4E3E\u5236",
+                FallbackDesc = "\u7531\u8D35\u65CF\u4E0E\u5BAB\u5EF7\u96C6\u4F1A\u63A8\u4E3E\u4E3B\u8981\u5B98\u5458\uFF0C\u4EE5\u4EFB\u671F\u7EA6\u675F\u6743\u529B\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 104f,
+                RequiredTechs = new[]
+                {
+                    "aw_west_tech_office_system",
+                    "aw_tech_pottery_casting",
+                    "aw_west_tech_landlord_tax"
+                },
+                Column = 5,
+                Row = 4
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_ritual_order",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_ritual_order",
+                DescKey = "aw_west_tech_ritual_order_desc",
+                FallbackName = "\u793C\u4E50\u5236\u5EA6",
+                FallbackDesc = "\u4EE5\u5BAB\u5EF7\u4EEA\u5F0F\u3001\u795E\u804C\u4E0E\u7235\u4F4D\u79E9\u5E8F\u5F3A\u5316\u541B\u4E3B\u5408\u6CD5\u6027\u3002",
+                IconPath = "ui/icons/iconCulture",
+                Cost = 112f,
+                RequiredTechs = new[] { "aw_west_tech_elective_offices" },
+                Column = 6,
+                Row = 4
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_feudal_retainers",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_feudal_retainers",
+                DescKey = "aw_west_tech_feudal_retainers_desc",
+                FallbackName = "\u5C01\u5EFA\u5BB6\u81E3",
+                FallbackDesc = "\u4EE5\u5BB6\u81E3\u3001\u5C01\u81E3\u548C\u5730\u65B9\u8D35\u65CF\u627F\u62C5\u519B\u4E8B\u4E0E\u884C\u653F\u4E49\u52A1\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 120f,
+                RequiredTechs = new[]
+                {
+                    "aw_west_tech_ritual_order",
+                    "aw_west_tech_enfeoffment_study"
+                },
+                Column = 7,
+                Row = 4
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_tech_royal_domain",
+                Kind = PolicyNodeKind.Tech,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_tech_royal_domain",
+                DescKey = "aw_west_tech_royal_domain_desc",
+                FallbackName = "\u56FD\u738B\u76F4\u8F96",
+                FallbackDesc = "\u6269\u5927\u738B\u5BA4\u76F4\u5C5E\u9886\u5730\u4E0E\u5B98\u50DA\uFF0C\u964D\u4F4E\u5BF9\u5C01\u81E3\u7684\u4F9D\u8D56\u3002",
+                IconPath = "ui/icons/iconKingdom",
+                Cost = 132f,
+                RequiredTechs = new[] { "aw_west_tech_feudal_retainers" },
+                Column = 8,
+                Row = 4
+            },
+            new KingdomPolicyDef
+            {
                 Id = "aw_policy_household_registry",
                 Kind = PolicyNodeKind.Social,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_policy_household_registry",
                 DescKey = "aw_policy_household_registry_desc",
                 FallbackName = "\u6237\u7C4D\u7F16\u6237",
@@ -291,6 +485,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_policy_start_slavery",
                 Kind = PolicyNodeKind.Social,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_policy_start_slavery",
                 DescKey = "aw_policy_start_slavery_desc",
                 FallbackName = "\u5F00\u542F\u5974\u96B6\u5236",
@@ -306,6 +501,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_policy_corvee_labor",
                 Kind = PolicyNodeKind.Social,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_policy_corvee_labor",
                 DescKey = "aw_policy_corvee_labor_desc",
                 FallbackName = "\u5FAD\u5F79\u5F81\u53D1",
@@ -321,6 +517,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_policy_control_slaves",
                 Kind = PolicyNodeKind.Social,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_policy_control_slaves",
                 DescKey = "aw_policy_control_slaves_desc",
                 FallbackName = "\u5F3A\u5316\u5974\u96B6\u63A7\u5236",
@@ -336,6 +533,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_policy_slave_army",
                 Kind = PolicyNodeKind.Social,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_policy_slave_army",
                 DescKey = "aw_policy_slave_army_desc",
                 FallbackName = "\u5974\u96B6\u519B",
@@ -513,6 +711,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_policy_adopt_xia_rites",
                 Kind = PolicyNodeKind.Social,
+                ProfileIds = WesternProfiles,
                 NameKey = "aw_policy_adopt_xia_rites",
                 DescKey = "aw_policy_adopt_xia_rites_desc",
                 FallbackName = "\u91C7\u590F\u793C",
@@ -526,6 +725,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_policy_xia_law_institutions",
                 Kind = PolicyNodeKind.Social,
+                ProfileIds = WesternProfiles,
                 NameKey = "aw_policy_xia_law_institutions",
                 DescKey = "aw_policy_xia_law_institutions_desc",
                 FallbackName = "\u884C\u590F\u5236",
@@ -536,6 +736,94 @@ namespace AncientWarfare3.content.policies
                 RequiredTechs = new[] { "aw_tech_writing" },
                 Column = 7,
                 Row = 3
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_policy_landlord_taxation",
+                Kind = PolicyNodeKind.Social,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_policy_landlord_taxation",
+                DescKey = "aw_west_policy_landlord_taxation_desc",
+                FallbackName = "\u5730\u4E3B\u7A0E\u5236",
+                FallbackDesc = "\u4EE5\u767B\u8BB0\u571F\u5730\u4E0E\u94F8\u5E01\u4F53\u7CFB\u5411\u5927\u5730\u4E3B\u5F81\u7A0E\uFF0C\u5EFA\u7ACB\u7A33\u5B9A\u8D22\u653F\u3002",
+                IconPath = "ui/icons/iconGold",
+                Cost = 74f,
+                RequiredPolicies = new[] { "aw_policy_household_registry" },
+                RequiredTechs = new[] { "aw_west_tech_landlord_tax" },
+                Column = 4,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_policy_noble_council",
+                Kind = PolicyNodeKind.Social,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_policy_noble_council",
+                DescKey = "aw_west_policy_noble_council_desc",
+                FallbackName = "\u8D35\u65CF\u8BAE\u653F",
+                FallbackDesc = "\u8BA9\u5927\u8D35\u65CF\u548C\u5B97\u6559\u9886\u8896\u53C2\u4E0E\u5BAB\u5EF7\u51B3\u7B56\uFF0C\u4EE5\u59A5\u534F\u6362\u53D6\u79E9\u5E8F\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 92f,
+                RequiredPolicies = new[]
+                    { "aw_west_policy_landlord_taxation" },
+                RequiredTechs = new[] { "aw_west_tech_ritual_order" },
+                GovernmentStateAfter = "western_noble_council",
+                Column = 6,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_policy_elective_offices",
+                Kind = PolicyNodeKind.Social,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_policy_elective_offices",
+                DescKey = "aw_west_policy_elective_offices_desc",
+                FallbackName = "\u9009\u4E3E\u5B98\u5236",
+                FallbackDesc = "\u5C06\u4E3B\u8981\u5B98\u804C\u7EB3\u5165\u516D\u5E74\u4EFB\u671F\u4E0E\u5BAB\u5EF7\u9009\u4E3E\uFF0C\u51CF\u5C11\u957F\u671F\u5784\u65AD\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 108f,
+                RequiredPolicies = new[]
+                    { "aw_west_policy_noble_council" },
+                RequiredTechs = new[] { "aw_west_tech_elective_offices" },
+                GovernmentStateAfter = "western_elective",
+                Column = 7,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_policy_feudal_retainers",
+                Kind = PolicyNodeKind.Social,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_policy_feudal_retainers",
+                DescKey = "aw_west_policy_feudal_retainers_desc",
+                FallbackName = "\u5C01\u5EFA\u5BB6\u81E3\u5236",
+                FallbackDesc = "\u7531\u5730\u65B9\u8D35\u65CF\u4E0E\u5BB6\u81E3\u5206\u62C5\u7EDF\u6CBB\uFF0C\u4EE5\u5C01\u571F\u6362\u53D6\u5FE0\u8BDA\u548C\u5175\u5F79\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 116f,
+                RequiredPolicies = new[]
+                    { "aw_west_policy_noble_council" },
+                RequiredTechs = new[] { "aw_west_tech_feudal_retainers" },
+                GovernmentStateAfter = "western_feudal",
+                Column = 7,
+                Row = 1
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_west_policy_royal_direct_rule",
+                Kind = PolicyNodeKind.Social,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_policy_royal_direct_rule",
+                DescKey = "aw_west_policy_royal_direct_rule_desc",
+                FallbackName = "\u738B\u5BA4\u76F4\u8F96\u5236",
+                FallbackDesc = "\u5C06\u8D22\u653F\u3001\u519B\u4E8B\u4E0E\u5730\u65B9\u5B98\u5458\u91CD\u65B0\u6536\u5F52\u738B\u5BA4\uFF0C\u5EFA\u7ACB\u96C6\u4E2D\u7EDF\u6CBB\u3002",
+                IconPath = "ui/icons/iconKingdom",
+                Cost = 138f,
+                RequiredPolicies = new[]
+                    { "aw_west_policy_feudal_retainers" },
+                RequiredTechs = new[] { "aw_west_tech_royal_domain" },
+                GovernmentStateAfter = "western_royal_direct",
+                Column = 8,
+                Row = 1
             },
             new KingdomPolicyDef
             {
@@ -602,6 +890,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_decision_title_upgrade",
                 Kind = PolicyNodeKind.Decision,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_decision_title_upgrade",
                 DescKey = "aw_decision_title_upgrade_desc",
                 FallbackName = "\u4E0A\u8868\u8BF7\u5C01",
@@ -616,6 +905,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_decision_royal_expansion",
                 Kind = PolicyNodeKind.Decision,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_decision_royal_expansion",
                 DescKey = "aw_decision_royal_expansion_desc",
                 FallbackName = "\u6D3E\u5B50\u5F00\u7586",
@@ -630,6 +920,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_decision_change_capital",
                 Kind = PolicyNodeKind.Decision,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_decision_change_capital",
                 DescKey = "aw_decision_change_capital_desc",
                 FallbackName = "\u8FC1\u90FD",
@@ -645,6 +936,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_decision_control_slaves",
                 Kind = PolicyNodeKind.Decision,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_decision_control_slaves",
                 DescKey = "aw_decision_control_slaves_desc",
                 FallbackName = "\u6574\u996C\u5974\u96B6",
@@ -658,23 +950,43 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
-                Id = "aw_decision_appease_xia_cities",
+                Id = "aw_decision_appease_foreign_cities",
                 Kind = PolicyNodeKind.Decision,
-                NameKey = "aw_decision_appease_xia_cities",
-                DescKey = "aw_decision_appease_xia_cities_desc",
-                FallbackName = "\u629A\u590F\u6C11",
-                FallbackDesc = "\u5B89\u629A\u5165\u636E\u7684\u590F\u5730\u57CE\u9091\uFF0C\u964D\u4F4E\u5916\u65CF\u5165\u5173\u5E26\u6765\u7684\u6C11\u6028\u4E0E\u4E49\u519B\u98CE\u9669\u3002",
+                ProfileIds = CommonProfiles,
+                NameKey = "aw_decision_appease_foreign_cities",
+                DescKey = "aw_decision_appease_foreign_cities_desc",
+                FallbackName = "\u5B89\u629A\u5F02\u65CF",
+                FallbackDesc = "\u5B89\u629A\u672C\u56FD\u63A7\u5236\u7684\u5F02\u6587\u5316\u57CE\u9091\uFF0C\u964D\u4F4E\u5360\u9886\u6C11\u6028\u4E0E\u53DB\u4E71\u98CE\u9669\u3002",
                 IconPath = "ui/icons/iconPeace",
                 Cost = 45f,
-                RequiredPolicies = new[] { "aw_policy_adopt_xia_rites" },
                 Repeatable = true,
                 Column = 5,
                 Row = 0
             },
             new KingdomPolicyDef
             {
+                Id = "aw_west_decision_consolidate_royal_authority",
+                Kind = PolicyNodeKind.Decision,
+                ProfileIds = WesternProfiles,
+                NameKey = "aw_west_decision_consolidate_royal_authority",
+                DescKey =
+                    "aw_west_decision_consolidate_royal_authority_desc",
+                FallbackName = "\u5DE9\u56FA\u738B\u6743",
+                FallbackDesc = "\u501F\u52A9\u738B\u5BA4\u76F4\u8F96\u5236\u6574\u5408\u5BAB\u5EF7\u4E0E\u9886\u5730\uFF0C\u964D\u4F4E\u7EE7\u627F\u4E89\u8BAE\u5E76\u63D0\u9AD8\u541B\u4E3B\u5408\u6CD5\u6027\u3002",
+                IconPath = "ui/icons/iconKingdom",
+                Cost = 75f,
+                RequiredPolicies = new[]
+                    { "aw_west_policy_royal_direct_rule" },
+                RequiredTechs = new[] { "aw_west_tech_royal_domain" },
+                Repeatable = true,
+                Column = 8,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
                 Id = "aw_decision_fabricate_core",
                 Kind = PolicyNodeKind.Decision,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_decision_fabricate_core",
                 DescKey = "aw_decision_fabricate_core_desc",
                 FallbackName = "\u5236\u9020\u6838\u5fc3",
@@ -689,6 +1001,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_decision_seek_suzerain",
                 Kind = PolicyNodeKind.Decision,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_decision_seek_suzerain",
                 DescKey = "aw_decision_seek_suzerain_desc",
                 FallbackName = "\u8bf7\u6c42\u81e3\u5c5e",
@@ -703,6 +1016,7 @@ namespace AncientWarfare3.content.policies
             {
                 Id = "aw_decision_absorb_vassal",
                 Kind = PolicyNodeKind.Decision,
+                ProfileIds = CommonProfiles,
                 NameKey = "aw_decision_absorb_vassal",
                 DescKey = "aw_decision_absorb_vassal_desc",
                 FallbackName = "\u541E\u5E76\u9644\u5EB8",
@@ -715,17 +1029,51 @@ namespace AncientWarfare3.content.policies
             }
         };
 
-        public static IReadOnlyList<KingdomPolicyDef> All => _all;
+        static KingdomPolicyDefs()
+        {
+            KingdomPolicyCatalogRules.Validate(_all);
+        }
 
-        public static IEnumerable<KingdomPolicyDef> Techs => _all.Where(p => p.Kind == PolicyNodeKind.Tech);
+        public static IReadOnlyList<KingdomPolicyDef> GetNodes(
+            KingdomPolicyProfileId pProfile, PolicyNodeKind pKind)
+        {
+            if (!KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                    pProfile)) return Array.Empty<KingdomPolicyDef>();
+            return _all.Where(pDefinition =>
+                    pDefinition.Kind == pKind &&
+                    KingdomPolicyCatalogRules.BelongsTo(pDefinition,
+                        pProfile))
+                .ToArray();
+        }
 
-        public static IEnumerable<KingdomPolicyDef> SocialPolicies => _all.Where(p => p.Kind == PolicyNodeKind.Social);
+        public static IReadOnlyList<KingdomPolicyDef> GetResearchNodes(
+            KingdomPolicyProfileId pProfile)
+        {
+            if (!KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                    pProfile)) return Array.Empty<KingdomPolicyDef>();
+            return _all.Where(pDefinition =>
+                    pDefinition.Kind != PolicyNodeKind.Decision &&
+                    KingdomPolicyCatalogRules.BelongsTo(pDefinition,
+                        pProfile))
+                .ToArray();
+        }
 
-        public static IEnumerable<KingdomPolicyDef> Decisions => _all.Where(p => p.Kind == PolicyNodeKind.Decision);
+        public static KingdomPolicyDef Get(KingdomPolicyProfileId pProfile,
+            string pId)
+        {
+            KingdomPolicyDef definition = GetAny(pId);
+            return KingdomPolicyCatalogRules.BelongsTo(definition, pProfile)
+                ? definition
+                : null;
+        }
 
-        public static IEnumerable<KingdomPolicyDef> ResearchPolicies => _all.Where(p => p.Kind != PolicyNodeKind.Decision);
+        public static bool Contains(KingdomPolicyProfileId pProfile,
+            string pId)
+        {
+            return Get(pProfile, pId) != null;
+        }
 
-        public static KingdomPolicyDef Get(string pId)
+        internal static KingdomPolicyDef GetAny(string pId)
         {
             if (string.IsNullOrEmpty(pId)) return null;
             return _all.FirstOrDefault(p => p.Id == pId);

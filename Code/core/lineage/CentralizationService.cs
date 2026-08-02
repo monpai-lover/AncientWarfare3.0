@@ -19,6 +19,10 @@ namespace AncientWarfare3.core.lineage
         public bool can_reform;
         public string block_reason = "";
         public CentralizationEffects effects;
+        public bool western_direct_rule;
+        public float administration_multiplier = 1f;
+        public int noble_opinion;
+        public int vassal_opinion;
     }
 
     internal static class CentralizationService
@@ -26,6 +30,14 @@ namespace AncientWarfare3.core.lineage
         public static CentralizationSnapshot ReadSnapshot(Kingdom pKingdom)
         {
             CentralizationSnapshot snapshot = BuildSnapshot(pKingdom);
+            KingdomPolicyEffects policyEffects =
+                KingdomPolicyEffectService.Read(pKingdom);
+            snapshot.western_direct_rule =
+                policyEffects.CentralizationUnlocked;
+            snapshot.administration_multiplier =
+                policyEffects.AdministrationMultiplier;
+            snapshot.noble_opinion = policyEffects.NobleOpinion;
+            snapshot.vassal_opinion = policyEffects.VassalOpinion;
             snapshot.can_reform = ValidateReform(pKingdom, snapshot,
                 snapshot.next_target_level, out string reason);
             snapshot.block_reason = reason;

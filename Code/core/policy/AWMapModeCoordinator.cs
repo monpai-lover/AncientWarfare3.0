@@ -4,6 +4,7 @@ namespace AncientWarfare3.core.policy
     {
         private static readonly string[] Priority =
         {
+            HierarchicalVassalMapModeService.POWER_ID,
             FeudatoryMapModeService.POWER_ID,
             SchoolMapModeService.POWER_ID,
             MandateCoreMapModeService.POWER_ID,

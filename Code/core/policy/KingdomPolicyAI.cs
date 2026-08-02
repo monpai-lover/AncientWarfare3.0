@@ -39,15 +39,23 @@ namespace AncientWarfare3.core.policy
             if (!KingdomPolicyService.IsPolicyAIEnabled(pKingdom)) return;
 
             KingdomPolicyService.EnsureInitialized(pKingdom);
+            WesternPolicyNeedFacts? westernFacts =
+                KingdomPolicyService.GetPolicyProfile(pKingdom) ==
+                KingdomPolicyProfileId.WesternGeneral
+                    ? BuildWesternPolicyNeedFacts(pKingdom)
+                    : null;
             TryStartIfEmpty(pKingdom, PolicyNodeKind.Decision, PickDecision(pKingdom));
-            TryStartIfEmpty(pKingdom, PolicyNodeKind.Tech, PickResearch(pKingdom, PolicyNodeKind.Tech));
-            TryStartIfEmpty(pKingdom, PolicyNodeKind.Social, PickResearch(pKingdom, PolicyNodeKind.Social));
+            TryStartIfEmpty(pKingdom, PolicyNodeKind.Tech,
+                PickResearch(pKingdom, PolicyNodeKind.Tech, westernFacts));
+            TryStartIfEmpty(pKingdom, PolicyNodeKind.Social,
+                PickResearch(pKingdom, PolicyNodeKind.Social, westernFacts));
         }
 
         public static KingdomPolicyDef PickDecision(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return null;
-            return KingdomPolicyDefs.Decisions
+            return KingdomPolicyService.GetNodes(pKingdom,
+                    PolicyNodeKind.Decision)
                 .Where(def => KingdomDecisionPriorityRules.
                     ShouldUseGeneralDecisionSlot(def.Id))
                 .Where(def => !KingdomPolicyService.IsNodeLocked(pKingdom, def.Id))
@@ -59,10 +67,24 @@ namespace AncientWarfare3.core.policy
 
         public static KingdomPolicyDef PickResearch(Kingdom pKingdom, PolicyNodeKind pKind)
         {
+            return PickResearch(pKingdom, pKind, null);
+        }
+
+        private static KingdomPolicyDef PickResearch(Kingdom pKingdom,
+            PolicyNodeKind pKind, WesternPolicyNeedFacts? pWesternFacts)
+        {
             if (pKingdom?.data == null) return null;
-            IEnumerable<KingdomPolicyDef> defs = pKind == PolicyNodeKind.Tech
-                ? KingdomPolicyDefs.Techs
-                : KingdomPolicyDefs.SocialPolicies;
+            KingdomPolicyProfileId profile =
+                KingdomPolicyService.GetPolicyProfile(pKingdom);
+            KingdomPolicyDef[] defs = KingdomPolicyService.GetNodes(
+                pKingdom, pKind).ToArray();
+
+            if (profile == KingdomPolicyProfileId.WesternGeneral)
+            {
+                WesternPolicyNeedFacts facts = pWesternFacts ??
+                    BuildWesternPolicyNeedFacts(pKingdom);
+                return PickWesternResearch(pKingdom, defs, profile, facts);
+            }
 
             bool officialCourtCompleted = pKind != PolicyNodeKind.Tech ||
                 KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Tech, "aw_tech_official_court");
@@ -78,6 +100,42 @@ namespace AncientWarfare3.core.policy
                 .Where(def => IsAvailable(pKingdom, def))
                 .OrderByDescending(def => ScoreResearch(pKingdom, def))
                 .FirstOrDefault();
+        }
+
+        private static KingdomPolicyDef PickWesternResearch(
+            Kingdom pKingdom, IReadOnlyList<KingdomPolicyDef> pDefinitions,
+            KingdomPolicyProfileId pProfile,
+            WesternPolicyNeedFacts pFacts)
+        {
+            if (pDefinitions == null || pDefinitions.Count == 0) return null;
+            var candidates = new WesternPolicyCandidate[pDefinitions.Count];
+            for (int index = 0; index < pDefinitions.Count; index++)
+            {
+                KingdomPolicyDef definition = pDefinitions[index];
+                candidates[index] = new WesternPolicyCandidate(
+                    definition?.Id,
+                    KingdomPolicyCatalogRules.BelongsTo(definition, pProfile),
+                    IsAvailable(pKingdom, definition),
+                    definition != null &&
+                    KingdomPolicyService.IsNodeLocked(
+                        pKingdom, definition.Id),
+                    definition == null
+                        ? int.MaxValue
+                        : Math.Max(0, definition.Column * 100 +
+                                      definition.Row));
+            }
+
+            string selectedId = WesternPolicyAiRules.SelectBest(candidates,
+                pFacts);
+            if (string.IsNullOrEmpty(selectedId)) return null;
+            for (int index = 0; index < pDefinitions.Count; index++)
+            {
+                KingdomPolicyDef definition = pDefinitions[index];
+                if (definition != null && string.Equals(definition.Id,
+                        selectedId, StringComparison.Ordinal))
+                    return definition;
+            }
+            return null;
         }
 
         private static void TryStartIfEmpty(Kingdom pKingdom, PolicyNodeKind pKind, KingdomPolicyDef pDef)
@@ -104,8 +162,10 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_control_slaves":
                     pKingdom.data.set(LineageKeys.POLICY_AI_LAST_SLAVE_CONTROL_YEAR, year);
                     break;
-                case "aw_decision_appease_xia_cities":
-                    pKingdom.data.set(LineageKeys.POLICY_AI_LAST_XIA_APPEASE_YEAR, year);
+                case "aw_decision_appease_foreign_cities":
+                    pKingdom.data.set(
+                        LineageKeys.POLICY_AI_LAST_FOREIGN_APPEASE_YEAR,
+                        year);
                     break;
             }
         }
@@ -161,8 +221,8 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_control_slaves":
                     return SlaveService.IsSlaveryEnabled(pKingdom) &&
                            YearsSince(pKingdom, LineageKeys.POLICY_AI_LAST_SLAVE_CONTROL_YEAR, -99999) >= 25;
-                case "aw_decision_appease_xia_cities":
-                    return YearsSince(pKingdom, LineageKeys.POLICY_AI_LAST_XIA_APPEASE_YEAR, -99999) >= 12 &&
+                case "aw_decision_appease_foreign_cities":
+                    return YearsSinceForeignAppeasement(pKingdom) >= 12 &&
                            XiaizationService.SpecialRequirementMet(pKingdom, pDef.Id);
                 case "aw_decision_fabricate_core":
                     return WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom)?.data != null;
@@ -253,6 +313,92 @@ namespace AncientWarfare3.core.policy
             return index >= 0 ? index : SocialOrder.Length + layoutFallback;
         }
 
+        private static WesternPolicyNeedFacts BuildWesternPolicyNeedFacts(
+            Kingdom pKingdom)
+        {
+            int population = 0;
+            int hungry = 0;
+            int cityCount = 0;
+            int citiesWithFood = 0;
+            int slaves = 0;
+            int gold = 0;
+            bool borderThreat = false;
+
+            try
+            {
+                foreach (City city in pKingdom.getCities())
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    cityCount++;
+                    int cityPopulation = Math.Max(0,
+                        city.status?.population ?? city.getPopulationPeople());
+                    population += cityPopulation;
+                    hungry += Math.Max(0, city.status?.hungry ?? 0);
+                    if (city.countFoodTotal() > 0) citiesWithFood++;
+                    slaves += SlavePopulationIndexService.Count(city);
+                    gold += Math.Max(0, city.getResourcesAmount("gold"));
+
+                    if (borderThreat || city.neighbours_cities == null)
+                        continue;
+                    foreach (City neighbour in city.neighbours_cities)
+                    {
+                        Kingdom neighbourKingdom = neighbour?.kingdom;
+                        if (neighbour?.data != null &&
+                            neighbourKingdom?.data != null &&
+                            neighbourKingdom != pKingdom &&
+                            !neighbourKingdom.isRekt() &&
+                            !neighbourKingdom.isNeutral())
+                        {
+                            borderThreat = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            float hungerSecurity = population <= 0
+                ? 0.5f
+                : 1f - Math.Min(1f, hungry / (float)population);
+            float stockSecurity = cityCount <= 0
+                ? 0f
+                : citiesWithFood / (float)cityCount;
+            float foodSecurity = Math.Max(0f, Math.Min(1f,
+                hungerSecurity * 0.7f + stockSecurity * 0.3f));
+            float treasuryRatio = population <= 0
+                ? 0f
+                : Math.Max(0f, Math.Min(1f,
+                    gold / (float)Math.Max(20, population * 2)));
+            float slaveShare = population <= 0
+                ? 0f
+                : Math.Max(0f, Math.Min(1f,
+                    slaves / (float)population));
+
+            KingdomPolicyEffects effects =
+                KingdomPolicyEffectService.Read(pKingdom);
+            float equipmentQuality = Math.Max(0f, Math.Min(1f,
+                effects.EquipmentQualityBonus /
+                (float)KingdomPolicyEffectRules.
+                    MaximumEquipmentQualityBonus));
+            pKingdom.data.get(LineageKeys.WESTERN_ROYAL_AUTHORITY,
+                out int royalAuthority, 0);
+            IReadOnlyList<CourtAristocraticGroup> groups =
+                CourtAristocraticGroupService.GetCachedGroups(pKingdom);
+            int nobleOpposition = groups != null && groups.Count > 0 &&
+                                  groups[0] != null
+                ? Math.Max(0, Math.Min(100, groups[0].Power))
+                : 0;
+            CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
+
+            return new WesternPolicyNeedFacts(foodSecurity,
+                equipmentQuality, IsAtWar(pKingdom), borderThreat,
+                treasuryRatio, CountCivilServiceVacancies(pKingdom),
+                cityCount, royalAuthority, nobleOpposition, slaveShare,
+                court?.dominant_school ?? string.Empty);
+        }
+
         private static int CountCities(Kingdom pKingdom)
         {
             try { return Math.Max(0, pKingdom?.countCities() ?? 0); }
@@ -267,8 +413,8 @@ namespace AncientWarfare3.core.policy
 
         private static int CountCivilServiceVacancies(Kingdom pKingdom)
         {
-            string[] expected = CourtTierRules.CentralOfficesForTier(
-                CourtService.ResolveTier(pKingdom));
+            string[] expected =
+                CourtService.CentralOfficeIdsForCurrentProfile(pKingdom);
             if (expected.Length == 0) return 0;
 
             var occupied = new HashSet<string>(StringComparer.Ordinal);
@@ -296,6 +442,17 @@ namespace AncientWarfare3.core.policy
         {
             pKingdom.data.get(pKey, out int lastYear, pFallback);
             return Date.getCurrentYear() - lastYear;
+        }
+
+        private static int YearsSinceForeignAppeasement(Kingdom pKingdom)
+        {
+            pKingdom.data.get(
+                LineageKeys.POLICY_AI_LAST_FOREIGN_APPEASE_YEAR,
+                out int currentKeyYear, -99999);
+            pKingdom.data.get(LineageKeys.POLICY_AI_LAST_XIA_APPEASE_YEAR,
+                out int legacyKeyYear, -99999);
+            return Date.getCurrentYear() -
+                   Math.Max(currentKeyYear, legacyKeyYear);
         }
 
         private static bool HasClearlyBetterCapital(Kingdom pKingdom)

@@ -1,0 +1,41 @@
+using AncientWarfare3.core.lineage;
+using System;
+
+internal static class VassalRuntimeProjectionRulesTests
+{
+    internal static void Run()
+    {
+        VassalRuntimeProjection tributary =
+            VassalRuntimeProjectionRules.Resolve(
+                suzerainId: 11L, relationId: 17L,
+                contractTier: VassalContractTierRules.Tributary);
+        Equal(-1L, tributary.VassalSuzerainId,
+            "a loaded tributary clears a stale formal-vassal suzerain");
+        Equal(-1L, tributary.VassalRelationId,
+            "a loaded tributary clears a stale formal-vassal relation");
+        Equal(11L, tributary.TributarySuzerainId,
+            "a loaded tributary restores its tributary suzerain");
+        Equal(17L, tributary.TributaryRelationId,
+            "a loaded tributary restores its tributary relation");
+
+        VassalRuntimeProjection formal =
+            VassalRuntimeProjectionRules.Resolve(
+                suzerainId: 22L, relationId: 31L,
+                contractTier: VassalContractTierRules.Outer);
+        Equal(22L, formal.VassalSuzerainId,
+            "a loaded formal vassal restores its formal suzerain");
+        Equal(31L, formal.VassalRelationId,
+            "a loaded formal vassal restores its formal relation");
+        Equal(-1L, formal.TributarySuzerainId,
+            "a loaded formal vassal clears a stale tributary suzerain");
+        Equal(-1L, formal.TributaryRelationId,
+            "a loaded formal vassal clears a stale tributary relation");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

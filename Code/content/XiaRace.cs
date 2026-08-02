@@ -92,7 +92,8 @@ namespace AncientWarfare3.content
             Xia.addGenome(
                 ("health", 30f),        // human 100 -> Xia 130
                 ("stamina", 20f),       // human 100 -> Xia 120
-                ("lifespan", 20f),      // human 70 -> Xia 90
+                ("lifespan", -20f),     // human 70 -> Xia 50
+                ("offspring", 5f),      // human 5 -> Xia 10
                 ("damage", 5f),         // human 15 -> Xia 20
                 ("speed", 1f),          // human 15 -> Xia 16
                 // ⚠ birth_rate 必须显式给(每帧繁殖 BabyMaker.cs:123 用 (int)stats["birth_rate"] 决定额外子女数)。

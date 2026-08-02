@@ -42,6 +42,7 @@ namespace AncientWarfare3.core.lineage
                 RulerAppellationService.GetFullLivingAppellation(pKingdom);
             snapshot.RealmName =
                 RulerAppellationService.GetProjectedStateName(pKingdom);
+            snapshot.RulerIsFemale = ruler.isSexFemale();
             snapshot.ConsortCapacity = capacity;
 
             Actor vanillaSpouse = LivingMutualSpouse(ruler);
@@ -50,12 +51,14 @@ namespace AncientWarfare3.core.lineage
             if (vanillaSpouse?.data != null)
                 snapshot.PrincipalWife = BuildRow(db, vanillaSpouse,
                     principalRecord, pKingdom.id, tier,
-                    RulerHouseholdKind.PrincipalWife);
+                    RulerHouseholdKind.PrincipalWife,
+                    snapshot.RulerIsFemale);
             else if (principalRecord != null)
                 snapshot.PrincipalWife = BuildRow(db,
                     FindActor(principalRecord.PartnerActorId),
                     principalRecord, principalRecord.SourceKingdomId, tier,
-                    RulerHouseholdKind.PrincipalWife);
+                    RulerHouseholdKind.PrincipalWife,
+                    snapshot.RulerIsFemale);
 
             long principalId = snapshot.PrincipalWife?.ActorId ?? -1L;
             for (int i = 0; i < records.Count; i++)
@@ -68,7 +71,8 @@ namespace AncientWarfare3.core.lineage
                 snapshot.Consorts.Add(BuildRow(db,
                     FindActor(record.PartnerActorId), record,
                     record.SourceKingdomId, tier,
-                    RulerHouseholdKind.Consort));
+                    RulerHouseholdKind.Consort,
+                    snapshot.RulerIsFemale));
             }
             return snapshot;
         }
@@ -94,7 +98,7 @@ namespace AncientWarfare3.core.lineage
         private static RulerHouseholdDisplayRow BuildRow(SQLiteConnection pDb,
             Actor pActor, RulerHouseholdRecord pRecord,
             long pFallbackOriginKingdomId, RulerHouseholdRealmTier pTier,
-            RulerHouseholdKind pKind)
+            RulerHouseholdKind pKind, bool pRulerIsFemale)
         {
             long actorId = pActor?.data?.id ??
                            pRecord?.PartnerActorId ?? -1L;
@@ -114,7 +118,8 @@ namespace AncientWarfare3.core.lineage
                 RelationshipId = pRecord?.RelationshipId ?? -1L,
                 ActorId = actorId,
                 ActorName = name ?? "",
-                TitleKey = RulerHouseholdRules.TitleKey(pTier, pKind),
+                TitleKey = RulerHouseholdRules.TitleKey(pTier, pKind,
+                    pRulerIsFemale),
                 OriginRealmName = ReadRealmName(pDb, originId),
                 LineageLabel = lineage,
                 Age = SafeAge(pActor),

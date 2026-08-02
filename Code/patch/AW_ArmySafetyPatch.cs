@@ -724,6 +724,38 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(City), "setKingdom")]
+        private static void CitySetKingdomArmyBacklink_Prefix(
+            City __instance)
+        {
+            Army army = null;
+            try { army = __instance?.getArmy(); }
+            catch { }
+            if (army?.data == null) return;
+
+            City armyCity = ReadField<City>(ArmyCityField, army);
+            bool detached = ArmyCreationSafetyRules.
+                ShouldDetachCityReference(
+                    AWArmyService.IsSpecialArmy(army),
+                    AWArmyRoleRules.ShouldUseDetachedArmy(
+                        AWArmyService.GetRole(army)));
+            if (detached || armyCity?.data != null &&
+                !ReferenceEquals(armyCity, __instance))
+            {
+                try { CityArmyField?.SetValue(__instance, null); }
+                catch { }
+                return;
+            }
+
+            if (ReferenceEquals(armyCity, __instance)) return;
+            try { ArmyCityField?.SetValue(army, __instance); }
+            catch { }
+            if (__instance?.data != null)
+                army.data.id_city = __instance.id;
+        }
+
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(Army), nameof(Army.save))]
         public static bool ArmySave_Prefix(Army __instance)
         {
@@ -742,12 +774,18 @@ namespace AncientWarfare3.patch
                 __instance);
             Actor rawCaptain = ReadField<Actor>(ArmyCaptainField,
                 __instance);
+            bool detachCity = ArmyCreationSafetyRules.
+                ShouldDetachCityReference(specialArmy,
+                    AWArmyRoleRules.ShouldUseDetachedArmy(
+                        AWArmyService.GetRole(__instance)));
+            if (detachCity)
+                AWArmyService.DetachArmyFromCity(__instance, rawCity);
             bool safeSave = ArmySaveSafetyRules.ShouldUseSafeSave(
                 specialArmy, IsReferenceValid(rawCity),
                 IsReferenceValid(rawKingdom), IsReferenceValid(rawCaptain));
             if (!safeSave) return true;
 
-            City city = SafeCity(__instance);
+            City city = detachCity ? null : SafeCity(__instance);
             Actor captain = SafeCaptain(__instance);
             Kingdom kingdom = SafeKingdom(__instance, city, captain);
             int unitCount = SafeUnitCount(__instance);
@@ -964,6 +1002,9 @@ namespace AncientWarfare3.patch
         {
             if (pCaptain?.kingdom?.data != null) return pCaptain.kingdom;
             if (pCity?.kingdom?.data != null) return pCity.kingdom;
+
+            Kingdom stored = ReadField<Kingdom>(ArmyKingdomField, pArmy);
+            if (stored?.data != null) return stored;
 
             try
             {

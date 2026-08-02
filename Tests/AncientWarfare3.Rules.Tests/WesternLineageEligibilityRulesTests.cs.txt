@@ -1,0 +1,191 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
+
+internal static class WesternLineageEligibilityRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, WesternLineageEligibilityRules.UsesWesternLineage(
+                civilized: true, biologicalXia: false, monkey: false,
+                valid: true),
+            "civilized human, elf, and dwarf actors use western lineage edges");
+        Equal(true, WesternLineageEligibilityRules.UsesWesternLineage(
+                civilized: true, biologicalXia: false, monkey: false,
+                valid: true),
+            "civilized orcs use western lineage edges");
+        Equal(false, WesternLineageEligibilityRules.UsesWesternLineage(
+                civilized: true, biologicalXia: true, monkey: false,
+                valid: true),
+            "biological Xia stays on the existing lineage path");
+        Equal(false, WesternLineageEligibilityRules.UsesWesternLineage(
+                civilized: true, biologicalXia: false, monkey: true,
+                valid: true),
+            "civilized monkey stays on the existing lineage path");
+        Equal(false, WesternLineageEligibilityRules.UsesWesternLineage(
+                civilized: false, biologicalXia: false, monkey: false,
+                valid: true),
+            "animals and non-civilized species do not record western edges");
+        Equal(false, WesternLineageEligibilityRules.UsesWesternLineage(
+                civilized: true, biologicalXia: false, monkey: false,
+                valid: false),
+            "invalid actors do not record western edges");
+
+        Equal(false, WesternLineageEligibilityRules.RequiresFullArchive(
+                ruler: false, heir: false, noble: false, official: false),
+            "a western commoner records edges without a full archive");
+        Equal(true, WesternLineageEligibilityRules.RequiresFullArchive(
+                ruler: true, heir: false, noble: false, official: false),
+            "a ruler requires full archive admission");
+        Equal(true, WesternLineageEligibilityRules.RequiresFullArchive(
+                ruler: false, heir: true, noble: false, official: false),
+            "an heir requires full archive admission");
+        Equal(true, WesternLineageEligibilityRules.RequiresFullArchive(
+                ruler: false, heir: false, noble: true, official: false),
+            "a noble requires full archive admission");
+        Equal(true, WesternLineageEligibilityRules.RequiresFullArchive(
+                ruler: false, heir: false, noble: false, official: true),
+            "an official requires full archive admission");
+
+        Equal(false, WesternLineageEligibilityRules.UsesAwLineageSystem(
+                NamingProfileId.Western, hasStableLineageId: false),
+            "lightweight western edges do not expose the full lineage system");
+        Equal(true, WesternLineageEligibilityRules.UsesAwLineageSystem(
+                NamingProfileId.Western, hasStableLineageId: true),
+            "a western profile with stable lineage identity uses the full system");
+        Equal(true, WesternLineageEligibilityRules.UsesAwLineageSystem(
+                NamingProfileId.OrcNomadic, hasStableLineageId: true),
+            "a nomadic orc profile with stable lineage identity uses the full system");
+        Equal(true, WesternLineageEligibilityRules.UsesAwLineageSystem(
+                NamingProfileId.Xia, hasStableLineageId: true),
+            "Xia with stable lineage identity keeps the existing full system");
+        Equal(true, WesternLineageEligibilityRules.UsesAwLineageSystem(
+                NamingProfileId.Monkey, hasStableLineageId: true),
+            "civilized monkey with stable lineage identity keeps the existing full system");
+        Equal(false, WesternLineageEligibilityRules.UsesAwLineageSystem(
+                NamingProfileId.None, hasStableLineageId: true),
+            "an invalid profile cannot expose the lineage system");
+
+        Equal(true,
+            WesternLineageEligibilityRules.UsesLightweightParentEdges(
+                NamingProfileId.Western),
+            "an ordinary western profile records lightweight edges");
+        Equal(true,
+            WesternLineageEligibilityRules.UsesLightweightParentEdges(
+                NamingProfileId.OrcNomadic),
+            "an ordinary orc profile records lightweight edges");
+        Equal(false,
+            WesternLineageEligibilityRules.UsesLightweightParentEdges(
+                NamingProfileId.Xia),
+            "a fully Xiaized profile stays on the existing full path");
+        Equal(false,
+            WesternLineageEligibilityRules.UsesLightweightParentEdges(
+                NamingProfileId.Monkey),
+            "monkey stays on the existing full path");
+        Equal(false, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.Western, biologicalXia: false,
+                monkey: false, civilized: true, parentHasLineage: true,
+                requiresFullArchive: false),
+            "an ordinary western baby cannot inherit a full archive");
+        Equal(false, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.OrcNomadic, biologicalXia: false,
+                monkey: false, civilized: true, parentHasLineage: true,
+                requiresFullArchive: false),
+            "an ordinary orc baby cannot inherit a full archive");
+        Equal(true, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.Western, biologicalXia: false,
+                monkey: false, civilized: true, parentHasLineage: true,
+                requiresFullArchive: true),
+            "an admitted western role may use an existing stable family");
+        Equal(false, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.Western, biologicalXia: false,
+                monkey: false, civilized: true, parentHasLineage: false,
+                requiresFullArchive: true),
+            "a western role cannot fabricate lineage without a stable parent");
+        Equal(true, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.Xia, biologicalXia: false,
+                monkey: false, civilized: true, parentHasLineage: true,
+                requiresFullArchive: false),
+            "a fully Xiaized human keeps the existing parent-lineage path");
+        Equal(false, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.Xia, biologicalXia: false,
+                monkey: false, civilized: true, parentHasLineage: false,
+                requiresFullArchive: false),
+            "a fully Xiaized human without lineage parents keeps the old early return");
+        Equal(true, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.Xia, biologicalXia: true,
+                monkey: false, civilized: true, parentHasLineage: false,
+                requiresFullArchive: false),
+            "biological Xia keeps native birth initialization");
+        Equal(true, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.Monkey, biologicalXia: false,
+                monkey: true, civilized: true, parentHasLineage: false,
+                requiresFullArchive: false),
+            "civilized monkey keeps native birth initialization");
+        Equal(false, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.None, biologicalXia: false,
+                monkey: false, civilized: false, parentHasLineage: true,
+                requiresFullArchive: true),
+            "invalid and non-civilized babies cannot enter the full path");
+
+        AssertBirthAdmission(NamingProfileId.Western,
+            biologicalXia: false, monkey: false, civilized: true,
+            parentHasLineage: true, requiresFullArchive: false,
+            expectedFullPath: false, expectedLightweightEdges: true,
+            "an ordinary western birth has one lightweight edge owner");
+        AssertBirthAdmission(NamingProfileId.OrcNomadic,
+            biologicalXia: false, monkey: false, civilized: true,
+            parentHasLineage: true, requiresFullArchive: true,
+            expectedFullPath: true, expectedLightweightEdges: false,
+            "an admitted orc birth transfers edge ownership to the full path");
+        AssertBirthAdmission(NamingProfileId.Western,
+            biologicalXia: false, monkey: false, civilized: true,
+            parentHasLineage: false, requiresFullArchive: true,
+            expectedFullPath: false, expectedLightweightEdges: true,
+            "an elevated western birth without a stable parent stays lightweight");
+        AssertBirthAdmission(NamingProfileId.Xia,
+            biologicalXia: true, monkey: false, civilized: true,
+            parentHasLineage: false, requiresFullArchive: false,
+            expectedFullPath: true, expectedLightweightEdges: false,
+            "a biological Xia birth keeps full-path edge ownership");
+        AssertBirthAdmission(NamingProfileId.Monkey,
+            biologicalXia: false, monkey: true, civilized: true,
+            parentHasLineage: false, requiresFullArchive: false,
+            expectedFullPath: true, expectedLightweightEdges: false,
+            "a civilized monkey birth keeps full-path edge ownership");
+        AssertBirthAdmission(NamingProfileId.Xia,
+            biologicalXia: false, monkey: false, civilized: true,
+            parentHasLineage: true, requiresFullArchive: false,
+            expectedFullPath: true, expectedLightweightEdges: false,
+            "an effective Xia human with a stable parent uses the full owner");
+        AssertBirthAdmission(NamingProfileId.None,
+            biologicalXia: false, monkey: false, civilized: false,
+            parentHasLineage: true, requiresFullArchive: true,
+            expectedFullPath: false, expectedLightweightEdges: false,
+            "an invalid birth assigns no parent-edge owner");
+    }
+
+    private static void AssertBirthAdmission(NamingProfileId pProfile,
+        bool biologicalXia, bool monkey, bool civilized,
+        bool parentHasLineage, bool requiresFullArchive,
+        bool expectedFullPath, bool expectedLightweightEdges,
+        string pMessage)
+    {
+        WesternLineageBirthAdmissionDecision decision =
+            WesternLineageEligibilityRules.ResolveBirthAdmission(
+                pProfile, biologicalXia, monkey, civilized,
+                parentHasLineage, requiresFullArchive);
+        Equal(expectedFullPath, decision.UseFullPath,
+            pMessage + " (full path)");
+        Equal(expectedLightweightEdges, decision.UseLightweightEdges,
+            pMessage + " (lightweight edges)");
+        Equal(false, decision.UseFullPath && decision.UseLightweightEdges,
+            pMessage + " (owners must be mutually exclusive)");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

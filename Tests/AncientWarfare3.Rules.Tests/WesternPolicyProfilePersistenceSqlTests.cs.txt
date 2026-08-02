@@ -1,0 +1,159 @@
+using System.Data.SQLite;
+using System.Reflection;
+using AncientWarfare3.attributes;
+using AncientWarfare3.core.db;
+using AncientWarfare3.utils;
+
+internal static class WesternPolicyProfilePersistenceSqlTests
+{
+    public static void Run()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE KingdomPolicyState (" +
+            "KINGDOM_ID INTEGER PRIMARY KEY,CURRENT_TECH TEXT," +
+            "TECH_PROGRESS REAL)");
+        Execute(db,
+            "INSERT INTO KingdomPolicyState " +
+            "(KINGDOM_ID,CURRENT_TECH,TECH_PROGRESS) " +
+            "VALUES (7,'legacy_tech',37.5)");
+        Execute(db,
+            "CREATE TABLE KingdomCourtState (" +
+            "KINGDOM_ID INTEGER PRIMARY KEY,COURT_MODE TEXT)");
+        Execute(db,
+            "INSERT INTO KingdomCourtState (KINGDOM_ID,COURT_MODE) " +
+            "VALUES (7,'primitive')");
+
+        EnsureTable<KingdomPolicyStateTableItem>(db);
+        EnsureTable<KingdomCourtStateTableItem>(db);
+
+        Equal("", ScalarText(db,
+            "SELECT PROFILE_ID FROM KingdomPolicyState WHERE KINGDOM_ID=7"),
+            "old policy rows receive an empty safe profile default");
+        Equal("default", ScalarText(db,
+            "SELECT GOVERNMENT_STATE FROM KingdomPolicyState WHERE KINGDOM_ID=7"),
+            "old policy rows receive the default government state");
+        Equal(0L, ScalarLong(db,
+            "SELECT MIGRATION_VERSION FROM KingdomPolicyState WHERE KINGDOM_ID=7"),
+            "old policy rows remain eligible for versioned migration");
+        Equal("", ScalarText(db,
+            "SELECT OBSOLETE_NODE_IDS FROM KingdomPolicyState WHERE KINGDOM_ID=7"),
+            "old rows start with an empty diagnostic archive");
+        Equal(0L, ScalarLong(db,
+            "SELECT ROYAL_AUTHORITY FROM KingdomPolicyState WHERE KINGDOM_ID=7"),
+            "old rows receive a neutral royal-authority reserve");
+        Equal("legacy_tech", ScalarText(db,
+            "SELECT CURRENT_TECH FROM KingdomPolicyState WHERE KINGDOM_ID=7"),
+            "schema synchronization preserves current research");
+        Equal(37.5, ScalarDouble(db,
+            "SELECT TECH_PROGRESS FROM KingdomPolicyState WHERE KINGDOM_ID=7"),
+            "schema synchronization preserves research progress");
+        Equal("", ScalarText(db,
+            "SELECT COURT_PROFILE_ID FROM KingdomCourtState WHERE KINGDOM_ID=7"),
+            "old court rows receive an empty profile default");
+        Equal("", ScalarText(db,
+            "SELECT INSTITUTION_ID FROM KingdomCourtState WHERE KINGDOM_ID=7"),
+            "old court rows receive an empty institution default");
+
+        string before = SchemaSignature(db, "KingdomPolicyState") + "|" +
+                        RowSignature(db);
+        EnsureTable<KingdomPolicyStateTableItem>(db);
+        EnsureTable<KingdomCourtStateTableItem>(db);
+        string after = SchemaSignature(db, "KingdomPolicyState") + "|" +
+                       RowSignature(db);
+        Equal(before, after,
+            "a second schema synchronization is byte-equivalent for active state");
+    }
+
+    private static void EnsureTable<T>(SQLiteConnection pDb)
+    {
+        Type type = typeof(T);
+        string table = type.GetCustomAttribute<TableDefAttribute>().Name;
+        List<SQLiteHelper.ColumnDef> columns = type.GetFields()
+            .Select(field =>
+            {
+                TableItemDefAttribute attribute =
+                    field.GetCustomAttribute<TableItemDefAttribute>() ??
+                    new TableItemDefAttribute();
+                string name = string.IsNullOrEmpty(attribute.Name)
+                    ? field.Name.ToUpperInvariant()
+                    : attribute.Name;
+                SQLiteHelper.ColumnType valueType = field.FieldType.Name
+                    .ToLowerInvariant() switch
+                    {
+                        "string" => SQLiteHelper.ColumnType.TEXT,
+                        "int32" => SQLiteHelper.ColumnType.INTEGER,
+                        "int64" => SQLiteHelper.ColumnType.INTEGER,
+                        "single" => SQLiteHelper.ColumnType.REAL,
+                        "double" => SQLiteHelper.ColumnType.REAL,
+                        _ => SQLiteHelper.ColumnType.BLOB
+                    };
+                return new SQLiteHelper.ColumnDef(name, valueType,
+                    attribute.IsPrimary, attribute.IsUnique,
+                    attribute.IsNotNull, attribute.DefaultValue,
+                    attribute.Check);
+            }).ToList();
+        SQLiteHelper.RegisterTable(table, columns);
+        pDb.AddMissingColumns(table, columns);
+    }
+
+    private static string SchemaSignature(SQLiteConnection pDb,
+        string pTable)
+    {
+        using var command = new SQLiteCommand(
+            "PRAGMA table_info(" + pTable + ")", pDb);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        var parts = new List<string>();
+        while (reader.Read())
+        {
+            parts.Add(reader.GetString(1) + ":" + reader.GetString(2) +
+                      ":" + (reader.IsDBNull(4)
+                          ? ""
+                          : Convert.ToString(reader.GetValue(4))));
+        }
+        return string.Join("|", parts.ToArray());
+    }
+
+    private static string RowSignature(SQLiteConnection pDb)
+    {
+        return ScalarText(pDb,
+            "SELECT PROFILE_ID || '|' || GOVERNMENT_STATE || '|' || " +
+            "MIGRATION_VERSION || '|' || OBSOLETE_NODE_IDS || '|' || " +
+            "ROYAL_AUTHORITY || '|' || " +
+            "CURRENT_TECH || '|' || TECH_PROGRESS " +
+            "FROM KingdomPolicyState WHERE KINGDOM_ID=7");
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static string ScalarText(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToString(command.ExecuteScalar()) ?? "";
+    }
+
+    private static long ScalarLong(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static double ScalarDouble(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToDouble(command.ExecuteScalar());
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

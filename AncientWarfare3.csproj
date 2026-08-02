@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Library</OutputType>
-		<DefineConstants>DEBUG;TRACE;一米_中文名</DefineConstants>
+		<DefineConstants>DEBUG;TRACE</DefineConstants>
 		<RootNamespace>AncientWarfare3</RootNamespace>
 		<AssemblyName>AncientWarfare3</AssemblyName>
 		<TargetFramework>net48</TargetFramework>
@@ -29,6 +29,15 @@
 	<ItemGroup>
 		<Content Include="mod.json" />
 		<Content Include="icon.png" />
+		<Content Include="name_generators\**\*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="word_libraries\**\*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="ABPackages\**\*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
 	</ItemGroup>
 
 	<!-- 游戏本体 (publicized: 所有成员 public, 供编译引用) -->
@@ -53,13 +62,6 @@
 		</Reference>
 	</ItemGroup>
 
-	<!-- 一米_中文名 (Chinese_Name): 编译期引用; 运行时靠 NML 源码加载 -->
-	<ItemGroup>
-		<Reference Include="Chinese_Name">
-			<HintPath>$(NewModDir)\Chinese_Name.dll</HintPath>
-		</Reference>
-	</ItemGroup>
-
 	<!-- SQLite (姓族/氏支/家族树档案持久化): 随 mod 一起分发, 来自本仓库 Assemblies -->
 	<ItemGroup>
 		<Reference Include="System.Data.SQLite">
@@ -74,6 +76,9 @@
 		</Reference>
 		<Reference Include="UnityEngine.CoreModule">
 			<HintPath>$(WorldBoxManaged)\UnityEngine.CoreModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.InputLegacyModule">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.InputLegacyModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.PhysicsModule">
 			<HintPath>$(WorldBoxManaged)\UnityEngine.PhysicsModule.dll</HintPath>

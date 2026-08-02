@@ -42,6 +42,7 @@ namespace AncientWarfare3.core.lineage
         public string RulerName = "";
         public string RulerTitle = "";
         public string RealmName = "";
+        public bool RulerIsFemale;
         public int ConsortCapacity;
         public RulerHouseholdDisplayRow PrincipalWife;
         public readonly System.Collections.Generic.List<

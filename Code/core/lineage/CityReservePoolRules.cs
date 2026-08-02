@@ -3,21 +3,6 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
-    public sealed class CityReserveDonorFacts
-    {
-        public CityReserveDonorFacts(long cityId, bool preferred,
-            long distanceSquared)
-        {
-            CityId = cityId;
-            Preferred = preferred;
-            DistanceSquared = Math.Max(0L, distanceSquared);
-        }
-
-        public long CityId { get; }
-        public bool Preferred { get; }
-        public long DistanceSquared { get; }
-    }
-
     public static class CityReservePoolRules
     {
         public const int PeaceCityBudget = 1;
@@ -65,6 +50,34 @@ namespace AncientWarfare3.core.lineage
             return preparation ? PreparationActorBudget : PeaceActorBudget;
         }
 
+        public static int FullReconciliationBudget(int residentCount,
+            int indexedMemberCount)
+        {
+            long total = (long)Math.Max(0, residentCount) +
+                         Math.Max(0, indexedMemberCount);
+            return (int)Math.Min(int.MaxValue, Math.Max(1L, total));
+        }
+
+        public static bool CanRestoreRejectedCandidate(bool sameKingdom,
+            bool sameCity, bool alive, bool reserveEligible,
+            bool enlistedIntoTargetArmy)
+        {
+            return sameKingdom && sameCity && alive && reserveEligible &&
+                   !enlistedIntoTargetArmy;
+        }
+
+        public static bool MatchesSourceCity(long sourceCityId,
+            long candidateCityId)
+        {
+            return sourceCityId >= 0L && sourceCityId == candidateCityId;
+        }
+
+        public static bool ShouldReconcileJoiningKingdom(bool warActive,
+            bool liveKingdom)
+        {
+            return warActive && liveKingdom;
+        }
+
         public static bool CanMaintain(bool frozen, bool worldDayChanged)
         {
             return !frozen && worldDayChanged;
@@ -73,22 +86,6 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldUnfreeze(int activeWarCount)
         {
             return activeWarCount <= 0;
-        }
-
-        public static IReadOnlyList<long> OrderDonorCityIds(
-            IReadOnlyList<CityReserveDonorFacts> donors)
-        {
-            var ordered = new List<CityReserveDonorFacts>(
-                donors?.Count ?? 0);
-            if (donors != null)
-                for (int i = 0; i < donors.Count; i++)
-                    if (donors[i] != null && donors[i].CityId >= 0L)
-                        ordered.Add(donors[i]);
-            ordered.Sort(CompareDonors);
-            var ids = new List<long>(ordered.Count);
-            for (int i = 0; i < ordered.Count; i++)
-                ids.Add(ordered[i].CityId);
-            return ids;
         }
 
         public static bool TryTakeNextActorId(SortedSet<long> actorIds,
@@ -129,6 +126,18 @@ namespace AncientWarfare3.core.lineage
             return registeredActors > 0;
         }
 
+        public static bool ShouldDeferPersistedMemberValidation(
+            bool hasPersistedMember, bool restoreValidationReady)
+        {
+            return hasPersistedMember && !restoreValidationReady;
+        }
+
+        public static bool ShouldDeferCallbackInvalidation(
+            bool hasPersistedMember, bool restoreInFlight)
+        {
+            return hasPersistedMember && restoreInFlight;
+        }
+
         public static bool ShouldApplyReserveExhaustion(
             bool attackAssignment, int reinforcementShortage,
             bool kingdomFrozen, bool exhaustionConfirmed,
@@ -153,16 +162,5 @@ namespace AncientWarfare3.core.lineage
                 ReserveExhaustionContribution);
         }
 
-        private static int CompareDonors(CityReserveDonorFacts left,
-            CityReserveDonorFacts right)
-        {
-            int preferred = right.Preferred.CompareTo(left.Preferred);
-            if (preferred != 0) return preferred;
-            int distance = left.DistanceSquared.CompareTo(
-                right.DistanceSquared);
-            return distance != 0
-                ? distance
-                : left.CityId.CompareTo(right.CityId);
-        }
     }
 }

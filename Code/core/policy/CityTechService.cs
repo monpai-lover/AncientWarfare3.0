@@ -117,7 +117,8 @@ namespace AncientWarfare3.core.policy
             {
                 foreach (string techId in CompletedTechIds(pKingdom))
                 {
-                    KingdomPolicyDef tech = KingdomPolicyDefs.Get(techId);
+                    KingdomPolicyDef tech = KingdomPolicyService.
+                        GetDefinition(pKingdom, techId);
                     if (tech == null || tech.Kind != PolicyNodeKind.Tech) continue;
                     SpreadCompletedTech(pKingdom, tech);
                 }
@@ -159,7 +160,8 @@ namespace AncientWarfare3.core.policy
         public static CityTechReport GetCityReport(City pCity, bool pIncludeNeighborBonus = true)
         {
             var report = new CityTechReport();
-            report.total_count = KingdomPolicyDefs.Techs.Count();
+            report.total_count = KingdomPolicyService.GetNodes(
+                pCity?.kingdom, PolicyNodeKind.Tech).Count;
             if (pCity?.data == null || !Ready) return report;
 
             try
@@ -173,6 +175,8 @@ namespace AncientWarfare3.core.policy
                 while (reader.Read())
                 {
                     string techId = ToString(reader, 0);
+                    if (KingdomPolicyService.GetDefinition(
+                            pCity.kingdom, techId) == null) continue;
                     bool adopted = ToInt(reader, 1) == 1;
                     double adoption = ToDouble(reader, 2);
                     double exposure = ToDouble(reader, 3);
@@ -206,20 +210,29 @@ namespace AncientWarfare3.core.policy
         {
             var reports = new Dictionary<long, CityTechReport>();
             var cityIds = new List<long>();
-            int totalTechCount = KingdomPolicyDefs.Techs.Count();
+            var profiles = new Dictionary<long, KingdomPolicyProfileId>();
             if (pCities == null) return reports;
 
             foreach (City city in pCities)
             {
                 if (city?.data == null || reports.ContainsKey(city.id)) continue;
-                reports[city.id] = new CityTechReport { total_count = totalTechCount };
+                KingdomPolicyProfileId profileId = KingdomPolicyService.
+                    GetPolicyProfile(city.kingdom);
+                profiles[city.id] = profileId;
+                reports[city.id] = new CityTechReport
+                {
+                    total_count = KingdomPolicyDefs.GetNodes(profileId,
+                        PolicyNodeKind.Tech).Count
+                };
                 cityIds.Add(city.id);
             }
 
             if (!Ready || cityIds.Count == 0) return reports;
 
             for (int offset = 0; offset < cityIds.Count; offset += SQL_IN_CHUNK_SIZE)
-                ReadCityReportsChunk(cityIds, offset, Math.Min(SQL_IN_CHUNK_SIZE, cityIds.Count - offset), reports);
+                ReadCityReportsChunk(cityIds, offset,
+                    Math.Min(SQL_IN_CHUNK_SIZE, cityIds.Count - offset),
+                    reports, profiles);
 
             if (!pIncludeNeighborBonus) return reports;
             foreach (City city in pCities)
@@ -233,7 +246,8 @@ namespace AncientWarfare3.core.policy
         }
 
         private static void ReadCityReportsChunk(List<long> pCityIds, int pOffset, int pCount,
-            Dictionary<long, CityTechReport> pReports)
+            Dictionary<long, CityTechReport> pReports,
+            IReadOnlyDictionary<long, KingdomPolicyProfileId> pProfiles)
         {
             if (!Ready || pCityIds == null || pReports == null || pCount <= 0) return;
             try
@@ -256,6 +270,12 @@ namespace AncientWarfare3.core.policy
                 {
                     long cityId = ToLong(reader, 0);
                     if (!pReports.TryGetValue(cityId, out CityTechReport report)) continue;
+                    string techId = ToString(reader, 1);
+                    if (pProfiles == null ||
+                        !pProfiles.TryGetValue(cityId,
+                            out KingdomPolicyProfileId profileId) ||
+                        KingdomPolicyDefs.Get(profileId, techId) == null)
+                        continue;
                     bool adopted = ToInt(reader, 2) == 1;
                     double adoption = ToDouble(reader, 3);
                     double exposure = ToDouble(reader, 4);
@@ -269,7 +289,7 @@ namespace AncientWarfare3.core.policy
                     double progress = Math.Max(adoption, exposure);
                     report.adoption_score += (float)(progress / ADOPTED) * 0.55f;
                     if (progress <= report.spreading_progress * ADOPTED) continue;
-                    report.spreading_tech = ToString(reader, 1);
+                    report.spreading_tech = techId;
                     report.spreading_progress = (float)(progress / ADOPTED);
                     report.source_city_name = FindCity(ToLong(reader, 5))?.data?.name ?? "";
                     report.source_kingdom_name = FindKingdom(ToLong(reader, 6))?.name ?? "";
@@ -312,7 +332,8 @@ namespace AncientWarfare3.core.policy
                           development + "%";
             if (!string.IsNullOrEmpty(report.spreading_tech))
             {
-                KingdomPolicyDef def = KingdomPolicyDefs.Get(report.spreading_tech);
+                KingdomPolicyDef def = KingdomPolicyService.GetDefinition(
+                    pCity.kingdom, report.spreading_tech);
                 text += "\n" + AW_L10n.Text("aw_tech_mapmode_spreading", "\u4F20\u64AD\u4E2D") + ": " +
                         (def?.FallbackName ?? report.spreading_tech) +
                         " " + Mathf.RoundToInt(report.spreading_progress * 100f) + "%";
@@ -389,7 +410,8 @@ namespace AncientWarfare3.core.policy
             string bestCurrent = "";
             float bestCurrentProgress = 0f;
 
-            foreach (KingdomPolicyDef tech in KingdomPolicyDefs.Techs)
+            foreach (KingdomPolicyDef tech in KingdomPolicyService.GetNodes(
+                         pNewKingdom, PolicyNodeKind.Tech))
             {
                 bool hasRowsForTech = false;
                 int adopted = 0;

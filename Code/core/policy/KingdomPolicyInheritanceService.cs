@@ -46,14 +46,16 @@ namespace AncientWarfare3.core.policy
             if (InheritedKingdoms.Contains(pNewKingdom.id)) return;
 
             Kingdom source = ResolveSource(pNewKingdom, pFounder);
-            bool integratedCulture = XiaCultureIntegrationService.IsIntegrated(
-                pNewKingdom.culture);
+            KingdomPolicyProfileId childProfile =
+                KingdomPolicyProfileService.Resolve(pNewKingdom);
+            bool childHasPolicyProfile = KingdomPolicyProfileRules.
+                IsResolvableKingdomProfile(childProfile);
             if (!KingdomPolicySplitInheritanceRules.ShouldInheritFromSplit(
                     pHasCapturedSource: source != null,
                     pNewKingdomValid: pNewKingdom != source,
                     pSourceValid: source?.data != null,
                     pSourceAlive: IsLivingSource(source),
-                    pCultureIntegrated: integratedCulture)) return;
+                    pChildHasPolicyProfile: childHasPolicyProfile)) return;
 
             if (!XiaizationService.InheritForSplit(pNewKingdom, source))
                 return;
@@ -65,8 +67,24 @@ namespace AncientWarfare3.core.policy
             KingdomPolicyService.EnsureInitialized(pNewKingdom);
 
             KingdomPolicySnapshot src = KingdomPolicyService.ReadSnapshot(source);
+            string childProfileId = KingdomPolicyProfileRules.ToPersistedId(
+                KingdomPolicyService.GetPolicyProfile(pNewKingdom));
+            string sourceProfileId = KingdomPolicyProfileRules.ToPersistedId(
+                KingdomPolicyService.GetPolicyProfile(source));
             var dst = new KingdomPolicySnapshot
             {
+                profile_id = childProfileId,
+                government_state = KingdomPolicySplitInheritanceRules.
+                    ResolveInheritedGovernmentState(childProfileId,
+                        src.government_state),
+                royal_authority = KingdomPolicySplitInheritanceRules.
+                    ResolveInheritedRoyalAuthority(childProfileId,
+                        sourceProfileId, src.royal_authority,
+                        WesternRoyalAuthorityRules.
+                            MaximumConsolidatedAuthority),
+                migration_version =
+                    KingdomPolicyProfileMigrationRules.CurrentVersion,
+                obsolete_node_ids = src.obsolete_node_ids,
                 class_state = KingdomPolicyInheritanceRules.SanitizeClassStateForNewKingdom(
                     src.class_state, KingdomPolicyDefs.ClassDefault),
                 army_state = src.army_state,
@@ -87,8 +105,10 @@ namespace AncientWarfare3.core.policy
             };
 
             CityTechService.AdjustInheritedSnapshotFromCities(pNewKingdom, dst);
-            ClampProgressToDefinition(dst, PolicyNodeKind.Social);
-            ClampProgressToDefinition(dst, PolicyNodeKind.Tech);
+            ClampProgressToDefinition(pNewKingdom, dst,
+                PolicyNodeKind.Social);
+            ClampProgressToDefinition(pNewKingdom, dst,
+                PolicyNodeKind.Tech);
             KingdomPolicyService.ApplySnapshot(pNewKingdom, dst, pIncludeDecision: false);
             SynchronizeInheritedNameIntegration(pNewKingdom, dst);
             ModClass.LogInfo("[policy inheritance] " + pNewKingdom.name + " inherited policy state from " + source.name);
@@ -143,10 +163,12 @@ namespace AncientWarfare3.core.policy
                    pKingdom.countCities() > 0;
         }
 
-        private static void ClampProgressToDefinition(KingdomPolicySnapshot pSnapshot, PolicyNodeKind pKind)
+        private static void ClampProgressToDefinition(Kingdom pKingdom,
+            KingdomPolicySnapshot pSnapshot, PolicyNodeKind pKind)
         {
             string id = pKind == PolicyNodeKind.Tech ? pSnapshot.current_tech : pSnapshot.current_policy;
-            KingdomPolicyDef def = KingdomPolicyDefs.Get(id);
+            KingdomPolicyDef def = KingdomPolicyService.GetDefinition(
+                pKingdom, id);
             if (def == null)
             {
                 if (pKind == PolicyNodeKind.Tech)

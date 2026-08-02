@@ -259,8 +259,13 @@ namespace AncientWarfare3.core.schools
             bool pAllowActing)
         {
             if (pHost?.data == null || pHost.isRekt()) return;
-            string[] offices = CourtTierRules.CentralOfficesForTier(
-                CourtService.ResolveTier(pHost));
+            if (CourtService.IsWesternElective(pHost))
+            {
+                WesternCourtElectionService.QueueKingdomVacancies(pHost);
+                return;
+            }
+            string[] offices =
+                CourtService.CentralOfficeIdsForCurrentProfile(pHost);
             if (offices.Length == 0) return;
             HashSet<string> occupied = new HashSet<string>(
                 CourtService.GetActiveOfficers(pHost, 96)
@@ -504,9 +509,18 @@ namespace AncientWarfare3.core.schools
                 return TryProcessPendingEnd(pPending);
             Actor actor = FindActor(pPending.ActorId);
             Kingdom host = FindKingdom(pPending.HostKingdomId);
+            if (pPending.StartRequest != null &&
+                pPending.CommittedStartResult != null &&
+                CourtService.IsWesternElective(host))
+                return CancelInvalidPendingGuestStart(pPending, actor, host);
             City residence = FindCity(pPending.CityId);
             if (actor?.data == null || host?.data == null || residence?.data == null ||
                 residence.kingdom != host) return false;
+            if (pPending.StartRequest != null &&
+                pPending.CommittedStartResult == null &&
+                !CanCommitPendingGuestStart(actor, host, residence,
+                    pPending))
+                return CancelInvalidPendingGuestStart(pPending, actor, host);
 
             GuestOfficeStartResult startResult = null;
             GuestOfficeRecoveryResult recoveryResult = null;
@@ -628,6 +642,42 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
+        private static bool CanCommitPendingGuestStart(Actor pActor,
+            Kingdom pHost, City pResidence, PendingGuestOffice pPending)
+        {
+            return pPending?.StartRequest != null &&
+                   !CourtService.IsWesternElective(pHost) &&
+                   CourtService.CanAppointGuestOfficer(pActor, pHost,
+                       pPending.OfficeId, pResidence, pPending.IsActing);
+        }
+
+        private static bool CancelInvalidPendingGuestStart(
+            PendingGuestOffice pPending, Actor pActor, Kingdom pHost)
+        {
+            if (pPending == null) return true;
+            if (pPending.PersistenceQueued) return false;
+            if (pPending.CommittedStartResult?.Persistence.Outcome !=
+                GuestOfficePersistenceOutcome.Committed)
+            {
+                pPending.PersistenceCleanFailure = true;
+                return true;
+            }
+            if (!CourtService.IsWesternElective(pHost) ||
+                !ConvertCommittedStartToEnd(pPending, pActor)) return false;
+            return TryProcessPendingEnd(pPending);
+        }
+
+        private static bool ConvertCommittedStartToEnd(
+            PendingGuestOffice pPending, Actor pActor)
+        {
+            HistoricalSchoolAffiliationSnapshot committed =
+                pPending?.CommittedStartResult?.Affiliation;
+            if (committed == null) return false;
+            return pPending.BeginEndCompensation(committed, pActor,
+                "elective_reform", Date.getCurrentYear(),
+                LineageService.CurTime());
+        }
+
         private static bool TryProcessPendingEnd(PendingGuestOffice pPending)
         {
             if (pPending?.EndExpectedAffiliation == null) return true;
@@ -692,9 +742,19 @@ namespace AncientWarfare3.core.schools
                 pPending.CourtApplied = true;
             }
 
-            return !GuestOfficeEndPendingRules.ShouldRetain(
-                pPending.PersistenceOutcome, pPending.AffiliationAdopted,
-                pPending.CourtApplied);
+            if (GuestOfficeEndPendingRules.ShouldRetain(
+                    pPending.PersistenceOutcome, pPending.AffiliationAdopted,
+                    pPending.CourtApplied)) return false;
+            QueueWesternElectiveVacancy(pPending);
+            return true;
+        }
+
+        private static void QueueWesternElectiveVacancy(PendingGuestOffice pPending)
+        {
+            Kingdom host = FindKingdom(pPending?.HostKingdomId ?? -1L);
+            if (!CourtService.IsWesternElective(host)) return;
+            WesternCourtElectionService.EnqueueVacancy(host,
+                pPending.OfficeId, pPending.ActorId);
         }
 
         private static void SchedulePendingRetry(PendingGuestOffice pPending)
@@ -740,14 +800,17 @@ namespace AncientWarfare3.core.schools
                 System.Data.SQLite.SQLiteConnection pDb,
                 System.Data.SQLite.SQLiteTransaction pTransaction)
             {
+                Actor actor = FindActor(_pending.ActorId);
+                Kingdom host = FindKingdom(_pending.HostKingdomId);
+                City residence = FindCity(_pending.CityId);
+                if (!CanCommitPendingGuestStart(actor, host, residence,
+                        _pending))
+                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
                 _result = GuestOfficePersistence.StartInTransaction(pDb, pTransaction,
                     _pending.StartRequest);
                 if (_result?.Persistence.Outcome ==
                     GuestOfficePersistenceOutcome.Committed)
                 {
-                    Actor actor = FindActor(_pending.ActorId);
-                    Kingdom host = FindKingdom(_pending.HostKingdomId);
-                    City residence = FindCity(_pending.CityId);
                     _stateProjection = OfficialCareerStateService.StageAppointment(
                         pDb, pTransaction, actor, host, CourtOfficeLayer.Central,
                         _pending.OfficeId, residence,
@@ -1221,6 +1284,34 @@ namespace AncientWarfare3.core.schools
             public bool PersistenceCleanFailure { get; set; }
             public int Attempts { get; set; }
             public int ReadyFrame { get; set; }
+
+            public bool BeginEndCompensation(
+                HistoricalSchoolAffiliationSnapshot pCommitted, Actor pActor,
+                string pReason, int pEndedYear, double pEndedTime)
+            {
+                if (pCommitted == null || pCommitted.ActorId != ActorId ||
+                    pCommitted.ServiceKingdomId != HostKingdomId ||
+                    pCommitted.LifecycleState !=
+                    HistoricalSchoolLifecycleState.Serving) return false;
+                EndActor = pActor;
+                EndExpectedAffiliation = pCommitted;
+                EndReason = pReason ?? "guest_start_cancelled";
+                EndedYear = Math.Max(pCommitted.ServiceStartYear, pEndedYear);
+                EndedTime = pEndedTime;
+                EndRequest = null;
+                CommittedEndResult = null;
+                CommittedAffiliation = null;
+                PersistenceOutcome = GuestOfficePersistenceOutcome.Unknown;
+                RecoverCommittedEnd = false;
+                AffiliationAdopted = false;
+                CourtApplied = false;
+                StatusApplied = false;
+                PersistenceQueued = false;
+                PersistenceCleanFailure = false;
+                Attempts = 0;
+                ReadyFrame = 0;
+                return true;
+            }
 
             public static PendingGuestOffice ForStart(GuestOfficeStartRequest pRequest,
                 OfficialCareerPrior pRuntimePrior)

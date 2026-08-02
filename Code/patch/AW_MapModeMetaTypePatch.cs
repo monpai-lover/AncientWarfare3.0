@@ -103,6 +103,12 @@ namespace AncientWarfare3.patch
 
         private static bool TryGetActiveAwMapMode(bool pCheckOnlyOption, ref MetaType pResult)
         {
+            if (IsActive(AWMapModeMetaLibrary.HierarchicalVassalAsset,
+                    pCheckOnlyOption))
+            {
+                pResult = AWMapModeMetaTypes.HierarchicalVassal;
+                return true;
+            }
             if (IsActive(AWMapModeMetaLibrary.FeudatoryAsset,
                     pCheckOnlyOption))
             {

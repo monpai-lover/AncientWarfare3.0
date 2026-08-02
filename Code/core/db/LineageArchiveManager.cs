@@ -507,6 +507,7 @@ namespace AncientWarfare3.core.db
         /// <summary>反射扫描本程序集所有 [TableDef] 类,按字段类型**建表**(新库用)。</summary>
         private void InitializeTables()
         {
+            LocalizedNameIdentitySchema.Ensure(_db);
             foreach (var (tableName, cols) in EnumerateTableSchemas())
                 if (cols.Count > 0) _db.CreateTable(tableName, cols);
             LineageArchiveIndexManager.EnsureIndexes(_db);
@@ -518,6 +519,7 @@ namespace AncientWarfare3.core.db
         /// </summary>
         private void EnsureLoadedSchema()
         {
+            LocalizedNameIdentitySchema.Ensure(_db);
             foreach (var (tableName, cols) in EnumerateTableSchemas())
             {
                 if (cols.Count == 0) continue;
@@ -539,6 +541,7 @@ namespace AncientWarfare3.core.db
             var types = Assembly.GetExecutingAssembly().GetTypes();
             foreach (var type in types)
             {
+                if (type == typeof(LocalizedNameIdentityTableItem)) continue;
                 var table_def = type.GetCustomAttribute<TableDefAttribute>();
                 if (table_def == null) continue;
 

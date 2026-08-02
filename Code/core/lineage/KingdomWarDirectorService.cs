@@ -956,10 +956,13 @@ namespace AncientWarfare3.core.lineage
                 ArmyRtsRole role = proposalKind ==
                                    ArmyRtsProposalKind.Defend ||
                                    homelandRecapture
-                    ? ArmyRtsRole.Defense
+                    ? KingdomWarDirectorRules.ResolveMissionRole(
+                        assignment.Role, hasStrategicTarget, forceReady,
+                        friendlyDefenseTarget: homelandRecapture,
+                        proposalKind)
                     : KingdomWarDirectorRules.ResolveMissionRole(
                         assignment.Role, hasStrategicTarget, forceReady,
-                        friendlyDefenseTarget: homelandRecapture);
+                        friendlyDefenseTarget: false, proposalKind);
                 bool connectedCorridor = target?.data != null &&
                     GetConnectedCorridor(pWork, plan.War, target,
                         pKingdom);
@@ -1228,8 +1231,17 @@ namespace AncientWarfare3.core.lineage
             if (pAssignment.Role == ArmyRtsRole.Defense &&
                 pPlan.Allocation.CapitalThreat &&
                 IsLiveCity(pKingdom?.capital))
-                return ResolveOpenTarget(pWork, pPlan.War, pKingdom,
-                    pKingdom.capital, out pProposalKind);
+            {
+                City priorityDefense = ResolveOpenTarget(pWork, pPlan.War,
+                    pKingdom, pKingdom.capital, out pProposalKind);
+                ArmyRtsObjectiveState priorityState = GetObjectiveState(
+                    pWork, pPlan.War, pKingdom, pKingdom.capital);
+                if (priorityDefense?.data != null &&
+                    KingdomWarDirectorRules.ShouldUsePriorityDefenseTarget(
+                        priorityState))
+                    return priorityDefense;
+                pProposalKind = ArmyRtsProposalKind.None;
+            }
             Army army = ArmyStrategicIndexService.ResolveIndexedArmy(
                 pAssignment.ArmyId, pKingdom?.id ?? -1L);
             if (pFrontAssignment != null &&

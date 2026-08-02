@@ -16,7 +16,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (!pPermanentOwnershipChanged && pRecordedCount > 0)
                 return NormalizeInitialCityCount(pRecordedCount);
-            return NormalizeInitialCityCount(pLiveCount);
+            return pPermanentOwnershipChanged
+                ? Math.Max(0, pLiveCount)
+                : NormalizeInitialCityCount(pLiveCount);
         }
 
         public static string Key(long pKingdomId)

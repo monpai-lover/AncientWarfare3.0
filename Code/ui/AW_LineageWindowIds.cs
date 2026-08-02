@@ -51,7 +51,7 @@ namespace AncientWarfare3.ui
             Kingdom kingdom = World.world?.kingdoms?.get(pKingdomId);
             if (kingdom?.data == null || kingdom.isRekt()) return false;
             ScrollWindow.finishAnimations();
-            MetaType.Kingdom.getAsset().selectAndInspect(kingdom);
+            MetaType.Kingdom.getAsset().selectAndInspect(kingdom, pFromNameplate: false, pCheckNameplate: false);
             return true;
         }
     }

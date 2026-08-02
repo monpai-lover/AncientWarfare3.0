@@ -1,6 +1,7 @@
 using AncientWarfare3.core.court;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -51,9 +52,8 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (GovernorRotationRuntimeScope.IsActive) return;
             if (__state) return;
-            if (pActor == null ||
-                (!LineageService.IsXia(pActor) && !LineageService.IsXiaKingdom(pActor.kingdom) &&
-                 !XiaizationService.IsForeignPseudoDynasty(pActor.kingdom)))
+            if (pActor == null || !ShouldRunLineagePromotionHook(
+                    pActor, pActor.kingdom))
                 return;
             LineageService.OnCityLeaderAppointed(pActor, CourtOfficeId.Governor);
             LineageService.EnsureOfficialShiAndClan(pActor, CourtOfficeId.Governor);
@@ -66,13 +66,31 @@ namespace AncientWarfare3.patch
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
-            if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
+            NamingProfileId profile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pActor).Profile;
+            bool actorIsActualKing = pActor != null &&
+                                     __instance?.king == pActor;
+            if (actorIsActualKing)
+                WesternLineageMigrationService.Request();
+            if (!WesternLineageAdmissionRules.ShouldRunKingAdmission(
+                    pFromLoad, actorIsActualKing,
+                    profile)) return;
             RoyalMedicalCareService.ReconcileTargets(__instance);
-            if (pActor == null ||
-                (!LineageService.IsXia(pActor) && !LineageService.IsXiaKingdom(__instance) &&
-                 !XiaizationService.IsForeignPseudoDynasty(__instance)))
+            if (pActor == null || !ShouldRunLineagePromotionHook(
+                    pActor, __instance))
                 return;
             LineageService.OnActorPromoted(pActor, NobleTrigger.King);
+        }
+
+        private static bool ShouldRunLineagePromotionHook(Actor pActor,
+            Kingdom pKingdom)
+        {
+            NamingProfileId profile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pActor).Profile;
+            return WesternLineageAdmissionRules.ShouldRunPromotionHook(profile,
+                LineageService.IsXia(pActor),
+                LineageService.IsXiaKingdom(pKingdom),
+                XiaizationService.IsForeignPseudoDynasty(pKingdom));
         }
 
         [HarmonyPrefix]

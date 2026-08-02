@@ -216,6 +216,7 @@ namespace AncientWarfare3.core.lineage
         public const int MinimumResponseDelayDays = 3;
         public const int MaximumResponseDelayDays = 180;
         public const int MaximumProcessingRecoveriesPerFrame = 1;
+        public const float MaximumNonBorderAllianceCapitalDistance = 120f;
 
         public static double NextResponseRuntimeTime(double pCurrentTime)
         {
@@ -260,6 +261,19 @@ namespace AncientWarfare3.core.lineage
             DiplomacyAvailabilityFacts pFacts)
         {
             return string.IsNullOrEmpty(UnavailableReason(pType, pFacts));
+        }
+
+        public static string AllianceDistanceFailure(bool sharesBorder,
+            bool hasBothCapitals, float capitalDistance)
+        {
+            if (sharesBorder) return "";
+            if (!hasBothCapitals) return "alliance_unavailable";
+            return !float.IsNaN(capitalDistance) &&
+                   !float.IsInfinity(capitalDistance) &&
+                   capitalDistance >= 0f && capitalDistance <=
+                   MaximumNonBorderAllianceCapitalDistance
+                ? ""
+                : "alliance_too_distant";
         }
 
         public static string UnavailableReason(DiplomacyProposalType pType,
@@ -489,7 +503,7 @@ namespace AncientWarfare3.core.lineage
                     Add("household_rank",
                         pFacts.ProposedPrincipalWife ? 8 : 2);
                     Add("consort_request",
-                        pFacts.ProposedConsortRequest ? 15 : 0);
+                        pFacts.ProposedConsortRequest ? 23 : 0);
                     break;
                 case DiplomacyProposalType.Coalition:
                     Add("base", 32);

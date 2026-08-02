@@ -1,0 +1,87 @@
+[
+    {
+        "id":  "human_clan",
+        "templates":  [
+                          {
+                              "format":  "$founder_home$#的#$founder_family_name$#家族#"
+                          }
+                      ]
+    },
+    {
+        "id":  "Xia_clan",
+        "templates":  [
+                          {
+                              "format":  "$founder_home$$founder_family_name$#家#"
+                          },
+                          {
+                              "format":  "$founder_home$$founder_family_name$#氏#"
+                          },
+                          {
+                              "format":  "$founder_home$$founder_family_name$#族#"
+                          }
+                      ]
+    },
+    {
+        "id":  "elf_clan",
+        "templates":  [
+                          {
+                              "format":  "$founder_family_name$#家#"
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_clan",
+        "templates":  [
+                          {
+                              "format":  "$founder_family_name$#部落#"
+                          }
+                      ]
+    },
+    {
+        "id":  "dwarf_clan",
+        "templates":  [
+                          {
+                              "format":  "{外号}#的#$founder_family_name$"
+                          }
+                      ]
+    },
+    {
+        "id":  "western_clan",
+        "default_template":  {
+                                 "format":  "{法兰西姓氏}#家族#",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{中欧姓氏}#家族#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_nomadic_clan",
+        "default_template":  {
+                                 "format":  "{兽人姓氏}#部落#",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏}#部落#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_nomadic_family_stem",
+        "default_template":  {
+                                 "format":  "{兽人姓氏:family_name}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏:family_name}",
+                              "weight":  1
+                          }
+                      ]
+    }
+]

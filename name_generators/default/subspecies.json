@@ -1,0 +1,68 @@
+[
+    {
+        "id":  "default_species",
+        "default_template":  {
+                                 "format":  "{西方城名上}{西方城名下}$locale$"
+                             },
+        "templates":  [
+                          {
+                              "format":  "{西方城名上}{西方城名下}$locale$",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{兽人城名}$locale$",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{罗斯姓氏}$locale$",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{中欧姓氏}$locale$",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁城名}$locale$",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{阿拉伯城名}$locale$",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{犹太人名}$locale$",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{古埃及姓氏}$locale$",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "western_subspecies",
+        "default_template":  {
+                                 "format":  "{中欧姓氏}$locale$",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{西方城名上}{西方城名下}$locale$",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_nomadic_subspecies",
+        "default_template":  {
+                                 "format":  "{兽人姓氏}$locale$",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏}$locale$",
+                              "weight":  1
+                          }
+                      ]
+    }
+]

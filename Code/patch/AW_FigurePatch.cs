@@ -36,6 +36,7 @@ namespace AncientWarfare3.patch
             long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
+                if (HierarchicalVassalMapModeService.IsActive()) return false;
                 if (pAsset?.group_system == null) return false;
                 bool markersEnabled =
                     PlayerConfig.optionBoolEnabled("marks_favorites");

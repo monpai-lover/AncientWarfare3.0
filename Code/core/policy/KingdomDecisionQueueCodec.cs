@@ -109,6 +109,28 @@ namespace AncientWarfare3.core.policy
             return string.Join(";", rows.ToArray());
         }
 
+        public static string MigrateDecisionIds(string pRaw,
+            Func<string, string> pMap,
+            out bool pChanged)
+        {
+            pChanged = false;
+            if (pMap == null) return pRaw ?? "";
+
+            List<KingdomDecisionQueueItem> items = Decode(pRaw);
+            for (int index = 0; index < items.Count; index++)
+            {
+                KingdomDecisionQueueItem item = items[index];
+                if (item == null) continue;
+                string mapped = pMap(item.decision_id) ?? "";
+                if (string.Equals(mapped, item.decision_id,
+                        StringComparison.Ordinal)) continue;
+                item.decision_id = mapped;
+                pChanged = true;
+            }
+
+            return pChanged ? Encode(items) : pRaw ?? "";
+        }
+
         private static string EncodeString(string pValue)
         {
             return Convert.ToBase64String(Encoding.UTF8.GetBytes(pValue ?? ""));

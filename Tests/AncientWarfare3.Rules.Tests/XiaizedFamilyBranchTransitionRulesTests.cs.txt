@@ -1,0 +1,41 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
+
+internal static class XiaizedFamilyBranchTransitionRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, XiaizedFamilyBranchTransitionRules.CanTransition(
+            NamingProfileId.Western, monkey: false, biologicalXia: false,
+            valid: true), "western families transition into a Xia child branch");
+        Equal(true, XiaizedFamilyBranchTransitionRules.CanTransition(
+            NamingProfileId.OrcNomadic, false, false, true),
+            "nomadic families transition into a Xia child branch");
+        Equal(false, XiaizedFamilyBranchTransitionRules.CanTransition(
+            NamingProfileId.Monkey, true, false, true),
+            "monkey families never use the western-to-Xia transition");
+        Equal(false, XiaizedFamilyBranchTransitionRules.CanTransition(
+            NamingProfileId.Xia, false, true, true),
+            "native Xia families never create a redundant transition branch");
+
+        Equal("姬", XiaizedFamilyBranchTransitionRules.ResolveFamily(
+            "姬", "德·巴黎", "姜"),
+            "the old Chinese-name surname remains authoritative");
+        Equal("姜", XiaizedFamilyBranchTransitionRules.ResolveFamily(
+            "德·巴黎", "von Paris", "姜"),
+            "western family particles cannot become a Xia surname");
+        Equal("洛", XiaizedFamilyBranchTransitionRules.ResolveClan(
+            "洛阳", "姬", "赵"),
+            "a usable city initial becomes the Xia Shi");
+        Equal("赵", XiaizedFamilyBranchTransitionRules.ResolveClan(
+            "姬城", "姬", "赵"),
+            "Shi falls back when the city initial equals the surname");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

@@ -13,7 +13,7 @@ namespace AncientWarfare3.core.lineage
         {
             pWinner = WarScoreSide.None;
             pIntensity = 0;
-            if (pAttackerDeaths <= 0 || pDefenderDeaths <= 0) return false;
+            if (pAttackerDeaths < 0 || pDefenderDeaths < 0) return false;
 
             long total = (long)pAttackerDeaths + pDefenderDeaths;
             long margin = Math.Abs((long)pAttackerDeaths - pDefenderDeaths);

@@ -23,6 +23,9 @@ namespace AncientWarfare3.core.lineage
             int score = pPopulation / 2;
             switch (pGoalType)
             {
+                case ZhuluWarRules.GoalTypeId:
+                    score += 240;
+                    break;
                 case WarTerritoryService.GOAL_TAKE_MANDATE:
                     score += 180;
                     break;

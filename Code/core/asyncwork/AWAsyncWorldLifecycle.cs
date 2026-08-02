@@ -74,6 +74,7 @@ namespace AncientWarfare3.core.asyncwork
                 return false;
             }
             ActorArchivePendingStore.Clear();
+            FamilyTreeProjectionPendingStore.Clear();
             pError = string.Empty;
             return true;
         }
@@ -320,6 +321,7 @@ namespace AncientWarfare3.core.asyncwork
                     return false;
                 }
                 ActorArchivePendingStore.Clear();
+                FamilyTreeProjectionPendingStore.Clear();
                 pError = string.Empty;
                 return true;
             }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.policy
 {
@@ -357,6 +358,8 @@ namespace AncientWarfare3.core.policy
 
         private static void RunStrategyDiplomacy(Kingdom pKingdom, int pYear)
         {
+            if (!DiplomacyAiRules.ShouldRun(
+                    AWPerformanceSettings.EnableDiplomacyAi)) return;
             bool runHeavy = KingdomYearSchedulerRules.ShouldRunHeavySystem(
                 pYear, pKingdom.id, pModulo: 2, pSlot: 0);
             if (runHeavy)

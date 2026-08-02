@@ -35,6 +35,10 @@ namespace AncientWarfare3.core.lineage
         public long lineage_id;
         public string clan_name;
         public long parent_shi_id = -1;
+        public string naming_profile = "xia";
+        public string western_naming_tradition = "";
+        public string origin_city_chinese_name = "";
+        public string display_stem = "";
         public string state_name = "";
         public string state_name_source = "";
         public double state_name_decided_time = -1;
@@ -275,6 +279,7 @@ namespace AncientWarfare3.core.lineage
         public string city_name;
         public string social_title = "";
         public string social_title_color = "";
+        public bool   has_held_title;
         public long   shi_id = -1;
         public int    noble_distance = 99;
         public int    head;          // 头像数据(可选,用于自绘头像)

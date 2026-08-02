@@ -929,8 +929,8 @@ namespace AncientWarfare3.core.schools
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
             try
             {
-                string[] expected = CourtTierRules.CentralOfficesForTier(
-                    CourtService.ResolveTier(pKingdom));
+                string[] expected =
+                    CourtService.CentralOfficeIdsForCurrentProfile(pKingdom);
                 if (expected.Length == 0) return false;
                 int occupied = CourtService.GetActiveOfficers(pKingdom, 96)
                     .Where(p => p.layer == CourtOfficeLayer.Central)

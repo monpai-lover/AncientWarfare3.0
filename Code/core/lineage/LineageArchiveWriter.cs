@@ -14,28 +14,33 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class LineageArchiveWriter
     {
-        public static void Upsert(Actor pActor, bool pAlive,
-            bool pTraceOnly = false)
+        public static bool Upsert(Actor pActor, bool pAlive,
+            bool pTraceOnly = false, bool pFinalizeProjection = true)
         {
-            Upsert(pActor, pAlive, pTraceOnly, pForceSynchronous: false);
+            return Upsert(pActor, pAlive, pTraceOnly,
+                pForceSynchronous: false,
+                pFinalizeProjection: pFinalizeProjection);
         }
 
-        private static void Upsert(Actor pActor, bool pAlive,
-            bool pTraceOnly, bool pForceSynchronous)
+        private static bool Upsert(Actor pActor, bool pAlive,
+            bool pTraceOnly, bool pForceSynchronous,
+            bool pFinalizeProjection)
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
-            if (db == null || !LineageArchiveManager.Instance.InitializeSuccessful)
-                return;
+            if (db == null ||
+                !LineageArchiveManager.Instance.InitializeSuccessful ||
+                pActor?.data == null)
+                return false;
             bool traceableSpecies = LineageService.IsHuman(pActor) ||
                                     LineageService.IsNativeXiaCultureActor(pActor);
             if (!LineageService.UsesAwLineageSystem(pActor) &&
                 !LineageService.HasOriginalClan(pActor) &&
-                (!pTraceOnly || !traceableSpecies)) return;
+                (!pTraceOnly || !traceableSpecies)) return false;
 
             long id = pActor.data.id;
             string table = ActorArchiveTableItem.GetTableName();
             ActorArchiveTableItem previous = LineageArchiveReader.ReadRow(id);
-            if (pAlive && IsArchivedDead(previous)) return;
+            if (pAlive && IsArchivedDead(previous)) return false;
 
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             pActor.data.get("display_name", out string display, "");
@@ -135,7 +140,9 @@ namespace AncientWarfare3.core.lineage
                 phenotype_shade = pActor.data.phenotype_shade,
                 founded_branch_shi_id = foundedBranchShi
             };
-
+            FamilyTreeProjectionChange projectionChange = pFinalizeProjection
+                ? ResolveProjectionChange(previous, snapshot)
+                : FamilyTreeProjectionChange.None;
             HistoricalSqlColumn[] inserts = SnapshotColumns(snapshot,
                 pIncludeId: true);
             HistoricalSqlColumn[] updates = SnapshotColumns(snapshot,
@@ -144,11 +151,23 @@ namespace AncientWarfare3.core.lineage
                 HistoricalWriteService.TryUpsertState(
                     "actor-archive:" + id, table,
                     new[] { new HistoricalSqlColumn("ID", id) }, updates,
-                    inserts, sequence => ActorArchivePendingStore.Complete(
-                        id, sequence), out long queuedSequence, out _))
+                    inserts, sequence =>
+                    {
+                        ActorArchivePendingStore.Complete(id, sequence);
+                        if (FamilyTreeProjectionPendingStore.TryComplete(
+                                id, sequence,
+                                out FamilyTreeProjectionChange committedChange))
+                            AdvanceProjectionAfterCommit(committedChange);
+                    }, out long queuedSequence, out _))
             {
                 ActorArchivePendingStore.Publish(id, queuedSequence, snapshot);
-                return;
+                if (pFinalizeProjection)
+                    FamilyTreeProjectionPendingStore.Publish(id,
+                        queuedSequence, projectionChange);
+                else
+                    FamilyTreeProjectionPendingStore.PublishDeferred(id,
+                        queuedSequence, writeAccepted: true);
+                return true;
             }
 
             if (!HistoricalWriteService.FlushForSynchronousFallback(
@@ -156,7 +175,7 @@ namespace AncientWarfare3.core.lineage
             {
                 ModClass.LogWarning("Actor archive ordering barrier failed: " +
                                     flushError);
-                return;
+                return false;
             }
             bool exists = previous != null || db.CheckKeyExist(table,
                 SimpleColumnConstraint.CreateEq("ID", id));
@@ -174,6 +193,73 @@ namespace AncientWarfare3.core.lineage
                     else
                         db.Insert(table, values);
                 });
+            if (pFinalizeProjection)
+            {
+                FamilyTreeProjectionChange committedChange =
+                    FamilyTreeProjectionPendingStore.FinalizeSynchronous(
+                        id, projectionChange, finalWriteSucceeded: true);
+                AdvanceProjectionAfterCommit(committedChange);
+            }
+            return true;
+        }
+
+        private static FamilyTreeProjectionChange ResolveProjectionChange(
+            ActorArchiveTableItem pPrevious,
+            ActorArchiveTableItem pCurrent)
+        {
+            if (pCurrent == null) return FamilyTreeProjectionChange.None;
+            bool firstArchive = pPrevious == null;
+            bool familyStructureChanged = !firstArchive &&
+                (pPrevious.lineage_id != pCurrent.lineage_id ||
+                 pPrevious.shi_id != pCurrent.shi_id ||
+                 pPrevious.parent_id_1 != pCurrent.parent_id_1 ||
+                 pPrevious.parent_id_2 != pCurrent.parent_id_2 ||
+                 pPrevious.generation != pCurrent.generation ||
+                 pPrevious.founded_branch_shi_id !=
+                     pCurrent.founded_branch_shi_id ||
+                 pPrevious.original_clan_id != pCurrent.original_clan_id ||
+                 !Same(pPrevious.family_name, pCurrent.family_name) ||
+                 !Same(pPrevious.clan_name, pCurrent.clan_name));
+            bool lifeStatusChanged = !firstArchive &&
+                (pPrevious.is_alive != pCurrent.is_alive ||
+                 pPrevious.death_time != pCurrent.death_time ||
+                 !Same(pPrevious.death_cause, pCurrent.death_cause));
+            bool identityOrTitleChanged = !firstArchive &&
+                (!Same(pPrevious.given_name, pCurrent.given_name) ||
+                 !Same(pPrevious.display_name, pCurrent.display_name) ||
+                 !Same(pPrevious.social_title, pCurrent.social_title) ||
+                 !Same(pPrevious.social_title_color,
+                     pCurrent.social_title_color) ||
+                 pPrevious.status != pCurrent.status ||
+                 pPrevious.noble_distance != pCurrent.noble_distance ||
+                 !Same(pPrevious.kingdom_name, pCurrent.kingdom_name) ||
+                 !Same(pPrevious.kingdom_color, pCurrent.kingdom_color) ||
+                 !Same(pPrevious.city_name, pCurrent.city_name) ||
+                 !Same(pPrevious.asset_id, pCurrent.asset_id) ||
+                 pPrevious.subspecies_id != pCurrent.subspecies_id ||
+                 pPrevious.head != pCurrent.head ||
+                 pPrevious.skin != pCurrent.skin ||
+                 pPrevious.skin_set != pCurrent.skin_set ||
+                 pPrevious.age_overgrowth != pCurrent.age_overgrowth ||
+                 pPrevious.phenotype_index != pCurrent.phenotype_index ||
+                 pPrevious.phenotype_shade != pCurrent.phenotype_shade);
+            return FamilyTreeProjectionRevisionRules.ResolveArchiveChange(
+                firstArchive, familyStructureChanged, lifeStatusChanged,
+                identityOrTitleChanged);
+        }
+
+        private static bool Same(string pLeft, string pRight)
+        {
+            return string.Equals(pLeft ?? "", pRight ?? "",
+                System.StringComparison.Ordinal);
+        }
+
+        private static void AdvanceProjectionAfterCommit(
+            FamilyTreeProjectionChange pChange)
+        {
+            if (!FamilyTreeProjectionRevisionRules.ShouldAdvance(pChange))
+                return;
+            FamilyTreeProjectionRevision.Advance(pChange);
         }
 
         private static int ResolveArchivedHead(Actor pActor,
@@ -270,8 +356,18 @@ namespace AncientWarfare3.core.lineage
                 clan?.data == null)
                 return false;
 
-            Upsert(pActor, pAlive: true, pTraceOnly: false,
-                pForceSynchronous: true);
+            if (!Upsert(pActor, pAlive: true, pTraceOnly: false,
+                    pForceSynchronous: true,
+                    pFinalizeProjection: false))
+                return false;
+            if (!HistoricalWriteService.FlushForSynchronousFallback(
+                    System.TimeSpan.FromSeconds(5), out string flushError))
+            {
+                ModClass.LogWarning(
+                    "Historical master identity ordering barrier failed: " +
+                    flushError);
+                return false;
+            }
             long clanId = clan.data.id;
             string clanColorText = clan.getColor()?.color_text ?? "";
             int clanColorId = clan.data.color_id;
@@ -298,6 +394,12 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("IS_ALIVE", 1),
                 ColumnVal.Create("DEATH_TIME", -1d),
                 ColumnVal.Create("DEATH_CAUSE", "")));
+            FamilyTreeProjectionChange committedChange =
+                FamilyTreeProjectionPendingStore.FinalizeSynchronous(
+                    pActor.data.id,
+                    FamilyTreeProjectionChange.FamilyStructure,
+                    finalWriteSucceeded: true);
+            AdvanceProjectionAfterCommit(committedChange);
 
             ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActor.data.id);
             return row != null && row.given_name == pIdentity.GivenName &&

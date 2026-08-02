@@ -4,8 +4,10 @@
 **/bin/
 **/obj/
 /artifacts/
+/release/
 /TestResults/
 /coverage/
+/*.zip
 *.pdb
 *.trx
 *.coverage
@@ -14,6 +16,30 @@
 # Local tests and internal development notes
 /Tests/*
 !/Tests/LineageDisplayNameRulesTests.ps1
+!/Tests/CivMonkeyTextureCatalogSourceGuard.ps1
+!/Tests/WesternLineageNamingSourceGuard.ps1
+!/Tests/WesternCityNameLibrarySourceGuard.ps1
+!/Tests/WesternLineageParentEdgeSourceGuard.ps1
+!/Tests/WesternFamilyIdentitySchemaSourceGuard.ps1
+!/Tests/WesternLineageAdmissionSourceGuard.ps1
+!/Tests/IntegratedNamingRuntimeSourceGuard.ps1
+!/Tests/IntegratedNamingCollisionGateSourceGuard.ps1
+!/Tests/IntegratedNamingEngineSourceGuard.ps1
+!/Tests/IntegratedNamingResourcesSourceGuard.ps1
+!/Tests/NoExternalChineseNameDependencySourceGuard.ps1
+!/Tests/KingdomPolicyReturnNavigationSourceGuard.ps1
+!/Tests/CivMonkeyClanSurnameTests.ps1
+!/Tests/XiaExpansionAndCivMonkeyNamingTests.ps1
+!/Tests/WesternBilateralFamilyTreeSourceGuard.ps1
+!/Tests/WesternCourtProfileSourceGuard.ps1
+!/Tests/WesternLineageMigrationSourceGuard.ps1
+!/Tests/WesternPolicyCatalogSourceGuard.ps1
+!/Tests/WesternPolicyDefinitionSourceGuard.ps1
+!/Tests/WesternPolicyEffectSourceGuard.ps1
+!/Tests/WesternPolicyProfileSourceGuard.ps1
+!/Tests/WesternPolicySplitMigrationSourceGuard.ps1
+!/Tests/WesternRegnalChronologySourceGuard.ps1
+!/Tests/WesternRoyalAuthoritySourceGuard.ps1
 !/Tests/HistoricalFigureFounderCatalogTests.ps1
 !/Tests/SQLiteHelperSchemaMigrationTests.cs.txt
 !/Tests/SQLiteHelperSchemaMigrationTests.csproj
@@ -60,6 +86,7 @@
 /HANDOFF.md
 /.agents/
 /.codex/
+/.superpowers/
 /.worktrees/
 
 # Runtime data, logs, and temporary files

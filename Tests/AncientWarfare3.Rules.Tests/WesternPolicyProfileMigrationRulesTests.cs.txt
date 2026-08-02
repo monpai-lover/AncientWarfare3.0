@@ -1,0 +1,134 @@
+using AncientWarfare3.core.policy;
+
+internal static class WesternPolicyProfileMigrationRulesTests
+{
+    public static void Run()
+    {
+        Equal(2, KingdomPolicyProfileMigrationRules.CurrentVersion,
+            "profile migration version is stable");
+
+        var input = new KingdomPolicyProfileMigrationState
+        {
+            profileId = "western_general",
+            migrationVersion = 0,
+            currentPolicy = "xia_policy",
+            currentTech = "west_tech",
+            currentDecision = "unknown_decision",
+            completedPolicies = "shared_policy;xia_policy;shared_policy",
+            completedTechs = "west_tech;xia_tech",
+            completedDecisions = "shared_decision;unknown_decision",
+            lockedNodes = "west_tech;xia_policy;shared_decision",
+            obsoleteNodeIds = "legacy_z"
+        };
+
+        KingdomPolicyProfileMigrationState result =
+            KingdomPolicyProfileMigrationRules.Sanitize(input,
+                policyAllowed: id => id == "shared_policy",
+                techAllowed: id => id == "west_tech",
+                decisionAllowed: id => id == "shared_decision");
+
+        Equal("western_general", result.profileId,
+            "valid profile id survives migration");
+        Equal(2, result.migrationVersion,
+            "migration advances to the current version");
+        Equal("", result.currentPolicy,
+            "foreign-profile current policy is cleared");
+        Equal("west_tech", result.currentTech,
+            "valid current technology survives");
+        Equal("", result.currentDecision,
+            "unknown current decision is cleared");
+        Equal("shared_policy", result.completedPolicies,
+            "completed policies are filtered and deduplicated");
+        Equal("west_tech", result.completedTechs,
+            "completed technologies are profile filtered");
+        Equal("shared_decision", result.completedDecisions,
+            "completed decisions are profile filtered");
+        Equal("west_tech;shared_decision", result.lockedNodes,
+            "locked ids retain only active-profile nodes");
+        Equal("legacy_z;xia_policy;unknown_decision;xia_tech",
+            result.obsoleteNodeIds,
+            "removed ids are archived once in encounter order");
+
+        KingdomPolicyProfileMigrationState repeated =
+            KingdomPolicyProfileMigrationRules.Sanitize(result,
+                policyAllowed: id => id == "shared_policy",
+                techAllowed: id => id == "west_tech",
+                decisionAllowed: id => id == "shared_decision");
+        Equal(Serialize(result), Serialize(repeated),
+            "migration is idempotent");
+
+        KingdomPolicyProfileMigrationState invalid =
+            KingdomPolicyProfileMigrationRules.Sanitize(
+                new KingdomPolicyProfileMigrationState
+                {
+                    profileId = "common",
+                    currentTech = "west_tech",
+                    completedTechs = "west_tech"
+                }, _ => true, _ => true, _ => true);
+        Equal("", invalid.profileId,
+            "catalog-only Common is not persisted as a kingdom profile");
+        Equal("", invalid.currentTech,
+            "invalid profiles publish no current node");
+        Equal("", invalid.completedTechs,
+            "invalid profiles publish no completed node");
+        Equal("west_tech", invalid.obsoleteNodeIds,
+            "invalid-profile active ids are retained for diagnostics");
+
+        Equal("aw_decision_appease_foreign_cities",
+            KingdomPolicyProfileMigrationRules.MapLegacyDecisionId(
+                "aw_decision_appease_xia_cities"),
+            "legacy appeasement maps to the generalized decision");
+        Equal("aw_decision_change_capital",
+            KingdomPolicyProfileMigrationRules.MapLegacyDecisionId(
+                "aw_decision_change_capital"),
+            "unrelated decisions keep their stable ids");
+
+        KingdomPolicyProfileMigrationState legacyDecision =
+            KingdomPolicyProfileMigrationRules.Sanitize(
+                new KingdomPolicyProfileMigrationState
+                {
+                    profileId = "western_general",
+                    currentDecision = "aw_decision_appease_xia_cities",
+                    completedDecisions =
+                        "aw_decision_appease_xia_cities;shared_decision"
+                },
+                policyAllowed: _ => false,
+                techAllowed: _ => false,
+                decisionAllowed: id =>
+                    id == "aw_decision_appease_foreign_cities" ||
+                    id == "shared_decision");
+        Equal("aw_decision_appease_foreign_cities",
+            legacyDecision.currentDecision,
+            "active legacy appeasement keeps its progress under the new id");
+        Equal("aw_decision_appease_foreign_cities;shared_decision",
+            legacyDecision.completedDecisions,
+            "completed legacy appeasement is deduplicated under the new id");
+        Equal("aw_decision_appease_xia_cities",
+            legacyDecision.obsoleteNodeIds,
+            "the replaced decision id remains archived for diagnostics");
+    }
+
+    private static string Serialize(KingdomPolicyProfileMigrationState pState)
+    {
+        return string.Join("|", new[]
+        {
+            pState.profileId,
+            pState.migrationVersion.ToString(),
+            pState.currentPolicy,
+            pState.currentTech,
+            pState.currentDecision,
+            pState.completedPolicies,
+            pState.completedTechs,
+            pState.completedDecisions,
+            pState.lockedNodes,
+            pState.obsoleteNodeIds
+        });
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

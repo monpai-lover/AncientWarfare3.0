@@ -1,0 +1,25 @@
+using AncientWarfare3.core.naming;
+
+internal static class ActorLocalizedNameBoundaryRulesTests
+{
+    public static void Run()
+    {
+        Equal("姬", ActorLocalizedNameBoundaryRules.ResolveTemplateFamily(
+                chineseFamilyName: "姬", lineageFamilyName: "周"),
+            "the integrated generator preserves the external mod's chinese_family_name authority");
+        Equal("周", ActorLocalizedNameBoundaryRules.ResolveTemplateFamily(
+                chineseFamilyName: string.Empty, lineageFamilyName: "周"),
+            "an AW lineage family is only a fallback for missing Chinese naming data");
+        Equal(string.Empty,
+            ActorLocalizedNameBoundaryRules.ResolveTemplateFamily(
+                chineseFamilyName: "  ", lineageFamilyName: null),
+            "blank family components remain absent");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}
