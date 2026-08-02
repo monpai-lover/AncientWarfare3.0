@@ -93,6 +93,30 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             "legal empty fill bounds are not failures");
         Equal(0, emptyFill.VertexCount,
             "legal empty fill bounds return an explicit empty draft");
+
+        HierarchyColorAssignment invalidAssignment =
+            HierarchicalVassalBoundaryColorRules.BuildCanonicalAssignment(
+                new[]
+                {
+                    CityIdentity(100, 1, 10, 0x336699FF),
+                    CityIdentity(100, 2, 20, 0x993333FF)
+                }, Array.Empty<HierarchyColorEdge>());
+        BoundaryMeshDraft invalidEmptyFill =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
+                grid, BoundaryDisplayLayer.Cities, empty,
+                invalidAssignment);
+        Equal(1, invalidEmptyFill.FailureCount,
+            "invalid assignment is rejected before empty bounds");
+        Equal(0, invalidEmptyFill.VertexCount,
+            "invalid assignment with empty bounds emits no geometry");
+
+        BoundaryMeshDraft missingEmptyFill =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
+                grid, BoundaryDisplayLayer.Cities, empty, null);
+        Equal(1, missingEmptyFill.FailureCount,
+            "missing assignment is rejected before empty bounds");
+        Equal(0, missingEmptyFill.VertexCount,
+            "missing assignment with empty bounds emits no geometry");
     }
 
     private static void CoherentFillIsConsolidated()

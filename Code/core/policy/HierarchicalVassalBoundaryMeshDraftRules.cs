@@ -173,7 +173,7 @@ namespace AncientWarfare3.core.policy
             HierarchyColorAssignment pAssignment)
         {
             if (pAssignment == null)
-                throw new ArgumentNullException(nameof(pAssignment));
+                return EmptyFailureDraft(1);
             return BuildFillCore(pRaster, pLayer, pBounds, pAssignment);
         }
 
@@ -185,14 +185,14 @@ namespace AncientWarfare3.core.policy
         {
             if (pRaster == null)
                 throw new ArgumentNullException(nameof(pRaster));
+            if (pAssignment != null && !pAssignment.IsValid)
+                return EmptyFailureDraft(1);
             BoundarySafeBoundsStatus boundsStatus =
                 BoundarySafeBoundsGate.Evaluate(pBounds);
             if (boundsStatus == BoundarySafeBoundsStatus.Invalid)
                 return EmptyFailureDraft(1);
             if (boundsStatus == BoundarySafeBoundsStatus.Empty)
                 return EmptyFailureDraft(0);
-            if (pAssignment != null && !pAssignment.IsValid)
-                return EmptyFailureDraft(1);
             BoundaryTier fillTier = pLayer == BoundaryDisplayLayer.Cities
                 ? BoundaryTier.City
                 : BoundaryTier.VassalRealm;
