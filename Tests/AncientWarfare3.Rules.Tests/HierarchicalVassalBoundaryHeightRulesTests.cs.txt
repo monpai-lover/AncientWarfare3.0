@@ -23,13 +23,27 @@ internal static class HierarchicalVassalBoundaryHeightRulesTests
 
         Equal(36, draft.Width, "height texture includes the horizontal halo");
         Equal(36, draft.Height, "height texture includes the vertical halo");
-        Equal(30, draft.ChunkWorldOriginX, "height origin preserves capture X");
-        Equal(62, draft.ChunkWorldOriginY, "height origin preserves capture Y");
+        Equal(30, draft.CaptureWorldOriginX,
+            "height draft preserves capture X including halo");
+        Equal(62, draft.CaptureWorldOriginY,
+            "height draft preserves capture Y including halo");
+        Equal(32, draft.ChunkWorldOriginX,
+            "chunk X starts after the left capture halo");
+        Equal(64, draft.ChunkWorldOriginY,
+            "chunk Y starts after the bottom capture halo");
         Equal(2, draft.Halo, "height draft records its halo");
         Equal(41L, draft.TerrainRevision, "height draft records terrain revision");
         Equal((byte)((18 * 7 + 18 * 11) % 256),
             draft.Samples[draft.Index(18, 18)],
             "packing preserves native 0-255 height bytes");
+        Equal(draft.Index(2, 2), draft.IndexForWorldCell(32, 64),
+            "chunk world origin maps to the first interior height texel");
+        Equal(draft.Index(0, 0), draft.IndexForWorldCell(30, 62),
+            "capture world origin maps to the first halo texel");
+        Near(2.5f / 36f, draft.UvForWorldCell(32, 64).X, 0.000001f,
+            "chunk origin maps to the center of interior texel X");
+        Near(2.5f / 36f, draft.UvForWorldCell(32, 64).Y, 0.000001f,
+            "chunk origin maps to the center of interior texel Y");
 
         byte packed = draft.Samples[draft.Index(5, 7)];
         cells[7 * 36 + 5] = Cell(35, 69, true, 0);
@@ -88,6 +102,15 @@ internal static class HierarchicalVassalBoundaryHeightRulesTests
             "lit slope remains in the bounded relief range");
         InRange(fromHighSide, 0.65f, 1.15f,
             "shadowed slope remains in the bounded relief range");
+
+        float subnormal = HierarchicalVassalBoundaryHeightRules.LightAt(
+            ramp, 18, 18,
+            new BoundaryFloat3(float.Epsilon, float.Epsilon, float.Epsilon),
+            6f);
+        Equal(true, IsFinite(subnormal),
+            "finite subnormal light directions produce a finite factor");
+        InRange(subnormal, 0.65f, 1.15f,
+            "subnormal light directions remain in the bounded relief range");
     }
 
     private static void InvalidWorldEdgeSamplesClampToNearestValidHeight()
@@ -162,6 +185,13 @@ internal static class HierarchicalVassalBoundaryHeightRulesTests
         Throws<ArgumentOutOfRangeException>(() => new BoundaryHeightDraft(
                 new byte[36 * 36], 36, 36, 0, 0, int.MaxValue, 0),
             "halo multiplication cannot overflow into acceptance");
+        Throws<ArgumentOutOfRangeException>(() => new BoundaryHeightDraft(
+                new byte[36 * 36], 36, 36,
+                int.MaxValue - 1, int.MaxValue - 1, 2, 0),
+            "capture origin plus halo cannot overflow chunk world origin");
+        Throws<ArgumentOutOfRangeException>(() =>
+            draft.IndexForWorldCell(int.MinValue, int.MinValue),
+            "world-to-height index subtraction cannot overflow into bounds");
         Throws<ArgumentOutOfRangeException>(() =>
             HierarchicalVassalBoundaryHeightRules.NormalAt(
                 draft, 0, 18, 2f),
@@ -258,6 +288,11 @@ internal static class HierarchicalVassalBoundaryHeightRulesTests
             throw new InvalidOperationException(
                 name + ": expected " + minimum + ".." + maximum +
                 ", got " + actual);
+    }
+
+    private static bool IsFinite(float value)
+    {
+        return !float.IsNaN(value) && !float.IsInfinity(value);
     }
 
     private static void Throws<TException>(Action action, string name)

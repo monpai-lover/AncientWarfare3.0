@@ -173,19 +173,29 @@ namespace AncientWarfare3.core.policy
 
         private static BoundaryFloat3 Normalize(BoundaryFloat3 pValue)
         {
-            double lengthSquared = (double)pValue.X * pValue.X +
-                                   (double)pValue.Y * pValue.Y +
-                                   (double)pValue.Z * pValue.Z;
-            if (lengthSquared <= 0d || double.IsNaN(lengthSquared) ||
-                double.IsInfinity(lengthSquared))
+            double x = pValue.X;
+            double y = pValue.Y;
+            double z = pValue.Z;
+            double maximum = Math.Max(
+                Math.Abs(x), Math.Max(Math.Abs(y), Math.Abs(z)));
+            if (maximum <= 0d || double.IsNaN(maximum) ||
+                double.IsInfinity(maximum))
+                throw new ArgumentOutOfRangeException(nameof(pValue));
+
+            double scaledX = x / maximum;
+            double scaledY = y / maximum;
+            double scaledZ = z / maximum;
+            double scaledLength = Math.Sqrt(
+                scaledX * scaledX + scaledY * scaledY + scaledZ * scaledZ);
+            if (scaledLength <= 0d || double.IsNaN(scaledLength) ||
+                double.IsInfinity(scaledLength))
             {
                 throw new ArgumentOutOfRangeException(nameof(pValue));
             }
-            float inverseLength = (float)(1d / Math.Sqrt(lengthSquared));
             return new BoundaryFloat3(
-                pValue.X * inverseLength,
-                pValue.Y * inverseLength,
-                pValue.Z * inverseLength);
+                ToFiniteFloat(scaledX / scaledLength, nameof(pValue)),
+                ToFiniteFloat(scaledY / scaledLength, nameof(pValue)),
+                ToFiniteFloat(scaledZ / scaledLength, nameof(pValue)));
         }
 
         private static float Dot(BoundaryFloat3 pLeft, BoundaryFloat3 pRight)
@@ -196,9 +206,25 @@ namespace AncientWarfare3.core.policy
 
         private static float Clamp(float pValue, float pMinimum, float pMaximum)
         {
+            if (float.IsNaN(pValue) || float.IsInfinity(pValue))
+                pValue = NeutralLightFactor;
             if (pValue < pMinimum)
                 return pMinimum;
             return pValue > pMaximum ? pMaximum : pValue;
+        }
+
+        private static float ToFiniteFloat(
+            double pValue, string pParameterName)
+        {
+            if (double.IsNaN(pValue) || double.IsInfinity(pValue) ||
+                pValue < -float.MaxValue || pValue > float.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(pParameterName);
+            }
+            float result = (float)pValue;
+            if (float.IsNaN(result) || float.IsInfinity(result))
+                throw new ArgumentOutOfRangeException(pParameterName);
+            return result;
         }
 
         private readonly struct ValidHeightSample

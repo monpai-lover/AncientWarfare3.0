@@ -495,8 +495,8 @@ namespace AncientWarfare3.core.policy
             byte[] pSamples,
             int pWidth,
             int pHeight,
-            int pChunkWorldOriginX,
-            int pChunkWorldOriginY,
+            int pCaptureWorldOriginX,
+            int pCaptureWorldOriginY,
             int pHalo,
             long pTerrainRevision)
         {
@@ -512,6 +512,21 @@ namespace AncientWarfare3.core.policy
             if (pTerrainRevision < 0L)
                 throw new ArgumentOutOfRangeException(nameof(pTerrainRevision));
 
+            long chunkWorldOriginX = (long)pCaptureWorldOriginX + pHalo;
+            long chunkWorldOriginY = (long)pCaptureWorldOriginY + pHalo;
+            if (chunkWorldOriginX < int.MinValue ||
+                chunkWorldOriginX > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(pCaptureWorldOriginX));
+            }
+            if (chunkWorldOriginY < int.MinValue ||
+                chunkWorldOriginY > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(pCaptureWorldOriginY));
+            }
+
             int expectedLength = checked(pWidth * pHeight);
             if (pSamples.Length != expectedLength)
                 throw new ArgumentException(
@@ -523,8 +538,10 @@ namespace AncientWarfare3.core.policy
             _readOnlySamples = Array.AsReadOnly(_samples);
             Width = pWidth;
             Height = pHeight;
-            ChunkWorldOriginX = pChunkWorldOriginX;
-            ChunkWorldOriginY = pChunkWorldOriginY;
+            CaptureWorldOriginX = pCaptureWorldOriginX;
+            CaptureWorldOriginY = pCaptureWorldOriginY;
+            ChunkWorldOriginX = (int)chunkWorldOriginX;
+            ChunkWorldOriginY = (int)chunkWorldOriginY;
             Halo = pHalo;
             TerrainRevision = pTerrainRevision;
         }
@@ -532,6 +549,10 @@ namespace AncientWarfare3.core.policy
         public int Width { get; }
 
         public int Height { get; }
+
+        public int CaptureWorldOriginX { get; }
+
+        public int CaptureWorldOriginY { get; }
 
         public int ChunkWorldOriginX { get; }
 
@@ -555,9 +576,39 @@ namespace AncientWarfare3.core.policy
             return pY * Width + pX;
         }
 
+        public int IndexForWorldCell(int pWorldX, int pWorldY)
+        {
+            GetLocalWorldCell(pWorldX, pWorldY, out int localX, out int localY);
+            return Index(localX, localY);
+        }
+
+        public BoundaryFloatPoint UvForWorldCell(int pWorldX, int pWorldY)
+        {
+            GetLocalWorldCell(pWorldX, pWorldY, out int localX, out int localY);
+            return new BoundaryFloatPoint(
+                (localX + 0.5f) / Width,
+                (localY + 0.5f) / Height);
+        }
+
         internal byte SampleAtUnchecked(int pX, int pY)
         {
             return _samples[pY * Width + pX];
+        }
+
+        private void GetLocalWorldCell(
+            int pWorldX,
+            int pWorldY,
+            out int pLocalX,
+            out int pLocalY)
+        {
+            long localX = (long)pWorldX - CaptureWorldOriginX;
+            long localY = (long)pWorldY - CaptureWorldOriginY;
+            if (localX < 0L || localX >= Width)
+                throw new ArgumentOutOfRangeException(nameof(pWorldX));
+            if (localY < 0L || localY >= Height)
+                throw new ArgumentOutOfRangeException(nameof(pWorldY));
+            pLocalX = (int)localX;
+            pLocalY = (int)localY;
         }
     }
 
