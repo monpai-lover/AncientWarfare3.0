@@ -10,6 +10,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         FillColorsAreChunkContextIndependentAndSeamStable();
         AuthoritativeFillUsesOneAssignmentAcrossIndependentContexts();
         FillApiRequiresExplicitAuthority();
+        FillBoundsAreGatedBeforeWork();
         RibbonsCarryTwoSidedPrimitiveAttributesAndTierWidths();
         FullFootprintNarrowsAndRiverWaterIsTransparent();
         ExactTriangleFootprintCatchesSliversAndAllowsBoundaryContact();
@@ -56,6 +57,42 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
                 worker.Contains("BuildFillNonAuthoritativeForTests"),
                 "runtime topology worker cannot use non-authoritative fill");
         }
+    }
+
+    private static void FillBoundsAreGatedBeforeWork()
+    {
+        BoundaryCellRaster grid = Raster(2, 2, (x, y) =>
+            Land(x, y, 1, 10, 100, 0x336699FF));
+        var reversed = new BoundaryChunkBounds(
+            0, 0, 2, 2,
+            int.MaxValue, int.MaxValue, int.MinValue, int.MinValue);
+        BoundaryMeshDraft reversedFill =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
+                grid, BoundaryDisplayLayer.Cities, reversed,
+                GlobalAssignment());
+        Equal(1, reversedFill.FailureCount,
+            "reversed fill bounds fail before iteration");
+
+        var huge = new BoundaryChunkBounds(
+            0, 0, 2, 2,
+            int.MinValue, int.MinValue, int.MaxValue, int.MaxValue);
+        BoundaryMeshDraft hugeFill =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
+                grid, BoundaryDisplayLayer.Cities, huge,
+                GlobalAssignment());
+        Equal(1, hugeFill.FailureCount,
+            "extreme positive fill bounds fail before iteration");
+
+        var empty = new BoundaryChunkBounds(
+            0, 0, 2, 2, 1, 1, 1, 1);
+        BoundaryMeshDraft emptyFill =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
+                grid, BoundaryDisplayLayer.Cities, empty,
+                GlobalAssignment());
+        Equal(0, emptyFill.FailureCount,
+            "legal empty fill bounds are not failures");
+        Equal(0, emptyFill.VertexCount,
+            "legal empty fill bounds return an explicit empty draft");
     }
 
     private static void CoherentFillIsConsolidated()

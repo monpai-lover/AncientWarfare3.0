@@ -143,6 +143,8 @@ namespace AncientWarfare3.core.policy
         private const int MaximumEarClipVertices = 8192;
         private const int MaximumEarClipWork = 4194304;
         private const long MaximumPairTriangleComparisons = 1000000L;
+        private const int MaximumPairContourPoints = 65536;
+        private const int MaximumPairContourWork = 4194304;
 
         public static BoundaryPolygonDraft BuildOwnerPolygon(
             BoundaryCellRaster pRaster,
@@ -174,7 +176,9 @@ namespace AncientWarfare3.core.policy
         {
             if (pRaster == null)
                 throw new ArgumentNullException(nameof(pRaster));
-            if (!BoundsWithinTraceBudget(pBounds))
+            BoundarySafeBoundsStatus boundsStatus =
+                BoundarySafeBoundsGate.Evaluate(pBounds);
+            if (boundsStatus != BoundarySafeBoundsStatus.Valid)
                 return EmptyPolygonDraft(pOwnerId, pTier);
             bool[,] owned = BuildOwnedMask(pRaster, pOwnerId, pTier, pBounds);
             IReadOnlyList<IReadOnlyList<BoundaryFloatPoint>> rings =
@@ -238,26 +242,66 @@ namespace AncientWarfare3.core.policy
         {
             if (pRaster == null)
                 throw new ArgumentNullException(nameof(pRaster));
-            if (!ContourIsFinite(pRawContour))
+            if (ContourExceedsPointBudget(pRawContour) ||
+                ContourExceedsPointBudget(pAcceptedContour))
+                return InvalidVisualPair(
+                    pLeftOwnerId, pRightOwnerId, pTier,
+                    "contour_budget");
+            BoundarySafeBoundsStatus boundsStatus =
+                BoundarySafeBoundsGate.Evaluate(pBounds);
+            if (boundsStatus != BoundarySafeBoundsStatus.Valid)
+                return InvalidVisualPair(
+                    pLeftOwnerId, pRightOwnerId, pTier,
+                    boundsStatus == BoundarySafeBoundsStatus.Empty
+                        ? "empty_bounds" : "bounds_budget");
+
+            int contourWork = MaximumPairContourWork;
+            if (!TryContourIsFinite(
+                    pRawContour, ref contourWork, out bool rawIsFinite))
+                return InvalidVisualPair(
+                    pLeftOwnerId, pRightOwnerId, pTier,
+                    "contour_budget");
+            if (!rawIsFinite)
                 return InvalidVisualPair(
                     pLeftOwnerId, pRightOwnerId, pTier,
                     "non_finite_raw_contour");
-            if (!BoundsWithinTraceBudget(pBounds))
+            if (!TryContourIsFinite(
+                    pAcceptedContour, ref contourWork,
+                    out bool acceptedIsFinite))
                 return InvalidVisualPair(
                     pLeftOwnerId, pRightOwnerId, pTier,
-                    "trace_budget");
-
-            bool acceptedIsFinite = ContourIsFinite(pAcceptedContour);
-            float maximumDeviation = acceptedIsFinite
-                ? SymmetricPolylineDistance(pAcceptedContour, pRawContour)
-                : 0f;
-            bool useAccepted =
-                acceptedIsFinite &&
-                maximumDeviation <= MaximumVisualDeviation + Epsilon &&
-                !PolylineSelfIntersects(pAcceptedContour) &&
-                SharedContourIsSafe(
-                    pAcceptedContour, pRaster, pTier,
-                    pLeftOwnerId, pRightOwnerId);
+                    "contour_budget");
+            float maximumDeviation = 0f;
+            bool useAccepted = false;
+            if (acceptedIsFinite)
+            {
+                if (!TrySymmetricPolylineDistance(
+                        pAcceptedContour, pRawContour,
+                        ref contourWork, out maximumDeviation))
+                    return InvalidVisualPair(
+                        pLeftOwnerId, pRightOwnerId, pTier,
+                        "contour_budget");
+                if (maximumDeviation <= MaximumVisualDeviation + Epsilon)
+                {
+                    if (!TryPolylineSelfIntersects(
+                            pAcceptedContour, ref contourWork,
+                            out bool selfIntersects))
+                        return InvalidVisualPair(
+                            pLeftOwnerId, pRightOwnerId, pTier,
+                            "contour_budget");
+                    if (!selfIntersects)
+                    {
+                        if (!TrySharedContourIsSafe(
+                                pAcceptedContour, pRaster, pTier,
+                                pLeftOwnerId, pRightOwnerId,
+                                ref contourWork, out bool contourIsSafe))
+                            return InvalidVisualPair(
+                                pLeftOwnerId, pRightOwnerId, pTier,
+                                "contour_budget");
+                        useAccepted = contourIsSafe;
+                    }
+                }
+            }
             IReadOnlyList<BoundaryFloatPoint> accepted = useAccepted
                 ? Copy(pAcceptedContour)
                 : Copy(pRawContour);
@@ -818,18 +862,26 @@ namespace AncientWarfare3.core.policy
                    (pB.Y - pA.Y) * (pC.X - pA.X);
         }
 
-        private static bool PolylineSelfIntersects(
-            IReadOnlyList<BoundaryFloatPoint> pPoints)
+        private static bool TryPolylineSelfIntersects(
+            IReadOnlyList<BoundaryFloatPoint> pPoints,
+            ref int pWork,
+            out bool pSelfIntersects)
         {
+            pSelfIntersects = false;
             for (int first = 0; first + 1 < pPoints.Count; first++)
             for (int second = first + 2; second + 1 < pPoints.Count; second++)
             {
+                if (pWork-- <= 0)
+                    return false;
                 if (SegmentsIntersect(
                         pPoints[first], pPoints[first + 1],
                         pPoints[second], pPoints[second + 1]))
+                {
+                    pSelfIntersects = true;
                     return true;
+                }
             }
-            return false;
+            return true;
         }
 
         private static bool SegmentsIntersect(
@@ -1367,32 +1419,42 @@ namespace AncientWarfare3.core.policy
             return result;
         }
 
-        private static bool SharedContourIsSafe(
+        private static bool TrySharedContourIsSafe(
             IReadOnlyList<BoundaryFloatPoint> pContour,
             BoundaryCellRaster pRaster,
             BoundaryTier pTier,
             long pLeftOwnerId,
-            long pRightOwnerId)
+            long pRightOwnerId,
+            ref int pWork,
+            out bool pIsSafe)
         {
+            pIsSafe = false;
             for (int i = 1; i < pContour.Count; i++)
             {
                 BoundaryFloatPoint start = pContour[i - 1];
                 BoundaryFloatPoint end = pContour[i];
-                float dx = end.X - start.X;
-                float dy = end.Y - start.Y;
-                float length = (float)Math.Sqrt(dx * dx + dy * dy);
-                int samples = Math.Max(1, (int)Math.Ceiling(length / 0.2f));
-                for (int sample = 0; sample <= samples; sample++)
+                double dx = (double)end.X - start.X;
+                double dy = (double)end.Y - start.Y;
+                double sampleValue = Math.Max(1d,
+                    Math.Ceiling(Math.Sqrt(dx * dx + dy * dy) / 0.2d));
+                if (!TryConsumeRepeatedWork(
+                        sampleValue + 1d, 1, ref pWork,
+                        out int samplesWithEndpoint))
+                    return false;
+                int samples = samplesWithEndpoint - 1;
+                for (int sample = 0; sample < samplesWithEndpoint; sample++)
                 {
                     float ratio = (float)sample / samples;
                     var point = new BoundaryFloatPoint(
-                        start.X + dx * ratio, start.Y + dy * ratio);
+                        start.X + (float)dx * ratio,
+                        start.Y + (float)dy * ratio);
                     if (!PointTouchesOnlyPair(
                             point, pRaster, pTier,
                             pLeftOwnerId, pRightOwnerId))
-                        return false;
+                        return true;
                 }
             }
+            pIsSafe = true;
             return true;
         }
 
@@ -1465,6 +1527,77 @@ namespace AncientWarfare3.core.policy
             return maximum;
         }
 
+        private static bool TrySymmetricPolylineDistance(
+            IReadOnlyList<BoundaryFloatPoint> pFirst,
+            IReadOnlyList<BoundaryFloatPoint> pSecond,
+            ref int pWork,
+            out float pDistance)
+        {
+            pDistance = 0f;
+            if (!TryMaximumDistanceToPolyline(
+                    pFirst, pSecond, ref pWork, out float first) ||
+                !TryMaximumDistanceToPolyline(
+                    pSecond, pFirst, ref pWork, out float second))
+                return false;
+            pDistance = Math.Max(first, second);
+            return true;
+        }
+
+        private static bool TryMaximumDistanceToPolyline(
+            IReadOnlyList<BoundaryFloatPoint> pCandidate,
+            IReadOnlyList<BoundaryFloatPoint> pReference,
+            ref int pWork,
+            out float pMaximum)
+        {
+            pMaximum = 0f;
+            int referenceSegments = pReference.Count > 2
+                ? pReference.Count : pReference.Count - 1;
+            for (int i = 1; i < pCandidate.Count; i++)
+            {
+                BoundaryFloatPoint start = pCandidate[i - 1];
+                BoundaryFloatPoint end = pCandidate[i];
+                double dx = (double)end.X - start.X;
+                double dy = (double)end.Y - start.Y;
+                double sampleValue = Math.Max(1d,
+                    Math.Ceiling(Math.Sqrt(dx * dx + dy * dy) / 0.20d));
+                if (!TryConsumeRepeatedWork(
+                        sampleValue + 1d, referenceSegments + 1,
+                        ref pWork, out int samplesWithEndpoint))
+                    return false;
+                int samples = samplesWithEndpoint - 1;
+                for (int sample = 0; sample < samplesWithEndpoint; sample++)
+                {
+                    float ratio = (float)sample / samples;
+                    var point = new BoundaryFloatPoint(
+                        start.X + (float)dx * ratio,
+                        start.Y + (float)dy * ratio);
+                    pMaximum = Math.Max(pMaximum,
+                        DistanceToPolyline(point, pReference));
+                }
+            }
+            return true;
+        }
+
+        private static bool TryConsumeRepeatedWork(
+            double pIterations,
+            int pCostPerIteration,
+            ref int pWork,
+            out int pIterationCount)
+        {
+            pIterationCount = 0;
+            if (double.IsNaN(pIterations) ||
+                double.IsInfinity(pIterations) ||
+                pIterations < 0d || pIterations > int.MaxValue)
+                return false;
+            int iterations = (int)pIterations;
+            long cost = (long)iterations * pCostPerIteration;
+            if (cost > pWork)
+                return false;
+            pWork -= (int)cost;
+            pIterationCount = iterations;
+            return true;
+        }
+
         private static float SymmetricPolylineDistance(
             IReadOnlyList<BoundaryFloatPoint> pFirst,
             IReadOnlyList<BoundaryFloatPoint> pSecond)
@@ -1511,41 +1644,33 @@ namespace AncientWarfare3.core.policy
             return result;
         }
 
-        private static bool ContourIsFinite(
-            IReadOnlyList<BoundaryFloatPoint> pContour)
+        private static bool TryContourIsFinite(
+            IReadOnlyList<BoundaryFloatPoint> pContour,
+            ref int pWork,
+            out bool pIsFinite)
         {
+            pIsFinite = false;
             if (pContour == null || pContour.Count < 2)
-                return false;
+                return true;
             for (int i = 0; i < pContour.Count; i++)
             {
+                if (pWork-- <= 0)
+                    return false;
                 if (float.IsNaN(pContour[i].X) ||
                     float.IsInfinity(pContour[i].X) ||
                     float.IsNaN(pContour[i].Y) ||
                     float.IsInfinity(pContour[i].Y))
-                    return false;
+                    return true;
             }
+            pIsFinite = true;
             return true;
         }
 
-        private static bool BoundsWithinTraceBudget(
-            BoundaryChunkBounds pBounds)
+        private static bool ContourExceedsPointBudget(
+            IReadOnlyList<BoundaryFloatPoint> pContour)
         {
-            try
-            {
-                long width = Math.Max(0L, checked(
-                    (long)pBounds.InteriorMaxXExclusive -
-                    pBounds.InteriorMinX));
-                long height = Math.Max(0L, checked(
-                    (long)pBounds.InteriorMaxYExclusive -
-                    pBounds.InteriorMinY));
-                return width <= MaximumTraceCells &&
-                       height <= MaximumTraceCells &&
-                       checked(width * height) <= MaximumTraceCells;
-            }
-            catch (OverflowException)
-            {
-                return false;
-            }
+            return pContour != null &&
+                   pContour.Count > MaximumPairContourPoints;
         }
 
         private static BoundaryVisualPairDraft InvalidVisualPair(

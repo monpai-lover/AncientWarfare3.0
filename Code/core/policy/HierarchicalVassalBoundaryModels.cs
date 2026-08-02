@@ -137,6 +137,47 @@ namespace AncientWarfare3.core.policy
         }
     }
 
+    internal enum BoundarySafeBoundsStatus
+    {
+        Invalid = 0,
+        Empty = 1,
+        Valid = 2
+    }
+
+    internal static class BoundarySafeBoundsGate
+    {
+        private const long MaximumDimension = 262144L;
+        private const long MaximumArea = 262144L;
+
+        public static BoundarySafeBoundsStatus Evaluate(
+            BoundaryChunkBounds pBounds)
+        {
+            long minimumX = pBounds.InteriorMinX;
+            long minimumY = pBounds.InteriorMinY;
+            long maximumX = pBounds.InteriorMaxXExclusive;
+            long maximumY = pBounds.InteriorMaxYExclusive;
+            if (maximumX < minimumX || maximumY < minimumY)
+                return BoundarySafeBoundsStatus.Invalid;
+
+            try
+            {
+                long width = checked(maximumX - minimumX);
+                long height = checked(maximumY - minimumY);
+                if (width > MaximumDimension || height > MaximumDimension)
+                    return BoundarySafeBoundsStatus.Invalid;
+                if (width == 0L || height == 0L)
+                    return BoundarySafeBoundsStatus.Empty;
+                return checked(width * height) <= MaximumArea
+                    ? BoundarySafeBoundsStatus.Valid
+                    : BoundarySafeBoundsStatus.Invalid;
+            }
+            catch (OverflowException)
+            {
+                return BoundarySafeBoundsStatus.Invalid;
+            }
+        }
+    }
+
     public readonly struct BoundaryCellFacts
     {
         public BoundaryCellFacts(

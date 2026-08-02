@@ -251,7 +251,7 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
                 new[] { new BoundaryFloatPoint(1, 0),
                     new BoundaryFloatPoint(1, 2) },
                 oversizedBounds);
-        Equal("trace_budget", pairTraceFailure.FailureReason,
+        Equal("bounds_budget", pairTraceFailure.FailureReason,
             "pair trace budget fails before mask construction");
 
         var degenerateHugeBounds = new BoundaryChunkBounds(
@@ -265,8 +265,37 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
                 new[] { new BoundaryFloatPoint(1, 0),
                     new BoundaryFloatPoint(1, 2) },
                 degenerateHugeBounds);
-        Equal("trace_budget", degenerateBoundsFailure.FailureReason,
+        Equal("bounds_budget", degenerateBoundsFailure.FailureReason,
             "degenerate huge bounds fail before mask construction");
+
+        var reversedBounds = new BoundaryChunkBounds(
+            0, 0, 2, 2,
+            int.MaxValue, int.MaxValue, int.MinValue, int.MinValue);
+        BoundaryVisualPairDraft reversedBoundsFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                reversedBounds);
+        Equal("bounds_budget", reversedBoundsFailure.FailureReason,
+            "reversed pair bounds fail before mask construction");
+
+        var emptyBounds = new BoundaryChunkBounds(
+            0, 0, 2, 2, 1, 1, 1, 1);
+        BoundaryVisualPairDraft emptyBoundsResult =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                emptyBounds);
+        Equal("empty_bounds", emptyBoundsResult.FailureReason,
+            "legal empty pair bounds return explicit empty output");
+        Equal(0, emptyBoundsResult.SharedContour.Count,
+            "empty pair bounds emit no contour");
 
         BoundaryCellRaster manyRings = Raster(512, 512, (x, y) =>
             (x + y) % 2 == 0 ? Land(x, y, 7) : Land(x, y, 8));
@@ -310,6 +339,30 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
             HierarchicalVassalBoundaryPolygonRules
                 .PairGeometryWithinBudgetForTests(repeated, repeated, 0f),
             "pair comparison budget returns deterministic failure");
+
+        var excessiveContour = new BoundaryFloatPoint[65537];
+        for (int i = 0; i < excessiveContour.Length; i++)
+            excessiveContour[i] = new BoundaryFloatPoint(1, 0);
+        BoundaryVisualPairDraft pointBudgetFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                excessiveContour,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                Interior(smallPair));
+        Equal("contour_budget", pointBudgetFailure.FailureReason,
+            "finite contour point limit returns stable invalid output");
+
+        var comparisonHeavy = new BoundaryFloatPoint[2001];
+        for (int i = 0; i < comparisonHeavy.Length; i++)
+            comparisonHeavy[i] = new BoundaryFloatPoint(1, 0);
+        BoundaryVisualPairDraft workBudgetFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                comparisonHeavy, comparisonHeavy,
+                Interior(smallPair));
+        Equal("contour_budget", workBudgetFailure.FailureReason,
+            "shared contour comparison work returns stable invalid output");
     }
 
     private static bool IsFinite(BoundaryFloatPoint point)

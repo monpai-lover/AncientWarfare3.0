@@ -185,6 +185,12 @@ namespace AncientWarfare3.core.policy
         {
             if (pRaster == null)
                 throw new ArgumentNullException(nameof(pRaster));
+            BoundarySafeBoundsStatus boundsStatus =
+                BoundarySafeBoundsGate.Evaluate(pBounds);
+            if (boundsStatus == BoundarySafeBoundsStatus.Invalid)
+                return EmptyFailureDraft(1);
+            if (boundsStatus == BoundarySafeBoundsStatus.Empty)
+                return EmptyFailureDraft(0);
             if (pAssignment != null && !pAssignment.IsValid)
                 return EmptyFailureDraft(1);
             BoundaryTier fillTier = pLayer == BoundaryDisplayLayer.Cities
