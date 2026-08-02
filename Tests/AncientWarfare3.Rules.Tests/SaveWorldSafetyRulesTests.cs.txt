@@ -1,0 +1,24 @@
+using AncientWarfare3.core.policy;
+
+internal static class SaveWorldSafetyRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(true, SaveWorldSafetyRules.CanEnterSave(
+            worldPresent: true, itemsPresent: true),
+            "a live world with an item manager can enter saving");
+        Equal(false, SaveWorldSafetyRules.CanEnterSave(
+            worldPresent: false, itemsPresent: true),
+            "saving is blocked while the world is absent");
+        Equal(false, SaveWorldSafetyRules.CanEnterSave(
+            worldPresent: true, itemsPresent: false),
+            "saving is blocked while item state is being rebuilt");
+    }
+}

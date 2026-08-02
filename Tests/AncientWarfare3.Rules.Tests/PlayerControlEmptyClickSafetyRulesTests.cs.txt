@@ -1,0 +1,31 @@
+using AncientWarfare3.core.policy;
+
+internal static class PlayerControlEmptyClickSafetyRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(true,
+            PlayerControlEmptyClickSafetyRules.CanInvokeActor(
+                actorPresent: true, tilePresent: true, assetPresent: true),
+            "only a complete actor can receive an empty-click callback");
+        Equal(false,
+            PlayerControlEmptyClickSafetyRules.CanInvokeActor(
+                actorPresent: true, tilePresent: false, assetPresent: true),
+            "a disconnected actor without a tile is skipped");
+        Equal(false,
+            PlayerControlEmptyClickSafetyRules.CanInvokeActor(
+                actorPresent: true, tilePresent: true, assetPresent: false),
+            "an actor without an asset is skipped");
+        Equal(false,
+            PlayerControlEmptyClickSafetyRules.CanInvokeActor(
+                actorPresent: false, tilePresent: true, assetPresent: true),
+            "a null actor entry is skipped");
+    }
+}

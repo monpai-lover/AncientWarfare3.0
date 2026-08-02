@@ -20,6 +20,10 @@ namespace AncientWarfare3.core.policy
         private static Material _material;
         private static HierarchicalVassalMapModeSnapshot _snapshot;
         private static bool _minimapHidden;
+        private static bool _rebuildActive;
+        private static int _rebuildZoneIndex;
+        private static int _rebuildLineIndex;
+        private static HashSet<long> _rebuildSeen;
 
         internal static void ProcessFrame()
         {
@@ -48,11 +52,19 @@ namespace AncientWarfare3.core.policy
                 SetRootActive(true);
                 HierarchicalVassalMapModeSnapshot snapshot =
                     HierarchicalVassalMapModeService.BuildVisibleSnapshot();
-                if (!ReferenceEquals(_snapshot, snapshot))
+                if (snapshot == null)
+                {
+                    _rebuildActive = false;
+                    SetRootActive(false);
+                    return;
+                }
+                if (!ReferenceEquals(_snapshot, snapshot) &&
+                    !_rebuildActive)
                 {
                     _snapshot = snapshot;
-                    Rebuild(snapshot);
+                    BeginRebuild(snapshot);
                 }
+                if (_rebuildActive) ProcessRebuild();
             }
             catch
             {
@@ -70,6 +82,10 @@ namespace AncientWarfare3.core.policy
             _root = null;
             _snapshot = null;
             _minimapHidden = false;
+            _rebuildActive = false;
+            _rebuildZoneIndex = 0;
+            _rebuildLineIndex = 0;
+            _rebuildSeen = null;
             Lines.Clear();
             if (_material != null)
             {
@@ -89,62 +105,79 @@ namespace AncientWarfare3.core.policy
             if (shader != null) _material = new Material(shader);
         }
 
-        private static void Rebuild(
+        private static void BeginRebuild(
             HierarchicalVassalMapModeSnapshot pSnapshot)
         {
-            int lineIndex = 0;
-            var seen = new HashSet<long>();
-            if (pSnapshot?.DrawableZones != null)
+            _snapshot = pSnapshot;
+            _rebuildActive = true;
+            _rebuildZoneIndex = 0;
+            _rebuildLineIndex = 0;
+            _rebuildSeen = new HashSet<long>();
+            for (int index = 0; index < Lines.Count; index++)
+                Lines[index].enabled = false;
+        }
+
+        private static void ProcessRebuild()
+        {
+            if (!_rebuildActive || _snapshot?.DrawableZones == null) return;
+            int segmentBudget = HierarchicalVassalMapModeSchedulingRules.
+                ClampBoundaryBudget(
+                    HierarchicalVassalMapModeSchedulingRules.MaximumBoundaryBudget);
+            int zoneBudget = Math.Max(1, segmentBudget / 16);
+            int segmentsUsed = 0;
+            while (_rebuildZoneIndex < _snapshot.DrawableZones.Count &&
+                   zoneBudget-- > 0 && segmentsUsed < segmentBudget)
             {
-                for (int index = 0;
-                     index < pSnapshot.DrawableZones.Count &&
-                     lineIndex < MaximumSegments; index++)
-                {
-                    TileZone zone = pSnapshot.DrawableZones[index];
-                    City city = zone?.city;
-                    if (city?.data == null || city.isRekt() ||
-                        zone.neighbours == null) continue;
-
-                    for (int neighbourIndex = 0;
-                         neighbourIndex < zone.neighbours.Length &&
-                         neighbourIndex < 4 &&
-                         lineIndex < MaximumSegments; neighbourIndex++)
-                    {
-                        TileZone neighbour = zone.neighbours[neighbourIndex];
-                        // A null or all-water neighbour is a coastline/gap,
-                        // not a city division. Drawing it creates stray
-                        // rectangles over the sea in the city layer.
-                        if (neighbour == null ||
-                            !HierarchicalVassalMapModeService.ContainsVisibleLand(
-                                neighbour)) continue;
-                        if (neighbour?.city == city) continue;
-                        if (neighbour?.city != null && neighbour.id < zone.id)
-                            continue;
-
-                        int direction = ResolveDirection(zone, neighbour,
-                            neighbourIndex);
-                        if (direction < 0) continue;
-                        // A zone can contain both land and water.  Drawing a
-                        // full eight-tile edge for such a zone leaks a city
-                        // boundary across the water, producing the long
-                        // stray lines visible in the city map mode.
-                        if (!HasContinuousLandEdge(zone, direction) ||
-                            !HasContinuousLandEdge(neighbour,
-                                OppositeDirection(direction))) continue;
-                        long edgeKey = EncodeEdge(zone, direction);
-                        if (!seen.Add(edgeKey)) continue;
-
-                        Vector3 start;
-                        Vector3 end;
-                        ResolveEdge(zone, direction, out start, out end);
-                        UseLine(ref lineIndex, start, end,
-                            ResolveColor(city), direction);
-                    }
-                }
+                TileZone zone = _snapshot.DrawableZones[_rebuildZoneIndex++];
+                segmentsUsed += ProcessZone(zone, _rebuildSeen,
+                    ref _rebuildLineIndex);
             }
 
-            for (int index = lineIndex; index < Lines.Count; index++)
+            if (_rebuildZoneIndex < _snapshot.DrawableZones.Count) return;
+            for (int index = _rebuildLineIndex; index < Lines.Count; index++)
                 Lines[index].enabled = false;
+            _rebuildActive = false;
+            _rebuildSeen = null;
+        }
+
+        private static int ProcessZone(TileZone zone,
+            HashSet<long> seen, ref int lineIndex)
+        {
+            int initialLineIndex = lineIndex;
+            City city = zone?.city;
+            if (city?.data == null || city.isRekt() ||
+                zone.neighbours == null) return 0;
+
+            for (int neighbourIndex = 0;
+                 neighbourIndex < zone.neighbours.Length &&
+                 neighbourIndex < 4 && lineIndex < MaximumSegments;
+                 neighbourIndex++)
+            {
+                TileZone neighbour = zone.neighbours[neighbourIndex];
+                // A null or all-water neighbour is a coastline/gap, not a
+                // city division. Drawing it creates stray rectangles over
+                // the sea in the city layer.
+                if (neighbour == null ||
+                    !HierarchicalVassalMapModeService.ContainsVisibleLand(
+                        neighbour)) continue;
+                if (neighbour.city == city) continue;
+                if (neighbour.city != null && neighbour.id < zone.id) continue;
+
+                int direction = ResolveDirection(zone, neighbour,
+                    neighbourIndex);
+                if (direction < 0) continue;
+                if (!HasContinuousLandEdge(zone, direction) ||
+                    !HasContinuousLandEdge(neighbour,
+                        OppositeDirection(direction))) continue;
+                long edgeKey = EncodeEdge(zone, direction);
+                if (!seen.Add(edgeKey)) continue;
+
+                Vector3 start;
+                Vector3 end;
+                ResolveEdge(zone, direction, out start, out end);
+                UseLine(ref lineIndex, start, end, ResolveColor(city), direction);
+            }
+            return lineIndex - initialLineIndex;
         }
 
         private static bool HasContinuousLandEdge(TileZone pZone,

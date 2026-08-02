@@ -1,0 +1,39 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalMapModeSchedulingRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(true,
+            HierarchicalVassalMapModeSchedulingRules.ShouldKeepCachedZones(
+                snapshotUnchanged: true, renderStateDirty: false),
+            "unchanged map mode keeps existing zone colors without a full redraw");
+        Equal(false,
+            HierarchicalVassalMapModeSchedulingRules.ShouldKeepCachedZones(
+                snapshotUnchanged: false, renderStateDirty: false),
+            "a new snapshot forces a complete zone redraw");
+        Equal(false,
+            HierarchicalVassalMapModeSchedulingRules.ShouldKeepCachedZones(
+                snapshotUnchanged: true, renderStateDirty: true),
+            "a render invalidation forces a complete zone redraw");
+        Equal(1,
+            HierarchicalVassalMapModeSchedulingRules.ClampEntryBudget(0),
+            "snapshot work always makes forward progress");
+        Equal(HierarchicalVassalMapModeSchedulingRules.MaximumEntryBudget,
+            HierarchicalVassalMapModeSchedulingRules.ClampEntryBudget(999),
+            "snapshot work is bounded per frame");
+        Equal(HierarchicalVassalMapModeSchedulingRules.MaximumLabelBudget,
+            HierarchicalVassalMapModeSchedulingRules.ClampLabelBudget(999),
+            "label work is bounded per frame");
+        Equal(HierarchicalVassalMapModeSchedulingRules.MaximumBoundaryBudget,
+            HierarchicalVassalMapModeSchedulingRules.ClampBoundaryBudget(999),
+            "boundary work is bounded per frame");
+    }
+}

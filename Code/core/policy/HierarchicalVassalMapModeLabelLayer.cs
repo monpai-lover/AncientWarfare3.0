@@ -18,6 +18,17 @@ namespace AncientWarfare3.core.policy
         private static GameObject _root;
         private static bool _dirty = true;
         private static bool _reportedFailure;
+        private static bool _rebuildActive;
+        private static HierarchicalVassalMapModeSnapshot _rebuildSnapshot;
+        private static IReadOnlyList<HierarchicalVassalKingdomSnapshot>
+            _rebuildEntries;
+        private static List<City> _rebuildCities;
+        private static Dictionary<long, City> _rebuildCityCandidates;
+        private static bool _rebuildCitiesReady;
+        private static int _rebuildCityZoneIndex;
+        private static int _rebuildEntryIndex;
+        private static int _rebuildCityIndex;
+        private static int _rebuildNodeIndex;
 
         internal static void MarkDirty()
         {
@@ -38,7 +49,11 @@ namespace AncientWarfare3.core.policy
                 EnsureRoot();
                 SetRootActive(true);
                 HierarchicalVassalMapModeService.RefreshIfWorldChanged();
-                if (_dirty) Rebuild();
+                HierarchicalVassalMapModeService.ProcessFrame();
+                if (_dirty && !_rebuildActive &&
+                    HierarchicalVassalMapModeService.IsSnapshotReady)
+                    BeginRebuild();
+                if (_rebuildActive) ProcessRebuild();
             }
             catch (Exception error)
             {
@@ -65,6 +80,16 @@ namespace AncientWarfare3.core.policy
             Nodes.Clear();
             _dirty = true;
             _reportedFailure = false;
+            _rebuildActive = false;
+            _rebuildSnapshot = null;
+            _rebuildEntries = null;
+            _rebuildCities = null;
+            _rebuildCityCandidates = null;
+            _rebuildCitiesReady = false;
+            _rebuildCityZoneIndex = 0;
+            _rebuildEntryIndex = 0;
+            _rebuildCityIndex = 0;
+            _rebuildNodeIndex = 0;
         }
 
         private static void EnsureRoot()
@@ -75,48 +100,160 @@ namespace AncientWarfare3.core.policy
                 _root.transform.SetParent(World.world.transform, false);
         }
 
-        private static void Rebuild()
+        private static void BeginRebuild()
         {
-            _dirty = false;
             HierarchicalVassalMapModeSnapshot snapshot =
                 HierarchicalVassalMapModeService.BuildVisibleSnapshot();
-            int nodeIndex = 0;
-            IReadOnlyList<HierarchicalVassalKingdomSnapshot> entries =
-                snapshot?.Entries;
-            if (entries != null)
+            if (snapshot == null)
             {
-                bool cityLayer = HierarchicalVassalMapModeService.IsCityLayer;
-                for (int index = 0; index < entries.Count; index++)
-                {
-                    HierarchicalVassalKingdomSnapshot entry = entries[index];
-                    Kingdom kingdom = GetKingdom(entry?.KingdomId ?? -1L);
-                    if (entry == null || kingdom == null ||
-                        string.IsNullOrWhiteSpace(entry.DisplayName)) continue;
-                    if (cityLayer) continue;
-
-                    Color labelColor = ResolveCountryLabelColor(kingdom);
-                    Color outlineColor = ResolveCountryOutlineColor(kingdom);
-                    Vector3 position = new Vector3(
-                        entry.Centroid.x + TileCenterOffset,
-                        entry.Centroid.y + TileCenterOffset, LabelZ);
-                    float size = Mathf.Clamp(entry.LabelSize,
-                        CountryLabelMinSize, CountryLabelMaxSize);
-                    string label = string.IsNullOrWhiteSpace(
-                        entry.LabelDisplayName)
-                        ? entry.DisplayName
-                        : entry.LabelDisplayName;
-                    UseNode(ref nodeIndex, label, position,
-                        size, labelColor, outlineColor, true, entry.LabelAngle,
-                        entry.CountryLabelGap);
-
-                }
+                _dirty = true;
+                return;
             }
 
-            if (HierarchicalVassalMapModeService.IsCityLayer)
-                DrawCityLabels(snapshot, ref nodeIndex);
+            _dirty = false;
+            _rebuildActive = true;
+            _rebuildSnapshot = snapshot;
+            _rebuildEntries = snapshot.Entries;
+            _rebuildCities = null;
+            _rebuildCityCandidates = HierarchicalVassalMapModeService.
+                IsCityLayer
+                ? new Dictionary<long, City>()
+                : null;
+            _rebuildCitiesReady = !HierarchicalVassalMapModeService.
+                IsCityLayer;
+            _rebuildCityZoneIndex = 0;
+            _rebuildEntryIndex = 0;
+            _rebuildCityIndex = 0;
+            _rebuildNodeIndex = 0;
+        }
 
-            for (int index = nodeIndex; index < Nodes.Count; index++)
+        private static void ProcessRebuild()
+        {
+            if (!_rebuildActive) return;
+            int budget = HierarchicalVassalMapModeSchedulingRules.
+                ClampLabelBudget(
+                    HierarchicalVassalMapModeSchedulingRules.MaximumLabelBudget);
+            bool cityLayer = HierarchicalVassalMapModeService.IsCityLayer;
+            while (budget-- > 0)
+            {
+                if (!cityLayer && _rebuildEntries != null &&
+                    _rebuildEntryIndex < _rebuildEntries.Count)
+                {
+                    HierarchicalVassalKingdomSnapshot entry =
+                        _rebuildEntries[_rebuildEntryIndex++];
+                    Kingdom kingdom = GetKingdom(entry?.KingdomId ?? -1L);
+                    if (entry != null && kingdom != null &&
+                        !string.IsNullOrWhiteSpace(entry.DisplayName))
+                    {
+                        Color labelColor = ResolveCountryLabelColor(kingdom);
+                        Color outlineColor = ResolveCountryOutlineColor(kingdom);
+                        Vector3 position = new Vector3(
+                            entry.Centroid.x + TileCenterOffset,
+                            entry.Centroid.y + TileCenterOffset, LabelZ);
+                        float size = Mathf.Clamp(entry.LabelSize,
+                            CountryLabelMinSize, CountryLabelMaxSize);
+                        string label = string.IsNullOrWhiteSpace(
+                            entry.LabelDisplayName)
+                            ? entry.DisplayName
+                            : entry.LabelDisplayName;
+                        UseNode(ref _rebuildNodeIndex, label, position,
+                            size, labelColor, outlineColor, true,
+                            entry.LabelAngle, entry.CountryLabelGap);
+                    }
+                    continue;
+                }
+
+                if (cityLayer && _rebuildCities != null &&
+                    _rebuildCitiesReady &&
+                    _rebuildCityIndex < _rebuildCities.Count)
+                {
+                    DrawOneCityLabel(_rebuildCities[_rebuildCityIndex++],
+                        _rebuildSnapshot, ref _rebuildNodeIndex);
+                    continue;
+                }
+
+                if (cityLayer && !_rebuildCitiesReady)
+                {
+                    ProcessCityCandidateBudget();
+                    return;
+                }
+
+                CompleteRebuild();
+                return;
+            }
+        }
+
+        private static void CompleteRebuild()
+        {
+            for (int index = _rebuildNodeIndex; index < Nodes.Count; index++)
                 Nodes[index].SetActive(false);
+            _rebuildActive = false;
+            _rebuildSnapshot = null;
+            _rebuildEntries = null;
+            _rebuildCities = null;
+            _rebuildCityCandidates = null;
+            _rebuildCitiesReady = false;
+        }
+
+        private static void ProcessCityCandidateBudget()
+        {
+            if (_rebuildSnapshot?.DrawableZones == null ||
+                _rebuildCityCandidates == null) return;
+            const int zoneBudget = 256;
+            int processed = 0;
+            while (_rebuildCityZoneIndex < _rebuildSnapshot.DrawableZones.Count &&
+                   processed++ < zoneBudget)
+            {
+                City city = _rebuildSnapshot.DrawableZones[
+                    _rebuildCityZoneIndex++]?.city;
+                if (city?.data == null || city.isRekt() ||
+                    string.IsNullOrWhiteSpace(city.data.name)) continue;
+                if (!_rebuildCityCandidates.ContainsKey(city.id))
+                    _rebuildCityCandidates.Add(city.id, city);
+            }
+            if (_rebuildCityZoneIndex < _rebuildSnapshot.DrawableZones.Count)
+                return;
+
+            _rebuildCities = new List<City>(_rebuildCityCandidates.Values);
+            _rebuildCities.Sort((pLeft, pRight) =>
+                pLeft.id.CompareTo(pRight.id));
+            _rebuildCitiesReady = true;
+        }
+
+        private static void DrawOneCityLabel(City pCity,
+            HierarchicalVassalMapModeSnapshot pSnapshot,
+            ref int pNodeIndex)
+        {
+            if (pCity?.zones == null || pSnapshot?.ZoneToKingdomId == null)
+                return;
+            HierarchicalVassalMapModeCityCacheEntry cached =
+                HierarchicalVassalMapModeCityCache.Get(pCity);
+            if (cached == null || cached.LandTiles.Count == 0) return;
+
+            bool visible = false;
+            for (int zoneIndex = 0; zoneIndex < cached.VisibleZones.Count;
+                 zoneIndex++)
+            {
+                TileZone zone = cached.VisibleZones[zoneIndex];
+                if (zone != null && zone.id >= 0 &&
+                    pSnapshot.ZoneToKingdomId.ContainsKey(zone.id))
+                {
+                    visible = true;
+                    break;
+                }
+            }
+            if (!visible) return;
+
+            HierarchicalVassalMapModeGeometryMetrics metrics = cached.Metrics;
+            float size = HierarchicalVassalMapModeGeometry.
+                CalculateCityLabelSize(metrics.Area);
+            Color color = ResolveCityLabelColor(pCity.kingdom);
+            Color outlineColor = ResolveCityOutlineColor(pCity.kingdom);
+            UseNode(ref pNodeIndex, pCity.data.name,
+                new Vector3(metrics.Centroid.x + TileCenterOffset,
+                    metrics.Centroid.y + TileCenterOffset,
+                    LabelZ - 0.02f), size, color, outlineColor, false,
+                metrics.Angle, 0);
         }
 
         private static void DrawCityLabels(

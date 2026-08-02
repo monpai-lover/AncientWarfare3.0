@@ -17,6 +17,9 @@ namespace AncientWarfare3.core.policy
                 new Dictionary<long, HierarchicalVassalMapModeSnapshot>();
         private static HierarchicalVassalMapModeSnapshot _visibleSnapshot;
         private static long _visibleSnapshotRevision = long.MinValue;
+        private static SnapshotBuildState _snapshotBuild;
+        private static bool _zoneRenderDirty = true;
+        private static HierarchicalVassalMapModeSnapshot _lastDrawnSnapshot;
         private static readonly HierarchicalVassalMapModeChangeTracker
             ChangeTracker = new HierarchicalVassalMapModeChangeTracker();
         private static HierarchicalVassalMapModeLayer _selectedLayer =
@@ -40,6 +43,7 @@ namespace AncientWarfare3.core.policy
         {
             _selectedLayer = HierarchicalVassalMapModeOptionRules.ResolveLayer(
                 pZoneOption);
+            _zoneRenderDirty = true;
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
         }
 
@@ -92,24 +96,43 @@ namespace AncientWarfare3.core.policy
 
         internal static long FocusKingdomId => State.FocusKingdomId;
 
+        internal static bool IsSnapshotReady => _visibleSnapshot != null;
+
+        internal static void MarkZoneRenderDirty()
+        {
+            _zoneRenderDirty = true;
+        }
+
+        internal static void ProcessFrame()
+        {
+            if (!Config.game_loaded || !IsActive())
+            {
+                _snapshotBuild = null;
+                return;
+            }
+
+            if (_visibleSnapshot != null) return;
+            if (_snapshotBuild == null)
+                _snapshotBuild = CreateSnapshotBuild();
+            AdvanceSnapshotBuild();
+        }
+
         internal static HierarchicalVassalMapModeSnapshot BuildVisibleSnapshot()
         {
             if (_visibleSnapshot != null) return _visibleSnapshot;
             if (State.IsRoot)
             {
-                if (_rootSnapshot == null)
-                    _rootSnapshot = BuildRootSnapshot();
+                // Runtime callers (zone drawing, hover and labels) must never
+                // synchronously build the world snapshot. MapBox.Update owns
+                // the bounded builder and will publish it when complete.
+                if (_rootSnapshot == null) return null;
                 _visibleSnapshot = _rootSnapshot;
                 return _visibleSnapshot;
             }
 
             long focusKingdomId = State.FocusKingdomId;
             if (!FocusedSnapshots.TryGetValue(focusKingdomId,
-                    out _visibleSnapshot))
-            {
-                _visibleSnapshot = BuildFocusedSnapshot(focusKingdomId);
-                FocusedSnapshots[focusKingdomId] = _visibleSnapshot;
-            }
+                    out _visibleSnapshot)) return null;
             return _visibleSnapshot;
         }
 
@@ -135,15 +158,24 @@ namespace AncientWarfare3.core.policy
                 BuildVisibleSnapshot();
             IReadOnlyList<TileZone> drawableZones = snapshot?.DrawableZones;
             if (drawableZones == null) return;
+            bool fullDraw = !HierarchicalVassalMapModeSchedulingRules.
+                ShouldKeepCachedZones(
+                    snapshotUnchanged: ReferenceEquals(snapshot,
+                        _lastDrawnSnapshot),
+                    renderStateDirty: _zoneRenderDirty);
             for (int index = 0; index < drawableZones.Count; index++)
             {
                 TileZone zone = drawableZones[index];
-                if (zone == null || zone.id < 0 ||
-                    !snapshot.ZoneToKingdomId.ContainsKey(zone.id)) continue;
-                calculator.drawBegin();
-                calculator.drawZoneMeta(zone, pAsset, GetMetaForZone);
+                if (zone == null || zone.id < 0) continue;
+                if (fullDraw)
+                {
+                    calculator.drawBegin();
+                    calculator.drawZoneMeta(zone, pAsset, GetMetaForZone);
+                }
                 calculator.drawEnd(zone);
             }
+            _lastDrawnSnapshot = snapshot;
+            _zoneRenderDirty = false;
         }
 
         public static bool HandleZoneClick(WorldTile pTile, string pPowerId)
@@ -154,6 +186,7 @@ namespace AncientWarfare3.core.policy
             if (!IsActive()) return false;
             HierarchicalVassalMapModeSnapshot visible =
                 BuildVisibleSnapshot();
+            if (visible == null) return false;
             TileZone clickedZone = pTile?.zone;
             if (clickedZone == null || clickedZone.id < 0)
                 return ReturnToRootFromUnmappedClick();
@@ -316,6 +349,7 @@ namespace AncientWarfare3.core.policy
             else if (!FocusedSnapshots.TryGetValue(State.FocusKingdomId,
                          out _visibleSnapshot))
                 _visibleSnapshot = null;
+            _zoneRenderDirty = true;
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
             try { World.world?.zone_calculator?.dirtyAndClear(); }
             catch { }
@@ -326,12 +360,122 @@ namespace AncientWarfare3.core.policy
             _rootSnapshot = null;
             FocusedSnapshots.Clear();
             _visibleSnapshot = null;
+            _snapshotBuild = null;
+            _lastDrawnSnapshot = null;
+            _zoneRenderDirty = true;
         }
 
         public static HierarchicalVassalMapModeSnapshot BuildRootSnapshot()
         {
             HierarchyContext context = BuildContext();
             return BuildRootSnapshot(context);
+        }
+
+        private static SnapshotBuildState CreateSnapshotBuild()
+        {
+            var context = BuildContext();
+            var state = new SnapshotBuildState
+            {
+                Context = context,
+                IsRoot = State.IsRoot,
+                FocusKingdomId = State.FocusKingdomId,
+                Snapshot = new HierarchicalVassalMapModeSnapshot
+                {
+                    FocusKingdomId = State.IsRoot ? -1L : State.FocusKingdomId
+                }
+            };
+
+            if (State.IsRoot)
+            {
+                var roots = new List<Kingdom>();
+                foreach (KeyValuePair<long, Kingdom> pair in context.Kingdoms)
+                    if (EffectiveSuzerainId(context, pair.Key) < 0L)
+                        roots.Add(pair.Value);
+                roots.Sort(CompareKingdoms);
+                for (int index = 0; index < roots.Count; index++)
+                {
+                    var territory = new List<Kingdom>();
+                    CollectSubtree(context, roots[index], territory,
+                        new HashSet<long>());
+                    state.Work.Add(new SnapshotBuildWork(
+                        roots[index], territory));
+                }
+                return state;
+            }
+
+            if (!context.Kingdoms.TryGetValue(State.FocusKingdomId,
+                    out Kingdom focus))
+            {
+                state.IsRoot = true;
+                state.FocusKingdomId = -1L;
+                state.Snapshot = new HierarchicalVassalMapModeSnapshot();
+                foreach (KeyValuePair<long, Kingdom> pair in context.Kingdoms)
+                    if (EffectiveSuzerainId(context, pair.Key) < 0L)
+                    {
+                        var territory = new List<Kingdom>();
+                        CollectSubtree(context, pair.Value, territory,
+                            new HashSet<long>());
+                        state.Work.Add(new SnapshotBuildWork(pair.Value,
+                            territory));
+                    }
+                return state;
+            }
+
+            state.Work.Add(new SnapshotBuildWork(focus,
+                new List<Kingdom> { focus }));
+            IReadOnlyList<Kingdom> children = GetChildren(context, focus);
+            for (int index = 0; index < children.Count; index++)
+            {
+                var territory = new List<Kingdom>();
+                CollectSubtree(context, children[index], territory,
+                    new HashSet<long>());
+                state.Work.Add(new SnapshotBuildWork(children[index],
+                    territory));
+            }
+            return state;
+        }
+
+        private static void AdvanceSnapshotBuild()
+        {
+            if (_snapshotBuild == null) return;
+            int budget = HierarchicalVassalMapModeSchedulingRules.
+                ClampEntryBudget(
+                    HierarchicalVassalMapModeSchedulingRules.MaximumEntryBudget);
+            while (budget-- > 0 && _snapshotBuild.Index <
+                       _snapshotBuild.Work.Count)
+            {
+                SnapshotBuildWork work =
+                    _snapshotBuild.Work[_snapshotBuild.Index++];
+                try
+                {
+                    HierarchicalVassalKingdomSnapshot entry = BuildEntry(
+                        _snapshotBuild.Context, work.Kingdom,
+                        work.Territory, _snapshotBuild.Snapshot);
+                    if (_snapshotBuild.IsRoot)
+                        _snapshotBuild.Snapshot.AddRootEntry(entry);
+                    else
+                        _snapshotBuild.Snapshot.AddFocusedEntry(entry);
+                }
+                catch
+                {
+                    // A stale kingdom is skipped; the rest of the snapshot
+                    // remains usable and will be rebuilt on the next dirty.
+                }
+            }
+
+            if (_snapshotBuild.Index < _snapshotBuild.Work.Count) return;
+
+            if (_snapshotBuild.IsRoot)
+                _rootSnapshot = _snapshotBuild.Snapshot;
+            else
+                FocusedSnapshots[_snapshotBuild.FocusKingdomId] =
+                    _snapshotBuild.Snapshot;
+            _visibleSnapshot = _snapshotBuild.Snapshot;
+            _snapshotBuild = null;
+            _zoneRenderDirty = true;
+            HierarchicalVassalMapModeLabelLayer.MarkDirty();
+            try { World.world?.zone_calculator?.dirtyAndClear(); }
+            catch { }
         }
 
         public static HierarchicalVassalMapModeSnapshot BuildFocusedSnapshot(
@@ -745,6 +889,30 @@ namespace AncientWarfare3.core.policy
         {
             int xOrder = pLeft.x.CompareTo(pRight.x);
             return xOrder != 0 ? xOrder : pLeft.y.CompareTo(pRight.y);
+        }
+
+        private sealed class SnapshotBuildWork
+        {
+            public readonly Kingdom Kingdom;
+            public readonly List<Kingdom> Territory;
+
+            public SnapshotBuildWork(Kingdom pKingdom,
+                List<Kingdom> pTerritory)
+            {
+                Kingdom = pKingdom;
+                Territory = pTerritory;
+            }
+        }
+
+        private sealed class SnapshotBuildState
+        {
+            public readonly List<SnapshotBuildWork> Work =
+                new List<SnapshotBuildWork>();
+            public HierarchyContext Context;
+            public HierarchicalVassalMapModeSnapshot Snapshot;
+            public bool IsRoot;
+            public long FocusKingdomId;
+            public int Index;
         }
 
         private sealed class HierarchyContext
