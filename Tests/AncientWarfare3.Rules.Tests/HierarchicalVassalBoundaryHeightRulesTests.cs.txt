@@ -5,11 +5,29 @@ internal static class HierarchicalVassalBoundaryHeightRulesTests
     public static void Run()
     {
         NativeHeightPackingCopiesSamples();
+        RasterSnapshotIgnoresCallerMutation();
         FlatAndRampNormalsUseCentralDifferences();
         LightingIsNeutralDirectionalAndBounded();
         InvalidWorldEdgeSamplesClampToNearestValidHeight();
         CountryAndCityDraftsShareOneHeightRevision();
         InvalidInputsFailBeforeHeightWork();
+        AssertionHelpersRejectNonFiniteValues();
+    }
+
+    private static void RasterSnapshotIgnoresCallerMutation()
+    {
+        BoundaryCellFacts[] cells = Cells(36, 36, (x, y) =>
+            Cell(x, y, true, 96));
+        var raster = new BoundaryCellRaster(0, 0, 36, 36, cells);
+
+        cells[18 * 36 + 18] = Cell(18, 18, true, 0);
+
+        Equal((byte)96, raster.GetOrInvalid(18, 18).Height,
+            "raster snapshot is isolated from deterministic caller mutation");
+        BoundaryHeightDraft packed =
+            HierarchicalVassalBoundaryHeightRules.Pack(raster, 32, 2);
+        Equal((byte)96, packed.Samples[packed.Index(18, 18)],
+            "worker packing observes captured facts rather than caller mutation");
     }
 
     private static void NativeHeightPackingCopiesSamples()
@@ -213,6 +231,12 @@ internal static class HierarchicalVassalBoundaryHeightRulesTests
         Throws<ArgumentOutOfRangeException>(() => new BoundaryCellRaster(
                 0, 0, 65536, 65536, Array.Empty<BoundaryCellFacts>()),
             "raster dimension multiplication cannot overflow into acceptance");
+        Throws<ArgumentNullException>(() => new BoundaryCellRaster(
+                0, 0, 1, 1, null),
+            "raster rejects a null caller-owned cell array");
+        Throws<ArgumentException>(() => new BoundaryCellRaster(
+                0, 0, 2, 2, new BoundaryCellFacts[3]),
+            "raster rejects cell arrays whose length mismatches dimensions");
         Throws<ArgumentOutOfRangeException>(() => new BoundaryCellRaster(
                 int.MaxValue, 0, 2, 1, new BoundaryCellFacts[2]),
             "raster world bounds cannot overflow into reversed coordinates");
@@ -276,7 +300,9 @@ internal static class HierarchicalVassalBoundaryHeightRulesTests
     private static void Near(
         float expected, float actual, float tolerance, string name)
     {
-        if (Math.Abs(expected - actual) > tolerance)
+        if (!IsFinite(expected) || !IsFinite(actual) ||
+            !IsFinite(tolerance) || tolerance < 0f ||
+            Math.Abs(expected - actual) > tolerance)
             throw new InvalidOperationException(
                 name + ": expected " + expected + ", got " + actual);
     }
@@ -284,7 +310,9 @@ internal static class HierarchicalVassalBoundaryHeightRulesTests
     private static void InRange(
         float actual, float minimum, float maximum, string name)
     {
-        if (actual < minimum || actual > maximum)
+        if (!IsFinite(actual) || !IsFinite(minimum) ||
+            !IsFinite(maximum) || minimum > maximum ||
+            actual < minimum || actual > maximum)
             throw new InvalidOperationException(
                 name + ": expected " + minimum + ".." + maximum +
                 ", got " + actual);
@@ -293,6 +321,16 @@ internal static class HierarchicalVassalBoundaryHeightRulesTests
     private static bool IsFinite(float value)
     {
         return !float.IsNaN(value) && !float.IsInfinity(value);
+    }
+
+    private static void AssertionHelpersRejectNonFiniteValues()
+    {
+        Throws<InvalidOperationException>(() =>
+            Near(float.NaN, float.NaN, 0.001f, "NaN near probe"),
+            "Near rejects NaN instead of treating it as equal");
+        Throws<InvalidOperationException>(() =>
+            InRange(float.NaN, 0.65f, 1.15f, "NaN range probe"),
+            "InRange rejects NaN instead of treating it as bounded");
     }
 
     private static void Throws<TException>(Action action, string name)

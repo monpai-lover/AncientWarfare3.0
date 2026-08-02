@@ -259,7 +259,8 @@ namespace AncientWarfare3.core.policy
             OriginY = pOriginY;
             Width = pWidth;
             Height = pHeight;
-            _cells = pCells;
+            _cells = new BoundaryCellFacts[pCells.Length];
+            Array.Copy(pCells, _cells, pCells.Length);
         }
 
         public int OriginX { get; }
