@@ -618,9 +618,25 @@ namespace AncientWarfare3.core.policy
         private readonly BoundaryHeightDraft _heightDraft;
 
         public BoundaryChunkDraftSet(BoundaryHeightDraft pHeightDraft)
+            : this(pHeightDraft, null, null, null, null, null)
+        {
+        }
+
+        public BoundaryChunkDraftSet(
+            BoundaryHeightDraft pHeightDraft,
+            BoundaryMeshDraft pCountryFill,
+            BoundaryMeshDraft pCityFill,
+            BoundaryMeshDraft pCountryRibbons,
+            BoundaryMeshDraft pCityRibbons,
+            HierarchyColorAssignment pColorAssignment)
         {
             _heightDraft = pHeightDraft ??
                            throw new ArgumentNullException(nameof(pHeightDraft));
+            CountryFill = pCountryFill;
+            CityFill = pCityFill;
+            CountryRibbons = pCountryRibbons;
+            CityRibbons = pCityRibbons;
+            ColorAssignment = pColorAssignment;
         }
 
         public BoundaryHeightDraft CountryHeightDraft
@@ -632,6 +648,16 @@ namespace AncientWarfare3.core.policy
         {
             get { return _heightDraft; }
         }
+
+        public BoundaryMeshDraft CountryFill { get; }
+
+        public BoundaryMeshDraft CityFill { get; }
+
+        public BoundaryMeshDraft CountryRibbons { get; }
+
+        public BoundaryMeshDraft CityRibbons { get; }
+
+        public HierarchyColorAssignment ColorAssignment { get; }
     }
 
     public readonly struct BoundaryGridEdgeKey : IEquatable<BoundaryGridEdgeKey>
