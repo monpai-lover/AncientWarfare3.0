@@ -165,6 +165,28 @@ namespace AncientWarfare3.core.policy
 
     public static class HierarchicalVassalBoundaryColorRules
     {
+        public static HierarchyColorIdentity IdentityForTier(
+            BoundaryTier tier,
+            long displayedOwnerId,
+            long systemId,
+            long realmId,
+            long cityId,
+            uint rootRgba)
+        {
+            if (tier < BoundaryTier.City ||
+                tier > BoundaryTier.SuzerainSystem)
+                throw new ArgumentOutOfRangeException(nameof(tier));
+            long normalizedRealmId = tier == BoundaryTier.VassalRealm
+                ? displayedOwnerId
+                : tier == BoundaryTier.City ? realmId : -1L;
+            long normalizedCityId = tier == BoundaryTier.City
+                ? displayedOwnerId
+                : -1L;
+            return new HierarchyColorIdentity(
+                tier, displayedOwnerId, systemId, systemId,
+                normalizedRealmId, normalizedCityId, rootRgba);
+        }
+
         public static HierarchyColorAssignment BuildCanonicalAssignment(
             IReadOnlyList<HierarchyColorIdentity> identities,
             IReadOnlyList<HierarchyColorEdge> edges)

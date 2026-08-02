@@ -13,6 +13,10 @@ namespace AncientWarfare3.core.policy
 
         public const int UploadBudgetPerFrame = 2;
 
+        private const ulong FingerprintOffset = 14695981039346656037UL;
+
+        private const ulong FingerprintPrime = 1099511628211UL;
+
         public static BoundaryChunkKey ForTile(int pX, int pY)
         {
             return new BoundaryChunkKey(FloorDivide(pX), FloorDivide(pY));
@@ -84,6 +88,37 @@ namespace AncientWarfare3.core.policy
                    resultLayer == currentLayer;
         }
 
+        public static ulong Fingerprint(BoundaryCellRaster pRaster)
+        {
+            if (pRaster == null)
+                throw new ArgumentNullException(nameof(pRaster));
+            ulong fingerprint = FingerprintOffset;
+            for (int y = pRaster.OriginY; y < pRaster.MaxYExclusive; y++)
+            {
+                for (int x = pRaster.OriginX;
+                     x < pRaster.MaxXExclusive; x++)
+                {
+                    BoundaryCellFacts cell = pRaster.GetOrInvalid(x, y);
+                    AddFingerprint(ref fingerprint, cell.X);
+                    AddFingerprint(ref fingerprint, cell.Y);
+                    AddFingerprint(ref fingerprint, cell.IsValid ? 1L : 0L);
+                    AddFingerprint(ref fingerprint, (long)cell.Water);
+                    AddFingerprint(ref fingerprint, cell.Height);
+                    AddFingerprint(ref fingerprint, cell.SystemId);
+                    AddFingerprint(ref fingerprint, cell.RealmId);
+                    AddFingerprint(ref fingerprint, cell.CityId);
+                    AddFingerprint(ref fingerprint, cell.Rgba);
+                }
+            }
+            return fingerprint;
+        }
+
+        public static bool HasAuditChange(
+            bool pHasPrevious, ulong pPrevious, ulong pCurrent)
+        {
+            return pHasPrevious && pPrevious != pCurrent;
+        }
+
         private static int FloorDivide(int pValue)
         {
             int quotient = pValue / ChunkSize;
@@ -97,6 +132,20 @@ namespace AncientWarfare3.core.policy
             if (pValue < pMinimum)
                 return pMinimum;
             return pValue > pMaximum ? pMaximum : pValue;
+        }
+
+        private static void AddFingerprint(ref ulong pHash, long pValue)
+        {
+            unchecked
+            {
+                ulong value = (ulong)pValue;
+                for (int i = 0; i < sizeof(long); i++)
+                {
+                    pHash ^= (byte)value;
+                    pHash *= FingerprintPrime;
+                    value >>= 8;
+                }
+            }
         }
     }
 }

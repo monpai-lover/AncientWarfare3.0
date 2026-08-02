@@ -6,6 +6,7 @@ internal static class HierarchicalVassalBoundaryColorRulesTests
     {
         CanonicalAssignmentCopiesSortsAndDeduplicatesInputs();
         EmptyAndConflictingAssignmentsHaveExplicitStates();
+        TierIdentitiesIgnoreLowerLevelIds();
     }
 
     private static void CanonicalAssignmentCopiesSortsAndDeduplicatesInputs()
@@ -86,6 +87,35 @@ internal static class HierarchicalVassalBoundaryColorRulesTests
         Equal("conflicting_identity:City:249", invalid.FailureReason,
             "conflicting duplicate has a stable failure reason");
         Equal(0, invalid.Count, "invalid assignment exposes no partial colors");
+    }
+
+    private static void TierIdentitiesIgnoreLowerLevelIds()
+    {
+        HierarchyColorIdentity firstRealm =
+            HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                BoundaryTier.VassalRealm, displayedOwnerId: 10,
+                systemId: 1, realmId: 10, cityId: 100,
+                rootRgba: 0x336699FF);
+        HierarchyColorIdentity secondRealm =
+            HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                BoundaryTier.VassalRealm, displayedOwnerId: 10,
+                systemId: 1, realmId: 10, cityId: 101,
+                rootRgba: 0x336699FF);
+        Equal(firstRealm, secondRealm,
+            "realm identity ignores the physical city");
+
+        HierarchyColorIdentity firstSystem =
+            HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                BoundaryTier.SuzerainSystem, displayedOwnerId: 1,
+                systemId: 1, realmId: 10, cityId: 100,
+                rootRgba: 0x336699FF);
+        HierarchyColorIdentity secondSystem =
+            HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                BoundaryTier.SuzerainSystem, displayedOwnerId: 1,
+                systemId: 1, realmId: 11, cityId: 101,
+                rootRgba: 0x336699FF);
+        Equal(firstSystem, secondSystem,
+            "system identity ignores lower hierarchy levels");
     }
 
     private static HierarchyColorIdentity CityIdentity(long owner, long root)

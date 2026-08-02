@@ -40,6 +40,8 @@ $capture = Read-Source `
     'Code/core/policy/HierarchicalVassalBoundarySnapshotCapture.cs'
 $snapshot = Read-Source `
     'Code/core/policy/HierarchicalVassalMapModeSnapshot.cs'
+$service = Read-Source `
+    'Code/core/policy/HierarchicalVassalMapModeService.cs'
 $chunkRules = Read-Source `
     'Code/core/policy/HierarchicalVassalBoundaryChunkRules.cs'
 
@@ -78,10 +80,10 @@ Require-Regex 'snapshot capture' $capture `
     'WorldTile.Height must be clamped into its native byte range'
 Require-Text 'snapshot capture' $capture 'InvalidCell(' `
     'world-edge halo cells must be represented explicitly as invalid facts'
-Require-Text 'snapshot capture' $capture 'FingerprintCell(' `
-    'the compact audit fingerprint must include complete cell facts'
-Require-Regex 'snapshot capture' $capture `
-    'FingerprintCell\([\s\S]{0,1000}?\.Height' `
+Require-Text 'snapshot capture' $capture `
+    'HierarchicalVassalBoundaryChunkRules.Fingerprint(' `
+    'capture and audit must use the tested pure fingerprint'
+Require-Text 'chunk rules' $chunkRules 'cell.Height' `
     'the terrain fingerprint must include native height'
 Require-Text 'snapshot capture' $capture 'AuditOneChunkPerSimulationCycle' `
     'round-robin auditing must expose a one-chunk simulation-cycle operation'
@@ -95,6 +97,17 @@ Require-Text 'snapshot capture' $capture 'ResetWorld(' `
     'capture state must be invalidated across world resets'
 Require-Text 'snapshot capture' $capture 'TryValidateWorld(' `
     'capture must reject invalid or reversed world bounds'
+Require-Text 'snapshot capture' $capture 'CaptureRaster(' `
+    'capture and audit must share one complete-halo raster capture path'
+if (([regex]::Matches($capture,
+        'CaptureRaster\(')).Count -lt 3) {
+    $failures.Add('snapshot capture: capture and audit must both call the shared CaptureRaster method')
+}
+Forbid-Regex 'snapshot capture' $capture '\bFingerprintInterior\s*\(' `
+    'audit cannot fingerprint a smaller range than ordinary capture'
+Require-Text 'snapshot capture' $capture `
+    'HierarchicalVassalBoundaryChunkRules.HasAuditChange(' `
+    'unchanged and first-observation audit behavior must use tested pure rules'
 
 Require-Text 'map snapshot' $snapshot 'TryGetBoundaryCellFacts(' `
     'the display snapshot must expose primitive hierarchy/color lookup'
@@ -102,14 +115,43 @@ Require-Text 'map snapshot' $snapshot 'HierarchyColorIdentity' `
     'global canonical color assignment inputs must be retained as primitives'
 Require-Text 'map snapshot' $snapshot 'HierarchyColorEdge' `
     'global canonical color assignment must receive adjacency inputs'
+Require-Text 'map snapshot' $snapshot '_readOnlyBoundaryFactsByZone' `
+    'boundary fact lookup must cache its readonly dictionary wrapper'
+Require-Text 'map snapshot' $snapshot '_readOnlyBoundaryColorIdentities' `
+    'canonical identity input must cache its readonly wrapper'
+Require-Text 'map snapshot' $snapshot '_readOnlyBoundaryColorEdges' `
+    'canonical edge input must cache its readonly wrapper'
+Forbid-Regex 'map snapshot getters' $snapshot `
+    '=>\s*(?:new\s+ReadOnlyDictionary|[^;\r\n]*\.AsReadOnly\s*\()' `
+    'snapshot getters cannot allocate readonly wrappers'
 
-$capturedModelRegion = $capture
+Require-Text 'map snapshot service' $service 'MapBoundaryZone(' `
+    'the production snapshot builder must populate primitive boundary facts'
+Require-Text 'map snapshot service' $service 'SetBoundaryColorInputs(' `
+    'the production snapshot builder must publish canonical color inputs'
+Require-Text 'map snapshot service' $service 'HierarchyColorIdentity' `
+    'the production builder must create hierarchy color identities'
+Require-Text 'map snapshot service' $service 'HierarchyColorEdge' `
+    'the production builder must create real adjacency color edges'
+Require-Regex 'map snapshot service' $service `
+    '\.neighbours\b' `
+    'canonical colors must use real zone adjacency'
+
+$modelStart = $capture.IndexOf(
+    'public sealed class HierarchicalVassalBoundaryChunkSnapshot')
+$modelEnd = $capture.IndexOf(
+    'internal sealed class HierarchicalVassalBoundarySnapshotCapture',
+    $modelStart)
+if ($modelStart -lt 0 -or $modelEnd -le $modelStart) {
+    $failures.Add('captured boundary snapshot: cannot isolate data model region')
+    $capturedModelRegion = ''
+} else {
+    $capturedModelRegion = $capture.Substring(
+        $modelStart, $modelEnd - $modelStart)
+}
 Forbid-Regex 'captured boundary snapshot' $capturedModelRegion `
-    'public\s+(?:World|Kingdom|City|TileZone|WorldTile)\b' `
-    'captured snapshots must not expose live WorldBox objects'
-Forbid-Regex 'captured boundary snapshot' $capturedModelRegion `
-    '(?:IReadOnlyList|List|Dictionary|Queue|HashSet)<\s*(?:World|Kingdom|City|TileZone|WorldTile)\b' `
-    'captured snapshots must not retain live WorldBox collections'
+    '(?m)\b(?:public|internal|protected|private)\s+(?:(?:readonly|static)\s+)*(?:(?:IReadOnlyList|IReadOnlyCollection|List|Dictionary|Queue|HashSet)<\s*)?(?:World|Kingdom|City|TileZone|WorldTile|UnityEngine(?:\.[A-Za-z_][A-Za-z0-9_]*)?|object)\b(?:\s*\[\s*\])?' `
+    'captured snapshot data fields and properties must use primitive/pure types only'
 
 $pureFiles = @(
     'Code/core/policy/HierarchicalVassalBoundaryModels.cs',

@@ -42,9 +42,6 @@ namespace AncientWarfare3.core.policy
 
     internal sealed class HierarchicalVassalBoundarySnapshotCapture
     {
-        private const ulong FingerprintOffset = 14695981039346656037UL;
-        private const ulong FingerprintPrime = 1099511628211UL;
-
         private readonly HierarchicalVassalBoundaryDirtyTracker _dirtyTracker;
         private readonly Dictionary<BoundaryChunkKey, ulong> _auditFingerprints =
             new Dictionary<BoundaryChunkKey, ulong>();
@@ -133,14 +130,18 @@ namespace AncientWarfare3.core.policy
                 _auditCursor / _dirtyTracker.ChunkCountX);
             _auditCursor = (_auditCursor + 1) % chunkCount;
 
-            ulong fingerprint = FingerprintInterior(
-                key, pLayer, pDisplaySnapshot, tiles, width, height);
-            if (!_auditFingerprints.TryGetValue(key, out ulong previous))
+            BoundaryCellRaster raster = CaptureRaster(key, pLayer,
+                pDisplaySnapshot, tiles, width, height);
+            ulong fingerprint =
+                HierarchicalVassalBoundaryChunkRules.Fingerprint(raster);
+            bool hasPrevious = _auditFingerprints.TryGetValue(
+                key, out ulong previous);
+            if (!HierarchicalVassalBoundaryChunkRules.HasAuditChange(
+                    hasPrevious, previous, fingerprint))
             {
                 _auditFingerprints[key] = fingerprint;
                 return false;
             }
-            if (previous == fingerprint) return false;
             _auditFingerprints[key] = fingerprint;
             _dirtyTracker.MarkChunk(key);
             return true;
@@ -156,6 +157,23 @@ namespace AncientWarfare3.core.policy
             int pWorldWidth,
             int pWorldHeight)
         {
+            BoundaryCellRaster raster = CaptureRaster(pKey, pLayer,
+                pDisplaySnapshot, pTiles, pWorldWidth, pWorldHeight);
+            ulong fingerprint =
+                HierarchicalVassalBoundaryChunkRules.Fingerprint(raster);
+            return new HierarchicalVassalBoundaryChunkSnapshot(
+                pWorldGeneration, pKey, pRevision, pLayer, raster,
+                pDisplaySnapshot.BoundaryColorAssignment, fingerprint);
+        }
+
+        private static BoundaryCellRaster CaptureRaster(
+            BoundaryChunkKey pKey,
+            BoundaryDisplayLayer pLayer,
+            HierarchicalVassalMapModeSnapshot pDisplaySnapshot,
+            WorldTile[] pTiles,
+            int pWorldWidth,
+            int pWorldHeight)
+        {
             int size = HierarchicalVassalBoundaryChunkRules.ChunkSize;
             int halo = HierarchicalVassalBoundaryChunkRules.Halo;
             int dimension = checked(size + halo * 2);
@@ -165,8 +183,8 @@ namespace AncientWarfare3.core.policy
                 originY < int.MinValue || originY > int.MaxValue)
                 throw new ArgumentOutOfRangeException(nameof(pKey));
 
-            var copiedCells = new BoundaryCellFacts[checked(dimension * dimension)];
-            ulong fingerprint = FingerprintOffset;
+            var copiedCells = new BoundaryCellFacts[
+                checked(dimension * dimension)];
             for (int localY = 0; localY < dimension; localY++)
             {
                 int worldY = checked((int)originY + localY);
@@ -177,39 +195,10 @@ namespace AncientWarfare3.core.policy
                         pLayer, pDisplaySnapshot, pTiles,
                         pWorldWidth, pWorldHeight);
                     copiedCells[localY * dimension + localX] = cell;
-                    fingerprint = FingerprintCell(fingerprint, cell);
                 }
             }
-            var raster = new BoundaryCellRaster((int)originX, (int)originY,
+            return new BoundaryCellRaster((int)originX, (int)originY,
                 dimension, dimension, copiedCells);
-            return new HierarchicalVassalBoundaryChunkSnapshot(
-                pWorldGeneration, pKey, pRevision, pLayer, raster,
-                pDisplaySnapshot.BoundaryColorAssignment, fingerprint);
-        }
-
-        private static ulong FingerprintInterior(
-            BoundaryChunkKey pKey,
-            BoundaryDisplayLayer pLayer,
-            HierarchicalVassalMapModeSnapshot pDisplaySnapshot,
-            WorldTile[] pTiles,
-            int pWorldWidth,
-            int pWorldHeight)
-        {
-            BoundaryChunkBounds bounds =
-                HierarchicalVassalBoundaryChunkRules.CaptureBounds(
-                    pKey, pWorldWidth, pWorldHeight);
-            if (bounds.InteriorMaxXExclusive < bounds.InteriorMinX ||
-                bounds.InteriorMaxYExclusive < bounds.InteriorMinY)
-                return FingerprintOffset;
-            ulong fingerprint = FingerprintOffset;
-            for (int y = bounds.InteriorMinY;
-                 y < bounds.InteriorMaxYExclusive; y++)
-                for (int x = bounds.InteriorMinX;
-                     x < bounds.InteriorMaxXExclusive; x++)
-                    fingerprint = FingerprintCell(fingerprint,
-                        CaptureCell(x, y, pLayer, pDisplaySnapshot,
-                            pTiles, pWorldWidth, pWorldHeight));
-            return fingerprint;
         }
 
         private static BoundaryCellFacts CaptureCell(
@@ -249,36 +238,6 @@ namespace AncientWarfare3.core.policy
         {
             return new BoundaryCellFacts(pX, pY, false,
                 BoundaryWaterKind.Land, 0, -1L, -1L, -1L, 0u);
-        }
-
-        private static ulong FingerprintCell(
-            ulong pFingerprint, BoundaryCellFacts pCell)
-        {
-            ulong value = pFingerprint;
-            AddFingerprint(ref value, pCell.X);
-            AddFingerprint(ref value, pCell.Y);
-            AddFingerprint(ref value, pCell.IsValid ? 1L : 0L);
-            AddFingerprint(ref value, (long)pCell.Water);
-            AddFingerprint(ref value, pCell.Height);
-            AddFingerprint(ref value, pCell.SystemId);
-            AddFingerprint(ref value, pCell.RealmId);
-            AddFingerprint(ref value, pCell.CityId);
-            AddFingerprint(ref value, pCell.Rgba);
-            return value;
-        }
-
-        private static void AddFingerprint(ref ulong pHash, long pValue)
-        {
-            unchecked
-            {
-                ulong value = (ulong)pValue;
-                for (int i = 0; i < sizeof(long); i++)
-                {
-                    pHash ^= (byte)value;
-                    pHash *= FingerprintPrime;
-                    value >>= 8;
-                }
-            }
         }
 
         private static bool TryValidateWorld(

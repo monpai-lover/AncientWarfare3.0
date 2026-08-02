@@ -89,6 +89,57 @@ internal static class HierarchicalVassalBoundaryChunkRulesTests
                 height: 0, systemId: -1, realmId: -1, cityId: -1,
                 rgba: 0).IsLand,
             "invalid clipped cells never masquerade as land");
+
+        CaptureAuditCaptureFingerprintCycle();
+    }
+
+    private static void CaptureAuditCaptureFingerprintCycle()
+    {
+        const int dimension = 36;
+        var firstCells = new BoundaryCellFacts[dimension * dimension];
+        for (int y = 0; y < dimension; y++)
+            for (int x = 0; x < dimension; x++)
+                firstCells[y * dimension + x] = new BoundaryCellFacts(
+                    x - 2, y - 2, true, BoundaryWaterKind.Land,
+                    height: 80, systemId: 1, realmId: 2,
+                    cityId: 3, rgba: 0x336699FF);
+        var firstCapture = new BoundaryCellRaster(
+            -2, -2, dimension, dimension, firstCells);
+        ulong firstFingerprint =
+            HierarchicalVassalBoundaryChunkRules.Fingerprint(firstCapture);
+        Equal(false, HierarchicalVassalBoundaryChunkRules.HasAuditChange(
+                false, 0UL, firstFingerprint),
+            "first audit observation establishes a baseline without marking");
+
+        var unchangedAudit = new BoundaryCellRaster(
+            -2, -2, dimension, dimension, firstCells);
+        ulong unchangedFingerprint =
+            HierarchicalVassalBoundaryChunkRules.Fingerprint(unchangedAudit);
+        Equal(firstFingerprint, unchangedFingerprint,
+            "capture and audit fingerprint the same complete halo");
+        Equal(false, HierarchicalVassalBoundaryChunkRules.HasAuditChange(
+                true, firstFingerprint, unchangedFingerprint),
+            "unchanged audit does not mark a chunk");
+
+        firstCells[18 * dimension + 18] = new BoundaryCellFacts(
+            16, 16, true, BoundaryWaterKind.Land,
+            height: 81, systemId: 1, realmId: 2,
+            cityId: 3, rgba: 0x336699FF);
+        var changedAudit = new BoundaryCellRaster(
+            -2, -2, dimension, dimension, firstCells);
+        ulong changedFingerprint =
+            HierarchicalVassalBoundaryChunkRules.Fingerprint(changedAudit);
+        Equal(true, HierarchicalVassalBoundaryChunkRules.HasAuditChange(
+                true, firstFingerprint, changedFingerprint),
+            "a height-only change marks the audited chunk");
+
+        var secondCapture = new BoundaryCellRaster(
+            -2, -2, dimension, dimension, firstCells);
+        ulong secondFingerprint =
+            HierarchicalVassalBoundaryChunkRules.Fingerprint(secondCapture);
+        Equal(false, HierarchicalVassalBoundaryChunkRules.HasAuditChange(
+                true, changedFingerprint, secondFingerprint),
+            "capture after a changed audit establishes the new baseline");
     }
 
     private static void Equal<T>(T expected, T actual, string name)
