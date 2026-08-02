@@ -1,0 +1,35 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarNoForceSurrenderRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(true, WarNoForceSurrenderRules.IsNoForce(
+            activeFieldSoldiers: 0, reserveSoldiers: 0,
+            recruitableSoldiers: 0, minimumOperationalArmyCount: 0),
+            "a side with no military potential is exhausted");
+        Equal(false, WarNoForceSurrenderRules.IsNoForce(
+            activeFieldSoldiers: 0, reserveSoldiers: 4,
+            recruitableSoldiers: 0, minimumOperationalArmyCount: 0),
+            "reserve soldiers prevent false surrender");
+        Equal(true, WarNoForceSurrenderRules.ShouldSurrender(
+            warYears: 3, sideNoForce: true, enemyHasForce: true,
+            ordinaryNegotiationBlocked: false, bothSidesNoForce: false),
+            "late ordinary war with no force surrenders");
+        Equal(true, WarNoForceSurrenderRules.ShouldSurrender(
+            warYears: 3, sideNoForce: true, enemyHasForce: true,
+            ordinaryNegotiationBlocked: true, bothSidesNoForce: false),
+            "late non-negotiable war with no force also collapses");
+        Equal(false, WarNoForceSurrenderRules.ShouldSurrender(
+            warYears: 3, sideNoForce: true, enemyHasForce: false,
+            ordinaryNegotiationBlocked: true, bothSidesNoForce: true),
+            "a two-sided empty war waits for a deterministic winner");
+    }
+}

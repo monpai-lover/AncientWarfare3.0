@@ -108,6 +108,10 @@
     <Compile Include="DeferredRuntimeWorkRulesTests.cs.txt" />
     <Compile Include="PathfindingRuntimeModeRulesTests.cs.txt" />
     <Compile Include="ActorRacePerformanceRulesTests.cs.txt" />
+    <Compile Include="ActorDiagnosticSamplingRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalMapModeInvalidationRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalMapModeLabelSizeRulesTests.cs.txt" />
+    <Compile Include="WarNoForceSurrenderRulesTests.cs.txt" />
     <Compile Include="ActorBatchPerformanceRulesTests.cs.txt" />
     <Compile Include="ArmyRtsControllerPerformanceRulesTests.cs.txt" />
     <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />

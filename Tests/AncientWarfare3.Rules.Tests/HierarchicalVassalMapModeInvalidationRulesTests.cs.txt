@@ -1,0 +1,32 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalMapModeInvalidationRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(true, HierarchicalVassalMapModeInvalidationRules.IsFallbackDue(
+            elapsedSeconds: 2.0, fallbackIntervalSeconds: 2.0),
+            "MapMode fallback becomes due at the accepted two-second bound");
+        Equal(false,
+            HierarchicalVassalMapModeInvalidationRules.IsFallbackDue(
+                elapsedSeconds: 1.99, fallbackIntervalSeconds: 2.0),
+            "MapMode fallback does not run early");
+        Equal(true,
+            HierarchicalVassalMapModeInvalidationRules.ShouldTransferRegion(
+                isLargestConnectedRegion: true,
+                isDisconnectedEnclave: false),
+            "the main connected region transfers");
+        Equal(false,
+            HierarchicalVassalMapModeInvalidationRules.ShouldTransferRegion(
+                isLargestConnectedRegion: false,
+                isDisconnectedEnclave: true),
+            "a disconnected island or enclave may remain");
+    }
+}

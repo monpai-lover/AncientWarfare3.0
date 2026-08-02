@@ -1,0 +1,27 @@
+using AncientWarfare3.core.policy;
+
+internal static class ActorDiagnosticSamplingRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(false, ActorDiagnosticSamplingRules.ShouldCollectDetail(
+            diagnosticsEnabled: false, benchmarkEnabled: false,
+            sampleOrdinal: 0, perFrameBudget: 8),
+            "disabled Actor diagnostics do no work");
+        Equal(true, ActorDiagnosticSamplingRules.ShouldCollectDetail(
+            diagnosticsEnabled: true, benchmarkEnabled: false,
+            sampleOrdinal: 0, perFrameBudget: 8),
+            "enabled diagnostics admit the first bounded sample");
+        Equal(false, ActorDiagnosticSamplingRules.ShouldCollectDetail(
+            diagnosticsEnabled: true, benchmarkEnabled: false,
+            sampleOrdinal: 8, perFrameBudget: 8),
+            "Actor detail sampling has a hard frame budget");
+    }
+}

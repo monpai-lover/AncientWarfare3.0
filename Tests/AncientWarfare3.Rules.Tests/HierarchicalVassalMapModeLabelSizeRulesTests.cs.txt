@@ -1,0 +1,21 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalMapModeLabelSizeRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(5f,
+            HierarchicalVassalMapModeLabelSizeRules.Calculate(1),
+            "city labels use the five-times minimum base size");
+        Equal(HierarchicalVassalMapModeLabelSizeRules.MaximumSize,
+            HierarchicalVassalMapModeLabelSizeRules.Calculate(1000000),
+            "large city labels stay bounded");
+    }
+}
