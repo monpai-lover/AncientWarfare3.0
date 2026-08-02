@@ -179,6 +179,148 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        /// <summary>
+        /// Total-war surrender transfers only the defeated realm's largest
+        /// connected land component.  Island and enclave components are left
+        /// behind so a no-negotiation war is not an unconditional world-wide
+        /// city wipe.
+        /// </summary>
+        internal static bool TransferLargestConnectedDefeatedTerritory(
+            War pWar, Kingdom pDefeated, Kingdom pWinner)
+        {
+            if (pWar?.data == null || pDefeated?.data == null ||
+                pWinner?.data == null || pDefeated == pWinner) return false;
+            var cities = new List<City>();
+            try
+            {
+                foreach (City city in pDefeated.getCities())
+                    if (city?.data != null && !city.isRekt() &&
+                        city.kingdom == pDefeated) cities.Add(city);
+            }
+            catch { return false; }
+            if (cities.Count == 0) return false;
+
+            var cityTiles = new Dictionary<long, HashSet<Vector2Int>>();
+            var tileOwners = new Dictionary<Vector2Int, long>();
+            for (int cityIndex = 0; cityIndex < cities.Count; cityIndex++)
+            {
+                City city = cities[cityIndex];
+                var tiles = new HashSet<Vector2Int>();
+                try
+                {
+                    if (city.zones != null)
+                        for (int zoneIndex = 0; zoneIndex < city.zones.Count;
+                             zoneIndex++)
+                        {
+                            TileZone zone = city.zones[zoneIndex];
+                            if (zone?.tiles == null || zone.city != city) continue;
+                            for (int tileIndex = 0;
+                                 tileIndex < zone.tiles.Length; tileIndex++)
+                            {
+                                WorldTile tile = zone.tiles[tileIndex];
+                                if (!IsTransferableLand(tile)) continue;
+                                var position = new Vector2Int(tile.x, tile.y);
+                                tiles.Add(position);
+                                tileOwners[position] = city.id;
+                            }
+                        }
+                }
+                catch { }
+                cityTiles[city.id] = tiles;
+            }
+
+            var neighbours = new Dictionary<long, HashSet<long>>();
+            for (int index = 0; index < cities.Count; index++)
+                neighbours[cities[index].id] = new HashSet<long>();
+            for (int cityIndex = 0; cityIndex < cities.Count; cityIndex++)
+            {
+                long cityId = cities[cityIndex].id;
+                foreach (Vector2Int tile in cityTiles[cityId])
+                {
+                    AddNeighbour(tileOwners, neighbours, cityId,
+                        new Vector2Int(tile.x - 1, tile.y));
+                    AddNeighbour(tileOwners, neighbours, cityId,
+                        new Vector2Int(tile.x + 1, tile.y));
+                    AddNeighbour(tileOwners, neighbours, cityId,
+                        new Vector2Int(tile.x, tile.y - 1));
+                    AddNeighbour(tileOwners, neighbours, cityId,
+                        new Vector2Int(tile.x, tile.y + 1));
+                }
+            }
+
+            var best = new List<long>();
+            var visited = new HashSet<long>();
+            for (int index = 0; index < cities.Count; index++)
+            {
+                long seed = cities[index].id;
+                if (!visited.Add(seed)) continue;
+                var component = new List<long>();
+                var queue = new Queue<long>();
+                queue.Enqueue(seed);
+                while (queue.Count > 0)
+                {
+                    long current = queue.Dequeue();
+                    component.Add(current);
+                    if (!neighbours.TryGetValue(current,
+                            out HashSet<long> adjacent)) continue;
+                    foreach (long next in adjacent)
+                        if (visited.Add(next)) queue.Enqueue(next);
+                }
+                if (component.Count > best.Count ||
+                    component.Count == best.Count &&
+                    FirstCityId(component) < FirstCityId(best)) best = component;
+            }
+
+            bool transferred = false;
+            for (int index = 0; index < best.Count; index++)
+            {
+                City city = FindCity(cities, best[index]);
+                if (city?.data == null || city.kingdom != pDefeated) continue;
+                try
+                {
+                    city.joinAnotherKingdom(pWinner, pCaptured: false,
+                        pRebellion: false);
+                    transferred |= city.kingdom == pWinner;
+                }
+                catch { }
+            }
+            return transferred;
+        }
+
+        private static void AddNeighbour(
+            Dictionary<Vector2Int, long> pTileOwners,
+            Dictionary<long, HashSet<long>> pNeighbours, long pCityId,
+            Vector2Int pPosition)
+        {
+            if (!pTileOwners.TryGetValue(pPosition, out long otherId) ||
+                otherId == pCityId) return;
+            pNeighbours[pCityId].Add(otherId);
+            pNeighbours[otherId].Add(pCityId);
+        }
+
+        private static bool IsTransferableLand(WorldTile pTile)
+        {
+            TileTypeBase type = pTile?.Type;
+            return pTile?.data != null && type != null && type.ground &&
+                   !type.liquid && !type.ocean && !type.lava;
+        }
+
+        private static City FindCity(IReadOnlyList<City> pCities, long pId)
+        {
+            for (int index = 0; index < pCities.Count; index++)
+                if (pCities[index]?.id == pId) return pCities[index];
+            return null;
+        }
+
+        private static long FirstCityId(IReadOnlyList<long> pIds)
+        {
+            if (pIds == null || pIds.Count == 0) return long.MaxValue;
+            long result = long.MaxValue;
+            for (int index = 0; index < pIds.Count; index++)
+                result = Math.Min(result, pIds[index]);
+            return result;
+        }
+
         internal static bool TryGetPrimaryOpenGoalCityId(long pWarId,
             out long pCityId)
         {

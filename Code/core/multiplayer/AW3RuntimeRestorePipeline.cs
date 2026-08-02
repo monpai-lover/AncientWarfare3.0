@@ -411,6 +411,8 @@ namespace AncientWarfare3.core.multiplayer
                     WarTerritoryService.ClearRuntime),
                 new AW3RestoreStage("zhulu_settlement",
                     ZhuluWarSettlementService.ClearRuntime),
+                new AW3RestoreStage("war_no_force_surrender",
+                    WarNoForceSurrenderService.ClearRuntime),
                 new AW3RestoreStage("zhulu_age_director",
                     ZhuluAgeDirectorService.Reset),
                 new AW3RestoreStage("xia_contacts",

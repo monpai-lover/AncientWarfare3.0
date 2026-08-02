@@ -149,31 +149,23 @@ namespace AncientWarfare3.core.policy
                 City city = cities[cityIndex];
                 if (city?.zones == null) continue;
 
-                var landTiles = new List<Vector2Int>();
                 bool visible = false;
-                for (int zoneIndex = 0; zoneIndex < city.zones.Count;
+                HierarchicalVassalMapModeCityCacheEntry cached =
+                    HierarchicalVassalMapModeCityCache.Get(city);
+                if (cached == null) continue;
+                for (int zoneIndex = 0; zoneIndex < cached.VisibleZones.Count;
                      zoneIndex++)
                 {
-                    TileZone zone = city.zones[zoneIndex];
-                    if (zone == null || zone.city != city || zone.id < 0 ||
-                        !pSnapshot.ZoneToKingdomId.ContainsKey(zone.id))
-                        continue;
-                    visible = true;
-                    if (zone.tiles == null) continue;
-                    for (int tileIndex = 0; tileIndex < zone.tiles.Length;
-                         tileIndex++)
-                    {
-                        WorldTile tile = zone.tiles[tileIndex];
-                        if (HierarchicalVassalMapModeService.IsVisibleLand(tile))
-                            landTiles.Add(new Vector2Int(tile.x, tile.y));
-                    }
+                    TileZone zone = cached.VisibleZones[zoneIndex];
+                    if (zone != null && zone.id >= 0 &&
+                        pSnapshot.ZoneToKingdomId.ContainsKey(zone.id))
+                        visible = true;
                 }
 
-                if (!visible || landTiles.Count == 0) continue;
+                if (!visible || cached.LandTiles.Count == 0) continue;
 
                 HierarchicalVassalMapModeGeometryMetrics metrics =
-                    HierarchicalVassalMapModeGeometry.CalculateMetrics(
-                        landTiles);
+                    cached.Metrics;
                 float size =
                     HierarchicalVassalMapModeGeometry.CalculateCityLabelSize(
                         metrics.Area);

@@ -75,6 +75,36 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        internal static bool ApplyNoForce(War pWar, Kingdom pDefeated,
+            Kingdom pWinner)
+        {
+            if (!ZhuluWarService.IsZhuluWar(pWar) ||
+                pDefeated?.data == null || pWinner?.data == null ||
+                pWar.hasEnded()) return false;
+            try
+            {
+                WarTerritoryService.TransferLargestConnectedDefeatedTerritory(
+                    pWar, pDefeated, pWinner);
+                WarWinner result = pWar.isAttacker(pWinner)
+                    ? WarWinner.Attackers
+                    : WarWinner.Defenders;
+                _dedicatedSettlementDepth++;
+                try { World.world?.wars?.endWar(pWar, result); }
+                finally
+                {
+                    _dedicatedSettlementDepth = Math.Max(0,
+                        _dedicatedSettlementDepth - 1);
+                }
+                return true;
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Zhulu no-force settlement failed: " +
+                                    exception.Message);
+                return false;
+            }
+        }
+
         private static void Enqueue(long warId, int attempt)
         {
             DeferredRuntimeWorkService.EnqueueCoalesced(
@@ -119,16 +149,12 @@ namespace AncientWarfare3.core.lineage
                 if (!ZhuluWarService.IsValidRealm(winner))
                     throw new InvalidOperationException(
                         "zhulu winner is unavailable");
-                foreach (City city in SnapshotCities(loser))
-                {
-                    if (city?.data == null || city.isRekt() ||
-                        city.kingdom == winner) continue;
-                    city.joinAnotherKingdom(winner, pCaptured: false,
-                        pRebellion: false);
-                    if (city.kingdom != winner)
-                        throw new InvalidOperationException(
-                            "zhulu city transfer was rejected");
-                }
+                // Zhulu is a no-negotiation war, but its surrender result is
+                // still bounded to the defeated side's largest connected
+                // mainland.  Disconnected islands/enclaves remain available
+                // for a later war instead of being silently erased.
+                WarTerritoryService.TransferLargestConnectedDefeatedTerritory(
+                    war, loser, winner);
 
                 _dedicatedSettlementDepth++;
                 try { World.world.wars.endWar(war, result); }

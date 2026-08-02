@@ -211,6 +211,21 @@ namespace AncientWarfare3.core.lineage
                 out pProposal, out pReason);
         }
 
+        internal static bool TryCreateNoForceSurrender(War pWar,
+            Kingdom pRequester, Kingdom pResponder)
+        {
+            if (pWar?.data == null || pRequester?.data == null ||
+                pResponder?.data == null || pWar.hasEnded()) return false;
+            if (!pWar.isAttacker(pRequester) &&
+                !pWar.isDefender(pRequester)) return false;
+            if (!pWar.isAttacker(pResponder) &&
+                !pWar.isDefender(pResponder)) return false;
+            return TryCreateSelected(pRequester, pResponder,
+                DiplomacyProposalType.Surrender, pPlayerInitiated: false,
+                pWar.data.id, DiplomacyProposalSelection.Empty,
+                out _, out _);
+        }
+
         private static bool TryCreateSelected(Kingdom pRequester,
             Kingdom pResponder, DiplomacyProposalType pType,
             bool pPlayerInitiated, long pWarId,
@@ -3130,6 +3145,23 @@ namespace AncientWarfare3.core.lineage
                 pRequester?.data == null || pRequester.isRekt() ||
                 pRequester.isNeutral()) return false;
             int year = SafeYear();
+            // No-force collapse has priority over ordinary AI peace choices.
+            // The queue is idempotent per war, so every participant may safely
+            // perform this bounded check during its annual pass.
+            try
+            {
+                foreach (War war in pRequester.getWars())
+                {
+                    if (!WarNoForceSurrenderService.QueueIfReady(war))
+                        continue;
+                    pRequester.data.set(
+                        LineageKeys.DIPLOMACY_AI_LAST_PROPOSAL_YEAR, year);
+                    KingdomStrategyRevisionService.MarkChanged(
+                        pRequester.id);
+                    return true;
+                }
+            }
+            catch { }
             if (ProposalRuntime.WasWarSettlementAssessed(pRequester.id,
                     year))
                 return false;

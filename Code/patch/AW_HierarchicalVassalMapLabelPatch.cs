@@ -18,6 +18,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.clearWorld))]
         private static void ClearWorld_Prefix()
         {
+            AW_HierarchicalVassalMapMinimapPatch.ResetSuppression();
             HierarchicalVassalMapModeLabelLayer.Reset();
             HierarchicalVassalMapModeBoundaryLayer.Reset();
         }

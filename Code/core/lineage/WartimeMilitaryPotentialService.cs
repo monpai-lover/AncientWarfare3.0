@@ -7,8 +7,44 @@ namespace AncientWarfare3.core.lineage
         public static int CountPotentialWarriors(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return 0;
-            return AddClamped(CountLivingOrdinaryMilitary(pKingdom),
-                CityReservePoolService.CountAvailable(pKingdom));
+            int active = CountLivingOrdinaryMilitary(pKingdom);
+            int reserve = CityReservePoolService.CountAvailable(pKingdom);
+            int recruitable = CountForceRecruitablePopulation(pKingdom);
+            return AddClamped(AddClamped(active, reserve), recruitable);
+        }
+
+        /// <summary>
+        /// Population that can still be mobilized without importing soldiers
+        /// from another city.  This is intentionally based on each city's
+        /// population and effective warrior slots, matching wartime levy
+        /// admission instead of the current Army count alone.
+        /// </summary>
+        public static int CountForceRecruitablePopulation(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return 0;
+            long total = 0L;
+            try
+            {
+                if (pKingdom.cities == null) return 0;
+                for (int index = 0; index < pKingdom.cities.Count; index++)
+                {
+                    City city = pKingdom.cities[index];
+                    if (city?.data == null || city.isRekt() ||
+                        city.kingdom != pKingdom) continue;
+                    int population = Math.Max(0, city.getPopulationPeople());
+                    int current = Math.Max(0,
+                        StandingArmyService.CountOrdinaryMilitary(city));
+                    int slots = Math.Max(0,
+                        MandateMilitaryPhaseService.EffectiveWarriorSlots(
+                            pKingdom, city.status?.warrior_slots ?? 0));
+                    total += WartimeRecruitmentPopulationRules.
+                        AdditionalMobilizationCapacity(population, current,
+                            slots);
+                    if (total >= int.MaxValue) return int.MaxValue;
+                }
+            }
+            catch { }
+            return (int)total;
         }
 
         public static int CountPotentialWarriorsBounded(Kingdom pKingdom,

@@ -17,11 +17,14 @@ namespace AncientWarfare3.core.policy
                 new Dictionary<long, HierarchicalVassalMapModeSnapshot>();
         private static HierarchicalVassalMapModeSnapshot _visibleSnapshot;
         private static long _visibleSnapshotRevision = long.MinValue;
-        private static int _revisionCheckCounter;
+        private static readonly HierarchicalVassalMapModeChangeTracker
+            ChangeTracker = new HierarchicalVassalMapModeChangeTracker();
         private static HierarchicalVassalMapModeLayer _selectedLayer =
             HierarchicalVassalMapModeLayer.Countries;
 
-        private const int RevisionCheckIntervalFrames = 15;
+        private const int FallbackKingdomBudget =
+            HierarchicalVassalMapModeInvalidationRules.
+                MaximumFallbackItemsPerFrame;
 
         public static bool IsActive()
         {
@@ -112,17 +115,15 @@ namespace AncientWarfare3.core.policy
 
         internal static void RefreshIfWorldChanged()
         {
-            if (_visibleSnapshotRevision != long.MinValue &&
-                ++_revisionCheckCounter < RevisionCheckIntervalFrames)
-                return;
-
-            _revisionCheckCounter = 0;
-            long revision = ComputeWorldRevision();
+            if (World.world?.kingdoms == null) return;
+            bool changed = ChangeTracker.AdvanceFallback(
+                World.world.kingdoms.list, FallbackKingdomBudget);
+            long revision = ChangeTracker.Generation;
             if (revision == _visibleSnapshotRevision) return;
 
             _visibleSnapshotRevision = revision;
             InvalidateSnapshotCaches();
-            HierarchicalVassalMapModeLabelLayer.MarkDirty();
+            if (changed) HierarchicalVassalMapModeLabelLayer.MarkDirty();
         }
 
         public static void DrawZones(MetaTypeAsset pAsset)
@@ -269,7 +270,8 @@ namespace AncientWarfare3.core.policy
         {
             InvalidateSnapshotCaches();
             _visibleSnapshotRevision = long.MinValue;
-            _revisionCheckCounter = 0;
+            ChangeTracker.MarkAll();
+            HierarchicalVassalMapModeCityCache.Clear();
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
             try { AWMapModeMetaLibrary.ClearDynamicMetaCache(); }
             catch { }
@@ -280,8 +282,31 @@ namespace AncientWarfare3.core.policy
         public static void Reset()
         {
             State.Reset();
+            ChangeTracker.Reset();
+            HierarchicalVassalMapModeCityCache.Clear();
             HierarchicalVassalMapModeLabelLayer.Reset();
             DirtyMap();
+        }
+
+        internal static void MarkKingdomDirty(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            ChangeTracker.MarkKingdom(pKingdom.id);
+            HierarchicalVassalMapModeLabelLayer.MarkDirty();
+        }
+
+        internal static void MarkCityDirty(City pCity)
+        {
+            if (pCity?.data == null) return;
+            ChangeTracker.MarkCity(pCity.id);
+            HierarchicalVassalMapModeCityCache.MarkDirty(pCity.id);
+            HierarchicalVassalMapModeLabelLayer.MarkDirty();
+        }
+
+        internal static void MarkHierarchyDirty()
+        {
+            ChangeTracker.MarkHierarchy();
+            HierarchicalVassalMapModeLabelLayer.MarkDirty();
         }
 
         private static void RefreshView()
@@ -531,33 +556,26 @@ namespace AncientWarfare3.core.policy
                     if (city?.data == null || city.isRekt() ||
                         city.kingdom != pTerritoryKingdom ||
                         city.zones == null) continue;
+                    HierarchicalVassalMapModeCityCacheEntry cached =
+                        HierarchicalVassalMapModeCityCache.Get(city);
+                    if (cached == null) continue;
                     for (int zoneIndex = 0;
-                         zoneIndex < city.zones.Count; zoneIndex++)
+                         zoneIndex < cached.VisibleZones.Count; zoneIndex++)
                     {
-                        TileZone zone = city.zones[zoneIndex];
-                        if (zone == null || zone.city != city) continue;
-                        // A zone containing no land should remain untouched by
-                        // the political overlay. Mixed zones still render and
-                        // let the dedicated water patch restore their liquid
-                        // tiles to the native terrain color.
-                        if (!ContainsVisibleLand(zone)) continue;
+                        TileZone zone = cached.VisibleZones[zoneIndex];
                         if (zone.id >= 0)
                         {
                             pOwner.MapZone(zone.id, pEntry.KingdomId);
                             pOwner.AddDrawableZone(zone);
                             pEntry.AddDrawableZone(zone);
                         }
-                        WorldTile[] tiles = zone.tiles;
-                        if (tiles == null) continue;
-                        for (int tileIndex = 0;
-                             tileIndex < tiles.Length; tileIndex++)
-                        {
-                            WorldTile tile = tiles[tileIndex];
-                            if (!IsVisibleLand(tile)) continue;
-                            var position = new Vector2Int(tile.x, tile.y);
-                            if (pSeenTiles.Add(position))
-                                pEntry.AddLandTile(position);
-                        }
+                    }
+                    for (int tileIndex = 0;
+                         tileIndex < cached.LandTiles.Count; tileIndex++)
+                    {
+                        Vector2Int position = cached.LandTiles[tileIndex];
+                        if (pSeenTiles.Add(position))
+                            pEntry.AddLandTile(position);
                     }
                 }
             }
@@ -665,100 +683,6 @@ namespace AncientWarfare3.core.policy
                 return true;
             }
             catch { return false; }
-        }
-
-        private static long ComputeWorldRevision()
-        {
-            unchecked
-            {
-                long hash = 1469598103934665603L;
-                try
-                {
-                    if (World.world?.kingdoms == null) return hash;
-                    foreach (Kingdom kingdom in World.world.kingdoms)
-                    {
-                        if (!IsValidKingdom(kingdom)) continue;
-                        AddRevision(ref hash, kingdom.id);
-                        AddRevision(ref hash, SafeSuzerainId(kingdom));
-                        AddRevision(ref hash, (int)KingdomTitleService.GetTitle(
-                            kingdom));
-                        AddRevision(ref hash, SafeDisplayName(kingdom));
-                        AddRevision(ref hash, SafeColorKey(kingdom));
-
-                        foreach (City city in kingdom.getCities())
-                        {
-                            if (city?.data == null || city.isRekt()) continue;
-                            AddRevision(ref hash, city.id);
-                            AddRevision(ref hash, city.kingdom?.id ?? -1L);
-                            AddRevision(ref hash, ReadMemberString(city.data,
-                                "name"));
-                            if (city.zones == null) continue;
-                            AddRevision(ref hash, city.zones.Count);
-                            for (int zoneIndex = 0;
-                                 zoneIndex < city.zones.Count; zoneIndex++)
-                            {
-                                TileZone zone = city.zones[zoneIndex];
-                                if (zone == null) continue;
-                                AddRevision(ref hash, zone.id);
-                                AddRevision(ref hash,
-                                    zone.city?.id ?? -1L);
-                                AddRevision(ref hash,
-                                    zone.tiles?.Length ?? 0);
-                            }
-                        }
-                    }
-                }
-                catch
-                {
-                    // A transient world mutation should force a rebuild on the
-                    // next check instead of leaving stale labels indefinitely.
-                    return long.MinValue + 1L;
-                }
-                return hash;
-            }
-        }
-
-        private static void AddRevision(ref long pHash, long pValue)
-        {
-            unchecked
-            {
-                pHash ^= pValue;
-                pHash *= 1099511628211L;
-            }
-        }
-
-        private static void AddRevision(ref long pHash, int pValue)
-        {
-            AddRevision(ref pHash, (long)pValue);
-        }
-
-        private static void AddRevision(ref long pHash, string pValue)
-        {
-            string value = pValue ?? string.Empty;
-            AddRevision(ref pHash, value.Length);
-            for (int index = 0; index < value.Length; index++)
-                AddRevision(ref pHash, value[index]);
-        }
-
-        private static string ReadMemberString(object pObject,
-            string pMemberName)
-        {
-            if (pObject == null || string.IsNullOrEmpty(pMemberName))
-                return string.Empty;
-            try
-            {
-                Type type = pObject.GetType();
-                var property = type.GetProperty(pMemberName);
-                if (property != null)
-                    return property.GetValue(pObject, null)?.ToString() ??
-                        string.Empty;
-                var field = type.GetField(pMemberName);
-                return field?.GetValue(pObject)?.ToString() ?? string.Empty;
-            }
-            catch
-            {
-                return string.Empty;
-            }
         }
 
         private static Kingdom GetKingdom(long pKingdomId)

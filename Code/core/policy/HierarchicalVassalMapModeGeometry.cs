@@ -406,8 +406,7 @@ namespace AncientWarfare3.core.policy
 
         public static float CalculateCityLabelSize(int pArea)
         {
-            double scaled = Math.Sqrt(Math.Max(1, pArea)) * 0.065d;
-            return (float)Math.Max(0.14d, Math.Min(0.9d, scaled));
+            return HierarchicalVassalMapModeLabelSizeRules.Calculate(pArea);
         }
 
         private static List<Vector2Int> UniqueTiles(

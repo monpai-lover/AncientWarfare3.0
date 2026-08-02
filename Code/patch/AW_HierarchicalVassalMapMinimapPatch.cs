@@ -1,5 +1,6 @@
 using AncientWarfare3.core.policy;
 using HarmonyLib;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace AncientWarfare3.patch
@@ -11,6 +12,15 @@ namespace AncientWarfare3.patch
         private static bool _nativeArmyFlagSortingCaptured;
         private static int _nativeArmyFlagLayerId;
         private static int _nativeArmyFlagSortingOrder;
+        private static readonly Dictionary<QuantumSpriteAsset, bool>
+            SavedMapFlags = new Dictionary<QuantumSpriteAsset, bool>();
+        private static bool _mapAssetsSuppressed;
+
+        internal static void ResetSuppression()
+        {
+            if (_mapAssetsSuppressed) RestoreMapAssets();
+            _mapAssetsSuppressed = false;
+        }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.redrawMiniMap))]
@@ -26,23 +36,20 @@ namespace AncientWarfare3.patch
             HierarchicalVassalMapModeBoundaryLayer.SetMinimapHidden(false);
         }
 
-        [HarmonyPostfix]
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(QuantumSpriteManager),
             nameof(QuantumSpriteManager.update))]
-        private static void HideNonEssentialMinimapAssets()
+        private static void SyncMapAssets()
         {
-            if (!HierarchicalVassalMapModeService.IsActive() ||
-                AssetManager.quantum_sprites?.list == null) return;
-            foreach (QuantumSpriteAsset asset in
-                     AssetManager.quantum_sprites.list)
+            bool active = HierarchicalVassalMapModeService.IsActive();
+            if (_mapAssetsSuppressed == active) return;
+            _mapAssetsSuppressed = active;
+            if (active)
             {
-                if (asset == null || !asset.render_map ||
-                    HierarchicalVassalMapModeRules.
-                        ShouldKeepMinimapQuantumAsset(asset.id)) continue;
-                if (asset.group_system == null ||
-                    asset.group_system.countActive() <= 0) continue;
-                asset.group_system.clearFull();
+                SuppressNonEssentialAssets();
+                return;
             }
+            RestoreMapAssets();
         }
 
         [HarmonyPrefix]
@@ -112,10 +119,37 @@ namespace AncientWarfare3.patch
         private static bool KeepOrClearMapIcons(QuantumSpriteAsset pAsset)
         {
             if (!HierarchicalVassalMapModeService.IsActive()) return true;
-            // Returning false stops new markers, while clearFull removes the
-            // king/leader sprites retained from the frame before mode entry.
-            pAsset?.group_system?.clearFull();
+            // The transition prefix clears retained groups once.  Returning
+            // false here prevents the native draw call from repopulating them
+            // on every frame while the mode remains active.
             return false;
+        }
+
+        private static void SuppressNonEssentialAssets()
+        {
+            SavedMapFlags.Clear();
+            if (AssetManager.quantum_sprites?.list == null) return;
+            foreach (QuantumSpriteAsset asset in
+                     AssetManager.quantum_sprites.list)
+            {
+                if (asset == null || !asset.render_map ||
+                    HierarchicalVassalMapModeRules.
+                        ShouldKeepMinimapQuantumAsset(asset.id)) continue;
+                SavedMapFlags[asset] = asset.render_map;
+                asset.render_map = false;
+                asset.group_system?.clearFull();
+            }
+        }
+
+        private static void RestoreMapAssets()
+        {
+            foreach (KeyValuePair<QuantumSpriteAsset, bool> pair in
+                     SavedMapFlags)
+            {
+                if (pair.Key == null) continue;
+                pair.Key.render_map = pair.Value;
+            }
+            SavedMapFlags.Clear();
         }
     }
 }
