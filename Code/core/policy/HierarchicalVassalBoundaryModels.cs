@@ -243,7 +243,15 @@ namespace AncientWarfare3.core.policy
                 throw new ArgumentOutOfRangeException(nameof(pHeight));
             if (pCells == null)
                 throw new ArgumentNullException(nameof(pCells));
-            if (pCells.Length != pWidth * pHeight)
+            long cellCount = (long)pWidth * pHeight;
+            if (cellCount > int.MaxValue)
+                throw new ArgumentOutOfRangeException(
+                    nameof(pWidth), "Raster dimensions exceed array capacity.");
+            if ((long)pOriginX + pWidth > int.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(pOriginX));
+            if ((long)pOriginY + pHeight > int.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(pOriginY));
+            if (pCells.Length != (int)cellCount)
                 throw new ArgumentException(
                     "Cell count must match raster dimensions.", nameof(pCells));
 
@@ -435,6 +443,142 @@ namespace AncientWarfare3.core.policy
         public override int GetHashCode()
         {
             return unchecked((X.GetHashCode() * 397) ^ Y.GetHashCode());
+        }
+    }
+
+    public readonly struct BoundaryFloat3 : IEquatable<BoundaryFloat3>
+    {
+        public BoundaryFloat3(float pX, float pY, float pZ)
+        {
+            X = pX;
+            Y = pY;
+            Z = pZ;
+        }
+
+        public float X { get; }
+
+        public float Y { get; }
+
+        public float Z { get; }
+
+        public bool Equals(BoundaryFloat3 pOther)
+        {
+            return X.Equals(pOther.X) && Y.Equals(pOther.Y) &&
+                   Z.Equals(pOther.Z);
+        }
+
+        public override bool Equals(object pValue)
+        {
+            return pValue is BoundaryFloat3 other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = X.GetHashCode();
+                hash = (hash * 397) ^ Y.GetHashCode();
+                return (hash * 397) ^ Z.GetHashCode();
+            }
+        }
+    }
+
+    public sealed class BoundaryHeightDraft
+    {
+        public const int MaximumDimension = 36;
+        public const int MaximumHalo = 2;
+
+        private readonly byte[] _samples;
+        private readonly IReadOnlyList<byte> _readOnlySamples;
+
+        public BoundaryHeightDraft(
+            byte[] pSamples,
+            int pWidth,
+            int pHeight,
+            int pChunkWorldOriginX,
+            int pChunkWorldOriginY,
+            int pHalo,
+            long pTerrainRevision)
+        {
+            if (pSamples == null)
+                throw new ArgumentNullException(nameof(pSamples));
+            if (pWidth <= 0 || pWidth > MaximumDimension)
+                throw new ArgumentOutOfRangeException(nameof(pWidth));
+            if (pHeight <= 0 || pHeight > MaximumDimension)
+                throw new ArgumentOutOfRangeException(nameof(pHeight));
+            if (pHalo < 0 || pHalo > MaximumHalo ||
+                pHalo * 2 >= pWidth || pHalo * 2 >= pHeight)
+                throw new ArgumentOutOfRangeException(nameof(pHalo));
+            if (pTerrainRevision < 0L)
+                throw new ArgumentOutOfRangeException(nameof(pTerrainRevision));
+
+            int expectedLength = checked(pWidth * pHeight);
+            if (pSamples.Length != expectedLength)
+                throw new ArgumentException(
+                    "Sample count must match height draft dimensions.",
+                    nameof(pSamples));
+
+            _samples = new byte[pSamples.Length];
+            Array.Copy(pSamples, _samples, pSamples.Length);
+            _readOnlySamples = Array.AsReadOnly(_samples);
+            Width = pWidth;
+            Height = pHeight;
+            ChunkWorldOriginX = pChunkWorldOriginX;
+            ChunkWorldOriginY = pChunkWorldOriginY;
+            Halo = pHalo;
+            TerrainRevision = pTerrainRevision;
+        }
+
+        public int Width { get; }
+
+        public int Height { get; }
+
+        public int ChunkWorldOriginX { get; }
+
+        public int ChunkWorldOriginY { get; }
+
+        public int Halo { get; }
+
+        public long TerrainRevision { get; }
+
+        public IReadOnlyList<byte> Samples
+        {
+            get { return _readOnlySamples; }
+        }
+
+        public int Index(int pX, int pY)
+        {
+            if (pX < 0 || pX >= Width)
+                throw new ArgumentOutOfRangeException(nameof(pX));
+            if (pY < 0 || pY >= Height)
+                throw new ArgumentOutOfRangeException(nameof(pY));
+            return pY * Width + pX;
+        }
+
+        internal byte SampleAtUnchecked(int pX, int pY)
+        {
+            return _samples[pY * Width + pX];
+        }
+    }
+
+    public sealed class BoundaryChunkDraftSet
+    {
+        private readonly BoundaryHeightDraft _heightDraft;
+
+        public BoundaryChunkDraftSet(BoundaryHeightDraft pHeightDraft)
+        {
+            _heightDraft = pHeightDraft ??
+                           throw new ArgumentNullException(nameof(pHeightDraft));
+        }
+
+        public BoundaryHeightDraft CountryHeightDraft
+        {
+            get { return _heightDraft; }
+        }
+
+        public BoundaryHeightDraft CityHeightDraft
+        {
+            get { return _heightDraft; }
         }
     }
 
