@@ -35,9 +35,19 @@ namespace AncientWarfare3.core.policy
 
         internal static void SetSelectedLayerFromOption(int pZoneOption)
         {
-            _selectedLayer = HierarchicalVassalMapModeOptionRules.ResolveLayer(
-                pZoneOption);
+            HierarchicalVassalMapModeLayer nextLayer =
+                HierarchicalVassalMapModeOptionRules.ResolveLayer(pZoneOption);
+            if (_selectedLayer == nextLayer) return;
+            _selectedLayer = nextLayer;
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                OnLayerChanged();
+        }
+
+        internal static bool MeshAuthorityActive
+        {
+            get { return AncientWarfare3.patch.
+                AW_HierarchicalVassalBoundaryDirtyPatch.MeshAuthorityActive; }
         }
 
         public static bool IsCityLayer =>
@@ -121,12 +131,15 @@ namespace AncientWarfare3.core.policy
             if (revision == _visibleSnapshotRevision) return;
 
             _visibleSnapshotRevision = revision;
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                MarkVisibleSnapshotZones();
             InvalidateSnapshotCaches();
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
         }
 
         public static void DrawZones(MetaTypeAsset pAsset)
         {
+            if (MeshAuthorityActive) return;
             ZoneCalculator calculator = World.world?.zone_calculator;
             if (pAsset == null || calculator == null ||
                 World.world?.kingdoms == null) return;
@@ -275,6 +288,8 @@ namespace AncientWarfare3.core.policy
             catch { }
             try { World.world?.zone_calculator?.dirtyAndClear(); }
             catch { }
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                OnMapModeDirty();
         }
 
         public static void Reset()
@@ -286,12 +301,16 @@ namespace AncientWarfare3.core.policy
 
         private static void RefreshView()
         {
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                MarkVisibleSnapshotZones();
             if (State.IsRoot)
                 _visibleSnapshot = _rootSnapshot;
             else if (!FocusedSnapshots.TryGetValue(State.FocusKingdomId,
                          out _visibleSnapshot))
                 _visibleSnapshot = null;
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                MarkVisibleSnapshotZones();
             try { World.world?.zone_calculator?.dirtyAndClear(); }
             catch { }
         }

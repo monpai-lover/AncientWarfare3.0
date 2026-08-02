@@ -643,6 +643,8 @@ namespace AncientWarfare3.core.lineage
 
             long currentSuzerain = GetSuzerainId(pVassal);
             long currentTributarySuzerain = GetTributarySuzerainId(pVassal);
+            Kingdom previousSuzerain = FindKingdom(currentSuzerain >= 0
+                ? currentSuzerain : currentTributarySuzerain);
             if ((VassalContractTierRules.IsLooseTributary(contractTier)
                     ? currentTributarySuzerain
                     : currentSuzerain) == pSuzerain.id)
@@ -703,6 +705,8 @@ namespace AncientWarfare3.core.lineage
             }
             KingdomStrategyRevisionService.MarkChanged(pVassal.id,
                 pSuzerain.id);
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                BoundaryHierarchyChanged(previousSuzerain, pSuzerain);
             return true;
         }
 
@@ -778,6 +782,8 @@ namespace AncientWarfare3.core.lineage
             PullVassalIntoSuzerainWars(pTributary, pSuzerain);
             KingdomStrategyRevisionService.MarkChanged(pTributary.id,
                 pSuzerain.id);
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                BoundaryHierarchyChanged(pSuzerain, pSuzerain);
             pReason = "";
             return true;
         }
@@ -822,6 +828,8 @@ namespace AncientWarfare3.core.lineage
             DirtyVassalMap();
             KingdomStrategyRevisionService.MarkChanged(pVassal.id,
                 suzerainId);
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                BoundaryHierarchyChanged(suzerain, null);
             return true;
         }
 

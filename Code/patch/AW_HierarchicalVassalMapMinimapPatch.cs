@@ -16,6 +16,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.redrawMiniMap))]
         private static void HideCityBoundariesForMinimap()
         {
+            // Hide only boundary roots; pooled political fill remains in the
+            // minimap capture so hierarchy regions retain their colors.
             HierarchicalVassalMapModeBoundaryLayer.SetMinimapHidden(true);
         }
 

@@ -103,9 +103,18 @@ namespace AncientWarfare3.core.policy
                 HierarchicalVassalMapModeService.POWER_ID,
                 HierarchicalVassalMapModeService.GetMetaForZone);
             HierarchicalVassalAsset.draw_zones =
-                HierarchicalVassalMapModeService.DrawZones;
+                DrawHierarchicalVassalZones;
             HierarchicalVassalAsset.click_action_zone =
                 HierarchicalVassalMapModeService.HandleZoneClick;
+        }
+
+        private static void DrawHierarchicalVassalZones(MetaTypeAsset pAsset)
+        {
+            // Mesh authority owns the political overlay. The legacy
+            // ZoneManager path remains available only for an explicit,
+            // whole-session fallback when mesh initialization fails.
+            if (HierarchicalVassalMapModeService.MeshAuthorityActive) return;
+            HierarchicalVassalMapModeService.DrawZones(pAsset);
         }
 
         private static void ConfigureSchoolSelectionAsset(MetaTypeAsset pAsset)

@@ -49,8 +49,39 @@ namespace AncientWarfare3.core.policy
         private static int _cameraPixelHeight = -1;
         private static bool _minimapHidden;
         private static bool _warningWritten;
+        private static bool _rendererHealthy = true;
 
         internal static int MaximumUploads { get { return MaximumUploadsPerFrame; } }
+
+        internal static bool IsHealthy
+        {
+            get { return _rendererHealthy; }
+        }
+
+        internal static bool TryInitialize()
+        {
+            try
+            {
+                EnsureRoots();
+                if (_fillRoot == null || _boundaryRoot == null ||
+                    HierarchicalVassalBoundaryMaterialLibrary.SharedFill == null ||
+                    HierarchicalVassalBoundaryMaterialLibrary.ForTier(
+                        BoundaryTier.City) == null ||
+                    HierarchicalVassalBoundaryMaterialLibrary.ForTier(
+                        BoundaryTier.VassalRealm) == null ||
+                    HierarchicalVassalBoundaryMaterialLibrary.ForTier(
+                        BoundaryTier.SuzerainSystem) == null)
+                    throw new InvalidOperationException(
+                        "boundary roots or materials unavailable");
+                _rendererHealthy = true;
+                return true;
+            }
+            catch
+            {
+                _rendererHealthy = false;
+                return false;
+            }
+        }
 
         internal static bool Submit(BoundaryWorkerCompletion pCompletion)
         {
@@ -122,7 +153,7 @@ namespace AncientWarfare3.core.policy
             return uploads;
         }
 
-        internal static void ProcessFrame()
+        internal static int DrainMesh()
         {
             try
             {
@@ -130,18 +161,30 @@ namespace AncientWarfare3.core.policy
                     !HierarchicalVassalMapModeService.IsActive())
                 {
                     SetRootsActive(false, false);
-                    return;
+                    return 0;
                 }
 
-                EnsureRoots();
+                if (!TryInitialize())
+                {
+                    SetRootsActive(false, false);
+                    return 0;
+                }
                 SetRootsActive(true, !_minimapHidden);
-                Drain();
+                return Drain();
             }
             catch (Exception error)
             {
-                WarnOnce("boundary mesh frame failed: " + BoundedMessage(error));
+                _rendererHealthy = false;
+                WarnOnce("boundary mesh frame failed: " +
+                    BoundedMessage(error));
                 SetRootsActive(false, false);
+                return 0;
             }
+        }
+
+        internal static void ProcessFrame()
+        {
+            DrainMesh();
         }
 
         internal static void ResetWorld(long pWorldGeneration)
@@ -149,6 +192,7 @@ namespace AncientWarfare3.core.policy
             if (pWorldGeneration < 0L)
                 throw new ArgumentOutOfRangeException(nameof(pWorldGeneration));
             _worldGeneration = pWorldGeneration;
+            _rendererHealthy = true;
             AcceptedRevisions.Clear();
             RetryCounts.Clear();
             Pending.Clear();
@@ -167,6 +211,7 @@ namespace AncientWarfare3.core.policy
             _cameraOrthographicSize = float.NaN;
             _cameraPixelHeight = -1;
             _minimapHidden = false;
+            _rendererHealthy = true;
             DestroyResources();
             HierarchicalVassalBoundaryMaterialLibrary.Reset();
         }

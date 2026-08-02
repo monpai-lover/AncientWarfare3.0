@@ -65,6 +65,20 @@ $bundleBuilder = Read-Source `
     'Tools/HierarchicalVassalBoundaryShader/Assets/Editor/AW3BoundaryBundleBuilder.cs'
 $materialLibrary = Read-Source `
     'Code/core/policy/HierarchicalVassalBoundaryMaterialLibrary.cs'
+$dirtyPatch = Read-Source `
+    'Code/patch/AW_HierarchicalVassalBoundaryDirtyPatch.cs'
+$deferredPatch = Read-Source `
+    'Code/patch/AW_DeferredRuntimeWorkPatch.cs'
+$labelPatch = Read-Source `
+    'Code/patch/AW_HierarchicalVassalMapLabelPatch.cs'
+$minimapPatch = Read-Source `
+    'Code/patch/AW_HierarchicalVassalMapMinimapPatch.cs'
+$metaLibrary = Read-Source `
+    'Code/core/policy/AWMapModeMetaLibrary.cs'
+$vassalService = Read-Source `
+    'Code/core/lineage/VassalService.cs'
+$dirtyTracker = Read-Source `
+    'Code/core/policy/HierarchicalVassalBoundaryDirtyTracker.cs'
 
 Require-Text 'Unity project version' $projectVersion 'm_EditorVersion: 2022.3.60f1' `
     'must match the installed WorldBox Unity player editor version'
@@ -311,6 +325,75 @@ Require-Text 'topology worker' $worker 'BuildRibbons(' `
     'worker must build consolidated ribbons'
 Forbid-Regex 'topology worker' $worker '\bTask\s*\.\s*Run\s*\(' `
     'worker cannot create unbounded Task.Run work'
+
+# Task 11 runtime ownership and ordering guard. Keep these checks source-level
+# so CI can reject a patch that compiles but silently drops a hook or stage.
+Require-Text 'runtime dirty patch' $dirtyPatch 'TargetMethods()' `
+    'dirty hooks must select overloads through reflection'
+Require-Text 'runtime dirty patch' $dirtyPatch 'TileZone' `
+    'must route TileZone ownership changes'
+Require-Text 'runtime dirty patch' $dirtyPatch 'City.addZone' `
+    'must route City.addZone'
+Require-Text 'runtime dirty patch' $dirtyPatch 'joinAnotherKingdom' `
+    'must route city kingdom transfers'
+Require-Text 'runtime dirty patch' $dirtyPatch 'WorldTile.Height' `
+    'must route terrain height setter'
+Require-Text 'runtime dirty patch' $dirtyPatch 'setTileType' `
+    'must route every setTileType overload'
+Require-Text 'runtime dirty patch' $dirtyPatch 'setTileTypes' `
+    'must route every setTileTypes overload'
+Require-Text 'runtime dirty patch' $dirtyPatch 'OldCity' `
+    'must capture old city before ownership mutation'
+Require-Text 'runtime dirty patch' $dirtyPatch 'OldKingdom' `
+    'must capture old kingdom before ownership mutation'
+Require-Text 'runtime dirty patch' $dirtyPatch 'OldHeight' `
+    'must capture old terrain height before mutation'
+Require-Text 'runtime dirty patch' $dirtyPatch 'MarkTile' `
+    'must mark changed tile chunks'
+Require-Text 'runtime dirty patch' $dirtyPatch 'MarkZone' `
+    'must mark changed zone chunks'
+Require-Text 'runtime dirty patch' $dirtyPatch 'MarkKingdom' `
+    'must mark changed kingdom chunks'
+Require-Text 'runtime dirty patch' $dirtyPatch 'AuditOneChunkPerSimulationCycle' `
+    'missing reflected lifecycle hooks must use bounded audit fallback'
+Require-Text 'runtime dirty patch' $dirtyPatch 'generation' `
+    'terrain routing must be gated by renderer world generation'
+Require-Regex 'runtime dirty patch' $dirtyPatch `
+    'GetMethods\(' `
+    'overload discovery must inspect all declared signatures'
+Require-Text 'runtime dirty tracker' $dirtyTracker 'DirtyNeighborhood' `
+    'dirty routing must retain 3x3 chunk expansion'
+
+Require-Text 'runtime revision stage' $dirtyPatch 'RefreshIfWorldChanged' `
+    'world revision events must run before capture'
+Require-Text 'runtime deferred ordering' $deferredPatch 'ProcessCapture' `
+    'deferred runtime must expose bounded snapshot capture stage'
+Require-Text 'runtime deferred ordering' $deferredPatch 'DrainWorker' `
+    'deferred runtime must drain topology worker completions before mesh upload'
+Require-Text 'runtime deferred ordering' $deferredPatch 'DrainMesh' `
+    'deferred runtime must upload a bounded mesh batch before labels'
+Require-Regex 'runtime deferred ordering' $deferredPatch `
+    'ProcessCapture[\s\S]*DrainWorker[\s\S]*DrainMesh[\s\S]*ProcessLabels' `
+    'runtime order must be capture -> worker drain -> mesh drain -> labels'
+Require-Text 'runtime labels' $labelPatch 'ProcessLabels' `
+    'labels must run in the final ordered stage'
+Require-Text 'runtime reset' $labelPatch 'CancelGeneration' `
+    'clearWorld must cancel boundary generation before destroying roots'
+Require-Text 'runtime reset' $dirtyPatch 'ResetWorld' `
+    'world reset must publish a new boundary generation'
+Require-Text 'runtime minimap' $minimapPatch 'SetMinimapHidden' `
+    'minimap must hide only boundary roots through the facade'
+Require-Text 'runtime minimap' $minimapPatch 'fill' `
+    'minimap behavior must preserve fill roots'
+
+Require-Text 'legacy suppression' $metaLibrary 'MeshAuthorityActive' `
+    'hierarchical asset must query mesh authority before drawZoneMeta'
+Require-Text 'legacy suppression' $metaLibrary 'drawZoneMeta' `
+    'legacy path remains auditable behind an explicit fallback gate'
+Require-Text 'legacy suppression' $metaLibrary 'return;' `
+    'mesh authority must return before invoking legacy drawing'
+Require-Text 'hierarchy mutation bridge' $vassalService 'BoundaryHierarchyChanged' `
+    'vassal relation mutations must notify boundary dirty routing'
 
 $pureFiles = @(
     'Code/core/policy/HierarchicalVassalBoundaryModels.cs',

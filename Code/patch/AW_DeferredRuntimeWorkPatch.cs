@@ -27,12 +27,26 @@ namespace AncientWarfare3.patch
 
             try
             {
+                // Boundary presentation is deliberately staged after the
+                // bounded world-revision/capture work and before labels. No
+                // stage below mutates simulation state.
+                MapBoxFrameStageGuard.Run("hierarchical_boundary_revision",
+                    AW_HierarchicalVassalBoundaryDirtyPatch.
+                        ProcessWorldRevisionEvents);
+                MapBoxFrameStageGuard.Run("hierarchical_boundary_capture",
+                    AW_HierarchicalVassalBoundaryDirtyPatch.ProcessCapture);
+                MapBoxFrameStageGuard.Run("hierarchical_boundary_worker",
+                    AW_HierarchicalVassalBoundaryDirtyPatch.DrainWorker);
+                MapBoxFrameStageGuard.Run("hierarchical_boundary_mesh",
+                    AW_HierarchicalVassalBoundaryDirtyPatch.DrainMesh);
                 MapBoxFrameStageGuard.Run("historical_read_completion",
                     DrainPresentationCompletionsMeasured);
                 MapBoxFrameStageGuard.Run("localized_name_refresh",
                     AWLocalizedNameRefreshService.ProcessFrame);
                 MapBoxFrameStageGuard.Run("school_map_presentation",
                     ProcessSchoolMapPresentationMeasured);
+                MapBoxFrameStageGuard.Run("hierarchical_boundary_labels",
+                    AW_HierarchicalVassalMapLabelPatch.ProcessLabels);
             }
             finally
             {
@@ -70,6 +84,7 @@ namespace AncientWarfare3.patch
         {
             if (!AWAsyncClearWorldGuard.CleanupAllowed) return;
             MapBoxFrameStageGuard.Reset();
+            AW_HierarchicalVassalBoundaryDirtyPatch.CancelGeneration();
             FamilyTreeDeferredCleanupHost.InvalidateWorld(long.MinValue);
             AWLocalizedNameRefreshService.Clear();
             ArmyCaptainDisposalScope.ClearRuntime();
