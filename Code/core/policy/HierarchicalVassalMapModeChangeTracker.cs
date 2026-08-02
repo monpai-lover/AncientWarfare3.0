@@ -138,6 +138,8 @@ namespace AncientWarfare3.core.policy
                 try { Add(ref hash, VassalService.GetSuzerainId(pKingdom)); }
                 catch { Add(ref hash, -1L); }
                 Add(ref hash, pKingdom.name ?? string.Empty);
+                try { Add(ref hash, (int)KingdomTitleService.GetTitle(pKingdom)); }
+                catch { Add(ref hash, -1); }
                 int cityCount = 0;
                 try
                 {
@@ -153,6 +155,7 @@ namespace AncientWarfare3.core.policy
                         if (city?.data == null || city.isRekt()) continue;
                         Add(ref hash, city.id);
                         Add(ref hash, city.kingdom?.id ?? -1L);
+                        Add(ref hash, city.data.name ?? string.Empty);
                         Add(ref hash, city.zones?.Count ?? 0);
                         if (city.zones == null) continue;
                         for (int index = 0; index < city.zones.Count; index++)
