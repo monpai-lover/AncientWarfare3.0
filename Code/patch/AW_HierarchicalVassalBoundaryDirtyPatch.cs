@@ -531,6 +531,19 @@ namespace AncientWarfare3.patch
         [HarmonyPatch]
         private static class ZoneLifecycleHooks
         {
+            [HarmonyPrepare]
+            private static bool Prepare()
+            {
+                // Zone removal is not exposed as a named method in every
+                // WorldBox build. Skip this optional hook when absent so the
+                // boundary worker and other hooks can still load.
+                foreach (MethodBase method in Methods(typeof(TileZone),
+                             "remove", "destroy", "setRekt", "kill"))
+                    return method != null;
+                _auditFallbackRequired = true;
+                return false;
+            }
+
             private static IEnumerable<MethodBase> TargetMethods()
             {
                 // Zone removal/destruction signatures are exact reflected
@@ -549,6 +562,19 @@ namespace AncientWarfare3.patch
         [HarmonyPatch]
         private static class KingdomLifecycleHooks
         {
+            [HarmonyPrepare]
+            private static bool Prepare()
+            {
+                // Some WorldBox builds expose kingdom removal only through
+                // the kingdom manager. An empty TargetMethods result must not
+                // make Harmony disable the entire Ancient Warfare mod.
+                foreach (MethodBase method in Methods(typeof(Kingdom),
+                             "create", "destroy", "setRekt", "kill"))
+                    return method != null;
+                _auditFallbackRequired = true;
+                return false;
+            }
+
             private static IEnumerable<MethodBase> TargetMethods()
             {
                 // Kingdom creation/destruction signatures vary by build.
