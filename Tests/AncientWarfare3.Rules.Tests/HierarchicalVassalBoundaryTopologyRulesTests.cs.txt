@@ -1,0 +1,144 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalBoundaryTopologyRulesTests
+{
+    public static void Run()
+    {
+        BoundaryCellFacts systemA = Land(0, 0, system: 1, realm: 10, city: 100);
+        BoundaryCellFacts systemB = Land(1, 0, system: 2, realm: 20, city: 200);
+        BoundaryCellFacts vassalA = Land(0, 0, system: 1, realm: 10, city: 100);
+        BoundaryCellFacts vassalB = Land(1, 0, system: 1, realm: 11, city: 110);
+        BoundaryCellFacts cityA = Land(0, 0, system: 1, realm: 10, city: 100);
+        BoundaryCellFacts cityB = Land(1, 0, system: 1, realm: 10, city: 101);
+
+        Equal(BoundaryTier.SuzerainSystem,
+            HierarchicalVassalBoundaryTopologyRules.Classify(
+                systemA, systemB, BoundaryDisplayLayer.Countries),
+            "different suzerain systems use the thick outer tier");
+        Equal(BoundaryTier.VassalRealm,
+            HierarchicalVassalBoundaryTopologyRules.Classify(
+                vassalA, vassalB, BoundaryDisplayLayer.Countries),
+            "vassal realms inside one system use the medium tier");
+        Equal(BoundaryTier.None,
+            HierarchicalVassalBoundaryTopologyRules.Classify(
+                cityA, cityB, BoundaryDisplayLayer.Countries),
+            "country view suppresses city-only boundaries");
+        Equal(BoundaryTier.City,
+            HierarchicalVassalBoundaryTopologyRules.Classify(
+                cityA, cityB, BoundaryDisplayLayer.Cities),
+            "city view emits the thin city tier");
+        Equal(BoundaryTier.SuzerainSystem,
+            HierarchicalVassalBoundaryTopologyRules.Classify(
+                systemA, Invalid(1, 0), BoundaryDisplayLayer.Countries),
+            "visible realm coastlines retain the outer tier");
+        Equal(BoundaryTier.None,
+            HierarchicalVassalBoundaryTopologyRules.Classify(
+                Invalid(0, 0), Invalid(1, 0), BoundaryDisplayLayer.Countries),
+            "two invisible cells do not create a boundary");
+
+        BoundaryTopologyDraft rectangle = Extract(new[]
+        {
+            Land(0, 0, 1, 10, 100), Land(1, 0, 1, 10, 100),
+            Land(0, 1, 1, 10, 100), Land(1, 1, 1, 10, 100)
+        }, width: 2, height: 2);
+        Equal(8, rectangle.RawEdges.Count,
+            "a two-by-two rectangle emits only its eight perimeter edges");
+        Equal(1, rectangle.ClosedChains.Count,
+            "a rectangle perimeter forms one closed chain");
+        Equal(0, rectangle.OpenChains.Count,
+            "a rectangle has no open boundary chain");
+
+        BoundaryTopologyDraft concave = Extract(new[]
+        {
+            Land(0, 0, 1, 10, 100), Land(1, 0, 1, 10, 100),
+            Land(0, 1, 1, 10, 100), Invalid(1, 1)
+        }, 2, 2);
+        Equal(8, concave.RawEdges.Count,
+            "an L territory preserves its concave corner");
+        Equal(1, concave.ClosedChains.Count,
+            "an L territory remains a single closed loop");
+
+        var ringCells = new List<BoundaryCellFacts>();
+        for (int y = 0; y < 3; y++)
+        for (int x = 0; x < 3; x++)
+            ringCells.Add(x == 1 && y == 1
+                ? Water(x, y)
+                : Land(x, y, 1, 10, 100));
+        BoundaryTopologyDraft ring = Extract(ringCells, 3, 3);
+        Equal(16, ring.RawEdges.Count,
+            "a three-by-three ring emits outer and inner-hole edges");
+        Equal(2, ring.ClosedChains.Count,
+            "inland water remains a separate closed hole loop");
+
+        BoundaryTopologyDraft junction = Extract(new[]
+        {
+            Land(0, 0, 1, 10, 100), Land(1, 0, 2, 20, 200),
+            Land(0, 1, 3, 30, 300), Land(1, 1, 3, 30, 300)
+        }, 2, 2);
+        Equal(true, junction.ProtectedVertices.Contains(
+                new BoundaryGridPoint(1, 1)),
+            "a three-realm junction is a protected topology anchor");
+
+        var seam = new BoundaryRawEdge(
+            new BoundaryGridPoint(32, 4),
+            new BoundaryGridPoint(32, 5),
+            BoundaryTier.SuzerainSystem,
+            leftOwnerId: 1,
+            rightOwnerId: 2);
+        Equal(true, HierarchicalVassalBoundaryTopologyRules.OwnsSeamEdge(
+                new BoundaryChunkKey(0, 0), seam),
+            "the lexicographically lower chunk owns a vertical seam edge");
+        Equal(false, HierarchicalVassalBoundaryTopologyRules.OwnsSeamEdge(
+                new BoundaryChunkKey(1, 0), seam),
+            "the neighboring chunk does not duplicate a seam edge");
+
+        var horizontalSeam = new BoundaryRawEdge(
+            new BoundaryGridPoint(4, 32),
+            new BoundaryGridPoint(5, 32),
+            BoundaryTier.SuzerainSystem,
+            leftOwnerId: 1,
+            rightOwnerId: 2);
+        Equal(true, HierarchicalVassalBoundaryTopologyRules.OwnsSeamEdge(
+                new BoundaryChunkKey(0, 0), horizontalSeam),
+            "the lower chunk owns a horizontal seam edge");
+        Equal(false, HierarchicalVassalBoundaryTopologyRules.OwnsSeamEdge(
+                new BoundaryChunkKey(0, 1), horizontalSeam),
+            "the upper chunk does not duplicate a horizontal seam edge");
+    }
+
+    private static BoundaryTopologyDraft Extract(
+        IEnumerable<BoundaryCellFacts> cells,
+        int width,
+        int height)
+    {
+        return HierarchicalVassalBoundaryTopologyRules.Extract(
+            new BoundaryCellRaster(0, 0, width, height, cells.ToArray()),
+            BoundaryDisplayLayer.Cities);
+    }
+
+    private static BoundaryCellFacts Land(
+        int x, int y, long system, long realm, long city)
+    {
+        return new BoundaryCellFacts(x, y, true, BoundaryWaterKind.Land,
+            128, system, realm, city, 0xFFFFFFFF);
+    }
+
+    private static BoundaryCellFacts Water(int x, int y)
+    {
+        return new BoundaryCellFacts(x, y, true,
+            BoundaryWaterKind.InlandWater, 70, -1, -1, -1, 0);
+    }
+
+    private static BoundaryCellFacts Invalid(int x, int y)
+    {
+        return new BoundaryCellFacts(x, y, false, BoundaryWaterKind.Land,
+            0, -1, -1, -1, 0);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+}

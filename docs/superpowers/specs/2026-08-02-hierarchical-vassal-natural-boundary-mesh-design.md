@@ -1,0 +1,402 @@
+# Hierarchical Vassal Natural Boundary Mesh Design
+
+## Goal
+
+Replace the hierarchical-vassal map mode's per-zone fill and per-edge
+`LineRenderer` rendering with event-driven, chunked meshes that produce
+natural polygon borders, preserve political topology, never fill across
+water, and remain responsive on large worlds.
+
+Tile cells are topology input only. The renderer does not create one object,
+quad, material, or draw call per tile, and a local change never replaces the
+whole-world overlay.
+
+## Scope
+
+- Replace both the country layer and city layer rendering.
+- Replace both political-region fill and political boundary lines.
+- Keep the existing hierarchy navigation, click behavior, labels, and
+  nameplates unless integration changes are required to bind them to the new
+  snapshot revision.
+- Remove the active-mode dependency on `ZoneCalculator.drawZoneMeta` and the
+  current one-`LineRenderer`-per-zone-edge implementation.
+- Do not redesign the underlying vassal relationship model.
+
+## Visual Hierarchy
+
+The renderer uses three boundary levels:
+
+1. The outer boundary of a suzerain system is the thickest line.
+2. Borders between vassal realms inside the same suzerain system use a medium
+   line.
+3. Borders between cities use the thinnest line.
+
+The country layer displays levels 1 and 2. The city layer displays all three
+levels. A suzerain system uses its stable primary color. Vassal realms and
+cities receive deterministic variations of that color so adjacent regions
+remain distinguishable without losing their shared hierarchy identity.
+
+Boundary ribbons use the owning region's color with a narrow dark outline.
+Shader parameters provide anti-aliasing, smooth joins, controlled
+transparency, and subtle blending with the map. At ordinary zoom levels the
+result should resemble a natural political-map polygon rather than a staircase
+of tile-sized right angles.
+
+## Topology And Natural Curves
+
+The authoritative topology starts from actual tile cells, not `TileZone` 8x8
+bounds. For each visible land cell, the extractor examines its four sides and
+emits an edge only when the opposite side has a different displayed owner or
+is not visible land. Shared edges are emitted once.
+
+The raw edge graph identifies:
+
+- 90-degree turns;
+- endpoints and closed loops;
+- three-or-more-region junctions;
+- islands and inland-water holes;
+- narrow isthmuses;
+- chunk-boundary continuation points.
+
+Raw corner points are topology anchors, not final rendered vertices. Ordinary
+stair-step points are simplified with a bounded Douglas-Peucker pass. Protected
+junctions, narrow passages, small islands, and chunk continuation anchors are
+never removed. The simplified chains are fitted with constrained Catmull-Rom
+or cubic Bezier curves and sampled adaptively.
+
+Every proposed smooth segment is checked against the immutable land and
+ownership raster. A segment that would cross water, enter a third region,
+close a narrow passage, change a junction, or change loop winding has its
+smoothing strength reduced. If no safe curve exists, that local chain falls
+back to its original topology. Correct ownership always takes priority over
+smoothness.
+
+The displayed boundary may deviate from the raw tile edge within the two-owner
+visual corridor. Ordinary open terrain permits at most 0.45 tile of centerline
+deviation into either adjacent owner; protected or narrow terrain reduces the
+limit to 0.15-0.25 tile. The shared curve visually gives small border slivers
+from either side to the other so the color division follows the natural line.
+This is presentation only: `TileZone`, `City`, kingdom ownership, resources,
+occupation, pathfinding, and click inspection continue to use the authoritative
+tile facts.
+
+Safety validation covers the complete rendered footprint, not only the curve
+centerline. Each sampled ribbon cross-section may cover either of the two owners
+forming that shared edge, but never water, invalid cells, or a third owner.
+Half-width and deviation reduce locally near narrow passages, third-owner
+corners, coastlines, and junctions. If the required tier cannot fit safely, the
+segment uses the raw contour and the widest safe local ribbon rather than
+covering unrelated territory. River-center boundaries render the political
+center line over water but keep both political-color halves transparent until
+their respective banks.
+
+Closed owner contours are grouped into outer rings and holes, clipped to the
+chunk interior, and triangulated into consolidated fill geometry. The fill
+uses the same accepted contour anchors as the boundary transition geometry;
+it is not emitted as one quad per source tile.
+
+## Water And River Rules
+
+Political fill is clipped to visible land cells. No fill triangle may cover a
+water, ocean, or lava cell. Mixed land/water zones are therefore represented by
+their real land outline rather than their rectangular zone boundary.
+
+The available tile facts reliably expose liquid and ocean state but do not
+provide a river identifier suitable for this renderer. The snapshot therefore
+classifies non-ocean liquid components conservatively:
+
+- narrow, continuous, elongated components may be classified as river
+  corridors;
+- broad or uncertain components remain lakes or generic inland-water holes;
+- ambiguous water always falls back to lake behavior.
+
+A river becomes a political boundary only when the land on its two banks has
+different displayed owners. In that case, the two-bank topology is unified
+into one continuous river-aligned political boundary instead of producing two
+unrelated shoreline borders. A river whose banks have the same owner remains
+ordinary terrain and does not create a political boundary.
+
+## Chunk Model
+
+The world is partitioned into stable 32x32-tile chunks. Geometry capture adds
+a halo around each dirty chunk so contours, rivers, smoothing, and junctions
+can continue across chunk seams. The halo contributes topology but is clipped
+out of the chunk's final owned triangles and boundary segments.
+
+Each active layer has two render products per chunk:
+
+- a consolidated, triangulated polygon fill mesh grouped into deterministic
+  region-color submeshes or vertex colors;
+- a boundary mesh with outer-system, vassal-realm, and city submeshes.
+
+Fill and boundary meshes remain separate so minimap capture can keep political
+fill while temporarily hiding dense boundary lines. Meshes, materials,
+`MeshFilter` objects, and `MeshRenderer` objects are pooled and reused. Runtime
+object count is bounded by the chunk count and active layer variants.
+
+## Components
+
+### Boundary Dirty Tracker
+
+`HierarchicalVassalBoundaryDirtyTracker` receives territory and presentation
+events:
+
+- city capture or ownership transfer;
+- zone addition, removal, reassignment, or destruction;
+- kingdom creation or destruction;
+- vassal/suzerain relationship changes;
+- hierarchy focus or layer changes;
+- land/liquid/ocean terrain changes;
+- world load, clear, and map-mode activation.
+
+It marks only affected chunks plus their immediate neighboring chunks. Dirty
+events are coalesced by chunk ID and revision.
+
+### Immutable Snapshot Capture
+
+`HierarchicalVassalBoundarySnapshotCapture` runs on the main thread with a
+bounded per-cycle budget. It copies primitive cell facts for dirty chunks and
+their halo:
+
+- coordinates and valid-cell flags;
+- land, liquid, ocean, lava, and conservative river classification inputs;
+- the real `WorldTile.Height` value clamped to its native 0-255 range;
+- root suzerain-system ID;
+- displayed realm ID for the current hierarchy focus;
+- city ID;
+- deterministic color values.
+
+No `World`, `Kingdom`, `City`, `TileZone`, `WorldTile`, `UnityEngine.Object`, or
+Unity collection is passed to background work.
+
+### Background Topology Worker
+
+`HierarchicalVassalBoundaryTopologyWorker` consumes immutable snapshots and
+produces pure mesh drafts. It performs edge extraction, graph construction,
+river-corridor analysis, endpoint protection, simplification, constrained
+curve fitting, loop and hole validation, consolidated polygon triangulation,
+and submesh classification. It never emits one render primitive per tile.
+
+Work is latest-wins by chunk revision. Results older than the current chunk or
+map-mode generation are discarded before upload. Background code does not call
+Unity or WorldBox APIs.
+
+### Main-Thread Mesh Layer
+
+`HierarchicalVassalBoundaryMeshLayer` owns pooled Unity objects and applies a
+bounded number of completed drafts per frame or authority presentation cycle.
+It preserves the last valid chunk mesh until a replacement succeeds. A failed
+draft marks the chunk dirty for retry instead of clearing the world overlay.
+
+Country and city drafts may be produced from the same captured cell facts.
+Switching layer or hierarchy focus uses a matching cached draft when its
+revision is current; otherwise only chunks whose displayed ownership mapping
+changed are rebuilt.
+
+### Material Library
+
+`HierarchicalVassalBoundaryMaterialLibrary` loads a shader AssetBundle built
+with the same Unity editor version as the supported WorldBox release. The
+bundle contains fill and boundary shaders that consume vertex color, boundary
+tier, ribbon-side distance, and camera-scale parameters.
+
+If the bundle is absent, incompatible, or fails to load, the renderer logs one
+bounded warning and creates functional materials from `Sprites/Default`.
+Fallback does not restore simultaneous legacy rendering.
+
+## Rendering And Zoom
+
+Boundary geometry is a ribbon mesh carrying centerline normal/extrusion and
+edge-distance data. The shader uses those attributes for anti-aliasing, rounded
+visual joins, and the dark outline. Orthographic camera scale is supplied as a
+shared material parameter so apparent line width remains readable across zoom
+levels without rebuilding geometry.
+
+Each political ribbon also carries the colors and owner IDs for both sides of
+the boundary. The shader paints the left half with the left region color, the
+right half with the right region color, and a narrow dark political line at
+the center. This transition band covers residual raster stair-stepping without
+changing the authoritative topology. At coastlines the water-facing half is
+transparent and land/water clipping forbids the transition band from becoming
+political fill over water.
+
+### Height-Aware Relief
+
+WorldBox stores a real 0-255 height value on every `WorldTile`. The renderer
+uses that value instead of synthetic noise for political-map relief. Immutable
+snapshots include height for the chunk interior and halo; background work packs
+those samples into a small height draft and computes a reference central-difference
+normal for tests and fallback lighting.
+
+The main thread owns one reusable single-channel height texture per world
+chunk, shared by the country and city layers. Accepted terrain revisions upload
+only the affected chunk texture. Fill and boundary materials receive the same
+texture through `MaterialPropertyBlock`, together with world-to-height UV
+mapping, texel size, relief strength, and a fixed map-light direction.
+
+The fill shader samples neighboring heights, derives a normalized surface
+gradient, and modulates political color with restrained diffuse light, ridge
+highlight, and valley shadow. This is visual relief only: it does not displace
+mesh vertices, change ownership topology, cover sprites, or alter click
+coordinates. Flat terrain remains nearly unchanged. The boundary shader uses
+the same lighting factor at reduced strength so borders remain readable.
+
+Height textures are render resources, not per-tile renderers. Their count is
+bounded by world chunk count, each texture is reused, and the two map layers do
+not duplicate it. If `TextureFormat.R8` is unavailable, the material library
+uses a supported single-channel fallback. If height texture creation or upload
+fails, rendering continues without relief and logs one bounded warning.
+
+The fill renderer and boundary renderer use explicit sorting order and stable
+Z values below labels and interaction markers. During minimap redraw, fill
+roots stay enabled while boundary and label roots are temporarily hidden.
+
+## Update Flow
+
+1. A territory, hierarchy, or terrain hook marks affected chunks dirty.
+2. Main-thread capture coalesces events and snapshots a bounded number of
+   chunks with halo.
+3. A background worker generates country and city mesh drafts.
+4. Main-thread upload rejects stale revisions and updates pooled meshes.
+5. Labels and click metadata consume the same visible snapshot revision.
+
+The target normal update latency is the next simulation cycle or about 0.5
+seconds. Completing a dirty chunk early makes it visible immediately; the
+renderer does not wait for every dirty chunk before applying results.
+
+The current every-15-frame whole-world revision hash is removed. A low-cost,
+round-robin chunk audit may detect missed hooks, but it may inspect only a
+bounded number of chunks per cycle and may not trigger a single-frame full-map
+scan.
+
+No ordinary update swaps or rebuilds the complete map. Only dirty chunks and
+their immediate neighbors are captured, rebuilt, and uploaded; unchanged
+chunk meshes remain active.
+
+Changes to `WorldTile.Height` mark the affected chunk neighborhood dirty while
+the map mode is active. World generation and loading remain cheap because the
+hook is gated until a world and renderer generation are active; initial map-mode
+activation captures current heights incrementally.
+
+## Activation And Migration
+
+On first activation, chunks are captured and built incrementally. Completed
+chunks appear as they become ready; unbuilt chunks retain the normal map rather
+than showing empty or invalid fill.
+
+While the new renderer is active:
+
+- legacy hierarchical-vassal `drawZoneMeta` fill is disabled;
+- the current `HierarchicalVassalMapModeBoundaryLayer` LineRenderer path is
+  disabled and replaced;
+- the two renderers must never overlap;
+- existing hierarchy navigation, labels, nameplates, click inspection, water
+  restoration compatibility, and minimap guards are updated to use the mesh
+  renderer's lifecycle.
+
+World clear, load, or mod shutdown cancels outstanding generations, clears
+queues, releases pooled meshes/material instances, and increments the global
+generation so late background results cannot enter a new world.
+
+## Failure Handling
+
+- Snapshot mutation or stale object resolution marks the chunk dirty for a
+  later capture.
+- Background exceptions are isolated to the affected chunk and generation.
+- Invalid polygons, self-intersections, winding changes, or failed
+  triangulation fall back first to a less-smoothed contour and then to the raw
+  tile-edge contour for consolidated polygon triangulation. A repeated failure
+  keeps the previous valid chunk mesh rather than falling back to per-tile
+  rendering.
+- Shader or AssetBundle failures use the built-in material fallback.
+- Height texture failures disable relief for the affected chunk while retaining
+  valid political fill and boundaries.
+- Upload failures retain the last valid mesh and retry with bounded logging.
+- Queue growth is capped; repeated dirty events coalesce into the newest
+  revision.
+
+## Verification
+
+Pure geometry tests use synthetic ownership and terrain rasters covering:
+
+- rectangles and disjoint regions;
+- L-shaped and concave territories;
+- islands, lakes, and multiple holes;
+- mixed land/water zones;
+- narrow isthmuses;
+- two-region and three-region junctions;
+- contours crossing chunk seams;
+- different owners on opposite river banks;
+- the same owner on both river banks;
+- ambiguous broad inland water;
+- stale worker generations;
+- smoothing that attempts to cross water or a third owner.
+
+The adversarial curve matrix additionally covers:
+
+- one-cell and two-cell land bridges, straits, fjords, hooked bays, and acute
+  peninsulas;
+- one-cell islands, small island chains, enclaves, exclaves, and nested holes;
+- T junctions, four-region point contacts, diagonal-only contacts, and a
+  third owner within one ribbon width;
+- zero-length/repeated points, two-edge chains, sharp 90-degree turns,
+  near-180-degree reversals, and closed loops with minimal vertex counts;
+- chains crossing a chunk edge, chains crossing a chunk corner, and loops
+  spanning two or four chunks;
+- map corners and clipped invalid halo cells;
+- river forks, deltas, same-owner banks, different-owner banks, and river
+  chains meeting a lake or ocean;
+- high world coordinates and deterministic rebuilds after adjacent chunks
+  receive revisions in opposite orders;
+- full ribbon footprints that would cross water, a third owner, or the wrong
+  side owner even though their centerline remains valid.
+
+Assertions include:
+
+- no fill triangle covers a forbidden cell;
+- no smoothed boundary enters a third region;
+- no visual fill or ribbon enters water, invalid cells, or a third owner;
+  river-water portions carry no political fill color;
+- visual exchange across a shared edge stays within its deviation corridor,
+  conserves the pair's combined visible land, and never mutates logical owner
+  facts;
+- protected junctions and loop winding remain stable;
+- river borders are single, continuous chains;
+- same-owner rivers do not emit political borders;
+- adjacent chunk drafts share identical seam endpoints;
+- adjacent chunk drafts share identical seam tangents and ribbon widths;
+- a flat height field produces a neutral normal and equal light factor;
+- an increasing height ramp produces a stable, correctly oriented gradient;
+- fallback output remains renderable after smoothing or triangulation failure.
+
+Integration source guards verify:
+
+- no `LineRenderer` remains in the active hierarchical-vassal boundary path;
+- no one-quad-per-tile, one-object-per-tile, or full-map replacement path
+  remains in the active renderer;
+- no background worker references live WorldBox or Unity objects;
+- legacy fill and new fill cannot render simultaneously;
+- minimap capture hides boundary meshes but retains fill meshes;
+- world clear cancels and invalidates pending results;
+- shader fallback is present.
+- height textures are chunk-bounded, shared across layers, and updated only for
+  accepted terrain revisions.
+
+A large-map benchmark simulates sparse zone and ownership changes. A one-zone
+change must rebuild only intersecting and neighboring chunks. Runtime checks
+must show no per-frame whole-world scan, no per-tile draw calls, no unbounded
+Mesh/GameObject growth, and no all-map replacement after local changes.
+
+Manual visual acceptance requires:
+
+- natural political-map curves at ordinary zoom;
+- no visible tile staircase except where topology safety forces a local
+  fallback;
+- no cross-water fill or boundary shortcuts;
+- continuous river borders;
+- no cracks at chunk seams;
+- stable three-region junctions;
+- readable thick/medium/thin hierarchy;
+- relief follows real hills and mountains without changing political geometry;
+- correct country/city switching and hierarchy drill-down;
+- correct minimap behavior.

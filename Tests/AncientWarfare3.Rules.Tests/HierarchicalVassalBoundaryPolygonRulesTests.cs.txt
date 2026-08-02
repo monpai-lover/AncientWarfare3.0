@@ -1,0 +1,597 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalBoundaryPolygonRulesTests
+{
+    public static void Run()
+    {
+        RectangleConcavityIslandsAndHolesTriangulate();
+        ChunkClippingAndRawFallbackRemainSafe();
+        AcceptedContourActuallyDefinesTheFill();
+        AcceptedContourRetainsMultipleHoles();
+        SharedVisualContourConservesPairArea();
+        MalformedSharedContoursFallBackWithoutOverlapOrGap();
+        NonFinitePairContoursAreBounded();
+        PolygonWorkBudgetsFailDeterministically();
+    }
+
+    private static void RectangleConcavityIslandsAndHolesTriangulate()
+    {
+        BoundaryPolygonDraft rectangle = Build(Raster(4, 3,
+            (x, y) => Land(x, y, 7)), 7);
+        Equal(1, rectangle.OuterRings.Count, "rectangle outer ring");
+        Equal(0, rectangle.Holes.Count, "rectangle holes");
+        NearlyEqual(12f, rectangle.Area, "rectangle area");
+        SafeTriangles(rectangle, Raster(4, 3, (x, y) => Land(x, y, 7)), 7);
+
+        BoundaryCellRaster concaveGrid = Raster(4, 4, (x, y) =>
+            x < 2 || y < 2 ? Land(x, y, 7) : Land(x, y, 9));
+        BoundaryPolygonDraft concave = Build(concaveGrid, 7);
+        Equal(1, concave.OuterRings.Count, "concave owner outer ring");
+        NearlyEqual(12f, concave.Area, "concave owner area");
+        SafeTriangles(concave, concaveGrid, 7);
+
+        BoundaryCellRaster islandsGrid = Raster(6, 3, (x, y) =>
+            x < 2 || x >= 4 ? Land(x, y, 7) : Water(x, y));
+        BoundaryPolygonDraft islands = Build(islandsGrid, 7);
+        Equal(2, islands.OuterRings.Count, "disconnected islands remain separate");
+        SafeTriangles(islands, islandsGrid, 7);
+
+        BoundaryCellRaster holesGrid = Raster(7, 5, (x, y) =>
+            (x == 2 || x == 4) && y == 2 ? Water(x, y) : Land(x, y, 7));
+        BoundaryPolygonDraft holes = Build(holesGrid, 7);
+        Equal(2, holes.Holes.Count, "multiple water holes are classified");
+        NearlyEqual(33f, holes.Area, "hole area is excluded");
+        SafeTriangles(holes, holesGrid, 7);
+    }
+
+    private static void ChunkClippingAndRawFallbackRemainSafe()
+    {
+        BoundaryCellRaster wide = Raster(40, 4, (x, y) => Land(x, y, 7));
+        var bounds = new BoundaryChunkBounds(0, 0, 34, 4, 0, 0, 32, 4);
+        BoundaryPolygonDraft clipped =
+            HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(
+                wide, 7, BoundaryTier.SuzerainSystem, bounds);
+        NearlyEqual(128f, clipped.Area, "halo is clipped from fill area");
+        Equal(true, clipped.Positions.All(point => point.X <= 32f),
+            "chunk fill vertices stay inside the interior");
+
+        BoundaryCellRaster unsafeGrid = Raster(4, 4, (x, y) =>
+            x == 2 && y == 1 ? Water(x, y) : Land(x, y, x < 2 ? 7 : 8));
+        var unsafeAccepted = new[]
+        {
+            new BoundaryFloatPoint(0, 0), new BoundaryFloatPoint(4, 0),
+            new BoundaryFloatPoint(4, 4), new BoundaryFloatPoint(0, 4),
+            new BoundaryFloatPoint(0, 0)
+        };
+        BoundaryPolygonDraft fallback =
+            HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(
+                unsafeGrid, 7, BoundaryTier.SuzerainSystem,
+                Interior(unsafeGrid), unsafeAccepted);
+        Equal(true, fallback.UsedRawFallback,
+            "unsafe accepted contour falls back to the raw owner contour");
+        SafeTriangles(fallback, unsafeGrid, 7);
+    }
+
+    private static void SharedVisualContourConservesPairArea()
+    {
+        BoundaryCellRaster grid = Raster(4, 4, (x, y) =>
+            Land(x, y, x < 2 ? 7 : 8));
+        var raw = new[]
+        {
+            new BoundaryFloatPoint(2, 0), new BoundaryFloatPoint(2, 4)
+        };
+        var accepted = new[]
+        {
+            new BoundaryFloatPoint(2.25f, 0),
+            new BoundaryFloatPoint(2.25f, 4)
+        };
+        BoundaryVisualPairDraft pair =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                grid, 7, 8, BoundaryTier.SuzerainSystem,
+                raw, accepted, Interior(grid));
+
+        SequenceEqual(pair.SharedContour, pair.Left.SharedContours.Single(),
+            "left visual face uses the authoritative shared contour");
+        SequenceEqual(pair.SharedContour, pair.Right.SharedContours.Single(),
+            "right visual face uses the authoritative shared contour");
+        Equal(false, pair.HasOverlapOrGap,
+            "two visual faces neither overlap nor leave a gap");
+        AssertPairCoverage(pair, 16f, "accepted pair");
+        NearlyEqual(16f, pair.Left.Area + pair.Right.Area,
+            "pair combined visible area is conserved");
+        Equal(true, pair.MaximumDeviation <= 0.45f,
+            "shared visual exchange stays inside the pair corridor");
+
+        BoundaryCellRaster waterGrid = Raster(4, 4, (x, y) =>
+            x == 2 && y == 1 ? Water(x, y) :
+            Land(x, y, x < 2 ? 7 : 8));
+        BoundaryVisualPairDraft fallback =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                waterGrid, 7, 8, BoundaryTier.SuzerainSystem,
+                raw, accepted, Interior(waterGrid));
+        SequenceEqual(raw, fallback.Left.SharedContours.Single(),
+            "unsafe pair fallback keeps the raw contour on the left face");
+        SequenceEqual(raw, fallback.Right.SharedContours.Single(),
+            "unsafe pair fallback keeps the raw contour on the right face");
+        NearlyEqual(15f, fallback.Left.Area + fallback.Right.Area,
+            "raw pair fallback conserves visible land and excludes water");
+        Equal(false, fallback.HasOverlapOrGap,
+            "raw pair fallback remains crack-free over visible land");
+        AssertPairCoverage(fallback, 15f, "raw fallback pair");
+
+        BoundaryCellRaster curvedGrid = Raster(6, 4, (x, y) =>
+            Land(x, y, x < 3 ? 7 : 8));
+        var curvedRaw = new[]
+        {
+            new BoundaryFloatPoint(3, 0), new BoundaryFloatPoint(3, 2),
+            new BoundaryFloatPoint(3, 4)
+        };
+        var curvedAccepted = new[]
+        {
+            new BoundaryFloatPoint(3, 0), new BoundaryFloatPoint(3.30f, 2),
+            new BoundaryFloatPoint(3, 4)
+        };
+        BoundaryVisualPairDraft curved =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                curvedGrid, 7, 8, BoundaryTier.SuzerainSystem,
+                curvedRaw, curvedAccepted, Interior(curvedGrid));
+        Equal(true, curved.Left.Positions.Any(point => point.X == 3.30f) &&
+                    curved.Right.Positions.Any(point => point.X == 3.30f),
+            "both faces are triangulated from the curved accepted contour");
+        NearlyEqual(24f, curved.Left.Area + curved.Right.Area,
+            "curved pair conserves the full visible pair area");
+        Equal(false, curved.HasOverlapOrGap,
+            "curved pair uses complementary boundary arcs without cracks");
+        AssertPairCoverage(curved, 24f, "curved pair");
+    }
+
+    private static void MalformedSharedContoursFallBackWithoutOverlapOrGap()
+    {
+        BoundaryCellRaster grid = Raster(4, 4, (x, y) =>
+            Land(x, y, x < 2 ? 7 : 8));
+        var raw = new[]
+        {
+            new BoundaryFloatPoint(2, 0), new BoundaryFloatPoint(2, 4)
+        };
+        var overlapping = new[]
+        {
+            new BoundaryFloatPoint(2, 0),
+            new BoundaryFloatPoint(2.30f, 3),
+            new BoundaryFloatPoint(1.70f, 1),
+            new BoundaryFloatPoint(2.30f, 1),
+            new BoundaryFloatPoint(2, 4)
+        };
+        var gapped = new[]
+        {
+            new BoundaryFloatPoint(2, 0),
+            new BoundaryFloatPoint(2.30f, 1),
+            new BoundaryFloatPoint(1.70f, 1),
+            new BoundaryFloatPoint(2.30f, 1),
+            new BoundaryFloatPoint(2, 4)
+        };
+
+        BoundaryVisualPairDraft overlapPair =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                grid, 7, 8, BoundaryTier.SuzerainSystem,
+                raw, overlapping, Interior(grid));
+        BoundaryVisualPairDraft gapPair =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                grid, 7, 8, BoundaryTier.SuzerainSystem,
+                raw, gapped, Interior(grid));
+
+        Equal(true, overlapPair.Left.UsedRawFallback &&
+                    overlapPair.Right.UsedRawFallback,
+            "self-overlapping accepted contour is rejected to raw fallback");
+        Equal(true, gapPair.Left.UsedRawFallback &&
+                    gapPair.Right.UsedRawFallback,
+            "gapped accepted contour is rejected to raw fallback");
+        AssertPairCoverage(overlapPair, 16f, "overlap contour fallback");
+        AssertPairCoverage(gapPair, 16f, "gap contour fallback");
+    }
+
+    private static void NonFinitePairContoursAreBounded()
+    {
+        BoundaryCellRaster grid = Raster(4, 4, (x, y) =>
+            Land(x, y, x < 2 ? 7 : 8));
+        var finiteRaw = new[]
+        {
+            new BoundaryFloatPoint(2, 0), new BoundaryFloatPoint(2, 4)
+        };
+        var nonFinite = new[]
+        {
+            new BoundaryFloatPoint(2, 0),
+            new BoundaryFloatPoint(float.NaN, 2),
+            new BoundaryFloatPoint(2, 4)
+        };
+
+        BoundaryVisualPairDraft invalidRaw =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                grid, 7, 8, BoundaryTier.SuzerainSystem,
+                nonFinite, finiteRaw, Interior(grid));
+        Equal(false, invalidRaw.IsValid,
+            "non-finite raw contour returns an explicit invalid pair");
+        Equal("non_finite_raw_contour", invalidRaw.FailureReason,
+            "non-finite raw contour has a stable failure reason");
+        Equal(true, invalidRaw.SharedContour.All(IsFinite),
+            "invalid pair never carries non-finite shared points");
+
+        BoundaryVisualPairDraft acceptedFallback =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                grid, 7, 8, BoundaryTier.SuzerainSystem,
+                finiteRaw, nonFinite, Interior(grid));
+        Equal(true, acceptedFallback.IsValid,
+            "non-finite accepted contour may use finite raw fallback");
+        Equal(true, acceptedFallback.Left.UsedRawFallback &&
+                    acceptedFallback.Right.UsedRawFallback,
+            "non-finite accepted contour is marked raw fallback");
+        SequenceEqual(finiteRaw, acceptedFallback.SharedContour,
+            "fallback pair carries only finite raw points");
+    }
+
+    private static void PolygonWorkBudgetsFailDeterministically()
+    {
+        BoundaryCellRaster oversized = Raster(513, 512,
+            (x, y) => Land(x, y, 7));
+        BoundaryPolygonDraft traceFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(
+                oversized, 7, BoundaryTier.SuzerainSystem,
+                Interior(oversized));
+        Equal(false, traceFailure.IsValid,
+            "trace cell budget returns deterministic invalid polygon");
+
+        BoundaryCellRaster smallPair = Raster(2, 2, (x, y) =>
+            Land(x, y, x == 0 ? 7 : 8));
+        var oversizedBounds = new BoundaryChunkBounds(
+            0, 0, 513, 512, 0, 0, 513, 512);
+        BoundaryVisualPairDraft pairTraceFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                oversizedBounds);
+        Equal("bounds_budget", pairTraceFailure.FailureReason,
+            "pair trace budget fails before mask construction");
+
+        var degenerateHugeBounds = new BoundaryChunkBounds(
+            0, int.MinValue, 0, int.MaxValue,
+            0, int.MinValue, 0, int.MaxValue);
+        BoundaryVisualPairDraft degenerateBoundsFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                degenerateHugeBounds);
+        Equal("bounds_budget", degenerateBoundsFailure.FailureReason,
+            "degenerate huge bounds fail before mask construction");
+
+        var reversedBounds = new BoundaryChunkBounds(
+            0, 0, 2, 2,
+            int.MaxValue, int.MaxValue, int.MinValue, int.MinValue);
+        BoundaryVisualPairDraft reversedBoundsFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                reversedBounds);
+        Equal("bounds_budget", reversedBoundsFailure.FailureReason,
+            "reversed pair bounds fail before mask construction");
+
+        var emptyBounds = new BoundaryChunkBounds(
+            0, 0, 2, 2, 1, 1, 1, 1);
+        BoundaryVisualPairDraft emptyBoundsResult =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                emptyBounds);
+        Equal("empty_bounds", emptyBoundsResult.FailureReason,
+            "legal empty pair bounds return explicit empty output");
+        Equal(0, emptyBoundsResult.SharedContour.Count,
+            "empty pair bounds emit no contour");
+
+        BoundaryCellRaster manyRings = Raster(512, 512, (x, y) =>
+            (x + y) % 2 == 0 ? Land(x, y, 7) : Land(x, y, 8));
+        BoundaryPolygonDraft traceWorkFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(
+                manyRings, 7, BoundaryTier.SuzerainSystem,
+                Interior(manyRings));
+        Equal(false, traceWorkFailure.IsValid,
+            "multi-ring trace work budget returns deterministic failure");
+
+        var excessiveRing = new BoundaryFloatPoint[8193];
+        for (int i = 0; i < excessiveRing.Length; i++)
+        {
+            float angle = i * MathF.PI * 2f / excessiveRing.Length;
+            excessiveRing[i] = new BoundaryFloatPoint(
+                MathF.Cos(angle), MathF.Sin(angle));
+        }
+        Equal(false,
+            HierarchicalVassalBoundaryPolygonRules
+                .EarClipWithinBudgetForTests(excessiveRing),
+            "ear clipping vertex budget returns deterministic failure");
+
+        var positions = new[]
+        {
+            new BoundaryFloatPoint(0, 0),
+            new BoundaryFloatPoint(1, 0),
+            new BoundaryFloatPoint(0, 1)
+        };
+        var indices = new int[1001 * 3];
+        for (int i = 0; i < indices.Length; i += 3)
+        {
+            indices[i] = 0; indices[i + 1] = 1; indices[i + 2] = 2;
+        }
+        var repeated = new BoundaryPolygonDraft(
+            7, BoundaryTier.SuzerainSystem,
+            Array.Empty<IReadOnlyList<BoundaryFloatPoint>>(),
+            Array.Empty<IReadOnlyList<BoundaryFloatPoint>>(),
+            positions, indices,
+            Array.Empty<IReadOnlyList<BoundaryFloatPoint>>(), false);
+        Equal(false,
+            HierarchicalVassalBoundaryPolygonRules
+                .PairGeometryWithinBudgetForTests(repeated, repeated, 0f),
+            "pair comparison budget returns deterministic failure");
+
+        var excessiveContour = new BoundaryFloatPoint[65537];
+        for (int i = 0; i < excessiveContour.Length; i++)
+            excessiveContour[i] = new BoundaryFloatPoint(1, 0);
+        BoundaryVisualPairDraft pointBudgetFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                excessiveContour,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                Interior(smallPair));
+        Equal("contour_budget", pointBudgetFailure.FailureReason,
+            "finite contour point limit returns stable invalid output");
+
+        var comparisonHeavy = new BoundaryFloatPoint[2001];
+        for (int i = 0; i < comparisonHeavy.Length; i++)
+            comparisonHeavy[i] = new BoundaryFloatPoint(1, 0);
+        BoundaryVisualPairDraft workBudgetFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                comparisonHeavy, comparisonHeavy,
+                Interior(smallPair));
+        Equal("contour_budget", workBudgetFailure.FailureReason,
+            "shared contour comparison work returns stable invalid output");
+    }
+
+    private static bool IsFinite(BoundaryFloatPoint point)
+    {
+        return !float.IsNaN(point.X) && !float.IsInfinity(point.X) &&
+               !float.IsNaN(point.Y) && !float.IsInfinity(point.Y);
+    }
+
+    private static void AcceptedContourActuallyDefinesTheFill()
+    {
+        BoundaryCellRaster grid = Raster(6, 6, (x, y) =>
+            Land(x, y, x >= 1 && x < 5 && y >= 1 && y < 5 ? 7 : 8));
+        var accepted = new[]
+        {
+            new BoundaryFloatPoint(1.02f, 1.02f),
+            new BoundaryFloatPoint(4.98f, 1.02f),
+            new BoundaryFloatPoint(4.98f, 4.98f),
+            new BoundaryFloatPoint(1.02f, 4.98f),
+            new BoundaryFloatPoint(1.02f, 1.02f)
+        };
+        BoundaryPolygonDraft draft =
+            HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(
+                grid, 7, BoundaryTier.SuzerainSystem,
+                Interior(grid), accepted);
+        Equal(false, draft.UsedRawFallback,
+            "safe accepted owner contour does not report raw fallback");
+        Equal(true, draft.Positions.Any(point =>
+                point.X != MathF.Round(point.X) || point.Y != MathF.Round(point.Y)),
+            "accepted contour coordinates define emitted fill positions");
+        NearlyEqual(15.6816f, draft.Area,
+            "accepted contour area defines the visible polygon");
+        SafeTriangles(draft, grid, 7);
+    }
+
+    private static void AcceptedContourRetainsMultipleHoles()
+    {
+        BoundaryCellRaster grid = Raster(7, 5, (x, y) =>
+            (x == 2 || x == 4) && y == 2 ? Water(x, y) : Land(x, y, 7));
+        var accepted = new[]
+        {
+            new BoundaryFloatPoint(0.015f, 0.015f),
+            new BoundaryFloatPoint(6.985f, 0.015f),
+            new BoundaryFloatPoint(6.985f, 4.985f),
+            new BoundaryFloatPoint(0.015f, 4.985f),
+            new BoundaryFloatPoint(0.015f, 0.015f)
+        };
+        BoundaryPolygonDraft draft =
+            HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(
+                grid, 7, BoundaryTier.SuzerainSystem,
+                Interior(grid), accepted);
+        Equal(false, draft.UsedRawFallback,
+            "safe accepted contour with multiple holes remains accepted");
+        Equal(2, draft.Holes.Count,
+            "accepted outer retains both raw water holes");
+        NearlyEqual(32.6409f, draft.Area,
+            "accepted outer and both holes define visible area");
+        SafeTriangles(draft, grid, 7);
+    }
+
+    private static BoundaryPolygonDraft Build(BoundaryCellRaster grid, long owner)
+    {
+        return HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(
+            grid, owner, BoundaryTier.SuzerainSystem, Interior(grid));
+    }
+
+    private static void SafeTriangles(
+        BoundaryPolygonDraft draft, BoundaryCellRaster grid, long owner)
+    {
+        Equal(true, draft.IsValid, "polygon draft is valid");
+        foreach (BoundaryTriangle triangle in draft.Triangles)
+        {
+            foreach (BoundaryFloatPoint sample in TriangleSamples(triangle))
+            {
+                BoundaryCellFacts cell = grid.GetOrInvalid(
+                    (int)MathF.Floor(sample.X), (int)MathF.Floor(sample.Y));
+                Equal(true, cell.IsLand && cell.SystemId == owner,
+                    "triangle centroid and supercover samples stay on owner land");
+            }
+        }
+    }
+
+    private static IEnumerable<BoundaryFloatPoint> TriangleSamples(BoundaryTriangle t)
+    {
+        yield return t.Centroid;
+        yield return Mix(Mix(t.A, t.B, 0.5f), t.Centroid, 0.02f);
+        yield return Mix(Mix(t.B, t.C, 0.5f), t.Centroid, 0.02f);
+        yield return Mix(Mix(t.C, t.A, 0.5f), t.Centroid, 0.02f);
+    }
+
+    private static void AssertPairCoverage(
+        BoundaryVisualPairDraft pair, float expectedArea, string name)
+    {
+        float intersection = 0f;
+        foreach (BoundaryTriangle left in pair.Left.Triangles)
+        foreach (BoundaryTriangle right in pair.Right.Triangles)
+            intersection += TriangleIntersectionArea(left, right);
+        float union = pair.Left.Triangles.Sum(triangle => triangle.Area) +
+                      pair.Right.Triangles.Sum(triangle => triangle.Area) -
+                      intersection;
+        Equal(true, intersection <= 0.0001f,
+            name + " independently calculated intersection is empty");
+        NearlyEqual(expectedArea, union,
+            name + " independently calculated union covers the pair mask");
+        Equal(false, pair.HasOverlapOrGap,
+            name + " reports the independently verified geometry state");
+    }
+
+    private static float TriangleIntersectionArea(
+        BoundaryTriangle subject, BoundaryTriangle clip)
+    {
+        IReadOnlyList<BoundaryFloatPoint> polygon =
+            new[] { subject.A, subject.B, subject.C };
+        BoundaryFloatPoint[] clipping = { clip.A, clip.B, clip.C };
+        float winding = Cross(clipping[0], clipping[1], clipping[2]);
+        for (int edge = 0; edge < 3 && polygon.Count > 0; edge++)
+        {
+            BoundaryFloatPoint a = clipping[edge];
+            BoundaryFloatPoint b = clipping[(edge + 1) % 3];
+            var result = new List<BoundaryFloatPoint>();
+            BoundaryFloatPoint previous = polygon[polygon.Count - 1];
+            bool previousInside = Inside(previous, a, b, winding);
+            for (int i = 0; i < polygon.Count; i++)
+            {
+                BoundaryFloatPoint current = polygon[i];
+                bool currentInside = Inside(current, a, b, winding);
+                if (currentInside != previousInside)
+                    result.Add(LineIntersection(previous, current, a, b));
+                if (currentInside) result.Add(current);
+                previous = current;
+                previousInside = currentInside;
+            }
+            polygon = result;
+        }
+        float twiceArea = 0f;
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            BoundaryFloatPoint next = polygon[(i + 1) % polygon.Count];
+            twiceArea += polygon[i].X * next.Y - polygon[i].Y * next.X;
+        }
+        return Math.Abs(twiceArea) * 0.5f;
+    }
+
+    private static bool Inside(
+        BoundaryFloatPoint point, BoundaryFloatPoint a,
+        BoundaryFloatPoint b, float winding)
+    {
+        float side = Cross(a, b, point);
+        return winding >= 0f ? side >= -0.000001f : side <= 0.000001f;
+    }
+
+    private static BoundaryFloatPoint LineIntersection(
+        BoundaryFloatPoint start, BoundaryFloatPoint end,
+        BoundaryFloatPoint a, BoundaryFloatPoint b)
+    {
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        float edgeX = b.X - a.X;
+        float edgeY = b.Y - a.Y;
+        float denominator = dx * edgeY - dy * edgeX;
+        if (Math.Abs(denominator) <= 0.000001f) return start;
+        float ratio = ((a.X - start.X) * edgeY -
+                       (a.Y - start.Y) * edgeX) / denominator;
+        return new BoundaryFloatPoint(
+            start.X + dx * ratio, start.Y + dy * ratio);
+    }
+
+    private static float Cross(
+        BoundaryFloatPoint a, BoundaryFloatPoint b, BoundaryFloatPoint c)
+    {
+        return (b.X - a.X) * (c.Y - a.Y) -
+               (b.Y - a.Y) * (c.X - a.X);
+    }
+
+    private static BoundaryFloatPoint Mix(
+        BoundaryFloatPoint first, BoundaryFloatPoint second, float ratio)
+    {
+        return new BoundaryFloatPoint(
+            first.X + (second.X - first.X) * ratio,
+            first.Y + (second.Y - first.Y) * ratio);
+    }
+
+    private static BoundaryChunkBounds Interior(BoundaryCellRaster grid)
+    {
+        return new BoundaryChunkBounds(
+            grid.OriginX, grid.OriginY, grid.MaxXExclusive, grid.MaxYExclusive,
+            grid.OriginX, grid.OriginY, grid.MaxXExclusive, grid.MaxYExclusive);
+    }
+
+    private static BoundaryCellRaster Raster(
+        int width, int height, Func<int, int, BoundaryCellFacts> factory)
+    {
+        var cells = new BoundaryCellFacts[width * height];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+            cells[y * width + x] = factory(x, y);
+        return new BoundaryCellRaster(0, 0, width, height, cells);
+    }
+
+    private static BoundaryCellFacts Land(int x, int y, long owner)
+    {
+        return new BoundaryCellFacts(x, y, true, BoundaryWaterKind.Land,
+            128, owner, owner, owner, 0x336699FF);
+    }
+
+    private static BoundaryCellFacts Water(int x, int y)
+    {
+        return new BoundaryCellFacts(x, y, true,
+            BoundaryWaterKind.InlandWater, 40, -1, -1, -1, 0);
+    }
+
+    private static void SequenceEqual<T>(
+        IReadOnlyList<T> expected, IReadOnlyList<T> actual, string name)
+    {
+        Equal(expected.Count, actual.Count, name + " count");
+        for (int i = 0; i < expected.Count; i++)
+            Equal(expected[i], actual[i], name + " at " + i);
+    }
+
+    private static void NearlyEqual(float expected, float actual, string name)
+    {
+        if (Math.Abs(expected - actual) > 0.0001f)
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+}

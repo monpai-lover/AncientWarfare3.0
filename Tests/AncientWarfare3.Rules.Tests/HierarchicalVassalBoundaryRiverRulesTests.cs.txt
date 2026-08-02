@@ -1,0 +1,140 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalBoundaryRiverRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, HierarchicalVassalBoundaryRiverRules.IsRiverCandidate(
+                liquidCells: 12, maximumLocalWidth: 2,
+                boundingWidth: 2, boundingHeight: 8,
+                touchesOcean: false),
+            "a narrow elongated inland component is a river candidate");
+        Equal(false, HierarchicalVassalBoundaryRiverRules.IsRiverCandidate(
+                16, 4, 4, 4, false),
+            "a broad square component remains a lake");
+        Equal(false, HierarchicalVassalBoundaryRiverRules.IsRiverCandidate(
+                12, 2, 2, 8, true),
+            "water connected to ocean is not classified as an inland river");
+        Equal(false, HierarchicalVassalBoundaryRiverRules.IsRiverCandidate(
+                3, 1, 1, 3, false),
+            "a tiny puddle is too ambiguous to become a river");
+        Equal(false, HierarchicalVassalBoundaryRiverRules.IsRiverCandidate(
+                10, 2, 4, 5, false),
+            "a short broad fork remains conservative lake topology");
+
+        Equal(false,
+            HierarchicalVassalBoundaryRiverRules.ShouldEmitPoliticalRiver(7, 7),
+            "same-owner banks do not create a political river");
+        Equal(true,
+            HierarchicalVassalBoundaryRiverRules.ShouldEmitPoliticalRiver(7, 9),
+            "different stable owners create a political river");
+        Equal(false,
+            HierarchicalVassalBoundaryRiverRules.ShouldEmitPoliticalRiver(-1, 9),
+            "an unresolved bank owner cannot create a political river");
+
+        BoundaryRiverDraft vertical =
+            HierarchicalVassalBoundaryRiverRules.Analyze(
+                VerticalRiver(leftOwner: 1, rightOwner: 2),
+                BoundaryDisplayLayer.Countries);
+        Equal(1, vertical.PoliticalChains.Count,
+            "different banks unify into one river-center political chain");
+        Equal(8, vertical.PoliticalChains[0].Points.Count,
+            "the river centerline has one stable sample per major-axis slice");
+        Equal(16, vertical.ShoreEdgesToSuppress.Count,
+            "both duplicate shoreline chains are suppressed");
+        Equal(1L, vertical.PoliticalChains[0].LeftOwnerId,
+            "vertical river preserves its western displayed owner");
+        Equal(2L, vertical.PoliticalChains[0].RightOwnerId,
+            "vertical river preserves its eastern displayed owner");
+
+        BoundaryRiverDraft sameOwner =
+            HierarchicalVassalBoundaryRiverRules.Analyze(
+                VerticalRiver(leftOwner: 1, rightOwner: 1),
+                BoundaryDisplayLayer.Countries);
+        Equal(0, sameOwner.PoliticalChains.Count,
+            "same-owner river terrain emits no political chain");
+        Equal(0, sameOwner.ShoreEdgesToSuppress.Count,
+            "same-owner river keeps ordinary shoreline topology");
+
+        BoundaryRiverDraft lake =
+            HierarchicalVassalBoundaryRiverRules.Analyze(
+                BroadLake(), BoundaryDisplayLayer.Countries);
+        Equal(0, lake.PoliticalChains.Count,
+            "broad inland water is not forced into a river centerline");
+        Equal(0, lake.ShoreEdgesToSuppress.Count,
+            "lake holes retain their complete shoreline contours");
+
+        BoundaryRiverDraft oceanMouth =
+            HierarchicalVassalBoundaryRiverRules.Analyze(
+                RiverTouchingOcean(), BoundaryDisplayLayer.Countries);
+        Equal(0, oceanMouth.PoliticalChains.Count,
+            "a component touching ocean falls back to ordinary coast topology");
+    }
+
+    private static BoundaryCellRaster VerticalRiver(long leftOwner, long rightOwner)
+    {
+        const int width = 3;
+        const int height = 8;
+        var cells = new BoundaryCellFacts[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            cells[y * width] = Land(0, y, leftOwner);
+            cells[y * width + 1] = Water(1, y);
+            cells[y * width + 2] = Land(2, y, rightOwner);
+        }
+        return new BoundaryCellRaster(0, 0, width, height, cells);
+    }
+
+    private static BoundaryCellRaster BroadLake()
+    {
+        const int size = 6;
+        var cells = new BoundaryCellFacts[size * size];
+        for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+            cells[y * size + x] = x >= 1 && x <= 4 && y >= 1 && y <= 4
+                ? Water(x, y)
+                : Land(x, y, x < 3 ? 1 : 2);
+        return new BoundaryCellRaster(0, 0, size, size, cells);
+    }
+
+    private static BoundaryCellRaster RiverTouchingOcean()
+    {
+        const int width = 3;
+        const int height = 8;
+        var cells = new BoundaryCellFacts[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            cells[y * width] = Land(0, y, 1);
+            cells[y * width + 1] = y == height - 1
+                ? Ocean(1, y)
+                : Water(1, y);
+            cells[y * width + 2] = Land(2, y, 2);
+        }
+        return new BoundaryCellRaster(0, 0, width, height, cells);
+    }
+
+    private static BoundaryCellFacts Land(int x, int y, long owner)
+    {
+        return new BoundaryCellFacts(x, y, true, BoundaryWaterKind.Land,
+            128, owner, owner, owner, 0xFFFFFFFF);
+    }
+
+    private static BoundaryCellFacts Water(int x, int y)
+    {
+        return new BoundaryCellFacts(x, y, true,
+            BoundaryWaterKind.InlandWater, 70, -1, -1, -1, 0);
+    }
+
+    private static BoundaryCellFacts Ocean(int x, int y)
+    {
+        return new BoundaryCellFacts(x, y, true,
+            BoundaryWaterKind.Ocean, 20, -1, -1, -1, 0);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+}

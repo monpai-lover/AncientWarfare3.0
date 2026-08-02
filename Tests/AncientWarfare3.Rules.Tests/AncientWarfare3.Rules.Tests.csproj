@@ -9,6 +9,27 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryChunkRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryTopologyRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryRiverRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryCurveRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryPolygonRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryColorRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryMeshDraftRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryHeightRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryWorkerRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryPerformanceTests.cs.txt" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryModels.cs" Link="Production\HierarchicalVassalBoundaryModels.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryChunkRules.cs" Link="Production\HierarchicalVassalBoundaryChunkRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryTopologyRules.cs" Link="Production\HierarchicalVassalBoundaryTopologyRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryRiverRules.cs" Link="Production\HierarchicalVassalBoundaryRiverRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryCurveRules.cs" Link="Production\HierarchicalVassalBoundaryCurveRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryPolygonRules.cs" Link="Production\HierarchicalVassalBoundaryPolygonRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryColorRules.cs" Link="Production\HierarchicalVassalBoundaryColorRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryMeshDraftRules.cs" Link="Production\HierarchicalVassalBoundaryMeshDraftRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryHeightRules.cs" Link="Production\HierarchicalVassalBoundaryHeightRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryChunkSnapshot.cs" Link="Production\HierarchicalVassalBoundaryChunkSnapshot.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryTopologyWorker.cs" Link="Production\HierarchicalVassalBoundaryTopologyWorker.cs" />
     <Compile Include="ActiveMilitaryLifecycleRulesTests.cs.txt" />
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Compile Include="PathfindingCursorTests.cs.txt" />

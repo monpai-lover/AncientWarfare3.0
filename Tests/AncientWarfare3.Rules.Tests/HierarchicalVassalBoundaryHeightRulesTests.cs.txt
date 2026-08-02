@@ -1,0 +1,357 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalBoundaryHeightRulesTests
+{
+    public static void Run()
+    {
+        NativeHeightPackingCopiesSamples();
+        RasterSnapshotIgnoresCallerMutation();
+        FlatAndRampNormalsUseCentralDifferences();
+        LightingIsNeutralDirectionalAndBounded();
+        InvalidWorldEdgeSamplesClampToNearestValidHeight();
+        CountryAndCityDraftsShareOneHeightRevision();
+        InvalidInputsFailBeforeHeightWork();
+        AssertionHelpersRejectNonFiniteValues();
+    }
+
+    private static void RasterSnapshotIgnoresCallerMutation()
+    {
+        BoundaryCellFacts[] cells = Cells(36, 36, (x, y) =>
+            Cell(x, y, true, 96));
+        var raster = new BoundaryCellRaster(0, 0, 36, 36, cells);
+
+        cells[18 * 36 + 18] = Cell(18, 18, true, 0);
+
+        Equal((byte)96, raster.GetOrInvalid(18, 18).Height,
+            "raster snapshot is isolated from deterministic caller mutation");
+        BoundaryHeightDraft packed =
+            HierarchicalVassalBoundaryHeightRules.Pack(raster, 32, 2);
+        Equal((byte)96, packed.Samples[packed.Index(18, 18)],
+            "worker packing observes captured facts rather than caller mutation");
+    }
+
+    private static void NativeHeightPackingCopiesSamples()
+    {
+        BoundaryCellFacts[] cells = Cells(36, 36, (x, y) =>
+            Cell(x + 30, y + 62, true, (byte)((x * 7 + y * 11) % 256)));
+        var raster = new BoundaryCellRaster(30, 62, 36, 36, cells);
+
+        BoundaryHeightDraft draft = HierarchicalVassalBoundaryHeightRules.Pack(
+            raster, interiorSize: 32, halo: 2, terrainRevision: 41);
+
+        Equal(36, draft.Width, "height texture includes the horizontal halo");
+        Equal(36, draft.Height, "height texture includes the vertical halo");
+        Equal(30, draft.CaptureWorldOriginX,
+            "height draft preserves capture X including halo");
+        Equal(62, draft.CaptureWorldOriginY,
+            "height draft preserves capture Y including halo");
+        Equal(32, draft.ChunkWorldOriginX,
+            "chunk X starts after the left capture halo");
+        Equal(64, draft.ChunkWorldOriginY,
+            "chunk Y starts after the bottom capture halo");
+        Equal(2, draft.Halo, "height draft records its halo");
+        Equal(41L, draft.TerrainRevision, "height draft records terrain revision");
+        Equal((byte)((18 * 7 + 18 * 11) % 256),
+            draft.Samples[draft.Index(18, 18)],
+            "packing preserves native 0-255 height bytes");
+        Equal(draft.Index(2, 2), draft.IndexForWorldCell(32, 64),
+            "chunk world origin maps to the first interior height texel");
+        Equal(draft.Index(0, 0), draft.IndexForWorldCell(30, 62),
+            "capture world origin maps to the first halo texel");
+        Near(2.5f / 36f, draft.UvForWorldCell(32, 64).X, 0.000001f,
+            "chunk origin maps to the center of interior texel X");
+        Near(2.5f / 36f, draft.UvForWorldCell(32, 64).Y, 0.000001f,
+            "chunk origin maps to the center of interior texel Y");
+
+        byte packed = draft.Samples[draft.Index(5, 7)];
+        cells[7 * 36 + 5] = Cell(35, 69, true, 0);
+        Equal(packed, draft.Samples[draft.Index(5, 7)],
+            "height draft owns a copy independent of snapshot mutation");
+    }
+
+    private static void FlatAndRampNormalsUseCentralDifferences()
+    {
+        BoundaryHeightDraft flat = HierarchicalVassalBoundaryHeightRules.Pack(
+            Raster(36, 36, (x, y) => Cell(x, y, true, 128)), 32, 2);
+        Near(new BoundaryFloat3(0f, 0f, 1f),
+            HierarchicalVassalBoundaryHeightRules.NormalAt(
+                flat, 18, 18, 2f), 0.0001f,
+            "flat native height has a neutral normal");
+
+        BoundaryHeightDraft rampX = HierarchicalVassalBoundaryHeightRules.Pack(
+            Raster(36, 36, (x, y) => Cell(x, y, true, (byte)(x * 5))),
+            32, 2);
+        BoundaryFloat3 normalX = HierarchicalVassalBoundaryHeightRules.NormalAt(
+            rampX, 18, 18, 2f);
+        Equal(true, normalX.X < 0f,
+            "increasing X height tilts the normal toward negative X");
+        Near(0f, normalX.Y, 0.0001f,
+            "an X-only ramp has no Y normal component");
+
+        BoundaryHeightDraft rampY = HierarchicalVassalBoundaryHeightRules.Pack(
+            Raster(36, 36, (x, y) => Cell(x, y, true, (byte)(y * 5))),
+            32, 2);
+        BoundaryFloat3 normalY = HierarchicalVassalBoundaryHeightRules.NormalAt(
+            rampY, 18, 18, 2f);
+        Equal(true, normalY.Y < 0f,
+            "increasing Y height tilts the normal toward negative Y");
+        Near(0f, normalY.X, 0.0001f,
+            "a Y-only ramp has no X normal component");
+    }
+
+    private static void LightingIsNeutralDirectionalAndBounded()
+    {
+        BoundaryHeightDraft flat = HierarchicalVassalBoundaryHeightRules.Pack(
+            Raster(36, 36, (x, y) => Cell(x, y, true, 128)), 32, 2);
+        Near(1f, HierarchicalVassalBoundaryHeightRules.LightAt(
+                flat, 18, 18, new BoundaryFloat3(-1f, 0f, 1f), 2f),
+            0.0001f, "flat relief has a neutral light factor");
+
+        BoundaryHeightDraft ramp = HierarchicalVassalBoundaryHeightRules.Pack(
+            Raster(36, 36, (x, y) => Cell(x, y, true, (byte)(x * 7))),
+            32, 2);
+        float fromLowSide = HierarchicalVassalBoundaryHeightRules.LightAt(
+            ramp, 18, 18, new BoundaryFloat3(-1f, 0f, 1f), 6f);
+        float fromHighSide = HierarchicalVassalBoundaryHeightRules.LightAt(
+            ramp, 18, 18, new BoundaryFloat3(1f, 0f, 1f), 6f);
+        Equal(true, fromLowSide > fromHighSide,
+            "opposite slope directions produce distinguishable lighting");
+        InRange(fromLowSide, 0.65f, 1.15f,
+            "lit slope remains in the bounded relief range");
+        InRange(fromHighSide, 0.65f, 1.15f,
+            "shadowed slope remains in the bounded relief range");
+
+        float subnormal = HierarchicalVassalBoundaryHeightRules.LightAt(
+            ramp, 18, 18,
+            new BoundaryFloat3(float.Epsilon, float.Epsilon, float.Epsilon),
+            6f);
+        Equal(true, IsFinite(subnormal),
+            "finite subnormal light directions produce a finite factor");
+        InRange(subnormal, 0.65f, 1.15f,
+            "subnormal light directions remain in the bounded relief range");
+    }
+
+    private static void InvalidWorldEdgeSamplesClampToNearestValidHeight()
+    {
+        BoundaryCellRaster raster = Raster(-2, -2, 36, 36, (x, y) =>
+        {
+            bool valid = x >= 0 && y >= 0;
+            byte height = valid ? (byte)(180 + Math.Min(x + y, 60)) : (byte)0;
+            return Cell(x, y, valid, height);
+        });
+
+        BoundaryHeightDraft draft = HierarchicalVassalBoundaryHeightRules.Pack(
+            raster, 32, 2);
+
+        Equal((byte)180, draft.Samples[draft.Index(0, 0)],
+            "corner halo copies the nearest valid world-corner height");
+        Equal((byte)185, draft.Samples[draft.Index(0, 7)],
+            "left invalid halo copies the nearest valid edge height");
+        Equal((byte)185, draft.Samples[draft.Index(7, 0)],
+            "bottom invalid halo copies the nearest valid edge height");
+        Equal(true, draft.Samples[draft.Index(1, 18)] > 0,
+            "world-edge padding never introduces a false zero cliff");
+    }
+
+    private static void CountryAndCityDraftsShareOneHeightRevision()
+    {
+        BoundaryHeightDraft height = HierarchicalVassalBoundaryHeightRules.Pack(
+            Raster(36, 36, (x, y) => Cell(x, y, true, 144)),
+            32, 2, terrainRevision: 73);
+        var draftSet = new BoundaryChunkDraftSet(height);
+
+        Equal(true, ReferenceEquals(
+                draftSet.CountryHeightDraft, draftSet.CityHeightDraft),
+            "country and city drafts reference one immutable height draft");
+        Equal(73L, draftSet.CountryHeightDraft.TerrainRevision,
+            "both layers observe the same terrain revision");
+    }
+
+    private static void InvalidInputsFailBeforeHeightWork()
+    {
+        BoundaryCellRaster raster = Raster(
+            36, 36, (x, y) => Cell(x, y, true, 128));
+        BoundaryHeightDraft draft = HierarchicalVassalBoundaryHeightRules.Pack(
+            raster, 32, 2);
+
+        Throws<ArgumentNullException>(() =>
+            HierarchicalVassalBoundaryHeightRules.Pack(null, 32, 2),
+            "null rasters are rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+            HierarchicalVassalBoundaryHeightRules.Pack(raster, -1, 2),
+            "negative interior sizes are rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+            HierarchicalVassalBoundaryHeightRules.Pack(raster, 32, -1),
+            "negative halos are rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+            HierarchicalVassalBoundaryHeightRules.Pack(raster, 33, 2),
+            "height texture dimensions are budgeted to one 32-tile chunk");
+        Throws<ArgumentException>(() =>
+            HierarchicalVassalBoundaryHeightRules.Pack(
+                Raster(35, 36, (x, y) => Cell(x, y, true, 128)), 32, 2),
+            "raster dimensions must match interior plus halo");
+        Throws<ArgumentException>(() =>
+            HierarchicalVassalBoundaryHeightRules.Pack(
+                Raster(36, 36, (x, y) => Cell(x, y, false, 0)), 32, 2),
+            "edge clamping requires at least one valid sample");
+        Throws<ArgumentException>(() => new BoundaryHeightDraft(
+                new byte[35], 6, 6, 0, 0, 2, 0),
+            "height draft array length must match its dimensions");
+        Throws<ArgumentOutOfRangeException>(() => new BoundaryHeightDraft(
+                new byte[37 * 37], 37, 37, 0, 0, 2, 0),
+            "height draft dimensions cannot exceed the chunk texture budget");
+        Throws<ArgumentOutOfRangeException>(() => new BoundaryHeightDraft(
+                new byte[36 * 36], 36, 36, 0, 0, int.MaxValue, 0),
+            "halo multiplication cannot overflow into acceptance");
+        Throws<ArgumentOutOfRangeException>(() => new BoundaryHeightDraft(
+                new byte[36 * 36], 36, 36,
+                int.MaxValue - 1, int.MaxValue - 1, 2, 0),
+            "capture origin plus halo cannot overflow chunk world origin");
+        Throws<ArgumentOutOfRangeException>(() =>
+            draft.IndexForWorldCell(int.MinValue, int.MinValue),
+            "world-to-height index subtraction cannot overflow into bounds");
+        Throws<ArgumentOutOfRangeException>(() =>
+            HierarchicalVassalBoundaryHeightRules.NormalAt(
+                draft, 0, 18, 2f),
+            "central differences reject coordinates without left neighbors");
+        Throws<ArgumentOutOfRangeException>(() =>
+            HierarchicalVassalBoundaryHeightRules.NormalAt(
+                draft, 18, 18, float.NaN),
+            "non-finite slope scales are rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+            HierarchicalVassalBoundaryHeightRules.LightAt(
+                draft, 18, 18,
+                new BoundaryFloat3(float.PositiveInfinity, 0f, 1f), 2f),
+            "non-finite light directions are rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+            HierarchicalVassalBoundaryHeightRules.LightAt(
+                draft, 18, 18, new BoundaryFloat3(0f, 0f, 0f), 2f),
+            "zero light directions are rejected");
+
+        Throws<ArgumentOutOfRangeException>(() => new BoundaryCellRaster(
+                0, 0, 65536, 65536, Array.Empty<BoundaryCellFacts>()),
+            "raster dimension multiplication cannot overflow into acceptance");
+        Throws<ArgumentNullException>(() => new BoundaryCellRaster(
+                0, 0, 1, 1, null),
+            "raster rejects a null caller-owned cell array");
+        Throws<ArgumentException>(() => new BoundaryCellRaster(
+                0, 0, 2, 2, new BoundaryCellFacts[3]),
+            "raster rejects cell arrays whose length mismatches dimensions");
+        Throws<ArgumentOutOfRangeException>(() => new BoundaryCellRaster(
+                int.MaxValue, 0, 2, 1, new BoundaryCellFacts[2]),
+            "raster world bounds cannot overflow into reversed coordinates");
+        Equal(BoundarySafeBoundsStatus.Invalid,
+            BoundarySafeBoundsGate.Evaluate(new BoundaryChunkBounds(
+                0, 0, 36, 36,
+                int.MaxValue, int.MaxValue, int.MinValue, int.MinValue)),
+            "reversed chunk bounds are rejected before height integration");
+    }
+
+    private static BoundaryCellRaster Raster(
+        int width,
+        int height,
+        Func<int, int, BoundaryCellFacts> create)
+    {
+        return Raster(0, 0, width, height, create);
+    }
+
+    private static BoundaryCellRaster Raster(
+        int originX,
+        int originY,
+        int width,
+        int height,
+        Func<int, int, BoundaryCellFacts> create)
+    {
+        return new BoundaryCellRaster(originX, originY, width, height,
+            Cells(width, height, (x, y) => create(originX + x, originY + y)));
+    }
+
+    private static BoundaryCellFacts[] Cells(
+        int width,
+        int height,
+        Func<int, int, BoundaryCellFacts> create)
+    {
+        var result = new BoundaryCellFacts[width * height];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+            result[y * width + x] = create(x, y);
+        return result;
+    }
+
+    private static BoundaryCellFacts Cell(
+        int x, int y, bool valid, byte height)
+    {
+        return new BoundaryCellFacts(
+            x, y, valid, BoundaryWaterKind.Land, height,
+            systemId: 1, realmId: 1, cityId: 1, rgba: 0xFFFFFFFF);
+    }
+
+    private static void Near(
+        BoundaryFloat3 expected,
+        BoundaryFloat3 actual,
+        float tolerance,
+        string name)
+    {
+        Near(expected.X, actual.X, tolerance, name + " X");
+        Near(expected.Y, actual.Y, tolerance, name + " Y");
+        Near(expected.Z, actual.Z, tolerance, name + " Z");
+    }
+
+    private static void Near(
+        float expected, float actual, float tolerance, string name)
+    {
+        if (!IsFinite(expected) || !IsFinite(actual) ||
+            !IsFinite(tolerance) || tolerance < 0f ||
+            Math.Abs(expected - actual) > tolerance)
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void InRange(
+        float actual, float minimum, float maximum, string name)
+    {
+        if (!IsFinite(actual) || !IsFinite(minimum) ||
+            !IsFinite(maximum) || minimum > maximum ||
+            actual < minimum || actual > maximum)
+            throw new InvalidOperationException(
+                name + ": expected " + minimum + ".." + maximum +
+                ", got " + actual);
+    }
+
+    private static bool IsFinite(float value)
+    {
+        return !float.IsNaN(value) && !float.IsInfinity(value);
+    }
+
+    private static void AssertionHelpersRejectNonFiniteValues()
+    {
+        Throws<InvalidOperationException>(() =>
+            Near(float.NaN, float.NaN, 0.001f, "NaN near probe"),
+            "Near rejects NaN instead of treating it as equal");
+        Throws<InvalidOperationException>(() =>
+            InRange(float.NaN, 0.65f, 1.15f, "NaN range probe"),
+            "InRange rejects NaN instead of treating it as bounded");
+    }
+
+    private static void Throws<TException>(Action action, string name)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException)
+        {
+            return;
+        }
+        throw new InvalidOperationException(name + ": expected " +
+            typeof(TException).Name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+}

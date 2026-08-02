@@ -41,10 +41,20 @@ namespace AncientWarfare3.core.policy
 
         internal static void SetSelectedLayerFromOption(int pZoneOption)
         {
-            _selectedLayer = HierarchicalVassalMapModeOptionRules.ResolveLayer(
-                pZoneOption);
+            HierarchicalVassalMapModeLayer nextLayer =
+                HierarchicalVassalMapModeOptionRules.ResolveLayer(pZoneOption);
+            if (_selectedLayer == nextLayer) return;
             _zoneRenderDirty = true;
+            _selectedLayer = nextLayer;
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                OnLayerChanged();
+        }
+
+        internal static bool MeshAuthorityActive
+        {
+            get { return AncientWarfare3.patch.
+                AW_HierarchicalVassalBoundaryDirtyPatch.MeshAuthorityActive; }
         }
 
         public static bool IsCityLayer =>
@@ -145,12 +155,15 @@ namespace AncientWarfare3.core.policy
             if (revision == _visibleSnapshotRevision) return;
 
             _visibleSnapshotRevision = revision;
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                MarkVisibleSnapshotZones();
             InvalidateSnapshotCaches();
             if (changed) HierarchicalVassalMapModeLabelLayer.MarkDirty();
         }
 
         public static void DrawZones(MetaTypeAsset pAsset)
         {
+            if (MeshAuthorityActive) return;
             ZoneCalculator calculator = World.world?.zone_calculator;
             if (pAsset == null || calculator == null ||
                 World.world?.kingdoms == null) return;
@@ -310,6 +323,8 @@ namespace AncientWarfare3.core.policy
             catch { }
             try { World.world?.zone_calculator?.dirtyAndClear(); }
             catch { }
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                OnMapModeDirty();
         }
 
         public static void Reset()
@@ -344,6 +359,8 @@ namespace AncientWarfare3.core.policy
 
         private static void RefreshView()
         {
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                MarkVisibleSnapshotZones();
             if (State.IsRoot)
                 _visibleSnapshot = _rootSnapshot;
             else if (!FocusedSnapshots.TryGetValue(State.FocusKingdomId,
@@ -351,6 +368,8 @@ namespace AncientWarfare3.core.policy
                 _visibleSnapshot = null;
             _zoneRenderDirty = true;
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
+            AncientWarfare3.patch.AW_HierarchicalVassalBoundaryDirtyPatch.
+                MarkVisibleSnapshotZones();
             try { World.world?.zone_calculator?.dirtyAndClear(); }
             catch { }
         }
@@ -501,6 +520,7 @@ namespace AncientWarfare3.core.policy
                 snapshot.AddFocusedEntry(BuildEntry(context,
                     children[index], territory, snapshot));
             }
+            FinalizeBoundaryColorInputs(snapshot);
             return snapshot;
         }
 
@@ -522,6 +542,7 @@ namespace AncientWarfare3.core.policy
                 snapshot.AddRootEntry(BuildEntry(pContext, roots[index],
                     territory, snapshot));
             }
+            FinalizeBoundaryColorInputs(snapshot);
             return snapshot;
         }
 
@@ -665,7 +686,7 @@ namespace AncientWarfare3.core.policy
 
             var seenTiles = new HashSet<Vector2Int>();
             for (int index = 0; index < pTerritoryKingdoms.Count; index++)
-                AddKingdomTerritory(pTerritoryKingdoms[index], entry,
+                AddKingdomTerritory(pContext, pTerritoryKingdoms[index], entry,
                     pOwner, seenTiles);
             entry.SortLandTiles(CompareTiles);
             HierarchicalVassalMapModeGeometryMetrics metrics =
@@ -687,12 +708,16 @@ namespace AncientWarfare3.core.policy
             return entry;
         }
 
-        private static void AddKingdomTerritory(Kingdom pTerritoryKingdom,
+        private static void AddKingdomTerritory(HierarchyContext pContext,
+            Kingdom pTerritoryKingdom,
             HierarchicalVassalKingdomSnapshot pEntry,
             HierarchicalVassalMapModeSnapshot pOwner,
             HashSet<Vector2Int> pSeenTiles)
         {
             if (!IsValidKingdom(pTerritoryKingdom)) return;
+            Kingdom root = ResolveHierarchyRoot(pContext, pTerritoryKingdom);
+            if (!IsValidKingdom(root)) return;
+            uint rootRgba = RootRgba(root);
             try
             {
                 foreach (City city in pTerritoryKingdom.getCities())
@@ -710,6 +735,8 @@ namespace AncientWarfare3.core.policy
                         if (zone.id >= 0)
                         {
                             pOwner.MapZone(zone.id, pEntry.KingdomId);
+                            pOwner.MapBoundaryZone(zone.id, root.id,
+                                pEntry.KingdomId, city.id, rootRgba);
                             pOwner.AddDrawableZone(zone);
                             pEntry.AddDrawableZone(zone);
                         }
@@ -727,6 +754,94 @@ namespace AncientWarfare3.core.policy
             {
                 // A stale city or zone is skipped without invalidating the
                 // rest of the deterministic snapshot.
+            }
+        }
+
+        private static void FinalizeBoundaryColorInputs(
+            HierarchicalVassalMapModeSnapshot pSnapshot)
+        {
+            var identities = new List<HierarchyColorIdentity>();
+            var edges = new List<HierarchyColorEdge>();
+            if (pSnapshot == null)
+            {
+                return;
+            }
+
+            foreach (KeyValuePair<int, HierarchicalVassalBoundaryZoneFacts>
+                     pair in pSnapshot.BoundaryFactsByZone)
+            {
+                HierarchicalVassalBoundaryZoneFacts facts = pair.Value;
+                AddBoundaryColorIdentity(identities,
+                    BoundaryTier.SuzerainSystem, facts.SystemId, facts);
+                AddBoundaryColorIdentity(identities,
+                    BoundaryTier.VassalRealm, facts.RealmId, facts);
+                AddBoundaryColorIdentity(identities,
+                    BoundaryTier.City, facts.CityId, facts);
+            }
+
+            IReadOnlyList<TileZone> zones = pSnapshot.DrawableZones;
+            for (int zoneIndex = 0; zoneIndex < zones.Count; zoneIndex++)
+            {
+                TileZone zone = zones[zoneIndex];
+                if (zone == null || zone.id < 0 || zone.neighbours == null ||
+                    !pSnapshot.TryGetBoundaryZoneFacts(zone.id,
+                        out HierarchicalVassalBoundaryZoneFacts first))
+                    continue;
+                for (int neighbourIndex = 0;
+                     neighbourIndex < zone.neighbours.Length; neighbourIndex++)
+                {
+                    TileZone neighbour = zone.neighbours[neighbourIndex];
+                    if (neighbour == null || neighbour.id <= zone.id ||
+                        !pSnapshot.TryGetBoundaryZoneFacts(neighbour.id,
+                            out HierarchicalVassalBoundaryZoneFacts second))
+                        continue;
+                    AddBoundaryColorEdge(edges, BoundaryTier.SuzerainSystem,
+                        first.SystemId, second.SystemId);
+                    AddBoundaryColorEdge(edges, BoundaryTier.VassalRealm,
+                        first.RealmId, second.RealmId);
+                    AddBoundaryColorEdge(edges, BoundaryTier.City,
+                        first.CityId, second.CityId);
+                }
+            }
+            pSnapshot.SetBoundaryColorInputs(identities, edges);
+        }
+
+        private static void AddBoundaryColorIdentity(
+            ICollection<HierarchyColorIdentity> pIdentities,
+            BoundaryTier pTier, long pOwnerId,
+            HierarchicalVassalBoundaryZoneFacts pFacts)
+        {
+            if (pOwnerId < 0L) return;
+            pIdentities.Add(
+                HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                    pTier, pOwnerId, pFacts.SystemId,
+                    pFacts.RealmId, pFacts.CityId, pFacts.RootRgba));
+        }
+
+        private static void AddBoundaryColorEdge(
+            ICollection<HierarchyColorEdge> pEdges,
+            BoundaryTier pTier, long pFirstOwnerId, long pSecondOwnerId)
+        {
+            if (pFirstOwnerId < 0L || pSecondOwnerId < 0L ||
+                pFirstOwnerId == pSecondOwnerId) return;
+            pEdges.Add(new HierarchyColorEdge(
+                pTier, pFirstOwnerId, pSecondOwnerId));
+        }
+
+        private static uint RootRgba(Kingdom pRoot)
+        {
+            try
+            {
+                ColorAsset asset = pRoot?.getColor();
+                if (asset == null) return 0x606060FFu;
+                asset.initColor();
+                Color32 color = asset.getColorMain32();
+                return ((uint)color.r << 24) | ((uint)color.g << 16) |
+                       ((uint)color.b << 8) | color.a;
+            }
+            catch
+            {
+                return 0x606060FFu;
             }
         }
 

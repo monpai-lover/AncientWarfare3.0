@@ -1,0 +1,136 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalBoundaryColorRulesTests
+{
+    public static void Run()
+    {
+        CanonicalAssignmentCopiesSortsAndDeduplicatesInputs();
+        EmptyAndConflictingAssignmentsHaveExplicitStates();
+        TierIdentitiesIgnoreLowerLevelIds();
+    }
+
+    private static void CanonicalAssignmentCopiesSortsAndDeduplicatesInputs()
+    {
+        HierarchyColorIdentity owner234 = CityIdentity(234, root: 1);
+        HierarchyColorIdentity owner249 = CityIdentity(249, root: 1);
+        var identities = new[] { owner249, owner234, owner249 };
+        var edges = new[]
+        {
+            new HierarchyColorEdge(BoundaryTier.City, 249, 234),
+            new HierarchyColorEdge(BoundaryTier.City, 234, 249),
+            new HierarchyColorEdge(BoundaryTier.City, 249, 249),
+            new HierarchyColorEdge(BoundaryTier.City, 234, 999)
+        };
+
+        uint base234 = HierarchicalVassalBoundaryColorRules.CandidateColor(
+            owner234, 0);
+        uint base249 = HierarchicalVassalBoundaryColorRules.CandidateColor(
+            owner249, 0);
+        Equal(base234, base249,
+            "234 and 249 retain the real candidate-zero collision");
+
+        HierarchyColorAssignment assignment =
+            HierarchicalVassalBoundaryColorRules.BuildCanonicalAssignment(
+                identities, edges);
+        Equal(true, assignment.IsValid, "canonical assignment is valid");
+        Equal(string.Empty, assignment.FailureReason,
+            "valid assignment has no failure reason");
+        Equal(2, assignment.Count, "exact identities are deduplicated");
+        Equal(true, assignment.TryGetColor(
+            BoundaryTier.City, 234, out uint color234), "owner 234 lookup");
+        Equal(true, assignment.TryGetColor(
+            BoundaryTier.City, 249, out uint color249), "owner 249 lookup");
+        Equal(true, color234 != color249,
+            "canonical adjacency advances the first colliding candidate");
+
+        HierarchyColorAssignment reversed =
+            HierarchicalVassalBoundaryColorRules.BuildCanonicalAssignment(
+                identities.Reverse().ToArray(), edges.Reverse().ToArray());
+        Equal(true, reversed.TryGetColor(
+            BoundaryTier.City, 234, out uint reversed234),
+            "reversed owner 234 lookup");
+        Equal(true, reversed.TryGetColor(
+            BoundaryTier.City, 249, out uint reversed249),
+            "reversed owner 249 lookup");
+        Equal(color234, reversed234, "identity input order is irrelevant");
+        Equal(color249, reversed249, "edge input order is irrelevant");
+
+        identities[0] = CityIdentity(700, root: 7);
+        edges[0] = new HierarchyColorEdge(BoundaryTier.City, 700, 701);
+        Equal(true, assignment.TryGetColor(
+            BoundaryTier.City, 249, out uint copied249),
+            "assignment does not retain mutable input arrays");
+        Equal(color249, copied249, "copied assignment remains bit-identical");
+    }
+
+    private static void EmptyAndConflictingAssignmentsHaveExplicitStates()
+    {
+        HierarchyColorAssignment empty =
+            HierarchicalVassalBoundaryColorRules.BuildCanonicalAssignment(
+                Array.Empty<HierarchyColorIdentity>(),
+                Array.Empty<HierarchyColorEdge>());
+        Equal(true, empty.IsValid, "empty world assignment is valid");
+        Equal(0, empty.Count, "empty world assignment has no colors");
+        Equal(string.Empty, empty.FailureReason,
+            "empty world is not represented as failure");
+
+        var conflicting = new[]
+        {
+            CityIdentity(249, root: 1),
+            CityIdentity(249, root: 2)
+        };
+        HierarchyColorAssignment invalid =
+            HierarchicalVassalBoundaryColorRules.BuildCanonicalAssignment(
+                conflicting, Array.Empty<HierarchyColorEdge>());
+        Equal(false, invalid.IsValid,
+            "conflicting duplicate identity is invalid");
+        Equal("conflicting_identity:City:249", invalid.FailureReason,
+            "conflicting duplicate has a stable failure reason");
+        Equal(0, invalid.Count, "invalid assignment exposes no partial colors");
+    }
+
+    private static void TierIdentitiesIgnoreLowerLevelIds()
+    {
+        HierarchyColorIdentity firstRealm =
+            HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                BoundaryTier.VassalRealm, displayedOwnerId: 10,
+                systemId: 1, realmId: 10, cityId: 100,
+                rootRgba: 0x336699FF);
+        HierarchyColorIdentity secondRealm =
+            HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                BoundaryTier.VassalRealm, displayedOwnerId: 10,
+                systemId: 1, realmId: 10, cityId: 101,
+                rootRgba: 0x336699FF);
+        Equal(firstRealm, secondRealm,
+            "realm identity ignores the physical city");
+
+        HierarchyColorIdentity firstSystem =
+            HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                BoundaryTier.SuzerainSystem, displayedOwnerId: 1,
+                systemId: 1, realmId: 10, cityId: 100,
+                rootRgba: 0x336699FF);
+        HierarchyColorIdentity secondSystem =
+            HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                BoundaryTier.SuzerainSystem, displayedOwnerId: 1,
+                systemId: 1, realmId: 11, cityId: 101,
+                rootRgba: 0x336699FF);
+        Equal(firstSystem, secondSystem,
+            "system identity ignores lower hierarchy levels");
+    }
+
+    private static HierarchyColorIdentity CityIdentity(long owner, long root)
+    {
+        return new HierarchyColorIdentity(
+            BoundaryTier.City, owner,
+            rootId: root, systemId: root,
+            realmId: 10, cityId: owner,
+            rootRgba: 0x336699FF);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+}

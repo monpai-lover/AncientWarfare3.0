@@ -6,18 +6,21 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_HierarchicalVassalMapLabelPatch
     {
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
-        private static void MapBoxUpdate_Postfix()
+        // Called by AW_DeferredRuntimeWorkPatch only after capture, worker
+        // completion drain, and bounded mesh upload.
+        internal static void ProcessLabels()
         {
             HierarchicalVassalMapModeLabelLayer.ProcessFrame();
-            HierarchicalVassalMapModeBoundaryLayer.ProcessFrame();
         }
 
         [HarmonyPrefix]
+        [HarmonyPriority(Priority.Last)]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.clearWorld))]
         private static void ClearWorld_Prefix()
         {
+            // Cancel the generation before roots/materials/labels are torn
+            // down, so a worker completion can never target the old world.
+            AW_HierarchicalVassalBoundaryDirtyPatch.CancelGeneration();
             AW_HierarchicalVassalMapMinimapPatch.ResetSuppression();
             HierarchicalVassalMapModeLabelLayer.Reset();
             HierarchicalVassalMapModeBoundaryLayer.Reset();

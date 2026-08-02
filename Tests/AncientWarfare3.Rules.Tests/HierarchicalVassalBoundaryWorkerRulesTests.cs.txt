@@ -1,0 +1,298 @@
+using AncientWarfare3.core.policy;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
+
+internal static class HierarchicalVassalBoundaryWorkerRulesTests
+{
+    public static void Run()
+    {
+        LatestRevisionWinsForTheSameChunk();
+        QueuedCompletionIsSupersededByANewerRevision();
+        OlderOrDuplicateRevisionCannotReplaceANewerCompletion();
+        QueuesStayBoundedAndSaturationMarksRescan();
+        ResetRejectsStaleSubmissionsAndLateResults();
+        ExceptionsAreIsolatedAndCompletionsStayOrdered();
+        ProductionDraftSharesHeightAndAssignment();
+        WholeChainsDoNotRestartARibbonAtEveryRawEdge();
+        InvalidAssignmentProducesFailure();
+        ShutdownIsBounded();
+    }
+
+    private static void LatestRevisionWinsForTheSameChunk()
+    {
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        using var worker = Worker(2, snapshot => {
+            if (snapshot.ChunkKey.X == 9) { entered.Set(); release.Wait(2000); }
+            return EmptyDraft(snapshot);
+        });
+        long generation = worker.ResetWorld(2);
+        True(worker.Submit(Snapshot(generation, 9, 0, 1)), "blocker submit");
+        True(entered.Wait(2000), "blocker entered");
+        True(worker.Submit(Snapshot(generation, 0, 0, 1)), "old submit");
+        True(worker.Submit(Snapshot(generation, 0, 0, 3)), "latest submit");
+        release.Set();
+        Equal(1L, Take(worker).Revision, "blocker revision");
+        Equal(3L, Take(worker).Revision, "latest revision");
+        False(worker.TryTakeCompletion(out _), "old revision omitted");
+    }
+
+    private static void QueuesStayBoundedAndSaturationMarksRescan()
+    {
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        using var worker = Worker(2, snapshot => {
+            entered.Set(); release.Wait(2000); return EmptyDraft(snapshot);
+        });
+        long generation = worker.ResetWorld(2);
+        worker.Submit(Snapshot(generation, 9, 0, 1));
+        True(entered.Wait(2000), "bounded worker entered");
+        worker.Submit(Snapshot(generation, 0, 0, 1));
+        worker.Submit(Snapshot(generation, 1, 0, 1));
+        False(worker.Submit(Snapshot(generation, 2, 0, 1)), "saturated key");
+        True(worker.PendingCount <= 2, "pending bound");
+        True(worker.NeedsRescan, "rescan marker");
+        False(worker.TryConsumeRescanMarker(generation + 1), "foreign marker");
+        True(worker.TryConsumeRescanMarker(generation), "consume marker");
+        release.Set();
+        WaitUntil(() => worker.CompletionCount == 2, "bounded completions");
+        True(worker.CompletionCount <= 2, "completion bound");
+    }
+
+    private static void QueuedCompletionIsSupersededByANewerRevision()
+    {
+        using var worker = Worker(1, EmptyDraft);
+        long generation = worker.ResetWorld(1);
+        worker.Submit(Snapshot(generation, 0, 0, 1));
+        WaitUntil(() => worker.CompletionCount == 1, "old completion queued");
+        worker.Submit(Snapshot(generation, 0, 0, 2));
+        Equal(2L, Take(worker).Revision, "queued old completion superseded");
+        False(worker.TryTakeCompletion(out _), "only latest completion remains");
+    }
+
+    private static void OlderOrDuplicateRevisionCannotReplaceANewerCompletion()
+    {
+        using var worker = Worker(1, EmptyDraft);
+        long generation = worker.ResetWorld(1);
+        True(worker.Submit(Snapshot(generation, 0, 0, 3)), "revision three");
+        WaitUntil(() => worker.CompletionCount == 1, "new completion queued");
+        False(worker.Submit(Snapshot(generation, 0, 0, 2)),
+            "older revision rejected after completion");
+        False(worker.Submit(Snapshot(generation, 0, 0, 3)),
+            "duplicate revision rejected after completion");
+        Equal(3L, Take(worker).Revision, "newest completion retained");
+        False(worker.TryTakeCompletion(out _), "no regressed completion");
+    }
+
+    private static void ResetRejectsStaleSubmissionsAndLateResults()
+    {
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        using var worker = Worker(1, snapshot => {
+            entered.Set(); release.Wait(2000); return EmptyDraft(snapshot);
+        });
+        long first = worker.ResetWorld(1);
+        worker.Submit(Snapshot(first, 0, 0, 1));
+        True(entered.Wait(2000), "generation worker entered");
+        long second = worker.ResetWorld(1);
+        Equal(first + 1, second, "generation increments");
+        False(worker.Submit(Snapshot(first, 0, 0, 2)), "stale submit");
+        release.Set();
+        Thread.Sleep(50);
+        False(worker.TryTakeCompletion(out _), "late result rejected");
+    }
+
+    private static void ExceptionsAreIsolatedAndCompletionsStayOrdered()
+    {
+        using var worker = Worker(3, snapshot => {
+            if (snapshot.ChunkKey.X == 1) throw new InvalidOperationException("expected");
+            return EmptyDraft(snapshot);
+        });
+        long generation = worker.ResetWorld(3);
+        worker.Submit(Snapshot(generation, 0, 0, 1));
+        worker.Submit(Snapshot(generation, 1, 0, 1));
+        worker.Submit(Snapshot(generation, 2, 0, 1));
+        BoundaryWorkerCompletion first = Take(worker);
+        BoundaryWorkerCompletion second = Take(worker);
+        BoundaryWorkerCompletion third = Take(worker);
+        Equal(0, first.ChunkKey.X, "first completion");
+        Equal(1, second.ChunkKey.X, "failure completion");
+        Equal(2, third.ChunkKey.X, "third completion");
+        True(second.IsFailure, "failure record");
+        True(second.FailureReason.Length <= 256, "bounded failure text");
+        False(third.IsFailure, "worker survived exception");
+    }
+
+    private static void ProductionDraftSharesHeightAndAssignment()
+    {
+        using var worker = new HierarchicalVassalBoundaryTopologyWorker(1);
+        long generation = worker.ResetWorld(1);
+        HierarchicalVassalBoundaryChunkSnapshot snapshot = Snapshot(generation, 0, 0, 1);
+        worker.Submit(snapshot);
+        BoundaryWorkerCompletion result = Take(worker);
+        False(result.IsFailure, "production draft");
+        True(ReferenceEquals(result.Draft.CountryHeightDraft,
+            result.Draft.CityHeightDraft), "shared height");
+        True(ReferenceEquals(snapshot.ColorAssignment,
+            result.Draft.ColorAssignment), "shared assignment");
+        True(result.Draft.CountryFill != null && result.Draft.CityFill != null,
+            "both fills");
+        True(result.Draft.CountryRibbons != null && result.Draft.CityRibbons != null,
+            "both ribbons");
+    }
+
+    private static void InvalidAssignmentProducesFailure()
+    {
+        HierarchyColorAssignment invalid = HierarchicalVassalBoundaryColorRules
+            .BuildCanonicalAssignment(new[] {
+                new HierarchyColorIdentity(BoundaryTier.VassalRealm, 1, 1, 1, 1, -1, 1),
+                new HierarchyColorIdentity(BoundaryTier.VassalRealm, 1, 2, 2, 1, -1, 1)
+            }, Array.Empty<HierarchyColorEdge>());
+        using var worker = new HierarchicalVassalBoundaryTopologyWorker(1);
+        long generation = worker.ResetWorld(1);
+        worker.Submit(Snapshot(generation, 0, 0, 1, invalid));
+        BoundaryWorkerCompletion result = Take(worker);
+        True(result.IsFailure, "invalid assignment failure");
+        True(result.FailureReason.Contains("assignment"), "assignment reason");
+    }
+
+    private static void WholeChainsDoNotRestartARibbonAtEveryRawEdge()
+    {
+        using var worker = new HierarchicalVassalBoundaryTopologyWorker(1);
+        long generation = worker.ResetWorld(1);
+        worker.Submit(Snapshot(generation, 0, 0, 1));
+        BoundaryMeshDraft ribbons = Take(worker).Draft.CountryRibbons;
+        int repeatedCenters = 0;
+        for (int vertex = 4; vertex + 3 < ribbons.VertexCount; vertex += 4)
+        {
+            float previousX = (ribbons.PositionX[vertex - 4] +
+                ribbons.PositionX[vertex - 3] + ribbons.PositionX[vertex - 2] +
+                ribbons.PositionX[vertex - 1]) * 0.25f;
+            float previousY = (ribbons.PositionY[vertex - 4] +
+                ribbons.PositionY[vertex - 3] + ribbons.PositionY[vertex - 2] +
+                ribbons.PositionY[vertex - 1]) * 0.25f;
+            float currentX = (ribbons.PositionX[vertex] +
+                ribbons.PositionX[vertex + 1] + ribbons.PositionX[vertex + 2] +
+                ribbons.PositionX[vertex + 3]) * 0.25f;
+            float currentY = (ribbons.PositionY[vertex] +
+                ribbons.PositionY[vertex + 1] + ribbons.PositionY[vertex + 2] +
+                ribbons.PositionY[vertex + 3]) * 0.25f;
+            if (Math.Abs(previousX - currentX) < 0.0001f &&
+                Math.Abs(previousY - currentY) < 0.0001f)
+                repeatedCenters++;
+        }
+        True(repeatedCenters < 20,
+            "multi-edge topology must not restart at every raw edge");
+    }
+
+    private static void ShutdownIsBounded()
+    {
+        var worker = new HierarchicalVassalBoundaryTopologyWorker(1);
+        worker.ResetWorld(1);
+        var watch = Stopwatch.StartNew();
+        worker.Dispose();
+        True(watch.ElapsedMilliseconds < 2000, "bounded shutdown");
+        False(worker.Submit(Snapshot(worker.WorldGeneration, 0, 0, 1)),
+            "submit after shutdown");
+    }
+
+    private static HierarchicalVassalBoundaryTopologyWorker Worker(
+        int count, Func<HierarchicalVassalBoundaryChunkSnapshot,
+        BoundaryChunkDraftSet> processor)
+    {
+        return new HierarchicalVassalBoundaryTopologyWorker(count, processor);
+    }
+
+    private static HierarchicalVassalBoundaryChunkSnapshot Snapshot(
+        long generation, int chunkX, int chunkY, long revision,
+        HierarchyColorAssignment assignment = null)
+    {
+        assignment ??= Assignment();
+        const int dimension = 36;
+        int originX = chunkX * 32 - 2;
+        int originY = chunkY * 32 - 2;
+        var cells = new BoundaryCellFacts[dimension * dimension];
+        for (int y = 0; y < dimension; y++)
+        for (int x = 0; x < dimension; x++)
+        {
+            int worldX = originX + x;
+            int worldY = originY + y;
+            bool valid = worldX >= 0 && worldY >= 0;
+            long realm = x < 18 ? 1 : 2;
+            long city = x < 18 ? 11 : 12;
+            cells[y * dimension + x] = new BoundaryCellFacts(worldX, worldY,
+                valid, BoundaryWaterKind.Land, (byte)(x + y), 1, realm, city,
+                0x112233FFu);
+        }
+        return new HierarchicalVassalBoundaryChunkSnapshot(generation,
+            new BoundaryChunkKey(chunkX, chunkY), revision,
+            BoundaryDisplayLayer.Countries,
+            new BoundaryCellRaster(originX, originY, dimension, dimension, cells),
+            assignment, 0UL);
+    }
+
+    private static HierarchyColorAssignment Assignment()
+    {
+        return HierarchicalVassalBoundaryColorRules.BuildCanonicalAssignment(
+            new[] {
+                HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                    BoundaryTier.SuzerainSystem, 1, 1, 1, -1, 0x112233FFu),
+                HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                    BoundaryTier.VassalRealm, 1, 1, 1, -1, 0x112233FFu),
+                HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                    BoundaryTier.VassalRealm, 2, 1, 2, -1, 0x112233FFu),
+                HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                    BoundaryTier.City, 11, 1, 1, 11, 0x112233FFu),
+                HierarchicalVassalBoundaryColorRules.IdentityForTier(
+                    BoundaryTier.City, 12, 1, 2, 12, 0x112233FFu)
+            }, new[] {
+                new HierarchyColorEdge(BoundaryTier.VassalRealm, 1, 2),
+                new HierarchyColorEdge(BoundaryTier.City, 11, 12)
+            });
+    }
+
+    private static BoundaryChunkDraftSet EmptyDraft(
+        HierarchicalVassalBoundaryChunkSnapshot snapshot)
+    {
+        BoundaryHeightDraft height = HierarchicalVassalBoundaryHeightRules.Pack(
+            snapshot.Cells, 32, 2, snapshot.Revision);
+        var empty = new BoundaryMeshDraft(null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null, null, null, null, null);
+        return new BoundaryChunkDraftSet(height, empty, empty, empty, empty,
+            snapshot.ColorAssignment);
+    }
+
+    private static BoundaryWorkerCompletion Take(
+        HierarchicalVassalBoundaryTopologyWorker worker)
+    {
+        BoundaryWorkerCompletion completion = null;
+        WaitUntil(() => worker.TryTakeCompletion(out completion), "completion");
+        return completion;
+    }
+
+    private static void WaitUntil(Func<bool> condition, string name)
+    {
+        var watch = Stopwatch.StartNew();
+        while (watch.ElapsedMilliseconds < 3000)
+        {
+            if (condition()) return;
+            Thread.Sleep(5);
+        }
+        throw new InvalidOperationException(name + " timed out");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " + expected +
+                ", actual " + actual);
+    }
+
+    private static void True(bool value, string name)
+    { if (!value) throw new InvalidOperationException(name); }
+
+    private static void False(bool value, string name)
+    { if (value) throw new InvalidOperationException(name); }
+}

@@ -8,6 +8,28 @@ using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--hierarchical-boundary-mesh-slice")
+{
+    HierarchicalVassalBoundaryChunkRulesTests.Run();
+    HierarchicalVassalBoundaryTopologyRulesTests.Run();
+    HierarchicalVassalBoundaryRiverRulesTests.Run();
+    HierarchicalVassalBoundaryCurveRulesTests.Run();
+    HierarchicalVassalBoundaryPolygonRulesTests.Run();
+    HierarchicalVassalBoundaryColorRulesTests.Run();
+    HierarchicalVassalBoundaryMeshDraftRulesTests.Run();
+    HierarchicalVassalBoundaryHeightRulesTests.Run();
+    HierarchicalVassalBoundaryWorkerRulesTests.Run();
+    Console.WriteLine("Hierarchical vassal boundary mesh rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--hierarchical-boundary-performance")
+{
+    HierarchicalVassalBoundaryPerformanceTests.Run();
+    Console.WriteLine("Hierarchical vassal boundary mesh performance rules passed.");
+    return;
+}
+
 if (args.Length == 2 && args[0] == "--benchmark" &&
     args[1] == "recent")
 {

@@ -1,0 +1,172 @@
+using AncientWarfare3.core.policy;
+using System;
+using System.Collections.Generic;
+
+internal static class HierarchicalVassalBoundaryPerformanceTests
+{
+    public static void Run()
+    {
+        Synthetic512WorldStaysChunkBounded();
+        DirtyNeighborhoodIsAtMostNineChunks();
+        SharedHeightDraftIsImmutableAcrossLayers();
+        CurveRebuildIsDeterministicAcrossCompletionOrder();
+        FailureFallbackRemainsBounded();
+    }
+
+    private static void Synthetic512WorldStaysChunkBounded()
+    {
+        const int worldSize = 512;
+        const int chunksPerAxis = worldSize / HierarchicalVassalBoundaryChunkRules.ChunkSize;
+        int built = 0;
+        var revisions = new HashSet<BoundaryChunkKey>();
+        for (int chunkY = 0; chunkY < chunksPerAxis; chunkY++)
+        for (int chunkX = 0; chunkX < chunksPerAxis; chunkX++)
+        {
+            BoundaryChunkKey key = new BoundaryChunkKey(chunkX, chunkY);
+            BoundaryCellRaster raster = RasterFor(key, 1L);
+            BoundaryHeightDraft height = HierarchicalVassalBoundaryHeightRules.Pack(
+                raster, HierarchicalVassalBoundaryChunkRules.ChunkSize,
+                HierarchicalVassalBoundaryChunkRules.Halo, 1L);
+            if (height.Samples.Count > 36 * 36)
+                throw new InvalidOperationException("height sample bound exceeded");
+            revisions.Add(key);
+            built++;
+        }
+
+        Equal(chunksPerAxis * chunksPerAxis, built,
+            "512x512 synthetic world builds one draft per chunk");
+        Equal(built, revisions.Count,
+            "synthetic chunk revisions remain unique");
+        True(HierarchicalVassalBoundaryChunkRules.CaptureBudgetPerFrame <= 2,
+            "capture budget remains bounded");
+        True(HierarchicalVassalBoundaryChunkRules.UploadBudgetPerFrame <= 2,
+            "upload budget remains bounded");
+    }
+
+    private static void DirtyNeighborhoodIsAtMostNineChunks()
+    {
+        IReadOnlyList<BoundaryChunkKey> center =
+            HierarchicalVassalBoundaryChunkRules.DirtyNeighborhood(
+                new BoundaryChunkKey(8, 8), 16, 16);
+        Equal(9, center.Count, "interior mutation expands to a 3x3 neighborhood");
+
+        IReadOnlyList<BoundaryChunkKey> corner =
+            HierarchicalVassalBoundaryChunkRules.DirtyNeighborhood(
+                new BoundaryChunkKey(0, 0), 16, 16);
+        True(corner.Count <= 9, "world edge neighborhood never exceeds nine chunks");
+    }
+
+    private static void SharedHeightDraftIsImmutableAcrossLayers()
+    {
+        BoundaryCellRaster raster = RasterFor(new BoundaryChunkKey(0, 0), 3L);
+        BoundaryHeightDraft height = HierarchicalVassalBoundaryHeightRules.Pack(
+            raster, 32, 2, 3L);
+        var drafts = new BoundaryChunkDraftSet(height);
+        True(ReferenceEquals(drafts.CountryHeightDraft,
+            drafts.CityHeightDraft), "country and city share one height draft");
+        Equal(3L, drafts.CountryHeightDraft.TerrainRevision,
+            "height revision is retained");
+    }
+
+    private static void CurveRebuildIsDeterministicAcrossCompletionOrder()
+    {
+        BoundaryCellRaster raster = RasterFor(new BoundaryChunkKey(0, 0), 4L);
+        var raw = new[]
+        {
+            new BoundaryGridPoint(14, 0),
+            new BoundaryGridPoint(14, 1),
+            new BoundaryGridPoint(15, 1),
+            new BoundaryGridPoint(15, 6),
+            new BoundaryGridPoint(14, 6),
+            new BoundaryGridPoint(14, 8)
+        };
+        var options = new BoundaryCurveOptions(
+            BoundaryTier.SuzerainSystem, 1L, 2L, 0.45f, false, false);
+        BoundaryCurveDraft first = HierarchicalVassalBoundaryCurveRules.Fit(
+            raw, new HashSet<BoundaryGridPoint>(raw), raster, options);
+        BoundaryCurveDraft second = HierarchicalVassalBoundaryCurveRules.Fit(
+            raw, new HashSet<BoundaryGridPoint>(raw), raster, options);
+        Equal(first.Points.Count, second.Points.Count,
+            "completion order does not change curve sample count");
+        for (int i = 0; i < first.Points.Count; i++)
+        {
+            Equal(first.Points[i], second.Points[i],
+                "completion order does not change curve samples");
+        }
+        True(HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+            first, raster, raw, options),
+            "deterministic curve remains inside its political corridor");
+    }
+
+    private static void FailureFallbackRemainsBounded()
+    {
+        BoundaryCellRaster water = Raster(36, 36, (x, y) =>
+            new BoundaryCellFacts(x, y, true,
+                BoundaryWaterKind.InlandWater, 20, -1L, -1L, -1L, 0u));
+        var raw = new[]
+        {
+            new BoundaryGridPoint(18, 0), new BoundaryGridPoint(18, 36)
+        };
+        var input = new BoundaryRibbonInput(
+            new BoundaryCurveDraft(new[] {
+                new BoundaryFloatPoint(18f, 0.2f),
+                new BoundaryFloatPoint(18f, 35.8f)
+            }, false, false, 1f), raw, BoundaryTier.City, 1L, 2L,
+            0xFFFFFFFFu, 0x888888FFu, false,
+            BoundaryRibbonCoastSide.None);
+        BoundaryMeshDraft result =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildRibbons(
+                new[] { input }, water);
+        Equal(1, result.FailureCount,
+            "an unsafe chunk records one bounded geometry failure");
+        Equal(0, result.VertexCount,
+            "failed geometry emits no unbounded fallback vertices");
+    }
+
+    private static BoundaryCellRaster RasterFor(
+        BoundaryChunkKey pKey, long pRevision)
+    {
+        int originX = pKey.X * 32 - 2;
+        int originY = pKey.Y * 32 - 2;
+        return RasterAt(originX, originY, 36, 36, (x, y) =>
+            new BoundaryCellFacts(x, y, true, BoundaryWaterKind.Land,
+                (byte)((x + y + pRevision) & 255), 1L,
+                x < 16 ? 10L : 20L, x < 16 ? 100L : 200L,
+                x < 16 ? 0x336699FFu : 0x993333FFu));
+    }
+
+    private static BoundaryCellRaster RasterAt(
+        int pOriginX, int pOriginY, int pWidth, int pHeight,
+        Func<int, int, BoundaryCellFacts> pFactory)
+    {
+        var cells = new BoundaryCellFacts[pWidth * pHeight];
+        for (int y = 0; y < pHeight; y++)
+        for (int x = 0; x < pWidth; x++)
+        {
+            int worldX = pOriginX + x;
+            int worldY = pOriginY + y;
+            cells[y * pWidth + x] = pFactory(worldX, worldY);
+        }
+        return new BoundaryCellRaster(pOriginX, pOriginY,
+            pWidth, pHeight, cells);
+    }
+
+    private static BoundaryCellRaster Raster(
+        int pWidth, int pHeight,
+        Func<int, int, BoundaryCellFacts> pFactory)
+    {
+        return RasterAt(0, 0, pWidth, pHeight, pFactory);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue) throw new InvalidOperationException(pName);
+    }
+}
