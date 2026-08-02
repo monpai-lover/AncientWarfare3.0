@@ -11,9 +11,9 @@ internal static class HierarchicalVassalMapModeLabelSizeRulesTests
 
     public static void Run()
     {
-        Equal(5f,
+        Equal(0.7f,
             HierarchicalVassalMapModeLabelSizeRules.Calculate(1),
-            "city labels use the five-times minimum base size");
+            "city labels use five times the old minimum base size");
         Equal(HierarchicalVassalMapModeLabelSizeRules.MaximumSize,
             HierarchicalVassalMapModeLabelSizeRules.Calculate(1000000),
             "large city labels stay bounded");

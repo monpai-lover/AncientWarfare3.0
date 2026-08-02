@@ -31,5 +31,13 @@ internal static class WarNoForceSurrenderRulesTests
             warYears: 3, sideNoForce: true, enemyHasForce: false,
             ordinaryNegotiationBlocked: true, bothSidesNoForce: true),
             "a two-sided empty war waits for a deterministic winner");
+        Equal(true, WarNoForceSurrenderRules.ShouldTransferRegion(
+            isLargestConnectedRegion: true,
+            isDisconnectedEnclave: false),
+            "the main connected region transfers");
+        Equal(false, WarNoForceSurrenderRules.ShouldTransferRegion(
+            isLargestConnectedRegion: false,
+            isDisconnectedEnclave: true),
+            "a disconnected island or enclave may remain");
     }
 }

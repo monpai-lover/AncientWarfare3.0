@@ -18,15 +18,5 @@ internal static class HierarchicalVassalMapModeInvalidationRulesTests
             HierarchicalVassalMapModeInvalidationRules.IsFallbackDue(
                 elapsedSeconds: 1.99, fallbackIntervalSeconds: 2.0),
             "MapMode fallback does not run early");
-        Equal(true,
-            HierarchicalVassalMapModeInvalidationRules.ShouldTransferRegion(
-                isLargestConnectedRegion: true,
-                isDisconnectedEnclave: false),
-            "the main connected region transfers");
-        Equal(false,
-            HierarchicalVassalMapModeInvalidationRules.ShouldTransferRegion(
-                isLargestConnectedRegion: false,
-                isDisconnectedEnclave: true),
-            "a disconnected island or enclave may remain");
     }
 }
