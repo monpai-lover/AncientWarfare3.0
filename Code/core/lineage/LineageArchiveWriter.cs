@@ -71,10 +71,12 @@ namespace AncientWarfare3.core.lineage
                 HistoricalWriteService.TryUpsertState(
                     "actor-archive:" + id, table,
                     new[] { new HistoricalSqlColumn("ID", id) }, updates,
-                    inserts, sequence =>
+                    inserts, (sequence, replacedSequence) =>
                     {
                         ActorArchivePendingStore.Publish(id, sequence,
                             snapshot);
+                        FamilyTreeProjectionPendingStore.TransferOwnership(
+                            id, replacedSequence, sequence);
                         if (pFinalizeProjection)
                             FamilyTreeProjectionPendingStore.Publish(id,
                                 sequence, projectionChange);
@@ -278,10 +280,12 @@ namespace AncientWarfare3.core.lineage
             if (!HistoricalWriteService.TryUpsertState(
                     "actor-archive:" + id, table,
                     new[] { new HistoricalSqlColumn("ID", id) }, updates,
-                    inserts, sequence =>
+                    inserts, (sequence, replacedSequence) =>
                     {
                         ActorArchivePendingStore.Publish(id, sequence,
                             pSnapshot);
+                        FamilyTreeProjectionPendingStore.TransferOwnership(
+                            id, replacedSequence, sequence);
                         if (pFinalizeProjection)
                             FamilyTreeProjectionPendingStore.Publish(id,
                                 sequence, pProjectionChange);

@@ -210,7 +210,8 @@ namespace AncientWarfare3.core.db
             out string pError)
         {
             return TryUpsertState(pOperationKey, pTable, pKeys, pUpdates,
-                pInserts, null, pOnCommitted, null, out pSequence,
+                pInserts, (Action<long, long>)null, pOnCommitted, null,
+                out pSequence,
                 out pError);
         }
 
@@ -222,8 +223,8 @@ namespace AncientWarfare3.core.db
             out long pSequence, out string pError)
         {
             return TryUpsertState(pOperationKey, pTable, pKeys, pUpdates,
-                pInserts, null, pOnCommitted, pOnFailed, out pSequence,
-                out pError);
+                pInserts, (Action<long, long>)null, pOnCommitted, pOnFailed,
+                out pSequence, out pError);
         }
 
         public static bool TryUpsertState(string pOperationKey,
@@ -231,6 +232,22 @@ namespace AncientWarfare3.core.db
             IReadOnlyList<HistoricalSqlColumn> pUpdates,
             IReadOnlyList<HistoricalSqlColumn> pInserts,
             Action<long> pOnAccepted, Action<long> pOnCommitted,
+            Action<long, string> pOnFailed, out long pSequence,
+            out string pError)
+        {
+            Action<long, long> accepted = pOnAccepted == null
+                ? null
+                : (sequence, replacedSequence) => pOnAccepted(sequence);
+            return TryUpsertState(pOperationKey, pTable, pKeys, pUpdates,
+                pInserts, accepted, pOnCommitted, pOnFailed, out pSequence,
+                out pError);
+        }
+
+        public static bool TryUpsertState(string pOperationKey,
+            string pTable, IReadOnlyList<HistoricalSqlColumn> pKeys,
+            IReadOnlyList<HistoricalSqlColumn> pUpdates,
+            IReadOnlyList<HistoricalSqlColumn> pInserts,
+            Action<long, long> pOnAccepted, Action<long> pOnCommitted,
             Action<long, string> pOnFailed, out long pSequence,
             out string pError)
         {
@@ -290,8 +307,9 @@ namespace AncientWarfare3.core.db
             Action<long, object> pOnCommitted, out long pSequence,
             out string pError)
         {
-            return TryEnqueueCustom(pOperationKey, pFactory, null,
-                pOnCommitted, null, out pSequence, out pError);
+            return TryEnqueueCustom(pOperationKey, pFactory,
+                (Action<long, long>)null, pOnCommitted, null,
+                out pSequence, out pError);
         }
 
         public static bool TryEnqueueCustom(string pOperationKey,
@@ -300,13 +318,28 @@ namespace AncientWarfare3.core.db
             Action<long, string> pOnFailed, out long pSequence,
             out string pError)
         {
-            return TryEnqueueCustom(pOperationKey, pFactory, null,
-                pOnCommitted, pOnFailed, out pSequence, out pError);
+            return TryEnqueueCustom(pOperationKey, pFactory,
+                (Action<long, long>)null, pOnCommitted, pOnFailed,
+                out pSequence, out pError);
         }
 
         public static bool TryEnqueueCustom(string pOperationKey,
             Func<long, AWAsyncStamp, HistoricalWriteEnvelope> pFactory,
             Action<long> pOnAccepted, Action<long, object> pOnCommitted,
+            Action<long, string> pOnFailed, out long pSequence,
+            out string pError)
+        {
+            Action<long, long> accepted = pOnAccepted == null
+                ? null
+                : (sequence, replacedSequence) => pOnAccepted(sequence);
+            return TryEnqueueCustom(pOperationKey, pFactory, accepted,
+                pOnCommitted, pOnFailed, out pSequence, out pError);
+        }
+
+        public static bool TryEnqueueCustom(string pOperationKey,
+            Func<long, AWAsyncStamp, HistoricalWriteEnvelope> pFactory,
+            Action<long, long> pOnAccepted,
+            Action<long, object> pOnCommitted,
             Action<long, string> pOnFailed, out long pSequence,
             out string pError)
         {

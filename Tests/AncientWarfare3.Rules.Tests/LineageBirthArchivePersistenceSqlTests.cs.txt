@@ -21,6 +21,8 @@ internal static class LineageBirthArchivePersistenceSqlTests
         EarlierCommittedCompletionIsConsumedExactlyOnce();
         FailedIdentityWriteClearsPendingProjection();
         LateBirthPublicationRetainsCommittedProvenance();
+        QueuedReplacementTransfersProjectionOwnership();
+        LatePrerequisiteAttachesToActiveOwner();
         ArchiveFailureCallbacksClearBothPendingStores();
     }
 
@@ -107,6 +109,40 @@ internal static class LineageBirthArchivePersistenceSqlTests
             "the newer failed identity still clears its own source");
     }
 
+    private static void QueuedReplacementTransfersProjectionOwnership()
+    {
+        var pending = new FamilyTreeProjectionPendingState();
+        pending.Publish(104L, 110L,
+            FamilyTreeProjectionChange.FamilyStructure);
+
+        True(pending.TransferOwnership(104L, 110L, 111L),
+            "a queued replacement explicitly takes ownership of old metadata");
+        pending.Publish(104L, 111L,
+            FamilyTreeProjectionChange.IdentityOrTitle);
+
+        True(!pending.TryComplete(104L, 110L, out _),
+            "a coalesced sequence no longer owns a completion callback");
+        True(pending.TryComplete(104L, 111L,
+                out FamilyTreeProjectionChange replacementChange),
+            "the replacement completes transferred metadata");
+        Equal(FamilyTreeProjectionChange.FamilyStructure, replacementChange,
+            "queued replacement preserves the strongest transferred change");
+    }
+
+    private static void LatePrerequisiteAttachesToActiveOwner()
+    {
+        var pending = new FamilyTreeProjectionPendingState();
+        pending.Publish(105L, 120L, FamilyTreeProjectionChange.None);
+        pending.IncludePrerequisite(105L,
+            FamilyTreeProjectionChange.FamilyStructure);
+
+        True(pending.TryComplete(105L, 120L,
+                out FamilyTreeProjectionChange committedChange),
+            "the active archive owner remains completable");
+        Equal(FamilyTreeProjectionChange.FamilyStructure, committedChange,
+            "a late prerequisite attaches to the active archive owner");
+    }
+
     private static void ArchiveFailureCallbacksClearBothPendingStores()
     {
         string archiveWriter = File.ReadAllText(Path.Combine(
@@ -129,6 +165,11 @@ internal static class LineageBirthArchivePersistenceSqlTests
                 @"TryUpsertState\s*\(.*?OnAsyncWriteFailed\s*\(\s*id\s*,\s*" +
                 @"sequence\s*\)", RegexOptions.Singleline).Count >= 2,
             "live and captured archive writes register failure cleanup");
+        True(Regex.Matches(archiveWriter,
+                @"\(sequence,\s*replacedSequence\)\s*=>.*?" +
+                @"TransferOwnership\s*\(\s*id\s*,\s*replacedSequence\s*,\s*" +
+                @"sequence\s*\)", RegexOptions.Singleline).Count >= 2,
+            "archive writes transfer only explicit queue replacements");
         True(Regex.IsMatch(birthWriter,
                 @"OnFailed\s*\(\s*long\s+pChildId.*?" +
                 @"ActorArchivePendingStore\.Complete\s*\(\s*pChildId\s*,\s*" +

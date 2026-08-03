@@ -19,6 +19,20 @@ namespace AncientWarfare3.core.db
             Action<long, string> pOnFailed,
             out HistoricalWriteEnvelope pReplaced)
         {
+            Action<long, long> accepted = pOnAccepted == null
+                ? null
+                : (sequence, replacedSequence) => pOnAccepted(sequence);
+            return TryEnqueue(pWorker, pEnvelope, accepted, pOnCommitted,
+                pOnFailed, out pReplaced);
+        }
+
+        public bool TryEnqueue(HistoricalWriteWorker pWorker,
+            HistoricalWriteEnvelope pEnvelope,
+            Action<long, long> pOnAccepted,
+            Action<long, object> pOnCommitted,
+            Action<long, string> pOnFailed,
+            out HistoricalWriteEnvelope pReplaced)
+        {
             lock (_gate)
             {
                 pReplaced = null;
@@ -32,7 +46,8 @@ namespace AncientWarfare3.core.db
                     _commitCallbacks[pEnvelope.Sequence] = pOnCommitted;
                 if (pOnFailed != null)
                     _failureCallbacks[pEnvelope.Sequence] = pOnFailed;
-                pOnAccepted?.Invoke(pEnvelope.Sequence);
+                pOnAccepted?.Invoke(pEnvelope.Sequence,
+                    pReplaced?.Sequence ?? 0L);
                 return true;
             }
         }

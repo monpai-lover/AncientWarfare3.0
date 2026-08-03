@@ -353,13 +353,32 @@ if ($enqueueIndex -lt 0 -or $actorPublishIndex -lt $enqueueIndex -or
     $projectionPublishIndex -lt $enqueueIndex) {
     throw 'Birth pending state must be published only after queue acceptance.'
 }
-if ($birthArchive -notmatch
-        '(?s)OnCommitted\s*\(.*ActorArchivePendingStore\.Complete.*' +
-        'FamilyTreeProjectionPendingStore\.TryComplete.*' +
-        'FamilyTreeProjectionRevision\.Advance\s*\(\s*committedChange\s*\)' -or
-    $birthArchive -notmatch
-        '(?s)OnFailed\s*\(.*ActorArchivePendingStore\.Complete.*' +
+$onCommittedStart = $birthArchive.IndexOf(
+    'private static void OnCommitted',
+    [System.StringComparison]::Ordinal)
+$onFailedStart = $birthArchive.IndexOf(
+    'private static void OnFailed', $onCommittedStart,
+    [System.StringComparison]::Ordinal)
+$writeSynchronouslyStart = $birthArchive.IndexOf(
+    'private static LineageBirthArchiveResult WriteSynchronously',
+    $onFailedStart, [System.StringComparison]::Ordinal)
+if ($onCommittedStart -lt 0 -or $onFailedStart -le $onCommittedStart -or
+    $writeSynchronouslyStart -le $onFailedStart) {
+    throw 'Birth completion method bodies could not be located exactly.'
+}
+$onCommittedBody = $birthArchive.Substring($onCommittedStart,
+    $onFailedStart - $onCommittedStart)
+$onFailedBody = $birthArchive.Substring($onFailedStart,
+    $writeSynchronouslyStart - $onFailedStart)
+if ($onCommittedBody -notmatch 'ActorArchivePendingStore\.Complete' -or
+    $onCommittedBody -notmatch
         'FamilyTreeProjectionPendingStore\.TryComplete' -or
+    $onCommittedBody -notmatch
+        'FamilyTreeProjectionRevision\.Advance\s*\(\s*committedChange\s*\)' -or
+    $onFailedBody -notmatch 'ActorArchivePendingStore\.Complete' -or
+    $onFailedBody -notmatch 'FamilyTreeProjectionPendingStore\.Fail' -or
+    $onFailedBody -match 'FamilyTreeProjectionPendingStore\.TryComplete' -or
+    $onFailedBody -match 'FamilyTreeProjectionRevision\.Advance' -or
     [regex]::Matches($birthArchive,
         'FamilyTreeProjectionRevision\.Advance\s*\(').Count -ne 2 -or
     [regex]::Matches($birthArchive,

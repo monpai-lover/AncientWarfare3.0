@@ -52,10 +52,13 @@ namespace AncientWarfare3.core.lineage
                         (sequence, stamp) =>
                             new LineageBirthArchiveEnvelope(sequence, stamp,
                                 write),
-                        sequence =>
+                        (sequence, replacedSequence) =>
                         {
                             ActorArchivePendingStore.Publish(childId,
                                 sequence, snapshot);
+                            FamilyTreeProjectionPendingStore.
+                                TransferOwnership(childId, replacedSequence,
+                                    sequence);
                             FamilyTreeProjectionPendingStore.Publish(childId,
                                 sequence,
                                 FamilyTreeProjectionChange.FamilyStructure);
