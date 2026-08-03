@@ -16,6 +16,14 @@ namespace AncientWarfare3.core.lineage
                        System.StringComparison.Ordinal);
         }
 
+        public static bool HasPersistedClosingQualifier(
+            SuccessionDisputeStatus pStatus, long rivalKingdomId)
+        {
+            return pStatus >= SuccessionDisputeStatus.RivalCreated &&
+                   pStatus != SuccessionDisputeStatus.Closed &&
+                   rivalKingdomId >= 0L;
+        }
+
         public static string BuildQualifiedName(string pCanonicalName,
             string pQualifierId, bool active, string language)
         {

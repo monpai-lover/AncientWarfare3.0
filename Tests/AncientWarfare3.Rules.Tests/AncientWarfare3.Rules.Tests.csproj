@@ -413,6 +413,8 @@
     <Compile Include="..\..\Code\core\naming\AWLocalizedMottoCreationRules.cs" Link="Production\AWLocalizedMottoCreationRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameMigrationRules.cs" Link="Production\AWLocalizedNameMigrationRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedKingdomRenameRules.cs" Link="Production\AWLocalizedKingdomRenameRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedKingdomIdentitySyncAdapter.cs" Link="Production\AWLocalizedKingdomIdentitySyncAdapter.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedNameProjectionRefreshScope.cs" Link="Production\AWLocalizedNameProjectionRefreshScope.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameRestoreRules.cs" Link="Production\AWLocalizedNameRestoreRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameProjectionChangeRules.cs" Link="Production\AWLocalizedNameProjectionChangeRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWNamingProfileRules.cs" Link="Production\AWNamingProfileRules.cs" />

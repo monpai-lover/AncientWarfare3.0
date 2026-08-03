@@ -74,7 +74,7 @@ namespace AncientWarfare3.core.naming
         }
 
         internal static string ProjectStored(Kingdom pKingdom,
-            string pObservedNameBefore = null)
+            string pObservedNameBefore = null, bool pRefresh = true)
         {
             if (pKingdom?.data == null || pKingdom.isRekt())
                 return string.Empty;
@@ -105,11 +105,42 @@ namespace AncientWarfare3.core.naming
                     ? pObservedNameBefore
                     : member.data.name ?? string.Empty;
                 member.data.name = projected;
-                if (AWLocalizedNameProjectionChangeRules.TryMarkInvalidated(
+                if (pRefresh &&
+                    AWLocalizedNameProjectionChangeRules.TryMarkInvalidated(
                         invalidatedIds, member.getID(), before, projected))
                     KingdomRenameProjectionService.Refresh(member);
             }
             return projected;
+        }
+
+        internal static int SynchronizeSharedIdentity(Kingdom pAuthority,
+            IReadOnlyList<Kingdom> pMembers)
+        {
+            if (pAuthority?.data == null || pMembers == null) return 0;
+            AWLocalizedNameIdentitySnapshot authorityIdentity =
+                AWLocalizedNamePersistence.Capture(pAuthority.data);
+            var membersById = new Dictionary<long, Kingdom>();
+            var memberIds = new List<long>(pMembers.Count);
+            for (int i = 0; i < pMembers.Count; i++)
+            {
+                Kingdom member = pMembers[i];
+                if (member?.data == null || member.isRekt()) continue;
+                long id = member.getID();
+                if (id < 0L || membersById.ContainsKey(id)) continue;
+                membersById[id] = member;
+                memberIds.Add(id);
+            }
+            int writes = AWLocalizedKingdomIdentitySyncAdapter.Synchronize(
+                authorityIdentity, memberIds, (id, identity) =>
+                {
+                    Kingdom member = membersById[id];
+                    AWLocalizedNamePersistence.Apply(member.data, identity);
+                    member.data.custom_name = pAuthority.data.custom_name;
+                    AWLocalizedNameMigrationService.Enqueue("Kingdom", id,
+                        member.data);
+                });
+            ProjectStored(pAuthority, pRefresh: false);
+            return writes;
         }
 
         internal static void EndEdit()

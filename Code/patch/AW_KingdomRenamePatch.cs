@@ -36,7 +36,9 @@ namespace AncientWarfare3.patch
                 committedName, pTrack);
             if (AWLocalizedNameProjectionChangeRules.ShouldInvalidate(
                     __state, committedName) &&
-                !AWLocalizedKingdomNameService.IsEditing(kingdom))
+                AWLocalizedNameProjectionRefreshScope.
+                    ShouldRefreshAutomatically(
+                        AWLocalizedKingdomNameService.IsEditing(kingdom)))
                 KingdomRenameProjectionService.Refresh(kingdom);
         }
     }

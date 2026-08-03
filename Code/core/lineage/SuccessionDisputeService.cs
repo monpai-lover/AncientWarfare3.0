@@ -699,9 +699,15 @@ namespace AncientWarfare3.core.lineage
             {
                 SuccessionDisputeSnapshot row = rows[i];
                 pLastDisputeId = row.DisputeId;
+                Kingdom original = FindKingdom(row.OriginalKingdomId);
+                Kingdom rival = FindKingdom(row.RivalKingdomId);
+                Dictionary<long, string> presentationsBefore =
+                    CaptureNamePresentations(original, rival);
                 Publish(row);
                 ApplyHotIds(row);
                 CommitCanonicalNames(row);
+                RefreshChangedNamePresentations(presentationsBefore,
+                    original, rival);
                 if (row.Status < SuccessionDisputeStatus.Active)
                     Enqueue(row.DisputeId);
             }
@@ -794,6 +800,8 @@ namespace AncientWarfare3.core.lineage
                 !SuccessionDisputeRules.CanFormBalancedTerritorialSplit(
                     originalCitiesBefore, cities.Count))
                 return false;
+            Dictionary<long, string> presentationsBefore =
+                CaptureNamePresentations(original);
             Kingdom rival;
             if (seed.kingdom != original &&
                 claimant.kingdom == seed.kingdom &&
@@ -811,14 +819,17 @@ namespace AncientWarfare3.core.lineage
                 FeudatoryService.BeginIntentionalJingnanTransfer();
                 try
                 {
-                    rival = seed.makeOwnKingdom(claimant,
-                        pRebellion: true, pFellApart: false);
+                    AWLocalizedNameProjectionRefreshScope.Suppress(() =>
+                        rival = seed.makeOwnKingdom(claimant,
+                            pRebellion: true, pFellApart: false));
                 }
                 finally
                 {
                     FeudatoryService.EndIntentionalJingnanTransfer();
                 }
             }
+            if (rival?.data != null && !rival.isRekt())
+                presentationsBefore[rival.getID()] = GetDisplayName(rival);
             if (rival?.data != null) pRow.RivalKingdomId = rival.id;
             if (rival?.data == null || seed.kingdom != rival ||
                 !SuccessionDisputeRules.CanMaintainTerritorialInvariant(
@@ -859,8 +870,8 @@ namespace AncientWarfare3.core.lineage
             pRow.Status = SuccessionDisputeStatus.RivalCreated;
             Publish(pRow);
             CommitCanonicalNames(pRow);
-            KingdomRenameProjectionService.Refresh(original);
-            KingdomRenameProjectionService.Refresh(rival);
+            RefreshChangedNamePresentations(presentationsBefore,
+                original, rival);
             ChronicleEvents.OnSuccessionDisputeStarted(original, rival,
                 successor, claimant, GetDisplayName(original),
                 GetDisplayName(rival));
@@ -1182,6 +1193,10 @@ namespace AncientWarfare3.core.lineage
             string pReason)
         {
             if (pRow == null || !Ready) return false;
+            Kingdom original = FindKingdom(pRow.OriginalKingdomId);
+            Kingdom rival = FindKingdom(pRow.RivalKingdomId);
+            Dictionary<long, string> presentationsBefore =
+                CaptureClosingNamePresentations(pRow, original, rival);
             double now = LineageService.CurTime();
             try
             {
@@ -1223,16 +1238,14 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             CommitCanonicalNames(pRow);
-            ClearHotId(FindKingdom(pRow.OriginalKingdomId), pRow.DisputeId);
-            ClearHotId(FindKingdom(pRow.RivalKingdomId), pRow.DisputeId);
+            ClearHotId(original, pRow.DisputeId);
+            ClearHotId(rival, pRow.DisputeId);
             ById.Remove(pRow.DisputeId);
             ByKingdom.Remove(pRow.OriginalKingdomId);
             ByKingdom.Remove(pRow.RivalKingdomId);
             CompensationAttempts.Remove(pRow.DisputeId);
-            KingdomRenameProjectionService.Refresh(
-                FindKingdom(pRow.OriginalKingdomId));
-            KingdomRenameProjectionService.Refresh(
-                FindKingdom(pRow.RivalKingdomId));
+            RefreshChangedNamePresentations(presentationsBefore,
+                original, rival);
             return true;
         }
 
@@ -1242,23 +1255,93 @@ namespace AncientWarfare3.core.lineage
             if (pRow == null) return;
             Kingdom original = FindKingdom(pRow.OriginalKingdomId);
             Kingdom rival = FindKingdom(pRow.RivalKingdomId);
-            string canonical = AWLocalizedKingdomRenameRules.
-                ResolveSettlementBase(original?.data?.name,
-                    rival?.data?.name,
-                    pRow.OriginalStateName);
-            if (string.IsNullOrWhiteSpace(canonical)) return;
-            CommitLiveName(original, canonical);
-            CommitLiveName(rival, canonical);
+            AWLocalizedNameIdentitySnapshot originalIdentity =
+                original?.data == null || original.isRekt()
+                    ? null
+                    : AWLocalizedNamePersistence.Capture(original.data);
+            AWLocalizedNameIdentitySnapshot rivalIdentity =
+                rival?.data == null || rival.isRekt()
+                    ? null
+                    : AWLocalizedNamePersistence.Capture(rival.data);
+            AWLocalizedNameIdentitySnapshot authorityIdentity =
+                AWLocalizedKingdomIdentitySyncAdapter.SelectAuthority(
+                    originalIdentity, rivalIdentity);
+            Kingdom authority = ReferenceEquals(authorityIdentity,
+                originalIdentity) ? original : rival;
+            if (authority?.data == null) return;
+            var members = new List<Kingdom>(2);
+            if (original?.data != null && !original.isRekt())
+                members.Add(original);
+            if (rival?.data != null && !rival.isRekt())
+                members.Add(rival);
+            AWLocalizedKingdomNameService.SynchronizeSharedIdentity(
+                authority, members);
         }
 
-        private static void CommitLiveName(Kingdom pKingdom,
-            string pProjected)
+        private static Dictionary<long, string> CaptureNamePresentations(
+            params Kingdom[] pKingdoms)
         {
-            if (pKingdom?.data == null || pKingdom.isRekt() ||
-                !SuccessionDisputeDisplayRules.NeedsLiveNameCommit(
-                    pKingdom.data.name, pProjected)) return;
-            KingdomRenameSyncService.Suppress(() =>
-                pKingdom.setName(pProjected.Trim(), pTrack: false));
+            var result = new Dictionary<long, string>();
+            if (pKingdoms == null) return result;
+            for (int i = 0; i < pKingdoms.Length; i++)
+            {
+                Kingdom kingdom = pKingdoms[i];
+                if (kingdom?.data == null || kingdom.isRekt()) continue;
+                result[kingdom.getID()] = GetDisplayName(kingdom);
+            }
+            return result;
+        }
+
+        private static Dictionary<long, string>
+            CaptureClosingNamePresentations(
+                SuccessionDisputeSnapshot pRow, Kingdom pOriginal,
+                Kingdom pRival)
+        {
+            if (pRow == null || !SuccessionDisputeDisplayRules.
+                    HasPersistedClosingQualifier(pRow.Status,
+                        pRow.RivalKingdomId))
+                return CaptureNamePresentations(pOriginal, pRival);
+
+            var result = new Dictionary<long, string>();
+            string sharedBase = !string.IsNullOrWhiteSpace(
+                    pOriginal?.data?.name) && !pOriginal.isRekt()
+                ? pOriginal.data.name.Trim()
+                : !string.IsNullOrWhiteSpace(pRival?.data?.name) &&
+                  !pRival.isRekt()
+                    ? pRival.data.name.Trim()
+                    : pRow.OriginalStateName ?? string.Empty;
+            string language = HistoryLocalizationRules.CurrentLanguage();
+            if (pOriginal?.data != null && !pOriginal.isRekt())
+                result[pOriginal.getID()] = SuccessionDisputeDisplayRules.
+                    BuildQualifiedName(sharedBase, pRow.OriginalQualifier,
+                        active: true, language);
+            if (pRival?.data != null && !pRival.isRekt())
+                result[pRival.getID()] = SuccessionDisputeDisplayRules.
+                    BuildQualifiedName(sharedBase, pRow.RivalQualifier,
+                        active: true, language);
+            return result;
+        }
+
+        private static void RefreshChangedNamePresentations(
+            IReadOnlyDictionary<long, string> pBefore,
+            params Kingdom[] pKingdoms)
+        {
+            if (pKingdoms == null) return;
+            var invalidatedIds = new HashSet<long>();
+            for (int i = 0; i < pKingdoms.Length; i++)
+            {
+                Kingdom kingdom = pKingdoms[i];
+                if (kingdom?.data == null || kingdom.isRekt()) continue;
+                long id = kingdom.getID();
+                string before = pBefore != null &&
+                                pBefore.TryGetValue(id, out string captured)
+                    ? captured
+                    : string.Empty;
+                string after = GetDisplayName(kingdom);
+                if (AWLocalizedNameProjectionChangeRules.TryMarkInvalidated(
+                        invalidatedIds, id, before, after))
+                    KingdomRenameProjectionService.Refresh(kingdom);
+            }
         }
 
         private sealed class LocalCitySupport

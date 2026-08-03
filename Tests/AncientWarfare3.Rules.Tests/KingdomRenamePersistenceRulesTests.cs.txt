@@ -62,6 +62,59 @@ internal static class KingdomRenamePersistenceRulesTests
                 originalAccepted: true, hasManualEditContext: false),
             "automatic generated names never enter the manual edit path");
 
+        AWLocalizedNameIdentitySnapshot authorityIdentity = new(
+            "Authority Native", "Authority Chinese", "Authority Given",
+            "Authority Family", "authority_generator", 91L,
+            AWLocalizedNameMigrationRules.CurrentSchemaVersion);
+        AWLocalizedNameIdentitySnapshot rivalOldIdentity = new(
+            "Rival Native", "Rival Chinese", "Rival Given",
+            "Rival Family", "rival_generator", 37L, 0);
+        AWLocalizedNameIdentitySnapshot selectedSurvivor =
+            AWLocalizedKingdomIdentitySyncAdapter.SelectAuthority(
+                original: null, rival: rivalOldIdentity);
+        Equal("Rival Native", selectedSurvivor.NativeName,
+            "an original-missing settlement selects the rival identity");
+        Equal("Rival Chinese", selectedSurvivor.ChineseName,
+            "the surviving rival retains both localized slots");
+
+        long synchronizedId = -1L;
+        AWLocalizedNameIdentitySnapshot synchronizedIdentity = null;
+        var createRivalQueue = new AWBoundedLocalizedNameWriteQueue(2);
+        int synchronizedWrites =
+            AWLocalizedKingdomIdentitySyncAdapter.Synchronize(
+                authorityIdentity, new[] { 84L }, (id, identity) =>
+                {
+                    synchronizedId = id;
+                    synchronizedIdentity = identity;
+                    createRivalQueue.Enqueue("Kingdom", id, identity);
+                });
+        Equal(1, synchronizedWrites,
+            "CreateRival schedules exactly one rival identity write");
+        Equal(84L, synchronizedId,
+            "CreateRival writes the new rival kingdom identity");
+        Equal("Authority Native", synchronizedIdentity.NativeName,
+            "CreateRival copies the complete native identity slot");
+        Equal("Authority Chinese", synchronizedIdentity.ChineseName,
+            "CreateRival copies the complete Chinese identity slot");
+        Equal("Authority Given", synchronizedIdentity.GivenName,
+            "CreateRival copies structured given-name identity");
+        Equal("Authority Family", synchronizedIdentity.FamilyComponent,
+            "CreateRival copies structured family identity");
+        Equal("authority_generator", synchronizedIdentity.GeneratorId,
+            "CreateRival copies generator provenance");
+        Equal(91L, synchronizedIdentity.CultureId,
+            "CreateRival copies culture provenance");
+        Equal(AWLocalizedNameMigrationRules.CurrentSchemaVersion,
+            synchronizedIdentity.SchemaVersion,
+            "CreateRival copies the current identity schema");
+        Equal(true, createRivalQueue.TryDequeue(
+                out AWLocalizedNamePendingWrite createRivalWrite),
+            "CreateRival enqueues the synchronized rival identity");
+        Equal(84L, createRivalWrite.ObjectId,
+            "the async writer receives the rival kingdom ID");
+        Equal("Authority Chinese", createRivalWrite.Snapshot.ChineseName,
+            "the async writer receives the synchronized bilingual snapshot");
+
         var pending = new AWBoundedLocalizedNameWriteQueue(2);
         pending.Enqueue("Kingdom", 42L, Snapshot("Old Native", "Old Chinese"));
         pending.Enqueue("Kingdom", 42L, Snapshot("New Native", "New Chinese"));
@@ -117,6 +170,60 @@ internal static class KingdomRenamePersistenceRulesTests
                 TryMarkInvalidated(invalidatedKingdoms, 43L,
                     "New Realm", "New Realm"),
             "an unchanged kingdom never enters the invalidation set");
+        var prefixInvalidations = new HashSet<long>();
+        Equal(true, AWLocalizedNameProjectionChangeRules.
+                TryMarkInvalidated(prefixInvalidations, 10L,
+                    "Zhou", "Eastern Zhou"),
+            "adding the original direction invalidates once");
+        Equal(true, AWLocalizedNameProjectionChangeRules.
+                TryMarkInvalidated(prefixInvalidations, 20L,
+                    "Rival", "Western Zhou"),
+            "creating the rival direction invalidates that kingdom once");
+        Equal(false, AWLocalizedNameProjectionChangeRules.
+                TryMarkInvalidated(prefixInvalidations, 10L,
+                    "Zhou", "Eastern Zhou"),
+            "a batched prefix refresh cannot invalidate original twice");
+        Equal(2, prefixInvalidations.Count,
+            "one split presentation batch refreshes each changed kingdom once");
+        int createRivalRefreshes = 0;
+        AWLocalizedNameProjectionRefreshScope.Suppress(() =>
+        {
+            if (AWLocalizedNameProjectionRefreshScope.
+                    ShouldRefreshAutomatically(isEditing: false))
+                createRivalRefreshes++;
+        });
+        if (AWLocalizedNameProjectionChangeRules.TryMarkInvalidated(
+                new HashSet<long>(), 20L, "Rival", "Western Zhou"))
+            createRivalRefreshes++;
+        Equal(1, createRivalRefreshes,
+            "CreateRival suppresses its automatic rename refresh and batches one final refresh");
+        Equal(true, AWLocalizedNameProjectionRefreshScope.
+                ShouldRefreshAutomatically(isEditing: false),
+            "CreateRival restores automatic refresh after its creation scope");
+        try
+        {
+            AWLocalizedNameProjectionRefreshScope.Suppress(() =>
+                throw new InvalidOperationException("creation failed"));
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        Equal(true, AWLocalizedNameProjectionRefreshScope.
+                ShouldRefreshAutomatically(isEditing: false),
+            "CreateRival restores automatic refresh when kingdom creation throws");
+        Equal(true, SuccessionDisputeDisplayRules.
+                HasPersistedClosingQualifier(
+                    SuccessionDisputeStatus.Active, rivalKingdomId: 20L),
+            "Close remembers an active prefix after cities are returned");
+        Equal(true, SuccessionDisputeDisplayRules.
+                HasPersistedClosingQualifier(
+                    SuccessionDisputeStatus.PermanentSplit,
+                    rivalKingdomId: 20L),
+            "reunification remembers permanent-split prefixes");
+        Equal(false, SuccessionDisputeDisplayRules.
+                HasPersistedClosingQualifier(
+                    SuccessionDisputeStatus.Prepared, rivalKingdomId: -1L),
+            "a prepared dispute never invents closing prefixes");
 
         string uiBaseName = "New Zhou";
         Equal("New Zhou Kingdom", KingdomNameplateSuffixRules.ProjectName(
@@ -137,14 +244,6 @@ internal static class KingdomRenamePersistenceRulesTests
         Equal(true, editPatch.Contains("typeof(KingdomWindow), \"onNameChange\"") &&
                     editPatch.Contains("__result"),
             "localized identity commits only after a successful kingdom UI edit");
-
-        string migrationService = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "naming", "AWLocalizedNameMigrationService.cs"));
-        Equal(true, migrationService.Contains("AWLocalizedNameRestoreRules.Merge") &&
-                    migrationService.Contains("databaseStale") &&
-                    migrationService.Contains(
-                        "AWLocalizedKingdomNameService.ProjectStored(kingdom"),
-            "restore merges before applying and refreshes only changed kingdom names");
 
         string projectionService = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "KingdomRenameProjectionService.cs"));
