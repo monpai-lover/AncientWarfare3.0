@@ -47,6 +47,33 @@ internal static class WarForceEliminationRulesTests
             "military potential clamps overflow");
         Equal(5, WarForceEliminationRules.AddPotential(-2, 5),
             "negative facts do not reduce military potential");
+        MilitaryPotentialReusesVanillaStatistics();
+    }
+
+    private static void MilitaryPotentialReusesVanillaStatistics()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "WartimeMilitaryPotentialService.cs"));
+        True(source.Contains("pKingdom.countTotalWarriors()"),
+            "kingdom potential reuses vanilla warrior aggregation");
+        False(source.Contains(
+                "ArmyFieldIndexService.CreateSnapshotCursor"),
+            "kingdom potential does not rescan Army indexes");
+        True(source.Contains("CityReservePoolService.CountAvailable"),
+            "AW3 reserves remain additive");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(
+            name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(
+            name + ": expected false");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

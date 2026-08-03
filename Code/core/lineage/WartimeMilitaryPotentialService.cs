@@ -7,7 +7,13 @@ namespace AncientWarfare3.core.lineage
         public static int CountPotentialWarriors(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return 0;
-            return AddClamped(CountLivingOrdinaryMilitary(pKingdom),
+            int active = 0;
+            try
+            {
+                active = Math.Max(0, pKingdom.countTotalWarriors());
+            }
+            catch { }
+            return WarForceEliminationRules.AddPotential(active,
                 CityReservePoolService.CountAvailable(pKingdom));
         }
 
@@ -21,32 +27,5 @@ namespace AncientWarfare3.core.lineage
 
         public static void RemoveKingdom(long pKingdomId) { }
 
-        private static int CountLivingOrdinaryMilitary(Kingdom pKingdom)
-        {
-            long total = 0L;
-            ArmyStrategicIdCursor cursor = ArmyFieldIndexService.
-                CreateSnapshotCursor(pKingdom);
-            while (!cursor.IsComplete)
-            {
-                var armyIds = cursor.Take(
-                    ArmyEstablishmentRules.MaximumFieldArmies);
-                for (int i = 0; i < armyIds.Count; i++)
-                {
-                    Army army = ArmyFieldIndexService.ResolveIndexedArmy(
-                        armyIds[i], pKingdom.id);
-                    try { total += Math.Max(0, army?.countUnits() ?? 0); }
-                    catch { }
-                    if (total >= int.MaxValue) return int.MaxValue;
-                }
-                if (armyIds.Count == 0) break;
-            }
-            return (int)total;
-        }
-
-        private static int AddClamped(int first, int second)
-        {
-            long total = (long)Math.Max(0, first) + Math.Max(0, second);
-            return total >= int.MaxValue ? int.MaxValue : (int)total;
-        }
     }
 }
