@@ -1,0 +1,84 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.schools;
+
+internal static class HistoricalSchoolSavePreparationTests
+{
+    public static void Run()
+    {
+        RuntimeStateCommitsAfterEveryDatabaseWriter();
+        FailedWriterPreventsRuntimeCommit();
+    }
+
+    private static void RuntimeStateCommitsAfterEveryDatabaseWriter()
+    {
+        var order = new List<string>();
+        HistoricalSchoolSavePreparationResult result =
+            HistoricalSchoolSavePreparation.Run(
+                Step("descents", order),
+                Step("deaths", order),
+                Step("noble_deaths", order),
+                Step("prior_writes", order),
+                Step("activities", order),
+                Step("writes", order),
+                Step("death_archives", order),
+                Step("async_writes", order),
+                Step("runtime", order));
+
+        True(result.AllResolved, "all successful save stages resolve");
+        Equal("runtime", order[order.Count - 1],
+            "runtime state is the final database write");
+        True(order.IndexOf("async_writes") < order.IndexOf("runtime"),
+            "background writes drain before runtime state commits");
+    }
+
+    private static void FailedWriterPreventsRuntimeCommit()
+    {
+        bool runtimeCalled = false;
+        HistoricalSchoolSavePreparationResult result =
+            HistoricalSchoolSavePreparation.Run(
+                () => true, () => true, () => true, () => true,
+                () => true, () => true, () => true,
+                () => false,
+                () =>
+                {
+                    runtimeCalled = true;
+                    return true;
+                });
+
+        False(result.AsyncWritesResolved,
+            "the failed background writer is reported");
+        False(result.RuntimeStateAttempted,
+            "runtime state is not written while another writer is unresolved");
+        False(runtimeCalled,
+            "the runtime persistence delegate is not invoked after failure");
+        False(result.AllResolved,
+            "an unresolved writer blocks the save boundary");
+    }
+
+    private static Func<bool> Step(string name, List<string> order)
+    {
+        return () =>
+        {
+            order.Add(name);
+            return true;
+        };
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" +
+                expected + " actual=" + actual);
+    }
+}
