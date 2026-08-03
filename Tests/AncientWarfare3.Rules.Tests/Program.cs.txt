@@ -219,6 +219,27 @@ if (args.Length == 1 && args[0] == "--lineage-atomic-birth-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--historical-write-terminal-slice")
+{
+    HistoricalWriteRulesTests.RunTerminalBatchFailure();
+    Console.WriteLine("AW3 historical terminal write rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--historical-write-api-slice")
+{
+    HistoricalWriteRulesTests.RunCustomWriteApi();
+    Console.WriteLine("AW3 historical custom write API rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--historical-write-slice")
+{
+    HistoricalWriteRulesTests.Run();
+    Console.WriteLine("AW3 historical write rules passed.");
+    return;
+}
+
 if (args.Length == 1 &&
     args[0] == "--diplomatic-war-availability-slice")
 {
@@ -7636,5 +7657,6 @@ ActorDeathArchiveRulesTests.Run();
 ActorPresentationDirtyRulesTests.Run();
 AWPathRequestReuseRulesTests.Run();
 LineageBirthArchivePersistenceSqlTests.Run();
+HistoricalWriteRulesTests.Run();
 
 Console.WriteLine("Rule tests passed.");

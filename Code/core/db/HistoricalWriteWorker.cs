@@ -94,6 +94,13 @@ namespace AncientWarfare3.core.db
     {
         public HistoricalWriteCompletion(IReadOnlyList<HistoricalWriteEnvelope>
             pOperations, IReadOnlyList<object> pOutcomes)
+            : this(pOperations, pOutcomes, true, string.Empty)
+        {
+        }
+
+        public HistoricalWriteCompletion(IReadOnlyList<HistoricalWriteEnvelope>
+            pOperations, IReadOnlyList<object> pOutcomes, bool pIsCommitted,
+            string pError)
         {
             HistoricalWriteEnvelope[] operations = pOperations?.ToArray() ??
                 Array.Empty<HistoricalWriteEnvelope>();
@@ -111,6 +118,8 @@ namespace AncientWarfare3.core.db
                      index < pOutcomes.Count; index++)
                     outcomes[index] = pOutcomes[index];
             Outcomes = Array.AsReadOnly(outcomes);
+            IsCommitted = pIsCommitted;
+            Error = pError ?? string.Empty;
         }
 
         public long FirstSequence { get; }
@@ -118,6 +127,8 @@ namespace AncientWarfare3.core.db
         public IReadOnlyList<long> Sequences { get; }
         public IReadOnlyList<string> OperationKeys { get; }
         public IReadOnlyList<object> Outcomes { get; }
+        public bool IsCommitted { get; }
+        public string Error { get; }
     }
 
     internal sealed class HistoricalWriteWorker : IDisposable
@@ -440,6 +451,7 @@ namespace AncientWarfare3.core.db
                                     ? result.Error
                                     : "retry limit " + _maxRetryAttempts +
                                       " reached: " + result.Error;
+                                EnqueueFailureCompletionLocked(batch, reason);
                                 SetTerminalFaultLocked(reason);
                                 return;
                             }
@@ -447,9 +459,11 @@ namespace AncientWarfare3.core.db
                             Monitor.PulseAll(_gate);
                             if (_stopRequested)
                             {
-                                SetTerminalFaultLocked(
+                                string reason =
                                     "stop requested during retry: " +
-                                    result.Error);
+                                    result.Error;
+                                EnqueueFailureCompletionLocked(batch, reason);
+                                SetTerminalFaultLocked(reason);
                                 return;
                             }
                         }
@@ -525,6 +539,15 @@ namespace AncientWarfare3.core.db
             _terminalFaulted = true;
             _lastError = UncommittedDetailLocked(_lastAcceptedSequence,
                 pError);
+            Monitor.PulseAll(_gate);
+        }
+
+        private void EnqueueFailureCompletionLocked(
+            IReadOnlyList<HistoricalWriteEnvelope> pBatch, string pError)
+        {
+            _completions.Enqueue(new HistoricalWriteCompletion(pBatch,
+                Array.Empty<object>(), false, pError));
+            _inFlightCount = 0;
             Monitor.PulseAll(_gate);
         }
 

@@ -1,4 +1,5 @@
 using System.Data.SQLite;
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 
@@ -6,6 +7,7 @@ internal static class LineageBirthArchivePersistenceSqlTests
 {
     public static void Run()
     {
+        AsyncEnvelopeUsesPerChildStateKeyAndReturnsTypedOutcome();
         OrdinaryBirthCommitsArchiveAndTwoEdges();
         ExplicitParentSlotsNormalizeArchiveSnapshot();
         BirthWithoutKnownParentsWritesNoEdges();
@@ -13,6 +15,34 @@ internal static class LineageBirthArchivePersistenceSqlTests
         ReplayWithoutSecondParentRemovesStaleEdge();
         SecondEdgeFailureRollsBackEverything();
         RepeatedBirthIsIdempotent();
+    }
+
+    private static void AsyncEnvelopeUsesPerChildStateKeyAndReturnsTypedOutcome()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        var envelope = new LineageBirthArchiveEnvelope(42L,
+            new AWAsyncStamp(3L, 42L, 42L),
+            Birth("Async snapshot", 10L, 20L, 100d));
+
+        Equal("lineage-birth:v1:child:100", envelope.OperationKey,
+            "birth envelope uses a versioned per-child state key");
+        True(envelope.Kind == HistoricalWriteKind.State,
+            "birth envelope is coalescible state");
+
+        using SQLiteTransaction tx = db.BeginTransaction();
+        object rawOutcome = ((IHistoricalCustomWriteEnvelope)envelope)
+            .Execute(db, tx);
+        True(rawOutcome is LineageBirthArchiveOutcome,
+            "birth envelope custom execution returns a typed outcome");
+        var outcome = (LineageBirthArchiveOutcome)rawOutcome;
+        tx.Commit();
+
+        Equal(100L, outcome.ChildId,
+            "birth envelope outcome identifies the newborn");
+        True(outcome.ArchiveWritten,
+            "birth envelope executes the archive persistence");
+        True(outcome.ParentSlot1Written && outcome.ParentSlot2Written,
+            "birth envelope executes both parent edges");
     }
 
     private static void ExplicitParentSlotsNormalizeArchiveSnapshot()

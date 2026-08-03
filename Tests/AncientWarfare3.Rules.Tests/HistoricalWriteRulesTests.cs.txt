@@ -1,0 +1,260 @@
+using System.Text.RegularExpressions;
+using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.db;
+
+internal static class HistoricalWriteRulesTests
+{
+    public static void Run()
+    {
+        TerminalBatchProducesFailureCompletionForEverySequence();
+        RetryLimitProducesFailureCompletionForEverySequence();
+        ExistingCompletionConstructorCreatesCommittedCompletion();
+        CustomWriteApiRegistersAndDrainsExclusiveFailureCallbacks();
+    }
+
+    public static void RunTerminalBatchFailure()
+    {
+        TerminalBatchProducesFailureCompletionForEverySequence();
+        RetryLimitProducesFailureCompletionForEverySequence();
+        ExistingCompletionConstructorCreatesCommittedCompletion();
+    }
+
+    private static void RetryLimitProducesFailureCompletionForEverySequence()
+    {
+        using var sink = new RetryableBatchSink("database is busy");
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 8,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 2);
+        for (long sequence = 11L; sequence <= 12L; sequence++)
+        {
+            string key = "retry-limit-test:" + sequence;
+            var envelope = new HistoricalWriteEnvelope(sequence, key,
+                string.Empty, Array.Empty<HistoricalSqlValue>(),
+                HistoricalWriteKind.Append,
+                new AWAsyncStamp(1L, sequence, sequence));
+            True(worker.TryEnqueue(envelope, out _),
+                "retry-limit test accepts sequence " + sequence);
+        }
+
+        worker.Start();
+        True(SpinWait.SpinUntil(() => worker.TerminalFaulted,
+                TimeSpan.FromSeconds(2)),
+            "retry limit faults the worker");
+        Equal(2L, sink.ExecuteCount,
+            "retryable batch executes through the configured limit");
+        True(worker.TryDequeueCompletion(out HistoricalWriteCompletion result),
+            "retry limit publishes a completion");
+        False(ReadProperty<bool>(result, "IsCommitted"),
+            "retry-limit completion is not committed");
+        Equal("retry limit 2 reached: database is busy",
+            ReadProperty<string>(result, "Error"),
+            "retry-limit completion preserves the terminal reason");
+        Equal(2, result.Sequences.Count,
+            "retry-limit completion covers every in-flight sequence");
+        Equal(11L, result.Sequences[0], "retry-limit completion sequence 11");
+        Equal(12L, result.Sequences[1], "retry-limit completion sequence 12");
+    }
+
+    private static void ExistingCompletionConstructorCreatesCommittedCompletion()
+    {
+        var envelope = new HistoricalWriteEnvelope(21L, "legacy-completion",
+            string.Empty, Array.Empty<HistoricalSqlValue>(),
+            HistoricalWriteKind.Append, new AWAsyncStamp(1L, 21L, 21L));
+        var completion = new HistoricalWriteCompletion(
+            new[] { envelope }, new object[] { "outcome" });
+
+        True(ReadProperty<bool>(completion, "IsCommitted"),
+            "existing completion constructor remains committed");
+        Equal(string.Empty, ReadProperty<string>(completion, "Error"),
+            "existing completion constructor has no error");
+        Equal("outcome", (string)completion.Outcomes[0],
+            "existing completion constructor preserves outcomes");
+    }
+
+    public static void RunCustomWriteApi()
+    {
+        CustomWriteApiRegistersAndDrainsExclusiveFailureCallbacks();
+    }
+
+    private static void TerminalBatchProducesFailureCompletionForEverySequence()
+    {
+        using var sink = new TerminalBatchSink("injected terminal failure");
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 8,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        for (long sequence = 1L; sequence <= 3L; sequence++)
+        {
+            string key = "terminal-test:" + sequence;
+            var envelope = new HistoricalWriteEnvelope(sequence, key,
+                string.Empty, Array.Empty<HistoricalSqlValue>(),
+                HistoricalWriteKind.Append,
+                new AWAsyncStamp(1L, sequence, sequence));
+            True(worker.TryEnqueue(envelope, out _),
+                "terminal test accepts sequence " + sequence);
+        }
+
+        worker.Start();
+        True(SpinWait.SpinUntil(() => worker.TerminalFaulted,
+                TimeSpan.FromSeconds(2)),
+            "terminal sink faults the worker");
+        True(worker.TryDequeueCompletion(out HistoricalWriteCompletion result),
+            "terminal batch publishes a completion");
+        False(ReadProperty<bool>(result, "IsCommitted"),
+            "terminal batch completion is not committed");
+        Equal("injected terminal failure",
+            ReadProperty<string>(result, "Error"),
+            "terminal batch completion preserves its error");
+        Equal(3, result.Sequences.Count,
+            "terminal batch completion covers every in-flight sequence");
+        Equal(1L, result.Sequences[0], "terminal completion sequence 1");
+        Equal(2L, result.Sequences[1], "terminal completion sequence 2");
+        Equal(3L, result.Sequences[2], "terminal completion sequence 3");
+        False(worker.TryDequeueCompletion(out _),
+            "terminal batch publishes exactly one completion");
+    }
+
+    private static void CustomWriteApiRegistersAndDrainsExclusiveFailureCallbacks()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "db",
+            "HistoricalWriteService.cs"));
+
+        Matches(source,
+            @"TryEnqueueCustom\s*\(\s*string\s+pOperationKey,\s*" +
+            @"Func<long,\s*AWAsyncStamp,\s*HistoricalWriteEnvelope>\s+" +
+            @"pFactory,\s*Action<long,\s*object>\s+pOnCommitted,\s*" +
+            @"Action<long,\s*string>\s+pOnFailed",
+            "custom write API accepts a failure callback");
+        Contains(source,
+            "FailureCallbacks[pSequence] = pOnFailed;",
+            "custom write API registers the failure callback");
+        Contains(source,
+            "FailureCallbacks.Remove(replaced.Sequence);",
+            "state replacement removes the stale failure callback");
+        Matches(source,
+            @"TryEnqueueCustom\s*\([^\)]*pOnCommitted[^\)]*" +
+            @"out\s+long\s+pSequence[^\)]*out\s+string\s+pError\)\s*" +
+            @"\{\s*return\s+TryEnqueueCustom\s*\([^;]*pOnCommitted,\s*" +
+            @"null,\s*out\s+pSequence,\s*out\s+pError\);",
+            "existing custom write overload forwards a null failure callback");
+        Contains(source,
+            "if (completion.IsCommitted)",
+            "completion drain selects callbacks by committed state");
+        Matches(source,
+            @"FailureCallbacks\.TryGetValue\s*\(\s*sequence,\s*" +
+            @"out\s+failureCallback\s*\);",
+            "completion drain reads the failure callback");
+        Contains(source,
+            "CommitCallbacks.Remove(sequence);",
+            "completion drain removes the success registration");
+        Contains(source,
+            "FailureCallbacks.Remove(sequence);",
+            "completion drain removes the failure registration");
+        Matches(source,
+            @"if\s*\(completion\.IsCommitted\)\s*\{[^}]*" +
+            @"callback\?\.Invoke\(sequence,\s*" +
+            @"completion\.Outcomes\[index\]\);[^}]*\}\s*else\s*\{[^}]*" +
+            @"failureCallback\?\.Invoke\(sequence,\s*" +
+            @"completion\.Error\);",
+            "completion drain invokes exactly the matching callback side");
+    }
+
+    private static void Contains(string pSource, string pExpected,
+        string pName)
+    {
+        True(pSource.Contains(pExpected, StringComparison.Ordinal), pName);
+    }
+
+    private static void Matches(string pSource, string pPattern,
+        string pName)
+    {
+        True(Regex.IsMatch(pSource, pPattern, RegexOptions.Singleline), pName);
+    }
+
+    private static T ReadProperty<T>(object pTarget, string pName)
+    {
+        System.Reflection.PropertyInfo property = pTarget.GetType()
+            .GetProperty(pName);
+        if (property == null)
+            throw new InvalidOperationException(
+                "completion property is missing: " + pName);
+        return (T)property.GetValue(pTarget);
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue)
+            throw new InvalidOperationException(pName + ": expected true");
+    }
+
+    private static void False(bool pValue, string pName)
+    {
+        if (pValue)
+            throw new InvalidOperationException(pName + ": expected false");
+    }
+
+    private static void Equal(long pExpected, long pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pName + ": expected " +
+                                                pExpected + ", got " +
+                                                pActual);
+    }
+
+    private static void Equal(string pExpected, string pActual, string pName)
+    {
+        if (!string.Equals(pExpected, pActual, StringComparison.Ordinal))
+            throw new InvalidOperationException(pName + ": expected '" +
+                                                pExpected + "', got '" +
+                                                pActual + "'");
+    }
+
+    private sealed class TerminalBatchSink : IHistoricalWriteBatchSink
+    {
+        private readonly string _error;
+
+        public TerminalBatchSink(string pError)
+        {
+            _error = pError;
+        }
+
+        public void Open()
+        {
+        }
+
+        public HistoricalWriteBatchResult Execute(
+            IReadOnlyList<HistoricalWriteEnvelope> pOperations)
+        {
+            return HistoricalWriteBatchResult.Terminal(_error);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class RetryableBatchSink : IHistoricalWriteBatchSink
+    {
+        private readonly string _error;
+
+        public RetryableBatchSink(string pError)
+        {
+            _error = pError;
+        }
+
+        public int ExecuteCount { get; private set; }
+
+        public void Open()
+        {
+        }
+
+        public HistoricalWriteBatchResult Execute(
+            IReadOnlyList<HistoricalWriteEnvelope> pOperations)
+        {
+            ExecuteCount++;
+            return HistoricalWriteBatchResult.Retryable(_error);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+}

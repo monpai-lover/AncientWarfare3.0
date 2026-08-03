@@ -18,6 +18,8 @@ namespace AncientWarfare3.core.db
         };
         private static readonly Dictionary<long, Action<long, object>>
             CommitCallbacks = new Dictionary<long, Action<long, object>>();
+        private static readonly Dictionary<long, Action<long, string>>
+            FailureCallbacks = new Dictionary<long, Action<long, string>>();
 
         private static HistoricalWriteWorker _worker;
         private static HistoryEventIdAllocator _eventIds =
@@ -243,7 +245,10 @@ namespace AncientWarfare3.core.db
                         return false;
                     }
                     if (replaced != null)
+                    {
                         CommitCallbacks.Remove(replaced.Sequence);
+                        FailureCallbacks.Remove(replaced.Sequence);
+                    }
                     if (pOnCommitted != null)
                         CommitCallbacks[pSequence] =
                             (sequence, outcome) => pOnCommitted(sequence);
@@ -265,6 +270,16 @@ namespace AncientWarfare3.core.db
         public static bool TryEnqueueCustom(string pOperationKey,
             Func<long, AWAsyncStamp, HistoricalWriteEnvelope> pFactory,
             Action<long, object> pOnCommitted, out long pSequence,
+            out string pError)
+        {
+            return TryEnqueueCustom(pOperationKey, pFactory, pOnCommitted,
+                null, out pSequence, out pError);
+        }
+
+        public static bool TryEnqueueCustom(string pOperationKey,
+            Func<long, AWAsyncStamp, HistoricalWriteEnvelope> pFactory,
+            Action<long, object> pOnCommitted,
+            Action<long, string> pOnFailed, out long pSequence,
             out string pError)
         {
             lock (Gate)
@@ -294,9 +309,14 @@ namespace AncientWarfare3.core.db
                     return false;
                 }
                 if (replaced != null)
+                {
                     CommitCallbacks.Remove(replaced.Sequence);
+                    FailureCallbacks.Remove(replaced.Sequence);
+                }
                 if (pOnCommitted != null)
                     CommitCallbacks[pSequence] = pOnCommitted;
+                if (pOnFailed != null)
+                    FailureCallbacks[pSequence] = pOnFailed;
                 pError = string.Empty;
                 return true;
             }
@@ -341,13 +361,28 @@ namespace AncientWarfare3.core.db
                 {
                     long sequence = completion.Sequences[index];
                     Action<long, object> callback;
+                    Action<long, string> failureCallback;
                     lock (Gate)
                     {
                         CommitCallbacks.TryGetValue(sequence, out callback);
+                        FailureCallbacks.TryGetValue(sequence,
+                            out failureCallback);
                         CommitCallbacks.Remove(sequence);
+                        FailureCallbacks.Remove(sequence);
                     }
-                    if (callback == null) continue;
-                    try { callback(sequence, completion.Outcomes[index]); }
+                    try
+                    {
+                        if (completion.IsCommitted)
+                        {
+                            callback?.Invoke(sequence,
+                                completion.Outcomes[index]);
+                        }
+                        else
+                        {
+                            failureCallback?.Invoke(sequence,
+                                completion.Error);
+                        }
+                    }
                     catch (Exception error)
                     {
                         ModClass.LogWarning(
@@ -393,6 +428,7 @@ namespace AncientWarfare3.core.db
                     _worldGeneration = 0L;
                     _eventIdsReady = false;
                     CommitCallbacks.Clear();
+                    FailureCallbacks.Clear();
                 }
                 pError = string.Empty;
                 return true;

@@ -1,0 +1,10 @@
+using System.Data.SQLite;
+
+namespace AncientWarfare3.core.db
+{
+    internal interface IHistoricalCustomWriteEnvelope
+    {
+        object Execute(SQLiteConnection pConnection,
+            SQLiteTransaction pTransaction);
+    }
+}
