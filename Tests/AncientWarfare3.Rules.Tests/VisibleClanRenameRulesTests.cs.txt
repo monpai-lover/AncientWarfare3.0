@@ -1,0 +1,35 @@
+using AncientWarfare3.core.lineage;
+
+internal static class VisibleClanRenameRulesTests
+{
+    public static void Run()
+    {
+        Equal(42L, VisibleClanRenameRules.ResolveTargetShiId(42L, 1L),
+            "the displayed snapshot branch wins over navigation fallback");
+        Equal(1L, VisibleClanRenameRules.ResolveTargetShiId(-1L, 1L),
+            "navigation fallback is used only before the snapshot is ready");
+        Sequence(new long[] { 7, 8, 9 },
+            VisibleClanRenameRules.MergeMemberIds(7,
+                new long[] { 8, 7 }, new long[] { 9, 8 }),
+            "the founder is retained and duplicate archive/live IDs are removed");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void Sequence(IReadOnlyList<long> expected,
+        IReadOnlyList<long> actual, string name)
+    {
+        if (expected.Count != actual.Count)
+            throw new InvalidOperationException(
+                $"{name}: expected {expected.Count} IDs, got {actual.Count}");
+        for (int i = 0; i < expected.Count; i++)
+            if (expected[i] != actual[i])
+                throw new InvalidOperationException(
+                    $"{name}: index {i} expected {expected[i]}, got {actual[i]}");
+    }
+}

@@ -130,7 +130,8 @@ internal static class AW3MultiplayerCatalogRulesTests
             AW3CommandRequest.SetArmyTargetCity(7, 71, 20),
             AW3CommandRequest.SetArmyPosture(7, 71, "defend"),
             AW3CommandRequest.CancelArmyOrder(7, 71),
-            AW3CommandRequest.SubmitCivilServiceRanking(7, 81, 91, 92, 93)
+            AW3CommandRequest.SubmitCivilServiceRanking(7, 81, 91, 92, 93),
+            AW3CommandRequest.RenameSurname(7, 31, "Jiang")
         };
 
         Equal(Enum.GetValues<AW3CommandKind>().Length, requests.Length,
@@ -170,6 +171,12 @@ internal static class AW3MultiplayerCatalogRulesTests
             "civil-service first place retained");
         Equal(92L, ranking.TargetActorId,
             "civil-service second place retained");
+        AW3CommandRequest surname = requests.Single(value => value.Kind ==
+            AW3CommandKind.RenameSurname);
+        Equal(31L, surname.ActorId,
+            "surname rename targets the centered family-tree actor");
+        Equal("Jiang", surname.Text,
+            "surname rename text retained");
         Equal(93L, ranking.CityId,
             "civil-service third place retained");
         Equal(19L, requests[17].CityId,

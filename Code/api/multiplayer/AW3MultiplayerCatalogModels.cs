@@ -333,7 +333,8 @@ namespace AncientWarfare3.api.multiplayer
         SetArmyTargetCity = 23,
         SetArmyPosture = 24,
         CancelArmyOrder = 25,
-        SubmitCivilServiceRanking = 26
+        SubmitCivilServiceRanking = 26,
+        RenameSurname = 27
     }
 
     public enum AW3CommandStatus : byte
@@ -584,6 +585,12 @@ namespace AncientWarfare3.api.multiplayer
             long shiId, string clanName) => Create(AW3CommandKind.RenameClan,
             countryId, secondaryId: Positive(shiId, nameof(shiId)),
             text: DisplayText(clanName, nameof(clanName)));
+
+        public static AW3CommandRequest RenameSurname(long countryId,
+            long actorId, string familyName) => Create(
+            AW3CommandKind.RenameSurname, countryId,
+            actorId: Positive(actorId, nameof(actorId)),
+            text: DisplayText(familyName, nameof(familyName)));
 
         public static AW3CommandRequest ChangeEra(long countryId,
             string eraName) => Create(AW3CommandKind.ChangeEra, countryId,

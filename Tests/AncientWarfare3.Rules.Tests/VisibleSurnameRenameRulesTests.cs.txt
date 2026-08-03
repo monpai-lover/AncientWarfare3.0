@@ -1,0 +1,51 @@
+using AncientWarfare3.core.lineage;
+
+internal static class VisibleSurnameRenameRulesTests
+{
+    public static void Run()
+    {
+        IReadOnlyList<long> actual =
+            VisibleSurnameRenameRules.CollectPatrilinealRenameIds(1, new[]
+            {
+                new SurnameRelationNode(1, true, 9),
+                new SurnameRelationNode(2, true, 1),
+                new SurnameRelationNode(3, false, 1),
+                new SurnameRelationNode(4, true, 2),
+                new SurnameRelationNode(5, false, 2),
+                new SurnameRelationNode(6, true, 3),
+                new SurnameRelationNode(9, true, -1),
+                new SurnameRelationNode(2, true, 1),
+                new SurnameRelationNode(1, true, 4)
+            });
+
+        Sequence(new long[] { 1, 2, 3, 4, 5 }, actual,
+            "rename includes the root and children reached through male-line parents");
+        True(VisibleSurnameRenameRules.TryNormalizeFamilyName("  姜姓 ",
+                out string familyName) && familyName == "姜",
+            "surname normalization trims whitespace and the display suffix");
+        False(VisibleSurnameRenameRules.TryNormalizeFamilyName(" 姓 ", out _),
+            "an empty normalized surname is rejected");
+    }
+
+    private static void Sequence(IReadOnlyList<long> expected,
+        IReadOnlyList<long> actual, string name)
+    {
+        if (expected.Count != actual.Count)
+            throw new InvalidOperationException(
+                $"{name}: expected {expected.Count} IDs, got {actual.Count}");
+        for (int i = 0; i < expected.Count; i++)
+            if (expected[i] != actual[i])
+                throw new InvalidOperationException(
+                    $"{name}: index {i} expected {expected[i]}, got {actual[i]}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name);
+    }
+}

@@ -180,6 +180,9 @@ namespace AncientWarfare3.api.multiplayer
                 Command(AW3CommandKind.RenameClan,
                     AW3WindowCategory.Records, Country() |
                     AW3WindowContextRequirement.Shi),
+                Command(AW3CommandKind.RenameSurname,
+                    AW3WindowCategory.Records, Country() |
+                    AW3WindowContextRequirement.Actor),
                 Command(AW3CommandKind.ChangeEra,
                     AW3WindowCategory.Mandate, Country()),
                 Command(AW3CommandKind.SetArmyRallyPoint,

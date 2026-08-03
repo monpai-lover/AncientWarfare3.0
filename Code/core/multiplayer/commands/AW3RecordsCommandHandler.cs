@@ -1,4 +1,5 @@
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.multiplayer.commands
@@ -17,6 +18,8 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return ConferPosthumousTitle(kingdom, request);
                 case AW3CommandKind.RenameClan:
                     return RenameClan(kingdom, request);
+                case AW3CommandKind.RenameSurname:
+                    return RenameSurname(kingdom, request);
                 default:
                     return AW3CommandResult.Rejected(
                         AW3CommandError.InvalidRequest,
@@ -60,7 +63,7 @@ namespace AncientWarfare3.core.multiplayer.commands
         private static AW3CommandResult RenameClan(Kingdom kingdom,
             AW3CommandRequest request)
         {
-            if (!RulerOwnsShi(kingdom, request.SecondaryId))
+            if (!KingdomContainsShi(kingdom, request.SecondaryId))
                 return AW3CommandResult.Rejected(
                     AW3CommandError.Unauthorized,
                     "aw3_command_unauthorized");
@@ -73,13 +76,50 @@ namespace AncientWarfare3.core.multiplayer.commands
                     "aw3_rename_visible_clan_none", detailCode: 0);
         }
 
-        private static bool RulerOwnsShi(Kingdom kingdom, long shiId)
+        private static bool KingdomContainsShi(Kingdom kingdom, long shiId)
         {
-            Actor ruler = kingdom?.king;
-            if (ruler?.data == null || ruler.isRekt() || shiId <= 0)
-                return false;
-            ruler.data.get(LineageKeys.SHI_ID, out long rulerShiId, -1L);
-            return rulerShiId == shiId;
+            if (kingdom?.data == null || shiId <= 0) return false;
+            try
+            {
+                foreach (Actor actor in kingdom.units)
+                {
+                    if (actor?.data == null || actor.isRekt()) continue;
+                    actor.data.get(LineageKeys.SHI_ID,
+                        out long actorShiId, -1L);
+                    if (actorShiId == shiId) return true;
+                }
+            }
+            catch { }
+            long founderId = LineageQuery.GetShiBranchFounderId(shiId);
+            ActorArchiveTableItem founder =
+                LineageArchiveReader.ReadRow(founderId);
+            return founder != null && founder.kingdom_id == kingdom.id;
+        }
+
+        private static AW3CommandResult RenameSurname(Kingdom kingdom,
+            AW3CommandRequest request)
+        {
+            if (!ActorBelongsToKingdom(kingdom, request.ActorId))
+                return AW3CommandResult.Rejected(
+                    AW3CommandError.Unauthorized,
+                    "aw3_command_unauthorized");
+            int changed = VisibleSurnameRenameService.
+                RenamePatrilinealBranch(request.ActorId, request.Text);
+            return changed > 0
+                ? AW3CommandResult.Success("aw3_command_accepted",
+                    request.ActorId, detailCode: changed)
+                : AW3CommandResult.Rejected(AW3CommandError.IllegalTarget,
+                    "aw3_rename_visible_surname_none", detailCode: 0);
+        }
+
+        private static bool ActorBelongsToKingdom(Kingdom kingdom,
+            long actorId)
+        {
+            if (kingdom?.data == null || actorId <= 0) return false;
+            Actor actor = FindActor(actorId);
+            if (actor?.data != null) return actor.kingdom == kingdom;
+            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(actorId);
+            return row != null && row.kingdom_id == kingdom.id;
         }
 
         private static AW3CommandError MapEraError(

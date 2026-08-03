@@ -1,0 +1,27 @@
+using AncientWarfare3.core.lineage;
+
+internal static class FeudatoryIdentityRulesTests
+{
+    public static void Run()
+    {
+        False(FeudatoryIdentityRules.CanEnslave(
+                ordinaryEligible: true, activePrince: true),
+            "an active feudatory prince cannot be enslaved");
+        True(FeudatoryIdentityRules.CanEnslave(
+                ordinaryEligible: true, activePrince: false),
+            "a former prince returns to ordinary eligibility rules");
+        False(FeudatoryIdentityRules.CanEnslave(
+                ordinaryEligible: false, activePrince: false),
+            "feudatory rules do not bypass ordinary exclusions");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name);
+    }
+}

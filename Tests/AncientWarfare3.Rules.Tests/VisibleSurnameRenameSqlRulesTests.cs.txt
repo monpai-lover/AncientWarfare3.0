@@ -1,0 +1,71 @@
+using AncientWarfare3.core.lineage;
+using System.Data.SQLite;
+
+internal static class VisibleSurnameRenameSqlRulesTests
+{
+    public static void Run()
+    {
+        string query = VisibleSurnameRenameSqlRules.DescendantRelationQuery;
+        Contains("PARENT_ID_1", query,
+            "archive parent slot one participates in descendant recovery");
+        Contains("PARENT_ID_2", query,
+            "archive parent slot two participates in descendant recovery");
+        Contains("FamilyEdge", query,
+            "normalized family edges participate in descendant recovery");
+        Contains("parent.SEX=0", query,
+            "recursion continues only through male-line parents");
+        Contains("depth<@maxDepth", query,
+            "corrupt archives cannot recurse without a depth bound");
+        Contains("LIMIT @limit", query,
+            "surname mutation has a bounded actor count");
+        QueryExecutesWithArchiveAndFamilyEdges(query);
+    }
+
+    private static void QueryExecutesWithArchiveAndFamilyEdges(string query)
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE ActorArchive (ID INTEGER PRIMARY KEY," +
+            "SEX INTEGER,PARENT_ID_1 INTEGER,PARENT_ID_2 INTEGER);" +
+            "CREATE TABLE FamilyEdge (PARENT_ID INTEGER,CHILD_ID INTEGER);" +
+            "INSERT INTO ActorArchive VALUES " +
+            "(1,0,-1,-1),(2,0,1,-1),(3,1,1,-1)," +
+            "(4,0,2,-1),(5,0,3,-1);" +
+            "INSERT INTO FamilyEdge VALUES (1,2),(1,3),(2,4),(3,5);");
+
+        using var command = new SQLiteCommand(query, db);
+        command.Parameters.AddWithValue("@root", 1L);
+        command.Parameters.AddWithValue("@maxDepth", 128);
+        command.Parameters.AddWithValue("@limit", 16384);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        var ids = new List<long>();
+        while (reader.Read()) ids.Add(reader.GetInt64(0));
+        Sequence(new long[] { 1, 2, 3, 4 }, ids,
+            "recursive query executes and stops below daughters");
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Sequence(IReadOnlyList<long> expected,
+        IReadOnlyList<long> actual, string name)
+    {
+        if (expected.Count != actual.Count)
+            throw new InvalidOperationException(name + ": count");
+        for (int i = 0; i < expected.Count; i++)
+            if (expected[i] != actual[i])
+                throw new InvalidOperationException(name + ": index " + i);
+    }
+
+    private static void Contains(string expected, string actual, string name)
+    {
+        if ((actual ?? "").IndexOf(expected,
+                StringComparison.OrdinalIgnoreCase) < 0)
+            throw new InvalidOperationException(name + ": missing " + expected);
+    }
+}

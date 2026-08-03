@@ -104,46 +104,53 @@ namespace AncientWarfare3.patch
             {
                 CityReservePoolService.PrepareForSave();
                 core.lineage.DeferredRuntimeWorkService.FlushPersistent();
-                bool descentsResolved =
-                    HistoricalSchoolDescentService.FlushPendingDescentsForSave();
-                bool deathsResolved =
-                    SchoolMembershipService.FlushDeathRetriesForSave();
-                bool nobleDeathsResolved =
-                    NobleRankService.FlushPendingDeathSuccessionsForSave();
-                bool runtimeStateResolved =
-                    HistoricalSchoolRuntime.FlushPendingStateForSave();
-                bool priorWritesResolved =
-                    HistoricalSchoolWriteBufferService.FlushForSave();
-                bool activitiesResolved =
-                    HistoricalSchoolActivityQueue.FlushPendingPersistenceForSave();
-                bool writesResolved =
-                    HistoricalSchoolWriteBufferService.FlushForSave();
-                core.lineage.DeferredRuntimeWorkService.FlushPersistent();
-                bool deathArchivesResolved =
-                    ActorDeathArchiveService.FlushForSave(
-                        TimeSpan.FromSeconds(5),
-                        out string deathArchiveError);
-                bool asyncWritesResolved =
-                    HistoricalWriteService.FlushForSave(
-                        TimeSpan.FromSeconds(5), out string asyncWriteError);
-                if (!descentsResolved || !deathsResolved ||
-                    !nobleDeathsResolved ||
-                    !runtimeStateResolved || !priorWritesResolved ||
-                    !activitiesResolved || !writesResolved ||
-                    !deathArchivesResolved ||
-                    !asyncWritesResolved)
+                string deathArchiveError = string.Empty;
+                string asyncWriteError = string.Empty;
+                HistoricalSchoolSavePreparationResult preparation =
+                    HistoricalSchoolSavePreparation.Run(
+                        HistoricalSchoolDescentService.
+                            FlushPendingDescentsForSave,
+                        SchoolMembershipService.FlushDeathRetriesForSave,
+                        NobleRankService.
+                            FlushPendingDeathSuccessionsForSave,
+                        HistoricalSchoolWriteBufferService.FlushForSave,
+                        HistoricalSchoolActivityQueue.
+                            FlushPendingPersistenceForSave,
+                        () =>
+                        {
+                            bool flushed = HistoricalSchoolWriteBufferService.
+                                FlushForSave();
+                            core.lineage.DeferredRuntimeWorkService.
+                                FlushPersistent();
+                            return HistoricalSchoolWriteBufferService.
+                                FlushForSave() && flushed;
+                        },
+                        () => ActorDeathArchiveService.FlushForSave(
+                            TimeSpan.FromSeconds(5),
+                            out deathArchiveError),
+                        () => HistoricalWriteService.FlushForSave(
+                            TimeSpan.FromSeconds(5), out asyncWriteError),
+                        HistoricalSchoolRuntime.FlushPendingStateForSave);
+                if (!preparation.AllResolved)
                 {
                     pError = "unresolved school persistence " +
-                             "descents=" + descentsResolved +
-                             " deaths=" + deathsResolved +
-                             " noble_deaths=" + nobleDeathsResolved +
-                             " runtime=" + runtimeStateResolved +
-                             " prior_writes=" + priorWritesResolved +
-                             " activities=" + activitiesResolved +
-                             " writes=" + writesResolved +
-                             " death_archives=" + deathArchivesResolved +
+                             "descents=" + preparation.DescentsResolved +
+                             " deaths=" + preparation.DeathsResolved +
+                             " noble_deaths=" +
+                             preparation.NobleDeathsResolved +
+                             " runtime=" + preparation.RuntimeStateResolved +
+                             " runtime_attempted=" +
+                             preparation.RuntimeStateAttempted +
+                             " prior_writes=" +
+                             preparation.PriorWritesResolved +
+                             " activities=" +
+                             preparation.ActivitiesResolved +
+                             " writes=" + preparation.WritesResolved +
+                             " death_archives=" +
+                             preparation.DeathArchivesResolved +
                              " death_archive_error=" + deathArchiveError +
-                             " async_writes=" + asyncWritesResolved +
+                             " async_writes=" +
+                             preparation.AsyncWritesResolved +
                              " async_error=" + asyncWriteError +
                              " buffered=" +
                              HistoricalSchoolWriteBufferService.Count;
