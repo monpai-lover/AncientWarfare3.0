@@ -102,7 +102,8 @@ namespace AncientWarfare3.core.naming
                 case Kingdom kingdom:
                     AWLocalizedMottoService.ProjectKingdom(kingdom,
                         kingdom.data?.motto);
-                    break;
+                    AWLocalizedKingdomNameService.ProjectStored(kingdom);
+                    return;
                 case Clan clan:
                     AWLocalizedMottoService.ProjectClan(clan,
                         clan.data?.motto);
@@ -128,7 +129,8 @@ namespace AncientWarfare3.core.naming
                 Item item => item.data,
                 _ => null
             };
-            if (data != null) AWLocalizedNameService.ProjectStored(data);
+            if (data == null) return;
+            AWLocalizedNameService.ProjectStored(data);
         }
 
         private static void AdvancePhase()

@@ -146,13 +146,20 @@ namespace AncientWarfare3.core.naming
                     out BaseSystemData data))
                 return;
 
+            AWLocalizedNameIdentitySnapshot savedIdentity =
+                AWLocalizedNamePersistence.Capture(data);
+            string displayBefore = data.name ?? string.Empty;
             bool hasStoredIdentity = AWLocalizedNamePersistence.TryLoad(
                 metaType, objectId,
-                out AWLocalizedNameIdentitySnapshot identity);
-            if (hasStoredIdentity)
-                AWLocalizedNamePersistence.Apply(data, identity);
-            else
-                identity = AWLocalizedNamePersistence.Capture(data);
+                out AWLocalizedNameIdentitySnapshot databaseIdentity);
+            AWLocalizedNameIdentitySnapshot identity = hasStoredIdentity
+                ? AWLocalizedNameRestoreRules.Merge(savedIdentity,
+                    databaseIdentity,
+                    AWLocalizedNameMigrationRules.CurrentSchemaVersion)
+                : savedIdentity;
+            bool databaseStale = hasStoredIdentity &&
+                !AWLocalizedNameRestoreRules.Same(identity,
+                    databaseIdentity);
             AWLocalizedNameMigrationDecision decision =
                 AWLocalizedNameMigrationRules.Resolve(data.name,
                     identity.NativeName, identity.ChineseName,
@@ -177,7 +184,15 @@ namespace AncientWarfare3.core.naming
                         objectId, decision.NeedsChineseGeneration);
             }
 
-            if (!hasStoredIdentity || decision.NeedsPersistence || generated)
+            if (generated)
+                AWLocalizedNameService.ProjectStored(data);
+
+            if (pObject is Kingdom kingdom)
+                AWLocalizedKingdomNameService.ProjectStored(kingdom,
+                    displayBefore);
+
+            if (!hasStoredIdentity || databaseStale ||
+                decision.NeedsPersistence || generated)
                 Enqueue(metaType, objectId, data);
         }
 

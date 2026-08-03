@@ -65,6 +65,7 @@
     <Compile Include="IntegratedNamingRulesTests.cs.txt" />
     <Compile Include="ActorLocalizedNameBoundaryRulesTests.cs.txt" />
     <Compile Include="LocalizedNameMigrationRulesTests.cs.txt" />
+    <Compile Include="KingdomRenamePersistenceRulesTests.cs.txt" />
     <Compile Include="LocalizedNameProfileReadinessRulesTests.cs.txt" />
     <Compile Include="WesternLineageNamingRulesTests.cs.txt" />
     <Compile Include="WesternFamilyIdentityRulesTests.cs.txt" />
@@ -411,6 +412,9 @@
     <Compile Include="..\..\Code\core\naming\AWLocalizedMottoProjectionRules.cs" Link="Production\AWLocalizedMottoProjectionRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedMottoCreationRules.cs" Link="Production\AWLocalizedMottoCreationRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameMigrationRules.cs" Link="Production\AWLocalizedNameMigrationRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedKingdomRenameRules.cs" Link="Production\AWLocalizedKingdomRenameRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedNameRestoreRules.cs" Link="Production\AWLocalizedNameRestoreRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedNameProjectionChangeRules.cs" Link="Production\AWLocalizedNameProjectionChangeRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWNamingProfileRules.cs" Link="Production\AWNamingProfileRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageEligibilityRules.cs" Link="Production\WesternLineageEligibilityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionRules.cs" Link="Production\WesternLineageAdmissionRules.cs" />

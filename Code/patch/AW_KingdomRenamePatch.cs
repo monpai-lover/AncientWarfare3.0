@@ -1,5 +1,6 @@
 using System;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
 
@@ -33,7 +34,10 @@ namespace AncientWarfare3.patch
                                    pName ?? "";
             KingdomRenameSyncService.OnKingdomNameChanged(kingdom, __state,
                 committedName, pTrack);
-            KingdomRenameProjectionService.Refresh(kingdom);
+            if (AWLocalizedNameProjectionChangeRules.ShouldInvalidate(
+                    __state, committedName) &&
+                !AWLocalizedKingdomNameService.IsEditing(kingdom))
+                KingdomRenameProjectionService.Refresh(kingdom);
         }
     }
 }

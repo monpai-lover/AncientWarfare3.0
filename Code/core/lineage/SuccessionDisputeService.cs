@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.lineage
@@ -390,10 +391,17 @@ namespace AncientWarfare3.core.lineage
 
         public static string GetCanonicalStateName(long pKingdomId)
         {
-            if (TryGetCachedByKingdom(pKingdomId,
-                    out SuccessionDisputeSnapshot activeRow) &&
-                StateNameRules.IsValid(activeRow.OriginalStateName))
-                return activeRow.OriginalStateName;
+            if (TryGetMaterializedByKingdom(pKingdomId,
+                    out SuccessionDisputeSnapshot activeRow))
+            {
+                Kingdom authority = FindKingdom(
+                    activeRow.OriginalKingdomId);
+                if (!string.IsNullOrWhiteSpace(authority?.data?.name))
+                    return authority.data.name.Trim();
+                if (!string.IsNullOrWhiteSpace(
+                        activeRow.OriginalStateName))
+                    return activeRow.OriginalStateName.Trim();
+            }
             Kingdom kingdom = FindKingdom(pKingdomId);
             if (kingdom?.data != null &&
                 StateNameRules.IsValid(kingdom.name))
@@ -415,12 +423,57 @@ namespace AncientWarfare3.core.lineage
                 : pKingdom.id == row.RivalKingdomId
                     ? row.RivalQualifier
                     : "";
+            Kingdom authority = FindKingdom(row.OriginalKingdomId);
+            string sharedBase = !string.IsNullOrWhiteSpace(
+                    authority?.data?.name)
+                ? authority.data.name.Trim()
+                : !string.IsNullOrWhiteSpace(pKingdom.data.name)
+                    ? pKingdom.data.name.Trim()
+                    : row.OriginalStateName;
             return SuccessionDisputeDisplayRules.BuildQualifiedName(
-                StateNameRules.IsValid(row.OriginalStateName)
-                    ? row.OriginalStateName
-                    : pKingdom.name,
+                sharedBase,
                 qualifier, active: true,
                 HistoryLocalizationRules.CurrentLanguage());
+        }
+
+        internal static Kingdom[] GetSharedNameMembers(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null ||
+                !TryGetMaterializedByKingdom(pKingdom.id,
+                    out SuccessionDisputeSnapshot row))
+                return pKingdom?.data == null
+                    ? Array.Empty<Kingdom>()
+                    : new[] { pKingdom };
+            Kingdom original = FindKingdom(row.OriginalKingdomId);
+            Kingdom rival = FindKingdom(row.RivalKingdomId);
+            if (original?.data == null || original.isRekt())
+                return rival?.data == null || rival.isRekt()
+                    ? new[] { pKingdom }
+                    : new[] { rival };
+            if (rival?.data == null || rival.isRekt())
+                return new[] { original };
+            return new[] { original, rival };
+        }
+
+        internal static Kingdom GetSharedNameAuthority(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null ||
+                !TryGetMaterializedByKingdom(pKingdom.id,
+                    out SuccessionDisputeSnapshot row))
+                return pKingdom;
+            Kingdom original = FindKingdom(row.OriginalKingdomId);
+            return original?.data != null && !original.isRekt()
+                ? original
+                : pKingdom;
+        }
+
+        internal static string GetLegacySharedName(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null &&
+                   TryGetMaterializedByKingdom(pKingdom.id,
+                       out SuccessionDisputeSnapshot row)
+                ? row.OriginalStateName ?? string.Empty
+                : string.Empty;
         }
 
         private static bool IsMaterializedNow(
@@ -1186,14 +1239,16 @@ namespace AncientWarfare3.core.lineage
         private static void CommitCanonicalNames(
             SuccessionDisputeSnapshot pRow)
         {
-            if (pRow == null ||
-                !StateNameRules.IsValid(pRow.OriginalStateName)) return;
-            string canonical = SuccessionDisputeDisplayRules
-                .CanonicalNameForLiveCommit(pRow.OriginalStateName);
-            CommitLiveName(FindKingdom(pRow.OriginalKingdomId),
-                canonical);
-            CommitLiveName(FindKingdom(pRow.RivalKingdomId),
-                canonical);
+            if (pRow == null) return;
+            Kingdom original = FindKingdom(pRow.OriginalKingdomId);
+            Kingdom rival = FindKingdom(pRow.RivalKingdomId);
+            string canonical = AWLocalizedKingdomRenameRules.
+                ResolveSettlementBase(original?.data?.name,
+                    rival?.data?.name,
+                    pRow.OriginalStateName);
+            if (string.IsNullOrWhiteSpace(canonical)) return;
+            CommitLiveName(original, canonical);
+            CommitLiveName(rival, canonical);
         }
 
         private static void CommitLiveName(Kingdom pKingdom,

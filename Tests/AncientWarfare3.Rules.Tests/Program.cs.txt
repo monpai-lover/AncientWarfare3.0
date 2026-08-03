@@ -121,7 +121,15 @@ if (args.Length == 1 && args[0] == "--integrated-naming-rules-slice")
 if (args.Length == 1 && args[0] == "--localized-name-migration-slice")
 {
     LocalizedNameMigrationRulesTests.Run();
+    KingdomRenamePersistenceRulesTests.Run();
     Console.WriteLine("AW3 localized-name migration rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--kingdom-rename-persistence-slice")
+{
+    KingdomRenamePersistenceRulesTests.Run();
+    Console.WriteLine("AW3 kingdom rename persistence rules passed.");
     return;
 }
 
@@ -472,6 +480,7 @@ if (args.Length == 1 && args[0] == "--guest-office-end-slice")
 if (args.Length == 1 && args[0] == "--name-system-slice")
 {
     NameSystemRulesTests.Run();
+    KingdomRenamePersistenceRulesTests.Run();
     Console.WriteLine("AW3 name-system rules passed.");
     return;
 }
@@ -7620,6 +7629,7 @@ OfficialCareerRewardCooldownPersistenceSqlTests.Run();
 OfficialCareerClosePersistenceSqlTests.Run();
 CourtDispositionSqlTests.Run();
 NameSystemRulesTests.Run();
+KingdomRenamePersistenceRulesTests.Run();
 XiaExpansionAndCivMonkeyNamingRulesTests.Run();
 IntegratedNamingRulesTests.Run();
 WesternLineageNamingRulesTests.Run();

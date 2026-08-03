@@ -1,0 +1,176 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
+
+internal static class KingdomRenamePersistenceRulesTests
+{
+    public static void Run()
+    {
+        AWLocalizedNameEditDecision chineseEdit =
+            AWLocalizedKingdomRenameRules.ResolveEdit(
+                "ch", "New Chinese", "Native Realm", "Old Chinese");
+        Equal("Native Realm", chineseEdit.NativeName,
+            "a Chinese edit preserves the native identity slot");
+        Equal("New Chinese", chineseEdit.ChineseName,
+            "a Chinese edit updates only the Chinese identity slot");
+
+        AWLocalizedNameEditDecision nativeEdit =
+            AWLocalizedKingdomRenameRules.ResolveEdit(
+                "en", "New Native", "Old Native", "Chinese Realm");
+        Equal("New Native", nativeEdit.NativeName,
+            "a non-Chinese edit updates only the native identity slot");
+        Equal("Chinese Realm", nativeEdit.ChineseName,
+            "a non-Chinese edit preserves the Chinese identity slot");
+
+        AWLocalizedNameEditDecision partnerChineseEdit =
+            AWLocalizedKingdomRenameRules.ResolveEdit(
+                "ch", "Shared Chinese", "Partner Native",
+                "Partner Chinese");
+        Equal("Partner Native", partnerChineseEdit.NativeName,
+            "a split partner preserves its own inactive native slot");
+        Equal("Shared Chinese", partnerChineseEdit.ChineseName,
+            "a split partner receives only the edited Chinese base");
+        AWLocalizedNameEditDecision originalChineseEdit =
+            AWLocalizedKingdomRenameRules.ResolveEdit(
+                "ch", "Shared Chinese", "Original Native",
+                "Original Chinese");
+        string sharedEnglish =
+            AWLocalizedKingdomRenameRules.ResolveSharedProjection(
+                "en", originalChineseEdit.NativeName,
+                originalChineseEdit.ChineseName, "Legacy Database Name");
+        Equal("Original Native", sharedEnglish,
+            "language switching projects the shared authority native slot");
+        Equal("Eastern Original Native",
+            SuccessionDisputeDisplayRules.BuildQualifiedName(
+                sharedEnglish, "east", active: true, language: "en"),
+            "the original nameplate adds direction to the shared native base");
+        Equal("Western Original Native",
+            SuccessionDisputeDisplayRules.BuildQualifiedName(
+                sharedEnglish, "west", active: true, language: "en"),
+            "the rival nameplate adds direction to the same native base");
+        Equal("Original Native",
+            AWLocalizedKingdomRenameRules.ResolveSettlementBase(
+                sharedEnglish, "Rival Native", "Shared Chinese"),
+            "settlement keeps the current bilingual projection, not DB text");
+        Equal("Rival Native",
+            AWLocalizedKingdomRenameRules.ResolveSettlementBase(
+                string.Empty, "Rival Native", "Shared Chinese"),
+            "settlement uses a surviving rival before legacy DB text");
+        Equal(true, AWLocalizedKingdomRenameRules.ShouldCommitManualEdit(
+                originalAccepted: true, hasManualEditContext: true),
+            "an accepted kingdom UI edit commits localized identity");
+        Equal(false, AWLocalizedKingdomRenameRules.ShouldCommitManualEdit(
+                originalAccepted: true, hasManualEditContext: false),
+            "automatic generated names never enter the manual edit path");
+
+        var pending = new AWBoundedLocalizedNameWriteQueue(2);
+        pending.Enqueue("Kingdom", 42L, Snapshot("Old Native", "Old Chinese"));
+        pending.Enqueue("Kingdom", 42L, Snapshot("New Native", "New Chinese"));
+        Equal(1, pending.Count,
+            "an exact kingdom identity replaces its stale pending snapshot");
+        Equal(true, pending.TryDequeue(out AWLocalizedNamePendingWrite write),
+            "the replacement identity remains queued");
+        Equal("New Native", write.Snapshot.NativeName,
+            "the queued snapshot contains the latest native name");
+        Equal("New Chinese", write.Snapshot.ChineseName,
+            "the queued snapshot contains the latest Chinese name");
+
+        AWLocalizedNameIdentitySnapshot saved =
+            Snapshot("Saved Native", "Saved Chinese");
+        AWLocalizedNameIdentitySnapshot staleDatabase =
+            Snapshot("Database Native", "Database Chinese");
+        AWLocalizedNameIdentitySnapshot restored =
+            AWLocalizedNameRestoreRules.Merge(saved, staleDatabase,
+                AWLocalizedNameMigrationRules.CurrentSchemaVersion);
+        Equal("Saved Native", restored.NativeName,
+            "current-schema save data is authoritative for native names");
+        Equal("Saved Chinese", restored.ChineseName,
+            "current-schema save data is authoritative for Chinese names");
+
+        AWLocalizedNameIdentitySnapshot partialSaved = new(
+            "Saved Native", string.Empty, "Saved Given", string.Empty,
+            "saved_generator", 7L,
+            AWLocalizedNameMigrationRules.CurrentSchemaVersion);
+        AWLocalizedNameIdentitySnapshot completed =
+            AWLocalizedNameRestoreRules.Merge(partialSaved, staleDatabase,
+                AWLocalizedNameMigrationRules.CurrentSchemaVersion);
+        Equal("Saved Native", completed.NativeName,
+            "SQLite cannot overwrite a present current-schema slot");
+        Equal("Database Chinese", completed.ChineseName,
+            "SQLite fills a missing current-schema slot");
+
+        Equal(true, AWLocalizedNameProjectionChangeRules.ShouldInvalidate(
+                "Old Realm", "New Realm"),
+            "a changed visible name invalidates name projections");
+        Equal(false, AWLocalizedNameProjectionChangeRules.ShouldInvalidate(
+                "New Realm", "New Realm"),
+            "an unchanged projection does not invalidate caches twice");
+        var invalidatedKingdoms = new HashSet<long>();
+        Equal(true, AWLocalizedNameProjectionChangeRules.
+                TryMarkInvalidated(invalidatedKingdoms, 42L,
+                    "Old Realm", "New Realm"),
+            "the first visible change schedules one kingdom invalidation");
+        Equal(false, AWLocalizedNameProjectionChangeRules.
+                TryMarkInvalidated(invalidatedKingdoms, 42L,
+                    "Old Realm", "New Realm"),
+            "the same kingdom cannot invalidate twice in one projection");
+        Equal(false, AWLocalizedNameProjectionChangeRules.
+                TryMarkInvalidated(invalidatedKingdoms, 43L,
+                    "New Realm", "New Realm"),
+            "an unchanged kingdom never enters the invalidation set");
+
+        string uiBaseName = "New Zhou";
+        Equal("New Zhou Kingdom", KingdomNameplateSuffixRules.ProjectName(
+                uiBaseName, " Kingdom", pShouldDisplaySuffix: true),
+            "the nameplate decorates the same base name shown by kingdom UI");
+
+        (string east, string west) =
+            SuccessionDisputeDisplayRules.BuildDistinctPair(
+                uiBaseName, "east", "west", active: true, language: "en");
+        Equal("Eastern New Zhou", east,
+            "the original split keeps its direction around the updated base");
+        Equal("Western New Zhou", west,
+            "the rival split shares the updated base with its own direction");
+
+        string root = Directory.GetCurrentDirectory();
+        string editPatch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "naming", "AW_KingdomNameEditPatch.cs"));
+        Equal(true, editPatch.Contains("typeof(KingdomWindow), \"onNameChange\"") &&
+                    editPatch.Contains("__result"),
+            "localized identity commits only after a successful kingdom UI edit");
+
+        string migrationService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "naming", "AWLocalizedNameMigrationService.cs"));
+        Equal(true, migrationService.Contains("AWLocalizedNameRestoreRules.Merge") &&
+                    migrationService.Contains("databaseStale") &&
+                    migrationService.Contains(
+                        "AWLocalizedKingdomNameService.ProjectStored(kingdom"),
+            "restore merges before applying and refreshes only changed kingdom names");
+
+        string projectionService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "KingdomRenameProjectionService.cs"));
+        Equal(true, projectionService.Contains("nameplate_manager?.clearCaches") &&
+                    projectionService.Contains(
+                        "HierarchicalVassalMapModeService.MarkKingdomDirty"),
+            "rename projection invalidates vanilla and hierarchical nameplates");
+        Equal(false, projectionService.Contains("DirtyMapIfActive"),
+            "rename projection does not trigger unrelated map-mode redraws");
+        Equal(false, projectionService.Contains("ModeGeometry") ||
+                     projectionService.Contains("Texture"),
+            "rename projection does not rebuild map geometry or textures");
+    }
+
+    private static AWLocalizedNameIdentitySnapshot Snapshot(
+        string nativeName, string chineseName)
+    {
+        return new AWLocalizedNameIdentitySnapshot(nativeName, chineseName,
+            "Given", "Family", "generator", 7L,
+            AWLocalizedNameMigrationRules.CurrentSchemaVersion);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

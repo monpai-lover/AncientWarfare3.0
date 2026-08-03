@@ -33,10 +33,11 @@ namespace AncientWarfare3.core.naming
                 schemaVersion);
         }
 
-        internal static void Apply(BaseSystemData pData,
+        internal static bool Apply(BaseSystemData pData,
             AWLocalizedNameIdentitySnapshot pIdentity)
         {
-            if (pData == null || pIdentity == null) return;
+            if (pData == null || pIdentity == null) return false;
+            string before = pData.name ?? string.Empty;
             pData.set(AWNameDataKeys.NativeName, pIdentity.NativeName ??
                 string.Empty);
             pData.set(AWNameDataKeys.ChineseName, pIdentity.ChineseName ??
@@ -51,6 +52,8 @@ namespace AncientWarfare3.core.naming
             pData.set(AWNameDataKeys.NamingSchemaVersion,
                 pIdentity.SchemaVersion);
             AWLocalizedNameService.ProjectStored(pData);
+            return AWLocalizedNameProjectionChangeRules.ShouldInvalidate(
+                before, pData.name);
         }
 
         internal static bool TryLoad(string pMetaType, long pObjectId,
