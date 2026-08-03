@@ -176,6 +176,13 @@ internal static class ZhuluWarRulesTests
         False(ZhuluWarRules.ShouldIssueDiplomaticDeclaration(-.01d),
             "invalid negative rolls do not issue");
 
+        False(ZhuluWarRules.CanCreateDeclaration("age_hope"),
+            "Hope blocks new Zhulu declarations");
+        True(ZhuluWarRules.CanCreateDeclaration("age_zhulu"),
+            "the Zhulu age permits new declarations");
+        True(ZhuluWarRules.CanCreateDeclaration("age_wonders"),
+            "other ages retain intrinsic eligibility");
+
         Equal(290, WarTargetSelectionRules.ScoreTarget(
                 ZhuluWarRules.GoalTypeId,
                 pHasCore: false, pHasStrongClaim: false,
@@ -290,8 +297,9 @@ internal static class ZhuluWarRulesTests
             "territory persistence recognizes the zhulu goal");
         True(declaration.Contains("public static bool IssueZhulu(") &&
              declaration.Contains("ZhuluWarRules.GoalTypeId") &&
-             declaration.Contains("ZhuluWarRules.WarTypeId"),
-            "Zhulu exposes a normal diplomatic notice entry point");
+             declaration.Contains("ZhuluWarRules.WarTypeId") &&
+             declaration.Contains("ZhuluWarRules.CanCreateDeclaration("),
+            "the final Zhulu issue boundary enforces the age gate");
         True(declaration.Contains("case ZhuluWarRules.GoalTypeId:"),
             "the locked declaration plan recognizes the Zhulu goal");
         False(declaration.Contains("ZhuluWarService.CanDeclare("),

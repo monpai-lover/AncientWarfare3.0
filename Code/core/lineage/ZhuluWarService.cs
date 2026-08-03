@@ -13,9 +13,15 @@ namespace AncientWarfare3.core.lineage
             bool pZhuluAgeOverride, out string reason)
         {
             reason = "";
+            string currentAgeId = World.world?.map_stats?.world_age_id;
+            if (!ZhuluWarRules.CanCreateDeclaration(currentAgeId))
+            {
+                reason = ZhuluWarRules.HopeAgeBlockedReason;
+                return false;
+            }
             bool ageOverride = ZhuluAgeRules.ShouldUseWarOverride(
                 pZhuluAgeOverride,
-                World.world?.map_stats?.world_age_id);
+                currentAgeId);
             Kingdom attackerRoot = VassalService.GetRootSuzerain(attacker);
             Kingdom defenderRoot = VassalService.GetRootSuzerain(defender);
             bool sameRoot = attackerRoot?.data != null &&

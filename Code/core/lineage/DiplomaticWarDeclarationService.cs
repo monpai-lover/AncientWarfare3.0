@@ -150,6 +150,8 @@ namespace AncientWarfare3.core.lineage
         public static bool IssueZhulu(Kingdom pAttacker,
             Kingdom pDefender)
         {
+            if (!ZhuluWarRules.CanCreateDeclaration(
+                    World.world?.map_stats?.world_age_id)) return false;
             City target = FindDisplayCity(pAttacker, pDefender,
                 ZhuluWarRules.GoalTypeId);
             return Issue(pAttacker, pDefender,

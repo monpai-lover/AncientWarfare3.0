@@ -54,7 +54,16 @@ namespace AncientWarfare3.core.lineage
         public const string GoalTypeId = "zhulu_annexation";
         public const string SettlementBlockedReason =
             "zhulu_requires_total_annexation";
+        public const string HopeAgeId = "age_hope";
+        public const string HopeAgeBlockedReason =
+            "zhulu_blocked_in_hope_age";
         public const double DiplomaticDeclarationChance = .70d;
+
+        public static bool CanCreateDeclaration(string currentAgeId)
+        {
+            return !string.Equals(currentAgeId, HopeAgeId,
+                StringComparison.Ordinal);
+        }
 
         public static bool ShouldIssueDiplomaticDeclaration(double pRoll)
         {
