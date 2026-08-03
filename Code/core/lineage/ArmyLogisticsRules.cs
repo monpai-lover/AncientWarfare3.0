@@ -56,10 +56,12 @@ namespace AncientWarfare3.core.lineage
             if (pFacts == null)
                 return new ArmyOperationalDirectorProjection(0, false,
                     true, true, 0);
-            int supplyFactor = pFacts.Supply <=
+            int effectiveSupply = ArmyLogisticsRules.EffectiveSupply(
+                pFacts.Supply);
+            int supplyFactor = effectiveSupply <=
                                ArmyOperationalThresholds.CriticalSupply
                 ? 50
-                : pFacts.Supply <= ArmyOperationalThresholds.LowSupply
+                : effectiveSupply <= ArmyOperationalThresholds.LowSupply
                     ? 75
                     : 100;
             int organizationFactor = pFacts.Organization <=
@@ -78,7 +80,7 @@ namespace AncientWarfare3.core.lineage
                 : scaled >= int.MaxValue * 10_000L
                     ? int.MaxValue
                     : (int)(scaled / 10_000L);
-            bool lowSupply = pFacts.Supply <=
+            bool lowSupply = effectiveSupply <=
                              ArmyOperationalThresholds.LowSupply;
             bool poorOrganization = pFacts.Organization <
                                     ArmyOperationalThresholds.
@@ -87,14 +89,17 @@ namespace AncientWarfare3.core.lineage
                 pGoodSupply: !lowSupply,
                 pLowSupply: lowSupply,
                 pPoorOrganization: poorOrganization,
-                pRegroupRecovery: RegroupRecoveryForSupply(pFacts.Supply));
+                pRegroupRecovery: RegroupRecoveryForSupply(
+                    effectiveSupply));
         }
 
         public static int RegroupRecoveryForSupply(int supply)
         {
-            if (supply <= ArmyOperationalThresholds.CriticalSupply)
+            int effectiveSupply = ArmyLogisticsRules.EffectiveSupply(supply);
+            if (effectiveSupply <=
+                ArmyOperationalThresholds.CriticalSupply)
                 return 0;
-            return supply <= ArmyOperationalThresholds.LowSupply
+            return effectiveSupply <= ArmyOperationalThresholds.LowSupply
                 ? ArmyOperationalThresholds.LowSupplyRegroupRecovery
                 : ArmyOperationalThresholds.FullRegroupRecovery;
         }
@@ -224,6 +229,7 @@ namespace AncientWarfare3.core.lineage
 
     public static class ArmyLogisticsRules
     {
+        public static bool SupplySimulationEnabled => false;
         public const double WorldTimePerLogisticsPeriod = 5d;
         public const int MinimumSupply = 0;
         public const int MaximumSupply = 100;
@@ -250,6 +256,20 @@ namespace AncientWarfare3.core.lineage
         public const double PursuitDistanceBudget = 12d;
         public const int MinimumOperationalForce = 2;
 
+        public static int EffectiveSupply(int observedSupply)
+        {
+            return SupplySimulationEnabled
+                ? Math.Max(MinimumSupply,
+                    Math.Min(MaximumSupply, observedSupply))
+                : MaximumSupply;
+        }
+
+        public static bool EffectiveSupplyConnection(
+            bool observedConnection)
+        {
+            return !SupplySimulationEnabled || observedConnection;
+        }
+
         public static long LogisticsPeriodForWorldTime(double pWorldTime)
         {
             if (double.IsNaN(pWorldTime) || pWorldTime <= 0d) return 0L;
@@ -274,6 +294,7 @@ namespace AncientWarfare3.core.lineage
             ArmyRtsState pState, bool connectedSupply, bool inCorridor,
             bool strategicMovementProgressed = true)
         {
+            if (!SupplySimulationEnabled) return MaximumSupply;
             int delta = StateSupplyDelta(pState);
             if (pState == ArmyRtsState.March &&
                 !strategicMovementProgressed)
@@ -291,11 +312,12 @@ namespace AncientWarfare3.core.lineage
             long delta = (long)Math.Max(0, pFacts.RecentCasualties) *
                          OrganizationPerCasualty;
             if (pFacts.CaptainLost) delta += CaptainLossOrganization;
-            if (pFacts.Supply <= CriticalSupply)
+            int effectiveSupply = EffectiveSupply(pFacts.Supply);
+            if (effectiveSupply <= CriticalSupply)
                 delta += CriticalSupplyOrganization;
             if (pFacts.Regrouping)
                 delta += ArmyOperationalDirectorRules.
-                    RegroupRecoveryForSupply(pFacts.Supply);
+                    RegroupRecoveryForSupply(effectiveSupply);
             if (pFacts.NearbySupport)
                 delta += NearbySupportOrganizationRecovery;
             if (pFacts.UninterruptedMarch)
@@ -327,7 +349,8 @@ namespace AncientWarfare3.core.lineage
             bool minimumForceReady = true)
         {
             return organization >= RegroupOrganization &&
-                   supply > CriticalSupply && minimumForceReady;
+                   EffectiveSupply(supply) > CriticalSupply &&
+                   minimumForceReady;
         }
 
         public static ArmyConnectivityResult ResolveConnectivity(
@@ -354,9 +377,11 @@ namespace AncientWarfare3.core.lineage
             ArmyPursuitFacts pFacts)
         {
             if (pFacts == null) return ArmyRtsState.Hold;
-            if (pFacts.Supply <= CriticalSupply || pFacts.NeedsRegroup)
+            if (EffectiveSupply(pFacts.Supply) <= CriticalSupply ||
+                pFacts.NeedsRegroup)
                 return ArmyRtsState.Regroup;
-            if (pFacts.RouteArrived || !pFacts.InCorridor ||
+            if (pFacts.RouteArrived ||
+                !EffectiveSupplyConnection(pFacts.InCorridor) ||
                 pFacts.ElapsedTime >= PursuitTimeBudget ||
                 pFacts.DistanceTiles >= PursuitDistanceBudget)
                 return ArmyRtsState.Hold;
@@ -373,7 +398,8 @@ namespace AncientWarfare3.core.lineage
             {
                 ArmyPursuitEndpointCandidate candidate = pCandidates[i];
                 if (candidate.TileId < 0 || !candidate.SameIsland ||
-                    !candidate.InCorridor || candidate.DistanceTiles <= 0d ||
+                    !EffectiveSupplyConnection(candidate.InCorridor) ||
+                    candidate.DistanceTiles <= 0d ||
                     candidate.DistanceTiles > PursuitDistanceBudget)
                     continue;
                 if (candidate.DistanceTiles < selectedDistance ||
@@ -392,7 +418,7 @@ namespace AncientWarfare3.core.lineage
         {
             return tileValid && ground && !liquid && !ocean && !lava &&
                    !blocked && !walled && !cityCenter && sameIsland &&
-                   inCorridor;
+                   EffectiveSupplyConnection(inCorridor);
         }
 
     }
