@@ -17,21 +17,10 @@ namespace AncientWarfare3.patch
         private static bool SetTask_Prefix(AiSystemActor __instance,
             string pTaskId)
         {
+            if (!WartimeMilitaryTaskRules.
+                    ShouldEvaluateMilitaryState(pTaskId)) return true;
             return WartimeMilitaryTaskGate.Allows(
-                FindActor(__instance), pTaskId);
-        }
-
-        private static Actor FindActor(AiSystemActor pSystem)
-        {
-            try
-            {
-                return Traverse.Create(pSystem).Field("ai_object")
-                    .GetValue<Actor>();
-            }
-            catch
-            {
-                return null;
-            }
+                __instance.ai_object, pTaskId);
         }
     }
 
@@ -46,32 +35,14 @@ namespace AncientWarfare3.patch
         [HarmonyPrefix]
         private static bool Update_Prefix(AiSystemActor __instance)
         {
-            Actor actor = FindActor(__instance);
-            string taskId = FindTaskId(__instance);
-            if (WartimeMilitaryTaskGate.Allows(actor, taskId)) return true;
+            string taskId = __instance.task?.id;
+            if (!WartimeMilitaryTaskRules.
+                    ShouldEvaluateMilitaryState(taskId)) return true;
+            if (WartimeMilitaryTaskGate.Allows(
+                    __instance.ai_object, taskId)) return true;
             try { __instance.setTaskBehFinished(); }
             catch { }
             return false;
-        }
-
-        private static Actor FindActor(AiSystemActor pSystem)
-        {
-            try
-            {
-                return Traverse.Create(pSystem).Field("ai_object")
-                    .GetValue<Actor>();
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static string FindTaskId(AiSystemActor pSystem)
-        {
-            try { return Traverse.Create(pSystem).Field("task")
-                .GetValue<BehaviourTaskActor>()?.id; }
-            catch { return null; }
         }
     }
 

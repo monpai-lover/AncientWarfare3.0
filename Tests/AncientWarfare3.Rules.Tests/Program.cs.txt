@@ -411,6 +411,7 @@ if (args.Length == 1 && args[0] == "--rts-replenishment-arrival-slice")
 if (args.Length == 1 && args[0] == "--rts-wartime-lifecycle-slice")
 {
     ActiveMilitaryLifecycleRulesTests.Run();
+    WartimeMilitaryTaskRulesTests.Run();
     TemporaryLevyRulesTests.Run();
     TemporaryLevyRecoveryRulesTests.Run();
     WarParticipantRosterRulesTests.Run();
@@ -7745,6 +7746,7 @@ HistoryUiRulesTests.Run();
 ChronicleTextExportRulesTests.Run();
 HistoryLocalizationRulesTests.Run();
 ActiveMilitaryLifecycleRulesTests.Run();
+WartimeMilitaryTaskRulesTests.Run();
 ArmyLogisticsSustainmentRulesTests.Run();
 ArmyRtsRouteChoiceRulesTests.Run();
 ArmyRtsReplenishmentArrivalRulesTests.Run();

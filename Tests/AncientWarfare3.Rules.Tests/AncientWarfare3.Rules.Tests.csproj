@@ -20,6 +20,7 @@
     <Compile Include="AWPathRequestReuseRulesTests.cs.txt" />
     <Compile Include="IdleBehaviourThrottleGateTests.cs.txt" />
     <Compile Include="ActiveMilitaryLifecycleRulesTests.cs.txt" />
+    <Compile Include="WartimeMilitaryTaskRulesTests.cs.txt" />
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
@@ -396,6 +397,7 @@
     <Compile Include="..\..\Code\core\lineage\StandingArmyRules.cs" Link="Production\StandingArmyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SoldierRetirementRules.cs" Link="Production\SoldierRetirementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActiveMilitaryLifecycleRules.cs" Link="Production\ActiveMilitaryLifecycleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WartimeMilitaryTaskRules.cs" Link="Production\WartimeMilitaryTaskRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MilitaryRecruitmentScope.cs" Link="Production\MilitaryRecruitmentScope.cs" />
     <Compile Include="..\..\Code\core\lineage\KingdomMilitaryReadinessRules.cs" Link="Production\KingdomMilitaryReadinessRules.cs" />
     <Compile Include="..\..\Code\core\lineage\KingdomMilitaryReadinessIndex.cs" Link="Production\KingdomMilitaryReadinessIndex.cs" />

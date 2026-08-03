@@ -10,6 +10,11 @@ namespace AncientWarfare3.core.lineage
             return !pWartimeMilitary || !IsCivilianTask(pTaskId);
         }
 
+        public static bool ShouldEvaluateMilitaryState(string pTaskId)
+        {
+            return IsCivilianTask(pTaskId);
+        }
+
         public static bool IsCivilianTask(string pTaskId)
         {
             if (string.IsNullOrEmpty(pTaskId)) return false;

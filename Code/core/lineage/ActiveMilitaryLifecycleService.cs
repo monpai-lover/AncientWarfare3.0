@@ -63,14 +63,10 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return false;
             try
             {
-                foreach (War war in pKingdom.getWars())
-                {
-                    if (war?.data != null && !war.hasEnded() &&
-                        war.hasKingdom(pKingdom)) return true;
-                }
+                return MilitaryEmergencyService.
+                    TryGetActiveWarId(pKingdom, out _);
             }
-            catch { }
-            return false;
+            catch { return false; }
         }
 
         private static bool IsCurrentCaptain(Actor pActor, Army pArmy)

@@ -1,0 +1,37 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WartimeMilitaryTaskRulesTests
+{
+    internal static void Run()
+    {
+        Equal(false, WartimeMilitaryTaskRules.
+                ShouldEvaluateMilitaryState("idle"),
+            "non-civilian tasks bypass military-state evaluation");
+        Equal(false, WartimeMilitaryTaskRules.
+                ShouldEvaluateMilitaryState(null),
+            "missing task ids bypass military-state evaluation");
+        Equal(true, WartimeMilitaryTaskRules.
+                ShouldEvaluateMilitaryState("socialize_with_actor"),
+            "socializing tasks evaluate military state");
+        Equal(true, WartimeMilitaryTaskRules.
+                ShouldEvaluateMilitaryState("sleep_inside"),
+            "listed civilian tasks evaluate military state");
+
+        Equal(true, WartimeMilitaryTaskRules.AllowsTask(
+                pWartimeMilitary: true, pTaskId: "idle"),
+            "wartime actors retain non-civilian tasks");
+        Equal(false, WartimeMilitaryTaskRules.AllowsTask(
+                pWartimeMilitary: true, pTaskId: "sleep_inside"),
+            "wartime actors still reject civilian tasks");
+        Equal(true, WartimeMilitaryTaskRules.AllowsTask(
+                pWartimeMilitary: false, pTaskId: "sleep_inside"),
+            "peacetime actors retain civilian tasks");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}
