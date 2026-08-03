@@ -76,8 +76,8 @@ internal static class DiplomaticWarAvailabilityRulesTests
                     "missing_claim_target")
             }, 0), "no available row has no selection");
 
-        DeclarationSubmissionPreservesAuthorityReason();
         DeclarationUiPreservesAvailabilityReasons();
+        DeclarationSubmissionPreservesAuthorityReason();
         EveryKnownDeclarationReasonIsLocalized();
     }
 
@@ -120,6 +120,13 @@ internal static class DiplomaticWarAvailabilityRulesTests
         True(decision.Contains("CanIssue(") &&
              decision.Contains("pSource, pTarget, pGoalType,"),
             "legacy blocked goal rows use authoritative validation");
+        string reportRows = Section(decision,
+            "private void AddReportRows(",
+            "private void AddProjectRows(");
+        False(reportRows.Contains("if (pReport.can_"),
+            "legacy war rows are not removed by target report flags");
+        Equal(9, Count(reportRows, "AddWarRow("),
+            "legacy window creates every supported war goal row");
     }
 
     private static void DeclarationSubmissionPreservesAuthorityReason()
@@ -142,13 +149,19 @@ internal static class DiplomaticWarAvailabilityRulesTests
             "pending declaration has a stable submission reason");
         True(handler.Contains("Rejected(failureReason)"),
             "host command preserves the authoritative rejection reason");
-        True(handler.Contains("CanIssue(attacker,") &&
-             handler.Contains("defender, request.Key, canonicalWarType,"),
-            "host revalidates a filtered-out goal authoritatively");
         True(handler.Contains("WarTypeForGoal(request.Key)"),
             "host revalidates with the canonical war type");
         True(handler.Contains("targetCity.kingdom != defender"),
             "host reserves stale target for a changed city identity");
+        string missingOptionBranch = Section(handler,
+            "if (option == null)", "bool issued =");
+        True(missingOptionBranch.Contains(
+                "TryIssue(attacker, defender,"),
+            "host submits a canonical request when a filtered option vanished");
+        True(missingOptionBranch.Contains("ReasonKeyForGoal(request.Key)"),
+            "host rebuilds a canonical reason key");
+        False(missingOptionBranch.Contains("StaleTarget"),
+            "filtered option branch never reports a live city as stale");
         False(handler.Contains(
                 "if (option == null) return StaleTarget();"),
             "missing filtered option is not automatically a stale city");
@@ -211,6 +224,31 @@ internal static class DiplomaticWarAvailabilityRulesTests
     {
         if (value) throw new InvalidOperationException(
             name + ": expected false");
+    }
+
+    private static string Section(string source, string start, string end)
+    {
+        int startIndex = source.IndexOf(start, StringComparison.Ordinal);
+        if (startIndex < 0) throw new InvalidOperationException(
+            "missing source section start: " + start);
+        int endIndex = source.IndexOf(end, startIndex + start.Length,
+            StringComparison.Ordinal);
+        if (endIndex < 0) throw new InvalidOperationException(
+            "missing source section end: " + end);
+        return source.Substring(startIndex, endIndex - startIndex);
+    }
+
+    private static int Count(string source, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(value, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 
     private static void Equal<T>(T expected, T actual, string name)

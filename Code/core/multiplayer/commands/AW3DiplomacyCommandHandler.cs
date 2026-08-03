@@ -242,11 +242,16 @@ namespace AncientWarfare3.core.multiplayer.commands
             {
                 string canonicalWarType = DiplomaticWarDeclarationService.
                     WarTypeForGoal(request.Key);
-                if (!DiplomaticWarDeclarationService.CanIssue(attacker,
-                        defender, request.Key, canonicalWarType,
-                        out string validationFailure))
-                    return Rejected(validationFailure);
-                return StaleTarget();
+                bool fallbackIssued = DiplomaticWarDeclarationService.
+                    TryIssue(attacker, defender, request.Key, targetCity,
+                        canonicalWarType, DiplomaticWarDeclarationService.
+                            ReasonKeyForGoal(request.Key),
+                        WarTerritoryService.GoalLabel(request.Key),
+                        out string fallbackFailure);
+                return fallbackIssued
+                    ? AW3CommandResult.Success("aw3_war_declaration_issued",
+                        defender.id)
+                    : Rejected(fallbackFailure);
             }
             bool issued = DiplomaticWarDeclarationService.TryIssue(attacker,
                 option, out string failureReason);

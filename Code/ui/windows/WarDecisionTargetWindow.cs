@@ -183,56 +183,49 @@ namespace AncientWarfare3.ui.windows
             string targetNameRich = RichKingdomName(target);
 
             AddProjectRows(pRows, pSource, pReport, target, targetName, targetNameRich);
-            if (pReport.can_take_mandate)
-                AddWarRow(pRows, pSource, target, pReport,
+            AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_TAKE_MANDATE),
                     AW_L10n.Text("aw_war_take_mandate", "\u593A\u53D6\u5929\u547D"),
                     WarTerritoryService.GOAL_TAKE_MANDATE,
                     AW_L10n.Text("aw_war_take_mandate_desc", "\u5BF9\u5F53\u524D\u5929\u547D\u56FD\u53D1\u52A8\u5929\u547D\u6218\u4E89\uFF0C\u80DC\u5229\u540E\u8F6C\u79FB\u5929\u547D\u3002"),
                     AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"));
 
-            if (pReport.can_mandate_conquest)
-                AddWarRow(pRows, pSource, target, pReport,
+            AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_MANDATE_CONQUEST),
                     AW_L10n.Text("aw_war_mandate_conquest", "\u5929\u547D\u5F81\u670D"),
                     WarTerritoryService.GOAL_MANDATE_CONQUEST,
                     AW_L10n.Text("aw_war_mandate_conquest_desc", "\u5929\u547D\u56FD\u5BF9\u5F31\u5C0F\u5916\u56FD\u53D1\u52A8\u5F81\u670D\u6218\u4E89\uFF0C\u4E0D\u9700\u5236\u9020\u5BA3\u79F0\u4E14\u4E0D\u53D7\u5F3A\u5BA3\u60E9\u7F5A\u3002"),
                     AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"));
 
-            if (pReport.can_reclaim)
-                AddWarRow(pRows, pSource, target, pReport,
+            AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_TAKE_CORE_CITY),
                     AW_L10n.Text("aw_war_reclaim", "\u6536\u590D\u6838\u5FC3"),
                     WarTerritoryService.GOAL_TAKE_CORE_CITY,
                     AW_L10n.Text("aw_war_reclaim_desc", "\u6536\u590D\u8BE5\u56FD\u5360\u636E\u7684\u6838\u5FC3\u57CE\u5E02"),
                     AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"));
 
-            if (pReport.can_press_claim)
-                AddWarRow(pRows, pSource, target, pReport,
+            AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_PRESS_CLAIM_CITY),
                     AW_L10n.Text("aw_war_press_claim", "\u6309\u5BA3\u79F0\u5BA3\u6218"),
                     WarTerritoryService.GOAL_PRESS_CLAIM_CITY,
                     AW_L10n.Text("aw_war_press_claim_desc", "\u6309\u5F3A/\u5F31\u5BA3\u79F0\u53D1\u52A8\u6218\u4E89"),
                     AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"));
 
-            if (pReport.can_restore)
-                AddWarRow(pRows, pSource, target, pReport,
+            AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_RESTORE_KINGDOM),
                     AW_L10n.Text("aw_war_restoration", "\u590D\u56FD\u6218\u4E89"),
                     WarTerritoryService.GOAL_RESTORE_KINGDOM,
                     AW_L10n.Text("aw_war_restoration_desc", "\u4EE5\u4EA1\u56FD\u738B\u5BA4\u8840\u7EDF\u53D1\u8D77\u590D\u56FD\u6218\u4E89"),
                     AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"));
 
-            if (pReport.can_force_vassal)
-                AddWarRow(pRows, pSource, target, pReport,
+            AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_FORCE_VASSAL),
                     AW_L10n.Text("aw_war_force_vassal", "\u5F3A\u5236\u81E3\u670D"),
                     WarTerritoryService.GOAL_FORCE_VASSAL,
                     AW_L10n.Text("aw_war_force_vassal_desc", "\u8FEB\u4F7F\u76EE\u6807\u6210\u4E3A\u9644\u5EB8"),
                     AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"));
 
-            if (pReport.can_force_tributary)
-                AddWarRow(pRows, pSource, target, pReport,
+            AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_FORCE_TRIBUTARY),
                     AW_L10n.Text("aw_war_force_tributary", "\u53E9\u5173\u7EB3\u8D21"),
                     WarTerritoryService.GOAL_FORCE_TRIBUTARY,
@@ -240,16 +233,14 @@ namespace AncientWarfare3.ui.windows
                         "\u8FEB\u4F7F\u76F8\u90BB\u5F31\u56FD\u5C81\u65F6\u7EB3\u8D21\uFF0C\u4F46\u4E0D\u7EB3\u5165\u9644\u5EB8\u4F53\u7CFB"),
                     AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"));
 
-            if (pReport.can_independence)
-                AddWarRow(pRows, pSource, target, pReport,
+            AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_INDEPENDENCE),
                     AW_L10n.Text("aw_war_independence", "\u72EC\u7ACB\u6218\u4E89"),
                     WarTerritoryService.GOAL_INDEPENDENCE,
                     AW_L10n.Text("aw_war_independence_desc", "\u5BF9\u5F53\u524D\u5B97\u4E3B\u53D1\u52A8\u72EC\u7ACB\u6218\u4E89"),
                     AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"));
 
-            if (pReport.can_no_cb)
-                AddWarRow(pRows, pSource, target, pReport,
+            AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_NO_CB),
                     AW_L10n.Text("aw_war_no_cb", "\u5F3A\u5BA3"),
                     WarTerritoryService.GOAL_NO_CB,
