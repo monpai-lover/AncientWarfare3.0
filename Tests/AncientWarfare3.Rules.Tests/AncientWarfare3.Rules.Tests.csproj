@@ -635,4 +635,8 @@
     <Compile Include="..\..\Code\core\asyncwork\AWAsyncWorkQueue.cs" Link="Production\AWAsyncWorkQueue.cs" />
     <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanArtifactWriter.cs" Link="Production\ArmyRtsPlanArtifactWriter.cs" />
   </ItemGroup>
+  <Target Name="WartimeMilitaryTaskGatePerformanceSourceGuard"
+      BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WartimeMilitaryTaskGatePerformanceSourceGuard.ps1&quot;" />
+  </Target>
 </Project>
