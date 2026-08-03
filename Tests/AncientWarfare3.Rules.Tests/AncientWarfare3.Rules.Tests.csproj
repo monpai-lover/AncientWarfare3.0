@@ -156,6 +156,7 @@
     <Compile Include="ArmyMapInformationRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalMapActivationRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalLabelPrecomputeRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalZoneLabelAccumulatorTests.cs.txt" />
     <Compile Include="AW3MultiplayerWorldLoadRulesTests.cs.txt" />
     <Compile Include="AW3RuntimeRestorePipelineTests.cs.txt" />
     <Compile Include="HistoricalFigureSpawnRulesTests.cs.txt" />
@@ -293,6 +294,7 @@
     <Compile Include="..\..\Code\core\lineage\MinimapActorMarkerRules.cs" Link="Production\MinimapActorMarkerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyMapInformationRules.cs" Link="Production\ArmyMapInformationRules.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalMapActivationRules.cs" Link="Production\HierarchicalVassalMapActivationRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalZoneLabelAccumulator.cs" Link="Production\HierarchicalVassalZoneLabelAccumulator.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalLabelInvalidationRules.cs" Link="Production\HierarchicalVassalLabelInvalidationRules.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalMapModeSchedulingRules.cs" Link="Production\HierarchicalVassalMapModeSchedulingRules.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalLabelPipelineRules.cs" Link="Production\HierarchicalVassalLabelPipelineRules.cs" />

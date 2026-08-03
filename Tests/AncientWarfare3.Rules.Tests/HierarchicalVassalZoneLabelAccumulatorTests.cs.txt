@@ -1,0 +1,43 @@
+using System;
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalZoneLabelAccumulatorTests
+{
+    internal static void Run()
+    {
+        var value = new HierarchicalVassalZoneLabelAccumulator();
+        Equal(true, value.Add(1, 0d, 0d, 10));
+        Equal(true, value.Add(2, 10d, 0d, 30));
+        Equal(false, value.Add(2, 99d, 99d, 30));
+        Equal(false, value.Add(3, 5d, 5d, 0));
+        Equal(true, value.TryBuild(out var metrics));
+        Near(7.5d, metrics.AnchorX);
+        Near(0d, metrics.AnchorY);
+        Equal(40, metrics.LandArea);
+        Equal(11, metrics.SpanX);
+        Equal(1, metrics.SpanY);
+        Near(0d, metrics.Angle);
+
+        var diagonal = new HierarchicalVassalZoneLabelAccumulator();
+        diagonal.Add(1, 0d, 0d, 1);
+        diagonal.Add(2, 20d, 20d, 1);
+        Equal(true, diagonal.TryBuild(out metrics));
+        Near(35d, metrics.Angle);
+        Equal(false,
+            new HierarchicalVassalZoneLabelAccumulator().TryBuild(out _));
+    }
+
+    private static void Equal<T>(T expected, T actual)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"expected {expected}, got {actual}");
+    }
+
+    private static void Near(double expected, double actual)
+    {
+        if (Math.Abs(expected - actual) > 0.0001d)
+            throw new InvalidOperationException(
+                $"expected {expected}, got {actual}");
+    }
+}
