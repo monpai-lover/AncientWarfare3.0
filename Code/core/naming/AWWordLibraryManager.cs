@@ -58,11 +58,75 @@ namespace AncientWarfare3.core.naming
             }
         }
 
-        public void InstallChineseNameLegacyAliases()
+        public void InstallChineseNameLegacyAliases(Action<string> pWarning = null)
         {
             InstallMergedAlias("阿拉伯名字", "阿拉伯男名", "阿拉伯女名");
             InstallMergedAlias("罗斯名字", "罗斯男名", "罗斯女名");
             InstallMergedAlias("犹太人名", "犹太男名", "犹太女名");
+            if (!InstallAlias("日本名字", "日本名字下"))
+                pWarning?.Invoke(
+                    "AW3 naming compatibility source is missing: 日本名字下.");
+            if (!InstallCyclicPairAlias("天干地支", "天干", "地支"))
+                pWarning?.Invoke(
+                    "AW3 naming compatibility sources are missing: 天干/地支.");
+        }
+
+        private bool InstallAlias(string pAlias, string pSource)
+        {
+            lock (_gate)
+            {
+                if (_libraries.ContainsKey(pAlias)) return true;
+                IEnumerable<string> words = _libraries.TryGetValue(pSource,
+                    out AWWordLibraryAsset source)
+                    ? source.Words
+                    : Array.Empty<string>();
+                var alias = new AWWordLibraryAsset(pAlias, words);
+                _libraries[pAlias] = alias;
+                return alias.Words.Count > 0;
+            }
+        }
+
+        private bool InstallCyclicPairAlias(string pAlias, string pFirst,
+            string pSecond)
+        {
+            lock (_gate)
+            {
+                if (_libraries.ContainsKey(pAlias)) return true;
+                string[] first = _libraries.TryGetValue(pFirst,
+                    out AWWordLibraryAsset firstAsset)
+                    ? firstAsset.Words.ToArray()
+                    : Array.Empty<string>();
+                string[] second = _libraries.TryGetValue(pSecond,
+                    out AWWordLibraryAsset secondAsset)
+                    ? secondAsset.Words.ToArray()
+                    : Array.Empty<string>();
+                if (first.Length == 0 || second.Length == 0)
+                {
+                    _libraries[pAlias] = new AWWordLibraryAsset(pAlias,
+                        Array.Empty<string>());
+                    return false;
+                }
+
+                int count = LeastCommonMultiple(first.Length, second.Length);
+                _libraries[pAlias] = new AWWordLibraryAsset(pAlias,
+                    Enumerable.Range(0, count)
+                        .Select(pIndex => first[pIndex % first.Length] +
+                                          second[pIndex % second.Length]));
+                return true;
+            }
+        }
+
+        private static int LeastCommonMultiple(int pFirst, int pSecond)
+        {
+            int first = pFirst;
+            int second = pSecond;
+            while (second != 0)
+            {
+                int remainder = first % second;
+                first = second;
+                second = remainder;
+            }
+            return checked(pFirst / first * pSecond);
         }
 
         private void InstallMergedAlias(string pAlias, string pFirst,

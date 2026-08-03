@@ -155,7 +155,8 @@ namespace AncientWarfare3.core.naming
             AWWordLibraryManager.Instance.ReplaceAll(
                 AWNamingResourceLoader.LoadWordLibraries(wordDirectory,
                     ModClass.LogWarning));
-            AWWordLibraryManager.Instance.InstallChineseNameLegacyAliases();
+            AWWordLibraryManager.Instance.InstallChineseNameLegacyAliases(
+                ModClass.LogWarning);
             AWNameGeneratorLibrary.Initialize(generatorDirectory,
                 ModClass.LogWarning);
             ModClass.LogInfo("AW3 integrated naming loaded: generators=" +
