@@ -1,6 +1,7 @@
 using AncientWarfare3.core.lineage;
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 internal static class CityReservePoolRulesTests
 {
@@ -275,6 +276,39 @@ internal static class CityReservePoolRulesTests
         Equal(false, CityReservePoolRules.ShouldDeferCallbackInvalidation(
             hasPersistedMember: true, restoreInFlight: false),
             "normal profession changes still validate reserve members");
+
+        PreparationUsesMaintainedActorPool();
+    }
+
+    private static void PreparationUsesMaintainedActorPool()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "CityReservePoolService.cs"));
+        Equal(true, source.Contains(
+                "int actorBudget = CityReservePoolRules.ActorBudget(preparation);",
+                StringComparison.Ordinal),
+            "daily and notice maintenance must budget actor-index work");
+        Equal(true, source.Contains(
+                "bool complete = MaintainCity(kingdom, city, state,",
+                StringComparison.Ordinal),
+            "daily and notice maintenance must populate the city actor pool");
+        Equal(true, source.Contains(
+                "if (!IndexEligibleActor(actor, kingdom, city, pool)) return;",
+                StringComparison.Ordinal),
+            "an eligible actor enters the reserve when becoming adult");
+        Equal(true, source.Contains(
+                "CityReservePoolRules.TryTakeNextActorId(pool.ActorIds,",
+                StringComparison.Ordinal),
+            "notice mobilization must consume the law-limited actor pool");
+        Equal(true, source.Contains(
+                "CityReservePoolRules.CanRestoreRejectedCandidate(",
+                StringComparison.Ordinal),
+            "a failed enlistment must restore its actor to the source pool");
+        Equal(true, source.Contains(
+                "foreach (Actor actor in World.world.units)",
+                StringComparison.Ordinal),
+            "load rebuild must reconstruct actor pools from living residents");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

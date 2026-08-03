@@ -344,6 +344,16 @@ if (args.Length == 1 && args[0] == "--army-mobilization-slice")
     return;
 }
 
+if (args.Length == 1 &&
+    args[0] == "--preparation-recruitment-completion-slice")
+{
+    CityReservePoolRulesTests.Run();
+    TemporaryLevyRulesTests.Run();
+    Console.WriteLine(
+        "AW3 preparation recruitment completion rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--rebellion-force-collapse-slice")
 {
     RebellionForceCollapseRulesTests.Run();
