@@ -1,0 +1,242 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.db;
+using AncientWarfare3.core.lineage;
+
+internal static class LineageBirthArchivePersistenceSqlTests
+{
+    public static void Run()
+    {
+        OrdinaryBirthCommitsArchiveAndTwoEdges();
+        SecondEdgeFailureRollsBackEverything();
+        RepeatedBirthIsIdempotent();
+    }
+
+    private static void OrdinaryBirthCommitsArchiveAndTwoEdges()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        LineageBirthArchiveWrite write = Birth("First snapshot", 10L, 20L,
+            100d);
+
+        using SQLiteTransaction tx = db.BeginTransaction();
+        LineageBirthArchiveOutcome outcome =
+            LineageBirthArchivePersistence.Execute(db, tx, write);
+        tx.Commit();
+
+        Equal(100L, outcome.ChildId, "outcome identifies the newborn");
+        True(outcome.ArchiveWritten, "outcome reports the archive write");
+        True(outcome.ParentSlot1Written, "outcome reports parent slot 1");
+        True(outcome.ParentSlot2Written, "outcome reports parent slot 2");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM ActorArchive WHERE ID=100"),
+            "birth writes one child archive");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM FamilyEdge WHERE CHILD_ID=100"),
+            "birth writes both parent edges");
+    }
+
+    private static void SecondEdgeFailureRollsBackEverything()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        Execute(db, "CREATE TRIGGER abort_second_parent_edge " +
+            "BEFORE INSERT ON FamilyEdge WHEN NEW.PARENT_SLOT=2 " +
+            "BEGIN SELECT RAISE(ABORT,'injected slot 2 failure'); END");
+
+        using SQLiteTransaction tx = db.BeginTransaction();
+        bool failed = false;
+        try
+        {
+            LineageBirthArchivePersistence.Execute(db, tx,
+                Birth("Rolled back", 10L, 20L, 100d));
+            tx.Commit();
+        }
+        catch (SQLiteException exception)
+        {
+            failed = true;
+            True(exception.Message.Contains("injected slot 2 failure",
+                    StringComparison.Ordinal),
+                "rollback failure comes from the slot 2 trigger");
+            tx.Rollback();
+        }
+
+        True(failed, "slot 2 trigger abort reaches the transaction owner");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM ActorArchive WHERE ID=100"),
+            "slot 2 failure rolls back the child archive");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM FamilyEdge WHERE CHILD_ID=100"),
+            "slot 2 failure rolls back both parent edges");
+    }
+
+    private static void RepeatedBirthIsIdempotent()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        Commit(db, Birth("First snapshot", 10L, 20L, 100d));
+        Commit(db, Birth("Latest snapshot", 11L, 22L, 200d));
+
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM ActorArchive WHERE ID=100"),
+            "repeated birth keeps one archive row");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM FamilyEdge WHERE CHILD_ID=100"),
+            "repeated birth keeps two deterministic parent edges");
+        Equal("Latest snapshot", TextScalar(db,
+                "SELECT DISPLAY_NAME FROM ActorArchive WHERE ID=100"),
+            "repeated birth keeps the latest child snapshot");
+        Equal(11L, Scalar(db,
+                "SELECT PARENT_ID FROM FamilyEdge WHERE EDGE_ID=1001"),
+            "repeated birth refreshes parent slot 1");
+        Equal(22L, Scalar(db,
+                "SELECT PARENT_ID FROM FamilyEdge WHERE EDGE_ID=1002"),
+            "repeated birth refreshes parent slot 2");
+        Equal(200d, DoubleScalar(db,
+                "SELECT CREATED_TIME FROM FamilyEdge WHERE EDGE_ID=1002"),
+            "repeated birth keeps the latest edge snapshot");
+    }
+
+    private static void Commit(SQLiteConnection pDb,
+        LineageBirthArchiveWrite pWrite)
+    {
+        using SQLiteTransaction tx = pDb.BeginTransaction();
+        LineageBirthArchivePersistence.Execute(pDb, tx, pWrite);
+        tx.Commit();
+    }
+
+    private static LineageBirthArchiveWrite Birth(string pDisplayName,
+        long pParentSlot1, long pParentSlot2, double pCreatedTime)
+    {
+        return new LineageBirthArchiveWrite(new ActorArchiveTableItem
+        {
+            id = 100L,
+            given_name = "Child",
+            display_name = pDisplayName,
+            family_name = "Family",
+            clan_name = "Clan",
+            lineage_id = 7L,
+            shi_id = 8L,
+            asset_id = "human",
+            subspecies_id = 9L,
+            subspecies_name = "Xia",
+            sex = 1,
+            status = "common_lineage",
+            kingdom_id = 30L,
+            kingdom_name = "Kingdom",
+            kingdom_color = "#112233",
+            city_id = 40L,
+            city_name = "City",
+            social_title = "Title",
+            social_title_color = "#445566",
+            original_clan_id = 50L,
+            clan_color_text = "#778899",
+            clan_color_id = 2,
+            clan_banner_icon_id = 3,
+            clan_banner_background_id = 4,
+            parent_id_1 = pParentSlot1,
+            parent_id_2 = pParentSlot2,
+            generation = 2,
+            noble_distance = 1,
+            ever_noble_blood = 1,
+            noble_origin_actor_id = 10L,
+            noble_origin_name = "Ancestor",
+            noble_origin_distance = 1,
+            birth_time = 90d,
+            death_time = -1d,
+            death_cause = "",
+            is_alive = 1,
+            name_integrated = 1,
+            head = 5,
+            skin = 6,
+            skin_set = 7,
+            age_overgrowth = 1,
+            phenotype_index = 8,
+            phenotype_shade = 9,
+            founded_branch_shi_id = -1L
+        }, pParentSlot1, pParentSlot2, pCreatedTime);
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE ActorArchive (" +
+            "ID INTEGER PRIMARY KEY,GIVEN_NAME TEXT,DISPLAY_NAME TEXT," +
+            "FAMILY_NAME TEXT,CLAN_NAME TEXT,LINEAGE_ID INTEGER," +
+            "SHI_ID INTEGER,ASSET_ID TEXT,SUBSPECIES_ID INTEGER," +
+            "SUBSPECIES_NAME TEXT,SEX INTEGER,STATUS TEXT," +
+            "KINGDOM_ID INTEGER,KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT," +
+            "CITY_ID INTEGER,CITY_NAME TEXT,SOCIAL_TITLE TEXT," +
+            "SOCIAL_TITLE_COLOR TEXT,ORIGINAL_CLAN_ID INTEGER," +
+            "CLAN_COLOR_TEXT TEXT,CLAN_COLOR_ID INTEGER," +
+            "CLAN_BANNER_ICON_ID INTEGER," +
+            "CLAN_BANNER_BACKGROUND_ID INTEGER,PARENT_ID_1 INTEGER," +
+            "PARENT_ID_2 INTEGER,GENERATION INTEGER,NOBLE_DISTANCE INTEGER," +
+            "EVER_NOBLE_BLOOD INTEGER,NOBLE_ORIGIN_ACTOR_ID INTEGER," +
+            "NOBLE_ORIGIN_NAME TEXT,NOBLE_ORIGIN_DISTANCE INTEGER," +
+            "BIRTH_TIME REAL,DEATH_TIME REAL,DEATH_CAUSE TEXT," +
+            "IS_ALIVE INTEGER,NAME_INTEGRATED INTEGER,HEAD INTEGER," +
+            "SKIN INTEGER,SKIN_SET INTEGER,AGE_OVERGROWTH INTEGER," +
+            "PHENOTYPE_INDEX INTEGER,PHENOTYPE_SHADE INTEGER," +
+            "FOUNDED_BRANCH_SHI_ID INTEGER)");
+        Execute(db, "CREATE TABLE FamilyEdge (" +
+            "EDGE_ID INTEGER PRIMARY KEY,CHILD_ID INTEGER," +
+            "PARENT_ID INTEGER,PARENT_SLOT INTEGER," +
+            "CHILD_LINEAGE_ID INTEGER,CREATED_TIME REAL)");
+        return db;
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static double DoubleScalar(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToDouble(command.ExecuteScalar());
+    }
+
+    private static string TextScalar(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToString(command.ExecuteScalar()) ?? "";
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue)
+            throw new InvalidOperationException(pName + ": expected true");
+    }
+
+    private static void Equal(long pExpected, long pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pName + ": expected " +
+                                                pExpected + ", got " +
+                                                pActual);
+    }
+
+    private static void Equal(double pExpected, double pActual,
+        string pName)
+    {
+        if (!pExpected.Equals(pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                                                pExpected + ", got " +
+                                                pActual);
+    }
+
+    private static void Equal(string pExpected, string pActual,
+        string pName)
+    {
+        if (!string.Equals(pExpected, pActual, StringComparison.Ordinal))
+            throw new InvalidOperationException(pName + ": expected '" +
+                                                pExpected + "', got '" +
+                                                pActual + "'");
+    }
+}

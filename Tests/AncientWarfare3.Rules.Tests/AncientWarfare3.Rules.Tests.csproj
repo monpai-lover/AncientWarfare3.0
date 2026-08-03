@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="LineageBirthArchivePersistenceSqlTests.cs.txt" />
     <Compile Include="ActorDiagnosticSamplingRulesTests.cs.txt" />
     <Compile Include="ActorAgeWorkRulesTests.cs.txt" />
     <Compile Include="ActorDeathArchiveRulesTests.cs.txt" />
@@ -85,6 +86,9 @@
     <Compile Include="..\..\Code\attributes\TableDefAttribute.cs" Link="Production\TableDefAttribute.cs" />
     <Compile Include="..\..\Code\attributes\TableItemDefAttribute.cs" Link="Production\TableItemDefAttribute.cs" />
     <Compile Include="..\..\Code\core\db\AbstractTableItem.cs" Link="Production\AbstractTableItem.cs" />
+    <Compile Include="..\..\Code\core\db\ActorArchiveTableItem.cs" Link="Production\ActorArchiveTableItem.cs" />
+    <Compile Include="..\..\Code\core\lineage\LineageBirthArchiveModels.cs" Link="Production\LineageBirthArchiveModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\LineageBirthArchivePersistence.cs" Link="Production\LineageBirthArchivePersistence.cs" />
     <Compile Include="..\..\Code\core\db\KingdomPolicyStateTableItem.cs" Link="Production\KingdomPolicyStateTableItem.cs" />
     <Compile Include="..\..\Code\core\db\KingdomCourtStateTableItem.cs" Link="Production\KingdomCourtStateTableItem.cs" />
     <Compile Include="..\..\Code\utils\SQLiteHelper.cs" Link="Production\SQLiteHelper.cs" />

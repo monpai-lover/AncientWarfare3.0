@@ -212,6 +212,13 @@ if (args.Length == 1 && args[0] == "--war-ai-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--lineage-atomic-birth-slice")
+{
+    LineageBirthArchivePersistenceSqlTests.Run();
+    Console.WriteLine("AW3 lineage atomic birth persistence passed.");
+    return;
+}
+
 if (args.Length == 1 &&
     args[0] == "--diplomatic-war-availability-slice")
 {
@@ -7628,5 +7635,6 @@ ActorAgeWorkRulesTests.Run();
 ActorDeathArchiveRulesTests.Run();
 ActorPresentationDirtyRulesTests.Run();
 AWPathRequestReuseRulesTests.Run();
+LineageBirthArchivePersistenceSqlTests.Run();
 
 Console.WriteLine("Rule tests passed.");
