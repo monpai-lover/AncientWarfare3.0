@@ -25,6 +25,7 @@ namespace AncientWarfare3.core.lineage
             MonthlyWork.Clear();
             Observations.Clear();
             QueuedWarIds.Clear();
+            WarForceSpecialSettlementService.ClearRuntime();
         }
 
         public static void ProcessAuthorityCycle()
@@ -65,11 +66,16 @@ namespace AncientWarfare3.core.lineage
         {
             if (!ObserveWar(pWar, pMonthKey,
                     out WarForceEliminationDecision decision) ||
+                WarPeaceSettlementService.Instance.
+                    HasActionableSettlement(pWar.data.id)) return false;
+            WarForceSpecialSettlementResult special =
+                WarForceSpecialSettlementService.TrySettle(pWar, decision);
+            if (special == WarForceSpecialSettlementResult.Handled)
+                return true;
+            if (special == WarForceSpecialSettlementResult.Failed ||
                 ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
                 RebellionDirectTerritoryTransferService.
                     BlocksOrdinarySettlement(pWar) ||
-                WarPeaceSettlementService.Instance.
-                    HasActionableSettlement(pWar.data.id) ||
                 !QueuedWarIds.Add(pWar.data.id)) return false;
             Enqueue(pWar.data.id, decision, 0);
             return true;

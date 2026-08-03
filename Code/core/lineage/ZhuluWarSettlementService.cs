@@ -7,9 +7,13 @@ namespace AncientWarfare3.core.lineage
     {
         private const string QueuePrefix = "zhulu_settlement:";
         private const int MaximumAttempts = 2;
+        private const string ForceQueuePrefix =
+            "zhulu_force_elimination_settlement:";
 
         [ThreadStatic] private static int _dedicatedSettlementDepth;
         private static readonly HashSet<long> QueuedWarIds =
+            new HashSet<long>();
+        private static readonly HashSet<long> ForceQueuedWarIds =
             new HashSet<long>();
 
         public static bool IsDedicatedSettlementActive =>
@@ -33,7 +37,20 @@ namespace AncientWarfare3.core.lineage
         public static void ClearRuntime()
         {
             QueuedWarIds.Clear();
+            ForceQueuedWarIds.Clear();
             _dedicatedSettlementDepth = 0;
+        }
+
+        public static bool QueueForceElimination(War pWar,
+            WarForceEliminationDecision pDecision)
+        {
+            long warId = pWar?.data?.id ?? -1L;
+            if (!ZhuluWarService.IsZhuluWar(pWar, requireActive: false) ||
+                pDecision.Kind == WarForceEliminationDecisionKind.None)
+                return false;
+            if (!ForceQueuedWarIds.Add(warId)) return true;
+            EnqueueForce(warId, 0);
+            return true;
         }
 
         public static void RebuildRuntime()
@@ -80,6 +97,78 @@ namespace AncientWarfare3.core.lineage
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 QueuePrefix + warId, DeferredWorkClass.Runtime,
                 () => Process(warId, attempt));
+        }
+
+        private static void EnqueueForce(long pWarId, int pAttempt)
+        {
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                ForceQueuePrefix + pWarId, DeferredWorkClass.Runtime,
+                () => ProcessForceElimination(pWarId, pAttempt));
+        }
+
+        private static void ProcessForceElimination(long pWarId,
+            int pAttempt)
+        {
+            War war = FindWar(pWarId);
+            if (war?.data == null || war.hasEnded() ||
+                !ZhuluWarService.IsZhuluWar(war, requireActive: false) ||
+                !WarForceEliminationSettlementService.
+                    TryGetConfirmedDecision(war,
+                        out WarForceEliminationDecision decision))
+            {
+                ForceQueuedWarIds.Remove(pWarId);
+                return;
+            }
+            Kingdom attacker = war.getMainAttacker();
+            Kingdom defender = war.getMainDefender();
+            Kingdom winner = decision.Beneficiary == WarScoreSide.Attackers
+                ? attacker
+                : defender;
+            Kingdom loser = winner == attacker ? defender : attacker;
+            WarWinner result = decision.Beneficiary == WarScoreSide.Attackers
+                ? WarWinner.Attackers
+                : decision.Beneficiary == WarScoreSide.Defenders
+                    ? WarWinner.Defenders
+                    : WarWinner.Peace;
+            try
+            {
+                bool surrender = decision.Kind ==
+                                     WarForceEliminationDecisionKind.
+                                         AttackersSurrender ||
+                                 decision.Kind ==
+                                     WarForceEliminationDecisionKind.
+                                         DefendersSurrender;
+                bool transferred = result == WarWinner.Peace ||
+                    (surrender
+                        ? WarForceSpecialSettlementService.
+                            TransferAllCities(loser, winner)
+                        : WarForceSpecialSettlementService.
+                            TransferScoreAffordableCities(war, loser,
+                                winner, decision.Score));
+                if (!transferred)
+                    throw new InvalidOperationException(
+                        "zhulu force territory transfer failed");
+                _dedicatedSettlementDepth++;
+                try { World.world.wars.endWar(war, result); }
+                finally
+                {
+                    _dedicatedSettlementDepth = Math.Max(0,
+                        _dedicatedSettlementDepth - 1);
+                }
+                ForceQueuedWarIds.Remove(pWarId);
+                QueuedWarIds.Remove(pWarId);
+            }
+            catch (Exception exception)
+            {
+                if (pAttempt < MaximumAttempts)
+                {
+                    EnqueueForce(pWarId, pAttempt + 1);
+                    return;
+                }
+                ForceQueuedWarIds.Remove(pWarId);
+                ModClass.LogWarning("Zhulu force elimination failed war=" +
+                                    pWarId + ": " + exception.Message);
+            }
         }
 
         private static void Process(long warId, int attempt)

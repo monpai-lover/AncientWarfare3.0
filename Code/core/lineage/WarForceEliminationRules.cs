@@ -18,6 +18,13 @@ namespace AncientWarfare3.core.lineage
         MaximumBenefit = 2
     }
 
+    public enum WarForceSpecialSettlementKind
+    {
+        None = 0,
+        Zhulu = 1,
+        Rebellion = 2
+    }
+
     public readonly struct WarForceEliminationDecision
     {
         public WarForceEliminationDecision(
@@ -86,6 +93,15 @@ namespace AncientWarfare3.core.lineage
                 default:
                     return WarForceSettlementOfferMode.WhitePeace;
             }
+        }
+
+        public static WarForceSpecialSettlementKind SpecialKind(
+            bool pIsZhulu, bool pIsRebellion)
+        {
+            if (pIsZhulu) return WarForceSpecialSettlementKind.Zhulu;
+            if (pIsRebellion)
+                return WarForceSpecialSettlementKind.Rebellion;
+            return WarForceSpecialSettlementKind.None;
         }
 
         public static WarForceEliminationDecision Resolve(
