@@ -110,7 +110,7 @@ namespace AncientWarfare3.patch
 
             Kingdom atk = __result.getMainAttacker();
             Kingdom def = __result.getMainDefender();
-            string warTypeName = GetWarTypeName(__result);
+            string warTypeName = WarRuntimeDisplayService.Resolve(__result);
             if (atk?.data != null)
                 ChronicleEvents.OnWarStart(atk, def, def?.name ?? "未知", warTypeName);
             if (def?.data != null)
@@ -266,10 +266,13 @@ namespace AncientWarfare3.patch
             Kingdom atk = pWar.getMainAttacker();
             Kingdom def = pWar.getMainDefender();
             var result = WarRecordWriter.WinnerLabelRich(pWinner, atk, def);
+            string warName = WarRuntimeDisplayService.Resolve(pWar);
             if (atk?.data != null)
-                ChronicleEvents.OnWarEnd(atk, def, def?.name ?? "未知", result);
+                ChronicleEvents.OnWarEnd(atk, def, def?.name ?? "未知",
+                    warName, result);
             if (def?.data != null)
-                ChronicleEvents.OnWarEnd(def, atk, atk?.name ?? "未知", result);
+                ChronicleEvents.OnWarEnd(def, atk, atk?.name ?? "未知",
+                    warName, result);
         }
 
         private static void OnKingdomJoinedWar(War pWar, Kingdom pKingdom, bool pDefender)
@@ -544,9 +547,5 @@ namespace AncientWarfare3.patch
             VassalService.OnWarEnded(pWar, pWinner);
         }
 
-        private static string GetWarTypeName(War pWar)
-        {
-            try { return pWar.getAsset()?.id ?? ""; } catch { return ""; }
-        }
     }
 }

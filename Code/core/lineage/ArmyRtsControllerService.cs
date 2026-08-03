@@ -2201,14 +2201,24 @@ namespace AncientWarfare3.core.lineage
             {
                 long armyId = armyIds[i];
                 if (!Controllers.TryGet(armyId,
-                        out ArmyRtsControllerRecord record) ||
-                    ActiveMilitaryLifecycleRules.
-                        ShouldInvalidateMissionForEndedWar(
-                            record?.Mission?.WarId ?? -1L, pWarId))
+                        out ArmyRtsControllerRecord record))
                 {
                     Invalidate(armyId);
                     invalidated++;
+                    continue;
                 }
+                long missionWarId = record?.Mission?.WarId ?? -1L;
+                if (!ActiveMilitaryLifecycleRules.
+                        ShouldInvalidateMissionForEndedWar(
+                            missionWarId, pWarId)) continue;
+                Army army = FindArmy(armyId);
+                bool shouldBeginReturn = WarArmyReturnRules.
+                    ShouldBeginReturn(IsLiveArmy(army), missionWarId,
+                        pWarId);
+                Invalidate(armyId);
+                if (shouldBeginReturn)
+                    WarArmyReturnService.TryBegin(army);
+                invalidated++;
             }
             return invalidated;
         }

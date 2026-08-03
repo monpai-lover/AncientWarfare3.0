@@ -1591,7 +1591,8 @@ namespace AncientWarfare3.core.lineage
             if (pWar?.data == null) return false;
             return RegisterTrucePair(pWar.data.id,
                 pWar.getMainAttacker(), pWar.getMainDefender(),
-                DiplomacyProposalRules.TruceYears, "war_settlement");
+                DiplomacyProposalRules.TruceYears, "war_settlement",
+                pWarName: WarRuntimeDisplayService.Resolve(pWar));
         }
 
         public static bool RegisterCoalitionTruces(War pWar,
@@ -1616,7 +1617,9 @@ namespace AncientWarfare3.core.lineage
                     foundPair = true;
                     if (!RegisterTrucePair(pWar.data.id, attacker, defender,
                             DiplomacyProposalRules.TruceYears,
-                            "war_settlement")) success = false;
+                            "war_settlement", pWarName:
+                            WarRuntimeDisplayService.Resolve(pWar)))
+                        success = false;
                 }
             }
             return foundPair && success;
@@ -1688,7 +1691,9 @@ namespace AncientWarfare3.core.lineage
                     Kingdom defender = FindKingdom(defenderId);
                     if (!RegisterTrucePair(pProposal.WarId, attacker,
                             defender, DiplomacyProposalRules.TruceYears,
-                            "war_settlement", treatyStartYear))
+                            "war_settlement", treatyStartYear,
+                            WarRuntimeDisplayService.Resolve(
+                                FindWar(pProposal.WarId))))
                         return false;
                     existing.Add(pairKey);
                 }
@@ -1715,7 +1720,8 @@ namespace AncientWarfare3.core.lineage
             return RegisterTrucePair(pProposal.WarId,
                 FindKingdom(requesterId), FindKingdom(responderId),
                 DiplomacyProposalRules.TruceYears, "war_settlement_legacy",
-                treatyStartYear);
+                treatyStartYear, WarRuntimeDisplayService.Resolve(
+                    FindWar(pProposal.WarId)));
         }
 
         public const int SeparatePeaceTruceYears = 5;
@@ -1726,12 +1732,13 @@ namespace AncientWarfare3.core.lineage
         {
             return pWar?.data != null && RegisterTrucePair(pWar.data.id,
                 pFirst, pSecond, SeparatePeaceTruceYears,
-                "separate_peace_settlement", pTreatyStartYear);
+                "separate_peace_settlement", pTreatyStartYear,
+                WarRuntimeDisplayService.Resolve(pWar));
         }
 
         private static bool RegisterTrucePair(long pWarId, Kingdom pFirst,
             Kingdom pSecond, int pDurationYears, string pReason,
-            int pTreatyStartYear = -1)
+            int pTreatyStartYear = -1, string pWarName = "")
         {
             if (!Ready || pWarId < 0 || pFirst?.data == null ||
                 pSecond?.data == null || pFirst == pSecond ||
@@ -1789,6 +1796,10 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("PROPOSAL_TYPE", "truce"),
                     ColumnVal.Create("STATUS", "accepted"),
                     ColumnVal.Create("WAR_ID", pWarId),
+                    ColumnVal.Create("DETAIL_ID",
+                        WarRuntimeDisplayRules.IsDisplayName(pWarName)
+                            ? pWarName
+                            : ""),
                     ColumnVal.Create("PLAYER_INITIATED", 0),
                     ColumnVal.Create("CREATED_YEAR", year),
                     ColumnVal.Create("EXPIRY_YEAR", treatyUntil),

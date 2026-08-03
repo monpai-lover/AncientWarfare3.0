@@ -152,7 +152,7 @@ namespace AncientWarfare3.core.lineage
             Kingdom attacker = pWar?.getMainAttacker();
             Kingdom defender = pWar?.getMainDefender();
             Record(attacker, defender, attacker, "war_declared",
-                SafeWarType(pWar));
+                WarRuntimeDisplayService.Resolve(pWar));
         }
 
         public static void RecordWarNotice(Kingdom pAttacker,
@@ -168,12 +168,8 @@ namespace AncientWarfare3.core.lineage
             Kingdom defender = pWar?.getMainDefender();
             Kingdom speaker = pWinner == WarWinner.Attackers ? attacker :
                 pWinner == WarWinner.Defenders ? defender : null;
-            string detail = pWinner == WarWinner.Attackers
-                ? RealmDisplayName(attacker)
-                : pWinner == WarWinner.Defenders
-                    ? RealmDisplayName(defender)
-                    : "peace";
-            Record(attacker, defender, speaker, "war_ended", detail);
+            Record(attacker, defender, speaker, "war_ended_named",
+                WarRuntimeDisplayService.Resolve(pWar));
         }
 
         public static void RecordVassalSet(Kingdom pVassal,
@@ -272,6 +268,14 @@ namespace AncientWarfare3.core.lineage
                             ": white peace")
                         : AW_L10n.Text("aw_diplomacy_winner_mid",
                             ": victor ") + detail),
+                "war_ended_named" => string.Format(AW_L10n.Text(
+                        "aw_diplomacy_named_war_ended", "{0} ended"),
+                    detail) + (WarRuntimeDisplayRules.HasNamedWinner(
+                            pEvent.SpeakerKingdomId)
+                        ? AW_L10n.Text("aw_diplomacy_winner_mid",
+                            ": victor ") + pEvent.SpeakerName
+                        : AW_L10n.Text("aw_diplomacy_white_peace_suffix",
+                            ": white peace")),
                 "vassal_set" => target +
                     AW_L10n.Text("aw_diplomacy_vassal_set_mid",
                         " became a vassal of ") + speaker,
@@ -709,12 +713,19 @@ namespace AncientWarfare3.core.lineage
                 : pProposal.ResponderName;
             int duration = Math.Max(0,
                 pProposal.TreatyUntilYear - pProposal.CreatedYear);
-            string summary = string.Format(AW_L10n.Text(
-                    "aw_diplomacy_truce_settlement_summary",
-                    "{0} and {1} ended the war and concluded a {2}-year " +
-                    "truce through year {3}"),
-                requester, responder, duration,
-                pProposal.TreatyUntilYear);
+            string summary = WarRuntimeDisplayRules.IsDisplayName(pProposal.DetailId)
+                ? string.Format(AW_L10n.Text(
+                        "aw_diplomacy_truce_named_settlement_summary",
+                        "{0} ended; {1} and {2} concluded a {3}-year " +
+                        "truce through year {4}"),
+                    pProposal.DetailId, requester, responder, duration,
+                    pProposal.TreatyUntilYear)
+                : string.Format(AW_L10n.Text(
+                        "aw_diplomacy_truce_settlement_summary",
+                        "{0} and {1} ended the war and concluded a {2}-year " +
+                        "truce through year {3}"),
+                    requester, responder, duration,
+                    pProposal.TreatyUntilYear);
             IReadOnlyList<WarPeaceSettlementTerm> terms =
                 WarPeaceSettlementService.Instance.ReadExecutedTerms(
                     pProposal.WarId);
@@ -886,12 +897,6 @@ namespace AncientWarfare3.core.lineage
             return string.IsNullOrEmpty(title) || actorName.Contains(title)
                 ? actorName
                 : actorName + " · " + title;
-        }
-
-        private static string SafeWarType(War pWar)
-        {
-            try { return pWar?.name ?? pWar?.getAsset()?.id ?? ""; }
-            catch { return ""; }
         }
 
         private static int SafeYear()

@@ -1,0 +1,128 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarArmyReturnRulesTests
+{
+    internal static void Run()
+    {
+        Equal(true, WarArmyReturnRules.ShouldBeginReturn(
+                armyAlive: true, currentMissionWarId: 17L,
+                endedWarId: 17L),
+            "the ended war returns its explicitly bound army");
+        Equal(false, WarArmyReturnRules.ShouldBeginReturn(
+                armyAlive: true, currentMissionWarId: 16L,
+                endedWarId: 17L),
+            "a replacement mission for another war is preserved");
+        Equal(false, WarArmyReturnRules.ShouldBeginReturn(
+                armyAlive: false, currentMissionWarId: 17L,
+                endedWarId: 17L),
+            "a dead army cannot enter the return queue");
+        Equal(true, WarArmyReturnRules.HasArrived(
+                armyAlive: true, insideFriendlySafeCity: true),
+            "a friendly safe city completes return intent");
+        Equal(false, WarArmyReturnRules.HasArrived(
+                armyAlive: true, insideFriendlySafeCity: false),
+            "an army abroad retains return intent");
+
+        string root = Directory.GetCurrentDirectory();
+        string servicePath = Path.Combine(root, "Code", "core", "lineage",
+            "WarArmyReturnService.cs");
+        True(File.Exists(servicePath),
+            "the ended-war army return queue exists");
+        string service = File.ReadAllText(servicePath);
+        True(service.Contains("MaximumArmiesPerFrame") &&
+             service.Contains("ArmyRtsTransportService.TryHandleActor"),
+            "the bounded queue reuses existing cross-island transport");
+        False(service.Contains("RestoreCivilian(") ||
+              service.Contains("removeFromArmy("),
+            "army return intent never demobilizes standing or special armies");
+        string queueAdmission = Section(service,
+            "public static bool TryBegin(",
+            "public static void ProcessFrame(");
+        False(queueAdmission.Contains("IssueMovement("),
+            "queue admission does not bypass the per-frame movement bound");
+        string queueProcessing = Section(service,
+            "public static void ProcessFrame(",
+            "public static void ClearRuntime(");
+        int targetRecovery = queueProcessing.IndexOf(
+            "if (!IsFriendlySafeCity(target, kingdom))",
+            StringComparison.Ordinal);
+        int recoveredMovement = queueProcessing.IndexOf(
+            "IssueMovement(captain, target)", targetRecovery,
+            StringComparison.Ordinal);
+        True(targetRecovery >= 0 && recoveredMovement > targetRecovery &&
+             queueProcessing.Substring(targetRecovery,
+                 recoveredMovement - targetRecovery).Contains(
+                 "Orders.Remove(armyId)"),
+            "an order is removed when no friendly safe city remains");
+
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        string invalidate = Section(controller,
+            "public static int InvalidateWar(",
+            "public static void RebuildRuntime(");
+        int exactMissionMatch = invalidate.IndexOf(
+            "ShouldInvalidateMissionForEndedWar(",
+            StringComparison.Ordinal);
+        int missionMatch = invalidate.IndexOf(
+            "ShouldBeginReturn(", StringComparison.Ordinal);
+        int invalidation = invalidate.IndexOf("Invalidate(armyId)",
+            missionMatch, StringComparison.Ordinal);
+        int queue = invalidate.IndexOf("WarArmyReturnService.TryBegin(",
+            invalidation, StringComparison.Ordinal);
+        True(exactMissionMatch >= 0 && missionMatch > exactMissionMatch &&
+             invalidation > missionMatch &&
+             queue > invalidation,
+            "matching ended-war missions invalidate before live armies enter return handling");
+
+        int missingControllerStart = invalidate.IndexOf(
+            "if (!Controllers.TryGet(", StringComparison.Ordinal);
+        int liveArmyLookup = invalidate.IndexOf("Army army = FindArmy(",
+            missingControllerStart, StringComparison.Ordinal);
+        True(missingControllerStart >= 0 &&
+             liveArmyLookup > missingControllerStart,
+            "the missing-controller cleanup branch is identifiable");
+        string missingControllerBranch = invalidate.Substring(
+            missingControllerStart, liveArmyLookup - missingControllerStart);
+        True(missingControllerBranch.Contains("Invalidate(armyId)") &&
+             missingControllerBranch.Contains("invalidated++") &&
+             !missingControllerBranch.Contains(
+                 "WarArmyReturnService.TryBegin("),
+            "a stale mission index is cleaned without queueing return");
+
+        string temporaryReturn = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "TemporaryMilitaryReturnService.cs"));
+        True(temporaryReturn.Contains(
+                 "ActiveMilitaryLifecycleRules.CanDemobilizeAtLocation(") &&
+             temporaryReturn.Contains("IsInsideFriendlySafeCity(") &&
+             temporaryReturn.Contains(
+                 "TemporaryMilitaryDemobilizationService."),
+            "temporary levies retain arrival-only demobilization");
+    }
+
+    private static string Section(string source, string start, string end)
+    {
+        int startIndex = source.IndexOf(start, StringComparison.Ordinal);
+        int endIndex = source.IndexOf(end, startIndex + start.Length,
+            StringComparison.Ordinal);
+        if (startIndex < 0 || endIndex < 0)
+            throw new InvalidOperationException("source section not found");
+        return source.Substring(startIndex, endIndex - startIndex);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

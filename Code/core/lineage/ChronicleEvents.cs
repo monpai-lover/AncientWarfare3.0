@@ -1390,32 +1390,45 @@ namespace AncientWarfare3.core.lineage
         }
 
         // 战争开始:给双方各记一条 war_start 国家史(由 AW_WarPatch 分别传入自身国)。
-        public static void OnWarStart(Kingdom pSelf, string pOpponentName, string pWarType)
+        public static void OnWarStart(Kingdom pSelf, string pOpponentName, string pWarName)
         {
-            OnWarStart(pSelf, null, pOpponentName, pWarType);
+            OnWarStart(pSelf, null, pOpponentName, pWarName);
         }
 
-        public static void OnWarStart(Kingdom pSelf, Kingdom pOpponent, string pOpponentName, string pWarType)
+        public static void OnWarStart(Kingdom pSelf, Kingdom pOpponent,
+            string pOpponentName, string pWarName)
         {
             if (pSelf?.data == null) return;
-            string label = string.IsNullOrEmpty(pWarType) ? "" : "（" + WarDisplayLabelRules.Label(pWarType) + "）";
+            HistoryText warName = WarRuntimeDisplayRules.IsDisplayName(
+                    pWarName)
+                ? HistoryText.PlainText("（") +
+                  HistoryText.PlainText(pWarName) +
+                  HistoryText.PlainText("）")
+                : HistoryText.PlainText("");
             HistoryWriter.RecordKingdom(pSelf, KingdomEvent.WAR_START,
                 H("aw_hist_war_with_prefix") + HistoryText.Kingdom(pOpponent, pOpponentName) +
-                H("aw_hist_war_started") + HistoryText.PlainText(label));
+                H("aw_hist_war_started") + warName);
         }
 
         // 战争结束:给双方各记一条 war_end 国家史。
         public static void OnWarEnd(Kingdom pSelf, string pOpponentName, string pResult)
         {
-            OnWarEnd(pSelf, null, pOpponentName, HistoryText.PlainText(pResult));
+            OnWarEnd(pSelf, null, pOpponentName, "",
+                HistoryText.PlainText(pResult));
         }
 
-        public static void OnWarEnd(Kingdom pSelf, Kingdom pOpponent, string pOpponentName, HistoryText pResult)
+        public static void OnWarEnd(Kingdom pSelf, Kingdom pOpponent,
+            string pOpponentName, string pWarName, HistoryText pResult)
         {
             if (pSelf?.data == null) return;
+            HistoryText warName = WarRuntimeDisplayRules.IsDisplayName(
+                    pWarName)
+                ? HistoryText.PlainText(pWarName) +
+                  HistoryText.PlainText(" - ")
+                : HistoryText.PlainText("");
             HistoryWriter.RecordKingdom(pSelf, KingdomEvent.WAR_END,
                 H("aw_hist_war_with_prefix") + HistoryText.Kingdom(pOpponent, pOpponentName) +
-                H("aw_hist_war_ended_mid") + pResult);
+                H("aw_hist_war_ended_mid") + warName + pResult);
             SlaveService.FlushPendingWarSlaveCaptures(pSelf);
         }
 

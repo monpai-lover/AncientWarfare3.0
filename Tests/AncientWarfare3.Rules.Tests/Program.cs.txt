@@ -7708,6 +7708,8 @@ HistoryUiRulesTests.Run();
 ChronicleTextExportRulesTests.Run();
 HistoryLocalizationRulesTests.Run();
 ActiveMilitaryLifecycleRulesTests.Run();
+WarArmyReturnRulesTests.Run();
+WarRuntimeDisplayRulesTests.Run();
 ArmyLogisticsSustainmentRulesTests.Run();
 ArmyRtsRouteChoiceRulesTests.Run();
 ArmyRtsReplenishmentArrivalRulesTests.Run();
