@@ -272,8 +272,8 @@ namespace AncientWarfare3.ui.items
             ResetAvatarForReuse();
             RenderAvatar(pNode);
 
-            bool unresolved = IsUnresolvedLegacy(pNode.archive_resolution);
-            string sex = unresolved ? "" : pNode.sex == 0 ? "♂" : "♀";
+            string sex = FamilyTreeArchivePresentationRules.ResolveSexLabel(
+                pNode.sex, "♂", "♀");
             string relation = pNode.relation_label ?? "";
             string self = AW_L10n.Text("aw_relation_self", "\u672C\u4EBA");
             string primaryDisplayName = FamilyTreeLabelLayoutRules.
@@ -447,7 +447,8 @@ namespace AncientWarfare3.ui.items
             if (_deadPortrait != null) _deadPortrait.gameObject.SetActive(false); // 弃用独立死像,统一走 _avatar 外壳
             _avatar.gameObject.SetActive(true);
 
-            if (IsUnresolvedLegacy(pNode.archive_resolution))
+            if (FamilyTreeArchivePresentationRules.ShouldUseUnavailablePortrait(
+                    pNode.archive_resolution))
             {
                 RenderUnavailablePortrait();
                 return;
@@ -501,13 +502,6 @@ namespace AncientWarfare3.ui.items
             catch { }
             try { LoadDeadClanBanner(pNode); }                     // 氏族旗帜:活 Clan / 人物档案快照重建
             catch { }
-        }
-
-        private static bool IsUnresolvedLegacy(string pResolution)
-        {
-            return string.Equals(pResolution,
-                LineageFamilyArchiveMigration.UnresolvedLegacy,
-                StringComparison.Ordinal);
         }
 
         private void RenderUnavailablePortrait()
@@ -1078,9 +1072,9 @@ namespace AncientWarfare3.ui.items
 
             // 行1:身份 · 性别 · 状态(在世/已故)
             string identity = IdentityLabel(pNode.status);
-            string sex = pNode.sex == 0
-                ? AW_L10n.Text("aw_sex_male", "男")
-                : AW_L10n.Text("aw_sex_female", "女");
+            string sex = FamilyTreeArchivePresentationRules.ResolveSexLabel(
+                pNode.sex, AW_L10n.Text("aw_sex_male", "男"),
+                AW_L10n.Text("aw_sex_female", "女"));
             string alive = pNode.is_alive
                 ? AW_L10n.Text("aw_alive_state", "在世")
                 : AW_L10n.Text("aw_dead_state", "已故");

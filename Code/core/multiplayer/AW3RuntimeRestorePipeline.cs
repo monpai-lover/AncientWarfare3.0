@@ -15,7 +15,8 @@ namespace AncientWarfare3.core.multiplayer
 {
     internal sealed class AW3RestoreStage
     {
-        internal AW3RestoreStage(string name, Action execute)
+        internal AW3RestoreStage(string name, Action execute,
+            bool stopOnFailure = false)
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Restore stage name is required.",
@@ -23,11 +24,14 @@ namespace AncientWarfare3.core.multiplayer
 
             Name = name;
             Execute = execute ?? throw new ArgumentNullException(nameof(execute));
+            StopOnFailure = stopOnFailure;
         }
 
         internal string Name { get; }
 
         internal Action Execute { get; }
+
+        internal bool StopOnFailure { get; }
     }
 
     internal sealed class AW3RestoreResult
@@ -98,7 +102,7 @@ namespace AncientWarfare3.core.multiplayer
                 {
                     firstFailure ??= AW3RestoreResult.Failed(stage.Name,
                         error.Message);
-                    if (strict) return firstFailure;
+                    if (strict || stage.StopOnFailure) return firstFailure;
                 }
             }
 
@@ -159,7 +163,8 @@ namespace AncientWarfare3.core.multiplayer
                     AWLocalizedNameMigrationService.
                         RebuildVisibleProjections),
                 new AW3RestoreStage("lineage_family_archive_migration",
-                    LineageFamilyArchiveMigrationService.Run),
+                    LineageFamilyArchiveMigrationService.Run,
+                    stopOnFailure: true),
                 new AW3RestoreStage("western_lineage_migration", () =>
                     WesternLineageMigrationService.Request()),
                 new AW3RestoreStage("runtime_cache_reset", () =>
@@ -320,7 +325,8 @@ namespace AncientWarfare3.core.multiplayer
                     AWLocalizedNameMigrationService.
                         RebuildVisibleProjections),
                 new AW3RestoreStage("lineage_family_archive_migration",
-                    LineageFamilyArchiveMigrationService.Run),
+                    LineageFamilyArchiveMigrationService.Run,
+                    stopOnFailure: true),
                 new AW3RestoreStage("western_lineage_migration", () =>
                     WesternLineageMigrationService.Request())
             };

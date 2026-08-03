@@ -2,6 +2,8 @@ using System;
 using System.Data.SQLite;
 using System.IO;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.multiplayer;
 
 internal static class LineageFamilyArchiveMigrationTests
 {
@@ -15,6 +17,9 @@ internal static class LineageFamilyArchiveMigrationTests
         InjectedAbortRollsBackRowsAndVersion();
         UpgradesLegacyActorArchiveSchema();
         VersionOwnedColumnIsExcludedFromGenericUpgrade();
+        ArchivePresentationRulesAreExecutable();
+        UnknownSexRendersEmpty();
+        MigrationFailureStopsDependentRestoreAndAsyncStartup();
         ProductionIntegrationContractsAreStable();
     }
 
@@ -216,6 +221,55 @@ internal static class LineageFamilyArchiveMigrationTests
             "schema ownership is scoped to ActorArchive");
     }
 
+    private static void ArchivePresentationRulesAreExecutable()
+    {
+        True(FamilyTreeArchivePresentationRules.ShouldUseUnavailablePortrait(
+                LineageFamilyArchiveMigration.UnresolvedLegacy),
+            "unresolved legacy archive uses the unavailable portrait");
+        True(!FamilyTreeArchivePresentationRules.ShouldUseUnavailablePortrait(
+                LineageFamilyArchiveMigration.Resolved),
+            "resolved archive retains its actor portrait");
+    }
+
+    private static void UnknownSexRendersEmpty()
+    {
+        Equal("male", FamilyTreeArchivePresentationRules.ResolveSexLabel(
+                0, "male", "female"),
+            "male archive sex uses the male label");
+        Equal("female", FamilyTreeArchivePresentationRules.ResolveSexLabel(
+                1, "male", "female"),
+            "female archive sex uses the female label");
+        Equal(string.Empty,
+            FamilyTreeArchivePresentationRules.ResolveSexLabel(
+                -1, "male", "female"),
+            "unknown archive sex renders no label");
+    }
+
+    private static void MigrationFailureStopsDependentRestoreAndAsyncStartup()
+    {
+        var westernMigrationCalls = 0;
+        var asyncStartupCalls = 0;
+        var stages = new[]
+        {
+            new AW3RestoreStage("lineage_family_archive_migration", () =>
+                    throw new InvalidOperationException("migration failed"),
+                stopOnFailure: true),
+            new AW3RestoreStage("western_lineage_migration",
+                () => westernMigrationCalls++)
+        };
+
+        AW3RestoreResult result = AW3RuntimeRestoreStageRunner.Run(stages,
+            strict: false);
+        if (result.Success) asyncStartupCalls++;
+
+        Equal(false, result.Success,
+            "non-strict restore reports migration failure");
+        Equal(0, westernMigrationCalls,
+            "migration failure blocks later western lineage migration");
+        Equal(0, asyncStartupCalls,
+            "migration failure prevents guarded async startup");
+    }
+
     private static void ProductionIntegrationContractsAreStable()
     {
         string root = Directory.GetCurrentDirectory();
@@ -273,6 +327,12 @@ internal static class LineageFamilyArchiveMigrationTests
         Equal(2, CountOccurrences(pipeline,
                 "new AW3RestoreStage(\"lineage_family_archive_migration\""),
             "saved and generated restore pipelines both run migration");
+        string normalizedPipeline = pipeline.Replace("\r\n", "\n");
+        Equal(2, CountOccurrences(normalizedPipeline,
+                "new AW3RestoreStage(\"lineage_family_archive_migration\",\n" +
+                "                    LineageFamilyArchiveMigrationService.Run,\n" +
+                "                    stopOnFailure: true)"),
+            "saved and generated migration stages stop later restore work");
         OrderedTokens(pipeline.Substring(pipeline.IndexOf(
             "internal static AW3RestoreResult TryInitializeGeneratedWorld(",
             StringComparison.Ordinal)), new[]
@@ -300,8 +360,9 @@ internal static class LineageFamilyArchiveMigrationTests
             "big tree retains unresolved children through known edges");
         Contains(window, "pSnapshot.ParentIds(pChildId).Contains(pParentId)",
             "placeholder big-tree navigation follows persisted parent edges");
-        Contains(nodeView, "IsUnresolvedLegacy(pNode.archive_resolution)",
-            "node view selects unavailable portrait for placeholders");
+        Contains(nodeView,
+            "FamilyTreeArchivePresentationRules.ShouldUseUnavailablePortrait(",
+            "node view delegates unavailable portrait selection to rules");
         Contains(nodeView, "RenderUnavailablePortrait()",
             "placeholder portrait is generic and does not infer race");
         Contains(nodeView,
