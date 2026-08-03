@@ -24,6 +24,51 @@ internal static class DiplomaticWarAvailabilityRulesTests
             Equal(expected, actual,
                 "pair failure reason survives goal validation");
         }
+
+        Equal("war_preparation",
+            DiplomaticWarAvailabilityRules.Resolve(true, new[]
+            {
+                new DiplomaticWarAvailabilityCandidate(true, "")
+            }).FailureReason,
+            "pending declaration has highest priority");
+        Equal("no_war_reasons",
+            DiplomaticWarAvailabilityRules.Resolve(false,
+                Array.Empty<DiplomaticWarAvailabilityCandidate>())
+                .FailureReason,
+            "empty candidate set has a stable reason");
+        Equal(true,
+            DiplomaticWarAvailabilityRules.Resolve(false, new[]
+            {
+                new DiplomaticWarAvailabilityCandidate(false,
+                    "missing_core_target"),
+                new DiplomaticWarAvailabilityCandidate(true, "")
+            }).Available,
+            "one available goal enables the pair");
+        Equal("missing_core_target",
+            DiplomaticWarAvailabilityRules.Resolve(false, new[]
+            {
+                new DiplomaticWarAvailabilityCandidate(false, ""),
+                new DiplomaticWarAvailabilityCandidate(false,
+                    "missing_core_target"),
+                new DiplomaticWarAvailabilityCandidate(false,
+                    "missing_claim_target")
+            }).FailureReason,
+            "all-blocked pair uses the first concrete reason");
+        Equal(1, DiplomaticWarAvailabilityRules.ResolveSelectedGoalIndex(
+            new[]
+            {
+                new DiplomaticWarAvailabilityCandidate(false,
+                    "missing_core_target"),
+                new DiplomaticWarAvailabilityCandidate(true, "")
+            }, 0), "selection moves to the first available goal");
+        Equal(-1, DiplomaticWarAvailabilityRules.ResolveSelectedGoalIndex(
+            new[]
+            {
+                new DiplomaticWarAvailabilityCandidate(false,
+                    "missing_core_target"),
+                new DiplomaticWarAvailabilityCandidate(false,
+                    "missing_claim_target")
+            }, 0), "no available row has no selection");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

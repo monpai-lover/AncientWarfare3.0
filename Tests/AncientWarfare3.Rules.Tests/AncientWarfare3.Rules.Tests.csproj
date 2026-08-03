@@ -544,6 +544,7 @@
     <Compile Include="..\..\Code\core\lineage\DiplomacyOpinionRules.cs" Link="Production\DiplomacyOpinionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyProposalRules.cs" Link="Production\DiplomacyProposalRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomaticWarDeclarationLedgerRules.cs" Link="Production\DiplomaticWarDeclarationLedgerRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomaticWarAvailabilityRules.cs" Link="Production\DiplomaticWarAvailabilityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyActionExpansionRules.cs" Link="Production\DiplomacyActionExpansionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerHouseholdRules.cs" Link="Production\RulerHouseholdRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerHouseholdPregnancyRules.cs" Link="Production\RulerHouseholdPregnancyRules.cs" />
