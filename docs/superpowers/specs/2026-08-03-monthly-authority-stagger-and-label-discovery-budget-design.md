@@ -7,9 +7,9 @@ Approved design.
 ## Goal
 
 Remove the recurring main-thread frame spike at game-month rollover without
-reducing monthly gameplay work or changing its outcomes. Also prevent the
-hierarchical-vassal map label precompute discovery stage from scanning an
-unbounded number of empty or invalid kingdoms in one frame.
+reducing monthly gameplay work or changing its outcomes. Also reduce the time
+needed to finish hierarchical-vassal map label precomputation without raising
+the main-thread frame budget.
 
 ## Scope
 
@@ -85,22 +85,37 @@ three services:
 The helper stores no WorldBox or Unity state and is covered by deterministic
 rules tests. Runtime services remain responsible for validating live kingdoms.
 
-## Hierarchical Label Discovery Budget
+## Hierarchical Label Precompute Pipeline
 
 The existing label pipeline remains intact: bounded main-thread snapshots,
 worker-only geometry, generation-gated acceptance, persistent layout cache,
 and publish-only-on-material-change behavior.
 
-The discovery cursor currently advances past null kingdom containers and empty
-city lists without consuming its city/source budget. A large number of such
-entries can therefore be traversed in a single frame. The fix charges one
-inspection unit whenever a kingdom container is examined, including null,
-destroyed, invalid, or empty containers.
+The current source already charges discovery budget for null kingdom
+containers and empty city lists. That protection remains covered by tests.
+The remaining latency comes from the build stage: one source copies its live
+coordinates, starts one pure geometry task, and then blocks preparation of all
+later sources until that worker completes.
 
-The cursor must yield when the inspection budget is exhausted even if it
-produced no city source. Productive city capture continues to consume the same
-budget, so the bound applies to total main-thread discovery effort rather than
-only successful outputs.
+Replace that serial wait with a bounded two-slot pipeline. At most one source
+copies live zone/tile data at a time on the main thread, while up to two
+completed immutable snapshots may run pure geometry workers concurrently. A
+running worker does not prevent the next source from using the remaining
+main-thread copy budget.
+
+Every frame performs work in this order:
+
+1. poll and accept a bounded number of completed workers;
+2. advance the current main-thread snapshot using the existing tile budget;
+3. submit the completed immutable snapshot if a worker slot is available;
+4. begin the next source only while source, tile, and worker-slot budgets allow;
+5. finish the batch only after every source is submitted and every worker
+   result is accepted or rejected.
+
+There is no unbounded `Task.Run` fan-out. Two worker slots bound CPU and memory
+pressure. Worker jobs continue to receive only strings, ids, zone-id baselines,
+and copied coordinate values; they never receive live WorldBox or Unity
+objects.
 
 The following established behavior is preserved:
 
@@ -148,6 +163,10 @@ Automated tests must prove:
   again;
 - empty and invalid label-discovery containers consume inspection budget;
 - label discovery yields after the configured number of inspections;
+- one running geometry worker does not block snapshot preparation for the next
+  source;
+- no more than two geometry workers may be in flight;
+- a label batch cannot finish until all in-flight results are resolved;
 - existing hierarchical label cache, lifecycle, and generation tests remain
   green;
 - source guards confirm the three monthly services no longer directly settle

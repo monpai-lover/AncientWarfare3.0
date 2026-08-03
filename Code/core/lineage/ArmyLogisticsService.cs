@@ -548,9 +548,13 @@ namespace AncientWarfare3.core.lineage
                     true);
             ArmyOperationalStateSnapshot state = OperationalIndex.
                 GetOrCreateSnapshot(pArmy.id);
-            return new ArmyOperationalStateView(state.Supply,
-                state.Organization, state.ConnectedSupply,
-                state.InCorridor);
+            return new ArmyOperationalStateView(
+                ArmyLogisticsRules.EffectiveSupply(state.Supply),
+                state.Organization,
+                ArmyLogisticsRules.EffectiveSupplyConnection(
+                    state.ConnectedSupply),
+                ArmyLogisticsRules.EffectiveSupplyConnection(
+                    state.InCorridor));
         }
 
         public static void OnActorDying(Actor pActor)
@@ -732,9 +736,10 @@ namespace AncientWarfare3.core.lineage
             }
             ArmyLogisticsEventSnapshot events =
                 EventIndex.ConsumeCasualties(pArmyId);
-            int supply = ArmyLogisticsRules.UpdateSupply(state.Supply,
-                state.State, state.ConnectedSupply, state.InCorridor,
-                strategicMovementProgressed);
+            int supply = ArmyLogisticsRules.EffectiveSupply(
+                ArmyLogisticsRules.UpdateSupply(state.Supply,
+                    state.State, state.ConnectedSupply, state.InCorridor,
+                    strategicMovementProgressed));
             int organization = ArmyLogisticsRules.UpdateOrganization(
                 new ArmyOrganizationFacts
                 {
@@ -754,8 +759,9 @@ namespace AncientWarfare3.core.lineage
         public static bool IsTileInMissionCorridor(Army pArmy,
             WorldTile pTile)
         {
-            if (pArmy?.data == null || pTile == null ||
-                !OperationalIndex.TryGet(pArmy.id,
+            if (pArmy?.data == null || pTile == null) return false;
+            if (!ArmyLogisticsRules.SupplySimulationEnabled) return true;
+            if (!OperationalIndex.TryGet(pArmy.id,
                     out ArmyOperationalStateSnapshot state) ||
                 !state.MissionActive) return false;
             City city = pTile.zone?.city;
