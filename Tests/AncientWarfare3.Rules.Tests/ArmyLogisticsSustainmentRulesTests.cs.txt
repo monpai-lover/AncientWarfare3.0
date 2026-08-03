@@ -7,7 +7,10 @@ internal static class ArmyLogisticsSustainmentRulesTests
     {
         AConfirmedMissionCorridorKeepsMarchSupplyConnected();
         ACurrentCorridorCityAndRouteAnchorPreventFalseIsolation();
-        AStalledMarchDoesNotConsumeSupply();
+        DisabledSupplyNeverDrainsDuringMarch();
+        DisabledSupplyAlwaysNormalizesToFull();
+        DisabledSupplyDoesNotBlockRegroupCompletion();
+        OrganizationStillRespondsToCasualtiesAndRegrouping();
         LogisticsSchedulerDoesNotRequestASecondSnapshotWithinSamePeriod();
     }
 
@@ -29,10 +32,10 @@ internal static class ArmyLogisticsSustainmentRulesTests
             "a director-confirmed corridor persists between city zones");
         Equal(false, connectivity.ConnectedSupply,
             "marching through a corridor does not fabricate a supply depot");
-        Equal(99, ArmyLogisticsRules.UpdateSupply(100,
+        Equal(100, ArmyLogisticsRules.UpdateSupply(100,
                 ArmyRtsState.March, connectivity.ConnectedSupply,
                 connectivity.InCorridor),
-            "a corridor march pays only its normal movement supply cost");
+            "disabled supply does not charge a corridor march");
     }
 
     private static void LogisticsSchedulerDoesNotRequestASecondSnapshotWithinSamePeriod()
@@ -66,10 +69,10 @@ internal static class ArmyLogisticsSustainmentRulesTests
             "an Army inside a registered corridor city must not become isolated because its next target changed");
         Equal(false, corridorCity.ConnectedSupply,
             "an enemy corridor city is a route connection, not an instant supply depot");
-        Equal(97, ArmyLogisticsRules.UpdateSupply(100,
+        Equal(100, ArmyLogisticsRules.UpdateSupply(100,
                 ArmyRtsState.Assault, corridorCity.ConnectedSupply,
                 corridorCity.InCorridor),
-            "a connected front assault pays only its ordinary supply cost");
+            "disabled supply does not charge a connected front assault");
 
         ArmyConnectivityResult routeAnchor =
             ArmyLogisticsRules.ResolveConnectivity(
@@ -84,22 +87,62 @@ internal static class ArmyLogisticsSustainmentRulesTests
                 });
         Equal(true, routeAnchor.InCorridor,
             "an Army that has reached its active route anchor must remain in the mission corridor");
-        Equal(99, ArmyLogisticsRules.UpdateSupply(100,
+        Equal(100, ArmyLogisticsRules.UpdateSupply(100,
                 ArmyRtsState.March, routeAnchor.ConnectedSupply,
                 routeAnchor.InCorridor),
-            "a route-connected march must not receive the isolated-army penalty");
+            "disabled supply does not penalize a route-connected march");
     }
 
-    private static void AStalledMarchDoesNotConsumeSupply()
+    private static void DisabledSupplyNeverDrainsDuringMarch()
     {
-        Equal(71, ArmyLogisticsRules.UpdateSupply(71,
+        Equal(100, ArmyLogisticsRules.UpdateSupply(71,
                 ArmyRtsState.March, connectedSupply: false,
                 inCorridor: true, strategicMovementProgressed: false),
-            "a stalled March with no positional progress must not consume supply");
-        Equal(70, ArmyLogisticsRules.UpdateSupply(71,
+            "disabled supply normalizes a stalled March to full supply");
+        Equal(100, ArmyLogisticsRules.UpdateSupply(71,
                 ArmyRtsState.March, connectedSupply: false,
                 inCorridor: true, strategicMovementProgressed: true),
-            "an actual March step still consumes its ordinary supply");
+            "disabled supply does not drain during an actual March step");
+    }
+
+    private static void DisabledSupplyAlwaysNormalizesToFull()
+    {
+        Equal(100, ArmyLogisticsRules.EffectiveSupply(0),
+            "disabled supply ignores a stale zero value");
+        Equal(true, ArmyLogisticsRules.EffectiveSupplyConnection(false),
+            "disabled supply ignores a stale disconnected corridor");
+        Equal(100, ArmyLogisticsRules.UpdateSupply(17,
+                ArmyRtsState.Assault, connectedSupply: false,
+                inCorridor: false),
+            "disabled supply neither drains nor applies isolation penalties");
+    }
+
+    private static void DisabledSupplyDoesNotBlockRegroupCompletion()
+    {
+        Equal(true, ArmyLogisticsRules.CanCompleteRegroup(
+                organization: 60, supply: 0,
+                minimumForceReady: true),
+            "stale supply cannot trap an otherwise-ready Army in regroup");
+    }
+
+    private static void OrganizationStillRespondsToCasualtiesAndRegrouping()
+    {
+        Equal(55, ArmyLogisticsRules.UpdateOrganization(
+                new ArmyOrganizationFacts
+                {
+                    CurrentOrganization = 60,
+                    RecentCasualties = 1,
+                    Supply = 0
+                }),
+            "casualties still reduce organization while supply is disabled");
+        Equal(72, ArmyLogisticsRules.UpdateOrganization(
+                new ArmyOrganizationFacts
+                {
+                    CurrentOrganization = 60,
+                    Supply = 0,
+                    Regrouping = true
+                }),
+            "regrouping still restores organization while supply is disabled");
     }
 
     private static void Equal<T>(T expected, T actual, string name)
