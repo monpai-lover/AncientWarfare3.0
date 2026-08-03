@@ -144,6 +144,7 @@
     <Compile Include="ActorKingdomSafetyRulesTests.cs.txt" />
     <Compile Include="SchedulerLoadSafetyRulesTests.cs.txt" />
     <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
+    <Compile Include="TestArmyRoutePollKindStub.cs.txt" />
     <Compile Include="ActorDeathInvocationRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAttackSpeechBubbleRulesTests.cs.txt" />
     <Compile Include="ArmyRtsPreDepartureDeadlineRulesTests.cs.txt" />
@@ -398,6 +399,8 @@
     <Compile Include="..\..\Code\core\lineage\SoldierRetirementRules.cs" Link="Production\SoldierRetirementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActiveMilitaryLifecycleRules.cs" Link="Production\ActiveMilitaryLifecycleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarArmyReturnRules.cs" Link="Production\WarArmyReturnRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarArmyReturnQueueCore.cs" Link="Production\WarArmyReturnQueueCore.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsControllerService.cs" Link="Production\ArmyRtsControllerService.cs" />
     <Compile Include="..\..\Code\core\lineage\WarRuntimeDisplayRules.cs" Link="Production\WarRuntimeDisplayRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MilitaryRecruitmentScope.cs" Link="Production\MilitaryRecruitmentScope.cs" />
     <Compile Include="..\..\Code\core\lineage\KingdomMilitaryReadinessRules.cs" Link="Production\KingdomMilitaryReadinessRules.cs" />

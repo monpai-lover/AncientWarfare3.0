@@ -27,6 +27,12 @@ internal static class WarRuntimeDisplayRulesTests
             "white peace has no winning kingdom");
         Equal(true, WarRuntimeDisplayRules.HasNamedWinner(17L),
             "a persisted speaker kingdom identifies the real winner");
+        Equal(" began (", HistoryLocalizationRules.Text(
+                "aw_hist_war_started_named_open", "en"),
+            "English chronicle war names use an English opening parenthesis");
+        Equal(")", HistoryLocalizationRules.Text(
+                "aw_hist_war_started_named_close", "en"),
+            "English chronicle war names use an English closing parenthesis");
 
         string root = Directory.GetCurrentDirectory();
         string lineage = Path.Combine(root, "Code", "core", "lineage");
@@ -48,6 +54,9 @@ internal static class WarRuntimeDisplayRulesTests
         True(chronicle.Contains("string pWarName") &&
              chronicle.Contains("HistoryText.PlainText(pWarName)"),
             "chronicle text receives and displays the resolved war name");
+        False(chronicle.Contains("HistoryText.PlainText(\"\uFF08\")") ||
+              chronicle.Contains("HistoryText.PlainText(\"\uFF09\")"),
+            "chronicle source does not hard-code Chinese parentheses");
 
         string conversation = File.ReadAllText(Path.Combine(lineage,
             "DiplomacyConversationService.cs"));

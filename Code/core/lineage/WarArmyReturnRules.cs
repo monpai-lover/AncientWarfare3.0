@@ -27,6 +27,23 @@ namespace AncientWarfare3.core.lineage
             return hasValidMission;
         }
 
+        public static bool IsMissionPublishable(bool armyAlive, long armyId,
+            long missionArmyId, bool kingdomMatches, long warId,
+            long targetCityId, bool runtimeMissionValid)
+        {
+            return armyAlive && armyId >= 0L && missionArmyId == armyId &&
+                   kingdomMatches && warId >= 0L && targetCityId >= 0L &&
+                   runtimeMissionValid;
+        }
+
+        public static bool ShouldCancelForPublishedMission(
+            bool missionPublishable, bool controllerPublished,
+            bool indexPublished)
+        {
+            return missionPublishable && controllerPublished &&
+                   indexPublished;
+        }
+
         public static WarArmyReturnOrderDecision ResolveOrder(
             bool armyAlive, bool insideFriendlySafeCity,
             bool hasValidMission)

@@ -1399,15 +1399,15 @@ namespace AncientWarfare3.core.lineage
             string pOpponentName, string pWarName)
         {
             if (pSelf?.data == null) return;
-            HistoryText warName = WarRuntimeDisplayRules.IsDisplayName(
-                    pWarName)
-                ? HistoryText.PlainText("（") +
+            bool hasWarName = WarRuntimeDisplayRules.IsDisplayName(pWarName);
+            HistoryText started = hasWarName
+                ? H("aw_hist_war_started_named_open") +
                   HistoryText.PlainText(pWarName) +
-                  HistoryText.PlainText("）")
-                : HistoryText.PlainText("");
+                  H("aw_hist_war_started_named_close")
+                : H("aw_hist_war_started");
             HistoryWriter.RecordKingdom(pSelf, KingdomEvent.WAR_START,
                 H("aw_hist_war_with_prefix") + HistoryText.Kingdom(pOpponent, pOpponentName) +
-                H("aw_hist_war_started") + warName);
+                started);
         }
 
         // 战争结束:给双方各记一条 war_end 国家史。

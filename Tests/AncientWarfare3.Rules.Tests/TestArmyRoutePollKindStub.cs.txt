@@ -1,0 +1,12 @@
+namespace AncientWarfare3.core.pathfinding
+{
+    public enum ArmyRoutePollKind
+    {
+        NoRequest,
+        Waiting,
+        StepReady,
+        Completed,
+        Failed,
+        Cancelled
+    }
+}

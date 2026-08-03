@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -7,16 +7,9 @@ namespace AncientWarfare3.core.lineage
     {
         private const int MaximumArmiesPerFrame = 4;
 
-        private sealed class ReturnOrder
-        {
-            internal long ArmyId;
-            internal long KingdomId;
-            internal long TargetCityId;
-        }
-
-        private static readonly Dictionary<long, ReturnOrder> Orders =
-            new Dictionary<long, ReturnOrder>();
-        private static readonly Queue<long> Work = new Queue<long>();
+        private static readonly WarArmyReturnQueueCore Queue =
+            new WarArmyReturnQueueCore();
+        private static bool _rebuildPending;
 
         public static bool TryBegin(Army pArmy)
         {
@@ -27,31 +20,26 @@ namespace AncientWarfare3.core.lineage
             if (!IsAlive(captain) || captain.kingdom != kingdom) return false;
             if (IsInsideFriendlySafeCity(captain, kingdom))
             {
-                Orders.Remove(pArmy.id);
+                Finish(pArmy.id, pArmy);
                 return true;
             }
 
             City target = ResolveTargetCity(pArmy, kingdom);
             if (!IsFriendlySafeCity(target, kingdom)) return false;
-            if (!Orders.TryGetValue(pArmy.id, out ReturnOrder order))
-            {
-                order = new ReturnOrder { ArmyId = pArmy.id };
-                Orders[pArmy.id] = order;
-                Work.Enqueue(pArmy.id);
-            }
-            order.KingdomId = kingdom.id;
-            order.TargetCityId = target.id;
+            if (!Queue.Begin(pArmy.id, kingdom.id, target.id)) return false;
+            Persist(pArmy, kingdom.id, target.id);
             return true;
         }
 
         public static void ProcessFrame()
         {
-            int count = Math.Min(MaximumArmiesPerFrame, Work.Count);
+            if (_rebuildPending) RebuildRuntime();
+            int count = Math.Min(MaximumArmiesPerFrame, Queue.WorkCount);
             for (int i = 0; i < count; i++)
             {
-                long armyId = Work.Dequeue();
-                if (!Orders.TryGetValue(armyId, out ReturnOrder order))
+                if (!Queue.TryTake(out WarArmyReturnQueueOrder order))
                     continue;
+                long armyId = order.ArmyId;
                 Army army = ResolveArmy(order.ArmyId);
                 Kingdom kingdom = ResolveKingdom(order.KingdomId);
                 Actor captain = SafeCaptain(army);
@@ -59,7 +47,7 @@ namespace AncientWarfare3.core.lineage
                     !IsAlive(captain) || captain.kingdom != kingdom ||
                     AWArmyService.GetIntendedKingdom(army) != kingdom)
                 {
-                    Orders.Remove(armyId);
+                    Finish(armyId, army);
                     continue;
                 }
                 WarArmyReturnOrderDecision decision = WarArmyReturnRules.
@@ -70,7 +58,7 @@ namespace AncientWarfare3.core.lineage
                             HasValidMission(army));
                 if (decision != WarArmyReturnOrderDecision.Continue)
                 {
-                    Orders.Remove(armyId);
+                    Finish(armyId, army);
                     continue;
                 }
 
@@ -80,25 +68,125 @@ namespace AncientWarfare3.core.lineage
                     target = ResolveTargetCity(army, kingdom);
                     if (!IsFriendlySafeCity(target, kingdom))
                     {
-                        Orders.Remove(armyId);
+                        Finish(armyId, army);
                         continue;
                     }
-                    order.TargetCityId = target.id;
+                    Queue.UpdateTarget(armyId, target.id);
+                    Persist(army, kingdom.id, target.id);
                 }
                 IssueMovement(captain, target);
-                Work.Enqueue(armyId);
+                Queue.Requeue(armyId);
             }
         }
 
         public static void Cancel(long pArmyId)
         {
-            if (pArmyId >= 0L) Orders.Remove(pArmyId);
+            if (pArmyId < 0L) return;
+            Queue.Cancel(pArmyId);
+            ClearPersisted(ResolveArmy(pArmyId));
         }
 
         public static void ClearRuntime()
         {
-            Orders.Clear();
-            Work.Clear();
+            Queue.Clear();
+            _rebuildPending = true;
+        }
+
+        public static void RebuildRuntime()
+        {
+            Queue.Clear();
+            if (AW3MultiplayerReplicaScope.IsReplicaSession)
+            {
+                _rebuildPending = true;
+                return;
+            }
+            _rebuildPending = false;
+            if (World.world?.armies == null)
+            {
+                _rebuildPending = true;
+                return;
+            }
+            foreach (Army army in World.world.armies)
+                TryRestore(army);
+        }
+
+        private static void TryRestore(Army pArmy)
+        {
+            WarArmyReturnStoredIntent stored = ReadPersisted(pArmy);
+            if (stored == null || !stored.Active) return;
+            Kingdom kingdom = ResolveKingdom(stored.KingdomId);
+            Actor captain = SafeCaptain(pArmy);
+            City storedTarget = ResolveCity(stored.TargetCityId);
+            City replacement = IsFriendlySafeCity(storedTarget, kingdom)
+                ? storedTarget
+                : ResolveTargetCity(pArmy, kingdom);
+            var facts = new WarArmyReturnRestoreFacts
+            {
+                ArmyAlive = IsLiveArmy(pArmy) && IsAlive(captain),
+                ArmyKingdomMatches = IsLiveKingdom(kingdom) &&
+                    captain?.kingdom == kingdom &&
+                    AWArmyService.GetIntendedKingdom(pArmy) == kingdom,
+                InsideFriendlySafeCity = IsInsideFriendlySafeCity(captain,
+                    kingdom),
+                HasValidMission = ArmyRtsControllerService.
+                    HasValidMission(pArmy),
+                StoredTargetFriendlySafe = IsFriendlySafeCity(storedTarget,
+                    kingdom),
+                ReplacementTargetCityId = replacement?.id ?? -1L
+            };
+            if (!WarArmyReturnPersistenceRules.TryRestore(stored, facts,
+                    out WarArmyReturnStoredIntent restored) ||
+                !Queue.Begin(restored.ArmyId, restored.KingdomId,
+                    restored.TargetCityId))
+            {
+                ClearPersisted(pArmy);
+                return;
+            }
+            Persist(pArmy, restored.KingdomId, restored.TargetCityId);
+        }
+
+        private static void Finish(long pArmyId, Army pArmy)
+        {
+            Queue.Complete(pArmyId);
+            ClearPersisted(pArmy);
+        }
+
+        private static void Persist(Army pArmy, long pKingdomId,
+            long pTargetCityId)
+        {
+            if (pArmy?.data == null) return;
+            pArmy.data.set(LineageKeys.AW_ARMY_RETURN_ACTIVE, true);
+            pArmy.data.set(LineageKeys.AW_ARMY_RETURN_KINGDOM_ID,
+                pKingdomId);
+            pArmy.data.set(LineageKeys.AW_ARMY_RETURN_TARGET_CITY_ID,
+                pTargetCityId);
+        }
+
+        private static WarArmyReturnStoredIntent ReadPersisted(Army pArmy)
+        {
+            if (pArmy?.data == null) return null;
+            pArmy.data.get(LineageKeys.AW_ARMY_RETURN_ACTIVE,
+                out bool active, false);
+            if (!active) return null;
+            pArmy.data.get(LineageKeys.AW_ARMY_RETURN_KINGDOM_ID,
+                out long kingdomId, -1L);
+            pArmy.data.get(LineageKeys.AW_ARMY_RETURN_TARGET_CITY_ID,
+                out long targetCityId, -1L);
+            return new WarArmyReturnStoredIntent
+            {
+                Active = true,
+                ArmyId = pArmy.id,
+                KingdomId = kingdomId,
+                TargetCityId = targetCityId
+            };
+        }
+
+        private static void ClearPersisted(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            pArmy.data.removeBool(LineageKeys.AW_ARMY_RETURN_ACTIVE);
+            pArmy.data.removeLong(LineageKeys.AW_ARMY_RETURN_KINGDOM_ID);
+            pArmy.data.removeLong(LineageKeys.AW_ARMY_RETURN_TARGET_CITY_ID);
         }
 
         private static void IssueMovement(Actor pCaptain, City pTargetCity)
