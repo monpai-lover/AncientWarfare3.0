@@ -69,7 +69,8 @@ namespace AncientWarfare3.core.policy
 
         internal static bool ShouldKeepMinimapQuantumAsset(string pAssetId)
         {
-            return pAssetId == "boats_big" ||
+            return pAssetId == "armies" ||
+                   pAssetId == "boats_big" ||
                    pAssetId == "boats_small" ||
                    pAssetId == "highlight_cursor_zones" ||
                    pAssetId == "selected_kingdom";

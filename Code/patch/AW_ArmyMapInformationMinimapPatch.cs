@@ -16,7 +16,6 @@ namespace AncientWarfare3.patch
             if (pAsset?.group_system == null ||
                 ArmyRtsRuntimeMode.Current != ArmyRtsMode.On ||
                 !AWPerformanceSettings.ShowArmyMapInformation) return;
-            if (HierarchicalVassalMapModeService.IsActive()) return;
 
             Kingdom selected = SelectedMetas.selected_kingdom;
             if (selected?.data == null || selected.isRekt()) return;

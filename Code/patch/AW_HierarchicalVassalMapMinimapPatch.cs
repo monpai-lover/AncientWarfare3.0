@@ -1,17 +1,12 @@
 using AncientWarfare3.core.policy;
 using HarmonyLib;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace AncientWarfare3.patch
 {
     [HarmonyPatch]
     internal static class AW_HierarchicalVassalMapMinimapPatch
     {
-        private const int MinimapArmyFlagSortingOrder = -2;
-        private static bool _nativeArmyFlagSortingCaptured;
-        private static int _nativeArmyFlagLayerId;
-        private static int _nativeArmyFlagSortingOrder;
         private static bool _nonEssentialAssetsCleared;
         private static bool _unknownIconAssetCleared;
         private static bool _iconFilteringActive;
@@ -85,56 +80,6 @@ namespace AncientWarfare3.patch
         private static bool SkipLeaderIcons(QuantumSpriteAsset pAsset)
         {
             return KeepOrClearMapIcons(pAsset);
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawArmies")]
-        private static bool SkipArmyFlags(QuantumSpriteAsset pAsset)
-        {
-            return KeepOrClearMapIcons(pAsset);
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawArmies")]
-        private static void KeepArmyFlagsBelowCountryLabels(
-            QuantumSpriteAsset pAsset)
-        {
-            if (pAsset?.group_system == null) return;
-            QuantumSprite[] flags = pAsset.group_system.getAll();
-            int activeCount = pAsset.group_system.countActive();
-            if (flags == null || activeCount <= 0) return;
-
-            bool hierarchical = HierarchicalVassalMapModeService.IsActive();
-            int count = Mathf.Min(activeCount, flags.Length);
-            for (int index = 0; index < count; index++)
-            {
-                QuantumSprite flag = flags[index];
-                SpriteRenderer spriteRenderer = flag?.sprite_renderer;
-                if (spriteRenderer == null) continue;
-                if (!_nativeArmyFlagSortingCaptured)
-                {
-                    _nativeArmyFlagSortingCaptured = true;
-                    _nativeArmyFlagLayerId = spriteRenderer.sortingLayerID;
-                    _nativeArmyFlagSortingOrder = spriteRenderer.sortingOrder;
-                }
-
-                int layerId = hierarchical
-                    ? SortingLayer.NameToID("EffectsBack")
-                    : _nativeArmyFlagLayerId;
-                int sortingOrder = hierarchical
-                    ? MinimapArmyFlagSortingOrder
-                    : _nativeArmyFlagSortingOrder;
-                spriteRenderer.sortingLayerID = layerId;
-                spriteRenderer.sortingOrder = sortingOrder;
-
-                QuantumSpriteWithText flagWithText =
-                    flag as QuantumSpriteWithText;
-                Renderer textRenderer =
-                    flagWithText?.text?.GetComponent<Renderer>();
-                if (textRenderer == null) continue;
-                textRenderer.sortingLayerID = layerId;
-                textRenderer.sortingOrder = sortingOrder;
-            }
         }
 
         private static bool KeepOrClearMapIcons(QuantumSpriteAsset pAsset)
