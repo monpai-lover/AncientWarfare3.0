@@ -72,6 +72,8 @@ namespace AncientWarfare3.core.policy
         private static readonly Dictionary<long, NativeCountryLabelEntry>
             NativeCountryLabels =
                 new Dictionary<long, NativeCountryLabelEntry>();
+        private static readonly Dictionary<long, NativeCityLabelEntry>
+            NativeCityLabels = new Dictionary<long, NativeCityLabelEntry>();
         private static HierarchicalVassalHierarchyIndex _hierarchyIndex;
         private static bool _nativeDrawPassActive;
         private static HierarchicalVassalMapModeLayer _selectedLayer =
@@ -110,15 +112,17 @@ namespace AncientWarfare3.core.policy
             HierarchicalVassalMapModeLayer nextLayer =
                 HierarchicalVassalMapModeOptionRules.ResolveLayer(pZoneOption);
             bool changed = nextLayer != _selectedLayer;
-            _selectedLayer = nextLayer;
             if (changed)
             {
+                HierarchicalVassalMapModeLabelLayer.
+                    HideRuntimeLabelsExcept(null);
+                _selectedLayer = nextLayer;
                 NativeDrawMetaCache.Clear();
-                HierarchicalVassalMapModeLabelLayer.MarkViewChanged();
+                RequestNativeRedraw();
             }
             else
             {
-                HierarchicalVassalMapModeLabelLayer.RequestRefresh();
+                RequestNativeRedraw();
             }
         }
 
@@ -169,13 +173,28 @@ namespace AncientWarfare3.core.policy
         {
             NativeDrawMetaCache.Clear();
             NativeCountryLabels.Clear();
+            NativeCityLabels.Clear();
             _nativeDrawPassActive = true;
         }
 
         internal static void RecordNativeDrawZone(TileZone pZone)
         {
-            if (!_nativeDrawPassActive || IsCityLayer || pZone == null ||
+            if (!_nativeDrawPassActive || pZone == null ||
                 pZone.id < 0 || !ContainsVisibleLand(pZone)) return;
+
+            if (IsCityLayer)
+            {
+                City city = GetMetaForZone(pZone) as City;
+                if (city?.data == null || city.isRekt()) return;
+                if (!NativeCityLabels.TryGetValue(city.id,
+                        out NativeCityLabelEntry cityEntry))
+                {
+                    cityEntry = new NativeCityLabelEntry(city);
+                    NativeCityLabels.Add(city.id, cityEntry);
+                }
+                cityEntry.Add(pZone);
+                return;
+            }
 
             Kingdom representative = GetMetaForZone(pZone) as Kingdom;
             if (!IsValidKingdom(representative)) return;
@@ -192,8 +211,11 @@ namespace AncientWarfare3.core.policy
         {
             try
             {
-                if (_nativeDrawPassActive && !IsCityLayer)
-                    PublishNativeCountryLabels();
+                if (_nativeDrawPassActive)
+                {
+                    if (IsCityLayer) PublishNativeCityLabels();
+                    else PublishNativeCountryLabels();
+                }
             }
             catch (Exception error)
             {
@@ -209,8 +231,41 @@ namespace AncientWarfare3.core.policy
             {
                 _nativeDrawPassActive = false;
                 NativeCountryLabels.Clear();
+                NativeCityLabels.Clear();
                 NativeDrawMetaCache.Clear();
             }
+        }
+
+        private static void PublishNativeCityLabels()
+        {
+            var entries = new List<NativeCityLabelEntry>(
+                NativeCityLabels.Values);
+            entries.Sort((pLeft, pRight) =>
+                pLeft.City.id.CompareTo(pRight.City.id));
+            var activeKeys = new HashSet<string>();
+            for (int index = 0; index < entries.Count; index++)
+            {
+                NativeCityLabelEntry entry = entries[index];
+                City city = entry.City;
+                string displayName = city?.data?.name?.Trim();
+                if (string.IsNullOrWhiteSpace(displayName)) continue;
+                Vector3 center = city.city_center;
+                var placement = new HierarchicalVassalMapModeLabelPlacement
+                {
+                    Centroid = new Vector2(center.x, center.y),
+                    Angle = 0f,
+                    Size = HierarchicalVassalMapModeGeometry.
+                        CalculateCityLabelSize(entry.LandArea)
+                };
+                string key = "native:city:" + CurrentLabelFocusKey +
+                             ":" + city.id;
+                activeKeys.Add(key);
+                HierarchicalVassalMapModeLabelLayer.ApplyRuntimeLabel(
+                    key, displayName, placement, 0, false, city.kingdom,
+                    city);
+            }
+            HierarchicalVassalMapModeLabelLayer.
+                HideRuntimeLabelsExcept(activeKeys);
         }
 
         private static void PublishNativeCountryLabels()
@@ -718,7 +773,7 @@ namespace AncientWarfare3.core.policy
         public static void DirtyMap()
         {
             NativeDrawMetaCache.Clear();
-            HierarchicalVassalMapModeLabelLayer.ForceRebuild();
+            RequestNativeRedraw();
         }
 
         public static void MarkCityDirty(City pCity)
@@ -726,6 +781,7 @@ namespace AncientWarfare3.core.policy
             if (pCity?.data == null) return;
             InvalidateCityMeta(pCity);
             HierarchicalVassalMapModeLabelLayer.MarkCityDirty(pCity);
+            RequestNativeRedraw();
         }
 
         internal static void MarkCityGeometryDirty(City pCity)
@@ -751,6 +807,7 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null) return;
             HierarchicalVassalMapModeLabelLayer.MarkKingdomDirty(pKingdom);
+            RequestNativeRedraw();
         }
 
         public static void MarkHierarchyDirty(params Kingdom[] pAffectedKingdoms)
@@ -758,6 +815,7 @@ namespace AncientWarfare3.core.policy
             _hierarchyIndex = null;
             NativeDrawMetaCache.Clear();
             HierarchicalVassalMapModeLabelLayer.MarkHierarchyDirty();
+            RequestNativeRedraw();
         }
 
         internal static void MarkCityOwnershipChanged(City pCity,
@@ -779,6 +837,7 @@ namespace AncientWarfare3.core.policy
             KingdomIndex.Clear();
             NativeDrawMetaCache.Clear();
             NativeCountryLabels.Clear();
+            NativeCityLabels.Clear();
             _nativeDrawPassActive = false;
             HierarchicalVassalMapModeLabelLayer.Reset();
         }
@@ -809,14 +868,25 @@ namespace AncientWarfare3.core.policy
             }
             catch { }
             HierarchicalVassalMapModeLabelLayer.EvictKingdom(pKingdomId);
-            HierarchicalVassalMapModeLabelLayer.ForceRebuild();
+            RequestNativeRedraw();
         }
 
         private static void RefreshView()
         {
             _hierarchyIndex = null;
             NativeDrawMetaCache.Clear();
-            HierarchicalVassalMapModeLabelLayer.MarkViewChanged();
+            HierarchicalVassalMapModeLabelLayer.
+                HideRuntimeLabelsExcept(null);
+            RequestNativeRedraw();
+        }
+
+        private static void RequestNativeRedraw()
+        {
+            try
+            {
+                World.world?.zone_calculator?.setDrawnZonesDirty();
+            }
+            catch { }
         }
 
         private static void InvalidateCityMeta(City pCity)
@@ -1011,6 +1081,25 @@ namespace AncientWarfare3.core.policy
                 }
                 Accumulator.Add(pZone.id, position.x, position.y,
                     pZone.tiles_with_ground);
+            }
+        }
+
+        private sealed class NativeCityLabelEntry
+        {
+            private readonly HashSet<int> _zoneIds = new HashSet<int>();
+            internal readonly City City;
+            internal int LandArea { get; private set; }
+
+            internal NativeCityLabelEntry(City pCity)
+            {
+                City = pCity;
+            }
+
+            internal void Add(TileZone pZone)
+            {
+                if (pZone == null || pZone.id < 0 ||
+                    !_zoneIds.Add(pZone.id)) return;
+                LandArea += Math.Max(0, pZone.tiles_with_ground);
             }
         }
 

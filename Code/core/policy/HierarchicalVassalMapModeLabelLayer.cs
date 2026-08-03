@@ -216,9 +216,10 @@ namespace AncientWarfare3.core.policy
             Color outlineColor = pCountry
                 ? ResolveCountryOutlineColor(pKingdom)
                 : ResolveCityOutlineColor(pCity?.kingdom ?? pKingdom);
+            float centerOffset = pCountry ? TileCenterOffset : 0f;
             node.Apply(pText, new Vector3(
-                    pPlacement.Centroid.x + TileCenterOffset,
-                    pPlacement.Centroid.y + TileCenterOffset,
+                    pPlacement.Centroid.x + centerOffset,
+                    pPlacement.Centroid.y + centerOffset,
                     pCountry ? LabelZ : LabelZ - 0.02f),
                 size, color, outlineColor, pCountry, pPlacement.Angle,
                 pCountryLabelGap);
