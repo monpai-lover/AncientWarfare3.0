@@ -16,10 +16,8 @@ namespace AncientWarfare3.core.db
             KingdomHistoryTableItem.GetTableName(),
             CityHistoryTableItem.GetTableName()
         };
-        private static readonly Dictionary<long, Action<long, object>>
-            CommitCallbacks = new Dictionary<long, Action<long, object>>();
-        private static readonly Dictionary<long, Action<long, string>>
-            FailureCallbacks = new Dictionary<long, Action<long, string>>();
+        private static readonly HistoricalWriteCallbackRegistry Callbacks =
+            new HistoricalWriteCallbackRegistry();
 
         private static HistoricalWriteWorker _worker;
         private static HistoryEventIdAllocator _eventIds =
@@ -211,6 +209,48 @@ namespace AncientWarfare3.core.db
             Action<long> pOnCommitted, out long pSequence,
             out string pError)
         {
+            return TryUpsertState(pOperationKey, pTable, pKeys, pUpdates,
+                pInserts, (Action<long, long>)null, pOnCommitted, null,
+                out pSequence,
+                out pError);
+        }
+
+        public static bool TryUpsertState(string pOperationKey,
+            string pTable, IReadOnlyList<HistoricalSqlColumn> pKeys,
+            IReadOnlyList<HistoricalSqlColumn> pUpdates,
+            IReadOnlyList<HistoricalSqlColumn> pInserts,
+            Action<long> pOnCommitted, Action<long, string> pOnFailed,
+            out long pSequence, out string pError)
+        {
+            return TryUpsertState(pOperationKey, pTable, pKeys, pUpdates,
+                pInserts, (Action<long, long>)null, pOnCommitted, pOnFailed,
+                out pSequence, out pError);
+        }
+
+        public static bool TryUpsertState(string pOperationKey,
+            string pTable, IReadOnlyList<HistoricalSqlColumn> pKeys,
+            IReadOnlyList<HistoricalSqlColumn> pUpdates,
+            IReadOnlyList<HistoricalSqlColumn> pInserts,
+            Action<long> pOnAccepted, Action<long> pOnCommitted,
+            Action<long, string> pOnFailed, out long pSequence,
+            out string pError)
+        {
+            Action<long, long> accepted = pOnAccepted == null
+                ? null
+                : (sequence, replacedSequence) => pOnAccepted(sequence);
+            return TryUpsertState(pOperationKey, pTable, pKeys, pUpdates,
+                pInserts, accepted, pOnCommitted, pOnFailed, out pSequence,
+                out pError);
+        }
+
+        public static bool TryUpsertState(string pOperationKey,
+            string pTable, IReadOnlyList<HistoricalSqlColumn> pKeys,
+            IReadOnlyList<HistoricalSqlColumn> pUpdates,
+            IReadOnlyList<HistoricalSqlColumn> pInserts,
+            Action<long, long> pOnAccepted, Action<long> pOnCommitted,
+            Action<long, string> pOnFailed, out long pSequence,
+            out string pError)
+        {
             string shadowExpected = null;
             string shadowActual = null;
             lock (Gate)
@@ -238,20 +278,15 @@ namespace AncientWarfare3.core.db
                 }
                 else
                 {
-                    if (!_worker.TryEnqueue(envelope,
-                            out HistoricalWriteEnvelope replaced))
+                    Action<long, object> committed = pOnCommitted == null
+                        ? null
+                        : (sequence, outcome) => pOnCommitted(sequence);
+                    if (!Callbacks.TryEnqueue(_worker, envelope,
+                            pOnAccepted, committed, pOnFailed, out _))
                     {
                         pError = "historical async state queue is full";
                         return false;
                     }
-                    if (replaced != null)
-                    {
-                        CommitCallbacks.Remove(replaced.Sequence);
-                        FailureCallbacks.Remove(replaced.Sequence);
-                    }
-                    if (pOnCommitted != null)
-                        CommitCallbacks[pSequence] =
-                            (sequence, outcome) => pOnCommitted(sequence);
                     pError = string.Empty;
                     return true;
                 }
@@ -272,12 +307,38 @@ namespace AncientWarfare3.core.db
             Action<long, object> pOnCommitted, out long pSequence,
             out string pError)
         {
-            return TryEnqueueCustom(pOperationKey, pFactory, pOnCommitted,
-                null, out pSequence, out pError);
+            return TryEnqueueCustom(pOperationKey, pFactory,
+                (Action<long, long>)null, pOnCommitted, null,
+                out pSequence, out pError);
         }
 
         public static bool TryEnqueueCustom(string pOperationKey,
             Func<long, AWAsyncStamp, HistoricalWriteEnvelope> pFactory,
+            Action<long, object> pOnCommitted,
+            Action<long, string> pOnFailed, out long pSequence,
+            out string pError)
+        {
+            return TryEnqueueCustom(pOperationKey, pFactory,
+                (Action<long, long>)null, pOnCommitted, pOnFailed,
+                out pSequence, out pError);
+        }
+
+        public static bool TryEnqueueCustom(string pOperationKey,
+            Func<long, AWAsyncStamp, HistoricalWriteEnvelope> pFactory,
+            Action<long> pOnAccepted, Action<long, object> pOnCommitted,
+            Action<long, string> pOnFailed, out long pSequence,
+            out string pError)
+        {
+            Action<long, long> accepted = pOnAccepted == null
+                ? null
+                : (sequence, replacedSequence) => pOnAccepted(sequence);
+            return TryEnqueueCustom(pOperationKey, pFactory, accepted,
+                pOnCommitted, pOnFailed, out pSequence, out pError);
+        }
+
+        public static bool TryEnqueueCustom(string pOperationKey,
+            Func<long, AWAsyncStamp, HistoricalWriteEnvelope> pFactory,
+            Action<long, long> pOnAccepted,
             Action<long, object> pOnCommitted,
             Action<long, string> pOnFailed, out long pSequence,
             out string pError)
@@ -302,21 +363,12 @@ namespace AncientWarfare3.core.db
                     pError = "custom historical write envelope is invalid";
                     return false;
                 }
-                if (!_worker.TryEnqueue(envelope,
-                        out HistoricalWriteEnvelope replaced))
+                if (!Callbacks.TryEnqueue(_worker, envelope, pOnAccepted,
+                        pOnCommitted, pOnFailed, out _))
                 {
                     pError = "historical async custom queue is full";
                     return false;
                 }
-                if (replaced != null)
-                {
-                    CommitCallbacks.Remove(replaced.Sequence);
-                    FailureCallbacks.Remove(replaced.Sequence);
-                }
-                if (pOnCommitted != null)
-                    CommitCallbacks[pSequence] = pOnCommitted;
-                if (pOnFailed != null)
-                    FailureCallbacks[pSequence] = pOnFailed;
                 pError = string.Empty;
                 return true;
             }
@@ -362,14 +414,8 @@ namespace AncientWarfare3.core.db
                     long sequence = completion.Sequences[index];
                     Action<long, object> callback;
                     Action<long, string> failureCallback;
-                    lock (Gate)
-                    {
-                        CommitCallbacks.TryGetValue(sequence, out callback);
-                        FailureCallbacks.TryGetValue(sequence,
-                            out failureCallback);
-                        CommitCallbacks.Remove(sequence);
-                        FailureCallbacks.Remove(sequence);
-                    }
+                    Callbacks.Take(sequence, out callback,
+                        out failureCallback);
                     try
                     {
                         if (completion.IsCommitted)
@@ -428,8 +474,7 @@ namespace AncientWarfare3.core.db
                     _worker = null;
                     _worldGeneration = 0L;
                     _eventIdsReady = false;
-                    CommitCallbacks.Clear();
-                    FailureCallbacks.Clear();
+                    Callbacks.Clear();
                 }
                 pError = string.Empty;
                 return true;

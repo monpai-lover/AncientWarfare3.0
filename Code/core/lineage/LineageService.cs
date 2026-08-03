@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.content;
 using AncientWarfare3.content.schools;
@@ -154,7 +153,6 @@ namespace AncientWarfare3.core.lineage
 
             EnsureGivenName(pActor);
             ApplyDisplayName(pActor);
-            ArchiveActor(pActor, pAlive: true);
         }
 
         /// <summary>
@@ -175,9 +173,8 @@ namespace AncientWarfare3.core.lineage
             if (!IsXia(pBaby)) EnsureGivenName(pBaby, originalForeignName);
             SlaveService.EnsureSlaveChild(pBaby, pParent1, pParent2);
             PropagateNobleBloodFromParents(pBaby, pParent1, pParent2);
-            RecordFamilyEdges(pBaby, pParent1, pParent2);
             ApplyDisplayName(pBaby);
-            ArchiveActor(pBaby, pAlive: true);
+            LineageBirthArchiveService.TryRecord(pBaby, pParent1, pParent2);
 
             // 编年史:仅入谱贵族(有 lineage_id)记出生事件。
             RecordBirthEvent(pBaby);
@@ -192,8 +189,8 @@ namespace AncientWarfare3.core.lineage
             ArchiveTraceableActor(pParent1, pAlive: true);
             ArchiveTraceableActor(pParent2, pAlive: true);
             if (!pParentEdgesOwned)
-                RecordFamilyEdges(pBaby, pParent1, pParent2);
-            ArchiveTraceableActor(pBaby, pAlive: true);
+                LineageBirthArchiveService.TryRecord(pBaby, pParent1,
+                    pParent2);
         }
 
         public static bool HasTraceableArchive(Actor pActor)
@@ -205,6 +202,11 @@ namespace AncientWarfare3.core.lineage
         {
             if (!IsNativeXiaCultureActor(pActor) && !IsHuman(pActor)) return;
             LineageArchiveWriter.Upsert(pActor, pAlive, pTraceOnly: true);
+        }
+
+        internal static bool RefreshArchivedIdentity(Actor pActor)
+        {
+            return LineageArchiveWriter.RefreshIdentity(pActor);
         }
 
         private static bool IsMixedXiaHumanFamily(Actor pBaby, Actor pParent1, Actor pParent2)
@@ -586,100 +588,6 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.NOBLE_ORIGIN_ACTOR_ID, pOriginId);
             pActor.data.set(LineageKeys.NOBLE_ORIGIN_NAME, pOriginName ?? "");
             pActor.data.set(LineageKeys.NOBLE_ORIGIN_DISTANCE, pDistance);
-        }
-
-        /// <summary>把 parent_id_1/2 写入 FamilyEdge 持久亲子边表(死后家族树仍可绘制)。</summary>
-        private static bool RecordFamilyEdges(Actor pActor,
-            Actor pParent1 = null, Actor pParent2 = null,
-            bool pDeferProjection = false)
-        {
-            if (pActor?.data == null) return false;
-            long childId = pActor.data.id;
-            pActor.data.get(LineageKeys.LINEAGE_ID, out long childLineage, -1);
-
-            long explicitParent1 = pParent1?.data?.id ?? -1L;
-            long explicitParent2 = pParent2?.data?.id ?? -1L;
-            var parents = FamilyTreeRelationRules.MergeParentSlots(
-                pActor.data.parent_id_1, pActor.data.parent_id_2,
-                explicitParent1, explicitParent2);
-            pActor.data.parent_id_1 = parents.slot1;
-            pActor.data.parent_id_2 = parents.slot2;
-
-            bool hasFirst = pActor.data.parent_id_1 >= 0L;
-            bool hasSecond = pActor.data.parent_id_2 >= 0L;
-            if (!hasFirst && !hasSecond) return false;
-
-            SQLiteConnection db = LineageArchiveManager.Instance.OperatingDB;
-            if (db == null ||
-                !LineageArchiveManager.Instance.InitializeSuccessful)
-                return false;
-
-            bool wrote;
-            using SQLiteTransaction transaction = db.BeginTransaction();
-            try
-            {
-                bool wroteFirst = UpsertFamilyEdge(db, transaction, childId,
-                    pActor.data.parent_id_1, 1, childLineage);
-                bool wroteSecond = UpsertFamilyEdge(db, transaction, childId,
-                    pActor.data.parent_id_2, 2, childLineage);
-                wrote = wroteFirst || wroteSecond;
-                HistoricalContentRevision
-                    .AdvanceAfterSuccessfulSynchronousWrite(
-                        transaction.Commit);
-            }
-            catch
-            {
-                try { transaction.Rollback(); }
-                catch { }
-                throw;
-            }
-
-            if (wrote && !pDeferProjection)
-                FamilyTreeProjectionPendingStore.IncludePrerequisite(childId,
-                    FamilyTreeProjectionChange.FamilyStructure);
-            return wrote;
-        }
-
-        internal static bool RecordLightweightParentEdges(Actor pActor,
-            Actor pParent1, Actor pParent2)
-        {
-            return RecordFamilyEdges(pActor, pParent1, pParent2,
-                pDeferProjection: true);
-        }
-
-        private static bool UpsertFamilyEdge(SQLiteConnection pDb,
-            SQLiteTransaction pTransaction, long pChildId, long pParentId,
-            int pSlot, long pChildLineage)
-        {
-            if (pParentId < 0) return false;
-
-            long edgeId = pChildId * 10 + pSlot;
-            string table = FamilyEdgeTableItem.GetTableName();
-            using (var update = new SQLiteCommand(pDb)
-                   { Transaction = pTransaction })
-            {
-                update.CommandText = "UPDATE " + table +
-                    " SET PARENT_ID=@parent,CHILD_LINEAGE_ID=@lineage" +
-                    " WHERE EDGE_ID=@edge";
-                update.Parameters.AddWithValue("@parent", pParentId);
-                update.Parameters.AddWithValue("@lineage", pChildLineage);
-                update.Parameters.AddWithValue("@edge", edgeId);
-                if (update.ExecuteNonQuery() > 0) return true;
-            }
-
-            using var insert = new SQLiteCommand(pDb)
-                { Transaction = pTransaction };
-            insert.CommandText = "INSERT INTO " + table +
-                " (EDGE_ID,CHILD_ID,PARENT_ID,PARENT_SLOT," +
-                "CHILD_LINEAGE_ID,CREATED_TIME) VALUES " +
-                "(@edge,@child,@parent,@slot,@lineage,@created)";
-            insert.Parameters.AddWithValue("@edge", edgeId);
-            insert.Parameters.AddWithValue("@child", pChildId);
-            insert.Parameters.AddWithValue("@parent", pParentId);
-            insert.Parameters.AddWithValue("@slot", pSlot);
-            insert.Parameters.AddWithValue("@lineage", pChildLineage);
-            insert.Parameters.AddWithValue("@created", CurTime());
-            return insert.ExecuteNonQuery() == 1;
         }
 
         // ───────────────────────────── 晋升 ─────────────────────────────
@@ -1670,7 +1578,6 @@ namespace AncientWarfare3.core.lineage
             PropagateNobleBloodFromSource(pChild, pParent);
             RefreshNobleStatus(pChild);
             ApplyDisplayName(pChild);
-            RecordFamilyEdges(pChild, pDeferProjection: pDeferProjection);
             pWriteAccepted = ArchiveActor(pChild, pAlive: true,
                 pFinalizeProjection: !pDeferProjection);
             try { pChild.clearGraphicsFully(); } catch { }

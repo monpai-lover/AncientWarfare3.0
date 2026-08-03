@@ -1,4 +1,5 @@
 using System.Data.SQLite;
+using System.Text.RegularExpressions;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
@@ -7,6 +8,7 @@ internal static class LineageBirthArchivePersistenceSqlTests
 {
     public static void Run()
     {
+        StructuredResultAcceptsOnlyQueuedOrCommitted();
         AsyncEnvelopeUsesPerChildStateKeyAndReturnsTypedOutcome();
         OrdinaryBirthCommitsArchiveAndTwoEdges();
         ExplicitParentSlotsNormalizeArchiveSnapshot();
@@ -15,6 +17,190 @@ internal static class LineageBirthArchivePersistenceSqlTests
         ReplayWithoutSecondParentRemovesStaleEdge();
         SecondEdgeFailureRollsBackEverything();
         RepeatedBirthIsIdempotent();
+        CommittedBirthRevisionSurvivesNewerIdentityFailure();
+        EarlierCommittedCompletionIsConsumedExactlyOnce();
+        FailedIdentityWriteClearsPendingProjection();
+        LateBirthPublicationRetainsCommittedProvenance();
+        QueuedReplacementTransfersProjectionOwnership();
+        LatePrerequisiteAttachesToActiveOwner();
+        ArchiveFailureCallbacksClearBothPendingStores();
+    }
+
+    private static void CommittedBirthRevisionSurvivesNewerIdentityFailure()
+    {
+        var pending = new FamilyTreeProjectionPendingState();
+        pending.Publish(100L, 70L,
+            FamilyTreeProjectionChange.FamilyStructure);
+        pending.Publish(100L, 71L,
+            FamilyTreeProjectionChange.IdentityOrTitle);
+        long revisionBefore = FamilyTreeProjectionRevision.Current;
+
+        True(pending.TryComplete(100L, 70L,
+                out FamilyTreeProjectionChange committedBirth),
+            "a committed birth completes while a newer identity is pending");
+        Equal(FamilyTreeProjectionChange.FamilyStructure, committedBirth,
+            "the birth completion releases its own family structure change");
+        FamilyTreeProjectionRevision.Advance(committedBirth);
+        pending.Fail(100L, 71L);
+        if (pending.TryComplete(100L, 70L,
+                out FamilyTreeProjectionChange repeatedBirth))
+            FamilyTreeProjectionRevision.Advance(repeatedBirth);
+        if (pending.TryComplete(100L, 71L,
+                out FamilyTreeProjectionChange failedIdentity))
+            FamilyTreeProjectionRevision.Advance(failedIdentity);
+        Equal(revisionBefore + 1L, FamilyTreeProjectionRevision.Current,
+            "birth success and identity failure advance exactly once");
+        True(!pending.TryComplete(100L, 70L, out _),
+            "the committed birth change is released exactly once");
+        True(!pending.TryComplete(100L, 71L, out _),
+            "the failed identity leaves no pending projection owner");
+    }
+
+    private static void EarlierCommittedCompletionIsConsumedExactlyOnce()
+    {
+        var pending = new FamilyTreeProjectionPendingState();
+        pending.Publish(101L, 80L,
+            FamilyTreeProjectionChange.FamilyStructure);
+        pending.Publish(101L, 81L,
+            FamilyTreeProjectionChange.IdentityOrTitle);
+
+        True(pending.TryComplete(101L, 80L,
+                out FamilyTreeProjectionChange committedBirth),
+            "a newer sequence cannot take ownership of an earlier commit");
+        Equal(FamilyTreeProjectionChange.FamilyStructure, committedBirth,
+            "the earlier committed source remains attributable to its sequence");
+        True(!pending.TryComplete(101L, 80L, out _),
+            "an earlier committed source cannot be consumed twice");
+    }
+
+    private static void FailedIdentityWriteClearsPendingProjection()
+    {
+        var pending = new FamilyTreeProjectionPendingState();
+        pending.Publish(102L, 90L,
+            FamilyTreeProjectionChange.IdentityOrTitle);
+
+        pending.Fail(102L, 90L);
+
+        True(!pending.TryComplete(102L, 90L, out _),
+            "a failed identity write clears its pending projection");
+        pending.Publish(102L, 91L, FamilyTreeProjectionChange.None);
+        True(pending.TryComplete(102L, 91L,
+                out FamilyTreeProjectionChange nextChange),
+            "a later write owns a fresh projection boundary");
+        Equal(FamilyTreeProjectionChange.None, nextChange,
+            "failed identity metadata cannot leak into a later commit");
+    }
+
+    private static void LateBirthPublicationRetainsCommittedProvenance()
+    {
+        var pending = new FamilyTreeProjectionPendingState();
+        pending.Publish(103L, 101L,
+            FamilyTreeProjectionChange.IdentityOrTitle);
+        pending.Publish(103L, 100L,
+            FamilyTreeProjectionChange.FamilyStructure);
+
+        True(pending.TryComplete(103L, 100L,
+                out FamilyTreeProjectionChange committedBirth),
+            "a late birth publication remains attributable to its sequence");
+        Equal(FamilyTreeProjectionChange.FamilyStructure, committedBirth,
+            "a newer pending identity cannot discard a late birth source");
+        pending.Fail(103L, 101L);
+        True(!pending.TryComplete(103L, 101L, out _),
+            "the newer failed identity still clears its own source");
+    }
+
+    private static void QueuedReplacementTransfersProjectionOwnership()
+    {
+        var pending = new FamilyTreeProjectionPendingState();
+        pending.Publish(104L, 110L,
+            FamilyTreeProjectionChange.FamilyStructure);
+
+        True(pending.TransferOwnership(104L, 110L, 111L),
+            "a queued replacement explicitly takes ownership of old metadata");
+        pending.Publish(104L, 111L,
+            FamilyTreeProjectionChange.IdentityOrTitle);
+
+        True(!pending.TryComplete(104L, 110L, out _),
+            "a coalesced sequence no longer owns a completion callback");
+        True(pending.TryComplete(104L, 111L,
+                out FamilyTreeProjectionChange replacementChange),
+            "the replacement completes transferred metadata");
+        Equal(FamilyTreeProjectionChange.FamilyStructure, replacementChange,
+            "queued replacement preserves the strongest transferred change");
+    }
+
+    private static void LatePrerequisiteAttachesToActiveOwner()
+    {
+        var pending = new FamilyTreeProjectionPendingState();
+        pending.Publish(105L, 120L, FamilyTreeProjectionChange.None);
+        pending.IncludePrerequisite(105L,
+            FamilyTreeProjectionChange.FamilyStructure);
+
+        True(pending.TryComplete(105L, 120L,
+                out FamilyTreeProjectionChange committedChange),
+            "the active archive owner remains completable");
+        Equal(FamilyTreeProjectionChange.FamilyStructure, committedChange,
+            "a late prerequisite attaches to the active archive owner");
+    }
+
+    private static void ArchiveFailureCallbacksClearBothPendingStores()
+    {
+        string archiveWriter = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageArchiveWriter.cs"));
+        string birthWriter = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageBirthArchiveService.cs"));
+
+        True(Regex.IsMatch(archiveWriter,
+                @"OnAsyncWriteFailed\s*\(\s*long\s+pActorId\s*,\s*" +
+                @"long\s+pSequence\s*\).*?" +
+                @"ActorArchivePendingStore\.Complete\s*\(\s*pActorId\s*,\s*" +
+                @"pSequence\s*\)\s*;.*?" +
+                @"FamilyTreeProjectionPendingStore\.Fail\s*\(\s*" +
+                @"pActorId\s*,\s*pSequence\s*\)\s*;",
+                RegexOptions.Singleline),
+            "async archive failure clears actor and projection pending stores");
+        True(Regex.Matches(archiveWriter,
+                @"TryUpsertState\s*\(.*?OnAsyncWriteFailed\s*\(\s*id\s*,\s*" +
+                @"sequence\s*\)", RegexOptions.Singleline).Count >= 2,
+            "live and captured archive writes register failure cleanup");
+        True(Regex.Matches(archiveWriter,
+                @"\(sequence,\s*replacedSequence\)\s*=>.*?" +
+                @"TransferOwnership\s*\(\s*id\s*,\s*replacedSequence\s*,\s*" +
+                @"sequence\s*\)", RegexOptions.Singleline).Count >= 2,
+            "archive writes transfer only explicit queue replacements");
+        True(Regex.IsMatch(birthWriter,
+                @"OnFailed\s*\(\s*long\s+pChildId.*?" +
+                @"ActorArchivePendingStore\.Complete\s*\(\s*pChildId\s*,\s*" +
+                @"pSequence\s*\)\s*;.*?" +
+                @"FamilyTreeProjectionPendingStore\.Fail\s*\(\s*" +
+                @"pChildId\s*,\s*pSequence\s*\)\s*;",
+                RegexOptions.Singleline),
+            "birth failure clears actor and projection pending stores");
+    }
+
+    private static void StructuredResultAcceptsOnlyQueuedOrCommitted()
+    {
+        var notEligible = new LineageBirthArchiveResult(
+            LineageBirthArchiveStatus.NotEligible, 100L, 10L, 20L,
+            "not eligible");
+        var queued = new LineageBirthArchiveResult(
+            LineageBirthArchiveStatus.Queued, 100L, 10L, 20L, "");
+        var committed = new LineageBirthArchiveResult(
+            LineageBirthArchiveStatus.Committed, 100L, 10L, 20L, "");
+        var failed = new LineageBirthArchiveResult(
+            LineageBirthArchiveStatus.Failed, 100L, 10L, 20L, "failed");
+
+        True(!notEligible.Accepted,
+            "not eligible births are not accepted persistence writes");
+        True(queued.Accepted, "queued births are accepted");
+        True(committed.Accepted, "synchronous commits are accepted");
+        True(!failed.Accepted, "failed births are not accepted");
+        Equal(100L, failed.ChildId, "result keeps the child id");
+        Equal(10L, failed.Parent1Id, "result keeps parent slot 1");
+        Equal(20L, failed.Parent2Id, "result keeps parent slot 2");
+        Equal("failed", failed.Reason, "result keeps the failure reason");
     }
 
     private static void AsyncEnvelopeUsesPerChildStateKeyAndReturnsTypedOutcome()
@@ -152,6 +338,10 @@ internal static class LineageBirthArchivePersistenceSqlTests
     private static void SecondEdgeFailureRollsBackEverything()
     {
         using SQLiteConnection db = OpenDatabase();
+        long revisionBefore = FamilyTreeProjectionRevision.Current;
+        var pending = new FamilyTreeProjectionPendingState();
+        pending.Publish(100L, 60L,
+            FamilyTreeProjectionChange.FamilyStructure);
         Execute(db, "CREATE TRIGGER abort_second_parent_edge " +
             "BEFORE INSERT ON FamilyEdge WHEN NEW.PARENT_SLOT=2 " +
             "BEGIN SELECT RAISE(ABORT,'injected slot 2 failure'); END");
@@ -171,6 +361,7 @@ internal static class LineageBirthArchivePersistenceSqlTests
                     StringComparison.Ordinal),
                 "rollback failure comes from the slot 2 trigger");
             tx.Rollback();
+            pending.Fail(100L, 60L);
         }
 
         True(failed, "slot 2 trigger abort reaches the transaction owner");
@@ -180,6 +371,14 @@ internal static class LineageBirthArchivePersistenceSqlTests
         Equal(0L, Scalar(db,
                 "SELECT COUNT(*) FROM FamilyEdge WHERE CHILD_ID=100"),
             "slot 2 failure rolls back both parent edges");
+        bool exposedFailedBirth = pending.TryComplete(100L, 60L,
+            out FamilyTreeProjectionChange failedBirthChange);
+        if (exposedFailedBirth)
+            FamilyTreeProjectionRevision.Advance(failedBirthChange);
+        True(!exposedFailedBirth,
+            "a rolled-back birth leaves no releasable projection change");
+        Equal(revisionBefore, FamilyTreeProjectionRevision.Current,
+            "a rolled-back birth cannot advance the family-tree revision");
     }
 
     private static void RepeatedBirthIsIdempotent()
@@ -363,5 +562,14 @@ internal static class LineageBirthArchivePersistenceSqlTests
             throw new InvalidOperationException(pName + ": expected '" +
                                                 pExpected + "', got '" +
                                                 pActual + "'");
+    }
+
+    private static void Equal(FamilyTreeProjectionChange pExpected,
+        FamilyTreeProjectionChange pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pName + ": expected " +
+                                                pExpected + ", got " +
+                                                pActual);
     }
 }

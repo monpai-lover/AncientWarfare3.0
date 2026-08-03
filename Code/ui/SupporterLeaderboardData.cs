@@ -95,7 +95,14 @@ namespace AncientWarfare3.ui
                     Rank = 10,
                     Name = "阿良",
                     Amount = "50",
-                    Date = "2026-08-03"
+                    Date = "2026-08-04"
+                },
+                new SupporterLeaderboardEntry
+                {
+                    Rank = 11,
+                    Name = "MO",
+                    Amount = "10",
+                    Date = "2026-08-04"
                 }
             };
 

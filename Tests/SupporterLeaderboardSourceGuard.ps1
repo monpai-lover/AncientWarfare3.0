@@ -17,8 +17,11 @@ if ($csv -notmatch '(?m)^1,Justin,20,') { throw 'Justin supporter entry is missi
 if ($csv -notmatch '(?m)^9,\u672a\u660e\u5929\u900d\u9065\u884c,20\.00,2026-08-02$') {
     throw 'supporter entry 9 is missing'
 }
-if ($csv -notmatch '(?m)^10,\u963f\u826f,50,2026-08-03$') {
+if ($csv -notmatch '(?m)^10,\u963f\u826f,50,2026-08-04$') {
     throw 'supporter entry 10 is missing'
+}
+if ($csv -notmatch '(?m)^11,MO,10,2026-08-04$') {
+    throw 'supporter entry 11 is missing'
 }
 foreach ($requiredRow in @(
         '(?m)^2,Jake,20,',
@@ -44,6 +47,9 @@ foreach ($required in @(
 }
 if ($source -notmatch 'Name = "\u963f\u826f"') {
     throw 'supporter data fallback entry 10 is missing'
+}
+if ($source -notmatch 'Name = "MO"') {
+    throw 'supporter data fallback entry 11 is missing'
 }
 $windowSource = Get-Content -Raw -Encoding UTF8 -LiteralPath $window
 foreach ($required in @('sponsor_qr.jpg', 'ImageConversion.LoadImage', 'SponsorQr')) {

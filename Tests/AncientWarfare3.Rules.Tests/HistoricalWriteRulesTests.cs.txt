@@ -1,9 +1,13 @@
 using System.Text.RegularExpressions;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.lineage;
 
 internal static class HistoricalWriteRulesTests
 {
+    private static readonly TimeSpan ConcurrentDrainTimeout =
+        TimeSpan.FromSeconds(30);
+
     public static void Run()
     {
         TerminalBatchProducesFailureCompletionForEverySequence();
@@ -11,6 +15,12 @@ internal static class HistoricalWriteRulesTests
         RetryLimitProducesFailureCompletionForEverySequence();
         ExistingCompletionConstructorCreatesCommittedCompletion();
         CustomWriteApiRegistersAndDrainsExclusiveFailureCallbacks();
+        CompletionCannotRunBeforeAcceptedPendingPublication();
+        NewerFailureCannotConsumeTakenCommittedSource();
+        QueuedReplacementExplicitlyTransfersProjectionSource();
+        ConsecutiveQueuedReplacementsTransferProvenance();
+        InFlightCommitSurvivesFailedReplacementChain();
+        LatePrerequisiteFollowsReplacementChain();
     }
 
     public static void RunTerminalBatchFailure()
@@ -79,6 +89,691 @@ internal static class HistoricalWriteRulesTests
     public static void RunCustomWriteApi()
     {
         CustomWriteApiRegistersAndDrainsExclusiveFailureCallbacks();
+        CompletionCannotRunBeforeAcceptedPendingPublication();
+        NewerFailureCannotConsumeTakenCommittedSource();
+        QueuedReplacementExplicitlyTransfersProjectionSource();
+        ConsecutiveQueuedReplacementsTransferProvenance();
+        InFlightCommitSurvivesFailedReplacementChain();
+        LatePrerequisiteFollowsReplacementChain();
+    }
+
+    private static void ConsecutiveQueuedReplacementsTransferProvenance()
+    {
+        using var sink = new SuccessfulBatchSink();
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        var replacements = new List<long>();
+        FamilyTreeProjectionChange committedChange =
+            FamilyTreeProjectionChange.None;
+        string key = "replacement-chain:actor";
+
+        for (long sequence = 91L; sequence <= 93L; sequence++)
+        {
+            FamilyTreeProjectionChange ownChange = sequence == 91L
+                ? FamilyTreeProjectionChange.FamilyStructure
+                : sequence == 92L
+                    ? FamilyTreeProjectionChange.LifeStatus
+                    : FamilyTreeProjectionChange.IdentityOrTitle;
+            var envelope = new HistoricalWriteEnvelope(sequence, key,
+                string.Empty, Array.Empty<HistoricalSqlValue>(),
+                HistoricalWriteKind.State,
+                new AWAsyncStamp(1L, sequence, sequence));
+            True(callbacks.TryEnqueue(worker, envelope,
+                    (accepted, replaced) =>
+                    {
+                        replacements.Add(replaced);
+                        pending.TransferOwnership(701L, replaced, accepted);
+                        pending.Publish(701L, accepted, ownChange);
+                    }, (committed, outcome) =>
+                    {
+                        pending.TryComplete(701L, committed,
+                            out committedChange);
+                    }, null, out _),
+                "replacement chain accepts sequence " + sequence);
+        }
+
+        Equal(0L, replacements[0], "chain A replaces no sequence");
+        Equal(91L, replacements[1], "chain B replaces A");
+        Equal(92L, replacements[2], "chain C replaces B");
+        worker.Start();
+        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount > 0,
+                TimeSpan.FromSeconds(2)),
+            "replacement chain publishes one completion");
+        True(worker.TryDequeueCompletion(
+                out HistoricalWriteCompletion completion),
+            "replacement chain completion is available");
+        callbacks.Take(completion.Sequences[0],
+            out Action<long, object> committedCallback,
+            out Action<long, string> failureCallback);
+        committedCallback?.Invoke(completion.Sequences[0],
+            completion.Outcomes[0]);
+
+        Equal(93L, completion.Sequences[0],
+            "only chain C reaches the worker completion");
+        True(committedChange == FamilyTreeProjectionChange.FamilyStructure,
+            "A provenance transfers through B into C exactly once");
+        True(!pending.TryComplete(701L, 91L, out _) &&
+             !pending.TryComplete(701L, 92L, out _),
+            "chain A and B retain no orphaned provenance");
+    }
+
+    private static void InFlightCommitSurvivesFailedReplacementChain()
+    {
+        using var sink = new SuccessfulThenTerminalSink(
+            "injected replacement chain failure");
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        int revisionAdvanceCount = 0;
+        var commitTaken = new ManualResetEventSlim(false);
+        var allowCommit = new ManualResetEventSlim(false);
+        var failureFinished = new ManualResetEventSlim(false);
+        Exception commitDrainError = null;
+        Exception failureDrainError = null;
+
+        var independent = new HistoricalWriteEnvelope(101L,
+            "inflight-chain:independent", string.Empty,
+            Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
+            new AWAsyncStamp(1L, 101L, 101L));
+        True(callbacks.TryEnqueue(worker, independent,
+                (sequence, replaced) => pending.Publish(702L, sequence,
+                    FamilyTreeProjectionChange.FamilyStructure),
+                (sequence, outcome) =>
+                {
+                    if (pending.TryComplete(702L, sequence,
+                            out FamilyTreeProjectionChange change) &&
+                        change == FamilyTreeProjectionChange.FamilyStructure)
+                        Interlocked.Increment(ref revisionAdvanceCount);
+                }, null, out _),
+            "independent in-flight sequence is accepted");
+        worker.Start();
+        bool firstExecuteEntered = sink.FirstExecuteEntered.Wait(
+            ConcurrentDrainTimeout);
+        try
+        {
+            True(firstExecuteEntered,
+                "independent sequence enters the worker before chain enqueue");
+
+            long expectedReplacement = 0L;
+            for (long sequence = 102L; sequence <= 104L; sequence++)
+            {
+                var envelope = new HistoricalWriteEnvelope(sequence,
+                    "inflight-chain:replacement", string.Empty,
+                    Array.Empty<HistoricalSqlValue>(),
+                    HistoricalWriteKind.State,
+                    new AWAsyncStamp(1L, sequence, sequence));
+                long expected = expectedReplacement;
+                True(callbacks.TryEnqueue(worker, envelope,
+                        (accepted, replaced) =>
+                        {
+                            Equal(expected, replaced,
+                                "replacement chain reports explicit owner");
+                            pending.TransferOwnership(702L, replaced,
+                                accepted);
+                            pending.Publish(702L, accepted,
+                                FamilyTreeProjectionChange.IdentityOrTitle);
+                        }, (committed, outcome) =>
+                        {
+                            if (pending.TryComplete(702L, committed, out _))
+                                Interlocked.Increment(
+                                    ref revisionAdvanceCount);
+                        }, (failed, error) => pending.Fail(702L, failed),
+                        out _),
+                    "in-flight replacement chain accepts " + sequence);
+                expectedReplacement = sequence;
+            }
+        }
+        finally
+        {
+            sink.AllowFirstExecute.Set();
+        }
+
+        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount >= 2,
+                ConcurrentDrainTimeout),
+            "worker publishes independent success and chain failure");
+        var commitDrain = new Thread(() =>
+        {
+            try
+            {
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "commit drain dequeues the independent completion");
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                commitTaken.Set();
+                True(allowCommit.Wait(ConcurrentDrainTimeout),
+                    "commit drain receives the main-thread release signal");
+                committed?.Invoke(completion.Sequences[0],
+                    completion.Outcomes[0]);
+            }
+            catch (Exception error)
+            {
+                commitDrainError = error;
+            }
+        });
+        var failureDrain = new Thread(() =>
+        {
+            try
+            {
+                True(commitTaken.Wait(ConcurrentDrainTimeout),
+                    "failure drain waits until the commit callback is taken");
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "failure drain dequeues the replacement failure");
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                failed?.Invoke(completion.Sequences[0], completion.Error);
+                failureFinished.Set();
+            }
+            catch (Exception error)
+            {
+                failureDrainError = error;
+            }
+        });
+        commitDrain.Start();
+        failureDrain.Start();
+        bool failureFinishedInTime = false;
+        bool commitDrainJoined = false;
+        bool failureDrainJoined = false;
+        int advanceCountBeforeCommit = -1;
+        try
+        {
+            failureFinishedInTime = failureFinished.Wait(
+                ConcurrentDrainTimeout);
+            advanceCountBeforeCommit = Volatile.Read(
+                ref revisionAdvanceCount);
+        }
+        finally
+        {
+            allowCommit.Set();
+            commitTaken.Set();
+            commitDrainJoined = commitDrain.Join(ConcurrentDrainTimeout);
+            failureDrainJoined = failureDrain.Join(ConcurrentDrainTimeout);
+        }
+
+        string drainDiagnostics =
+            "; commit joined=" + commitDrainJoined +
+            ", failure joined=" + failureDrainJoined +
+            ", commit error=" + (commitDrainError?.ToString() ?? "none") +
+            ", failure error=" + (failureDrainError?.ToString() ?? "none");
+        True(failureFinishedInTime,
+            "replacement chain failure runs before independent commit" +
+            drainDiagnostics);
+        True(commitDrainJoined && failureDrainJoined,
+            "both completion drains exit after their explicit handshakes" +
+            drainDiagnostics);
+        True(commitDrainError == null && failureDrainError == null,
+            "completion drains finish without background exceptions" +
+            drainDiagnostics);
+        Equal(0L, advanceCountBeforeCommit,
+            "failed replacement chain never advances revision");
+
+        Equal(1L, Volatile.Read(ref revisionAdvanceCount),
+            "independent in-flight success advances exactly once");
+        True(!pending.TryComplete(702L, 102L, out _) &&
+             !pending.TryComplete(702L, 103L, out _) &&
+             !pending.TryComplete(702L, 104L, out _),
+            "C failure clears only the complete replacement chain");
+    }
+
+    private static void LatePrerequisiteFollowsReplacementChain()
+    {
+        FamilyTreeProjectionChange committedChange =
+            RunLatePrerequisiteChain(pFail: false, pActorId: 703L,
+                pFirstSequence: 111L);
+        True(committedChange == FamilyTreeProjectionChange.FamilyStructure,
+            "late prerequisite transfers from B through C on commit");
+
+        FamilyTreeProjectionChange failedChange =
+            RunLatePrerequisiteChain(pFail: true, pActorId: 704L,
+                pFirstSequence: 121L);
+        True(failedChange == FamilyTreeProjectionChange.None,
+            "failed C never advances its uncommitted prerequisite");
+    }
+
+    private static FamilyTreeProjectionChange RunLatePrerequisiteChain(
+        bool pFail, long pActorId, long pFirstSequence)
+    {
+        using IHistoricalWriteBatchSink sink = pFail
+            ? new TerminalBatchSink("injected prerequisite chain failure")
+            : new SuccessfulBatchSink();
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        FamilyTreeProjectionChange observedChange =
+            FamilyTreeProjectionChange.None;
+        string key = "late-prerequisite:" + pActorId;
+
+        for (long offset = 0L; offset < 3L; offset++)
+        {
+            long sequence = pFirstSequence + offset;
+            var envelope = new HistoricalWriteEnvelope(sequence, key,
+                string.Empty, Array.Empty<HistoricalSqlValue>(),
+                HistoricalWriteKind.State,
+                new AWAsyncStamp(1L, sequence, sequence));
+            True(callbacks.TryEnqueue(worker, envelope,
+                    (accepted, replaced) =>
+                    {
+                        pending.TransferOwnership(pActorId, replaced,
+                            accepted);
+                        pending.Publish(pActorId, accepted,
+                            FamilyTreeProjectionChange.None);
+                    }, (committed, outcome) =>
+                    {
+                        if (pending.TryComplete(pActorId, committed,
+                                out FamilyTreeProjectionChange change))
+                            observedChange = change;
+                    }, (failed, error) => pending.Fail(pActorId, failed),
+                    out _),
+                "late prerequisite chain accepts offset " + offset);
+            if (offset == 1L)
+                pending.IncludePrerequisite(pActorId,
+                    FamilyTreeProjectionChange.FamilyStructure);
+        }
+
+        worker.Start();
+        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount > 0,
+                TimeSpan.FromSeconds(2)),
+            "late prerequisite chain publishes a completion");
+        True(worker.TryDequeueCompletion(
+                out HistoricalWriteCompletion completion),
+            "late prerequisite completion is available");
+        callbacks.Take(completion.Sequences[0],
+            out Action<long, object> committedCallback,
+            out Action<long, string> failedCallback);
+        if (completion.IsCommitted)
+            committedCallback?.Invoke(completion.Sequences[0],
+                completion.Outcomes[0]);
+        else
+            failedCallback?.Invoke(completion.Sequences[0],
+                completion.Error);
+
+        True(!pending.TryComplete(pActorId, pFirstSequence, out _) &&
+             !pending.TryComplete(pActorId, pFirstSequence + 1L, out _) &&
+             !pending.TryComplete(pActorId, pFirstSequence + 2L, out _),
+            "late prerequisite chain leaves no orphaned owner");
+        pending.Publish(pActorId, pFirstSequence + 3L,
+            FamilyTreeProjectionChange.None);
+        True(pending.TryComplete(pActorId, pFirstSequence + 3L,
+                out FamilyTreeProjectionChange laterChange),
+            "later independent owner remains usable");
+        True(laterChange == FamilyTreeProjectionChange.None,
+            "failed prerequisite cannot leak into later owner");
+        return observedChange;
+    }
+
+    private static void QueuedReplacementExplicitlyTransfersProjectionSource()
+    {
+        using var sink = new SuccessfulBatchSink();
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        long observedReplacement = -1L;
+        FamilyTreeProjectionChange committedChange =
+            FamilyTreeProjectionChange.None;
+        var original = new HistoricalWriteEnvelope(81L,
+            "queued-replacement:actor", string.Empty,
+            Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
+            new AWAsyncStamp(1L, 81L, 81L));
+        var replacement = new HistoricalWriteEnvelope(82L,
+            "queued-replacement:actor", string.Empty,
+            Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
+            new AWAsyncStamp(1L, 82L, 82L));
+
+        True(callbacks.TryEnqueue(worker, original,
+                (sequence, replacedSequence) =>
+                {
+                    observedReplacement = replacedSequence;
+                    pending.Publish(602L, sequence,
+                        FamilyTreeProjectionChange.FamilyStructure);
+                }, (sequence, outcome) =>
+                {
+                    pending.TryComplete(602L, sequence,
+                        out committedChange);
+                }, null, out _),
+            "queued replacement test accepts original sequence");
+        Equal(0L, observedReplacement,
+            "the original queued write replaces no source");
+        True(callbacks.TryEnqueue(worker, replacement,
+                (sequence, replacedSequence) =>
+                {
+                    observedReplacement = replacedSequence;
+                    pending.TransferOwnership(602L, replacedSequence,
+                        sequence);
+                    pending.Publish(602L, sequence,
+                        FamilyTreeProjectionChange.IdentityOrTitle);
+                }, (sequence, outcome) =>
+                {
+                    pending.TryComplete(602L, sequence,
+                        out committedChange);
+                }, null, out _),
+            "queued replacement test accepts replacement sequence");
+        Equal(81L, observedReplacement,
+            "registry reports only the actually coalesced queued sequence");
+
+        worker.Start();
+        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount > 0,
+                TimeSpan.FromSeconds(2)),
+            "queued replacement produces one completion");
+        True(worker.TryDequeueCompletion(
+                out HistoricalWriteCompletion completion),
+            "queued replacement completion is available");
+        callbacks.Take(completion.Sequences[0],
+            out Action<long, object> committed,
+            out Action<long, string> failed);
+        committed?.Invoke(completion.Sequences[0], completion.Outcomes[0]);
+
+        Equal(82L, completion.Sequences[0],
+            "only replacement sequence reaches completion");
+        True(committedChange == FamilyTreeProjectionChange.FamilyStructure,
+            "replacement commit releases explicitly transferred structure");
+        True(!pending.TryComplete(602L, 81L, out _),
+            "replaced sequence has no independent completion source");
+    }
+
+    private static void NewerFailureCannotConsumeTakenCommittedSource()
+    {
+        using var sink = new SuccessfulThenTerminalSink(
+            "injected newer identity failure");
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        int revisionAdvanceCount = 0;
+        var birthCallbackTaken = new ManualResetEventSlim(false);
+        var allowBirthCallback = new ManualResetEventSlim(false);
+        var identityFailureFinished = new ManualResetEventSlim(false);
+        Exception birthDrainError = null;
+        Exception failureDrainError = null;
+
+        long birthReplacedSequence = -1L;
+        long identityReplacedSequence = -1L;
+        var birth = new HistoricalWriteEnvelope(71L,
+            "failure-first:actor", string.Empty,
+            Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
+            new AWAsyncStamp(1L, 71L, 71L));
+        var identity = new HistoricalWriteEnvelope(72L,
+            "failure-first:actor", string.Empty,
+            Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
+            new AWAsyncStamp(1L, 72L, 72L));
+        True(callbacks.TryEnqueue(worker, birth,
+                (sequence, replacedSequence) =>
+                {
+                    birthReplacedSequence = replacedSequence;
+                    pending.Publish(601L, sequence,
+                        FamilyTreeProjectionChange.FamilyStructure);
+                },
+                (sequence, outcome) =>
+                {
+                    if (pending.TryComplete(601L, sequence,
+                            out FamilyTreeProjectionChange change) &&
+                        change == FamilyTreeProjectionChange.FamilyStructure)
+                        Interlocked.Increment(ref revisionAdvanceCount);
+                }, null, out _),
+            "failure-first test accepts birth sequence");
+        Equal(0L, birthReplacedSequence,
+            "birth sequence replaces no queued owner");
+
+        worker.Start();
+        True(sink.FirstExecuteEntered.Wait(TimeSpan.FromSeconds(2)),
+            "birth sequence is in flight before identity enqueue");
+        True(callbacks.TryEnqueue(worker, identity,
+                (sequence, replacedSequence) =>
+                {
+                    identityReplacedSequence = replacedSequence;
+                    pending.TransferOwnership(601L, replacedSequence,
+                        sequence);
+                    pending.Publish(601L, sequence,
+                        FamilyTreeProjectionChange.IdentityOrTitle);
+                },
+                (sequence, outcome) =>
+                {
+                    if (pending.TryComplete(601L, sequence, out _))
+                        Interlocked.Increment(ref revisionAdvanceCount);
+                }, (sequence, error) => pending.Fail(601L, sequence),
+                out _),
+            "failure-first test accepts identity sequence");
+        Equal(0L, identityReplacedSequence,
+            "in-flight birth is not reported as a queued replacement");
+
+        sink.AllowFirstExecute.Set();
+        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount >= 2,
+                TimeSpan.FromSeconds(2)),
+            "worker publishes birth success and identity failure completions");
+
+        var birthDrain = new Thread(() =>
+        {
+            try
+            {
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "birth drain dequeues the committed completion");
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                birthCallbackTaken.Set();
+                True(allowBirthCallback.Wait(ConcurrentDrainTimeout),
+                    "birth drain receives the main-thread release signal");
+                committed?.Invoke(completion.Sequences[0],
+                    completion.Outcomes[0]);
+            }
+            catch (Exception error)
+            {
+                birthDrainError = error;
+            }
+        });
+        var failureDrain = new Thread(() =>
+        {
+            try
+            {
+                True(birthCallbackTaken.Wait(ConcurrentDrainTimeout),
+                    "failure drain waits until the birth callback is taken");
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "failure drain dequeues the identity failure");
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                failed?.Invoke(completion.Sequences[0], completion.Error);
+            }
+            catch (Exception error)
+            {
+                failureDrainError = error;
+            }
+            finally
+            {
+                identityFailureFinished.Set();
+            }
+        });
+        bool birthDrainStarted = false;
+        bool failureDrainStarted = false;
+        bool identityFailureFinishedInTime = false;
+        bool birthDrainJoined = false;
+        bool failureDrainJoined = false;
+        int advanceCountBeforeBirthCommit = -1;
+        try
+        {
+            birthDrain.Start();
+            birthDrainStarted = true;
+            failureDrain.Start();
+            failureDrainStarted = true;
+            identityFailureFinishedInTime = identityFailureFinished.Wait(
+                ConcurrentDrainTimeout);
+            advanceCountBeforeBirthCommit = Volatile.Read(
+                ref revisionAdvanceCount);
+        }
+        finally
+        {
+            allowBirthCallback.Set();
+            birthCallbackTaken.Set();
+            if (birthDrainStarted)
+                birthDrainJoined = birthDrain.Join(ConcurrentDrainTimeout);
+            if (failureDrainStarted)
+                failureDrainJoined = failureDrain.Join(ConcurrentDrainTimeout);
+        }
+
+        string drainDiagnostics =
+            "; birth joined=" + birthDrainJoined +
+            ", failure joined=" + failureDrainJoined +
+            ", birth error=" + (birthDrainError?.ToString() ?? "none") +
+            ", failure error=" + (failureDrainError?.ToString() ?? "none");
+        True(identityFailureFinishedInTime,
+            "newer identity failure runs before taken birth callback" +
+            drainDiagnostics);
+        True(birthDrainJoined && failureDrainJoined,
+            "both completion drains exit after their explicit handshakes" +
+            drainDiagnostics);
+        True(birthDrainError == null && failureDrainError == null,
+            "completion drains finish without background exceptions" +
+            drainDiagnostics);
+        Equal(0L, advanceCountBeforeBirthCommit,
+            "failure callback never advances projection revision");
+
+        Equal(1L, Volatile.Read(ref revisionAdvanceCount),
+            "taken committed birth source advances exactly once after failure");
+    }
+
+    private static void CompletionCannotRunBeforeAcceptedPendingPublication()
+    {
+        using var sink = new SuccessfulBatchSink();
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        var acceptedEntered = new ManualResetEventSlim(false);
+        var allowPendingPublication = new ManualResetEventSlim(false);
+        var takeStarted = new ManualResetEventSlim(false);
+        var takeReturned = new ManualResetEventSlim(false);
+        bool revisionReleased = false;
+        bool enqueueSucceeded = false;
+        Exception producerError = null;
+        Exception consumerError = null;
+        var envelope = new HistoricalWriteEnvelope(61L,
+            "accepted-publication:61", string.Empty,
+            Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
+            new AWAsyncStamp(1L, 61L, 61L));
+
+        worker.Start();
+        var producer = new Thread(() =>
+        {
+            try
+            {
+                enqueueSucceeded = callbacks.TryEnqueue(worker, envelope,
+                    sequence =>
+                    {
+                        acceptedEntered.Set();
+                        True(allowPendingPublication.Wait(
+                                ConcurrentDrainTimeout),
+                            "producer receives the pending-publication release signal");
+                        pending.Publish(501L, sequence,
+                            FamilyTreeProjectionChange.FamilyStructure);
+                    }, (sequence, outcome) =>
+                        revisionReleased = pending.TryComplete(501L, sequence,
+                            out FamilyTreeProjectionChange change) &&
+                            change == FamilyTreeProjectionChange.FamilyStructure,
+                    null, out _);
+            }
+            catch (Exception error)
+            {
+                producerError = error;
+            }
+        });
+        var consumer = new Thread(() =>
+        {
+            try
+            {
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "consumer dequeues the completion");
+                takeStarted.Set();
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                takeReturned.Set();
+                committed?.Invoke(completion.Sequences[0],
+                    completion.Outcomes[0]);
+            }
+            catch (Exception error)
+            {
+                consumerError = error;
+            }
+            finally
+            {
+                takeStarted.Set();
+            }
+        });
+        bool producerStarted = false;
+        bool consumerStarted = false;
+        bool acceptedEnteredInTime = false;
+        bool completionPublishedInTime = false;
+        bool takeStartedInTime = false;
+        bool consumerBlockedInTime = false;
+        bool takeReturnedBeforePublication = false;
+        bool producerJoined = false;
+        bool consumerJoined = false;
+        try
+        {
+            producer.Start();
+            producerStarted = true;
+            acceptedEnteredInTime = acceptedEntered.Wait(
+                ConcurrentDrainTimeout);
+            completionPublishedInTime = SpinWait.SpinUntil(
+                () => worker.PendingCompletionCount > 0,
+                ConcurrentDrainTimeout);
+            consumer.Start();
+            consumerStarted = true;
+            takeStartedInTime = takeStarted.Wait(ConcurrentDrainTimeout);
+            consumerBlockedInTime = SpinWait.SpinUntil(
+                () => (consumer.ThreadState &
+                       System.Threading.ThreadState.WaitSleepJoin) != 0,
+                ConcurrentDrainTimeout);
+            takeReturnedBeforePublication = takeReturned.IsSet;
+        }
+        finally
+        {
+            allowPendingPublication.Set();
+            if (producerStarted)
+                producerJoined = producer.Join(ConcurrentDrainTimeout);
+            if (consumerStarted)
+                consumerJoined = consumer.Join(ConcurrentDrainTimeout);
+        }
+
+        string threadDiagnostics =
+            "; producer joined=" + producerJoined +
+            ", consumer joined=" + consumerJoined +
+            ", producer error=" + (producerError?.ToString() ?? "none") +
+            ", consumer error=" + (consumerError?.ToString() ?? "none");
+        True(acceptedEnteredInTime,
+            "accepted callback enters before publishing pending metadata" +
+            threadDiagnostics);
+        True(completionPublishedInTime,
+            "the worker completes before pending publication" +
+            threadDiagnostics);
+        True(takeStartedInTime,
+            "completion drain attempts callback lookup during acceptance" +
+            threadDiagnostics);
+        True(consumerBlockedInTime,
+            "completion drain blocks on the acceptance registry lock" +
+            threadDiagnostics);
+        False(takeReturnedBeforePublication,
+            "completion callback lookup cannot return before publication");
+        True(producerJoined && consumerJoined,
+            "producer and consumer exit after pending publication is released" +
+            threadDiagnostics);
+        True(producerError == null && consumerError == null,
+            "producer and consumer finish without background exceptions" +
+            threadDiagnostics);
+
+        True(enqueueSucceeded, "interleaving test accepts the write");
+        True(revisionReleased,
+            "accepted pending publication must precede completion callback");
     }
 
     private static void TerminalBatchProducesFailureCompletionForEverySequence()
@@ -161,6 +856,9 @@ internal static class HistoricalWriteRulesTests
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "db",
             "HistoricalWriteService.cs"));
+        string registrySource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "db",
+            "HistoricalWriteCallbackRegistry.cs"));
 
         Matches(source,
             @"TryEnqueueCustom\s*\(\s*string\s+pOperationKey,\s*" +
@@ -168,31 +866,48 @@ internal static class HistoricalWriteRulesTests
             @"pFactory,\s*Action<long,\s*object>\s+pOnCommitted,\s*" +
             @"Action<long,\s*string>\s+pOnFailed",
             "custom write API accepts a failure callback");
-        Contains(source,
-            "FailureCallbacks[pSequence] = pOnFailed;",
-            "custom write API registers the failure callback");
-        Contains(source,
-            "FailureCallbacks.Remove(replaced.Sequence);",
-            "state replacement removes the stale failure callback");
+        Contains(registrySource,
+            "_failureCallbacks[pEnvelope.Sequence] = pOnFailed;",
+            "callback registry stores the failure callback");
+        Matches(source,
+            @"TryUpsertState\s*\(\s*string\s+pOperationKey,.*?" +
+            @"Action<long>\s+pOnCommitted,\s*" +
+            @"Action<long,\s*string>\s+pOnFailed,\s*" +
+            @"out\s+long\s+pSequence,\s*out\s+string\s+pError\)",
+            "state upsert API accepts a failure callback");
+        Matches(source,
+            @"TryUpsertState\s*\(\s*string\s+pOperationKey,.*?" +
+            @"Action<long>\s+pOnAccepted,\s*Action<long>\s+pOnCommitted,\s*" +
+            @"Action<long,\s*string>\s+pOnFailed",
+            "state upsert API accepts an atomic publication callback");
+        Matches(source,
+            @"TryUpsertState\s*\([^)]*Action<long>\s+pOnCommitted,\s*" +
+            @"out\s+long\s+pSequence,\s*out\s+string\s+pError\)\s*" +
+            @"\{\s*return\s+TryUpsertState\s*\(.*?null,\s*pOnCommitted,\s*null,\s*" +
+            @"out\s+pSequence,\s*out\s+pError\);",
+            "existing state upsert overload forwards null accepted and failure callbacks");
+        Contains(registrySource,
+            "RemoveLocked(pReplaced.Sequence);",
+            "state replacement removes stale callback registrations");
         Matches(source,
             @"TryEnqueueCustom\s*\([^\)]*pOnCommitted[^\)]*" +
             @"out\s+long\s+pSequence[^\)]*out\s+string\s+pError\)\s*" +
-            @"\{\s*return\s+TryEnqueueCustom\s*\([^;]*pOnCommitted,\s*" +
-            @"null,\s*out\s+pSequence,\s*out\s+pError\);",
-            "existing custom write overload forwards a null failure callback");
+            @"\{\s*return\s+TryEnqueueCustom\s*\([^;]*null,\s*" +
+            @"pOnCommitted,\s*null,\s*out\s+pSequence,\s*out\s+pError\);",
+            "existing custom write overload forwards null accepted and failure callbacks");
+        Contains(registrySource,
+            "pOnAccepted?.Invoke(pEnvelope.Sequence,",
+            "accepted pending publication receives replacement provenance");
+        Contains(registrySource,
+            "pReplaced?.Sequence ?? 0L);",
+            "accepted callback distinguishes queued replacement ownership");
         Contains(source,
             "if (completion.IsCommitted)",
             "completion drain selects callbacks by committed state");
-        Matches(source,
-            @"FailureCallbacks\.TryGetValue\s*\(\s*sequence,\s*" +
-            @"out\s+failureCallback\s*\);",
-            "completion drain reads the failure callback");
-        Contains(source,
-            "CommitCallbacks.Remove(sequence);",
-            "completion drain removes the success registration");
-        Contains(source,
-            "FailureCallbacks.Remove(sequence);",
-            "completion drain removes the failure registration");
+        Contains(source, "Callbacks.Take(sequence, out callback,",
+            "completion drain atomically takes both callback sides");
+        Contains(registrySource, "RemoveLocked(pSequence);",
+            "completion drain removes callback registrations exactly once");
         Matches(source,
             @"if\s*\(completion\.IsCommitted\)\s*\{[^}]*" +
             @"callback\?\.Invoke\(sequence,\s*" +
@@ -274,6 +989,62 @@ internal static class HistoricalWriteRulesTests
         public HistoricalWriteBatchResult Execute(
             IReadOnlyList<HistoricalWriteEnvelope> pOperations)
         {
+            return HistoricalWriteBatchResult.Terminal(_error);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class SuccessfulBatchSink : IHistoricalWriteBatchSink
+    {
+        public void Open()
+        {
+        }
+
+        public HistoricalWriteBatchResult Execute(
+            IReadOnlyList<HistoricalWriteEnvelope> pOperations)
+        {
+            return HistoricalWriteBatchResult.Committed(
+                pOperations.Select(_ => (object)null).ToArray());
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class SuccessfulThenTerminalSink :
+        IHistoricalWriteBatchSink
+    {
+        private readonly string _error;
+        private int _executeCount;
+        public readonly ManualResetEventSlim FirstExecuteEntered =
+            new ManualResetEventSlim(false);
+        public readonly ManualResetEventSlim AllowFirstExecute =
+            new ManualResetEventSlim(false);
+
+        public SuccessfulThenTerminalSink(string pError)
+        {
+            _error = pError;
+        }
+
+        public void Open()
+        {
+        }
+
+        public HistoricalWriteBatchResult Execute(
+            IReadOnlyList<HistoricalWriteEnvelope> pOperations)
+        {
+            if (Interlocked.Increment(ref _executeCount) == 1)
+            {
+                FirstExecuteEntered.Set();
+                True(AllowFirstExecute.Wait(ConcurrentDrainTimeout),
+                    "blocked first batch receives its release signal");
+                return HistoricalWriteBatchResult.Committed(
+                    pOperations.Select(_ => (object)null).ToArray());
+            }
             return HistoricalWriteBatchResult.Terminal(_error);
         }
 

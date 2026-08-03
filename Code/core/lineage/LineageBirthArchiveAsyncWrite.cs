@@ -33,7 +33,12 @@ namespace AncientWarfare3.core.lineage
         {
             if (pWrite == null)
                 throw new ArgumentNullException(nameof(pWrite));
-            return OperationKeyPrefix + pWrite.Child.id;
+            return BuildOperationKey(pWrite.Child.id);
+        }
+
+        internal static string BuildOperationKey(long pChildId)
+        {
+            return OperationKeyPrefix + pChildId;
         }
     }
 }

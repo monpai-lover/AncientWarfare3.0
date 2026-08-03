@@ -3,6 +3,36 @@ using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.lineage
 {
+    internal enum LineageBirthArchiveStatus
+    {
+        NotEligible,
+        Queued,
+        Committed,
+        Failed
+    }
+
+    internal readonly struct LineageBirthArchiveResult
+    {
+        internal LineageBirthArchiveResult(LineageBirthArchiveStatus pStatus,
+            long pChildId, long pParent1Id, long pParent2Id, string pReason)
+        {
+            Status = pStatus;
+            ChildId = pChildId;
+            Parent1Id = pParent1Id;
+            Parent2Id = pParent2Id;
+            Reason = pReason ?? string.Empty;
+        }
+
+        internal LineageBirthArchiveStatus Status { get; }
+        internal long ChildId { get; }
+        internal long Parent1Id { get; }
+        internal long Parent2Id { get; }
+        internal string Reason { get; }
+        internal bool Accepted =>
+            Status == LineageBirthArchiveStatus.Queued ||
+            Status == LineageBirthArchiveStatus.Committed;
+    }
+
     internal sealed class LineageBirthArchiveWrite
     {
         internal LineageBirthArchiveWrite(ActorArchiveTableItem pChild,
