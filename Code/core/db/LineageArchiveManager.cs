@@ -530,7 +530,10 @@ namespace AncientWarfare3.core.db
                 }
 
                 SQLiteHelper.RegisterTable(tableName, cols);
-                _db.AddMissingColumns(tableName, cols);
+                List<SQLiteHelper.ColumnDef> upgradeColumns = cols.Where(
+                    pColumn => !LineageFamilyArchiveMigration.IsVersionOwnedColumn(
+                        tableName, pColumn.Name)).ToList();
+                _db.AddMissingColumns(tableName, upgradeColumns);
             }
             LineageArchiveIndexManager.EnsureIndexes(_db);
         }

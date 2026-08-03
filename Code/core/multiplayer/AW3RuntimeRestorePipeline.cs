@@ -158,6 +158,8 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("localized_name_projection",
                     AWLocalizedNameMigrationService.
                         RebuildVisibleProjections),
+                new AW3RestoreStage("lineage_family_archive_migration",
+                    LineageFamilyArchiveMigrationService.Run),
                 new AW3RestoreStage("western_lineage_migration", () =>
                     WesternLineageMigrationService.Request()),
                 new AW3RestoreStage("runtime_cache_reset", () =>
@@ -317,6 +319,8 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("localized_name_projection",
                     AWLocalizedNameMigrationService.
                         RebuildVisibleProjections),
+                new AW3RestoreStage("lineage_family_archive_migration",
+                    LineageFamilyArchiveMigrationService.Run),
                 new AW3RestoreStage("western_lineage_migration", () =>
                     WesternLineageMigrationService.Request())
             };

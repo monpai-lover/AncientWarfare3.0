@@ -105,6 +105,8 @@ namespace AncientWarfare3.core.lineage
                 shi?.OriginCityName ?? shi?.OriginCityChineseName,
                 shi?.DisplayStem));
             AssetId = strings.Take(actor?.asset_id);
+            ArchiveResolution = strings.Take(
+                actor?.archive_resolution);
             FamilyName = strings.Take(actor?.family_name);
             ClanName = strings.Take(actor?.clan_name);
             Status = strings.Take(actor?.status);
@@ -163,6 +165,7 @@ namespace AncientWarfare3.core.lineage
         public long Id { get; }
         public string DisplayName { get; }
         public string AssetId { get; }
+        public string ArchiveResolution { get; }
         public string FamilyName { get; }
         public string ClanName { get; }
         public string Status { get; }

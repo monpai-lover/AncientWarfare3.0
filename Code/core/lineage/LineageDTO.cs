@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -257,6 +258,8 @@ namespace AncientWarfare3.core.lineage
         public long id;
         public string display_name;
         public string asset_id = "";
+        public string archive_resolution =
+            LineageFamilyArchiveMigration.Resolved;
         public int sex;
         public bool is_alive;
         public string status;

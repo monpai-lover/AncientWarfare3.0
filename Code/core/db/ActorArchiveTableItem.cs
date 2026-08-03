@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.db
         public long   lineage_id = -1;
         public long   shi_id = -1;
         public string asset_id;       // 种族(应为 Xia)
+        [TableItemDef(pDefaultValue: "resolved")] public string archive_resolution = "resolved";
         [TableItemDef(pDefaultValue: "-1")] public long subspecies_id = -1;
         public string subspecies_name = "";
         public int    sex;            // 0/1

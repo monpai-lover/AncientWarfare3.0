@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="LineageFamilyArchiveMigrationTests.cs.txt" />
     <Compile Include="LineageBirthArchivePersistenceSqlTests.cs.txt" />
     <Compile Include="HistoricalWriteRulesTests.cs.txt" />
     <Compile Include="ActorDiagnosticSamplingRulesTests.cs.txt" />
@@ -91,6 +92,7 @@
     <Compile Include="..\..\Code\attributes\TableItemDefAttribute.cs" Link="Production\TableItemDefAttribute.cs" />
     <Compile Include="..\..\Code\core\db\AbstractTableItem.cs" Link="Production\AbstractTableItem.cs" />
     <Compile Include="..\..\Code\core\db\ActorArchiveTableItem.cs" Link="Production\ActorArchiveTableItem.cs" />
+    <Compile Include="..\..\Code\core\db\LineageFamilyArchiveMigration.cs" Link="Production\LineageFamilyArchiveMigration.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageBirthArchiveModels.cs" Link="Production\LineageBirthArchiveModels.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageBirthArchivePersistence.cs" Link="Production\LineageBirthArchivePersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageBirthArchiveAsyncWrite.cs" Link="Production\LineageBirthArchiveAsyncWrite.cs" />

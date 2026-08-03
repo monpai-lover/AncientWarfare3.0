@@ -8,6 +8,13 @@ using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--lineage-family-migration-slice")
+{
+    LineageFamilyArchiveMigrationTests.Run();
+    Console.WriteLine("AW3 lineage family archive migration passed.");
+    return;
+}
+
 if (args.Length == 2 && args[0] == "--benchmark" &&
     args[1] == "recent")
 {
@@ -7689,6 +7696,7 @@ VisibleClanRenameRulesTests.Run();
 VisibleSurnameRenameSqlRulesTests.Run();
 FeudatoryIdentityRulesTests.Run();
 AW3RuntimeRestorePipelineTests.Run();
+LineageFamilyArchiveMigrationTests.Run();
 AW3MultiplayerStrategicStateRulesTests.Run();
 AW3MultiplayerReplicationRulesTests.Run();
 AW3DiplomacyChatProviderRulesTests.Run();

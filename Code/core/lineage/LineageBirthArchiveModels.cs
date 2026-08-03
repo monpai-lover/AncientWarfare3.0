@@ -65,6 +65,7 @@ namespace AncientWarfare3.core.lineage
                 lineage_id = pRow.lineage_id,
                 shi_id = pRow.shi_id,
                 asset_id = pRow.asset_id,
+                archive_resolution = pRow.archive_resolution,
                 subspecies_id = pRow.subspecies_id,
                 subspecies_name = pRow.subspecies_name,
                 sex = pRow.sex,

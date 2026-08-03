@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.db;
@@ -2505,11 +2506,20 @@ namespace AncientWarfare3.ui.windows
                     out LineageTreeNodeSnapshot parent) ||
                 !pSnapshot.TryGetNode(pChildId,
                     out LineageTreeNodeSnapshot child)) return false;
+            if (IsUnresolvedLegacy(child.ArchiveResolution) &&
+                pSnapshot.ParentIds(pChildId).Contains(pParentId)) return true;
             return FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
                 pParentId, pSnapshot.FatherId(pChildId),
                 pSnapshot.MotherId(pChildId), parent.Sex,
                 parent.HasHeldTitle, child.Sex, child.Status,
                 child.HasHeldTitle, pSnapshot.BigTreeProfile);
+        }
+
+        private static bool IsUnresolvedLegacy(string pResolution)
+        {
+            return string.Equals(pResolution,
+                LineageFamilyArchiveMigration.UnresolvedLegacy,
+                System.StringComparison.Ordinal);
         }
 
         private void SpawnNode(TreeLayoutNode pNode,
@@ -2704,8 +2714,15 @@ namespace AncientWarfare3.ui.windows
             var result = new FamilyTreeNode
             {
                 id = node.Id,
-                display_name = node.DisplayName,
+                display_name = string.Equals(node.ArchiveResolution,
+                    LineageFamilyArchiveMigration.UnresolvedLegacy,
+                    System.StringComparison.Ordinal)
+                    ? AW_L10n.Text(
+                        "aw_family_tree_unresolved_descendant",
+                        "资料缺失的后代")
+                    : node.DisplayName,
                 asset_id = node.AssetId,
+                archive_resolution = node.ArchiveResolution,
                 sex = node.Sex,
                 is_alive = node.IsAlive,
                 status = node.Status,

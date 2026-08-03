@@ -1,0 +1,502 @@
+using System;
+using System.Data.SQLite;
+using System.IO;
+using AncientWarfare3.core.db;
+
+internal static class LineageFamilyArchiveMigrationTests
+{
+    public static void Run()
+    {
+        ResolvesLivingOrphanFromSnapshot();
+        InsertsNeutralPlaceholderForUnrecoverableOrphan();
+        ZeroOrphansMarksCurrentVersion();
+        GroupsRowsByResolution();
+        RepeatedRunIsIdempotent();
+        InjectedAbortRollsBackRowsAndVersion();
+        UpgradesLegacyActorArchiveSchema();
+        VersionOwnedColumnIsExcludedFromGenericUpgrade();
+        ProductionIntegrationContractsAreStable();
+    }
+
+    private static void ResolvesLivingOrphanFromSnapshot()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        InsertEdge(db, 4201L, 42L, 7L, 1, 19L);
+
+        LineageFamilyArchiveMigrationResult result =
+            LineageFamilyArchiveMigration.Run(db, id => id == 42L
+                ? ResolvedActor(id, "Recovered child")
+                : null);
+
+        Equal(1, result.Scanned, "living migration scans one orphan");
+        Equal(1, result.Resolved, "living migration resolves one actor");
+        Equal(0, result.Placeholders,
+            "living migration writes no placeholder");
+        Equal("Recovered child", TextScalar(db,
+                "SELECT DISPLAY_NAME FROM ActorArchive WHERE ID=42"),
+            "living migration keeps captured identity");
+        Equal(LineageFamilyArchiveMigration.Resolved,
+            TextScalar(db,
+                "SELECT ARCHIVE_RESOLUTION FROM ActorArchive WHERE ID=42"),
+            "living migration labels the row resolved");
+        Equal(0L, OrphanCount(db),
+            "living migration eliminates the orphan edge");
+    }
+
+    private static void InsertsNeutralPlaceholderForUnrecoverableOrphan()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        InsertEdge(db, 4301L, 43L, 7L, 1, 23L);
+        InsertEdge(db, 4302L, 43L, 8L, 2, 23L);
+
+        LineageFamilyArchiveMigrationResult result =
+            LineageFamilyArchiveMigration.Run(db, _ => null);
+
+        Equal(1, result.Scanned, "dead migration deduplicates child ids");
+        Equal(0, result.Resolved, "dead migration resolves no actor");
+        Equal(1, result.Placeholders,
+            "dead migration inserts one placeholder");
+        Equal(0L, Scalar(db,
+                "SELECT IS_ALIVE FROM ActorArchive WHERE ID=43"),
+            "placeholder is archived dead");
+        Equal(LineageFamilyArchiveMigration.UnresolvedLegacy,
+            TextScalar(db,
+                "SELECT ARCHIVE_RESOLUTION FROM ActorArchive WHERE ID=43"),
+            "placeholder records unresolved legacy resolution");
+        Equal(7L, Scalar(db,
+                "SELECT PARENT_ID_1 FROM ActorArchive WHERE ID=43"),
+            "placeholder preserves known first parent edge");
+        Equal(8L, Scalar(db,
+                "SELECT PARENT_ID_2 FROM ActorArchive WHERE ID=43"),
+            "placeholder preserves known second parent edge");
+        Equal(23L, Scalar(db,
+                "SELECT LINEAGE_ID FROM ActorArchive WHERE ID=43"),
+            "placeholder preserves known child lineage edge fact");
+        Equal(string.Empty, TextScalar(db,
+                "SELECT DISPLAY_NAME FROM ActorArchive WHERE ID=43"),
+            "placeholder does not invent a name");
+        Equal(string.Empty, TextScalar(db,
+                "SELECT ASSET_ID FROM ActorArchive WHERE ID=43"),
+            "placeholder does not invent a race");
+        Equal(-1L, Scalar(db,
+                "SELECT SHI_ID FROM ActorArchive WHERE ID=43"),
+            "placeholder does not invent a shi identity");
+        Equal(-1L, Scalar(db,
+                "SELECT SEX FROM ActorArchive WHERE ID=43"),
+            "placeholder keeps unknown sex neutral");
+    }
+
+    private static void ZeroOrphansMarksCurrentVersion()
+    {
+        using SQLiteConnection db = OpenDatabase();
+
+        LineageFamilyArchiveMigrationResult result =
+            LineageFamilyArchiveMigration.Run(db, _ =>
+                throw new InvalidOperationException("resolver must not run"));
+
+        Equal(0, result.Scanned, "fresh database scans no orphans");
+        Equal(1L, MigrationVersion(db),
+            "fresh database is directly marked current");
+    }
+
+    private static void GroupsRowsByResolution()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        InsertEdge(db, 4401L, 44L, 7L, 1, 30L);
+        InsertEdge(db, 4501L, 45L, 7L, 1, 30L);
+
+        LineageFamilyArchiveMigration.Run(db, id => id == 44L
+            ? ResolvedActor(id, "Living")
+            : null);
+
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM ActorArchive " +
+                              "WHERE ARCHIVE_RESOLUTION='resolved'"),
+            "resolution group counts recovered actors");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM ActorArchive " +
+                              "WHERE ARCHIVE_RESOLUTION='unresolved_legacy'"),
+            "resolution group counts placeholders");
+        Equal(1L, MigrationVersion(db), "migration records version one");
+    }
+
+    private static void RepeatedRunIsIdempotent()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        InsertEdge(db, 4601L, 46L, 7L, 1, 31L);
+        var resolverCalls = 0;
+
+        LineageFamilyArchiveMigrationResult first =
+            LineageFamilyArchiveMigration.Run(db, _ =>
+            {
+                resolverCalls++;
+                return null;
+            });
+        LineageFamilyArchiveMigrationResult second =
+            LineageFamilyArchiveMigration.Run(db, _ =>
+            {
+                resolverCalls++;
+                return ResolvedActor(46L, "Must not replace placeholder");
+            });
+
+        Equal(1, resolverCalls, "rerun skips completed migration work");
+        Equal(1, first.Placeholders,
+            "first run records the inserted placeholder");
+        Equal(0, second.Scanned, "rerun reports no repeated scans");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM ActorArchive WHERE ID=46"),
+            "rerun keeps one archive row");
+        Equal(LineageFamilyArchiveMigration.UnresolvedLegacy,
+            TextScalar(db,
+                "SELECT ARCHIVE_RESOLUTION FROM ActorArchive WHERE ID=46"),
+            "rerun does not mutate the completed placeholder");
+    }
+
+    private static void InjectedAbortRollsBackRowsAndVersion()
+    {
+        using SQLiteConnection db = OpenDatabase(includeResolution: false);
+        InsertEdge(db, 4701L, 47L, 7L, 1, 32L);
+        Execute(db, "CREATE TRIGGER abort_lineage_archive_migration " +
+                    "BEFORE INSERT ON ActorArchive WHEN NEW.ID=47 " +
+                    "BEGIN SELECT RAISE(ABORT,'injected migration failure'); END");
+
+        bool failed = false;
+        try
+        {
+            LineageFamilyArchiveMigration.Run(db, _ => null);
+        }
+        catch (LineageFamilyArchiveMigrationException exception)
+        {
+            failed = true;
+            Equal(1, exception.Result.Scanned,
+                "failure summary keeps aggregate scan count");
+            Equal(1, exception.Result.Failures,
+                "failure summary records one transaction failure");
+        }
+
+        True(failed, "injected abort reaches migration caller");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM ActorArchive WHERE ID=47"),
+            "injected abort rolls back archive rows");
+        Equal(0L, TableExists(db,
+                LineageFamilyArchiveMigration.MigrationTable)
+                ? MigrationVersion(db)
+                : 0L,
+            "injected abort does not publish migration version");
+        Equal(1L, OrphanCount(db),
+            "injected abort leaves the original orphan for a later retry");
+        True(!ColumnExists(db, "ActorArchive", "ARCHIVE_RESOLUTION"),
+            "injected abort rolls back the version-owned schema column");
+    }
+
+    private static void UpgradesLegacyActorArchiveSchema()
+    {
+        using SQLiteConnection db = OpenDatabase(includeResolution: false);
+        Execute(db, "INSERT INTO ActorArchive " +
+                    "(ID,DISPLAY_NAME,IS_ALIVE) VALUES (5,'Legacy row',0)");
+
+        LineageFamilyArchiveMigration.Run(db, _ => null);
+
+        True(ColumnExists(db, "ActorArchive", "ARCHIVE_RESOLUTION"),
+            "legacy schema receives archive resolution column");
+        Equal(LineageFamilyArchiveMigration.Resolved,
+            TextScalar(db,
+                "SELECT ARCHIVE_RESOLUTION FROM ActorArchive WHERE ID=5"),
+            "preexisting archive rows default to resolved");
+    }
+
+    private static void VersionOwnedColumnIsExcludedFromGenericUpgrade()
+    {
+        True(LineageFamilyArchiveMigration.IsVersionOwnedColumn(
+                "ActorArchive", "ARCHIVE_RESOLUTION"),
+            "resolution column belongs to the version-one transaction");
+        True(!LineageFamilyArchiveMigration.IsVersionOwnedColumn(
+                "ActorArchive", "DISPLAY_NAME"),
+            "ordinary actor columns remain generic schema upgrades");
+        True(!LineageFamilyArchiveMigration.IsVersionOwnedColumn(
+                "FamilyEdge", "ARCHIVE_RESOLUTION"),
+            "schema ownership is scoped to ActorArchive");
+    }
+
+    private static void ProductionIntegrationContractsAreStable()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string actorModel = Read(root, "Code", "core", "db",
+            "ActorArchiveTableItem.cs");
+        string manager = Read(root, "Code", "core", "db",
+            "LineageArchiveManager.cs");
+        string writer = Read(root, "Code", "core", "lineage",
+            "LineageArchiveWriter.cs");
+        string service = Read(root, "Code", "core", "lineage",
+            "LineageFamilyArchiveMigrationService.cs");
+        string pipeline = Read(root, "Code", "core", "multiplayer",
+            "AW3RuntimeRestorePipeline.cs");
+        string coordinator = Read(root, "Code", "core", "multiplayer",
+            "AW3WorldLoadCoordinator.cs");
+        string bulk = Read(root, "Code", "core", "lineage",
+            "LineageBulkQuery.cs");
+        string window = Read(root, "Code", "ui", "windows",
+            "FamilyTreeWindow.cs");
+        string nodeView = Read(root, "Code", "ui", "items",
+            "FamilyTreeNodeView.cs");
+        string locale = Read(root, "Locales", "aw3_family_tree.csv");
+
+        Contains(actorModel,
+            "pDefaultValue: \"resolved\")\u005d public string archive_resolution",
+            "actor archive model defaults normal rows to resolved");
+        Contains(manager,
+            "!LineageFamilyArchiveMigration.IsVersionOwnedColumn(",
+            "loaded legacy schemas exclude version-owned columns");
+        Contains(manager,
+            "_db.AddMissingColumns(tableName, upgradeColumns);",
+            "loaded legacy schemas pass only generic columns to upgrade");
+        Contains(writer,
+            "ColumnVal.Create(\"ARCHIVE_RESOLUTION\", pRow.archive_resolution)",
+            "ordinary archive writes persist resolution");
+        Contains(service,
+            "LineageArchiveWriter.CaptureUnarchivedRelationshipSnapshot(",
+            "migration reuses shared actor snapshot capture");
+        Contains(service, "pAlive: true",
+            "migration captures only a living snapshot");
+        Contains(writer,
+            "return CaptureRelationshipSnapshot(pActor, pAlive, null);",
+            "unarchived migration capture delegates to shared capture logic");
+        Contains(service, "actor == null || actor.isRekt()",
+            "migration resolves only valid living actors");
+        Contains(service, "scanned=" ,
+            "migration logs one aggregate summary");
+
+        OrderedTokens(pipeline, new[]
+        {
+            "new AW3RestoreStage(\"localized_name_projection\"",
+            "new AW3RestoreStage(\"lineage_family_archive_migration\"",
+            "new AW3RestoreStage(\"western_lineage_migration\""
+        }, "lineage archive migration restore order");
+        Equal(2, CountOccurrences(pipeline,
+                "new AW3RestoreStage(\"lineage_family_archive_migration\""),
+            "saved and generated restore pipelines both run migration");
+        OrderedTokens(pipeline.Substring(pipeline.IndexOf(
+            "internal static AW3RestoreResult TryInitializeGeneratedWorld(",
+            StringComparison.Ordinal)), new[]
+        {
+            "new AW3RestoreStage(\"localized_name_projection\"",
+            "new AW3RestoreStage(\"lineage_family_archive_migration\"",
+            "new AW3RestoreStage(\"western_lineage_migration\""
+        }, "generated archive migration restore order");
+        OrderedTokens(coordinator, new[]
+        {
+            "AW3RuntimeRestorePipeline.TryRestoreFromDirectory(",
+            "if (result.Success) AWAsyncWorldLifecycle.StartWorld();"
+        }, "restored database migration completes before async writer start");
+
+        Contains(bulk, "ArchiveResolution = strings.Take(",
+            "bulk projection retains archive resolution");
+        Contains(bulk, "actor?.archive_resolution",
+            "bulk projection does not discard unresolved rows");
+        Contains(window, "aw_family_tree_unresolved_descendant",
+            "family tree assigns localized placeholder text");
+        Contains(window, "archive_resolution = node.ArchiveResolution",
+            "family tree carries placeholder identity into its node");
+        Contains(window,
+            "IsUnresolvedLegacy(child.ArchiveResolution) &&",
+            "big tree retains unresolved children through known edges");
+        Contains(window, "pSnapshot.ParentIds(pChildId).Contains(pParentId)",
+            "placeholder big-tree navigation follows persisted parent edges");
+        Contains(nodeView, "IsUnresolvedLegacy(pNode.archive_resolution)",
+            "node view selects unavailable portrait for placeholders");
+        Contains(nodeView, "RenderUnavailablePortrait()",
+            "placeholder portrait is generic and does not infer race");
+        Contains(nodeView,
+            "_avatarButton.onClick.AddListener(() => pOnNode?.Invoke(id))",
+            "placeholder nodes retain edge navigation");
+        Contains(locale,
+            "aw_family_tree_unresolved_descendant,资料缺失的后代," +
+            "Descendant with missing records,資料缺失的後代",
+            "placeholder label is localized in all supported languages");
+    }
+
+    private static ActorArchiveTableItem ResolvedActor(long pId,
+        string pDisplayName)
+    {
+        return new ActorArchiveTableItem
+        {
+            id = pId,
+            display_name = pDisplayName,
+            given_name = "Child",
+            asset_id = "human",
+            is_alive = 1,
+            parent_id_1 = 7L,
+            parent_id_2 = -1L
+        };
+    }
+
+    private static SQLiteConnection OpenDatabase(bool includeResolution = true)
+    {
+        var db = new SQLiteConnection("Data Source=:memory:");
+        db.Open();
+        string resolution = includeResolution
+            ? ",ARCHIVE_RESOLUTION TEXT DEFAULT 'resolved'"
+            : string.Empty;
+        Execute(db, "CREATE TABLE ActorArchive (" +
+                    "ID INTEGER PRIMARY KEY,GIVEN_NAME TEXT DEFAULT ''," +
+                    "DISPLAY_NAME TEXT DEFAULT '',FAMILY_NAME TEXT DEFAULT ''," +
+                    "CLAN_NAME TEXT DEFAULT '',LINEAGE_ID INTEGER DEFAULT -1," +
+                    "SHI_ID INTEGER DEFAULT -1,ASSET_ID TEXT DEFAULT ''," +
+                    "SUBSPECIES_ID INTEGER DEFAULT -1," +
+                    "SUBSPECIES_NAME TEXT DEFAULT '',SEX INTEGER DEFAULT -1," +
+                    "STATUS TEXT DEFAULT '',KINGDOM_ID INTEGER DEFAULT -1," +
+                    "KINGDOM_NAME TEXT DEFAULT '',KINGDOM_COLOR TEXT DEFAULT ''," +
+                    "CITY_ID INTEGER DEFAULT -1,CITY_NAME TEXT DEFAULT ''," +
+                    "SOCIAL_TITLE TEXT DEFAULT ''," +
+                    "SOCIAL_TITLE_COLOR TEXT DEFAULT ''," +
+                    "ORIGINAL_CLAN_ID INTEGER DEFAULT -1," +
+                    "CLAN_COLOR_TEXT TEXT DEFAULT ''," +
+                    "CLAN_COLOR_ID INTEGER DEFAULT -1," +
+                    "CLAN_BANNER_ICON_ID INTEGER DEFAULT -1," +
+                    "CLAN_BANNER_BACKGROUND_ID INTEGER DEFAULT -1," +
+                    "PARENT_ID_1 INTEGER DEFAULT -1," +
+                    "PARENT_ID_2 INTEGER DEFAULT -1,GENERATION INTEGER DEFAULT 0," +
+                    "NOBLE_DISTANCE INTEGER DEFAULT 99," +
+                    "EVER_NOBLE_BLOOD INTEGER DEFAULT 0," +
+                    "NOBLE_ORIGIN_ACTOR_ID INTEGER DEFAULT -1," +
+                    "NOBLE_ORIGIN_NAME TEXT DEFAULT ''," +
+                    "NOBLE_ORIGIN_DISTANCE INTEGER DEFAULT 99," +
+                    "BIRTH_TIME REAL DEFAULT 0,DEATH_TIME REAL DEFAULT -1," +
+                    "DEATH_CAUSE TEXT DEFAULT '',IS_ALIVE INTEGER DEFAULT 1," +
+                    "NAME_INTEGRATED INTEGER DEFAULT 0,HEAD INTEGER DEFAULT 0," +
+                    "SKIN INTEGER DEFAULT 0,SKIN_SET INTEGER DEFAULT 0," +
+                    "AGE_OVERGROWTH INTEGER DEFAULT 1," +
+                    "PHENOTYPE_INDEX INTEGER DEFAULT 0," +
+                    "PHENOTYPE_SHADE INTEGER DEFAULT 0," +
+                    "FOUNDED_BRANCH_SHI_ID INTEGER DEFAULT -1" + resolution +
+                    ")");
+        Execute(db, "CREATE TABLE FamilyEdge (" +
+                    "EDGE_ID INTEGER PRIMARY KEY,CHILD_ID INTEGER," +
+                    "PARENT_ID INTEGER,PARENT_SLOT INTEGER," +
+                    "CHILD_LINEAGE_ID INTEGER DEFAULT -1," +
+                    "CREATED_TIME REAL DEFAULT 0)");
+        return db;
+    }
+
+    private static void InsertEdge(SQLiteConnection pDb, long pEdgeId,
+        long pChildId, long pParentId, int pSlot, long pLineageId)
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO FamilyEdge " +
+            "(EDGE_ID,CHILD_ID,PARENT_ID,PARENT_SLOT,CHILD_LINEAGE_ID) " +
+            "VALUES (@edge,@child,@parent,@slot,@lineage)", pDb);
+        command.Parameters.AddWithValue("@edge", pEdgeId);
+        command.Parameters.AddWithValue("@child", pChildId);
+        command.Parameters.AddWithValue("@parent", pParentId);
+        command.Parameters.AddWithValue("@slot", pSlot);
+        command.Parameters.AddWithValue("@lineage", pLineageId);
+        command.ExecuteNonQuery();
+    }
+
+    private static long MigrationVersion(SQLiteConnection pDb)
+    {
+        return Scalar(pDb, "SELECT VERSION FROM " +
+                           LineageFamilyArchiveMigration.MigrationTable +
+                           " WHERE MIGRATION_KEY='lineage_family_archive'");
+    }
+
+    private static long OrphanCount(SQLiteConnection pDb)
+    {
+        return Scalar(pDb, "SELECT COUNT(DISTINCT edge.CHILD_ID) " +
+                           "FROM FamilyEdge edge LEFT JOIN ActorArchive actor " +
+                           "ON actor.ID=edge.CHILD_ID WHERE edge.CHILD_ID>=0 " +
+                           "AND actor.ID IS NULL");
+    }
+
+    private static bool ColumnExists(SQLiteConnection pDb, string pTable,
+        string pColumn)
+    {
+        using var command = new SQLiteCommand("PRAGMA table_info(" + pTable +
+                                              ")", pDb);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        while (reader.Read())
+            if (string.Equals(reader.GetString(1), pColumn,
+                    StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private static bool TableExists(SQLiteConnection pDb, string pTable)
+    {
+        using var command = new SQLiteCommand(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@name",
+            pDb);
+        command.Parameters.AddWithValue("@name", pTable);
+        return Convert.ToInt64(command.ExecuteScalar()) > 0L;
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static string TextScalar(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToString(command.ExecuteScalar()) ?? string.Empty;
+    }
+
+    private static string Read(string pRoot, params string[] pSegments)
+    {
+        string path = pRoot;
+        foreach (string segment in pSegments) path = Path.Combine(path, segment);
+        return File.ReadAllText(path);
+    }
+
+    private static void OrderedTokens(string pSource, string[] pTokens,
+        string pName)
+    {
+        int offset = 0;
+        foreach (string token in pTokens)
+        {
+            int found = pSource.IndexOf(token, offset,
+                StringComparison.Ordinal);
+            if (found < 0)
+                throw new InvalidOperationException(pName +
+                    ": missing or out of order token " + token);
+            offset = found + token.Length;
+        }
+    }
+
+    private static int CountOccurrences(string pSource, string pToken)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = pSource.IndexOf(pToken, offset,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += pToken.Length;
+        }
+        return count;
+    }
+
+    private static void Contains(string pSource, string pExpected,
+        string pName)
+    {
+        if (!pSource.Contains(pExpected, StringComparison.Ordinal))
+            throw new InvalidOperationException(pName + ": missing " +
+                                                pExpected);
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue) throw new InvalidOperationException(pName);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                                                pExpected + ", got " + pActual);
+    }
+}

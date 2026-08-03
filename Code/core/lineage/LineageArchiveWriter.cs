@@ -159,6 +159,12 @@ namespace AncientWarfare3.core.lineage
                 pIdentityOnlyProjection: true);
         }
 
+        internal static ActorArchiveTableItem CaptureUnarchivedRelationshipSnapshot(
+            Actor pActor, bool pAlive)
+        {
+            return CaptureRelationshipSnapshot(pActor, pAlive, null);
+        }
+
         private static ActorArchiveTableItem CaptureRelationshipSnapshot(
             Actor pActor, bool pAlive, ActorArchiveTableItem pPrevious)
         {
@@ -205,6 +211,8 @@ namespace AncientWarfare3.core.lineage
                 lineage_id = lineageId,
                 shi_id = shiId,
                 asset_id = pActor.asset?.id ?? pPrevious?.asset_id ?? "",
+                archive_resolution =
+                    LineageFamilyArchiveMigration.Resolved,
                 subspecies_id = pActor.subspecies?.getID() ?? -1L,
                 subspecies_name = pActor.subspecies?.data?.name ?? "",
                 sex = pActor.isSexMale() ? 0 : 1,
@@ -489,6 +497,7 @@ namespace AncientWarfare3.core.lineage
             values.Add(ColumnVal.Create("LINEAGE_ID", pRow.lineage_id));
             values.Add(ColumnVal.Create("SHI_ID", pRow.shi_id));
             values.Add(ColumnVal.Create("ASSET_ID", pRow.asset_id));
+            values.Add(ColumnVal.Create("ARCHIVE_RESOLUTION", pRow.archive_resolution));
             values.Add(ColumnVal.Create("SUBSPECIES_ID", pRow.subspecies_id));
             values.Add(ColumnVal.Create("SUBSPECIES_NAME", pRow.subspecies_name));
             values.Add(ColumnVal.Create("SEX", pRow.sex));

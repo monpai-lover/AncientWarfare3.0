@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
 using AncientWarfare3.ui.windows;
@@ -271,7 +272,8 @@ namespace AncientWarfare3.ui.items
             ResetAvatarForReuse();
             RenderAvatar(pNode);
 
-            string sex = pNode.sex == 0 ? "♂" : "♀";
+            bool unresolved = IsUnresolvedLegacy(pNode.archive_resolution);
+            string sex = unresolved ? "" : pNode.sex == 0 ? "♂" : "♀";
             string relation = pNode.relation_label ?? "";
             string self = AW_L10n.Text("aw_relation_self", "\u672C\u4EBA");
             string primaryDisplayName = FamilyTreeLabelLayoutRules.
@@ -445,6 +447,12 @@ namespace AncientWarfare3.ui.items
             if (_deadPortrait != null) _deadPortrait.gameObject.SetActive(false); // 弃用独立死像,统一走 _avatar 外壳
             _avatar.gameObject.SetActive(true);
 
+            if (IsUnresolvedLegacy(pNode.archive_resolution))
+            {
+                RenderUnavailablePortrait();
+                return;
+            }
+
             Actor live = World.world?.units?.get(pNode.id);
             // 必须 isAlive():死者在世界里可能仍有 actor 但 !isRekt(),走 show(live) 会触发 loader 的 showDied()
             // 渲染 _died_sprite(墓碑/僵尸占位)。真死者一律走下方静态重建分支。
@@ -493,6 +501,27 @@ namespace AncientWarfare3.ui.items
             catch { }
             try { LoadDeadClanBanner(pNode); }                     // 氏族旗帜:活 Clan / 人物档案快照重建
             catch { }
+        }
+
+        private static bool IsUnresolvedLegacy(string pResolution)
+        {
+            return string.Equals(pResolution,
+                LineageFamilyArchiveMigration.UnresolvedLegacy,
+                StringComparison.Ordinal);
+        }
+
+        private void RenderUnavailablePortrait()
+        {
+            _avatar.enabled = false;
+            if (_avatar.avatarLoader != null)
+                _avatar.avatarLoader.enabled = false;
+            HideAvatarBody();
+            if (_deadPortrait == null) return;
+            _deadPortrait.sprite = SpriteTextureLoader.getSprite(
+                "ui/Icons/iconQuestionMark");
+            _deadPortrait.color = Color.white;
+            _deadPortrait.gameObject.SetActive(
+                _deadPortrait.sprite != null);
         }
 
         private void RenderStaticPortraitFallback(FamilyTreeNode pNode,
