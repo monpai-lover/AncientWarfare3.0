@@ -36,16 +36,12 @@
         "id":  "elf_city",
         "templates":  [
                           {
-                              "format":  "{拉丁城名}",
-                              "weight":  3
+                              "format":  "{精灵城名上}{精灵城名下}{空位识别符}#森林#",
+                              "weight":  6
                           },
                           {
-                              "format":  "{拉丁姓氏}#堡#",
-                              "weight":  3
-                          },
-                          {
-                              "format":  "{精灵奇幻城名}",
-                              "weight":  3
+                              "format":  "{精灵城名上}{精灵城名下}{空位识别符}#之城#",
+                              "weight":  4
                           }
                       ]
     },
@@ -57,7 +53,7 @@
                               "weight":  5
                           },
                           {
-                              "format":  "{兽人城名}#部落#",
+                              "format":  "{兽人城名}{空位识别符}#部落#",
                               "weight":  3
                           }
                       ]
@@ -66,15 +62,15 @@
         "id":  "dwarf_city",
         "templates":  [
                           {
-                              "format":  "{罗斯城名}",
-                              "weight":  6
+                              "format":  "{维京男名}{空位识别符}{维京地名后缀}",
+                              "weight":  2
                           },
                           {
-                              "format":  "{中欧姓氏}#堡#",
-                              "weight":  3
+                              "format":  "{维京女名}{空位识别符}{维京地名后缀}",
+                              "weight":  2
                           },
                           {
-                              "format":  "{矮人城名上}{矮人城名下}#堡#",
+                              "format":  "{矮人城名上}{矮人城名下}{空位识别符}#堡#",
                               "weight":  5
                           }
                       ]
@@ -102,6 +98,493 @@
                           {
                               "format":  "{游牧城名}",
                               "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_chicken_city",
+        "templates":  [
+                          {
+                              "format":  "{西方城名上}{西方城名下}{空位识别符}{西方城名后缀}",
+                              "weight":  7
+                          },
+                          {
+                              "format":  "{奇幻人类城名}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{法兰西姓氏}{空位识别符}#堡#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠姓氏}{空位识别符}#堡#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中欧姓氏}{空位识别符}#堡#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "Cultiway.EasternHuman_city",
+        "templates":  [
+                          {
+                              "format":  "{中文城名上}{中文城名下}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{真实城名}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_rabbit_city",
+        "templates":  [
+                          {
+                              "format":  "{山海地名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "bandit_city",
+        "templates":  [
+                          {
+                              "format":  "{奇幻人类城名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_crystal_golem_city",
+        "templates":  [
+                          {
+                              "format":  "{维京男名}{空位识别符}{维京地名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{维京女名}{空位识别符}{维京地名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{矮人城名上}{矮人城名下}{空位识别符}#堡#",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_wolf_city",
+        "templates":  [
+                          {
+                              "format":  "{拉丁城名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_angle_city",
+        "templates":  [
+                          {
+                              "format":  "{拉丁城名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "white_mage_city",
+        "templates":  [
+                          {
+                              "format":  "{拉丁城名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_demon_city",
+        "templates":  [
+                          {
+                              "format":  "{游牧城名}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{兽人城名}{空位识别符}#部落#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_lemon_man_city",
+        "templates":  [
+                          {
+                              "format":  "{日式城名上}{日式城名下}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_fox_city",
+        "templates":  [
+                          {
+                              "format":  "{山海地名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_turtle_city",
+        "templates":  [
+                          {
+                              "format":  "{日式城名上}{日式城名下}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_dog_city",
+        "templates":  [
+                          {
+                              "format":  "{日式城名上}{日式城名下}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_rhino_city",
+        "templates":  [
+                          {
+                              "format":  "{古波斯城名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_armadillo_city",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯姓氏}{空位识别符}#城#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯名字中缀}#·#{阿拉伯姓氏}{空位识别符}#城#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯姓氏}{空位识别符}#堡#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯名字中缀}#·#{阿拉伯姓氏}{空位识别符}#堡#",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_scorpion_city",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯姓氏}{空位识别符}#城#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯名字中缀}#·#{阿拉伯姓氏}{空位识别符}#城#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯姓氏}{空位识别符}#堡#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯名字中缀}#·#{阿拉伯姓氏}{空位识别符}#堡#",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_buffalo_city",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯姓氏}{空位识别符}#城#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯名字中缀}#·#{阿拉伯姓氏}{空位识别符}#城#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯姓氏}{空位识别符}#堡#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯名字中缀}#·#{阿拉伯姓氏}{空位识别符}#堡#",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_sheep_city",
+        "templates":  [
+                          {
+                              "format":  "{游牧城名}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{兽人城名}{空位识别符}#部落#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_cow_city",
+        "templates":  [
+                          {
+                              "format":  "{奇幻人类城名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_druid_city",
+        "templates":  [
+                          {
+                              "format":  "{奇幻人类城名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_garlic_man_city",
+        "templates":  [
+                          {
+                              "format":  "{古波斯城名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_snake_city",
+        "templates":  [
+                          {
+                              "format":  "{奥吉布瓦城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_hyena_city",
+        "templates":  [
+                          {
+                              "format":  "{犹太姓氏}{空位识别符}#地#",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太姓氏}{空位识别符}#城#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_goat_city",
+        "templates":  [
+                          {
+                              "format":  "{犹太姓氏}{空位识别符}#地#",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太姓氏}{空位识别符}#城#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "evil_mage_city",
+        "templates":  [
+                          {
+                              "format":  "{犹太姓氏}{空位识别符}#地#",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太姓氏}{空位识别符}#城#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_penguin_city",
+        "templates":  [
+                          {
+                              "format":  "{罗斯城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_bear_city",
+        "templates":  [
+                          {
+                              "format":  "{罗斯城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_snowman_city",
+        "templates":  [
+                          {
+                              "format":  "{罗斯城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_candy_man_city",
+        "templates":  [
+                          {
+                              "format":  "{维京男名}{空位识别符}{维京地名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{维京女名}{空位识别符}{维京地名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{矮人城名上}{矮人城名下}{空位识别符}#堡#",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_cat_city",
+        "templates":  [
+                          {
+                              "format":  "{埃及城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "necromancer_city",
+        "templates":  [
+                          {
+                              "format":  "{埃及城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_beetle_city",
+        "templates":  [
+                          {
+                              "format":  "{埃及城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_crab_city",
+        "templates":  [
+                          {
+                              "format":  "{古波斯城名}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_alpaca_city",
+        "templates":  [
+                          {
+                              "format":  "{奥吉布瓦城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_capybara_city",
+        "templates":  [
+                          {
+                              "format":  "{奥吉布瓦城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_crocodile_city",
+        "templates":  [
+                          {
+                              "format":  "{阿兹特克城名上}{阿兹特克城名下}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_frog_city",
+        "templates":  [
+                          {
+                              "format":  "{阿兹特克城名上}{阿兹特克城名下}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_liliar_city",
+        "templates":  [
+                          {
+                              "format":  "{阿兹特克城名上}{阿兹特克城名下}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_rat_city",
+        "templates":  [
+                          {
+                              "format":  "{印度城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_piranha_city",
+        "templates":  [
+                          {
+                              "format":  "{印度城名}",
+                              "weight":  6
+                          }
+                      ]
+    },
+    {
+        "id":  "alien_city",
+        "templates":  [
+                          {
+                              "format":  "{希腊字母}#-#{英文字母}{数字}{数字}{企业管理地区}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_acid_sentleman_city",
+        "templates":  [
+                          {
+                              "format":  "{西方城名上}{西方城名下}{空位识别符}{西方城名后缀}",
+                              "weight":  7
+                          },
+                          {
+                              "format":  "{奇幻人类城名}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{法兰西姓氏}{空位识别符}#堡#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠姓氏}{空位识别符}#堡#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中欧姓氏}{空位识别符}#堡#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_seal_city",
+        "templates":  [
+                          {
+                              "format":  "{希腊字母}#-#{英文字母}{数字}{数字}{企业管理地区}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_unicorn_city",
+        "templates":  [
+                          {
+                              "format":  "{希腊字母}#-#{英文字母}{数字}{数字}{企业管理地区}"
                           }
                       ]
     }

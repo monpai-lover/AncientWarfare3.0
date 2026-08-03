@@ -88,11 +88,11 @@
         "id":  "elf_name",
         "templates":  [
                           {
-                              "format":  "{中文百家姓:family_name}{中文名字:middle_name}",
-                              "weight":  5
+                              "format":  "{精灵姓氏:family_name}{空位识别符}{精灵文化:given_name}",
+                              "weight":  1
                           },
                           {
-                              "format":  "{中文百家姓:family_name}{中文名字:middle_name}{中文名字:given_name}",
+                              "format":  "{精灵姓氏:family_name}{空位识别符}{精灵名字中缀:middle_name}{精灵名字:given_name}",
                               "weight":  5
                           }
                       ]
@@ -114,16 +114,20 @@
         "id":  "orc_name",
         "templates":  [
                           {
-                              "format":  "{兽人名字:given_name}# #{兽人姓氏:family_name}",
+                              "format":  "{兽人名字:given_name}{空位识别符}{兽人姓氏:family_name}",
                               "weight":  2
                           },
                           {
-                              "format":  "{游牧男名:given_name}# #{游牧姓氏:family_name}",
-                              "weight":  3
+                              "format":  "{兽人名字:given_name}{空位识别符}{兽人英雄:family_name}",
+                              "weight":  1
                           },
                           {
-                              "format":  "{游牧女名:given_name}# #{游牧姓氏:family_name}",
-                              "weight":  3
+                              "format":  "{游牧男名:given_name}{空位识别符}{游牧姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{游牧女名:given_name}{空位识别符}{游牧姓氏:family_name}",
+                              "weight":  5
                           }
                       ]
     },
@@ -131,20 +135,20 @@
         "id":  "dwarf_name",
         "templates":  [
                           {
-                              "format":  "{中欧姓氏:given_name}# #{中欧姓氏:family_name}",
+                              "format":  "{外号}#的#{维京男名:given_name}{空位识别符}{矮人英雄:family_name}",
                               "weight":  2
                           },
                           {
-                              "format":  "{中欧姓氏:given_name} #冯##·#{中欧姓氏:family_name}",
-                              "weight":  1
+                              "format":  "{外号}#的#{维京女名:given_name}{空位识别符}{矮人英雄:family_name}",
+                              "weight":  2
                           },
                           {
-                              "format":  "{罗斯男名:given_name}# #{罗斯姓氏:family_name}#夫#",
-                              "weight":  3
+                              "format":  "{外号}#的#{维京男名:given_name}{空位识别符}{冰魔:family_name}",
+                              "weight":  2
                           },
                           {
-                              "format":  "{罗斯女名:given_name}# #{罗斯姓氏:family_name}#娃#",
-                              "weight":  3
+                              "format":  "{外号}#的#{维京女名:given_name}{空位识别符}{冰魔:family_name}",
+                              "weight":  2
                           }
                       ]
     },
@@ -178,11 +182,11 @@
         "id":  "Rome_name",
         "templates":  [
                           {
-                              "format":  "{拉丁男名:given_name}# #{拉丁姓氏:family_name}",
+                              "format":  "{拉丁男名:given_name}{空位识别符}{拉丁姓氏:family_name}",
                               "weight":  5
                           },
                           {
-                              "format":  "{拉丁女名:given_name}# #{拉丁姓氏:family_name}",
+                              "format":  "{拉丁女名:given_name}{空位识别符}{拉丁姓氏:family_name}",
                               "weight":  5
                           }
                       ]
@@ -191,7 +195,11 @@
         "id":  "Arab_name",
         "templates":  [
                           {
-                              "format":  "{阿拉伯名字:given_name}# #{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "format":  "{阿拉伯男名:given_name}{空位识别符}{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯女名:given_name}{空位识别符}{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
                               "weight":  5
                           }
                       ]
@@ -200,16 +208,20 @@
         "id":  "Russia_name",
         "templates":  [
                           {
-                              "format":  "{罗斯名字:given_name}# #{罗斯姓氏:family_name}",
-                              "weight":  5
+                              "format":  "{中欧姓氏:given_name}{空位识别符}{中欧姓氏:family_name}",
+                              "weight":  2
                           },
                           {
-                              "format":  "{中欧姓氏:given_name}# #{中欧姓氏:family_name}",
+                              "format":  "{中欧姓氏:given_name}{空位识别符}#冯##·#{中欧姓氏:family_name}",
                               "weight":  1
                           },
                           {
-                              "format":  "{中欧姓氏:given_name} #冯##·#{中欧姓氏:family_name}",
-                              "weight":  1
+                              "format":  "{罗斯男名:given_name}{空位识别符}{罗斯姓氏:family_name}#夫#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{罗斯女名:given_name}{空位识别符}{罗斯姓氏:family_name}#娃#",
+                              "weight":  3
                           }
                       ]
     },
@@ -217,8 +229,12 @@
         "id":  "Goblins_name",
         "templates":  [
                           {
-                              "format":  "{犹太人名:given_name}# #{犹太姓氏:family_name}",
+                              "format":  "{犹太男名:given_name}{空位识别符}{犹太姓氏:family_name}",
                               "weight":  4
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}{空位识别符}{犹太姓氏:family_name}",
+                              "weight":  2
                           }
                       ]
     },
@@ -235,7 +251,7 @@
         "id":  "hive_name",
         "templates":  [
                           {
-                              "format":  "{古埃及名字:given_name}# #{古埃及姓氏:family_name}",
+                              "format":  "{古埃及名字:given_name}{空位识别符}{古埃及姓氏:family_name}",
                               "weight":  5
                           }
                       ]
@@ -321,6 +337,822 @@
                           },
                           {
                               "format":  "{游牧女名:given_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_chicken_name",
+        "templates":  [
+                          {
+                              "format":  "{法兰西男名:given_name}{空位识别符}{法兰西姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{法兰西女名:given_name}{空位识别符}{法兰西姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{法兰西男名:given_name}{空位识别符}{西方贵族姓名中缀:middle_name}#·#{法兰西姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{不列颠姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{不列颠女名:given_name}{空位识别符}{不列颠姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{西方贵族姓名中缀:middle_name}#·#{不列颠姓氏:family_name}",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_rabbit_name",
+        "templates":  [
+                          {
+                              "format":  "{山海姓氏:family_name}{千字文}{天干}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{山海姓氏:family_name}{地支}{千字文}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{山海姓氏:family_name}{千字文}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "bandit_name",
+        "templates":  [
+                          {
+                              "format":  "{中欧男名:given_name}{空位识别符}{中欧姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{中欧女名:given_name}{空位识别符}{中欧姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{中欧男名:given_name}{空位识别符}#冯##·#{中欧姓氏:family_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_crystal_golem_name",
+        "templates":  [
+                          {
+                              "format":  "{外号}#的#{维京男名:given_name}{空位识别符}{矮人英雄:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{外号}#的#{维京女名:given_name}{空位识别符}{矮人英雄:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{外号}#的#{维京男名:given_name}{空位识别符}{冰魔:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{外号}#的#{维京女名:given_name}{空位识别符}{冰魔:family_name}",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "Cultiway.EasternHuman_name",
+        "templates":  [
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:given_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:middle_name}{中文名字:given_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "bee_name",
+        "templates":  [
+                          {
+                              "format":  "{希腊字母:family_name}{空位识别符}#蜜蜂#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{天干地支:family_name}{空位识别符}#蜜蜂#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_bee_name",
+        "templates":  [
+                          {
+                              "format":  "{希腊字母:family_name}{空位识别符}#蜜蜂#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{天干地支:family_name}{空位识别符}#蜜蜂#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_wolf_name",
+        "templates":  [
+                          {
+                              "format":  "{拉丁男名:given_name}{空位识别符}{拉丁姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{拉丁女名:given_name}{空位识别符}{拉丁姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_angle_name",
+        "templates":  [
+                          {
+                              "format":  "{拉丁男名:given_name}{空位识别符}{拉丁姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{拉丁女名:given_name}{空位识别符}{拉丁姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "white_mage_name",
+        "templates":  [
+                          {
+                              "format":  "{拉丁男名:given_name}{空位识别符}{拉丁姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{拉丁女名:given_name}{空位识别符}{拉丁姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_white_mage_name",
+        "templates":  [
+                          {
+                              "format":  "{拉丁男名:given_name}{空位识别符}{拉丁姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{拉丁女名:given_name}{空位识别符}{拉丁姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_demon_name",
+        "templates":  [
+                          {
+                              "format":  "{兽人名字:given_name}{空位识别符}{兽人姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{兽人名字:given_name}{空位识别符}{兽人英雄:family_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{游牧男名:given_name}{空位识别符}{游牧姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{游牧女名:given_name}{空位识别符}{游牧姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_lemon_man_name",
+        "templates":  [
+                          {
+                              "format":  "{日本姓氏:family_name}{空位识别符}{日本名字上:given_name}{日本名字}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_fox_name",
+        "templates":  [
+                          {
+                              "format":  "{山海姓氏:family_name}{千字文}{天干}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{山海姓氏:family_name}{地支}{千字文}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{山海姓氏:family_name}{千字文}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_turtle_name",
+        "templates":  [
+                          {
+                              "format":  "{日本姓氏:family_name}{空位识别符}{日本名字上:given_name}{日本名字}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_dog_name",
+        "templates":  [
+                          {
+                              "format":  "{日本姓氏:family_name}{空位识别符}{日本名字上:given_name}{日本名字}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_rhino_name",
+        "templates":  [
+                          {
+                              "format":  "{古波斯男名:given_name}{空位识别符}{古波斯姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{古波斯女名:given_name}{空位识别符}{古波斯姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_armadillo_name",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯男名:given_name}{空位识别符}{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯女名:given_name}{空位识别符}{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_scorpion_name",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯男名:given_name}{空位识别符}{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯女名:given_name}{空位识别符}{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_buffalo_name",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯男名:given_name}{空位识别符}{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯女名:given_name}{空位识别符}{阿拉伯名字中缀}#·#{阿拉伯姓氏:family_name}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_sheep_name",
+        "templates":  [
+                          {
+                              "format":  "{兽人名字:given_name}{空位识别符}{兽人姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{兽人名字:given_name}{空位识别符}{红袍巫师:family_name}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{游牧男名:given_name}{空位识别符}{游牧姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{游牧女名:given_name}{空位识别符}{游牧姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_cow_name",
+        "templates":  [
+                          {
+                              "format":  "{中欧男名:given_name}{空位识别符}{中欧姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{中欧女名:given_name}{空位识别符}{中欧姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{中欧男名:given_name}{空位识别符}#冯##·#{中欧姓氏:family_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "druid_name",
+        "templates":  [
+                          {
+                              "format":  "{中欧男名:given_name}{空位识别符}{中欧姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{中欧女名:given_name}{空位识别符}{中欧姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{中欧男名:given_name}{空位识别符}#冯##·#{中欧姓氏:family_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_druid_name",
+        "templates":  [
+                          {
+                              "format":  "{中欧男名:given_name}{空位识别符}{中欧姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{中欧女名:given_name}{空位识别符}{中欧姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{中欧男名:given_name}{空位识别符}#冯##·#{中欧姓氏:family_name}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_garlic_man_name",
+        "templates":  [
+                          {
+                              "format":  "{古波斯男名:given_name}{空位识别符}{古波斯姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{古波斯女名:given_name}{空位识别符}{古波斯姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_snake_name",
+        "templates":  [
+                          {
+                              "format":  "{奥吉布瓦男名:given_name}{空位识别符}{奥吉布瓦姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{奥吉布瓦女名:given_name}{空位识别符}{奥吉布瓦姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_hyena_name",
+        "templates":  [
+                          {
+                              "format":  "{犹太男名:given_name}{空位识别符}{犹太姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}{空位识别符}{犹太姓氏:family_name}",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_goat_name",
+        "templates":  [
+                          {
+                              "format":  "{犹太男名:given_name}{空位识别符}{犹太姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}{空位识别符}{犹太姓氏:family_name}",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "evil_mage_name",
+        "templates":  [
+                          {
+                              "format":  "{犹太男名:given_name}{空位识别符}{犹太姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}{空位识别符}{犹太姓氏:family_name}",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_evil_mage_name",
+        "templates":  [
+                          {
+                              "format":  "{犹太男名:given_name}{空位识别符}{犹太姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}{空位识别符}{犹太姓氏:family_name}",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_penguin_name",
+        "templates":  [
+                          {
+                              "format":  "{罗斯男名:given_name}{空位识别符}{罗斯姓氏:family_name}#夫#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{罗斯女名:given_name}{空位识别符}{罗斯姓氏:family_name}#娃#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_bear_name",
+        "templates":  [
+                          {
+                              "format":  "{罗斯男名:given_name}{空位识别符}{罗斯姓氏:family_name}#夫#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{罗斯女名:given_name}{空位识别符}{罗斯姓氏:family_name}#娃#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_snowman_name",
+        "templates":  [
+                          {
+                              "format":  "{罗斯男名:given_name}{空位识别符}{罗斯姓氏:family_name}#夫#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{罗斯女名:given_name}{空位识别符}{罗斯姓氏:family_name}#娃#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_candy_man_name",
+        "templates":  [
+                          {
+                              "format":  "{外号}#的#{维京男名:given_name}{空位识别符}{矮人英雄:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{外号}#的#{维京女名:given_name}{空位识别符}{矮人英雄:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{外号}#的#{维京男名:given_name}{空位识别符}{冰魔:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{外号}#的#{维京女名:given_name}{空位识别符}{冰魔:family_name}",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_cat_name",
+        "templates":  [
+                          {
+                              "format":  "{埃及男名:given_name}{空位识别符}{埃及姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{埃及女名:given_name}{空位识别符}{埃及姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "necromancer_name",
+        "templates":  [
+                          {
+                              "format":  "{埃及男名:given_name}{空位识别符}{埃及姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{埃及女名:given_name}{空位识别符}{埃及姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_necromancer_name",
+        "templates":  [
+                          {
+                              "format":  "{埃及男名:given_name}{空位识别符}{埃及姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{埃及女名:given_name}{空位识别符}{埃及姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_beetle_name",
+        "templates":  [
+                          {
+                              "format":  "{埃及男名:given_name}{空位识别符}{埃及姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{埃及女名:given_name}{空位识别符}{埃及姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_crab_name",
+        "templates":  [
+                          {
+                              "format":  "{古波斯男名:given_name}{空位识别符}{古波斯姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{古波斯女名:given_name}{空位识别符}{古波斯姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_alpaca_name",
+        "templates":  [
+                          {
+                              "format":  "{奥吉布瓦男名:given_name}{空位识别符}{奥吉布瓦姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{奥吉布瓦女名:given_name}{空位识别符}{奥吉布瓦姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_capybara_name",
+        "templates":  [
+                          {
+                              "format":  "{奥吉布瓦男名:given_name}{空位识别符}{奥吉布瓦姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{奥吉布瓦女名:given_name}{空位识别符}{奥吉布瓦姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_crocodile_name",
+        "templates":  [
+                          {
+                              "format":  "{阿兹特克男名:given_name}{空位识别符}{阿兹特克姓氏:family_name}#之子#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{阿兹特克女名:given_name}{空位识别符}{阿兹特克姓氏:family_name}#之女#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_frog_name",
+        "templates":  [
+                          {
+                              "format":  "{阿兹特克男名:given_name}{空位识别符}{阿兹特克姓氏:family_name}#之子#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{阿兹特克女名:given_name}{空位识别符}{阿兹特克姓氏:family_name}#之女#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_liliar_name",
+        "templates":  [
+                          {
+                              "format":  "{阿兹特克男名:given_name}{空位识别符}{阿兹特克姓氏:family_name}#之子#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{阿兹特克女名:given_name}{空位识别符}{阿兹特克姓氏:family_name}#之女#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_rat_name",
+        "templates":  [
+                          {
+                              "format":  "{印度男名:given_name}{空位识别符}{印度姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{印度女名:given_name}{空位识别符}{印度姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_piranha_name",
+        "templates":  [
+                          {
+                              "format":  "{印度男名:given_name}{空位识别符}{印度姓氏:family_name}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{印度女名:given_name}{空位识别符}{印度姓氏:family_name}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "alien_name",
+        "templates":  [
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠女名:given_name}{空位识别符}{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{西方贵族姓名中缀:middle_name}#·#{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:middle_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:middle_name}{中文名字:given_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{犹太男名:given_name}{空位识别符}{犹太姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}{空位识别符}{犹太姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_alien_name",
+        "templates":  [
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠女名:given_name}{空位识别符}{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{西方贵族姓名中缀:middle_name}#·#{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:middle_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:middle_name}{中文名字:given_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{犹太男名:given_name}{空位识别符}{犹太姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}{空位识别符}{犹太姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_acid_sentleman_name",
+        "templates":  [
+                          {
+                              "format":  "{法兰西男名:given_name}{空位识别符}{法兰西姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{法兰西女名:given_name}{空位识别符}{法兰西姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{法兰西男名:given_name}{空位识别符}{西方贵族姓名中缀:middle_name}#·#{法兰西姓氏:family_name}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{不列颠姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{不列颠女名:given_name}{空位识别符}{不列颠姓氏:family_name}",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{西方贵族姓名中缀:middle_name}#·#{不列颠姓氏:family_name}",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_seal_name",
+        "templates":  [
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠女名:given_name}{空位识别符}{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{西方贵族姓名中缀:middle_name}#·#{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:middle_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:middle_name}{中文名字:given_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{犹太男名:given_name}{空位识别符}{犹太姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}{空位识别符}{犹太姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_unicorn_name",
+        "templates":  [
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠女名:given_name}{空位识别符}{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{不列颠男名:given_name}{空位识别符}{西方贵族姓名中缀:middle_name}#·#{不列颠姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:middle_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{中文百家姓:family_name}{空位识别符}{中文名字:middle_name}{中文名字:given_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{犹太男名:given_name}{空位识别符}{犹太姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{犹太女名:given_name}{空位识别符}{犹太姓氏:family_name}{空位识别符}{希腊字母}{英文字母}{英文字母}{数字}{数字}{数字}{数字}",
                               "weight":  1
                           }
                       ]

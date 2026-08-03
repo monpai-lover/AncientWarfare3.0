@@ -44,24 +44,7 @@
         "id":  "elf_kingdom",
         "templates":  [
                           {
-                              "format":  "{拉丁国名}{专制国名后缀}",
-                              "weight":  3
-                          },
-                          {
-                              "format":  "{拉丁国名}{教权国名后缀}",
-                              "weight":  1
-                          },
-                          {
-                              "format":  "{拉丁国名}{民主国名后缀}",
-                              "weight":  3
-                          },
-                          {
-                              "format":  "{拉丁国名}#帝国#",
-                              "weight":  2
-                          },
-                          {
-                              "format":  "{奇幻完整国名}",
-                              "weight":  2
+                              "format":  "{精灵国名}{空位识别符}{精灵国名后缀}"
                           }
                       ]
     },
@@ -69,7 +52,7 @@
         "id":  "orc_kingdom",
         "templates":  [
                           {
-                              "format":  "{游牧姓氏}{游牧国名后缀}"
+                              "format":  "{游牧姓氏}{空位识别符}{游牧国名后缀}"
                           }
                       ]
     },
@@ -77,28 +60,32 @@
         "id":  "dwarf_kingdom",
         "templates":  [
                           {
-                              "format":  "{矮人国名前缀}{专制国名后缀}",
+                              "format":  "{矮人国名前缀}{空位识别符}{专制国名后缀}",
                               "weight":  5
                           },
                           {
-                              "format":  "{矮人国名前缀}{教权国名后缀}",
+                              "format":  "{矮人国名前缀}{空位识别符}{教权国名后缀}",
                               "weight":  1
                           },
                           {
-                              "format":  "{矮人国名前缀}{民主国名后缀}",
+                              "format":  "{矮人国名前缀}{空位识别符}{民主国名后缀}",
                               "weight":  1
                           },
                           {
-                              "format":  "{罗斯姓氏}{专制国名后缀}",
-                              "weight":  5
+                              "format":  "{维京男名}#加德#{空位识别符}#王国#",
+                              "weight":  2
                           },
                           {
-                              "format":  "{罗斯姓氏}{教权国名后缀}",
-                              "weight":  1
+                              "format":  "{维京男名}#海姆#{空位识别符}#王国#",
+                              "weight":  2
                           },
                           {
-                              "format":  "{罗斯姓氏}{民主国名后缀}",
-                              "weight":  1
+                              "format":  "{维京女名}#加德#{空位识别符}#王国#",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{维京女名}#海姆#{空位识别符}#王国#",
+                              "weight":  2
                           }
                       ]
     },
@@ -132,6 +119,702 @@
         "templates":  [
                           {
                               "format":  "{游牧姓氏}{游牧国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_chicken_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{奇幻人类国名}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{奇幻人类国名}{空位识别符}{教权国名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{奇幻人类国名}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{西方国名}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{西方国名}{空位识别符}{教权国名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{西方国名}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{法兰克地名}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{法兰克地名}{空位识别符}{教权国名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{法兰克地名}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_rabbit_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{山海国名}{空位识别符}#国#"
+                          }
+                      ]
+    },
+    {
+        "id":  "bandit_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{中欧诸侯}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{中欧诸侯}{空位识别符}{教权国名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{中欧诸侯}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_crystal_golem_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{矮人国名前缀}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{矮人国名前缀}{空位识别符}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{矮人国名前缀}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{维京男名}#加德#{空位识别符}#王国#",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{维京男名}#海姆#{空位识别符}#王国#",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{维京女名}#加德#{空位识别符}#王国#",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{维京女名}#海姆#{空位识别符}#王国#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "Cultiway.EasternHuman_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{中文国名}{空位识别符}#国#",
+                              "weight":  7
+                          },
+                          {
+                              "format":  "{真实城名}{空位识别符}#国#",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{真实城名}{空位识别符}#军#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_wolf_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{拉丁国名}{空位识别符}{专制国名后缀}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁国名}{空位识别符}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{拉丁国名}{空位识别符}{民主国名后缀}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁国名}{空位识别符}#帝国#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_angle_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{拉丁国名}{空位识别符}{专制国名后缀}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁国名}{空位识别符}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{拉丁国名}{空位识别符}{民主国名后缀}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁国名}{空位识别符}#帝国#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "white_mage_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{拉丁国名}{空位识别符}{专制国名后缀}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁国名}{空位识别符}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{拉丁国名}{空位识别符}{民主国名后缀}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁国名}{空位识别符}#帝国#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_demon_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏}{空位识别符}{游牧国名后缀}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_lemon_man_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{日式国名上}{日式国名下}{空位识别符}#国#"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_fox_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{山海国名}{空位识别符}#国#"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_turtle_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{日式国名上}{日式国名下}{空位识别符}#国#"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_dog_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{日式国名上}{日式国名下}{空位识别符}#国#"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_rhinot_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{古波斯姓氏}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{古波斯姓氏}{空位识别符}{阿拉伯国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_armadillo_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯姓氏}{空位识别符}{阿拉伯国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯名字中缀}#·#{阿拉伯姓氏}{空位识别符}{阿拉伯国名后缀}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_scorpion_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯姓氏}{空位识别符}{阿拉伯国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯名字中缀}#·#{阿拉伯姓氏}{空位识别符}{阿拉伯国名后缀}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_buffalo_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{阿拉伯姓氏}{空位识别符}{阿拉伯国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿拉伯名字中缀}#·#{阿拉伯姓氏}{空位识别符}{阿拉伯国名后缀}",
+                              "weight":  5
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_sheep_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏}{空位识别符}{游牧国名后缀}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_cow_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{中欧诸侯}{空位识别符}{教权国名后缀}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_druid_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{中欧诸侯}{空位识别符}{教权国名后缀}"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_garlic_man_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{古波斯姓氏}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{古波斯姓氏}{空位识别符}{阿拉伯国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_snake_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{奥吉布瓦城名}{空位识别符}#酋邦#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{奥吉布瓦城名}{空位识别符}#王国#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{奥吉布瓦城名}{空位识别符}#帝国#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_hyena_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{犹太姓氏}{空位识别符}#联合王国#",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太男名}{空位识别符}#王国#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_goat_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{犹太姓氏}{空位识别符}#联合王国#",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太男名}{空位识别符}#王国#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "evil_mage_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{犹太姓氏}{空位识别符}#联合王国#",
+                              "weight":  4
+                          },
+                          {
+                              "format":  "{犹太男名}{空位识别符}#王国#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_penguin_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{罗斯姓氏}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{罗斯姓氏}{空位识别符}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{罗斯姓氏}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_bear_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{罗斯姓氏}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{罗斯姓氏}{空位识别符}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{罗斯姓氏}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_snowman_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{罗斯姓氏}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{罗斯姓氏}{空位识别符}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{罗斯姓氏}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_candy_man_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{矮人国名前缀}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{矮人国名前缀}{空位识别符}{教权国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{矮人国名前缀}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{维京男名}#加德#{空位识别符}#王国#",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{维京男名}#海姆#{空位识别符}#王国#",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{维京女名}#加德#{空位识别符}#王国#",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{维京女名}#海姆#{空位识别符}#王国#",
+                              "weight":  2
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_cat_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{埃及国名}{空位识别符}#王朝#"
+                          }
+                      ]
+    },
+    {
+        "id":  "necromancer_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{埃及国名}{空位识别符}#王朝#"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_beetle_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{埃及国名}{空位识别符}#王朝#"
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_crab_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{古波斯姓氏}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{古波斯姓氏}{空位识别符}{阿拉伯国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_alpaca_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{奥吉布瓦城名}{空位识别符}#酋邦#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{奥吉布瓦城名}{空位识别符}#王国#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{奥吉布瓦城名}{空位识别符}#帝国#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_capybara_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{奥吉布瓦城名}{空位识别符}#酋邦#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{奥吉布瓦城名}{空位识别符}#王国#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{奥吉布瓦城名}{空位识别符}#帝国#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_crocodile_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{阿兹特克国名}{空位识别符}#酋邦#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿兹特克国名}{空位识别符}#王国#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{阿兹特克国名}{空位识别符}#帝国#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_frog_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{阿兹特克国名}{空位识别符}#酋邦#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿兹特克国名}{空位识别符}#王国#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{阿兹特克国名}{空位识别符}#帝国#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_liliar_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{阿兹特克国名}{空位识别符}#酋邦#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{阿兹特克国名}{空位识别符}#王国#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{阿兹特克国名}{空位识别符}#帝国#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_rat_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{印度国名}{空位识别符}#邦#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{印度国名}{空位识别符}#国#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{印度国名}{空位识别符}#王朝#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_piranha_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{印度国名}{空位识别符}#邦#",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{印度国名}{空位识别符}#国#",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{印度国名}{空位识别符}#王朝#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "alien_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{企业政府}{空位识别符}#公司#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{企业政府}{空位识别符}#有限公司#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{企业政府}{空位识别符}#股份有限公司#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_acid_sentleman_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{奇幻人类国名}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{奇幻人类国名}{空位识别符}{教权国名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{奇幻人类国名}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{西方国名}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{西方国名}{空位识别符}{教权国名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{西方国名}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{法兰克地名}{空位识别符}{专制国名后缀}",
+                              "weight":  5
+                          },
+                          {
+                              "format":  "{法兰克地名}{空位识别符}{教权国名后缀}",
+                              "weight":  2
+                          },
+                          {
+                              "format":  "{法兰克地名}{空位识别符}{民主国名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_seal_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{企业政府}{空位识别符}#公司#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{企业政府}{空位识别符}#有限公司#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{企业政府}{空位识别符}#股份有限公司#",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "civ_unicorn_kingdom",
+        "templates":  [
+                          {
+                              "format":  "{企业政府}{空位识别符}#公司#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{企业政府}{空位识别符}#有限公司#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "{企业政府}{空位识别符}#股份有限公司#",
                               "weight":  1
                           }
                       ]
