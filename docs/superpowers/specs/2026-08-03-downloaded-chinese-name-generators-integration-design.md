@@ -24,7 +24,7 @@
 2. 下载文件中与 AW3 重名的 ID 使用下载版本完整替换，不拼接模板。
 3. AW3 中存在而下载文件中不存在的 ID 原样保留，包括 `Xia_*`、`western_*`、`orc_nomadic_*` 和其他 AW3 扩展生成器。
 4. `human_name`、`human_city`、`human_kingdom` 不导入，保留 AW3 当前定义。
-5. `civ_monkey_name`、`civ_monkey_city`、`civ_monkey_kingdom` 是覆盖规则的明确例外：保留 AW3 当前定义，下载版本不得替换。
+5. `civ_monkey_name`、`civ_monkey_city`、`civ_monkey_kingdom` 是覆盖规则的明确例外：它们由 `CivMonkeyNamingContent` 运行时注册，下载版本不得写入默认 JSON，确保 AW3 运行时定义是唯一来源。
 
 因此，“排除人类”只排除三个原版人类 ID。`Cultiway.EasternHuman_*`、`Rome_name`、`Arab_name`、`Russia_name` 等其他生成器仍按普通合并规则导入。
 
@@ -49,7 +49,7 @@
 
 ## 测试与验收
 
-- 最终生成器集合包含下载文件中的全部 ID，但不使用下载版本覆盖三个 `human_*` 和三个 `civ_monkey_*` ID。
+- 最终生成器集合包含下载文件中除六个保留例外外的全部 ID；三个 `human_*` 保留默认 JSON 当前定义，三个 `civ_monkey_*` 不写入默认 JSON并继续由 AW3 运行时注册。
 - 所有 AW3 独有生成器仍存在，且其模板内容不变。
 - 除六个保留例外外，所有下载文件中的重名 ID 与下载版本结构一致。
 - `日本名字` 和 `天干地支` 兼容别名能够生成非空名称，并支持下载模板所需字段。
