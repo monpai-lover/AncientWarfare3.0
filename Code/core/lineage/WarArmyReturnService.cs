@@ -62,10 +62,13 @@ namespace AncientWarfare3.core.lineage
                     Orders.Remove(armyId);
                     continue;
                 }
-                if (WarArmyReturnRules.HasArrived(
-                        armyAlive: true,
+                WarArmyReturnOrderDecision decision = WarArmyReturnRules.
+                    ResolveOrder(armyAlive: true,
                         insideFriendlySafeCity: IsInsideFriendlySafeCity(
-                            captain, kingdom)))
+                            captain, kingdom),
+                        hasValidMission: ArmyRtsControllerService.
+                            HasValidMission(army));
+                if (decision != WarArmyReturnOrderDecision.Continue)
                 {
                     Orders.Remove(armyId);
                     continue;
@@ -85,6 +88,11 @@ namespace AncientWarfare3.core.lineage
                 IssueMovement(captain, target);
                 Work.Enqueue(armyId);
             }
+        }
+
+        public static void Cancel(long pArmyId)
+        {
+            if (pArmyId >= 0L) Orders.Remove(pArmyId);
         }
 
         public static void ClearRuntime()

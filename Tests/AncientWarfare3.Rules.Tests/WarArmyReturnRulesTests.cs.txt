@@ -23,6 +23,9 @@ internal static class WarArmyReturnRulesTests
                 armyAlive: true, insideFriendlySafeCity: false),
             "an army abroad retains return intent");
 
+        AcceptedReplacementMissionCancelsQueuedReturn();
+        ConsumerDropsReturnWhenActiveMissionAppears();
+
         string root = Directory.GetCurrentDirectory();
         string servicePath = Path.Combine(root, "Code", "core", "lineage",
             "WarArmyReturnService.cs");
@@ -89,6 +92,37 @@ internal static class WarArmyReturnRulesTests
                  "WarArmyReturnService.TryBegin("),
             "a stale mission index is cleaned without queueing return");
 
+        string assignment = Section(controller,
+            "private static void AssignMission(Army pArmy,",
+            "public static bool TryGetMission(");
+        int controllerWrite = assignment.IndexOf(
+            "Controllers.AssignMission(pMission)", StringComparison.Ordinal);
+        int indexWrite = assignment.IndexOf("MissionIndex.Upsert(pMission)",
+            controllerWrite, StringComparison.Ordinal);
+        int returnCancellation = assignment.IndexOf(
+            "WarArmyReturnService.Cancel(pArmy.id)", indexWrite,
+            StringComparison.Ordinal);
+        True(controllerWrite >= 0 && indexWrite > controllerWrite &&
+             returnCancellation > indexWrite,
+            "accepted missions cancel queued return after controller and index publication");
+
+        int missionDefense = queueProcessing.IndexOf("ResolveOrder(",
+            StringComparison.Ordinal);
+        int activeMissionCheck = queueProcessing.IndexOf(
+            "HasValidMission(army)", missionDefense,
+            StringComparison.Ordinal);
+        int movement = queueProcessing.IndexOf(
+            "IssueMovement(captain, target)", StringComparison.Ordinal);
+        int requeue = queueProcessing.IndexOf("Work.Enqueue(armyId)",
+            movement, StringComparison.Ordinal);
+        True(missionDefense >= 0 && activeMissionCheck > missionDefense &&
+             movement > activeMissionCheck &&
+             requeue > movement &&
+             queueProcessing.Substring(missionDefense,
+                 movement - missionDefense).Contains(
+                 "Orders.Remove(armyId)"),
+            "consumer drops a return order before movement and requeue when a mission is active");
+
         string temporaryReturn = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "TemporaryMilitaryReturnService.cs"));
         True(temporaryReturn.Contains(
@@ -97,6 +131,55 @@ internal static class WarArmyReturnRulesTests
              temporaryReturn.Contains(
                  "TemporaryMilitaryDemobilizationService."),
             "temporary levies retain arrival-only demobilization");
+    }
+
+    private static void AcceptedReplacementMissionCancelsQueuedReturn()
+    {
+        bool returnOrderActive = true;
+        long controllerMissionWarId = -1L;
+        long indexedMissionWarId = -1L;
+        int movementCalls = 0;
+        int transportCalls = 0;
+        int requeueCalls = 0;
+
+        controllerMissionWarId = 29L;
+        indexedMissionWarId = 29L;
+        if (WarArmyReturnRules.ShouldCancelForMission(
+                hasValidMission: controllerMissionWarId >= 0L &&
+                                 indexedMissionWarId ==
+                                 controllerMissionWarId))
+            returnOrderActive = false;
+
+        if (returnOrderActive)
+        {
+            movementCalls++;
+            transportCalls++;
+            requeueCalls++;
+        }
+
+        Equal(false, returnOrderActive,
+            "a replacement mission cancels an already queued return");
+        Equal(29L, controllerMissionWarId,
+            "return cancellation preserves the replacement controller mission");
+        Equal(29L, indexedMissionWarId,
+            "return cancellation preserves the replacement mission index");
+        Equal(0, movementCalls,
+            "replacement mission cancellation issues no home movement");
+        Equal(0, transportCalls,
+            "replacement mission cancellation issues no home transport");
+        Equal(0, requeueCalls,
+            "replacement mission cancellation does not requeue return work");
+    }
+
+    private static void ConsumerDropsReturnWhenActiveMissionAppears()
+    {
+        WarArmyReturnOrderDecision decision =
+            WarArmyReturnRules.ResolveOrder(
+                armyAlive: true, insideFriendlySafeCity: false,
+                hasValidMission: true);
+
+        Equal(WarArmyReturnOrderDecision.CancelForMission, decision,
+            "consumer defense cancels return when active assignment appears");
     }
 
     private static string Section(string source, string start, string end)

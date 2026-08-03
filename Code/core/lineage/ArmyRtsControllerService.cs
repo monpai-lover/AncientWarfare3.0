@@ -892,6 +892,7 @@ namespace AncientWarfare3.core.lineage
                 out RuntimeState previousRuntime);
             bool changed = Controllers.AssignMission(pMission);
             MissionIndex.Upsert(pMission);
+            WarArmyReturnService.Cancel(pArmy.id);
             bool clearSharedRoute = ArmyRtsControllerRules.
                 ShouldClearSharedRoute(resetOperationalProgress,
                     runtimeExists,
