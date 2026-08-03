@@ -5,6 +5,9 @@ using AncientWarfare3.core.lineage;
 
 internal static class HistoricalWriteRulesTests
 {
+    private static readonly TimeSpan ConcurrentDrainTimeout =
+        TimeSpan.FromSeconds(30);
+
     public static void Run()
     {
         TerminalBatchProducesFailureCompletionForEverySequence();
@@ -168,6 +171,8 @@ internal static class HistoricalWriteRulesTests
         var commitTaken = new ManualResetEventSlim(false);
         var allowCommit = new ManualResetEventSlim(false);
         var failureFinished = new ManualResetEventSlim(false);
+        Exception commitDrainError = null;
+        Exception failureDrainError = null;
 
         var independent = new HistoricalWriteEnvelope(101L,
             "inflight-chain:independent", string.Empty,
@@ -185,71 +190,128 @@ internal static class HistoricalWriteRulesTests
                 }, null, out _),
             "independent in-flight sequence is accepted");
         worker.Start();
-        True(sink.FirstExecuteEntered.Wait(TimeSpan.FromSeconds(2)),
-            "independent sequence enters the worker before chain enqueue");
-
-        long expectedReplacement = 0L;
-        for (long sequence = 102L; sequence <= 104L; sequence++)
+        bool firstExecuteEntered = sink.FirstExecuteEntered.Wait(
+            ConcurrentDrainTimeout);
+        try
         {
-            var envelope = new HistoricalWriteEnvelope(sequence,
-                "inflight-chain:replacement", string.Empty,
-                Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
-                new AWAsyncStamp(1L, sequence, sequence));
-            long expected = expectedReplacement;
-            True(callbacks.TryEnqueue(worker, envelope,
-                    (accepted, replaced) =>
-                    {
-                        Equal(expected, replaced,
-                            "replacement chain reports explicit owner");
-                        pending.TransferOwnership(702L, replaced, accepted);
-                        pending.Publish(702L, accepted,
-                            FamilyTreeProjectionChange.IdentityOrTitle);
-                    }, (committed, outcome) =>
-                    {
-                        if (pending.TryComplete(702L, committed, out _))
-                            Interlocked.Increment(ref revisionAdvanceCount);
-                    }, (failed, error) => pending.Fail(702L, failed),
-                    out _),
-                "in-flight replacement chain accepts " + sequence);
-            expectedReplacement = sequence;
+            True(firstExecuteEntered,
+                "independent sequence enters the worker before chain enqueue");
+
+            long expectedReplacement = 0L;
+            for (long sequence = 102L; sequence <= 104L; sequence++)
+            {
+                var envelope = new HistoricalWriteEnvelope(sequence,
+                    "inflight-chain:replacement", string.Empty,
+                    Array.Empty<HistoricalSqlValue>(),
+                    HistoricalWriteKind.State,
+                    new AWAsyncStamp(1L, sequence, sequence));
+                long expected = expectedReplacement;
+                True(callbacks.TryEnqueue(worker, envelope,
+                        (accepted, replaced) =>
+                        {
+                            Equal(expected, replaced,
+                                "replacement chain reports explicit owner");
+                            pending.TransferOwnership(702L, replaced,
+                                accepted);
+                            pending.Publish(702L, accepted,
+                                FamilyTreeProjectionChange.IdentityOrTitle);
+                        }, (committed, outcome) =>
+                        {
+                            if (pending.TryComplete(702L, committed, out _))
+                                Interlocked.Increment(
+                                    ref revisionAdvanceCount);
+                        }, (failed, error) => pending.Fail(702L, failed),
+                        out _),
+                    "in-flight replacement chain accepts " + sequence);
+                expectedReplacement = sequence;
+            }
+        }
+        finally
+        {
+            sink.AllowFirstExecute.Set();
         }
 
-        sink.AllowFirstExecute.Set();
         True(SpinWait.SpinUntil(() => worker.PendingCompletionCount >= 2,
-                TimeSpan.FromSeconds(2)),
+                ConcurrentDrainTimeout),
             "worker publishes independent success and chain failure");
         var commitDrain = new Thread(() =>
         {
-            if (!worker.TryDequeueCompletion(
-                    out HistoricalWriteCompletion completion)) return;
-            callbacks.Take(completion.Sequences[0],
-                out Action<long, object> committed,
-                out Action<long, string> failed);
-            commitTaken.Set();
-            allowCommit.Wait(TimeSpan.FromSeconds(2));
-            committed?.Invoke(completion.Sequences[0],
-                completion.Outcomes[0]);
+            try
+            {
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "commit drain dequeues the independent completion");
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                commitTaken.Set();
+                True(allowCommit.Wait(ConcurrentDrainTimeout),
+                    "commit drain receives the main-thread release signal");
+                committed?.Invoke(completion.Sequences[0],
+                    completion.Outcomes[0]);
+            }
+            catch (Exception error)
+            {
+                commitDrainError = error;
+            }
         });
         var failureDrain = new Thread(() =>
         {
-            commitTaken.Wait(TimeSpan.FromSeconds(2));
-            if (!worker.TryDequeueCompletion(
-                    out HistoricalWriteCompletion completion)) return;
-            callbacks.Take(completion.Sequences[0],
-                out Action<long, object> committed,
-                out Action<long, string> failed);
-            failed?.Invoke(completion.Sequences[0], completion.Error);
-            failureFinished.Set();
+            try
+            {
+                True(commitTaken.Wait(ConcurrentDrainTimeout),
+                    "failure drain waits until the commit callback is taken");
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "failure drain dequeues the replacement failure");
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                failed?.Invoke(completion.Sequences[0], completion.Error);
+                failureFinished.Set();
+            }
+            catch (Exception error)
+            {
+                failureDrainError = error;
+            }
         });
         commitDrain.Start();
         failureDrain.Start();
-        True(failureFinished.Wait(TimeSpan.FromSeconds(2)),
-            "replacement chain failure runs before independent commit");
-        Equal(0L, Volatile.Read(ref revisionAdvanceCount),
+        bool failureFinishedInTime = false;
+        bool commitDrainJoined = false;
+        bool failureDrainJoined = false;
+        int advanceCountBeforeCommit = -1;
+        try
+        {
+            failureFinishedInTime = failureFinished.Wait(
+                ConcurrentDrainTimeout);
+            advanceCountBeforeCommit = Volatile.Read(
+                ref revisionAdvanceCount);
+        }
+        finally
+        {
+            allowCommit.Set();
+            commitTaken.Set();
+            commitDrainJoined = commitDrain.Join(ConcurrentDrainTimeout);
+            failureDrainJoined = failureDrain.Join(ConcurrentDrainTimeout);
+        }
+
+        string drainDiagnostics =
+            "; commit joined=" + commitDrainJoined +
+            ", failure joined=" + failureDrainJoined +
+            ", commit error=" + (commitDrainError?.ToString() ?? "none") +
+            ", failure error=" + (failureDrainError?.ToString() ?? "none");
+        True(failureFinishedInTime,
+            "replacement chain failure runs before independent commit" +
+            drainDiagnostics);
+        True(commitDrainJoined && failureDrainJoined,
+            "both completion drains exit after their explicit handshakes" +
+            drainDiagnostics);
+        True(commitDrainError == null && failureDrainError == null,
+            "completion drains finish without background exceptions" +
+            drainDiagnostics);
+        Equal(0L, advanceCountBeforeCommit,
             "failed replacement chain never advances revision");
-        allowCommit.Set();
-        commitDrain.Join(TimeSpan.FromSeconds(2));
-        failureDrain.Join(TimeSpan.FromSeconds(2));
 
         Equal(1L, Volatile.Read(ref revisionAdvanceCount),
             "independent in-flight success advances exactly once");
@@ -857,7 +919,8 @@ internal static class HistoricalWriteRulesTests
             if (Interlocked.Increment(ref _executeCount) == 1)
             {
                 FirstExecuteEntered.Set();
-                AllowFirstExecute.Wait(TimeSpan.FromSeconds(2));
+                True(AllowFirstExecute.Wait(ConcurrentDrainTimeout),
+                    "blocked first batch receives its release signal");
                 return HistoricalWriteBatchResult.Committed(
                     pOperations.Select(_ => (object)null).ToArray());
             }
