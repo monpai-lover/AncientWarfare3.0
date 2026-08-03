@@ -299,9 +299,13 @@ namespace AncientWarfare3.ui.windows
         {
             WarTerritoryService.WarTargetOption option =
                 WarTerritoryService.FindBestTargetOption(pSource, pTarget, pGoalType);
-            if (option != null &&
-                !DiplomaticWarDeclarationService.CanIssue(pSource, option,
-                    out _)) option = null;
+            bool goalAllowed = DiplomaticWarDeclarationService.CanIssue(
+                pSource, pTarget, pGoalType,
+                DiplomaticWarDeclarationService.WarTypeForGoal(pGoalType),
+                out string failureReason);
+            bool available = option != null && goalAllowed;
+            if (option == null && goalAllowed)
+                failureReason = "target_city_changed";
             City city = option?.target_city;
             string targetName = pTarget?.name ?? "?";
             string targetNameRich = RichKingdomName(pTarget);
@@ -316,8 +320,11 @@ namespace AncientWarfare3.ui.windows
                 button_text = pButtonText,
                 icon_path = WarIconPathRules.ResolveTargetIconPath(pGoalType),
                 tooltip_title = pLabel,
-                tooltip_desc = BuildActionTooltip(pLabel, targetName, cityName, pDesc),
-                enabled = option != null && !_commandPending,
+                tooltip_desc = BuildActionTooltip(pLabel, targetName,
+                    cityName, pDesc) + (available ? "" : "\n\n" +
+                    DiplomacyConversationWindow.
+                        ProposalFailure(failureReason)),
+                enabled = available && !_commandPending,
                 action = option == null ? null : () => DispatchWar(pSource,
                     option)
             });
@@ -351,9 +358,8 @@ namespace AncientWarfare3.ui.windows
             if (result.Accepted)
                 DiplomacyConversationWindow.Open(pSource.id);
             else
-                WorldTip.showNow(AW_L10n.Text(
-                    "aw_diplomacy_failure_unavailable",
-                    "This action is currently unavailable"), false, "top");
+                WorldTip.showNow(DiplomacyConversationWindow.
+                    ProposalFailure(result.MessageKey), false, "top");
         }
 
         private static string BuildStats(WarTerritoryService.TargetReport pReport, string pCityName)

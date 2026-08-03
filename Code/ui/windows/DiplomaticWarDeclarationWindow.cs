@@ -32,6 +32,7 @@ namespace AncientWarfare3.ui.windows
         private ScrollRect _reasonScroll;
         private Button _declareButton;
         private Text _declareText;
+        private TipButton _declareTip;
         private Text _emptyReasons;
         private WideWindowChrome _chrome;
         private WarTerritoryService.WarTargetOption _selectedOption;
@@ -130,37 +131,57 @@ namespace AncientWarfare3.ui.windows
                 "aw_diplomatic_war_potential_allies", "Potential allies") +
                 ": " + attackerAllies + "  -  " + defenderAllies;
 
-            List<WarTerritoryService.WarTargetOption> options =
-                WarTerritoryService.BuildTargetOptions(attacker, defender);
-            options.RemoveAll(option =>
-                !DiplomaticWarDeclarationService.CanIssue(attacker, option,
-                    out _));
-            _selectedOption = null;
-            for (int i = 0; i < options.Count; i++)
+            List<DiplomaticWarTargetAvailability> targets =
+                DiplomaticWarDeclarationService.BuildTargetAvailabilities(
+                    attacker, defender);
+            var candidates = new List<DiplomaticWarAvailabilityCandidate>(
+                targets.Count);
+            int preferredIndex = -1;
+            for (int i = 0; i < targets.Count; i++)
             {
-                string signature = Signature(options[i]);
-                if (signature == _selectedSignature) _selectedOption = options[i];
+                candidates.Add(targets[i].ToCandidate());
+                if (Signature(targets[i].Option) == _selectedSignature)
+                    preferredIndex = i;
             }
-            if (_selectedOption == null && options.Count > 0)
+            int selectedIndex = DiplomaticWarAvailabilityRules.
+                ResolveSelectedGoalIndex(candidates, preferredIndex);
+            _selectedOption = null;
+            if (selectedIndex >= 0)
             {
-                _selectedOption = options[0];
+                _selectedOption = targets[selectedIndex].Option;
                 _selectedSignature = Signature(_selectedOption);
             }
-            for (int i = 0; i < options.Count; i++)
+            else
+            {
+                _selectedSignature = "";
+            }
+            for (int i = 0; i < targets.Count; i++)
             {
                 while (_reasonRows.Count <= i)
                     _reasonRows.Add(CreateReasonRow(_reasonContent));
-                BindReason(_reasonRows[i], options[i], attacker, defender);
+                BindReason(_reasonRows[i], targets[i], attacker, defender);
             }
-            for (int i = options.Count; i < _reasonRows.Count; i++)
+            for (int i = targets.Count; i < _reasonRows.Count; i++)
                 _reasonRows[i].Root.SetActive(false);
-            _emptyReasons.gameObject.SetActive(options.Count == 0);
+            DiplomaticWarAvailabilityResult pairAvailability =
+                DiplomaticWarAvailabilityRules.Resolve(
+                    DiplomaticWarDeclarationService.HasPendingForPair(
+                        attacker, defender), candidates);
+            _emptyReasons.gameObject.SetActive(targets.Count == 0);
+            _emptyReasons.text = targets.Count == 0
+                ? DiplomacyConversationWindow.ProposalFailure(
+                    pairAvailability.FailureReason)
+                : "";
             bool canDeclare = _selectedOption != null && !_commandPending;
             _declareButton.interactable = canDeclare;
             _declareText.text = canDeclare
                 ? AW_L10n.Text("aw_diplomatic_war_send", "Deliver declaration")
                 : AW_L10n.Text("aw_diplomatic_war_unavailable",
                     "Declaration unavailable");
+            string declareFailure = canDeclare
+                ? ""
+                : pairAvailability.FailureReason;
+            BindDeclareTip(declareFailure);
             Canvas.ForceUpdateCanvases();
         }
 
@@ -190,9 +211,8 @@ namespace AncientWarfare3.ui.windows
             }
             if (!result.Accepted)
             {
-                WorldTip.showNow(AW_L10n.Text(
-                    "aw_diplomacy_failure_unavailable",
-                    "This action is currently unavailable"), false, "top");
+                WorldTip.showNow(DiplomacyConversationWindow.
+                    ProposalFailure(result.MessageKey), false, "top");
                 return;
             }
             DiplomacyConversationWindow.Open(attacker.id);
@@ -231,6 +251,10 @@ namespace AncientWarfare3.ui.windows
                 .preferredHeight = 42f;
             _declareButton = CreateButton(_root, "Declare", Declare,
                 out _declareText);
+            _declareTip = _declareButton.gameObject.
+                GetComponent<TipButton>() ??
+                _declareButton.gameObject.AddComponent<TipButton>();
+            _declareTip.type = AW_RawTooltip.TYPE;
             ScrollWindow window = GetComponent<ScrollWindow>();
             if (window?.titleText != null)
             {
@@ -415,9 +439,12 @@ namespace AncientWarfare3.ui.windows
         }
 
         private void BindReason(ReasonRow pRow,
-            WarTerritoryService.WarTargetOption pOption, Kingdom pAttacker,
+            DiplomaticWarTargetAvailability pAvailability,
+            Kingdom pAttacker,
             Kingdom pDefender)
         {
+            WarTerritoryService.WarTargetOption pOption =
+                pAvailability.Option;
             pRow.Signature = Signature(pOption);
             string city = pOption.target_city?.data?.name;
             pRow.Label.text = pOption.label +
@@ -430,11 +457,11 @@ namespace AncientWarfare3.ui.windows
                 ? new Color(.36f, .28f, .15f, .98f)
                 : new Color(.13f, .12f, .10f, .96f);
             pRow.Button.onClick.RemoveAllListeners();
-            pRow.Button.interactable = !_commandPending;
+            pRow.Button.interactable = !_commandPending && pAvailability.Available;
             string signature = pRow.Signature;
             pRow.Button.onClick.AddListener(() =>
             {
-                if (_commandPending) return;
+                if (_commandPending || !pAvailability.Available) return;
                 _selectedSignature = signature;
                 Refresh();
             });
@@ -444,6 +471,9 @@ namespace AncientWarfare3.ui.windows
                           (string.IsNullOrEmpty(city) ? "" : "\n" +
                            AW_L10n.Text("aw_war_target_city", "Target city: ") +
                            city);
+            if (!pAvailability.Available)
+                desc += "\n\n" + DiplomacyConversationWindow.
+                    ProposalFailure(pAvailability.FailureReason);
             pRow.Tip.hoverAction = () => Tooltip.show(pRow.Root,
                 AW_RawTooltip.TYPE, new TooltipData
                 {
@@ -451,6 +481,29 @@ namespace AncientWarfare3.ui.windows
                     tip_description = desc
                 });
             pRow.Root.SetActive(true);
+        }
+
+        private void BindDeclareTip(string pFailureReason)
+        {
+            if (_declareTip == null) return;
+            if (string.IsNullOrWhiteSpace(pFailureReason))
+            {
+                _declareTip.enabled = false;
+                _declareTip.hoverAction = null;
+                return;
+            }
+            _declareTip.enabled = true;
+            string description = DiplomacyConversationWindow.
+                ProposalFailure(pFailureReason);
+            _declareTip.hoverAction = () => Tooltip.show(
+                _declareButton.gameObject, AW_RawTooltip.TYPE,
+                new TooltipData
+                {
+                    tip_name = AW_L10n.Text(
+                        "aw_diplomatic_war_unavailable",
+                        "Declaration unavailable"),
+                    tip_description = description
+                });
         }
 
         private static int SidePower(Kingdom pKingdom, out int pAllyCount)

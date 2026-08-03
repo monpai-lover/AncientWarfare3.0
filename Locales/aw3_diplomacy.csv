@@ -1,4 +1,23 @@
 key,cz,en,ch
+aw_diplomacy_failure_invalid_participants,当前国家或目标国家已经无效,One of the realms is no longer valid,當前國家或目標國家已經無效
+aw_diplomacy_failure_invalid,当前双方不能互相宣战,These realms cannot declare war on each other,當前雙方不能互相宣戰
+aw_diplomacy_failure_non_aggression_pact,互不侵犯条约或停战期阻止了宣战,A treaty or truce currently prevents war,互不侵犯條約或停戰期阻止了宣戰
+aw_diplomacy_failure_same_alliance,同一联盟的成员不能互相宣战,Members of the same alliance cannot declare war,同一聯盟的成員不能互相宣戰
+aw_diplomacy_failure_vassal_external_war_blocked,该附庸没有独立对外宣战权,This subject lacks independent external war powers,該附庸沒有獨立對外宣戰權
+aw_diplomacy_failure_already_at_war,双方已经处于战争状态,The realms are already at war,雙方已經處於戰爭狀態
+aw_diplomacy_failure_no_war_reasons,当前没有可用的战争理由,There are no usable war reasons,當前沒有可用的戰爭理由
+aw_diplomacy_failure_missing_mandate_cb,缺少争夺天命的合法理由,There is no valid claim to contest the Mandate,缺少爭奪天命的合法理由
+aw_diplomacy_failure_missing_mandate_conquest_cb,不满足天命征服的条件,The conditions for Mandate conquest are not met,不滿足天命征服的條件
+aw_diplomacy_failure_missing_core_target,没有可供收复的核心城市,There is no occupied core city to reclaim,沒有可供收復的核心城市
+aw_diplomacy_failure_missing_claim_target,没有可执行的领土宣称,There is no valid territorial claim to press,沒有可執行的領土宣稱
+aw_diplomacy_failure_cannot_force_vassal,不满足强制附庸的条件,The target cannot be forced into vassalage,不滿足強制附庸的條件
+aw_diplomacy_failure_cannot_force_tributary,不满足强制朝贡的条件,The target cannot be forced to pay tribute,不滿足強制朝貢的條件
+aw_diplomacy_failure_not_suzerain,对方不是本国的宗主国,The target is not this realm's suzerain,對方不是本國的宗主國
+aw_diplomacy_failure_missing_restoration_target,没有有效的复国目标,There is no valid realm restoration target,沒有有效的復國目標
+aw_diplomacy_failure_missing_reunification_claim,没有有效的宗统统一继承权,There is no valid succession reunification claim,沒有有效的宗統統一繼承權
+aw_diplomacy_failure_missing_zhulu_cb,不满足逐鹿战争的条件,The conditions for a contest war are not met,不滿足逐鹿戰爭的條件
+aw_diplomacy_failure_cannot_force_no_cb,当前不能发动强制战争,A punitive war cannot currently be forced,當前不能發動強制戰爭
+aw_diplomacy_failure_unknown_goal,无法识别所选战争目标,The selected war goal is unknown,無法識別所選戰爭目標
 aw_diplomacy_action_household_offering_desc,从本国贵族宗族的18至33岁女子中选择一人，提供给对方君主为正妻或妾室,Offer an 18-33 year old woman of a domestic noble clan to the other ruler as principal wife or consort,從本國貴族宗族的18至33歲女子中選擇一人，提供給對方君主為正妻或妾室
 aw_diplomatic_marriage Title,宗室婚盟,Royal Marriage,宗室婚盟
 aw_diplomatic_marriage,宗室婚盟,Royal Marriage,宗室婚盟

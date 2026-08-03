@@ -75,6 +75,142 @@ internal static class DiplomaticWarAvailabilityRulesTests
                 new DiplomaticWarAvailabilityCandidate(false,
                     "missing_claim_target")
             }, 0), "no available row has no selection");
+
+        DeclarationSubmissionPreservesAuthorityReason();
+        DeclarationUiPreservesAvailabilityReasons();
+        EveryKnownDeclarationReasonIsLocalized();
+    }
+
+    private static void DeclarationUiPreservesAvailabilityReasons()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "DiplomaticWarDeclarationService.cs"));
+        string territory = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "WarTerritoryService.cs"));
+        string conversation = File.ReadAllText(Path.Combine(root, "Code",
+            "ui", "windows", "DiplomacyConversationWindow.cs"));
+        string declaration = File.ReadAllText(Path.Combine(root, "Code",
+            "ui", "windows", "DiplomaticWarDeclarationWindow.cs"));
+        string decision = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "WarDecisionTargetWindow.cs"));
+
+        True(service.Contains("ResolvePairAvailability("),
+            "service exposes pair-level declaration availability");
+        True(service.Contains("DiplomaticWarTargetAvailability"),
+            "service exposes reason-bearing target availability");
+        True(service.Contains("pIncludeUnavailable: true"),
+            "declaration availability requests blocked goal rows");
+        True(territory.Contains("bool pIncludeUnavailable"),
+            "war target builder supports a complete declaration projection");
+        True(conversation.Contains(
+                "ResolvePairAvailability(pRequester, pResponder)"),
+            "diplomacy action row uses shared declaration availability");
+        False(declaration.Contains("options.RemoveAll"),
+            "blocked declaration targets remain visible");
+        True(declaration.Contains(
+                "pRow.Button.interactable = !_commandPending && " +
+                "pAvailability.Available;"),
+            "blocked declaration rows are visible but disabled");
+        True(declaration.Contains(
+                "ProposalFailure(pAvailability.FailureReason)"),
+            "blocked declaration rows explain their specific reason");
+        True(decision.Contains("ProposalFailure(failureReason)"),
+            "legacy war target rows explain their specific reason");
+        True(decision.Contains("CanIssue(") &&
+             decision.Contains("pSource, pTarget, pGoalType,"),
+            "legacy blocked goal rows use authoritative validation");
+    }
+
+    private static void DeclarationSubmissionPreservesAuthorityReason()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "DiplomaticWarDeclarationService.cs"));
+        string handler = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "commands", "AW3DiplomacyCommandHandler.cs"));
+        string declaration = File.ReadAllText(Path.Combine(root, "Code",
+            "ui", "windows", "DiplomaticWarDeclarationWindow.cs"));
+        string decision = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "WarDecisionTargetWindow.cs"));
+
+        True(service.Contains("TryIssue("),
+            "declaration service exposes a reason-bearing submission API");
+        True(service.Contains("out string pFailureReason"),
+            "declaration submission returns its failure reason");
+        True(service.Contains("pFailureReason = \"war_preparation\""),
+            "pending declaration has a stable submission reason");
+        True(handler.Contains("Rejected(failureReason)"),
+            "host command preserves the authoritative rejection reason");
+        True(handler.Contains("CanIssue(attacker,") &&
+             handler.Contains("defender, request.Key, canonicalWarType,"),
+            "host revalidates a filtered-out goal authoritatively");
+        True(handler.Contains("WarTypeForGoal(request.Key)"),
+            "host revalidates with the canonical war type");
+        True(handler.Contains("targetCity.kingdom != defender"),
+            "host reserves stale target for a changed city identity");
+        False(handler.Contains(
+                "if (option == null) return StaleTarget();"),
+            "missing filtered option is not automatically a stale city");
+        False(handler.Contains("Rejected(\"unavailable\")"),
+            "host command no longer replaces the authoritative reason");
+        True(declaration.Contains(
+                "ProposalFailure(result.MessageKey)"),
+            "declaration window displays the host rejection reason");
+        True(decision.Contains("ProposalFailure(result.MessageKey)"),
+            "legacy target window displays the host rejection reason");
+    }
+
+    private static void EveryKnownDeclarationReasonIsLocalized()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string conversation = File.ReadAllText(Path.Combine(root, "Code",
+            "ui", "windows", "DiplomacyConversationWindow.cs"));
+        string localePath = Path.Combine(root, "Locales",
+            "aw3_diplomacy.csv");
+        string[] lines = File.ReadAllLines(localePath);
+        string[] reasons =
+        {
+            "invalid_participants", "invalid", "non_aggression_pact",
+            "same_alliance", "vassal_external_war_blocked",
+            "already_at_war", "war_preparation", "no_war_reasons",
+            "missing_mandate_cb", "missing_mandate_conquest_cb",
+            "missing_core_target", "missing_claim_target",
+            "cannot_force_vassal", "cannot_force_tributary",
+            "not_suzerain", "missing_restoration_target",
+            "missing_reunification_claim", "missing_zhulu_cb",
+            "cannot_force_no_cb", "unknown_goal"
+        };
+
+        foreach (string reason in reasons)
+        {
+            string key = "aw_diplomacy_failure_" + reason;
+            True(conversation.Contains("\"" + reason + "\" => " +
+                                       "AW_L10n.Text("),
+                reason + " has an explicit UI mapping");
+            string line = Array.Find(lines, value =>
+                value.StartsWith(key + ",", StringComparison.Ordinal));
+            True(!string.IsNullOrWhiteSpace(line),
+                reason + " has a localization row");
+            string[] columns = line.Split(',', 4);
+            True(columns.Length == 4 &&
+                 !string.IsNullOrWhiteSpace(columns[1]) &&
+                 !string.IsNullOrWhiteSpace(columns[2]) &&
+                 !string.IsNullOrWhiteSpace(columns[3]),
+                reason + " has cz/en/ch localization values");
+        }
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(
+            name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(
+            name + ": expected false");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

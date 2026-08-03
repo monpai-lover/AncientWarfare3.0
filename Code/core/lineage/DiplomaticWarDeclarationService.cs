@@ -3,6 +3,28 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
+    internal sealed class DiplomaticWarTargetAvailability
+    {
+        internal DiplomaticWarTargetAvailability(
+            WarTerritoryService.WarTargetOption pOption,
+            bool pAvailable, string pFailureReason)
+        {
+            Option = pOption;
+            Available = pAvailable;
+            FailureReason = pFailureReason ?? "";
+        }
+
+        internal WarTerritoryService.WarTargetOption Option { get; }
+        internal bool Available { get; }
+        internal string FailureReason { get; }
+
+        internal DiplomaticWarAvailabilityCandidate ToCandidate()
+        {
+            return new DiplomaticWarAvailabilityCandidate(Available,
+                FailureReason);
+        }
+    }
+
     internal static class DiplomaticWarDeclarationService
     {
         private sealed class ExecutionPlan
@@ -27,15 +49,23 @@ namespace AncientWarfare3.core.lineage
             long pSourceClaimId = -1L, long pSourceCoreId = -1L,
             long pRestorationClaimId = -1L)
         {
-            if (pAttacker?.data == null || pDefender?.data == null ||
-                pAttacker.isRekt() || pDefender.isRekt()) return false;
-            if (DiplomaticWarDeclarationLedgerService.HasPendingForPair(
-                    pAttacker, pDefender)) return false;
+            return TryIssue(pAttacker, pDefender, pGoalType, pTargetCity,
+                pWarType, pReasonKey, pReasonLabel, out _, pClaimant,
+                pSourceClaimId, pSourceCoreId, pRestorationClaimId);
+        }
 
+        public static bool TryIssue(Kingdom pAttacker, Kingdom pDefender,
+            string pGoalType, City pTargetCity, string pWarType,
+            string pReasonKey, string pReasonLabel,
+            out string pFailureReason, Actor pClaimant = null,
+            long pSourceClaimId = -1L, long pSourceCoreId = -1L,
+            long pRestorationClaimId = -1L)
+        {
+            pFailureReason = "";
             string goalType = pGoalType ?? "";
             string warType = pWarType ?? WarDecisionService.WAR_NORMAL;
-            if (!CanQueueCurrentGoal(pAttacker, pDefender, goalType,
-                    warType, out _))
+            if (!CanIssue(pAttacker, pDefender, goalType, warType,
+                    out pFailureReason))
                 return false;
 
             City displayCity = pTargetCity ?? FindDisplayCity(pAttacker,
@@ -74,7 +104,11 @@ namespace AncientWarfare3.core.lineage
                     : -1
             };
             if (!DiplomaticWarDeclarationLedgerService.Append(pAttacker,
-                    record)) return false;
+                    record))
+            {
+                pFailureReason = "write_failed";
+                return false;
+            }
             pAttacker.data.set(
                 LineageKeys.DIPLOMATIC_WAR_LAST_CANCEL_REASON, "");
             pAttacker.data.set(
@@ -85,16 +119,30 @@ namespace AncientWarfare3.core.lineage
                 pAttacker, record.Signature);
             RefreshCompatibilityProjection(pAttacker);
             KingdomStrategyRevisionService.MarkChanged(pAttacker.id, pDefender.id);
+            pFailureReason = "";
             return true;
         }
 
         public static bool Issue(Kingdom pAttacker,
             WarTerritoryService.WarTargetOption pOption)
         {
-            if (pOption?.target_kingdom?.data == null) return false;
-            return Issue(pAttacker, pOption.target_kingdom, pOption.goal_type,
+            return TryIssue(pAttacker, pOption, out _);
+        }
+
+        public static bool TryIssue(Kingdom pAttacker,
+            WarTerritoryService.WarTargetOption pOption,
+            out string pFailureReason)
+        {
+            if (pOption?.target_kingdom?.data == null)
+            {
+                pFailureReason = "invalid_participants";
+                return false;
+            }
+            return TryIssue(pAttacker, pOption.target_kingdom,
+                pOption.goal_type,
                 pOption.target_city, WarTypeForGoal(pOption.goal_type),
                 ReasonKeyForGoal(pOption.goal_type), pOption.label,
+                out pFailureReason,
                 FindActor(pOption.claimant_actor_id), pOption.source_claim_id,
                 pOption.source_core_id, pOption.restoration_claim_id);
         }
@@ -115,15 +163,68 @@ namespace AncientWarfare3.core.lineage
             WarTerritoryService.WarTargetOption pOption,
             out string pFailureReason)
         {
-            if (pAttacker?.data == null ||
-                pOption?.target_kingdom?.data == null)
+            if (pOption?.target_kingdom?.data == null)
             {
                 pFailureReason = "invalid_participants";
                 return false;
             }
-            return CanQueueCurrentGoal(pAttacker, pOption.target_kingdom,
+            return CanIssue(pAttacker, pOption.target_kingdom,
                 pOption.goal_type, WarTypeForGoal(pOption.goal_type),
                 out pFailureReason);
+        }
+
+        internal static bool CanIssue(Kingdom pAttacker,
+            Kingdom pDefender, string pGoalType, string pWarType,
+            out string pFailureReason)
+        {
+            if (pAttacker?.data == null || pDefender?.data == null ||
+                pAttacker.isRekt() || pDefender.isRekt())
+            {
+                pFailureReason = "invalid_participants";
+                return false;
+            }
+            if (DiplomaticWarDeclarationLedgerService.HasPendingForPair(
+                    pAttacker, pDefender))
+            {
+                pFailureReason = "war_preparation";
+                return false;
+            }
+            return CanQueueCurrentGoal(pAttacker, pDefender, pGoalType,
+                pWarType, out pFailureReason);
+        }
+
+        internal static List<DiplomaticWarTargetAvailability>
+            BuildTargetAvailabilities(Kingdom pAttacker,
+                Kingdom pDefender)
+        {
+            List<WarTerritoryService.WarTargetOption> options =
+                WarTerritoryService.BuildTargetOptions(pAttacker,
+                    pDefender, pIncludeUnavailable: true);
+            var result = new List<DiplomaticWarTargetAvailability>(
+                options.Count);
+            for (int index = 0; index < options.Count; index++)
+            {
+                WarTerritoryService.WarTargetOption option = options[index];
+                bool available = CanIssue(pAttacker, option,
+                    out string failureReason);
+                result.Add(new DiplomaticWarTargetAvailability(option,
+                    available, failureReason));
+            }
+            return result;
+        }
+
+        internal static DiplomaticWarAvailabilityResult
+            ResolvePairAvailability(Kingdom pAttacker,
+                Kingdom pDefender)
+        {
+            List<DiplomaticWarTargetAvailability> targets =
+                BuildTargetAvailabilities(pAttacker, pDefender);
+            var candidates = new List<DiplomaticWarAvailabilityCandidate>(
+                targets.Count);
+            for (int index = 0; index < targets.Count; index++)
+                candidates.Add(targets[index].ToCandidate());
+            return DiplomaticWarAvailabilityRules.Resolve(
+                HasPendingForPair(pAttacker, pDefender), candidates);
         }
 
         public static void OnKingdomYear(Kingdom pAttacker)

@@ -851,11 +851,11 @@ namespace AncientWarfare3.ui.windows
                 {
                     title = AW_L10n.Text("aw_diplomacy_action_declare_war",
                         "Declare war");
-                    available = !DiplomaticWarDeclarationService.
-                                    HasPendingForPair(pRequester, pResponder) &&
-                                WarTerritoryService.BuildTargetOptions(
-                                    pRequester, pResponder).Count > 0;
-                    reason = available ? "" : "unavailable";
+                    DiplomaticWarAvailabilityResult warAvailability =
+                        DiplomaticWarDeclarationService.
+                            ResolvePairAvailability(pRequester, pResponder);
+                    available = warAvailability.Available;
+                    reason = warAvailability.FailureReason;
                     expectedAccepted = available;
                 }
                 else if (row.WarNegotiation)
@@ -1222,9 +1222,66 @@ namespace AncientWarfare3.ui.windows
                 "no_active_non_aggression" => AW_L10n.Text(
                     "aw_diplomacy_failure_no_active_non_aggression",
                     "There is no active non-aggression pact to break"),
+                "invalid_participants" => AW_L10n.Text(
+                    "aw_diplomacy_failure_invalid_participants",
+                    "One of the realms is no longer valid"),
+                "invalid" => AW_L10n.Text(
+                    "aw_diplomacy_failure_invalid",
+                    "These realms cannot declare war on each other"),
+                "non_aggression_pact" => AW_L10n.Text(
+                    "aw_diplomacy_failure_non_aggression_pact",
+                    "A treaty or truce currently prevents war"),
+                "same_alliance" => AW_L10n.Text(
+                    "aw_diplomacy_failure_same_alliance",
+                    "Members of the same alliance cannot declare war"),
+                "vassal_external_war_blocked" => AW_L10n.Text(
+                    "aw_diplomacy_failure_vassal_external_war_blocked",
+                    "This subject lacks independent external war powers"),
+                "already_at_war" => AW_L10n.Text(
+                    "aw_diplomacy_failure_already_at_war",
+                    "The realms are already at war"),
                 "war_preparation" => AW_L10n.Text(
                     "aw_diplomacy_failure_war_preparation",
                     "A war declaration or military preparation is active between these realms"),
+                "no_war_reasons" => AW_L10n.Text(
+                    "aw_diplomacy_failure_no_war_reasons",
+                    "There are no usable war reasons"),
+                "missing_mandate_cb" => AW_L10n.Text(
+                    "aw_diplomacy_failure_missing_mandate_cb",
+                    "There is no valid claim to contest the Mandate"),
+                "missing_mandate_conquest_cb" => AW_L10n.Text(
+                    "aw_diplomacy_failure_missing_mandate_conquest_cb",
+                    "The conditions for Mandate conquest are not met"),
+                "missing_core_target" => AW_L10n.Text(
+                    "aw_diplomacy_failure_missing_core_target",
+                    "There is no occupied core city to reclaim"),
+                "missing_claim_target" => AW_L10n.Text(
+                    "aw_diplomacy_failure_missing_claim_target",
+                    "There is no valid territorial claim to press"),
+                "cannot_force_vassal" => AW_L10n.Text(
+                    "aw_diplomacy_failure_cannot_force_vassal",
+                    "The target cannot be forced into vassalage"),
+                "cannot_force_tributary" => AW_L10n.Text(
+                    "aw_diplomacy_failure_cannot_force_tributary",
+                    "The target cannot be forced to pay tribute"),
+                "not_suzerain" => AW_L10n.Text(
+                    "aw_diplomacy_failure_not_suzerain",
+                    "The target is not this realm's suzerain"),
+                "missing_restoration_target" => AW_L10n.Text(
+                    "aw_diplomacy_failure_missing_restoration_target",
+                    "There is no valid realm restoration target"),
+                "missing_reunification_claim" => AW_L10n.Text(
+                    "aw_diplomacy_failure_missing_reunification_claim",
+                    "There is no valid succession reunification claim"),
+                "missing_zhulu_cb" => AW_L10n.Text(
+                    "aw_diplomacy_failure_missing_zhulu_cb",
+                    "The conditions for a contest war are not met"),
+                "cannot_force_no_cb" => AW_L10n.Text(
+                    "aw_diplomacy_failure_cannot_force_no_cb",
+                    "A punitive war cannot currently be forced"),
+                "unknown_goal" => AW_L10n.Text(
+                    "aw_diplomacy_failure_unknown_goal",
+                    "The selected war goal is unknown"),
                 "no_vassal_relation" => AW_L10n.Text(
                     "aw_diplomacy_failure_no_vassal_relation", "There is no direct subject relationship to end"),
                 "title_too_low" => AW_L10n.Text(

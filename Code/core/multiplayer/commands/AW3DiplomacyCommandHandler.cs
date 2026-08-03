@@ -229,15 +229,31 @@ namespace AncientWarfare3.core.multiplayer.commands
             Kingdom attacker = FindKingdom(request.CountryId);
             Kingdom defender = FindKingdom(request.TargetCountryId);
             if (attacker == null || defender == null) return NotFound();
+            City targetCity = request.CityId >= 0
+                ? FindCity(request.CityId)
+                : null;
+            if (request.CityId >= 0 &&
+                (targetCity?.data == null || targetCity.isRekt() ||
+                 targetCity.kingdom != defender))
+                return StaleTarget();
             WarTerritoryService.WarTargetOption option = FindWarOption(
                 attacker, defender, request.Key, request.CityId);
-            if (option == null) return StaleTarget();
-            bool issued = DiplomaticWarDeclarationService.Issue(attacker,
-                option);
+            if (option == null)
+            {
+                string canonicalWarType = DiplomaticWarDeclarationService.
+                    WarTypeForGoal(request.Key);
+                if (!DiplomaticWarDeclarationService.CanIssue(attacker,
+                        defender, request.Key, canonicalWarType,
+                        out string validationFailure))
+                    return Rejected(validationFailure);
+                return StaleTarget();
+            }
+            bool issued = DiplomaticWarDeclarationService.TryIssue(attacker,
+                option, out string failureReason);
             return issued
                 ? AW3CommandResult.Success("aw3_war_declaration_issued",
                     defender.id)
-                : Rejected("unavailable");
+                : Rejected(failureReason);
         }
 
         private static WarTerritoryService.WarTargetOption FindWarOption(

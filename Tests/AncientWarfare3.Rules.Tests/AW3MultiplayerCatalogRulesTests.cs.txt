@@ -638,7 +638,7 @@ internal static class AW3MultiplayerCatalogRulesTests
             "DiplomacyProposalService.Respond(",
             "DiplomaticOperationService.TryStartSpyNetwork(",
             "DiplomaticOperationService.TryStartForgeDocuments(",
-            "DiplomaticWarDeclarationService.Issue(",
+            "DiplomaticWarDeclarationService.TryIssue(",
             "KingdomPolicyService.StartDecisionWithTarget("
         };
         foreach (string file in uiFiles)

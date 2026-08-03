@@ -1145,86 +1145,120 @@ namespace AncientWarfare3.core.lineage
 
         public static List<WarTargetOption> BuildTargetOptions(Kingdom pSource, Kingdom pTarget)
         {
+            return BuildTargetOptions(pSource, pTarget,
+                pIncludeUnavailable: false);
+        }
+
+        internal static List<WarTargetOption> BuildTargetOptions(
+            Kingdom pSource, Kingdom pTarget, bool pIncludeUnavailable)
+        {
             var result = new List<WarTargetOption>();
             if (!IsCivil(pSource) || pTarget?.data == null) return result;
 
             bool vassalBlocked = IsVassalDecisionOnlyTarget(pSource, pTarget);
-            if (!vassalBlocked && WarDecisionService.HasValidCasusBelli(
-                    pSource, pTarget, WarDecisionService.WAR_ZHULU))
+            if (pIncludeUnavailable ||
+                (!vassalBlocked && WarDecisionService.HasValidCasusBelli(
+                    pSource, pTarget, WarDecisionService.WAR_ZHULU)))
                 result.Add(MakeOption(pTarget,
                     pTarget.capital ?? FindFirstTargetCity(pTarget),
                     GOAL_ZHULU_ANNEXATION,
                     GoalLabel(GOAL_ZHULU_ANNEXATION), -1, -1, -1, null,
                     hasCore: false, hasStrongClaim: false,
                     hasWeakClaim: false, restorationStrength: 0));
-            if (!vassalBlocked &&
-                SuccessionDisputeService.CanDeclareReunification(
-                    pSource, pTarget))
+            if (pIncludeUnavailable ||
+                (!vassalBlocked &&
+                 SuccessionDisputeService.CanDeclareReunification(
+                     pSource, pTarget)))
                 result.Add(MakeOption(pTarget,
                     pTarget.capital ?? FindFirstTargetCity(pTarget),
                     GOAL_REUNIFY_SUCCESSION,
                     GoalLabel(GOAL_REUNIFY_SUCCESSION), -1, -1, -1,
                     pSource.king, hasCore: false, hasStrongClaim: true,
                     hasWeakClaim: false, restorationStrength: 0));
-            if (!vassalBlocked && MandateService.GetCurrentMandateKingdom() == pTarget &&
-                WarDecisionService.HasValidCasusBelli(pSource, pTarget, MandateService.WAR_TIANMING))
+            if (pIncludeUnavailable ||
+                (!vassalBlocked &&
+                 MandateService.GetCurrentMandateKingdom() == pTarget &&
+                 WarDecisionService.HasValidCasusBelli(pSource, pTarget,
+                     MandateService.WAR_TIANMING)))
                 result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
                     GOAL_TAKE_MANDATE, GoalLabel(GOAL_TAKE_MANDATE),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
-            if (CanUseMandateConquest(pSource, pTarget))
+            if (pIncludeUnavailable || CanUseMandateConquest(pSource, pTarget))
                 result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
                     GOAL_MANDATE_CONQUEST, GoalLabel(GOAL_MANDATE_CONQUEST),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: true, hasWeakClaim: false,
                     restorationStrength: 0));
 
             City city = FindBestCoreTargetCity(pSource, pTarget, out long coreId);
-            if (!vassalBlocked && city?.data != null)
+            if (pIncludeUnavailable || (!vassalBlocked && city?.data != null))
                 result.Add(MakeOption(pTarget, city, GOAL_TAKE_CORE_CITY, GoalLabel(GOAL_TAKE_CORE_CITY),
                     coreId, -1, -1, null, hasCore: true, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
             city = FindBestClaimTargetCity(pSource, pTarget, out long claimId);
-            if (!vassalBlocked && claimId >= 0)
+            bool hasClaim = claimId >= 0;
+            ClaimRow claim = hasClaim
+                ? FindBestClaim(pSource.id, pTarget.id,
+                    city?.data?.id ?? -1L)
+                : default(ClaimRow);
+            bool strong = hasClaim && claim.claim_type == CLAIM_STRONG;
+            if (pIncludeUnavailable || (!vassalBlocked && hasClaim))
             {
-                ClaimRow claim = FindBestClaim(pSource.id, pTarget.id, city?.data?.id ?? -1L);
-                bool strong = claim.claim_type == CLAIM_STRONG;
                 result.Add(MakeOption(pTarget, city, GOAL_PRESS_CLAIM_CITY,
-                    strong ? T("aw_hist_goal_press_strong_claim_city") : T("aw_hist_goal_press_weak_claim_city"),
-                    -1, claimId, -1, null, hasCore: false, hasStrongClaim: strong, hasWeakClaim: !strong,
+                    !hasClaim ? GoalLabel(GOAL_PRESS_CLAIM_CITY) :
+                    strong ? T("aw_hist_goal_press_strong_claim_city") :
+                        T("aw_hist_goal_press_weak_claim_city"),
+                    -1, claimId, -1, null, hasCore: false,
+                    hasStrongClaim: strong,
+                    hasWeakClaim: hasClaim && !strong,
                     restorationStrength: 0));
             }
 
             RoyalClaimService.RoyalClaimInfo restoration = FindBestRestorationClaim(pSource, pTarget, out City restorationCity);
-            if (!vassalBlocked && restoration != null && restoration.claim_id >= 0 && restorationCity?.data != null)
+            bool hasRestoration = restoration != null &&
+                                  restoration.claim_id >= 0 &&
+                                  restorationCity?.data != null;
+            Actor claimant = hasRestoration
+                ? FindActor(restoration.claimant_actor_id)
+                : null;
+            hasRestoration = hasRestoration &&
+                             RoyalClaimService.IsEligibleRestorationClaimant(
+                                 claimant);
+            if (pIncludeUnavailable || (!vassalBlocked && hasRestoration))
             {
-                Actor claimant = FindActor(restoration.claimant_actor_id);
-                if (RoyalClaimService.IsEligibleRestorationClaimant(claimant))
-                    result.Add(MakeOption(pTarget, restorationCity, GOAL_RESTORE_KINGDOM, GoalLabel(GOAL_RESTORE_KINGDOM),
-                        -1, -1, restoration.claim_id, claimant, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
-                        restorationStrength: restoration.claim_strength));
+                result.Add(MakeOption(pTarget, restorationCity,
+                    GOAL_RESTORE_KINGDOM, GoalLabel(GOAL_RESTORE_KINGDOM),
+                    -1, -1, restoration?.claim_id ?? -1L, claimant,
+                    hasCore: false, hasStrongClaim: false,
+                    hasWeakClaim: false,
+                    restorationStrength: restoration?.claim_strength ?? 0));
             }
 
-            if (!vassalBlocked && WarDecisionService.HasValidCasusBelli(pSource, pTarget, "vassal_war"))
+            if (pIncludeUnavailable ||
+                (!vassalBlocked && WarDecisionService.HasValidCasusBelli(
+                    pSource, pTarget, "vassal_war")))
                 result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget), GOAL_FORCE_VASSAL, GoalLabel(GOAL_FORCE_VASSAL),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
-            if (!vassalBlocked && WarDecisionService.HasValidCasusBelli(
-                    pSource, pTarget, WarDecisionService.WAR_TRIBUTARY))
+            if (pIncludeUnavailable ||
+                (!vassalBlocked && WarDecisionService.HasValidCasusBelli(
+                    pSource, pTarget, WarDecisionService.WAR_TRIBUTARY)))
                 result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
                     GOAL_FORCE_TRIBUTARY, GoalLabel(GOAL_FORCE_TRIBUTARY),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
-            if (VassalService.GetDiplomaticSuzerain(pSource) == pTarget &&
-                !IsAlreadyAtWar(pSource, pTarget))
+            if (pIncludeUnavailable ||
+                (VassalService.GetDiplomaticSuzerain(pSource) == pTarget &&
+                 !IsAlreadyAtWar(pSource, pTarget)))
                 result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_INDEPENDENCE, GoalLabel(GOAL_INDEPENDENCE),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
-            if (!vassalBlocked && CanNoCb(pSource))
+            if (pIncludeUnavailable || (!vassalBlocked && CanNoCb(pSource)))
                 result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_NO_CB, GoalLabel(GOAL_NO_CB),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
