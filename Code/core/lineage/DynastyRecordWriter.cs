@@ -27,26 +27,29 @@ namespace AncientWarfare3.core.lineage
 
         private static readonly System.Random Rng = new System.Random();
 
-        public static bool OnKingChanged(Kingdom pKingdom, Actor pNewKing)
+        public static DynastyTransitionStatus TryOnKingChanged(
+            Kingdom pKingdom, Actor pNewKing)
         {
             if (!Ready || pKingdom?.data == null || pNewKing?.data == null)
-                return false;
-            if (!LineageService.IsXiaKingdom(pKingdom)) return false;
+                return DynastyTransitionStatus.Failure;
+            if (!LineageService.IsXiaKingdom(pKingdom))
+                return DynastyTransitionStatus.NoChange;
 
             pNewKing.data.get(LineageKeys.SHI_ID, out long newShiId, -1L);
             string newClanName = ResolveDynastyClanName(pNewKing, newShiId);
             long curShiId = GetCurrentDynastyShiId(pKingdom.id);
 
             if (IsDynasticContinuity(pKingdom.id, curShiId, newShiId))
-                return false;
+                return DynastyTransitionStatus.NoChange;
 
             // 关旧朝代
             string closeReason = (newShiId < 0 || !LineageService.IsXia(pNewKing))
                 ? END_REASON_UNKNOWN_SUCCESSOR
                 : END_REASON_REPLACED;
-            CloseOpenDynasty(pKingdom.id, closeReason);
+            if (!TryCloseOpenDynasty(pKingdom.id, closeReason))
+                return DynastyTransitionStatus.Failure;
             if (newShiId < 0 || !LineageService.IsXia(pNewKing))
-                return false;
+                return DynastyTransitionStatus.NoChange;
 
             // 开新朝代
             string dynastyName = BuildRulePeriodName(pNewKing, pKingdom, newShiId, newClanName);
@@ -79,9 +82,9 @@ namespace AncientWarfare3.core.lineage
             }
             catch (Exception e)
             {
-                ModClass.LogWarning("DynastyRecordWriter.OnKingChanged: " +
+                ModClass.LogWarning("DynastyRecordWriter.TryOnKingChanged: " +
                                     e.Message);
-                return false;
+                return DynastyTransitionStatus.Failure;
             }
 
             try
@@ -96,7 +99,7 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("Dynasty history write failed: " +
                                     e.Message);
             }
-            return true;
+            return DynastyTransitionStatus.Created;
         }
 
         internal static bool WouldCreateNewDynasty(Kingdom pKingdom,
@@ -196,7 +199,13 @@ namespace AncientWarfare3.core.lineage
 
         public static void CloseOpenDynasty(long pKingdomId, string pReason)
         {
-            if (!Ready) return;
+            TryCloseOpenDynasty(pKingdomId, pReason);
+        }
+
+        private static bool TryCloseOpenDynasty(long pKingdomId,
+            string pReason)
+        {
+            if (!Ready) return false;
             try
             {
                 using var findCmd = new SQLiteCommand(DB);
@@ -204,14 +213,27 @@ namespace AncientWarfare3.core.lineage
                                       $"WHERE KINGDOM_ID=@kid AND END_TIME=-1 ORDER BY START_TIME DESC LIMIT 1";
                 findCmd.Parameters.AddWithValue("@kid", pKingdomId);
                 object v = findCmd.ExecuteScalar();
-                if (v == null || v == DBNull.Value) return;
+                if (v == null || v == DBNull.Value) return true;
                 long openId = Convert.ToInt64(v);
-                DB.UpdateValue(TABLE,
-                    new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("DYNASTY_ID", openId) },
-                    ColumnVal.Create("END_TIME", World.world.getCurWorldTime()),
-                    ColumnVal.Create("END_REASON", pReason ?? ""));
+                using var close = new SQLiteCommand(DB)
+                {
+                    CommandText = "UPDATE " + TABLE +
+                                  " SET END_TIME=@time,END_REASON=@reason " +
+                                  "WHERE DYNASTY_ID=@id AND END_TIME=-1"
+                };
+                close.Parameters.AddWithValue("@time",
+                    World.world.getCurWorldTime());
+                close.Parameters.AddWithValue("@reason", pReason ?? "");
+                close.Parameters.AddWithValue("@id", openId);
+                if (close.ExecuteNonQuery() != 1) return false;
+                return true;
             }
-            catch (Exception e) { ModClass.LogWarning("DynastyRecordWriter.CloseOpenDynasty: " + e.Message); }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("DynastyRecordWriter.CloseOpenDynasty: " +
+                                    e.Message);
+                return false;
+            }
         }
 
         public static long GetCurrentDynastyId(long pKingdomId)

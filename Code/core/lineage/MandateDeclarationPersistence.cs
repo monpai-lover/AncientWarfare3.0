@@ -32,8 +32,18 @@ namespace AncientWarfare3.core.lineage
             public bool ExpectedPreviousActive;
             public long PreviousPeriodId = -1L;
             public long PreviousKingdomId = -1L;
+            public string PreviousKingdomName = "";
+            public string PreviousKingdomColor = "";
+            public long PreviousRulerActorId = -1L;
+            public string PreviousRulerName = "";
             public int PreviousMandateValue;
             public string PreviousEndReason = "replaced";
+            public string NewYearPrefix = "";
+            public string NewYearPrefixRich = "";
+            public string PreviousYearPrefix = "";
+            public string PreviousYearPrefixRich = "";
+            public string OperationKey = "";
+            public bool WasAlreadyEmperor;
         }
 
         public static bool TryCommit(SQLiteConnection pDb,
@@ -48,9 +58,10 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
-            using SQLiteTransaction transaction = pDb.BeginTransaction();
+            SQLiteTransaction transaction = null;
             try
             {
+                transaction = pDb.BeginTransaction();
                 if (pRequest.ExpectedPreviousActive)
                     EndPreviousPeriod(pDb, transaction, pPeriodTable,
                         pRequest);
@@ -65,6 +76,44 @@ namespace AncientWarfare3.core.lineage
                     transaction.Rollback();
                     return false;
                 }
+                var pending = new MandateProjectionOutboxPersistence.
+                    PendingProjection
+                {
+                    OperationKey = pRequest.OperationKey,
+                    PeriodId = pRequest.PeriodId,
+                    KingdomId = pRequest.KingdomId,
+                    KingdomName = pRequest.KingdomName,
+                    KingdomColor = pRequest.KingdomColor,
+                    DynastyName = pRequest.DynastyName,
+                    RulerActorId = pRequest.RulerActorId,
+                    RulerName = pRequest.RulerName,
+                    PreviousPeriodId = pRequest.PreviousPeriodId,
+                    PreviousKingdomId = pRequest.PreviousKingdomId,
+                    PreviousKingdomName = pRequest.PreviousKingdomName,
+                    PreviousKingdomColor = pRequest.PreviousKingdomColor,
+                    PreviousRulerActorId = pRequest.PreviousRulerActorId,
+                    PreviousRulerName = pRequest.PreviousRulerName,
+                    PreviousMandateValue = pRequest.PreviousMandateValue,
+                    PreviousEndReason = pRequest.PreviousEndReason,
+                    OldEndRequired = pRequest.ExpectedPreviousActive,
+                    CurrentYear = pRequest.CurrentYear,
+                    WasAlreadyEmperor = pRequest.WasAlreadyEmperor,
+                    OriginType = pRequest.OriginType,
+                    ClaimantKind = pRequest.ClaimantKind,
+                    MapMarkerKind = pRequest.MapMarkerKind,
+                    NewYearPrefix = pRequest.NewYearPrefix,
+                    NewYearPrefixRich = pRequest.NewYearPrefixRich,
+                    PreviousYearPrefix = pRequest.PreviousYearPrefix,
+                    PreviousYearPrefixRich =
+                        pRequest.PreviousYearPrefixRich,
+                    CreatedTime = pRequest.StartTime
+                };
+                if (!MandateProjectionOutboxPersistence.TryEnqueue(
+                        pDb, transaction, pending, out pError))
+                {
+                    transaction.Rollback();
+                    return false;
+                }
                 transaction.Commit();
                 return true;
             }
@@ -74,6 +123,10 @@ namespace AncientWarfare3.core.lineage
                 catch { }
                 pError = error.Message;
                 return false;
+            }
+            finally
+            {
+                transaction?.Dispose();
             }
         }
 
@@ -91,6 +144,7 @@ namespace AncientWarfare3.core.lineage
                    pRequest.StateId >= 0L && pRequest.PeriodId >= 0L &&
                    pRequest.KingdomId >= 0L &&
                    pRequest.RulerActorId >= 0L &&
+                   !string.IsNullOrWhiteSpace(pRequest.OperationKey) &&
                    pRequest.StartMandate >= 0 &&
                    pRequest.EmperorTitle >= 0 &&
                    (!pRequest.ExpectedPreviousActive ||

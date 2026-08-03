@@ -29,5 +29,6 @@ namespace AncientWarfare3.core.db
         public string context_kingdom_color = "";
         public string target_type = "";
         [TableItemDef(pDefaultValue: "-1")] public long target_id = -1;
+        public string projection_key = "";
     }
 }

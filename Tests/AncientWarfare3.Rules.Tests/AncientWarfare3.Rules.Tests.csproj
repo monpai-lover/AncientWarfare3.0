@@ -271,6 +271,9 @@
     <Compile Include="..\..\Code\core\lineage\MandateSuccessionPersistence.cs" Link="Production\MandateSuccessionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\ReignMandateProjectionPersistence.cs" Link="Production\ReignMandateProjectionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateDeclarationPersistence.cs" Link="Production\MandateDeclarationPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateProjectionOutboxPersistence.cs" Link="Production\MandateProjectionOutboxPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateProjectionResumeRules.cs" Link="Production\MandateProjectionResumeRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DynastyTransitionRules.cs" Link="Production\DynastyTransitionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandatePhaseRules.cs" Link="Production\MandatePhaseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateDeclineRebellionRules.cs" Link="Production\MandateDeclineRebellionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateFeudatoryCompletionRules.cs" Link="Production\MandateFeudatoryCompletionRules.cs" />

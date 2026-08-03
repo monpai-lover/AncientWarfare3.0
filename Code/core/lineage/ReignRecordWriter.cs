@@ -212,22 +212,20 @@ namespace AncientWarfare3.core.lineage
                 (float)pStartTime);
         }
 
-        public static bool ProjectMandateContext(Kingdom pKingdom,
-            Actor pKing, long pMandatePeriodId)
+        public static bool TryProjectCurrentReignDynasty(Kingdom pKingdom,
+            Actor pKing, out string pError)
         {
-            if (!Ready || pKingdom?.data == null || pKing?.data == null ||
-                pMandatePeriodId < 0L)
-                return false;
-            bool projected = ReignMandateProjectionPersistence.TryProject(
-                DB, TABLE, pKingdom.id, pKing.data.id, pMandatePeriodId,
-                (int)KingdomTitle.Emperor, pKingdom.name,
-                out string error);
-            if (!projected)
+            pError = "";
+            if (!Ready || pKingdom?.data == null || pKing?.data == null)
             {
-                ModClass.LogWarning("Project mandate reign context failed: " +
-                                    error);
+                pError = "invalid current reign dynasty projection";
+                return false;
             }
-            return projected;
+            long dynastyId = DynastyRecordWriter.GetCurrentDynastyId(
+                pKingdom.id);
+            return ReignMandateProjectionPersistence.TryProjectDynasty(
+                DB, TABLE, pKingdom.id, pKing.data.id, dynastyId,
+                out pError);
         }
 
         public static bool TryRecoverCurrentProjection(Kingdom pKingdom,

@@ -148,6 +148,8 @@ namespace AncientWarfare3.core.multiplayer
             {
                 new AW3RestoreStage("mandate_projection",
                     MandateService.RebuildRuntimeMarkerProjection),
+                new AW3RestoreStage("mandate_projection_resume", () =>
+                    MandateService.ResumePendingProjections(2)),
                 new AW3RestoreStage("world_traits", () =>
                     XiaSubspeciesRepair.EnsureWorldTraits()),
                 new AW3RestoreStage("figure_state", FigureStateStore.Load),
@@ -271,6 +273,8 @@ namespace AncientWarfare3.core.multiplayer
                     LineageArchiveManager.Instance.CreateDataBase),
                 new AW3RestoreStage("mandate_projection",
                     MandateService.RebuildRuntimeMarkerProjection),
+                new AW3RestoreStage("mandate_projection_resume", () =>
+                    MandateService.ResumePendingProjections(2)),
                 new AW3RestoreStage("war_plot_redirect",
                     WarPlotRedirectService.SweepExistingPlots),
                 new AW3RestoreStage("world_traits", () =>

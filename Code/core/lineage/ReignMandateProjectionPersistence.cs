@@ -64,5 +64,47 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
         }
+
+        public static bool TryProjectDynasty(SQLiteConnection pDb,
+            string pTable, long kingdomId, long rulerActorId,
+            long dynastyId, out string pError)
+        {
+            pError = "";
+            if (pDb == null ||
+                !string.Equals(pTable, "KingdomReign",
+                    StringComparison.Ordinal) ||
+                kingdomId < 0L || rulerActorId < 0L || dynastyId < 0L)
+            {
+                pError = "invalid reign dynasty projection input";
+                return false;
+            }
+
+            try
+            {
+                using var command = new SQLiteCommand(pDb)
+                {
+                    CommandText = "UPDATE " + pTable +
+                        " SET DYNASTY_ID=@dynasty WHERE REIGN_ID=(" +
+                        "SELECT REIGN_ID FROM " + pTable +
+                        " WHERE KINGDOM_ID=@kingdom AND KING_ACTOR_ID=@actor" +
+                        " AND END_TIME=-1 ORDER BY START_TIME DESC," +
+                        "REIGN_ID DESC LIMIT 1) AND KINGDOM_ID=@kingdom" +
+                        " AND KING_ACTOR_ID=@actor AND END_TIME=-1"
+                };
+                command.Parameters.AddWithValue("@dynasty", dynastyId);
+                command.Parameters.AddWithValue("@kingdom", kingdomId);
+                command.Parameters.AddWithValue("@actor", rulerActorId);
+                int affected = command.ExecuteNonQuery();
+                if (affected == 1) return true;
+                pError = "reign dynasty projection expected one row, got " +
+                         affected;
+                return false;
+            }
+            catch (Exception error)
+            {
+                pError = error.Message;
+                return false;
+            }
+        }
     }
 }

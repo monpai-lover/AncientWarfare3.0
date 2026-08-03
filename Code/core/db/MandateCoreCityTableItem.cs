@@ -16,5 +16,6 @@ namespace AncientWarfare3.core.db
         public string core_type = "founding";
         public double added_time = -1;
         public int active = 1;
+        public string projection_key = "";
     }
 }

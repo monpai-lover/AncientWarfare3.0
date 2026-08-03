@@ -20,8 +20,6 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pNewKing?.data == null) return;
             if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
-            if (!EnsureInitialStateNameForRuler(pKingdom, pNewKing))
-                WarnStateNameProjection(pKingdom, pNewKing);
 
             // 防重复:记录上次为该国登记的王 id,相同则跳过。
             pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID, out long lastKingId, -1L);
@@ -50,17 +48,45 @@ namespace AncientWarfare3.core.lineage
             bool changedRulingShi = previousDynastyShiId >= 0 &&
                                     previousDynastyShiId != newShiId;
             double accessionTime = World.world.getCurWorldTime();
-            bool newDynastyCreated =
-                DynastyRecordWriter.OnKingChanged(pKingdom, pNewKing);
-            if (!ProjectDynasticStateNameForRuler(pKingdom, pNewKing,
-                    newShiId, changedRulingShi, newDynastyCreated))
-                WarnStateNameProjection(pKingdom, pNewKing);
+            bool newDynastyCreated = false;
             double persistedStartTime = -1d;
             string transitionError = "";
             bool settled = MandateAccessionCoordinator.TrySettle(
                 () => ReignRecordWriter.TryTransitionReign(
                     pKingdom, pNewKing, accessionTime,
                     out persistedStartTime, out transitionError),
+                () =>
+                {
+                    if (!EnsureInitialStateNameForRuler(
+                            pKingdom, pNewKing))
+                    {
+                        WarnStateNameProjection(pKingdom, pNewKing);
+                        return false;
+                    }
+                    DynastyTransitionStatus dynastyStatus =
+                        DynastyRecordWriter.TryOnKingChanged(
+                            pKingdom, pNewKing);
+                    if (!DynastyTransitionRules.TryResolve(dynastyStatus,
+                            out newDynastyCreated))
+                        return false;
+                    if (DynastyTransitionRules.ShouldProjectCreatedDynasty(
+                            dynastyStatus) &&
+                        !ReignRecordWriter.TryProjectCurrentReignDynasty(
+                            pKingdom, pNewKing,
+                            out string dynastyProjectionError))
+                    {
+                        ModClass.LogWarning(
+                            "Reign dynasty projection failed: " +
+                            dynastyProjectionError);
+                        return false;
+                    }
+                    bool projected = ProjectDynasticStateNameForRuler(
+                        pKingdom, pNewKing, newShiId, changedRulingShi,
+                        newDynastyCreated);
+                    if (!projected)
+                        WarnStateNameProjection(pKingdom, pNewKing);
+                    return projected;
+                },
                 () => pKingdom.king?.data?.id == pNewKing.data.id,
                 () => MandateService.OnRulerSucceeded(
                     pKingdom, pNewKing),
