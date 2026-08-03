@@ -1,0 +1,67 @@
+using AncientWarfare3.core.performance;
+
+internal static class IdleBehaviourThrottleGateTests
+{
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name);
+    }
+
+    public static void Run()
+    {
+        ActorAndBehaviourCooldownsAreIndependent();
+        RemoveActorClearsOnlyTheTargetActor();
+        ClearReleasesEveryActor();
+    }
+
+    private static void ActorAndBehaviourCooldownsAreIndependent()
+    {
+        var gate = new AWIdleBehaviourThrottleGate();
+
+        True(gate.TryBeginScan(11L, AWIdleBehaviourKind.Socialize, 100d),
+            "an actor can begin its first socialize scan");
+        True(gate.TryBeginScan(11L, AWIdleBehaviourKind.EmoteSearch, 100d),
+            "the same actor has an independent emote cooldown");
+        True(gate.TryBeginScan(12L, AWIdleBehaviourKind.Socialize, 100d),
+            "different actors have independent socialize cooldowns");
+        False(gate.TryBeginScan(11L, AWIdleBehaviourKind.Socialize, 100d),
+            "the original actor remains throttled for socialize");
+    }
+
+    private static void RemoveActorClearsOnlyTheTargetActor()
+    {
+        var gate = new AWIdleBehaviourThrottleGate();
+        True(gate.TryBeginScan(21L, AWIdleBehaviourKind.Socialize, 200d),
+            "the target actor begins before removal");
+        True(gate.TryBeginScan(22L, AWIdleBehaviourKind.Socialize, 200d),
+            "the retained actor begins before removal");
+
+        gate.RemoveActor(21L);
+
+        True(gate.TryBeginScan(21L, AWIdleBehaviourKind.Socialize, 200d),
+            "a removed actor can run immediately");
+        False(gate.TryBeginScan(22L, AWIdleBehaviourKind.Socialize, 200d),
+            "removing one actor preserves another actor's cooldown");
+    }
+
+    private static void ClearReleasesEveryActor()
+    {
+        var gate = new AWIdleBehaviourThrottleGate();
+        True(gate.TryBeginScan(31L, AWIdleBehaviourKind.Socialize, 300d),
+            "the first actor begins before clear");
+        True(gate.TryBeginScan(32L, AWIdleBehaviourKind.EmoteSearch, 300d),
+            "the second actor begins before clear");
+
+        gate.Clear();
+
+        True(gate.TryBeginScan(31L, AWIdleBehaviourKind.Socialize, 300d),
+            "clear releases the first actor");
+        True(gate.TryBeginScan(32L, AWIdleBehaviourKind.EmoteSearch, 300d),
+            "clear releases the second actor");
+    }
+}

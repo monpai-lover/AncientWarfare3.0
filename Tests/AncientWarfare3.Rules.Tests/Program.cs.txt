@@ -15,6 +15,13 @@ if (args.Length == 2 && args[0] == "--benchmark" &&
     return;
 }
 
+if (args.Length == 1 && args[0] == "--idle-throttle-gate")
+{
+    IdleBehaviourThrottleGateTests.Run();
+    Console.WriteLine("Idle behaviour throttle gate tests passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--central-acting-atomic-slice")
 {
     OfficialCareerActingAtomicPersistenceSqlTests.Run();
@@ -7701,6 +7708,7 @@ ActorAgeWorkRulesTests.Run();
 ActorDeathArchiveRulesTests.Run();
 ActorPresentationDirtyRulesTests.Run();
 AWPathRequestReuseRulesTests.Run();
+IdleBehaviourThrottleGateTests.Run();
 LineageBirthArchivePersistenceSqlTests.Run();
 HistoricalWriteRulesTests.Run();
 

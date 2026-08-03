@@ -1,3 +1,4 @@
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.performance;
 using ai.behaviours;
 using HarmonyLib;
@@ -29,6 +30,15 @@ namespace AncientWarfare3.patch
         private static void ActorDispose_Prefix(Actor __instance)
         {
             AWIdleBehaviourThrottleService.Forget(__instance);
+        }
+
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MapBox), nameof(MapBox.clearWorld))]
+        private static void MapBoxClearWorld_Prefix()
+        {
+            if (!AWAsyncClearWorldGuard.CleanupAllowed) return;
+            AWIdleBehaviourThrottleService.ClearRuntime();
         }
 
         private static bool AllowOrStop(Actor pActor, ref BehResult pResult)

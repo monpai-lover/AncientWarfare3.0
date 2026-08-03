@@ -32,5 +32,10 @@ namespace AncientWarfare3.core.performance
             if (pActor?.data == null) return;
             Gate.RemoveActor(pActor.data.id);
         }
+
+        public static void ClearRuntime()
+        {
+            Gate.Clear();
+        }
     }
 }
