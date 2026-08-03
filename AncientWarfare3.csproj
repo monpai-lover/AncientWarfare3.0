@@ -10,6 +10,7 @@
 		<FileAlignment>512</FileAlignment>
 		<!-- 不自动包含 obj/bin 等; 仅编译 Code 下源码 -->
 		<EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+		<EnableDefaultNoneItems>false</EnableDefaultNoneItems>
 	</PropertyGroup>
 
 	<!-- ========================================================================
