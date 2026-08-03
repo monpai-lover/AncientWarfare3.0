@@ -95,6 +95,8 @@ internal static class CityReservePoolRulesTests
             reserveEligible: true, enlistedIntoTargetArmy: false),
             "a migrant cannot be returned to the former city's pool");
         RejectedCandidateReturnIsDeterministicAndIdempotent();
+        FailedLastCandidateReturnReopensAvailability();
+        RecruitmentExitsOwnOneReturnAndResolveFinalAvailability();
         Equal(true, CityReservePoolRules.MatchesSourceCity(
             sourceCityId: 10L, candidateCityId: 10L),
             "an army may consume reserves raised by its source city");
@@ -279,6 +281,7 @@ internal static class CityReservePoolRulesTests
             hasPersistedMember: true, restoreInFlight: false),
             "normal profession changes still validate reserve members");
         WarEntryWaitsForCompleteRestoreValidation();
+        WarEntryReconciliationRunsOncePerKingdom();
 
         PreparationUsesMaintainedActorPool();
     }
@@ -344,6 +347,56 @@ internal static class CityReservePoolRulesTests
             "rejected return guards never add an invalid actor id");
     }
 
+    private static void FailedLastCandidateReturnReopensAvailability()
+    {
+        var eligible = new SortedSet<long> { 11L };
+        var members = new SortedSet<long> { 11L };
+        Equal(true, CityReservePoolRules.TryTakeNextActorId(
+                members, out long actorId),
+            "the last reserve actor is leased for enlistment");
+        eligible.Remove(actorId);
+        bool exhaustedBeforeReturn = CityReservePoolRules.
+            CanConfirmExhausted(reconciliationComplete: true,
+                availableActorCount: members.Count);
+        Equal(true, exhaustedBeforeReturn,
+            "leasing the last actor temporarily empties the pool");
+
+        Equal(true, CityReservePoolRules.RestoreRejectedActorId(
+                eligible, members, actorId,
+                sameKingdom: true, sameCity: true, alive: true,
+                reserveEligible: true, enlistedIntoTargetArmy: false),
+            "failed enlistment returns the actor to the source pool");
+        bool exhaustedAfterReturn = CityReservePoolRules.
+            ResolveConfirmedExhaustionAfterReturn(
+                exhaustedBeforeReturn, members.Count);
+
+        Equal(false, exhaustedAfterReturn,
+            "a restored actor invalidates the pre-return exhaustion result");
+        Equal(true, CityReservePoolRules.TryTakeNextActorId(
+                members, out long nextActorId),
+            "the restored actor is available to the next work item");
+        Equal(actorId, nextActorId,
+            "the next work item receives the exact restored actor");
+    }
+
+    private static void RecruitmentExitsOwnOneReturnAndResolveFinalAvailability()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "TemporaryLevyService.cs"));
+        Equal(4, CountOccurrences(source, "RestoreRejectedCandidates("),
+            "four recruitment exits own exactly one rejected-candidate return");
+        Equal(4, CountOccurrences(source,
+                "ResolveConfirmedExhaustionAfterReturn("),
+            "every return owner resolves exhaustion from final availability");
+        string reserveHelper = Section(source,
+            "internal static int EnlistReserveActors(",
+            "private static int DirectedDemand(");
+        Equal(false, reserveHelper.Contains("RestoreRejectedCandidates(",
+                StringComparison.Ordinal),
+            "casualty helper leaves rejected-candidate return to its caller");
+    }
+
     private static void WarEntryWaitsForCompleteRestoreValidation()
     {
         Equal(true, CityReservePoolRules.
@@ -361,6 +414,83 @@ internal static class CityReservePoolRulesTests
                 restoreValidationPending: false,
                 validationCompleted: false),
             "ordinary war entry does not require an unrelated validation");
+    }
+
+    private static void WarEntryReconciliationRunsOncePerKingdom()
+    {
+        int newWarReconciliations = 1;
+        if (CityReservePoolRules.ShouldPrepareWarEntryFromJoinPrefix(
+                canJoin: true, initializingMainBelligerent: true))
+            newWarReconciliations++;
+        if (CityReservePoolRules.ShouldPrepareWarEntryFromJoinPrefix(
+                canJoin: true, initializingMainBelligerent: true))
+            newWarReconciliations++;
+        Equal(1, newWarReconciliations,
+            "new-war prefix reconciliation is not repeated by nested joins");
+
+        int directJoinReconciliations =
+            CityReservePoolRules.ShouldPrepareWarEntryFromJoinPrefix(
+                canJoin: true, initializingMainBelligerent: false)
+                ? 1
+                : 0;
+        Equal(1, directJoinReconciliations,
+            "an ordinary join prefix performs one reconciliation");
+        Equal(false, CityReservePoolRules.
+                ShouldPrepareWarEntryFromJoinPrefix(
+                    canJoin: false, initializingMainBelligerent: false),
+            "a rejected join performs no reserve reconciliation");
+
+        long generation = CityReservePoolRules.
+            AdvanceWarEmergencyGeneration(alreadyFrozen: false,
+                currentGeneration: 7L);
+        generation = CityReservePoolRules.AdvanceWarEmergencyGeneration(
+            alreadyFrozen: true, currentGeneration: generation);
+        Equal(8L, generation,
+            "prefix preparation plus repeated committed notifications advance one generation");
+
+        string root = Directory.GetCurrentDirectory();
+        string patch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_WarPatch.cs"));
+        string newWarPrefix = Section(patch,
+            "public static bool NewWar_Prefix(",
+            "public static void NewWar_Postfix(");
+        string newWarPostfix = Section(patch,
+            "public static void NewWar_Postfix(",
+            "public static void IncreaseDeathsAttackers_Postfix(");
+        string canJoin = Section(patch,
+            "private static bool CanJoin(",
+            "private static void CompleteJoin(");
+        Equal(true, newWarPrefix.Contains(
+                "CityReservePoolService.PrepareWarEntry(",
+                StringComparison.Ordinal),
+            "new-war prefix retains the synchronous preparation gate");
+        Equal(false, newWarPostfix.Contains(
+                "CompletePreWarReconciliation(",
+                StringComparison.Ordinal),
+            "new-war postfix does not repeat prefix reconciliation");
+        Equal(true, canJoin.Contains(
+                "ShouldPrepareWarEntryFromJoinPrefix(",
+                StringComparison.Ordinal),
+            "join prefix uses the executable nested-join decision");
+
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "CityReservePoolService.cs"));
+        string joined = Section(service,
+            "internal static void OnKingdomJoinedWar(",
+            "internal static void OnWarEnded(");
+        Equal(false, joined.Contains("CompletePreWarReconciliation(",
+                StringComparison.Ordinal),
+            "committed join notification does not repeat prefix reconciliation");
+        Equal(true, joined.Contains("OpenWarEmergency(",
+                StringComparison.Ordinal),
+            "committed join notification still opens the war emergency");
+        string openEmergency = Section(service,
+            "private static void OpenWarEmergency(",
+            "private static void OpenCityWarReserve(");
+        Equal(true, openEmergency.Contains(
+                "AdvanceWarEmergencyGeneration(",
+                StringComparison.Ordinal),
+            "war emergency generation uses the idempotent transition rule");
     }
 
     private static void PreparationUsesMaintainedActorPool()
@@ -392,6 +522,30 @@ internal static class CityReservePoolRulesTests
                 "foreach (Actor actor in World.world.units)",
                 StringComparison.Ordinal),
             "load rebuild must reconstruct actor pools from living residents");
+    }
+
+    private static string Section(string source, string start, string end)
+    {
+        int startIndex = source.IndexOf(start, StringComparison.Ordinal);
+        if (startIndex < 0) return string.Empty;
+        int endIndex = source.IndexOf(end, startIndex + start.Length,
+            StringComparison.Ordinal);
+        return endIndex < 0
+            ? source.Substring(startIndex)
+            : source.Substring(startIndex, endIndex - startIndex);
+    }
+
+    private static int CountOccurrences(string source, string token)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(token, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += token.Length;
+        }
+        return count;
     }
 
     private static void Equal<T>(T expected, T actual, string name)

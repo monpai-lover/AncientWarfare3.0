@@ -326,9 +326,6 @@ namespace AncientWarfare3.core.lineage
             bool liveKingdom = IsLivingKingdom(kingdom);
             if (!CityReservePoolRules.ShouldReconcileJoiningKingdom(
                     warActive, liveKingdom)) return;
-            if (!EnsureRestoreValidationForWarEntry()) return;
-            CompletePreWarReconciliation(kingdom,
-                new HashSet<long>());
             OpenWarEmergency(kingdom, war.data.id);
         }
 
@@ -632,14 +629,14 @@ namespace AncientWarfare3.core.lineage
                 CountFormalWars(kingdom));
         }
 
-        internal static void RestoreRejectedCandidates(Kingdom kingdom,
+        internal static int RestoreRejectedCandidates(Kingdom kingdom,
             City sourceCity, Army targetArmy,
             IReadOnlyList<Actor> candidates)
         {
             if (kingdom?.data == null || sourceCity?.data == null ||
                 candidates == null ||
                 !States.TryGetValue(kingdom.id,
-                    out KingdomPoolState state)) return;
+                    out KingdomPoolState state)) return -1;
 
             for (int i = 0; i < candidates.Count; i++)
             {
@@ -679,17 +676,7 @@ namespace AncientWarfare3.core.lineage
             ReconcilePool(kingdom, sourceCity, state, sourcePool,
                 allowFrozenAddition: false, additionBudget: 0);
             MarkCityDirty(sourceCity);
-        }
-
-        internal static void CompletePreWarReconciliation(War war)
-        {
-            if (war?.data == null || war.hasEnded()) return;
-            if (!EnsureRestoreValidationForWarEntry()) return;
-            var participantIds = new HashSet<long>();
-            foreach (Kingdom kingdom in war.getAttackers())
-                CompletePreWarReconciliation(kingdom, participantIds);
-            foreach (Kingdom kingdom in war.getDefenders())
-                CompletePreWarReconciliation(kingdom, participantIds);
+            return sourcePool.ActorIds.Count;
         }
 
         internal static bool PrepareWarEntry(Kingdom first,
@@ -1242,9 +1229,9 @@ namespace AncientWarfare3.core.lineage
                 }
                 return;
             }
-            state.Generation = state.Generation >= long.MaxValue
-                ? long.MaxValue
-                : state.Generation + 1L;
+            state.Generation = CityReservePoolRules.
+                AdvanceWarEmergencyGeneration(state.Frozen,
+                    state.Generation);
             state.Frozen = true;
             state.EmergencyId = emergencyId;
             kingdom.data.set(LineageKeys.CITY_RESERVE_KINGDOM_GENERATION,

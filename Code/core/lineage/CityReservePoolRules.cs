@@ -138,12 +138,27 @@ namespace AncientWarfare3.core.lineage
             return warActive && liveKingdom;
         }
 
+        public static bool ShouldPrepareWarEntryFromJoinPrefix(
+            bool canJoin, bool initializingMainBelligerent)
+        {
+            return canJoin && !initializingMainBelligerent;
+        }
+
         public static long ResolveWarEmergencyId(bool frozen,
             long currentEmergencyId, long requestedEmergencyId)
         {
             if (frozen && currentEmergencyId >= 0L)
                 return currentEmergencyId;
             return requestedEmergencyId;
+        }
+
+        public static long AdvanceWarEmergencyGeneration(
+            bool alreadyFrozen, long currentGeneration)
+        {
+            long generation = Math.Max(0L, currentGeneration);
+            if (alreadyFrozen || generation >= long.MaxValue)
+                return generation;
+            return generation + 1L;
         }
 
         public static bool CanMaintain(bool frozen, bool worldDayChanged)
@@ -197,6 +212,16 @@ namespace AncientWarfare3.core.lineage
         {
             return ArmyMobilizationRules.ShouldConfirmExhausted(
                 reconciliationComplete, availableActorCount);
+        }
+
+        public static bool ResolveConfirmedExhaustionAfterReturn(
+            bool exhaustionConfirmedBeforeReturn,
+            int availableActorCountAfterReturn)
+        {
+            if (availableActorCountAfterReturn < 0)
+                return exhaustionConfirmedBeforeReturn;
+            return exhaustionConfirmedBeforeReturn &&
+                   availableActorCountAfterReturn == 0;
         }
 
         public static bool CanConfirmExhausted(bool kingdomFrozen,

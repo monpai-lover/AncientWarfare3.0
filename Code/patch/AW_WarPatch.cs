@@ -95,7 +95,6 @@ namespace AncientWarfare3.patch
             RecordMainBelligerents(__result);
             WarRecordWriter.OnWarStart(__result);
             WarScoreService.StartWar(__result);
-            CityReservePoolService.CompletePreWarReconciliation(__result);
             CityReservePoolService.OnWarStarted(__result);
             KingdomWarDirectorService.OnWarStarted(__result);
             ArmyLogisticsService.OnWarStarted(__result);
@@ -349,8 +348,11 @@ namespace AncientWarfare3.patch
             bool canJoin = WarParticipantLifecycleRules.CanJoin(wasOnSide,
                 initializingMainBelligerent, lookupSucceeded,
                 hasSeparatePeaceExit: !sourceAllowsJoin);
-            return canJoin && CityReservePoolService.PrepareWarEntry(
-                pKingdom);
+            if (!canJoin) return false;
+            return !CityReservePoolRules.
+                       ShouldPrepareWarEntryFromJoinPrefix(canJoin,
+                           initializingMainBelligerent) ||
+                   CityReservePoolService.PrepareWarEntry(pKingdom);
         }
 
         private static void CompleteJoin(War pWar, Kingdom pKingdom,
