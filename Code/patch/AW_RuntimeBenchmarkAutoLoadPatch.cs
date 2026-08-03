@@ -7,14 +7,19 @@ using HarmonyLib;
 
 namespace AncientWarfare3.patch
 {
-    [HarmonyPatch(typeof(MapBox), nameof(MapBox.startTheGame))]
+    [HarmonyPatch]
     internal static class AW_RuntimeBenchmarkAutoLoadPatch
     {
+        private static readonly TimeSpan AutoLoadTimeout =
+            TimeSpan.FromMinutes(2);
+
         private static bool _configured;
         private static bool _dispatched;
+        private static bool _waitingForBenchmarkWorld;
         private static int _slot = -1;
         private static string _path = string.Empty;
         private static string _pendingPath = string.Empty;
+        private static long _pendingDeadlineUtcTicks;
         private static long _validationActorId = -1L;
 
         internal static void Initialize()
@@ -44,8 +49,10 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(MapBox), nameof(MapBox.startTheGame))]
         private static void StartTheGame_Prefix(ref bool pForceGenerate)
         {
+            if (_dispatched) return;
             string configuredPath = Environment.GetEnvironmentVariable(
                 RuntimePerformanceDiagnosticRules.AutoLoadPathEnvironmentVariable);
             bool hasPath = RuntimePerformanceDiagnosticRules.
@@ -89,6 +96,9 @@ namespace AncientWarfare3.patch
             }
 
             _pendingPath = Path.GetFullPath(path);
+            _pendingDeadlineUtcTicks =
+                DateTime.UtcNow.Add(AutoLoadTimeout).Ticks;
+            _waitingForBenchmarkWorld = true;
             MapBox.on_world_loaded -= OnBenchmarkWorldLoaded;
             MapBox.on_world_loaded += OnBenchmarkWorldLoaded;
             LoadingScreen.TransitionAction load = () => LoadBenchmarkWorld(path);
@@ -126,6 +136,16 @@ namespace AncientWarfare3.patch
 
         private static void OnBenchmarkWorldLoaded()
         {
+            long nowUtcTicks = DateTime.UtcNow.Ticks;
+            if (RuntimePerformanceDiagnosticRules.
+                HasBenchmarkAutoLoadTimedOut(_waitingForBenchmarkWorld,
+                    nowUtcTicks, _pendingDeadlineUtcTicks))
+            {
+                FailBenchmarkAutoLoad("timed out",
+                    "path=" + _pendingPath);
+                return;
+            }
+
             string expectedPath = _pendingPath;
             if (!AW3SaveDirectoryRegistry.TryGet(out string loadedPath))
             {
@@ -199,8 +219,23 @@ namespace AncientWarfare3.patch
 
         private static void StopWaitingForBenchmarkWorld()
         {
+            _waitingForBenchmarkWorld = false;
             MapBox.on_world_loaded -= OnBenchmarkWorldLoaded;
             _pendingPath = string.Empty;
+            _pendingDeadlineUtcTicks = 0L;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
+        private static void CheckBenchmarkAutoLoadTimeout_Postfix()
+        {
+            if (!_waitingForBenchmarkWorld) return;
+            long nowUtcTicks = DateTime.UtcNow.Ticks;
+            if (!RuntimePerformanceDiagnosticRules.
+                    HasBenchmarkAutoLoadTimedOut(_waitingForBenchmarkWorld,
+                        nowUtcTicks, _pendingDeadlineUtcTicks))
+                return;
+            FailBenchmarkAutoLoad("timed out", "path=" + _pendingPath);
         }
 
         private static void OpenValidationFamilyTree()

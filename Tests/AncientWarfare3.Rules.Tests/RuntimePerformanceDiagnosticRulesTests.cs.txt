@@ -16,14 +16,134 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         Equal(true, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
                 diagnosticsEnabled: true, benchmarkEnabled: true),
             "combined diagnostic and benchmark mode emits one text log");
+        BenchmarkFallbackCannotBeReintercepted();
+        GeneratedFallbackInvalidatesPendingCompletion();
+        BenchmarkTimeoutRulesBoundPendingWait();
+        BenchmarkTimeoutPollingIsPendingOnlyAndCleansUp();
         BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20();
+    }
+
+    private static void BenchmarkFallbackCannotBeReintercepted()
+    {
+        string source = Read("Code", "patch",
+            "AW_RuntimeBenchmarkAutoLoadPatch.cs");
+        int prefix = source.IndexOf(
+            "private static void StartTheGame_Prefix(ref bool pForceGenerate)",
+            StringComparison.Ordinal);
+        int dispatchedGate = source.IndexOf("if (_dispatched) return;", prefix,
+            StringComparison.Ordinal);
+        int forceOverride = source.IndexOf("pForceGenerate =", prefix,
+            StringComparison.Ordinal);
+
+        True(prefix >= 0 && dispatchedGate > prefix &&
+             forceOverride > dispatchedGate,
+            "a dispatched benchmark preserves stock forced-generation fallback");
+    }
+
+    private static void GeneratedFallbackInvalidatesPendingCompletion()
+    {
+        string benchmark = Read("Code", "patch",
+            "AW_RuntimeBenchmarkAutoLoadPatch.cs");
+        string savePatch = Read("Code", "patch", "AW_SavePatch.cs");
+        int generatedPostfix = savePatch.IndexOf(
+            "public static void GenerateNewMap_Postfix()",
+            StringComparison.Ordinal);
+        int clear = savePatch.IndexOf(
+            "AW3SaveDirectoryRegistry.ClearForNewWorld();", generatedPostfix,
+            StringComparison.Ordinal);
+        True(generatedPostfix >= 0 && clear > generatedPostfix,
+            "generated fallback clears the pre-observed benchmark directory");
+
+        int completion = benchmark.IndexOf(
+            "private static void OnBenchmarkWorldLoaded()",
+            StringComparison.Ordinal);
+        int missingPath = benchmark.IndexOf(
+            "if (!AW3SaveDirectoryRegistry.TryGet(out string loadedPath))",
+            completion, StringComparison.Ordinal);
+        int cleanup = benchmark.IndexOf("StopWaitingForBenchmarkWorld();",
+            missingPath, StringComparison.Ordinal);
+        int invalid = benchmark.IndexOf(
+            "AW3 benchmark auto-load invalid: completed world has no ",
+            cleanup, StringComparison.Ordinal);
+        int invalidReturn = benchmark.IndexOf("return;", invalid,
+            StringComparison.Ordinal);
+        int ready = benchmark.IndexOf("AW3 benchmark auto-load ready:",
+            completion, StringComparison.Ordinal);
+        int familyTree = benchmark.IndexOf("OpenValidationFamilyTree();",
+            completion, StringComparison.Ordinal);
+        True(completion >= 0 && missingPath > completion &&
+             cleanup > missingPath && invalid > cleanup &&
+             invalidReturn > invalid && ready > invalidReturn &&
+             familyTree > ready,
+            "generated fallback is invalid, cleans up, and cannot validate");
+    }
+
+    private static void BenchmarkTimeoutRulesBoundPendingWait()
+    {
+        System.Reflection.MethodInfo timeoutRule =
+            typeof(RuntimePerformanceDiagnosticRules).GetMethod(
+                "HasBenchmarkAutoLoadTimedOut",
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Static);
+        True(timeoutRule != null,
+            "benchmark auto-load exposes a testable timeout rule");
+
+        bool Invoke(bool pending, long nowTicks, long deadlineTicks)
+        {
+            return (bool)timeoutRule.Invoke(null,
+                new object[] { pending, nowTicks, deadlineTicks });
+        }
+
+        Equal(false, Invoke(false, 200L, 100L),
+            "non-pending benchmark work never times out");
+        Equal(false, Invoke(true, 99L, 100L),
+            "pending benchmark remains live before its deadline");
+        Equal(true, Invoke(true, 100L, 100L),
+            "pending benchmark expires exactly at its deadline");
+        Equal(false, Invoke(true, 200L, 0L),
+            "an unset deadline cannot expire benchmark work");
+    }
+
+    private static void BenchmarkTimeoutPollingIsPendingOnlyAndCleansUp()
+    {
+        string source = Read("Code", "patch",
+            "AW_RuntimeBenchmarkAutoLoadPatch.cs");
+        int timeoutPoll = source.IndexOf(
+            "private static void CheckBenchmarkAutoLoadTimeout_Postfix()",
+            StringComparison.Ordinal);
+        int pendingGate = source.IndexOf(
+            "if (!_waitingForBenchmarkWorld) return;", timeoutPoll,
+            StringComparison.Ordinal);
+        int clockRead = source.IndexOf("DateTime.UtcNow.Ticks", pendingGate,
+            StringComparison.Ordinal);
+        int timeoutRule = source.IndexOf(
+            "HasBenchmarkAutoLoadTimedOut(", clockRead,
+            StringComparison.Ordinal);
+        int timeoutInvalid = source.IndexOf(
+            "FailBenchmarkAutoLoad(\"timed out\"", timeoutRule,
+            StringComparison.Ordinal);
+        int stop = source.IndexOf(
+            "private static void StopWaitingForBenchmarkWorld()",
+            StringComparison.Ordinal);
+        int clearPending = source.IndexOf(
+            "_waitingForBenchmarkWorld = false;", stop,
+            StringComparison.Ordinal);
+        int unsubscribe = source.IndexOf(
+            "MapBox.on_world_loaded -= OnBenchmarkWorldLoaded;", stop,
+            StringComparison.Ordinal);
+
+        True(timeoutPoll >= 0 && pendingGate > timeoutPoll &&
+             clockRead > pendingGate && timeoutRule > clockRead &&
+             timeoutInvalid > timeoutRule,
+            "timeout polling is a pending-only fast branch with explicit invalid");
+        True(stop >= 0 && clearPending > stop && unsubscribe > stop,
+            "timeout failure clears pending state and releases the callback");
     }
 
     private static void BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20()
     {
-        string source = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "patch",
-            "AW_RuntimeBenchmarkAutoLoadPatch.cs"));
+        string source = Read("Code", "patch",
+            "AW_RuntimeBenchmarkAutoLoadPatch.cs");
 
         Contains(source, "private static void OnBenchmarkWorldLoaded()",
             "benchmark auto-load has a dedicated completion callback");
@@ -58,6 +178,14 @@ internal static class RuntimePerformanceDiagnosticRulesTests
     private static void Contains(string value, string token, string message)
     {
         True(value.Contains(token, StringComparison.Ordinal), message);
+    }
+
+    private static string Read(params string[] parts)
+    {
+        string[] pathParts = new string[parts.Length + 1];
+        pathParts[0] = Directory.GetCurrentDirectory();
+        Array.Copy(parts, 0, pathParts, 1, parts.Length);
+        return File.ReadAllText(Path.Combine(pathParts));
     }
 
     private static void True(bool value, string message)

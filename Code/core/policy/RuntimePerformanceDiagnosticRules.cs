@@ -81,6 +81,13 @@ namespace AncientWarfare3.core.policy
             return configured && !dispatched;
         }
 
+        public static bool HasBenchmarkAutoLoadTimedOut(bool pending,
+            long utcNowTicks, long deadlineUtcTicks)
+        {
+            return pending && deadlineUtcTicks > 0L &&
+                   utcNowTicks >= deadlineUtcTicks;
+        }
+
         public static bool ShouldSample(bool enabled, long frame)
         {
             return enabled && frame > 0L &&
