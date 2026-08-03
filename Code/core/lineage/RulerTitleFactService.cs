@@ -95,8 +95,8 @@ namespace AncientWarfare3.core.lineage
             facts.KingdomColor = HistoryColors.FromKingdom(pKingdom);
             facts.EndReason = pEndReason ?? pReign.EndReason ?? "";
             facts.DeathCause = pReign.DeathCause ?? "";
-            facts.HighestTitle = Math.Max(pReign.HighestTitle,
-                pKingdom?.data == null ? 0 : (int)KingdomTitleService.GetTitle(pKingdom));
+            facts.HighestTitle = RulerTitleFactRules.ResolveSavedHighestTitle(
+                pReign.HighestTitle, facts.MandatePeriodId);
             facts.Age = SafeAge(pActor);
             facts.StartYear = Date.getYear(pReign.StartTime);
             facts.EndYear = Date.getYear(endTime);

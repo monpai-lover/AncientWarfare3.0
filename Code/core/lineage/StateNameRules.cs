@@ -128,7 +128,17 @@ namespace AncientWarfare3.core.lineage
             bool newDynastyCreated, bool isEmpireRank,
             bool changedRulingShi, bool hasExistingBoundStateName)
         {
-            return newDynastyCreated && isEmpireRank &&
+            return ShouldProjectDynasticStateName(newDynastyCreated,
+                isEmpireRank, changedRulingShi, hasExistingBoundStateName,
+                isActiveMandate: false);
+        }
+
+        public static bool ShouldProjectDynasticStateName(
+            bool newDynastyCreated, bool isEmpireRank,
+            bool changedRulingShi, bool hasExistingBoundStateName,
+            bool isActiveMandate)
+        {
+            return !isActiveMandate && newDynastyCreated && isEmpireRank &&
                    changedRulingShi && hasExistingBoundStateName;
         }
 

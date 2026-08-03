@@ -15,6 +15,7 @@
 
 # Local tests and internal development notes
 /Tests/*
+!/Tests/MandateSuccessionRuntimeSourceGuard.ps1
 !/Tests/LineageDisplayNameRulesTests.ps1
 !/Tests/CivMonkeyTextureCatalogSourceGuard.ps1
 !/Tests/WesternLineageNamingSourceGuard.ps1

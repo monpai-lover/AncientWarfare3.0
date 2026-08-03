@@ -47,6 +47,7 @@ namespace AncientWarfare3.core.lineage
             if (!ProjectDynasticStateNameForRuler(pKingdom, pNewKing,
                     newShiId, changedRulingShi, newDynastyCreated))
                 WarnStateNameProjection(pKingdom, pNewKing);
+            MandateService.OnRulerSucceeded(pKingdom, pNewKing);
 
             string kingName = pNewKing.getName();
 
@@ -523,7 +524,9 @@ namespace AncientWarfare3.core.lineage
                     pNewDynastyCreated,
                     KingdomTitleService.IsEmperor(pKingdom),
                     pChangedRulingShi,
-                    StateNameRules.IsValid(boundStateName))) return true;
+                    StateNameRules.IsValid(boundStateName),
+                    isActiveMandate: MandateService.IsMandateKingdom(pKingdom)))
+                return true;
             bool projected = StateNameService.ProjectExistingStateName(
                 pKingdom, pShiId, boundStateName);
             if (!projected) return false;

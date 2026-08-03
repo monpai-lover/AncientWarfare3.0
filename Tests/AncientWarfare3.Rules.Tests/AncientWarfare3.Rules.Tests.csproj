@@ -172,6 +172,7 @@
     <Compile Include="OccupiedCityCivilianProtectionRulesTests.cs.txt" />
     <Compile Include="HistoryLocalizationRulesTests.cs.txt" />
     <Compile Include="ConsistencyRegressionRulesTests.cs.txt" />
+    <Compile Include="MandateSuccessionRegressionRulesTests.cs.txt" />
     <Compile Include="Regression20260721Tests.cs.txt" />
     <Compile Include="ArmyMapInformationRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalMapActivationRulesTests.cs.txt" />
@@ -264,6 +265,7 @@
     <Compile Include="..\..\Code\core\lineage\RestorationUprisingRules.cs" Link="Production\RestorationUprisingRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateStartRecordRules.cs" Link="Production\MandateStartRecordRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateNameProjectionRules.cs" Link="Production\MandateNameProjectionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateSuccessionRules.cs" Link="Production\MandateSuccessionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandatePhaseRules.cs" Link="Production\MandatePhaseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateDeclineRebellionRules.cs" Link="Production\MandateDeclineRebellionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateFeudatoryCompletionRules.cs" Link="Production\MandateFeudatoryCompletionRules.cs" />

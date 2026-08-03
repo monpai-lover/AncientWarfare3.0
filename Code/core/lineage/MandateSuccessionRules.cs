@@ -2,6 +2,25 @@ namespace AncientWarfare3.core.lineage
 {
     public static class MandateSuccessionRules
     {
+        public static bool ShouldRefreshRulerProjection(bool active,
+            long trackedKingdomId, long installedKingdomId,
+            long installedActorId, long liveKingActorId)
+        {
+            return active && trackedKingdomId >= 0L &&
+                   trackedKingdomId == installedKingdomId &&
+                   installedActorId >= 0L &&
+                   installedActorId == liveKingActorId;
+        }
+
+        public static bool ShouldTransferRulerTrait(
+            bool projectionRefreshAccepted, long previousActorId,
+            long installedActorId)
+        {
+            return projectionRefreshAccepted && previousActorId >= 0L &&
+                   installedActorId >= 0L &&
+                   previousActorId != installedActorId;
+        }
+
         public static bool ShouldBlockPeacefulFellApart(bool pIsActiveMandate, int pMandateValue,
             string pCrisisLevel, bool pHasSuccessionCandidate)
         {

@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.lineage
         public long period_id = -1;
         public string kingdom_name = "";
         public string dynasty_name = "";
+        public long emperor_actor_id = -1;
         public string emperor_name = "";
         public int mandate_value;
         public int imperial_authority;
@@ -222,6 +223,43 @@ namespace AncientWarfare3.core.lineage
             return ReadReportFromDb();
         }
 
+        public static void OnRulerSucceeded(Kingdom pKingdom, Actor pNewKing)
+        {
+            if (!Ready || pKingdom?.data == null || pNewKing?.data == null)
+                return;
+            MandateReport report = ReadReport();
+            long liveKingActorId = pKingdom.king?.data?.id ?? -1L;
+            bool refresh = MandateSuccessionRules.ShouldRefreshRulerProjection(
+                report.active, report.kingdom_id, pKingdom.id,
+                pNewKing.data.id, liveKingActorId);
+            if (!refresh) return;
+
+            long previousActorId = report.emperor_actor_id;
+            KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
+            UpsertState(pKingdom, report.period_id, report.mandate_value,
+                report.imperial_authority, report.dynasty_prestige,
+                report.core_control, report.vassal_loyalty,
+                report.crisis_level, Date.getCurrentYear(), ReadStartTime(),
+                report.origin_type, report.claimant_kind, null,
+                report.map_marker_kind);
+
+            if (MandateSuccessionRules.ShouldTransferRulerTrait(
+                    refresh, previousActorId, pNewKing.data.id))
+            {
+                Actor previousRuler = FindActor(previousActorId);
+                if (previousRuler?.data != null &&
+                    previousRuler.hasTrait(TRAIT_TIANMING))
+                    previousRuler.removeTrait(TRAIT_TIANMING);
+            }
+            if (!pNewKing.hasTrait(TRAIT_TIANMING))
+                pNewKing.addTrait(TRAIT_TIANMING);
+
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.RankOrMandate);
+            DirtyAllMaps();
+        }
+
         public static void OnKingdomYear(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral()) return;
@@ -409,6 +447,7 @@ namespace AncientWarfare3.core.lineage
                 XiaizationService.OnPseudoMandateDeclared(pKingdom);
             bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
+            ReignRecordWriter.ProjectMandateContext(pKingdom, periodId);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
             FamilyTreeProjectionRevision.Advance(
                 FamilyTreeProjectionChange.RankOrMandate);
@@ -1439,9 +1478,9 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT ACTIVE,KINGDOM_ID,KINGDOM_NAME,DYNASTY_NAME,EMPEROR_NAME,PERIOD_ID," +
-                                  "MANDATE_VALUE,IMPERIAL_AUTHORITY,DYNASTY_PRESTIGE,CORE_CONTROL,VASSAL_LOYALTY,CRISIS_LEVEL," +
-                                  "ORIGIN_TYPE,ORIGINAL_CORE_COUNT,REBEL_ORIGIN_KINGDOM_ID,REBEL_ORIGIN_KINGDOM_NAME,CLAIMANT_KIND,MAP_MARKER_KIND " +
+                cmd.CommandText = "SELECT ACTIVE,KINGDOM_ID,KINGDOM_NAME,DYNASTY_NAME,EMPEROR_ACTOR_ID,EMPEROR_NAME,PERIOD_ID," +
+                                   "MANDATE_VALUE,IMPERIAL_AUTHORITY,DYNASTY_PRESTIGE,CORE_CONTROL,VASSAL_LOYALTY,CRISIS_LEVEL," +
+                                   "ORIGIN_TYPE,ORIGINAL_CORE_COUNT,REBEL_ORIGIN_KINGDOM_ID,REBEL_ORIGIN_KINGDOM_NAME,CLAIMANT_KIND,MAP_MARKER_KIND " +
                                   "FROM " + MandateStateTableItem.GetTableName() + " WHERE STATE_ID=@id LIMIT 1";
                 cmd.Parameters.AddWithValue("@id", STATE_ID);
                 using SQLiteDataReader reader = cmd.ExecuteReader();
@@ -1450,20 +1489,21 @@ namespace AncientWarfare3.core.lineage
                 report.kingdom_id = ToLong(reader, 1);
                 report.kingdom_name = ToString(reader, 2);
                 report.dynasty_name = ToString(reader, 3);
-                report.emperor_name = ToString(reader, 4);
-                report.period_id = ToLong(reader, 5);
-                report.mandate_value = ToInt(reader, 6);
-                report.imperial_authority = ToInt(reader, 7);
-                report.dynasty_prestige = ToInt(reader, 8);
-                report.core_control = (float)ToDouble(reader, 9);
-                report.vassal_loyalty = (float)ToDouble(reader, 10);
-                report.crisis_level = ToString(reader, 11);
-                report.origin_type = ToString(reader, 12);
-                report.original_core_count = ToInt(reader, 13);
-                report.rebel_origin_kingdom_id = ToLong(reader, 14);
-                report.rebel_origin_kingdom_name = ToString(reader, 15);
-                report.claimant_kind = ToString(reader, 16);
-                report.map_marker_kind = ToString(reader, 17);
+                report.emperor_actor_id = ToLong(reader, 4);
+                report.emperor_name = ToString(reader, 5);
+                report.period_id = ToLong(reader, 6);
+                report.mandate_value = ToInt(reader, 7);
+                report.imperial_authority = ToInt(reader, 8);
+                report.dynasty_prestige = ToInt(reader, 9);
+                report.core_control = (float)ToDouble(reader, 10);
+                report.vassal_loyalty = (float)ToDouble(reader, 11);
+                report.crisis_level = ToString(reader, 12);
+                report.origin_type = ToString(reader, 13);
+                report.original_core_count = ToInt(reader, 14);
+                report.rebel_origin_kingdom_id = ToLong(reader, 15);
+                report.rebel_origin_kingdom_name = ToString(reader, 16);
+                report.claimant_kind = ToString(reader, 17);
+                report.map_marker_kind = ToString(reader, 18);
             }
             catch { }
 
@@ -1916,6 +1956,20 @@ namespace AncientWarfare3.core.lineage
             catch { }
             foreach (Kingdom kingdom in World.world.kingdoms)
                 if (kingdom?.data != null && kingdom.id == pId) return kingdom;
+            return null;
+        }
+
+        private static Actor FindActor(long pId)
+        {
+            if (pId < 0L || World.world?.units == null) return null;
+            try
+            {
+                Actor actor = World.world.units.get(pId);
+                if (actor?.data != null) return actor;
+            }
+            catch { }
+            foreach (Actor actor in World.world.units)
+                if (actor?.data != null && actor.data.id == pId) return actor;
             return null;
         }
 

@@ -1,0 +1,62 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MandateSuccessionRegressionRulesTests
+{
+    public static void Run()
+    {
+        ActiveMandateSuccessionRefreshesInstalledRuler();
+        MandateTraitMovesToTheInstalledRuler();
+        ActiveMandateKeepsItsImperialStateName();
+        SavedMandateReignUsesImperialPosthumousRank();
+    }
+
+    private static void ActiveMandateSuccessionRefreshesInstalledRuler()
+    {
+        Equal(true, MandateSuccessionRules.ShouldRefreshRulerProjection(
+                active: true, trackedKingdomId: 17L, installedKingdomId: 17L,
+                installedActorId: 42L, liveKingActorId: 42L),
+            "the installed ruler immediately refreshes the active Mandate state");
+        Equal(false, MandateSuccessionRules.ShouldRefreshRulerProjection(
+                active: true, trackedKingdomId: 17L, installedKingdomId: 18L,
+                installedActorId: 42L, liveKingActorId: 42L),
+            "a foreign accession cannot rewrite the active Mandate state");
+    }
+
+    private static void MandateTraitMovesToTheInstalledRuler()
+    {
+        Equal(true, MandateSuccessionRules.ShouldTransferRulerTrait(
+                projectionRefreshAccepted: true, previousActorId: 41L,
+                installedActorId: 42L),
+            "a real succession transfers the Mandate trait");
+        Equal(false, MandateSuccessionRules.ShouldTransferRulerTrait(
+                projectionRefreshAccepted: true, previousActorId: 42L,
+                installedActorId: 42L),
+            "an idempotent refresh does not transfer the trait from the ruler to itself");
+    }
+
+    private static void ActiveMandateKeepsItsImperialStateName()
+    {
+        Equal(false, StateNameRules.ShouldProjectDynasticStateName(
+                newDynastyCreated: true, isEmpireRank: true,
+                changedRulingShi: true, hasExistingBoundStateName: true,
+                isActiveMandate: true),
+            "a Mandate succession cannot replace the imperial state name with a branch state");
+    }
+
+    private static void SavedMandateReignUsesImperialPosthumousRank()
+    {
+        Equal(4, RulerTitleFactRules.ResolveSavedHighestTitle(
+                savedHighestTitle: 2, savedMandatePeriodId: 91L),
+            "a saved Mandate reign remains imperial after the live realm is downgraded");
+        Equal(2, RulerTitleFactRules.ResolveSavedHighestTitle(
+                savedHighestTitle: 2, savedMandatePeriodId: -1L),
+            "an ordinary saved ducal reign remains ducal");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}
