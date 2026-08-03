@@ -89,17 +89,6 @@
         ]
     },
     {
-        "id": "alien_name",
-        "templates": [
-            {
-                "format": "$天干地支纪年$#星人#"
-            },
-            {
-                "format": "{天干地支}#星人#"
-            }
-        ]
-    },
-    {
         "id": "ufo_name",
         "templates": [
             {
@@ -224,17 +213,6 @@
             },
             {
                 "format": "{天干地支}#牛#"
-            }
-        ]
-    },
-    {
-        "id": "evil_mage_name",
-        "templates": [
-            {
-                "format": "$天干地支纪年$#法师#"
-            },
-            {
-                "format": "{天干地支}#法师#"
             }
         ]
     },

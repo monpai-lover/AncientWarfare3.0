@@ -70,4 +70,26 @@ if ($xiaNamingSource -match '\?\.get\([^;]*\bout\s+string\s+(clan|family)\b') {
     throw 'XiaNaming assigns an out local through a null-conditional call.'
 }
 
+$generatorRoot = Join-Path $repoRoot 'name_generators/default'
+$generatorOwners = foreach ($file in Get-ChildItem -LiteralPath $generatorRoot `
+    -Recurse -File -Filter '*.json') {
+    $generators = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    foreach ($generator in $generators) {
+        [pscustomobject]@{
+            Id = [string]$generator.id
+            File = $file.Name
+        }
+    }
+}
+$duplicateGenerators = @($generatorOwners | Group-Object Id |
+    Where-Object Count -gt 1)
+if ($duplicateGenerators.Count -gt 0) {
+    $details = $duplicateGenerators | ForEach-Object {
+        $_.Name + ': ' + (($_.Group.File | Sort-Object) -join ', ')
+    }
+    throw "Integrated naming generator IDs must be globally unique:`n" +
+        ($details -join [Environment]::NewLine)
+}
+
 Write-Output 'Integrated naming engine source guard passed.'
