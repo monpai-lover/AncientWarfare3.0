@@ -11,7 +11,7 @@ namespace AncientWarfare3.core.lineage
             if (pChild == null)
                 throw new ArgumentNullException(nameof(pChild));
 
-            Child = Clone(pChild);
+            Child = Clone(pChild, pParentSlot1, pParentSlot2);
             ParentSlot1 = pParentSlot1;
             ParentSlot2 = pParentSlot2;
             CreatedTime = pCreatedTime;
@@ -22,7 +22,8 @@ namespace AncientWarfare3.core.lineage
         internal long ParentSlot2 { get; }
         internal double CreatedTime { get; }
 
-        private static ActorArchiveTableItem Clone(ActorArchiveTableItem pRow)
+        private static ActorArchiveTableItem Clone(ActorArchiveTableItem pRow,
+            long pParentSlot1, long pParentSlot2)
         {
             return new ActorArchiveTableItem
             {
@@ -50,8 +51,8 @@ namespace AncientWarfare3.core.lineage
                 clan_color_id = pRow.clan_color_id,
                 clan_banner_icon_id = pRow.clan_banner_icon_id,
                 clan_banner_background_id = pRow.clan_banner_background_id,
-                parent_id_1 = pRow.parent_id_1,
-                parent_id_2 = pRow.parent_id_2,
+                parent_id_1 = pParentSlot1,
+                parent_id_2 = pParentSlot2,
                 generation = pRow.generation,
                 noble_distance = pRow.noble_distance,
                 ever_noble_blood = pRow.ever_noble_blood,

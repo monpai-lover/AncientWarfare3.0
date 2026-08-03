@@ -7,11 +7,32 @@ internal static class LineageBirthArchivePersistenceSqlTests
     public static void Run()
     {
         OrdinaryBirthCommitsArchiveAndTwoEdges();
+        ExplicitParentSlotsNormalizeArchiveSnapshot();
         BirthWithoutKnownParentsWritesNoEdges();
         BirthWithOnlyFirstParentWritesOneEdge();
         ReplayWithoutSecondParentRemovesStaleEdge();
         SecondEdgeFailureRollsBackEverything();
         RepeatedBirthIsIdempotent();
+    }
+
+    private static void ExplicitParentSlotsNormalizeArchiveSnapshot()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        Commit(db, Birth("Explicit parents", 10L, 11L, 100d,
+            999L, 998L));
+
+        Equal(10L, Scalar(db,
+                "SELECT PARENT_ID_1 FROM ActorArchive WHERE ID=100"),
+            "explicit slot 1 normalizes the child archive");
+        Equal(11L, Scalar(db,
+                "SELECT PARENT_ID_2 FROM ActorArchive WHERE ID=100"),
+            "explicit slot 2 normalizes the child archive");
+        Equal(10L, Scalar(db,
+                "SELECT PARENT_ID FROM FamilyEdge WHERE EDGE_ID=1001"),
+            "explicit slot 1 remains authoritative for its edge");
+        Equal(11L, Scalar(db,
+                "SELECT PARENT_ID FROM FamilyEdge WHERE EDGE_ID=1002"),
+            "explicit slot 2 remains authoritative for its edge");
     }
 
     private static void BirthWithoutKnownParentsWritesNoEdges()
@@ -170,6 +191,14 @@ internal static class LineageBirthArchivePersistenceSqlTests
     private static LineageBirthArchiveWrite Birth(string pDisplayName,
         long pParentSlot1, long pParentSlot2, double pCreatedTime)
     {
+        return Birth(pDisplayName, pParentSlot1, pParentSlot2, pCreatedTime,
+            pParentSlot1, pParentSlot2);
+    }
+
+    private static LineageBirthArchiveWrite Birth(string pDisplayName,
+        long pParentSlot1, long pParentSlot2, double pCreatedTime,
+        long pArchivedParentSlot1, long pArchivedParentSlot2)
+    {
         return new LineageBirthArchiveWrite(new ActorArchiveTableItem
         {
             id = 100L,
@@ -196,8 +225,8 @@ internal static class LineageBirthArchivePersistenceSqlTests
             clan_color_id = 2,
             clan_banner_icon_id = 3,
             clan_banner_background_id = 4,
-            parent_id_1 = pParentSlot1,
-            parent_id_2 = pParentSlot2,
+            parent_id_1 = pArchivedParentSlot1,
+            parent_id_2 = pArchivedParentSlot2,
             generation = 2,
             noble_distance = 1,
             ever_noble_blood = 1,
