@@ -1,7 +1,6 @@
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
-using System;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -65,34 +64,6 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
-        [HarmonyPatch(typeof(SimObjectsZones), "checkUnits")]
-        private static void SimObjectsZonesCheckUnits_Prefix(
-            out ActorKingdomSafetyService.ActorListIsolationState __state)
-        {
-            __state = ActorKingdomSafetyService.FilterRuntimeActors(
-                pForZoneProcessing: true, pRequireKingdomForAlliance: false);
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(SimObjectsZones), "checkUnits")]
-        private static void SimObjectsZonesCheckUnits_Postfix(
-            ActorKingdomSafetyService.ActorListIsolationState __state)
-        {
-            ActorKingdomSafetyService.RestoreRuntimeActors(__state);
-        }
-
-        [HarmonyFinalizer]
-        [HarmonyPatch(typeof(SimObjectsZones), "checkUnits")]
-        private static Exception SimObjectsZonesCheckUnits_Finalizer(
-            ActorKingdomSafetyService.ActorListIsolationState __state,
-            Exception __exception)
-        {
-            ActorKingdomSafetyService.RestoreRuntimeActors(__state);
-            return __exception is NullReferenceException ? null : __exception;
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(SimObjectsZones), "addUnit")]
         private static bool SimObjectsZonesAddUnit_Prefix(Actor pActor,
             WorldTile pTile)
@@ -125,48 +96,5 @@ namespace AncientWarfare3.patch
             return false;
         }
 
-        [HarmonyFinalizer]
-        [HarmonyPatch(typeof(City), "updateConquest")]
-        private static Exception CityUpdateConquest_Finalizer(
-            Exception __exception)
-        {
-            return __exception is NullReferenceException ? null : __exception;
-        }
-
-        [HarmonyFinalizer]
-        [HarmonyPatch(typeof(SimObjectsZones), "addUnit")]
-        private static Exception SimObjectsZonesAddUnit_Finalizer(
-            Exception __exception)
-        {
-            return __exception is NullReferenceException ? null : __exception;
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPriority(Priority.First)]
-        [HarmonyPatch(typeof(UnitLayer), "UpdateDirty")]
-        private static void UnitLayerUpdateDirty_Prefix(
-            out ActorKingdomSafetyService.ActorListIsolationState __state)
-        {
-            __state = ActorKingdomSafetyService.FilterRuntimeActors(
-                pForZoneProcessing: false, pRequireKingdomForAlliance: true);
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(UnitLayer), "UpdateDirty")]
-        private static void UnitLayerUpdateDirty_Postfix(
-            ActorKingdomSafetyService.ActorListIsolationState __state)
-        {
-            ActorKingdomSafetyService.RestoreRuntimeActors(__state);
-        }
-
-        [HarmonyFinalizer]
-        [HarmonyPatch(typeof(UnitLayer), "UpdateDirty")]
-        private static Exception UnitLayerUpdateDirty_Finalizer(
-            ActorKingdomSafetyService.ActorListIsolationState __state,
-            Exception __exception)
-        {
-            ActorKingdomSafetyService.RestoreRuntimeActors(__state);
-            return __exception is NullReferenceException ? null : __exception;
-        }
     }
 }

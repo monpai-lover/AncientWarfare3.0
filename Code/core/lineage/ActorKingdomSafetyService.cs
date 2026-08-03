@@ -8,12 +8,6 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class ActorKingdomSafetyService
     {
-        internal sealed class ActorListIsolationState
-        {
-            internal List<Actor> List;
-            internal List<Actor> Removed;
-        }
-
         private const int DefaultDrainBudget = 32;
         private static readonly ConcurrentQueue<Actor> PendingRepairs =
             new ConcurrentQueue<Actor>();
@@ -34,57 +28,6 @@ namespace AncientWarfare3.core.lineage
         public static bool RepairLoadedActor(Actor pActor)
         {
             return TryRepairLoadedActor(pActor);
-        }
-
-        internal static ActorListIsolationState FilterRuntimeActors(
-            bool pForZoneProcessing, bool pRequireKingdomForAlliance)
-        {
-            var state = new ActorListIsolationState
-            {
-                List = World.world?.units?.getSimpleList(),
-                Removed = new List<Actor>()
-            };
-            if (state.List == null) return state;
-
-            bool allianceMode = false;
-            try
-            {
-                allianceMode = pRequireKingdomForAlliance &&
-                               Zones.showAllianceZones();
-            }
-            catch { }
-
-            for (int i = state.List.Count - 1; i >= 0; i--)
-            {
-                Actor actor = state.List[i];
-                bool usable = pForZoneProcessing
-                    ? ActorKingdomSafetyRules.CanEnterVanillaZoneProcessing(
-                        actor?.data != null, actor?.asset != null,
-                        actor?.current_tile?.data != null,
-                        actor?.profession_asset != null,
-                        actor?.kingdom?.asset != null)
-                    : ActorKingdomSafetyRules.CanRenderUnit(
-                        actor?.data != null, actor?.asset != null,
-                        actor?.current_tile?.data != null);
-                if (usable && (!allianceMode || actor?.kingdom?.data != null))
-                    continue;
-                if (actor != null) QueueRepair(actor);
-                state.Removed.Add(actor);
-                state.List.RemoveAt(i);
-            }
-            return state;
-        }
-
-        internal static void RestoreRuntimeActors(
-            ActorListIsolationState pState)
-        {
-            if (pState?.List == null || pState.Removed == null) return;
-            for (int i = pState.Removed.Count - 1; i >= 0; i--)
-            {
-                Actor actor = pState.Removed[i];
-                if (actor != null && !pState.List.Contains(actor))
-                    pState.List.Add(actor);
-            }
         }
 
         private static bool TryRepairLoadedActor(Actor pActor)
