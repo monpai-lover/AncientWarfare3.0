@@ -123,6 +123,10 @@ internal static class WarForceEliminationRulesTests
             "second distinct month confirms attacker exhaustion");
         Equal(0, state.DefenderZeroStreak,
             "recovered defender clears its zero streak");
+        False(state.Observe(1201, 0, 0),
+            "late work from an older month is ignored");
+        Equal(2, state.AttackerZeroStreak,
+            "out-of-order work cannot create another zero month");
     }
 
     private static void RuntimeWiresBoundedMonthlyObservationFirst()

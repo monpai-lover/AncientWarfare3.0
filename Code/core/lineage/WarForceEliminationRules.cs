@@ -51,7 +51,7 @@ namespace AncientWarfare3.core.lineage
         public bool Observe(int pMonthKey, int pAttackerPotential,
             int pDefenderPotential)
         {
-            if (pMonthKey == _lastMonthKey) return false;
+            if (pMonthKey <= _lastMonthKey) return false;
             _lastMonthKey = pMonthKey;
             AttackerZeroStreak = WarForceEliminationRules.NextZeroStreak(
                 pAttackerPotential, AttackerZeroStreak);
