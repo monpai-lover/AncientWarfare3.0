@@ -146,9 +146,12 @@ namespace AncientWarfare3.core.policy
             IMetaObject resolved = ResolveMetaForZone(
                 city, physicalKingdom);
             if (_nativeDrawPassActive)
+            {
                 NativeDrawMetaCache[pZone.id] =
                     new NativeZoneMetaCacheEntry(pZone, city,
                         physicalKingdom, resolved);
+                RecordNativeDrawZone(pZone);
+            }
             return resolved;
         }
 
@@ -181,10 +184,13 @@ namespace AncientWarfare3.core.policy
         {
             if (!_nativeDrawPassActive || pZone == null ||
                 pZone.id < 0 || !ContainsVisibleLand(pZone)) return;
+            if (!NativeDrawMetaCache.TryGetValue(pZone.id,
+                    out NativeZoneMetaCacheEntry cached) ||
+                !ReferenceEquals(cached.Zone, pZone)) return;
 
             if (IsCityLayer)
             {
-                City city = GetMetaForZone(pZone) as City;
+                City city = cached.Meta as City;
                 if (city?.data == null || city.isRekt()) return;
                 if (!NativeCityLabels.TryGetValue(city.id,
                         out NativeCityLabelEntry cityEntry))
@@ -196,7 +202,7 @@ namespace AncientWarfare3.core.policy
                 return;
             }
 
-            Kingdom representative = GetMetaForZone(pZone) as Kingdom;
+            Kingdom representative = cached.Meta as Kingdom;
             if (!IsValidKingdom(representative)) return;
             if (!NativeCountryLabels.TryGetValue(representative.id,
                     out NativeCountryLabelEntry entry))

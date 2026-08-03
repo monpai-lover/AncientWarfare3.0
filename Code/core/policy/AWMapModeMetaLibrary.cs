@@ -187,7 +187,10 @@ namespace AncientWarfare3.core.policy
             pAsset.selected_tab_action_meta = _ => PowerTabController.showTabSelectedMeta(MetaTypeLibrary.kingdom);
             pAsset.check_unit_has_meta = pActor => pActor != null && pActor.isKingdomCiv();
             pAsset.set_unit_set_meta_for_meta_for_window = pActor => SelectedMetas.selected_kingdom = pActor?.kingdom;
-            pAsset.draw_zones = DrawZones;
+            pAsset.draw_zones = AWMapModeMetaRules.IsRuntimeMeta(pType,
+                AWMapModeMetaTypes.HierarchicalVassal)
+                ? DrawHierarchicalZones
+                : DrawZones;
             pAsset.tile_get_metaobject = (pZone, _) => GetKingdomForZone(pZone);
             pAsset.tile_get_metaobject_0 = pGetter;
             pAsset.tile_get_metaobject_1 = pGetter;
@@ -203,26 +206,29 @@ namespace AncientWarfare3.core.policy
         {
             MetaZoneGetMetaSimple getter = GetZoneGetter(pAsset);
             if (World.world?.kingdoms == null || ZoneManager == null || getter == null) return;
-            bool hierarchical = AWMapModeMetaRules.IsRuntimeMeta(
-                pAsset?.map_mode ?? MetaType.None,
-                AWMapModeMetaTypes.HierarchicalVassal);
-            if (hierarchical)
-                HierarchicalVassalMapModeService.BeginNativeDrawPass();
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null || kingdom.isRekt() ||
+                    kingdom.isNeutral()) continue;
+                if (!ShouldDrawKingdomZones(pAsset, kingdom)) continue;
+                foreach (City city in kingdom.getCities())
+                    DrawCityZones(pAsset, city, getter);
+            }
+        }
+
+        private static void DrawHierarchicalZones(MetaTypeAsset pAsset)
+        {
+            HierarchicalVassalMapModeService.BeginNativeDrawPass();
             try
             {
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                {
-                    if (kingdom?.data == null || kingdom.isRekt() ||
-                        kingdom.isNeutral()) continue;
-                    if (!ShouldDrawKingdomZones(pAsset, kingdom)) continue;
-                    foreach (City city in kingdom.getCities())
-                        DrawCityZones(pAsset, city, getter, hierarchical);
-                }
+                MetaZoneDrawAction native =
+                    MetaTypeLibrary.kingdom?.draw_zones;
+                if (native != null) native(pAsset);
+                else DrawZones(pAsset);
             }
             finally
             {
-                if (hierarchical)
-                    HierarchicalVassalMapModeService.EndNativeDrawPass();
+                HierarchicalVassalMapModeService.EndNativeDrawPass();
             }
         }
 
@@ -254,15 +260,12 @@ namespace AncientWarfare3.core.policy
         }
 
         private static void DrawCityZones(MetaTypeAsset pAsset, City pCity,
-            MetaZoneGetMetaSimple pGetter, bool pHierarchical)
+            MetaZoneGetMetaSimple pGetter)
         {
             if (pCity?.data == null || pCity.isRekt() || pCity.zones == null) return;
             for (int i = 0; i < pCity.zones.Count; i++)
             {
                 TileZone zone = pCity.zones[i];
-                if (pHierarchical)
-                    HierarchicalVassalMapModeService.
-                        RecordNativeDrawZone(zone);
                 ZoneManager.drawBegin();
                 ZoneManager.drawZoneMeta(zone, pAsset, pGetter);
                 ZoneManager.drawEnd(zone);

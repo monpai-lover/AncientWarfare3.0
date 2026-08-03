@@ -14,12 +14,16 @@ function Forbid([string]$text, [string]$needle, [string]$message) {
     if ($text.Contains($needle)) { throw $message }
 }
 
-Require $meta 'pAsset.draw_zones = DrawZones;' `
-    'kingdom-style draw delegate is missing'
+Require $meta '? DrawHierarchicalZones' `
+    'hierarchical asset does not select the native draw wrapper'
+Require $meta ': DrawZones;' `
+    'other kingdom-style assets lost their generic draw delegate'
+Require $meta 'MetaTypeLibrary.kingdom?.draw_zones' `
+    'hierarchical country rendering does not invoke the vanilla delegate'
 Require $meta 'HierarchicalVassalMapModeService.BeginNativeDrawPass();' `
     'native label pass does not begin with zone rendering'
-Require $meta 'RecordNativeDrawZone(zone);' `
-    'native zones do not contribute label statistics'
+Require $service 'RecordNativeDrawZone(pZone);' `
+    'resolved native zones do not contribute label statistics'
 Require $meta 'HierarchicalVassalMapModeService.EndNativeDrawPass();' `
     'native labels are not finalized with zone rendering'
 Require $meta 'finally' 'native pass is not finalized on failure'
