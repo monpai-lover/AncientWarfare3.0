@@ -106,6 +106,28 @@ namespace AncientWarfare3.core.policy
             return diagnosticsEnabled || benchmarkEnabled;
         }
 
+        public static bool ShouldStartIntervalBaseline(bool intervalEnabled,
+            bool diagnosticsEnabled)
+        {
+            return diagnosticsEnabled && !intervalEnabled;
+        }
+
+        public static long IntervalFrameCount(long intervalStartFrame,
+            long currentFrame)
+        {
+            long start = System.Math.Max(0L, intervalStartFrame);
+            return currentFrame <= start ? 0L : currentFrame - start;
+        }
+
+        public static double AverageFramesPerSecond(long intervalFrames,
+            long intervalTicks, long timestampFrequency)
+        {
+            if (intervalFrames <= 0L || intervalTicks <= 0L ||
+                timestampFrequency <= 0L) return 0d;
+            return intervalFrames * (double)timestampFrequency /
+                   intervalTicks;
+        }
+
         public static long ExclusiveTicks(long totalTicks, long nestedTicks)
         {
             return System.Math.Max(0L, totalTicks - nestedTicks);

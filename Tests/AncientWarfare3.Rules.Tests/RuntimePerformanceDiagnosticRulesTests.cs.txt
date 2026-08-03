@@ -16,12 +16,104 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         Equal(true, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
                 diagnosticsEnabled: true, benchmarkEnabled: true),
             "combined diagnostic and benchmark mode emits one text log");
+        PerformanceIntervalMetricsUseRealElapsedTime();
+        PerformanceIntervalLogUsesO1NativeCounts();
         BenchmarkFallbackCannotBeReintercepted();
         GeneratedFallbackInvalidatesPendingCompletion();
         BenchmarkTimeoutRulesBoundPendingWait();
         BenchmarkTimeoutPollingIsPendingOnlyAndCleansUp();
         BenchmarkTimeoutCoversExceptionalMapUpdate();
         BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20();
+    }
+
+    private static void PerformanceIntervalMetricsUseRealElapsedTime()
+    {
+        Equal(true, RuntimePerformanceDiagnosticRules.
+                ShouldStartIntervalBaseline(
+                    intervalEnabled: false, diagnosticsEnabled: true),
+            "enabling diagnostics starts a new reportable interval");
+        Equal(false, RuntimePerformanceDiagnosticRules.
+                ShouldStartIntervalBaseline(
+                    intervalEnabled: true, diagnosticsEnabled: true),
+            "an active interval keeps its existing baseline");
+        Equal(false, RuntimePerformanceDiagnosticRules.
+                ShouldStartIntervalBaseline(
+                    intervalEnabled: true, diagnosticsEnabled: false),
+            "disabling diagnostics does not start an interval");
+        Equal(120L, RuntimePerformanceDiagnosticRules.IntervalFrameCount(
+                intervalStartFrame: 0L, currentFrame: 120L),
+            "first sample reports every frame since the interval baseline");
+        Equal(120L, RuntimePerformanceDiagnosticRules.IntervalFrameCount(
+                intervalStartFrame: 120L, currentFrame: 240L),
+            "later samples report frames since the previous sample");
+        Equal(0L, RuntimePerformanceDiagnosticRules.IntervalFrameCount(
+                intervalStartFrame: 240L, currentFrame: 120L),
+            "a regressed frame counter cannot produce a negative interval");
+        Equal(60d, RuntimePerformanceDiagnosticRules.AverageFramesPerSecond(
+                intervalFrames: 120L, intervalTicks: 2000L,
+                timestampFrequency: 1000L),
+            "average FPS uses real elapsed time rather than game time scale");
+        Equal(0d, RuntimePerformanceDiagnosticRules.AverageFramesPerSecond(
+                intervalFrames: 120L, intervalTicks: 0L,
+                timestampFrequency: 1000L),
+            "a zero-duration interval has no average FPS");
+        Equal(0d, RuntimePerformanceDiagnosticRules.AverageFramesPerSecond(
+                intervalFrames: 120L, intervalTicks: 2000L,
+                timestampFrequency: 0L),
+            "an unavailable timestamp frequency has no average FPS");
+    }
+
+    private static void PerformanceIntervalLogUsesO1NativeCounts()
+    {
+        string source = Read("Code", "core", "policy",
+            "RuntimePerformanceDiagnostic.cs");
+        Contains(source, " interval_real_ms=",
+            "PERF log exposes real sampling interval duration");
+        Contains(source, " interval_frames=",
+            "PERF log exposes frames completed during the interval");
+        Contains(source, " avg_fps=",
+            "PERF log exposes average real frames per second");
+        Contains(source, " live_population=",
+            "PERF log exposes the current live population");
+        Contains(source, " army_count=",
+            "PERF log exposes the current army count");
+
+        int emitGate = source.IndexOf("ShouldEmitTextLog(",
+            StringComparison.Ordinal);
+        int countRead = source.IndexOf("ReadLiveWorldCounts(", emitGate,
+            StringComparison.Ordinal);
+        True(emitGate >= 0 && countRead > emitGate,
+            "world counts are read only inside the low-frequency log sample");
+
+        int enableState = source.IndexOf("bool diagnosticsEnabled =",
+            StringComparison.Ordinal);
+        int baselineDecision = source.IndexOf(
+            "ShouldStartIntervalBaseline(", enableState,
+            StringComparison.Ordinal);
+        int baselineClock = source.IndexOf(
+            "_intervalStarted = Stopwatch.GetTimestamp();",
+            baselineDecision, StringComparison.Ordinal);
+        True(enableState >= 0 && baselineDecision > enableState &&
+             baselineClock > baselineDecision,
+            "the interval baseline starts only after diagnostics become enabled");
+
+        int helper = source.IndexOf(
+            "private static void ReadLiveWorldCounts(",
+            StringComparison.Ordinal);
+        int helperEnd = IndexAfter(source, "        private static ",
+            helper + 1);
+        True(helper >= 0 && helperEnd > helper,
+            "PERF diagnostics expose a bounded world-count helper");
+        string countSource = source.Substring(helper, helperEnd - helper);
+        Contains(countSource, "units_only_alive?.Count",
+            "live population reuses the native alive-unit list count");
+        Contains(countSource, "armies?.Count",
+            "army count reuses the native manager count");
+        Equal(false, countSource.Contains("foreach") ||
+                     countSource.Contains("for (") ||
+                     countSource.Contains("getSimpleArray") ||
+                     countSource.Contains("ToList("),
+            "world-count sampling performs no world scan or materialization");
     }
 
     private static void BenchmarkFallbackCannotBeReintercepted()

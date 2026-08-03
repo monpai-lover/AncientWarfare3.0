@@ -38,6 +38,9 @@ namespace AncientWarfare3.core.policy
             new int[ActorDeathPerformanceRules.StageCount];
         private static long _frame;
         private static bool _sampling;
+        private static long _intervalStarted;
+        private static long _intervalFrameStarted;
+        private static bool _intervalEnabled;
         private static int _actorDetailSamples;
         private const int ActorDetailBudgetPerFrame =
             ActorDiagnosticSamplingRules.MaximumDetailSamplesPerFrame;
@@ -100,10 +103,18 @@ namespace AncientWarfare3.core.policy
         public static void BeginFrame()
         {
             if (_frame < long.MaxValue) _frame++;
+            bool diagnosticsEnabled = RuntimePerformanceDiagnosticRules.
+                ShouldEnableDetailedSampling(Enabled(), Bench.bench_enabled);
+            if (RuntimePerformanceDiagnosticRules.ShouldStartIntervalBaseline(
+                    _intervalEnabled, diagnosticsEnabled))
+            {
+                _intervalStarted = Stopwatch.GetTimestamp();
+                _intervalFrameStarted = Math.Max(0L, _frame - 1L);
+            }
+            _intervalEnabled = diagnosticsEnabled;
             Interlocked.Exchange(ref _actorDetailSamples, 0);
             _sampling = RuntimePerformanceDiagnosticRules.ShouldSample(
-                RuntimePerformanceDiagnosticRules.ShouldEnableDetailedSampling(
-                    Enabled(), Bench.bench_enabled), _frame);
+                diagnosticsEnabled, _frame);
             if (_sampling)
             {
                 ResetSample();
@@ -366,6 +377,16 @@ namespace AncientWarfare3.core.policy
                 _sampling = false;
                 return;
             }
+            long intervalEnded = Stopwatch.GetTimestamp();
+            long intervalTicks = _intervalStarted <= 0L
+                ? 0L
+                : Math.Max(0L, intervalEnded - _intervalStarted);
+            long intervalFrames = RuntimePerformanceDiagnosticRules.
+                IntervalFrameCount(_intervalFrameStarted, _frame);
+            double averageFps = RuntimePerformanceDiagnosticRules.
+                AverageFramesPerSecond(intervalFrames, intervalTicks,
+                    Stopwatch.Frequency);
+            ReadLiveWorldCounts(out int livePopulation, out int armyCount);
             AWAsyncDiagnosticsSnapshot asyncSnapshot =
                 AWAsyncRuntime.SnapshotDiagnostics();
             AWAsyncDiagnosticsSnapshot readSnapshot =
@@ -422,6 +443,12 @@ namespace AncientWarfare3.core.policy
                                     _sampleManagedHeapStart;
             ModClass.LogInfo("[AW3 PERF] frame=" + _frame +
                 " bench=" + (Bench.bench_enabled ? 1 : 0) +
+                " interval_real_ms=" + Milliseconds(intervalTicks) +
+                " interval_frames=" + intervalFrames +
+                " avg_fps=" + averageFps.ToString("0.###",
+                    CultureInfo.InvariantCulture) +
+                " live_population=" + livePopulation +
+                " army_count=" + armyCount +
                 " frame_ms=" + Milliseconds(frameTicks) +
                 " actor_ms=" + Milliseconds(_actorWallTicks) +
                 " actor_ai_ms=" + Milliseconds(_actorAiTicks) +
@@ -585,6 +612,8 @@ namespace AncientWarfare3.core.policy
                     "update_age") +
                 RaceMetricFields(ActorRacePerformanceMetric.MainSprite,
                     "main_sprite"));
+            _intervalStarted = intervalEnded;
+            _intervalFrameStarted = _frame;
             ResetDeathInterval();
             _sampling = false;
         }
@@ -749,6 +778,21 @@ namespace AncientWarfare3.core.policy
                 ? 0d
                 : ticks * 1000d / Stopwatch.Frequency;
             return value.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+
+        private static void ReadLiveWorldCounts(out int pLivePopulation,
+            out int pArmyCount)
+        {
+            pLivePopulation = 0;
+            pArmyCount = 0;
+            try
+            {
+                pLivePopulation = World.world?.units?.units_only_alive?.Count ??
+                                  0;
+            }
+            catch { }
+            try { pArmyCount = World.world?.armies?.Count ?? 0; }
+            catch { }
         }
 
         private static string Kilobytes(long pBytes)
