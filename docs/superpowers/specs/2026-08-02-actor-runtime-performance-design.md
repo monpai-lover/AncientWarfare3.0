@@ -25,6 +25,19 @@ The current baseline comes from 427 `[AW3 PERF]` samples in
 - current samples do not establish `Actor.updateAge` as a measured hotspot,
   but its AW3 postfix performs three unconditional service calls per Actor.
 
+The 2026-08-04 follow-up audit adds two constraints to this baseline:
+
+- `ActorKingdomSafetyService.FilterRuntimeActors` scans and temporarily edits
+  the complete global Actor list before `UnitLayer.UpdateDirty` and
+  `SimObjectsZones.checkUnits`. The UnitLayer prefix pays this cost even when
+  the vanilla method immediately returns during normal gameplay. This is an
+  O(actor count) cost per invocation, with O(actor count * invalid actors)
+  restoration behavior and avoidable allocations.
+- the latest attempted runtime did not produce a valid post-change sample
+  because AW3 failed source compilation after an incomplete deployment. No
+  runtime result is accepted until the deployed production source set matches
+  the repository and both AW3 and its multiplayer child mod compile.
+
 ## Hard Constraints
 
 - Do not reduce or replace WorldBox `Actor.updateParallelChecks` frequency.
@@ -51,6 +64,19 @@ The optimization is divided into five independently disableable components:
 Every component preserves the existing synchronous behavior as a fallback.
 Failure in one component disables or bypasses that component without disabling
 Actor AI, RTS, or unrelated AW3 systems.
+
+## Event-Driven Actor Kingdom Safety
+
+Actor kingdom repair is performed at Actor load, affiliation mutation, an
+invalid enemy-check boundary, or an explicit bounded repair queue entry. Normal
+rendering and zone processing do not isolate, remove, restore, or scan the
+global Actor list before entering vanilla code.
+
+Boundary prefixes validate only the Actor already supplied by vanilla and
+queue that Actor when invalid. Normal and exceptional Harmony exits restore
+temporary state exactly once. Actor disposal and world reset remove all repair,
+failure-reporting, and throttle-cache entries associated with the old Actor or
+world.
 
 ## Diagnostic Fast Path
 
@@ -211,6 +237,14 @@ The war scenario uses ten cities and twenty dispersed armies and covers:
 Any army that idles because of this optimization, loses its mission, changes
 leader incorrectly, fails to replenish, or fails to transport is a blocking
 regression regardless of frame-time improvement.
+
+The immediate recovery benchmark additionally loads
+`C:\Users\24908\AppData\LocalLow\mkarpenko\WorldBox\autosaves\1785772934`
+through `AW3_BENCHMARK_LOAD_PATH`. After a two-minute warm-up it runs at 20x
+for ten minutes and records FPS, P95/P99 frame time, Actor batch stages, RTS
+controller stages, path submissions, deaths, GC, population, and active army
+count. The first recovery gate is an average of at least 20 FPS. Missing 20x
+selection, a compile/load failure, or an incomplete sample invalidates the run.
 
 ## Acceptance Criteria
 
