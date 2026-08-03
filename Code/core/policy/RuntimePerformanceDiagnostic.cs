@@ -103,14 +103,17 @@ namespace AncientWarfare3.core.policy
         public static void BeginFrame()
         {
             if (_frame < long.MaxValue) _frame++;
-            Interlocked.Exchange(ref _actorDetailSamples, 0);
             int currentMode = CurrentIntervalMode();
             if (currentMode == 0)
             {
-                TerminateIntervalBaseline();
+                if (RuntimePerformanceDiagnosticRules.
+                        ShouldTerminateIntervalBaseline(
+                            _intervalMode, _sampling))
+                    TerminateIntervalBaseline();
                 _sampling = false;
                 return;
             }
+            Interlocked.Exchange(ref _actorDetailSamples, 0);
             if (RuntimePerformanceDiagnosticRules.ShouldStartIntervalBaseline(
                     _intervalMode, currentMode))
             {

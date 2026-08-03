@@ -44,8 +44,23 @@ internal static class RuntimePerformanceDiagnosticRulesTests
             StringComparison.Ordinal);
         int sampleDecision = beginSource.IndexOf("ShouldSample(",
             StringComparison.Ordinal);
-        Contains(beginSource, "TerminateIntervalBaseline();",
-            "an ineligible frame terminates the current interval baseline");
+        int disabledGate = beginSource.IndexOf("if (currentMode == 0)",
+            StringComparison.Ordinal);
+        int actorDetailReset = beginSource.IndexOf("Interlocked.Exchange(",
+            StringComparison.Ordinal);
+        int terminateDecision = beginSource.IndexOf(
+            "ShouldTerminateIntervalBaseline(",
+            StringComparison.Ordinal);
+        int terminateState = IndexAfter(beginSource,
+            "_intervalMode, _sampling", terminateDecision);
+        int terminateCall = beginSource.IndexOf(
+            "TerminateIntervalBaseline();", StringComparison.Ordinal);
+        True(disabledGate >= 0 && terminateDecision > disabledGate &&
+             terminateState > terminateDecision &&
+             terminateCall > terminateState,
+            "an ineligible frame terminates only an active interval state");
+        True(actorDetailReset > disabledGate,
+            "a stable disabled frame returns before atomic detail cleanup");
         True(frameIncrement >= 0 && modeRead > frameIncrement &&
              sampleDecision > modeRead,
             "global frame cadence remains intact before eligibility sampling");
@@ -123,6 +138,18 @@ internal static class RuntimePerformanceDiagnosticRulesTests
              diagnosticMode != combinedMode &&
              benchmarkMode != combinedMode,
             "diagnostics, benchmark, and combined intervals have distinct modes");
+        Equal(false, RuntimePerformanceDiagnosticRules.
+                ShouldTerminateIntervalBaseline(
+                    intervalMode: offMode, sampling: false),
+            "a stable disabled state performs no interval cleanup");
+        Equal(true, RuntimePerformanceDiagnosticRules.
+                ShouldTerminateIntervalBaseline(
+                    intervalMode: diagnosticMode, sampling: false),
+            "an active baseline is terminated when the frame becomes invalid");
+        Equal(true, RuntimePerformanceDiagnosticRules.
+                ShouldTerminateIntervalBaseline(
+                    intervalMode: offMode, sampling: true),
+            "residual sampled state is terminated even without a mode");
 
         Equal(true, RuntimePerformanceDiagnosticRules.
                 ShouldStartIntervalBaseline(

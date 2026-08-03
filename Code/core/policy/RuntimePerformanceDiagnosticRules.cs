@@ -127,6 +127,12 @@ namespace AncientWarfare3.core.policy
             return currentMode != 0 && previousMode != currentMode;
         }
 
+        public static bool ShouldTerminateIntervalBaseline(int intervalMode,
+            bool sampling)
+        {
+            return intervalMode != 0 || sampling;
+        }
+
         public static bool ShouldFlushInterval(int baselineMode,
             int currentMode)
         {
