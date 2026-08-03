@@ -628,26 +628,69 @@ namespace AncientWarfare3.core.lineage
             bool basicAllowed = WarDecisionService.CanQueueWarPair(
                 pAttacker, pDefender, pWarType, out string pairFailureReason,
                 IsSystemGoal(pGoalType));
-            bool hasNormalCb = WarDecisionService.HasValidCasusBelli(
-                pAttacker, pDefender, pWarType);
-            bool hasCoreTarget = WarTerritoryService
-                .FindBestCoreTargetCityForDecision(pAttacker, pDefender)
-                ?.data != null;
-            bool hasClaimTarget = WarTerritoryService
-                .FindBestClaimTargetCityForDecision(pAttacker, pDefender)
-                ?.data != null;
-            bool canForceVassal = WarDecisionService.CanForceVassal(
-                pAttacker, pDefender);
-            bool canForceTributary = WarDecisionService.CanForceTributary(
-                pAttacker, pDefender);
-            bool isIndependenceTarget = VassalService.GetDiplomaticSuzerain(pAttacker) ==
-                                        pDefender;
-            bool hasRestorationTarget = WarTerritoryService
-                .FindBestRestorationTargetCityForDecision(pAttacker,
-                    pDefender)?.data != null;
-            bool canReunifySuccession = SuccessionDisputeService
-                .CanDeclareReunification(pAttacker, pDefender);
-            bool canForceNoCb = WarDecisionService.CanForceNoCb(pAttacker);
+            if (!basicAllowed)
+            {
+                pFailureReason = string.IsNullOrWhiteSpace(pairFailureReason)
+                    ? "invalid"
+                    : pairFailureReason;
+                return false;
+            }
+
+            bool hasNormalCb = false;
+            bool hasCoreTarget = false;
+            bool hasClaimTarget = false;
+            bool canForceVassal = false;
+            bool canForceTributary = false;
+            bool isIndependenceTarget = false;
+            bool hasRestorationTarget = false;
+            bool canReunifySuccession = false;
+            bool canForceNoCb = false;
+            switch (pGoalType ?? "")
+            {
+                case WarTerritoryService.GOAL_TAKE_MANDATE:
+                case WarTerritoryService.GOAL_MANDATE_CONQUEST:
+                case ZhuluWarRules.GoalTypeId:
+                    hasNormalCb = WarDecisionService.HasValidCasusBelli(
+                        pAttacker, pDefender, pWarType);
+                    break;
+                case WarTerritoryService.GOAL_TAKE_CORE_CITY:
+                    hasCoreTarget = WarTerritoryService
+                        .FindBestCoreTargetCityForDecision(pAttacker,
+                            pDefender)?.data != null;
+                    break;
+                case WarTerritoryService.GOAL_PRESS_CLAIM_CITY:
+                    hasClaimTarget = WarTerritoryService
+                        .FindBestClaimTargetCityForDecision(pAttacker,
+                            pDefender)?.data != null;
+                    break;
+                case WarTerritoryService.GOAL_FORCE_VASSAL:
+                    canForceVassal = WarDecisionService.CanForceVassal(
+                        pAttacker, pDefender);
+                    break;
+                case WarTerritoryService.GOAL_FORCE_TRIBUTARY:
+                    canForceTributary = WarDecisionService.CanForceTributary(
+                        pAttacker, pDefender);
+                    break;
+                case WarTerritoryService.GOAL_INDEPENDENCE:
+                    isIndependenceTarget = VassalService
+                        .GetDiplomaticSuzerain(pAttacker) == pDefender;
+                    break;
+                case WarTerritoryService.GOAL_RESTORE_KINGDOM:
+                    hasRestorationTarget = WarTerritoryService
+                        .FindBestRestorationTargetCityForDecision(pAttacker,
+                            pDefender)?.data != null;
+                    break;
+                case WarTerritoryService.GOAL_REUNIFY_SUCCESSION:
+                    canReunifySuccession = SuccessionDisputeService
+                        .CanDeclareReunification(pAttacker, pDefender);
+                    break;
+                case WarTerritoryService.GOAL_NO_CB:
+                    canForceNoCb = WarDecisionService.CanForceNoCb(pAttacker);
+                    break;
+                default:
+                    pFailureReason = "unknown_goal";
+                    return false;
+            }
             return WarDecisionQueueRules.CanQueueGoal(pGoalType,
                 basicAllowed, pairFailureReason, hasNormalCb, canForceNoCb,
                 hasCoreTarget, hasClaimTarget, canForceVassal,

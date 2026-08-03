@@ -120,9 +120,67 @@ internal static class DiplomaticWarAvailabilityRulesTests
         Equal("", canonical.FailureReason,
             "canonical option has no failure reason");
 
+        DeclarationQueueValidationUsesLazyGoalProbes();
         DeclarationUiPreservesAvailabilityReasons();
         DeclarationSubmissionPreservesAuthorityReason();
         EveryKnownDeclarationReasonIsLocalized();
+    }
+
+    private static void DeclarationQueueValidationUsesLazyGoalProbes()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "DiplomaticWarDeclarationService.cs"));
+        string helper = Section(service,
+            "private static bool CanQueueCurrentGoal(",
+            "private static void UpdateResolvedTarget(");
+
+        int pairGate = helper.IndexOf("CanQueueWarPair(",
+            StringComparison.Ordinal);
+        int pairShortCircuit = helper.IndexOf("if (!basicAllowed)",
+            StringComparison.Ordinal);
+        int goalSwitch = helper.IndexOf("switch (pGoalType ?? \"\")",
+            StringComparison.Ordinal);
+        True(pairGate >= 0 && pairShortCircuit > pairGate &&
+             goalSwitch > pairShortCircuit,
+            "pair validation short-circuits before goal probes");
+        True(helper.Contains(
+                 "string.IsNullOrWhiteSpace(pairFailureReason)") &&
+             helper.Contains("? \"invalid\"") &&
+             helper.Contains(": pairFailureReason;"),
+            "pair validation preserves its reason and invalid fallback");
+
+        foreach (string probe in new[]
+                 {
+                     "HasValidCasusBelli(",
+                     "FindBestCoreTargetCityForDecision(",
+                     "FindBestClaimTargetCityForDecision(",
+                     "CanForceVassal(", "CanForceTributary(",
+                     "GetDiplomaticSuzerain(",
+                     "FindBestRestorationTargetCityForDecision(",
+                     "CanDeclareReunification(", "CanForceNoCb("
+                 })
+        {
+            int probeIndex = helper.IndexOf(probe,
+                StringComparison.Ordinal);
+            True(probeIndex > goalSwitch,
+                probe + " runs only after goal selection");
+            Equal(1, Count(helper, probe),
+                probe + " has one goal-specific call site");
+        }
+
+        foreach (string goalCase in new[]
+                 {
+                     "GOAL_TAKE_MANDATE:", "GOAL_MANDATE_CONQUEST:",
+                     "ZhuluWarRules.GoalTypeId:", "GOAL_TAKE_CORE_CITY:",
+                     "GOAL_PRESS_CLAIM_CITY:", "GOAL_FORCE_VASSAL:",
+                     "GOAL_FORCE_TRIBUTARY:", "GOAL_INDEPENDENCE:",
+                     "GOAL_RESTORE_KINGDOM:",
+                     "GOAL_REUNIFY_SUCCESSION:", "GOAL_NO_CB:"
+                 })
+            True(helper.Contains(goalCase), goalCase + " is selected lazily");
+        True(helper.Contains("pFailureReason = \"unknown_goal\";"),
+            "unknown goals keep their stable failure reason");
     }
 
     private static void DeclarationUiPreservesAvailabilityReasons()
