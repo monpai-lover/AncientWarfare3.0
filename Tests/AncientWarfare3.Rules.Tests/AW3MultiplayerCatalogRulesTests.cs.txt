@@ -21,7 +21,29 @@ internal static class AW3MultiplayerCatalogRulesTests
         PolicyMandateAndRecordsWritesUseDispatcher();
         CourtInheritanceAndRealmWritesUseDispatcher();
         DiplomacyAndWarWritesUseDispatcher();
+        DiplomacyStaleReasonsMapToStaleResults();
         AllPlayerFacingUiWritesUseDispatcher();
+    }
+
+    private static void DiplomacyStaleReasonsMapToStaleResults()
+    {
+        const string reason = "war_target_option_changed";
+        AW3CommandResult result = AW3CommandResult.Rejected(
+            AW3DiplomacyCommandErrorRules.Map(reason), reason);
+
+        Equal(AW3CommandStatus.Rejected, result.Status,
+            "changed war target option is rejected");
+        Equal(AW3CommandError.StaleState, result.Error,
+            "changed war target option is stale state");
+        Equal(reason, result.MessageKey,
+            "changed war target option keeps its stable reason");
+
+        string root = Directory.GetCurrentDirectory();
+        string handler = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "commands", "AW3DiplomacyCommandHandler.cs"));
+        True(handler.Contains(
+                "return AW3DiplomacyCommandErrorRules.Map(reason);"),
+            "diplomacy handler delegates MapError to the tested rule");
     }
 
     private static void CatalogsAreCompleteUniqueAndImmutable()

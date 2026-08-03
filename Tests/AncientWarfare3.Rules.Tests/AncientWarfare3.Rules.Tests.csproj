@@ -190,6 +190,7 @@
     <Compile Include="TestWarTerritoryServiceStubs.cs.txt" />
     <Compile Include="TestAw3CommandRouterStub.cs.txt" />
     <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerCatalogModels.cs" Link="Production\AW3MultiplayerCatalogModels.cs" />
+    <Compile Include="..\..\Code\core\multiplayer\commands\AW3DiplomacyCommandErrorRules.cs" Link="Production\AW3DiplomacyCommandErrorRules.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureDef.cs" Link="Production\HistoricalFigureDef.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureSpawnRules.cs" Link="Production\HistoricalFigureSpawnRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityArmyReinforcementRules.cs" Link="Production\CityArmyReinforcementRules.cs" />

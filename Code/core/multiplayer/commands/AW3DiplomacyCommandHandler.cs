@@ -327,31 +327,7 @@ namespace AncientWarfare3.core.multiplayer.commands
 
         private static AW3CommandError MapError(string reason)
         {
-            switch (reason)
-            {
-                case "not_found":
-                case "invalid_participants":
-                    return AW3CommandError.NotFound;
-                case "already_responded":
-                case "pending_exists":
-                case "covert_operation_pending":
-                    return AW3CommandError.Conflict;
-                case "expired":
-                case "target_city_changed":
-                case "marriage_candidate_stale":
-                    return AW3CommandError.StaleState;
-                case "insufficient_resources":
-                case "insufficient_points":
-                    return AW3CommandError.InsufficientResources;
-                case "cooldown":
-                    return AW3CommandError.Cooldown;
-                case "write_failed":
-                case "execution_failed":
-                case "covert_operation_write_failed":
-                    return AW3CommandError.ExecutionFailed;
-                default:
-                    return AW3CommandError.IllegalTarget;
-            }
+            return AW3DiplomacyCommandErrorRules.Map(reason);
         }
 
         private static Kingdom FindKingdom(long id)
