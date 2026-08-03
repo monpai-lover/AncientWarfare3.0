@@ -6666,15 +6666,28 @@ True(AWPowerButtonVisualRules.ShouldPatchCancelIcon("xia"),
     "AW powers use the corrected cancel icon path");
 Equal(false, AWPowerButtonVisualRules.ShouldPatchCancelIcon("spawn_human"),
     "vanilla powers keep the vanilla cancel icon path");
-True(AWPowerButtonVisualRules.ShouldClearCancelIconOverride("spawn_human"),
-    "selecting a vanilla power clears a stale AW3 cancel icon override");
+True(AWPowerButtonVisualRules.ShouldClearOwnedCancelIconOverride(
+        "spawn_human", true, "aw3", "aw3", true),
+    "a valid vanilla power clears the override last written by AW3");
 Equal(false,
-    AWPowerButtonVisualRules.ShouldClearCancelIconOverride("aw_grant_mandate"),
+    AWPowerButtonVisualRules.ShouldClearOwnedCancelIconOverride(
+        "aw_grant_mandate", true, "aw3", "aw3", true),
     "switching between AW3 powers keeps the AW3 override path");
-Equal(false, AWPowerButtonVisualRules.ShouldClearCancelIconOverride("xia"),
+Equal(false, AWPowerButtonVisualRules.ShouldClearOwnedCancelIconOverride(
+        "xia", true, "aw3", "aw3", true),
     "the Xia power keeps the corrected AW3 override path");
-Equal(false, AWPowerButtonVisualRules.ShouldClearCancelIconOverride(null),
+Equal(false, AWPowerButtonVisualRules.ShouldClearOwnedCancelIconOverride(
+        null, true, "aw3", "aw3", true),
     "an invalid power does not mutate the current cancel icon");
+Equal(false, AWPowerButtonVisualRules.ShouldClearOwnedCancelIconOverride(
+        "spawn_human", false, "aw3", "aw3", true),
+    "a vanilla button without a valid source icon preserves vanilla no-op behavior");
+Equal(false, AWPowerButtonVisualRules.ShouldClearOwnedCancelIconOverride(
+        "spawn_human", true, "other-mod", "aw3", true),
+    "a vanilla power does not clear another mod's override");
+Equal(false, AWPowerButtonVisualRules.ShouldClearOwnedCancelIconOverride(
+        "spawn_human", true, "aw3", "aw3", false),
+    "a different cancel button does not consume AW3 ownership");
 True(ArmyMarchRules.ShouldRecordLeaderStep(
         pHasArmy: true, pIsLeader: true, pHasValidTarget: true),
     "only a marching army leader records the shared route");
