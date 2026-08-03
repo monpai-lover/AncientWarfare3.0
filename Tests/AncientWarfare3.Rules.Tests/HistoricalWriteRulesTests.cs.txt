@@ -155,6 +155,12 @@ internal static class HistoricalWriteRulesTests
             @"failureCallback\?\.Invoke\(sequence,\s*" +
             @"completion\.Error\);",
             "completion drain invokes exactly the matching callback side");
+        Matches(source,
+            @"if\s*\(!worker\.TryStop\(pTimeout,\s*out\s+pError\)\)\s*" +
+            @"\{\s*DrainCompletions\(int\.MaxValue\);\s*" +
+            @"long\s+earliest\s*=\s*worker\.EarliestUncommittedSequence;" +
+            @".*?return\s+false;\s*\}",
+            "failed stop drains failure completions before returning");
     }
 
     private static void Contains(string pSource, string pExpected,

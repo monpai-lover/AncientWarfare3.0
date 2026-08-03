@@ -403,6 +403,7 @@ namespace AncientWarfare3.core.db
                 {
                     if (!worker.TryStop(pTimeout, out pError))
                     {
+                        DrainCompletions(int.MaxValue);
                         long earliest = worker.EarliestUncommittedSequence;
                         if (earliest > 0L && (pError?.IndexOf(
                                 "earliest uncommitted sequence",
