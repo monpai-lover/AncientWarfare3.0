@@ -7210,14 +7210,31 @@ Equal(false, AWPathLifecycleRules.ShouldExpirePendingRequest(
 True(AWPathLifecycleRules.ShouldExpireAcceptedRequest(
         startedAt: 10d, now: 40d),
     "worker-accepted path work cannot retain a motionless actor forever");
+double workerFirstObservedAt = 10d + 45d;
+double workerWatchdogBaseline =
+    AWPathLifecycleRules.ResolveWorkerWatchdogBaseline(
+        currentBaseline: -1d, now: workerFirstObservedAt);
+Equal(workerFirstObservedAt, workerWatchdogBaseline,
+    "a worker first observed after a long queue starts a fresh watchdog baseline");
+Equal(false, AWPathLifecycleRules.ShouldExpireAcceptedRequest(
+        workerWatchdogBaseline, workerFirstObservedAt),
+    "a worker does not expire when it is first observed running");
+Equal(workerWatchdogBaseline,
+    AWPathLifecycleRules.ResolveWorkerWatchdogBaseline(
+        workerWatchdogBaseline, workerFirstObservedAt + 29.9d),
+    "later observations preserve the original worker watchdog baseline");
+Equal(false, AWPathLifecycleRules.ShouldExpireAcceptedRequest(
+        workerWatchdogBaseline, workerFirstObservedAt + 29.9d),
+    "a running worker remains below the watchdog at 29.9 seconds");
+True(AWPathLifecycleRules.ShouldExpireAcceptedRequest(
+        workerWatchdogBaseline, workerFirstObservedAt + 30d),
+    "a running worker expires after 30 seconds without progress");
 string pathMovementBridgeSource = File.ReadAllText(Path.Combine(
     Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
-    "AWPathMovementBridge.cs")).Replace("\r\n", "\n");
-True(pathMovementBridgeSource.Contains(
-        "if (pFinder.IsWaitingForWorker(pActor.data.id))\n" +
-        "            {\n" +
-        "                return false;\n" +
-        "            }"),
+    "AWPathMovementBridge.cs"));
+True(System.Text.RegularExpressions.Regex.IsMatch(pathMovementBridgeSource,
+        @"if\s*\(pFinder\.IsWaitingForWorker\(pActor\.data\.id\)\)\s*" +
+        @"\{\s*return false;\s*\}"),
     "waiting-for-worker paths cannot enter cancellation or failure recovery");
 Equal(false, AWPathLifecycleRules.ShouldPollWaiting(
         now: 10.1d, nextPollAt: 10.25d),

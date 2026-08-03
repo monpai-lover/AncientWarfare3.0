@@ -138,7 +138,8 @@ namespace AncientWarfare3.core.pathfinding
                             AWPathfindingBootstrap.RecoveryManager.Clear(actorId);
                         RetryContexts[actorId] = new RetryContext(
                             targetTileId, pOptions, generation.Id,
-                            pPending: false, 0d, now, workClass,
+                            pPending: false, 0d, now,
+                            pAcceptedNoProgressAt: -1d, workClass,
                             pNextPollAt: now);
                         diagnostic = RuntimePerformanceDiagnostic.BeginScope();
                         try
@@ -337,6 +338,7 @@ namespace AncientWarfare3.core.pathfinding
                     context.TargetTileId, context.Options,
                     context.GenerationId, context.Pending,
                     context.DueTime, context.SubmittedAt,
+                    context.AcceptedNoProgressAt,
                     context.WorkClass, now + interval);
             }
             TrySetNotMoving(pActor);
@@ -355,9 +357,22 @@ namespace AncientWarfare3.core.pathfinding
             {
                 return false;
             }
-            if (!pFinder.IsWorkerRunning(pActor.data.id) ||
-                !AWPathLifecycleRules.ShouldExpireAcceptedRequest(
-                    context.SubmittedAt, now)) return false;
+            if (!pFinder.IsWorkerRunning(pActor.data.id)) return false;
+            double acceptedNoProgressAt =
+                AWPathLifecycleRules.ResolveWorkerWatchdogBaseline(
+                    context.AcceptedNoProgressAt, now);
+            if (acceptedNoProgressAt != context.AcceptedNoProgressAt)
+            {
+                RetryContexts[pActor.data.id] = new RetryContext(
+                    context.TargetTileId, context.Options,
+                    context.GenerationId, context.Pending,
+                    context.DueTime, context.SubmittedAt,
+                    acceptedNoProgressAt, context.WorkClass,
+                    context.NextPollAt);
+                return false;
+            }
+            if (!AWPathLifecycleRules.ShouldExpireAcceptedRequest(
+                    acceptedNoProgressAt, now)) return false;
 
             pFinder.Cancel(pActor.data.id, AWPathFailureReason.Timeout);
             AWArmyMarchService.OnPathEnded(pActor);
@@ -856,6 +871,7 @@ namespace AncientWarfare3.core.pathfinding
                         context.TargetTileId, context.Options,
                         context.GenerationId, pPending: true,
                         retry.DueTime, context.SubmittedAt,
+                        pAcceptedNoProgressAt: -1d,
                         context.WorkClass,
                         pNextPollAt: retry.DueTime);
                 pActor.timer_action = retry.DelaySeconds;
@@ -947,6 +963,7 @@ namespace AncientWarfare3.core.pathfinding
             RetryContexts[pActor.data.id] = new RetryContext(
                 context.TargetTileId, context.Options, context.GenerationId,
                 pPending: false, 0d, context.SubmittedAt,
+                pAcceptedNoProgressAt: -1d,
                 context.WorkClass, pNextPollAt: now);
             if (SubmitCore(pActor, target, context.Options,
                     pIsRecovery: true,
@@ -976,7 +993,8 @@ namespace AncientWarfare3.core.pathfinding
             double now = Time.realtimeSinceStartupAsDouble;
             RetryContexts[pActorId] = new RetryContext(context.TargetTileId,
                 context.Options, context.GenerationId, pPending: false, 0d,
-                now, context.WorkClass, pNextPollAt: now);
+                now, pAcceptedNoProgressAt: now, context.WorkClass,
+                pNextPollAt: now);
         }
 
         private static void TrySetNotMoving(Actor pActor)
@@ -1064,8 +1082,8 @@ namespace AncientWarfare3.core.pathfinding
         {
             public RetryContext(int pTargetTileId, AWPathRequestOptions pOptions,
                 int pGenerationId, bool pPending, double pDueTime,
-                double pSubmittedAt, AWPathWorkClass pWorkClass,
-                double pNextPollAt)
+                double pSubmittedAt, double pAcceptedNoProgressAt,
+                AWPathWorkClass pWorkClass, double pNextPollAt)
             {
                 TargetTileId = pTargetTileId;
                 Options = pOptions;
@@ -1073,6 +1091,7 @@ namespace AncientWarfare3.core.pathfinding
                 Pending = pPending;
                 DueTime = pDueTime;
                 SubmittedAt = pSubmittedAt;
+                AcceptedNoProgressAt = pAcceptedNoProgressAt;
                 WorkClass = pWorkClass;
                 NextPollAt = pNextPollAt;
             }
@@ -1083,6 +1102,7 @@ namespace AncientWarfare3.core.pathfinding
             public bool Pending { get; }
             public double DueTime { get; }
             public double SubmittedAt { get; }
+            public double AcceptedNoProgressAt { get; }
             public AWPathWorkClass WorkClass { get; }
             public double NextPollAt { get; }
         }

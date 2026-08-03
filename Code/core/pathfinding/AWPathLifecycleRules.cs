@@ -296,6 +296,12 @@ namespace AncientWarfare3.core.pathfinding
                    now - startedAt >= AcceptedNoProgressTimeoutSeconds;
         }
 
+        public static double ResolveWorkerWatchdogBaseline(
+            double currentBaseline, double now)
+        {
+            return currentBaseline >= 0d ? currentBaseline : now;
+        }
+
         public static bool ShouldPollWaiting(double now, double nextPollAt)
         {
             return nextPollAt <= 0d || now >= nextPollAt;
