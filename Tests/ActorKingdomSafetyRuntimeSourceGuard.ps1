@@ -38,8 +38,43 @@ function Test-HarmonyPatchTarget([string]$attributes, [string]$typeName,
     return $hasType -and $hasMethod
 }
 
+function Get-BracedBlock([string]$source, [int]$start,
+    [string]$description) {
+    $body = [regex]::Match($source.Substring($start),
+        '(?s)\{(?>[^{}]+|(?<brace>\{)|(?<-brace>\}))*' +
+        '(?(brace)(?!))\}')
+    if (-not $body.Success) {
+        throw "unbalanced $description body"
+    }
+    return $body
+}
+
 function Get-HarmonyMethodBlocks([string]$source) {
     $groups = @(Get-HarmonyAttributeGroups $source)
+    $classScopes = @()
+    for ($i = 0; $i -lt $groups.Count; $i++) {
+        $searchEnd = if ($i + 1 -lt $groups.Count) {
+            $groups[$i + 1].Index
+        }
+        else {
+            $source.Length
+        }
+        $declarationStart = $groups[$i].Index + $groups[$i].Length
+        $declaration = [regex]::Match($source.Substring(
+                $declarationStart, $searchEnd - $declarationStart),
+            '(?ms)\bclass\s+\w+[^{}]*\{')
+        if ($declaration.Success) {
+            $bodyStart = $declarationStart + $declaration.Index +
+                $declaration.Value.LastIndexOf('{')
+            $body = Get-BracedBlock $source $bodyStart 'Harmony class'
+            $classScopes += [pscustomobject]@{
+                Attributes = $groups[$i].Value
+                Start = $bodyStart
+                End = $bodyStart + $body.Length
+            }
+        }
+    }
+
     $blocks = @()
     for ($i = 0; $i -lt $groups.Count; $i++) {
         $searchEnd = if ($i + 1 -lt $groups.Count) {
@@ -59,16 +94,15 @@ function Get-HarmonyMethodBlocks([string]$source) {
         }
         $bodyStart = $declarationStart + $declaration.Index +
             $declaration.Value.LastIndexOf('{')
-        $body = [regex]::Match($source.Substring($bodyStart),
-            '(?s)\{(?>[^{}]+|(?<brace>\{)|(?<-brace>\}))*' +
-            '(?(brace)(?!))\}')
-        if (-not $body.Success) {
-            throw "unbalanced Harmony method body: $($declaration.Groups['name'].Value)"
-        }
+        $body = Get-BracedBlock $source $bodyStart `
+            "Harmony method $($declaration.Groups['name'].Value)"
         $start = $groups[$i].Index
         $end = $bodyStart + $body.Length
+        $classAttributes = @($classScopes | Where-Object {
+                $_.Start -lt $start -and $_.End -gt $end
+            } | Select-Object -Last 1).Attributes
         $blocks += [pscustomobject]@{
-            Attributes = $groups[$i].Value
+            Attributes = "$classAttributes`n$($groups[$i].Value)"
             Name = $declaration.Groups['name'].Value
             Source = $source.Substring($start, $end - $start)
         }
@@ -97,7 +131,8 @@ function Find-ActorSafetyPatchViolation([string]$source) {
         $swallowsNullReference =
             $block.Source -match '\bNullReferenceException\b' -and
             ($block.Source -match '\breturn\s+null\s*;' -or
-             $block.Source -match '\?\s*null\s*:')
+             $block.Source -match
+                '\?\s*(?:null|default(?:\s*\(\s*Exception\s*\))?)\s*:')
         if (-not $swallowsNullReference -and
             $block.Source -match '\bNullReferenceException\b') {
             $method = [regex]::Escape($block.Name)
@@ -186,6 +221,24 @@ Require-FixtureRejected 'combined nameof zone scan hook' @'
 [HarmonyPatch(typeof(SimObjectsZones), nameof(SimObjectsZones.checkUnits))]
 private static void HiddenZoneScan() { }
 '@
+Require-FixtureRejected 'class-level UnitLayer target hook' @'
+[HarmonyPatch(typeof(UnitLayer))]
+internal static class HiddenUnitLayerPatch
+{
+    [HarmonyPatch(nameof(UnitLayer.UpdateDirty))]
+    [HarmonyPrefix]
+    private static void HiddenRenderScan() { }
+}
+'@
+Require-FixtureRejected 'class-level SimObjectsZones target hook' @'
+[HarmonyPatch(typeof(SimObjectsZones))]
+internal static class HiddenZonesPatch
+{
+    [HarmonyPatch(nameof(SimObjectsZones.checkUnits))]
+    [HarmonyPrefix]
+    private static void HiddenZoneScan() { }
+}
+'@
 Require-FixtureRejected 'addUnit NullReferenceException swallowing finalizer' @'
 [HarmonyFinalizer]
 [HarmonyPatch(typeof(SimObjectsZones), nameof(SimObjectsZones.addUnit))]
@@ -211,6 +264,22 @@ private static Exception UnsafeFinalizer(Exception error)
 {
     if (error is NullReferenceException) error = null;
     return error;
+}
+'@
+Require-FixtureRejected 'addUnit finalizer returns default for NRE' @'
+[HarmonyFinalizer]
+[HarmonyPatch(typeof(SimObjectsZones), nameof(SimObjectsZones.addUnit))]
+private static Exception UnsafeFinalizer(Exception error)
+{
+    return error is NullReferenceException ? default : error;
+}
+'@
+Require-FixtureRejected 'conquest finalizer returns default Exception for NRE' @'
+[HarmonyFinalizer]
+[HarmonyPatch(typeof(City), nameof(City.updateConquest))]
+private static Exception UnsafeFinalizer(Exception error)
+{
+    return error is NullReferenceException ? default(Exception) : error;
 }
 '@
 Require-FixtureAllowed 'pass-through supplied-Actor boundary finalizer' @'
