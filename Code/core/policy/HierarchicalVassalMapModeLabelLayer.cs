@@ -173,7 +173,7 @@ namespace AncientWarfare3.core.policy
             try
             {
                 for (int index = 0; index < Nodes.Count; index++)
-                    Nodes[index]?.RefreshSortingLayer();
+                    Nodes[index]?.RefreshSortingLayer(pMinimap);
             }
             catch { }
         }
@@ -289,10 +289,12 @@ namespace AncientWarfare3.core.policy
                 Nodes.Add(node);
             }
 
+            float visualSize = pPlacement.Size * HierarchicalVassalMapModeRules.
+                MapLabelVisualScale;
             float size = pCountry
-                ? Mathf.Clamp(pPlacement.Size, CountryLabelMinSize,
+                ? Mathf.Clamp(visualSize, CountryLabelMinSize,
                     CountryLabelMaxSize)
-                : Mathf.Clamp(pPlacement.Size,
+                : Mathf.Clamp(visualSize,
                     HierarchicalVassalMapModeRules.CityLabelMinimumSize,
                     HierarchicalVassalMapModeRules.CityLabelMaximumSize);
             Color color = pCountry
@@ -519,7 +521,8 @@ namespace AncientWarfare3.core.policy
                     ApplyGlyph(_text, _outlines, value, Vector3.zero, pSize,
                         pColor, pOutlineColor, pCountry);
                 }
-                ApplySortingLayer(pCountry);
+                ApplySortingLayer(pCountry,
+                    _resolutionModeKnown && _lastMinimapMode);
                 _root.transform.rotation = Quaternion.Euler(0f, 0f, pAngle);
                 ApplyBackground(pColor, pOutlineColor, pCountry, pSize,
                     value);
@@ -584,9 +587,9 @@ namespace AncientWarfare3.core.policy
                 _background.color = backgroundColor;
             }
 
-            internal void RefreshSortingLayer()
+            internal void RefreshSortingLayer(bool pMinimap)
             {
-                ApplySortingLayer(_country);
+                ApplySortingLayer(_country, pMinimap);
             }
 
             private void ApplySplitCountryLabel(string pValue, float pSize,
@@ -678,23 +681,20 @@ namespace AncientWarfare3.core.policy
                     _secondOutlines[index].gameObject.SetActive(pActive);
             }
 
-            private void ApplySortingLayer(bool pCountry)
+            private void ApplySortingLayer(bool pCountry, bool pMinimap)
             {
-                bool minimap = false;
-                try { minimap = MapBox.isRenderMiniMap(); }
-                catch { }
                 int layerId = pCountry
                     ? SortingLayer.NameToID(
                         HierarchicalVassalMapModeRules.
-                            ResolveCountryLabelSortingLayer(minimap))
+                            ResolveCountryLabelSortingLayer(pMinimap))
                     : SortingLayer.NameToID("MapOverlay");
                 int outlineOrder = pCountry
                     ? HierarchicalVassalMapModeRules.
-                        ResolveCountryLabelSortingOrder(minimap)
+                        ResolveCountryLabelSortingOrder(pMinimap)
                     : CityOutlineSortingOrder;
                 int textOrder = pCountry
                     ? HierarchicalVassalMapModeRules.
-                        ResolveCountryLabelSortingOrder(minimap) + 1
+                        ResolveCountryLabelSortingOrder(pMinimap) + 1
                     : CityTextSortingOrder;
                 ApplySorting(_text, layerId, textOrder);
                 for (int index = 0; index < _outlines.Length; index++)
@@ -712,7 +712,7 @@ namespace AncientWarfare3.core.policy
                     _background.sortingLayerID = layerId;
                     _background.sortingOrder = pCountry
                         ? HierarchicalVassalMapModeRules.
-                            ResolveCountryLabelSortingOrder(minimap) - 1
+                            ResolveCountryLabelSortingOrder(pMinimap) - 1
                         : CityBackgroundSortingOrder;
                 }
             }

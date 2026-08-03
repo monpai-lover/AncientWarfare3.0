@@ -17,9 +17,10 @@ namespace AncientWarfare3.core.policy
         // two world units made ordinary city names nearly invisible.
         public const float CityLabelMaximumSize = 10.0f;
         public const float MaximumLabelSize = 40.0f;
-        public const string CountryLabelMinimapSortingLayer = "EffectsTop";
+        public const float MapLabelVisualScale = 2.0f;
+        public const string CountryLabelMinimapSortingLayer = "MapOverlay";
         public const string CountryLabelMainMapSortingLayer = "EffectsBack";
-        public const int CountryLabelMinimapSortingOrder = 100;
+        public const int CountryLabelMinimapSortingOrder = 32760;
         public const int CountryLabelMainMapSortingOrder = -100;
         // Square-root area scaling tracks the physical footprint of a zone;
         // the broad bounds prevent tiny labels and continental labels from
