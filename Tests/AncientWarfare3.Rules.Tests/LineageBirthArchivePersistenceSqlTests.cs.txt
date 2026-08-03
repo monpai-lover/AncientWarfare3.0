@@ -7,8 +7,72 @@ internal static class LineageBirthArchivePersistenceSqlTests
     public static void Run()
     {
         OrdinaryBirthCommitsArchiveAndTwoEdges();
+        BirthWithoutKnownParentsWritesNoEdges();
+        BirthWithOnlyFirstParentWritesOneEdge();
+        ReplayWithoutSecondParentRemovesStaleEdge();
         SecondEdgeFailureRollsBackEverything();
         RepeatedBirthIsIdempotent();
+    }
+
+    private static void BirthWithoutKnownParentsWritesNoEdges()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        LineageBirthArchiveOutcome outcome = Commit(db,
+            Birth("No known parents", -1L, -1L, 100d));
+
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM ActorArchive WHERE ID=100"),
+            "birth without parents still writes the child archive");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM FamilyEdge WHERE CHILD_ID=100"),
+            "birth without parents writes no parent edges");
+        True(!outcome.ParentSlot1Written,
+            "outcome skips unknown parent slot 1");
+        True(!outcome.ParentSlot2Written,
+            "outcome skips unknown parent slot 2");
+    }
+
+    private static void BirthWithOnlyFirstParentWritesOneEdge()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        LineageBirthArchiveOutcome outcome = Commit(db,
+            Birth("One known parent", 10L, -1L, 100d));
+
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM FamilyEdge WHERE CHILD_ID=100"),
+            "birth with one parent writes one edge");
+        Equal(10L, Scalar(db,
+                "SELECT PARENT_ID FROM FamilyEdge WHERE EDGE_ID=1001"),
+            "birth with one parent writes slot 1");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM FamilyEdge WHERE PARENT_ID=-1"),
+            "birth with one parent writes no unknown-parent sentinel");
+        True(outcome.ParentSlot1Written,
+            "outcome reports known parent slot 1");
+        True(!outcome.ParentSlot2Written,
+            "outcome skips unknown parent slot 2");
+    }
+
+    private static void ReplayWithoutSecondParentRemovesStaleEdge()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        Commit(db, Birth("Two known parents", 10L, 20L, 100d));
+        LineageBirthArchiveOutcome outcome = Commit(db,
+            Birth("Latest snapshot", 11L, -1L, 200d));
+
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM FamilyEdge WHERE CHILD_ID=100"),
+            "replay without slot 2 leaves one current edge");
+        Equal(11L, Scalar(db,
+                "SELECT PARENT_ID FROM FamilyEdge WHERE EDGE_ID=1001"),
+            "replay refreshes parent slot 1");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM FamilyEdge WHERE EDGE_ID=1002"),
+            "replay removes the stale parent slot 2 edge");
+        True(outcome.ParentSlot1Written,
+            "replay reports the refreshed parent slot 1");
+        True(!outcome.ParentSlot2Written,
+            "replay reports no parent slot 2 write");
     }
 
     private static void OrdinaryBirthCommitsArchiveAndTwoEdges()
@@ -93,12 +157,14 @@ internal static class LineageBirthArchivePersistenceSqlTests
             "repeated birth keeps the latest edge snapshot");
     }
 
-    private static void Commit(SQLiteConnection pDb,
+    private static LineageBirthArchiveOutcome Commit(SQLiteConnection pDb,
         LineageBirthArchiveWrite pWrite)
     {
         using SQLiteTransaction tx = pDb.BeginTransaction();
-        LineageBirthArchivePersistence.Execute(pDb, tx, pWrite);
+        LineageBirthArchiveOutcome outcome =
+            LineageBirthArchivePersistence.Execute(pDb, tx, pWrite);
         tx.Commit();
+        return outcome;
     }
 
     private static LineageBirthArchiveWrite Birth(string pDisplayName,

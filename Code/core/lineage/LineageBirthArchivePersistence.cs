@@ -109,6 +109,17 @@ namespace AncientWarfare3.core.lineage
             int pParentSlot, long pChildLineageId, double pCreatedTime)
         {
             long edgeId = checked(pChildId * 10L + pParentSlot);
+            if (pParentId < 0L)
+            {
+                using var delete = new SQLiteCommand(pDb)
+                    { Transaction = pTransaction };
+                delete.CommandText = "DELETE FROM " + FamilyEdge +
+                    " WHERE EDGE_ID=@edge";
+                delete.Parameters.AddWithValue("@edge", edgeId);
+                delete.ExecuteNonQuery();
+                return false;
+            }
+
             using var update = new SQLiteCommand(pDb)
                 { Transaction = pTransaction };
             update.CommandText = "UPDATE " + FamilyEdge + " SET " +
