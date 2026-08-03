@@ -89,6 +89,13 @@ namespace AncientWarfare3.ui
                     Name = "未明天逍遥行",
                     Amount = "20.00",
                     Date = "2026-08-02"
+                },
+                new SupporterLeaderboardEntry
+                {
+                    Rank = 10,
+                    Name = "阿良",
+                    Amount = "50",
+                    Date = "2026-08-03"
                 }
             };
 
