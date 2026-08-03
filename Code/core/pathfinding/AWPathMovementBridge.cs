@@ -351,22 +351,13 @@ namespace AncientWarfare3.core.pathfinding
                 !RetryContexts.TryGetValue(pActor.data.id,
                     out RetryContext context)) return false;
             double now = Time.realtimeSinceStartupAsDouble;
-            bool expired;
             if (pFinder.IsWaitingForWorker(pActor.data.id))
-            {
-                expired = AWPathLifecycleRules.ShouldExpirePendingRequest(
-                    context.SubmittedAt, now, context.WorkClass);
-            }
-            else if (pFinder.IsWorkerRunning(pActor.data.id))
-            {
-                expired = AWPathLifecycleRules.ShouldExpireAcceptedRequest(
-                    context.SubmittedAt, now);
-            }
-            else
             {
                 return false;
             }
-            if (!expired) return false;
+            if (!pFinder.IsWorkerRunning(pActor.data.id) ||
+                !AWPathLifecycleRules.ShouldExpireAcceptedRequest(
+                    context.SubmittedAt, now)) return false;
 
             pFinder.Cancel(pActor.data.id, AWPathFailureReason.Timeout);
             AWArmyMarchService.OnPathEnded(pActor);

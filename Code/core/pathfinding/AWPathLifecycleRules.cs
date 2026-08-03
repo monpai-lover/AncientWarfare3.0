@@ -244,9 +244,6 @@ namespace AncientWarfare3.core.pathfinding
         private const string CityFoodTaskId = "try_to_eat_city_food";
 
         public const int MaximumConsecutivePriorityRequests = 8;
-        public const double HighPriorityPendingTimeoutSeconds = 2d;
-        public const double EssentialTravelPendingTimeoutSeconds = 4d;
-        public const double NormalPendingTimeoutSeconds = 8d;
         public const double AcceptedNoProgressTimeoutSeconds = 30d;
         public const double HighPriorityWaitingPollSeconds = 0.1d;
         public const double EssentialTravelWaitingPollSeconds = 0.15d;
@@ -287,16 +284,9 @@ namespace AncientWarfare3.core.pathfinding
         public static bool ShouldExpirePendingRequest(double startedAt,
             double now, AWPathWorkClass pWorkClass)
         {
-            if (startedAt < 0d || now < startedAt) return false;
-            double timeout = pWorkClass switch
-            {
-                AWPathWorkClass.Operational =>
-                    HighPriorityPendingTimeoutSeconds,
-                AWPathWorkClass.EssentialTravel =>
-                    EssentialTravelPendingTimeoutSeconds,
-                _ => NormalPendingTimeoutSeconds
-            };
-            return now - startedAt >= timeout;
+            // Each Actor owns one latest queued slot, so worker backlog cannot
+            // accumulate stale requests that need wall-clock expiry.
+            return false;
         }
 
         public static bool ShouldExpireAcceptedRequest(double startedAt,

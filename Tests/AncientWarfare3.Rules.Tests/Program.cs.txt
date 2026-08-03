@@ -7198,15 +7198,27 @@ Equal(0f, PoliticalPointSpendingRules.AutomaticSpend(
 Equal(5f, PoliticalPointSpendingRules.AutomaticSpend(
         points: 25f, requested: 18f),
     "automatic policy work spends only points above the reserve");
-True(AWPathLifecycleRules.ShouldExpirePendingRequest(
-        startedAt: 10d, now: 12.1d, highPriority: true),
-    "a military-priority path cannot wait indefinitely behind civilian work");
 Equal(false, AWPathLifecycleRules.ShouldExpirePendingRequest(
-        startedAt: 10d, now: 12.1d, highPriority: false),
-    "ordinary path requests keep the longer bounded wait window");
+        startedAt: 10d, now: 21d, highPriority: true),
+    "operational paths keep their latest queued slot while waiting for a worker");
+Equal(false, AWPathLifecycleRules.ShouldExpirePendingRequest(
+        startedAt: 10d, now: 21d, AWPathWorkClass.EssentialTravel),
+    "essential paths keep their latest queued slot while waiting for a worker");
+Equal(false, AWPathLifecycleRules.ShouldExpirePendingRequest(
+        startedAt: 10d, now: 21d, AWPathWorkClass.Ambient),
+    "ambient paths keep their latest queued slot while waiting for a worker");
 True(AWPathLifecycleRules.ShouldExpireAcceptedRequest(
         startedAt: 10d, now: 40d),
     "worker-accepted path work cannot retain a motionless actor forever");
+string pathMovementBridgeSource = File.ReadAllText(Path.Combine(
+    Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+    "AWPathMovementBridge.cs")).Replace("\r\n", "\n");
+True(pathMovementBridgeSource.Contains(
+        "if (pFinder.IsWaitingForWorker(pActor.data.id))\n" +
+        "            {\n" +
+        "                return false;\n" +
+        "            }"),
+    "waiting-for-worker paths cannot enter cancellation or failure recovery");
 Equal(false, AWPathLifecycleRules.ShouldPollWaiting(
         now: 10.1d, nextPollAt: 10.25d),
     "waiting paths skip redundant per-frame stream polling");
