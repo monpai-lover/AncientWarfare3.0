@@ -261,6 +261,8 @@ namespace AncientWarfare3.core.lineage
                 pShiBranchId: shiBranchId);
             ProjectHotIds(snapshot, pPrince, pCities);
             PublishAdded(snapshot);
+            SlaveService.ReleaseForFeudatoryAppointment(pPrince);
+            AssignPrinceIdentity(pPrince, pCities[0]);
             MarkPrinceChildren(pPrince, snapshot.FeudatoryId);
             RefreshSuccessor(snapshot.FeudatoryId);
             FeudatoryMapModeService.DirtyMapIfActive();
@@ -604,6 +606,9 @@ namespace AncientWarfare3.core.lineage
                     snapshot.FeudatoryId);
                 prince.data.set(LineageKeys.FEUDATORY_BRANCH_SHI_ID,
                     snapshot.ShiBranchId);
+                SlaveService.ReleaseForFeudatoryAppointment(prince);
+                City seat = FindCity(snapshot.SeatCityId);
+                if (seat?.data != null) AssignPrinceIdentity(prince, seat);
                 MarkPrinceChildren(prince, snapshot.FeudatoryId);
             }
             FeudatoryMapModeService.DirtyMapIfActive();

@@ -227,6 +227,11 @@ aw_rename_visible_clan_placeholder,新氏,New clan,New clan
 aw_rename_visible_clan_hint,改当前氏支树全部成员,Whole branch tree,Whole branch tree
 aw_rename_visible_clan_invalid,请输入有效氏名,Enter a valid clan name,Enter a valid clan name
 aw_rename_visible_clan_none,没有可更新节点,No visible nodes updated,No visible nodes updated
+aw_rename_visible_surname,改姓,Rename surname,Rename surname
+aw_rename_visible_surname_placeholder,新姓,New surname,New surname
+aw_rename_visible_surname_hint,改当前人物及父系后代的姓,Current person and patrilineal descendants,Current person and patrilineal descendants
+aw_rename_visible_surname_invalid,请输入有效姓氏,Enter a valid surname,Enter a valid surname
+aw3_rename_visible_surname_none,没有可更新人物,No people updated,No people updated
 aw_confirm,确定,OK,OK
 aw_war_goal_take_mandate,夺取天命,Seize Mandate,奪取天命
 aw_war_take_mandate,夺取天命,Seize Mandate,奪取天命

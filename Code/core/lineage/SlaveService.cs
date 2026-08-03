@@ -464,6 +464,36 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static bool ReleaseForFeudatoryAppointment(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.isRekt()) return false;
+            pActor.data.get(LineageKeys.SLAVE_SOLDIER,
+                out bool slaveSoldier, false);
+            bool changed = IsSlave(pActor) || slaveSoldier;
+
+            TemporarySlaveVanguardService.OnMemberInvalidated(pActor);
+            SlavePopulationIndexService.Deactivate(pActor);
+            if (pActor.hasTrait(LineageKeys.TRAIT_SLAVE))
+                pActor.removeTrait(LineageKeys.TRAIT_SLAVE);
+            pActor.data.set(LineageKeys.SLAVE_SOLDIER, false);
+            pActor.data.set(LineageKeys.FREEDMAN, true);
+            pActor.data.removeLong(LineageKeys.SLAVE_SINCE);
+            pActor.data.removeString(LineageKeys.SLAVE_REASON);
+            pActor.data.removeLong(LineageKeys.SLAVE_CAPTURED_BY);
+            pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
+            pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+            pActor.beh_actor_target = null;
+            pActor.clearAttackTarget();
+            UpsertSlaveState(pActor, pActive: false, pActor.city,
+                pActor.kingdom);
+            LineageService.ApplyDisplayName(pActor);
+            LineageService.ArchiveActor(pActor, pAlive: pActor.isAlive());
+            try { pActor.clearGraphicsFully(); } catch { }
+            return changed;
+        }
+
         public static bool CanFallInLoveByStatus(Actor pA, Actor pB)
         {
             bool aSlave = IsSlave(pA);
@@ -819,6 +849,10 @@ namespace AncientWarfare3.core.lineage
         private static bool CanBeEnslaved(Actor pActor, bool pAllowImportantCapture = false)
         {
             if (pActor?.data == null) return false;
+            if (!FeudatoryIdentityRules.CanEnslave(
+                    ordinaryEligible: true,
+                    activePrince: FeudatoryService.IsActivePrince(pActor)))
+                return false;
             if (!IsSupportedSlaveryActor(pActor)) return false;
             if (pActor.isRekt()) return false;
             if ((pActor.isKing() || pActor.isCityLeader() || SafeIsArmyLeader(pActor)) && !pAllowImportantCapture) return false;

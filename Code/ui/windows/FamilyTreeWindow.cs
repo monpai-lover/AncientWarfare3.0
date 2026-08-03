@@ -65,6 +65,7 @@ namespace AncientWarfare3.ui.windows
         private Button _halfSiblingButton;
         private Text _halfSiblingText;
         private Button _renameClanButton;
+        private Button _renameSurnameButton;
         private GameObject _renameClanPanel;
         private InputField _renameClanInput;
         private Text _renameClanHintText;
@@ -77,6 +78,7 @@ namespace AncientWarfare3.ui.windows
         private Vector2 _locateTarget;
         private bool _commandPending;
         private bool _commandRefreshRequested;
+        private bool _renameSurnameMode;
         private readonly AWUiBoundedRetryState _bulkReadRetry =
             new AWUiBoundedRetryState(3, 2, 8);
         private AWUiRetryTicket _bulkReadTicket;
@@ -285,6 +287,10 @@ namespace AncientWarfare3.ui.windows
             _collapseButton = MakeToolbarButton("CollapseBranches", AW_L10n.Text("aw_tree_collapse", "收缩"), new Vector2(SIDE_RIGHT, -128), CollapseAllBranches, SIDE_BUTTON_SIZE);
             _halfSiblingButton = MakeToolbarButton("HalfSiblingRelations", "", new Vector2(SIDE_RIGHT, -54), ToggleHalfSiblingRelations, SIDE_BUTTON_SIZE);
             _renameClanButton = MakeToolbarButton("RenameVisibleClan", AW_L10n.Text("aw_rename_visible_clan", "\u6539\u6C0F"), new Vector2(SIDE_RIGHT, RENAME_TOP), ToggleRenameClanPanel, SIDE_BUTTON_SIZE);
+            _renameSurnameButton = MakeToolbarButton("RenamePatrilinealSurname",
+                AW_L10n.Text("aw_rename_visible_surname", "\u6539\u59D3"),
+                new Vector2(SIDE_RIGHT, RENAME_TOP), ToggleRenameSurnamePanel,
+                SIDE_BUTTON_SIZE);
             _halfSiblingText = _halfSiblingButton != null ? _halfSiblingButton.GetComponentInChildren<Text>() : null;
             UpdateHalfSiblingButtonText();
             BuildRenameClanPanel();
@@ -589,6 +595,7 @@ namespace AncientWarfare3.ui.windows
         private void ToggleRenameClanPanel()
         {
             if (_renameClanPanel == null || _mode != Mode.BigTree) return;
+            _renameSurnameMode = false;
             bool show = !_renameClanPanel.activeSelf;
             _renameClanPanel.SetActive(show);
             if (!show) return;
@@ -601,25 +608,67 @@ namespace AncientWarfare3.ui.windows
                         out LineageTreeNodeSnapshot rootNode))
                     currentName = rootNode.ShiDisplay;
                 _renameClanInput.text = currentName ?? string.Empty;
+                if (_renameClanInput.placeholder is Text placeholder)
+                    placeholder.text = AW_L10n.Text(
+                        "aw_rename_visible_clan_placeholder", "\u65B0\u6C0F");
             }
             if (_renameClanHintText != null)
                 _renameClanHintText.text = AW_L10n.Text("aw_rename_visible_clan_hint", "\u6539\u5F53\u524D\u6C0F\u652F\u6811\u5168\u90E8\u6210\u5458");
             try { _renameClanInput?.ActivateInputField(); } catch { }
         }
 
+        private void ToggleRenameSurnamePanel()
+        {
+            if (_renameClanPanel == null || _mode != Mode.Family) return;
+            _renameSurnameMode = true;
+            bool show = !_renameClanPanel.activeSelf;
+            _renameClanPanel.SetActive(show);
+            if (!show) return;
+
+            string currentName = string.Empty;
+            if (_bulkSnapshot != null &&
+                _bulkSnapshot.TryGetNode(_centerActorId,
+                    out LineageTreeNodeSnapshot centerNode))
+                currentName = centerNode.FamilyName;
+            if (_renameClanInput != null)
+            {
+                _renameClanInput.text = currentName ?? string.Empty;
+                if (_renameClanInput.placeholder is Text placeholder)
+                    placeholder.text = AW_L10n.Text(
+                        "aw_rename_visible_surname_placeholder", "\u65B0\u59D3");
+            }
+            if (_renameClanHintText != null)
+                _renameClanHintText.text = AW_L10n.Text(
+                    "aw_rename_visible_surname_hint",
+                    "\u6539\u5F53\u524D\u4EBA\u7269\u53CA\u7236\u7CFB\u540E\u4EE3\u7684\u59D3");
+            try { _renameClanInput?.ActivateInputField(); } catch { }
+        }
+
         private void ConfirmRenameVisibleClan()
         {
             if (_commandPending) return;
-            if (_mode != Mode.BigTree) return;
+            if (_renameSurnameMode && _mode != Mode.Family) return;
+            if (!_renameSurnameMode && _mode != Mode.BigTree) return;
             string raw = _renameClanInput != null ? _renameClanInput.text : "";
-            if (!VisibleClanRenameRules.TryNormalizeClanName(raw, out _))
+            bool valid = _renameSurnameMode
+                ? VisibleSurnameRenameRules.TryNormalizeFamilyName(raw, out _)
+                : VisibleClanRenameRules.TryNormalizeClanName(raw, out _);
+            if (!valid)
             {
                 if (_renameClanHintText != null)
-                    _renameClanHintText.text = AW_L10n.Text("aw_rename_visible_clan_invalid", "\u8BF7\u8F93\u5165\u6709\u6548\u6C0F\u540D");
+                    _renameClanHintText.text = _renameSurnameMode
+                        ? AW_L10n.Text("aw_rename_visible_surname_invalid",
+                            "\u8BF7\u8F93\u5165\u6709\u6548\u59D3\u540D")
+                        : AW_L10n.Text("aw_rename_visible_clan_invalid",
+                            "\u8BF7\u8F93\u5165\u6709\u6548\u6C0F\u540D");
                 return;
             }
 
-            long countryId = ResolveRenameCountryId(_backShiId);
+            long targetShiId = VisibleClanRenameRules.ResolveTargetShiId(
+                _readSpec?.ShiId ?? -1L, _backShiId);
+            long countryId = _renameSurnameMode
+                ? ResolveRenameCountryIdForActor(_centerActorId)
+                : ResolveRenameCountryId(targetShiId);
             if (countryId <= 0)
             {
                 if (_renameClanHintText != null)
@@ -627,10 +676,13 @@ namespace AncientWarfare3.ui.windows
                 return;
             }
 
+            AW3CommandRequest request = _renameSurnameMode
+                ? AW3CommandRequest.RenameSurname(countryId,
+                    _centerActorId, raw)
+                : AW3CommandRequest.RenameClan(countryId,
+                    targetShiId, raw);
             AW3CommandResult result =
-                AW3MultiplayerCommandFacade.DispatchFromUi(
-                    AW3CommandRequest.RenameClan(countryId,
-                        _backShiId, raw));
+                AW3MultiplayerCommandFacade.DispatchFromUi(request);
             if (result.Status == AW3CommandStatus.Pending)
             {
                 _commandPending = true;
@@ -656,9 +708,22 @@ namespace AncientWarfare3.ui.windows
             Rebuild();
         }
 
-        private static long ResolveRenameCountryId(long pShiId)
+        private long ResolveRenameCountryId(long pShiId)
         {
             if (pShiId <= 0 || World.world?.kingdoms == null) return -1L;
+            if (World.world?.units != null)
+                foreach (Actor actor in World.world.units)
+                {
+                    if (actor?.data == null || actor.isRekt() ||
+                        actor.kingdom?.data == null || actor.kingdom.isRekt())
+                        continue;
+                    actor.data.get(LineageKeys.SHI_ID, out long actorShiId, -1L);
+                    if (actorShiId == pShiId) return actor.kingdom.id;
+                }
+            if (_bulkSnapshot != null &&
+                _bulkSnapshot.TryGetNode(_rootActorId,
+                    out LineageTreeNodeSnapshot rootNode) &&
+                rootNode.KingdomId > 0) return rootNode.KingdomId;
             foreach (Kingdom kingdom in World.world.kingdoms)
             {
                 Actor ruler = kingdom?.king;
@@ -667,6 +732,21 @@ namespace AncientWarfare3.ui.windows
                     -1L);
                 if (rulerShiId == pShiId) return kingdom.id;
             }
+            return -1L;
+        }
+
+        private long ResolveRenameCountryIdForActor(long pActorId)
+        {
+            try
+            {
+                Actor actor = World.world?.units?.get(pActorId);
+                if (actor?.kingdom?.data != null && !actor.kingdom.isRekt())
+                    return actor.kingdom.id;
+            }
+            catch { }
+            if (_bulkSnapshot != null &&
+                _bulkSnapshot.TryGetNode(pActorId,
+                    out LineageTreeNodeSnapshot node)) return node.KingdomId;
             return -1L;
         }
 
@@ -1964,7 +2044,10 @@ namespace AncientWarfare3.ui.windows
                 _halfSiblingButton.gameObject.SetActive(!showTreeTools);
             if (_renameClanButton != null)
                 _renameClanButton.gameObject.SetActive(showTreeTools);
-            if (_renameClanPanel != null && !showTreeTools)
+            if (_renameSurnameButton != null)
+                _renameSurnameButton.gameObject.SetActive(!showTreeTools);
+            if (_renameClanPanel != null &&
+                (_renameSurnameMode == showTreeTools))
                 _renameClanPanel.SetActive(false);
             UpdateHalfSiblingButtonText();
             if (_titleText != null)

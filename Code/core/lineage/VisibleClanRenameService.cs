@@ -40,9 +40,9 @@ namespace AncientWarfare3.core.lineage
 
         private static List<long> CollectShiTreeActorIds(long pShiId)
         {
-            var result = new List<long>();
-            var seen = new HashSet<long>();
-            if (pShiId < 0) return result;
+            var archiveIds = new List<long>();
+            var liveIds = new List<long>();
+            if (pShiId < 0) return archiveIds;
 
             using (var cmd = new SQLiteCommand(DB))
             {
@@ -52,7 +52,7 @@ namespace AncientWarfare3.core.lineage
                 cmd.Parameters.AddWithValue("@sid", pShiId);
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
                 while (reader.Read())
-                    AddUnique(result, seen, reader.GetInt64(0));
+                    archiveIds.Add(reader.GetInt64(0));
             }
 
             var units = World.world?.units;
@@ -63,17 +63,12 @@ namespace AncientWarfare3.core.lineage
                     if (unit?.data == null || unit.isRekt()) continue;
                     unit.data.get(LineageKeys.SHI_ID, out long unitShiId, -1L);
                     if (unitShiId == pShiId)
-                        AddUnique(result, seen, unit.data.id);
+                        liveIds.Add(unit.data.id);
                 }
             }
 
-            return result;
-        }
-
-        private static void AddUnique(List<long> pResult, HashSet<long> pSeen, long pActorId)
-        {
-            if (pActorId < 0 || !pSeen.Add(pActorId)) return;
-            pResult.Add(pActorId);
+            return VisibleClanRenameRules.MergeMemberIds(
+                LineageQuery.GetShiBranchFounderId(pShiId), archiveIds, liveIds);
         }
 
         private static bool RenameActor(long pActorId, string pClanName)
