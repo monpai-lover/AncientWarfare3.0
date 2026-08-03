@@ -20,7 +20,8 @@ namespace AncientWarfare3.core.lineage
             return Upsert(pActor, pAlive, pTraceOnly,
                 pForceSynchronous: false,
                 pAllowSynchronousFallback: true,
-                pFinalizeProjection: pFinalizeProjection);
+                pFinalizeProjection: pFinalizeProjection,
+                pIdentityOnlyProjection: false);
         }
 
         public static bool QueueDeath(Actor pActor, bool pTraceOnly)
@@ -28,131 +29,40 @@ namespace AncientWarfare3.core.lineage
             return Upsert(pActor, pAlive: false, pTraceOnly,
                 pForceSynchronous: false,
                 pAllowSynchronousFallback: false,
-                pFinalizeProjection: true);
+                pFinalizeProjection: true,
+                pIdentityOnlyProjection: false);
         }
 
         private static bool Upsert(Actor pActor, bool pAlive,
             bool pTraceOnly, bool pForceSynchronous,
             bool pAllowSynchronousFallback,
-            bool pFinalizeProjection)
+            bool pFinalizeProjection, bool pIdentityOnlyProjection)
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null ||
                 !LineageArchiveManager.Instance.InitializeSuccessful ||
                 pActor?.data == null)
                 return false;
+            long id = pActor.data.id;
+            ActorArchiveTableItem previous = LineageArchiveReader.ReadRow(id);
             bool traceableSpecies = LineageService.IsHuman(pActor) ||
                                     LineageService.IsNativeXiaCultureActor(pActor);
             if (!LineageService.UsesAwLineageSystem(pActor) &&
                 !LineageService.HasOriginalClan(pActor) &&
-                (!pTraceOnly || !traceableSpecies)) return false;
+                (!pTraceOnly || !traceableSpecies) &&
+                (!pIdentityOnlyProjection || previous == null))
+                return false;
 
-            long id = pActor.data.id;
             string table = ActorArchiveTableItem.GetTableName();
-            ActorArchiveTableItem previous = LineageArchiveReader.ReadRow(id);
-            if (pAlive && IsArchivedDead(previous)) return false;
-
-            pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
-            pActor.data.get("display_name", out string display, "");
-            pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
-            pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
-            pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
-            pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1);
-            pActor.data.get(LineageKeys.NOBLE_DISTANCE, out int nobleDist, 99);
-            pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status,
-                LineageStatus.NONE);
-            pActor.data.get(LineageKeys.NAME_INTEGRATED, out bool integrated,
-                false);
-            pActor.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID,
-                out long foundedBranchShi, -1);
-            pActor.data.get(LineageKeys.DEATH_CAUSE, out string deathCause, "");
-            var nobleBlood = ResolveNobleBloodSnapshot(pActor, previous,
-                nobleDist);
-
-            string name = pActor.getName();
-            if (string.IsNullOrEmpty(given)) given = name;
-            if (string.IsNullOrEmpty(display)) display = name;
-            var kingdom = ResolveActorKingdomSnapshot(pActor, previous);
-            var city = ResolveActorCitySnapshot(pActor, previous);
-            var social = ResolveSocialTitleSnapshot(pActor,
-                kingdom.kingdomName, kingdom.kingdomColor, city.cityName);
-            long clanId = pActor.clan?.data?.id ?? -1L;
-            bool currentClan = clanId >= 0L;
-            double deathTime = pAlive
-                ? previous?.death_time ?? -1d
-                : LineageService.CurTime();
-
-            var snapshot = new ActorArchiveTableItem
-            {
-                id = id,
-                given_name = given ?? "",
-                display_name = display ?? "",
-                family_name = family ?? "",
-                clan_name = clan ?? "",
-                lineage_id = lineageId,
-                shi_id = shiId,
-                asset_id = pActor.asset?.id ?? previous?.asset_id ?? "",
-                subspecies_id = pActor.subspecies?.getID() ?? -1L,
-                subspecies_name = pActor.subspecies?.data?.name ?? "",
-                sex = pActor.isSexMale() ? 0 : 1,
-                status = status ?? LineageStatus.NONE,
-                noble_distance = nobleDist,
-                ever_noble_blood = nobleBlood.ever,
-                noble_origin_actor_id = nobleBlood.originId,
-                noble_origin_name = nobleBlood.originName ?? "",
-                noble_origin_distance = nobleBlood.distance,
-                name_integrated = integrated ? 1 : 0,
-                kingdom_id = kingdom.kingdomId,
-                kingdom_name = kingdom.kingdomName ?? "",
-                kingdom_color = !string.IsNullOrEmpty(kingdom.kingdomColor)
-                    ? kingdom.kingdomColor
-                    : previous?.kingdom_color ?? "",
-                city_id = city.cityId,
-                city_name = city.cityName ?? "",
-                social_title = social.title ?? "",
-                social_title_color = social.color ?? "",
-                original_clan_id = currentClan
-                    ? clanId
-                    : previous?.original_clan_id ?? -1L,
-                clan_color_text = currentClan
-                    ? pActor.clan?.getColor()?.color_text ?? ""
-                    : previous?.clan_color_text ?? "",
-                clan_color_id = currentClan
-                    ? pActor.clan.data.color_id
-                    : previous?.clan_color_id ?? -1,
-                clan_banner_icon_id = currentClan
-                    ? pActor.clan.data.banner_icon_id
-                    : previous?.clan_banner_icon_id ?? -1,
-                clan_banner_background_id = currentClan
-                    ? pActor.clan.data.banner_background_id
-                    : previous?.clan_banner_background_id ?? -1,
-                parent_id_1 = pActor.data.parent_id_1,
-                parent_id_2 = pActor.data.parent_id_2,
-                generation = pActor.data.generation,
-                birth_time = previous?.birth_time ?? pActor.data.created_time,
-                death_time = deathTime,
-                death_cause = pAlive
-                    ? previous?.death_cause ?? ""
-                    : deathCause ?? "",
-                is_alive = pAlive ? 1 : 0,
-                head = ResolveArchivedHead(pActor, previous),
-                skin = FamilyTreePortraitIdentityRules.ResolveArchivedSkinId(
-                    currentSkinId: pActor.subspecies?.data?.skin_id ?? 0,
-                    hasCurrentSubspecies: pActor.subspecies?.data != null,
-                    previousSkinId: previous?.skin ?? 0),
-                skin_set = FamilyTreePortraitIdentityRules.
-                    ResolveArchivedSkinSet(
-                        hasCurrentSubspecies:
-                            pActor.subspecies?.data != null,
-                        previousSkinSet: previous?.skin_set ?? 0),
-                age_overgrowth = pActor.data.age_overgrowth,
-                phenotype_index = pActor.data.phenotype_index,
-                phenotype_shade = pActor.data.phenotype_shade,
-                founded_branch_shi_id = foundedBranchShi
-            };
-            FamilyTreeProjectionChange projectionChange = pFinalizeProjection
-                ? ResolveProjectionChange(previous, snapshot)
-                : FamilyTreeProjectionChange.None;
+            ActorArchiveTableItem snapshot = CaptureRelationshipSnapshot(
+                pActor, pAlive, previous);
+            if (snapshot == null) return false;
+            FamilyTreeProjectionChange projectionChange =
+                !pFinalizeProjection
+                    ? FamilyTreeProjectionChange.None
+                    : pIdentityOnlyProjection
+                        ? ResolveIdentityProjectionChange(previous, snapshot)
+                        : ResolveProjectionChange(previous, snapshot);
             HistoricalSqlColumn[] inserts = SnapshotColumns(snapshot,
                 pIncludeId: true);
             HistoricalSqlColumn[] updates = SnapshotColumns(snapshot,
@@ -216,6 +126,136 @@ namespace AncientWarfare3.core.lineage
                 AdvanceProjectionAfterCommit(committedChange);
             }
             return true;
+        }
+
+        internal static ActorArchiveTableItem CaptureRelationshipSnapshot(
+            Actor pActor, bool pAlive)
+        {
+            if (LineageArchiveManager.Instance.OperatingDB == null ||
+                !LineageArchiveManager.Instance.InitializeSuccessful ||
+                pActor?.data == null)
+                return null;
+            ActorArchiveTableItem previous = LineageArchiveReader.ReadRow(
+                pActor.data.id);
+            return CaptureRelationshipSnapshot(pActor, pAlive, previous);
+        }
+
+        internal static bool RefreshIdentity(Actor pActor)
+        {
+            if (pActor?.data == null ||
+                LineageArchiveReader.ReadRow(pActor.data.id) == null)
+                return false;
+            return Upsert(pActor, pAlive: true, pTraceOnly: true,
+                pForceSynchronous: false,
+                pAllowSynchronousFallback: true,
+                pFinalizeProjection: true,
+                pIdentityOnlyProjection: true);
+        }
+
+        private static ActorArchiveTableItem CaptureRelationshipSnapshot(
+            Actor pActor, bool pAlive, ActorArchiveTableItem pPrevious)
+        {
+            if (pActor?.data == null ||
+                (pAlive && IsArchivedDead(pPrevious))) return null;
+
+            pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
+            pActor.data.get("display_name", out string display, "");
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
+            pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
+            pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1);
+            pActor.data.get(LineageKeys.NOBLE_DISTANCE, out int nobleDist, 99);
+            pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status,
+                LineageStatus.NONE);
+            pActor.data.get(LineageKeys.NAME_INTEGRATED, out bool integrated,
+                false);
+            pActor.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID,
+                out long foundedBranchShi, -1);
+            pActor.data.get(LineageKeys.DEATH_CAUSE, out string deathCause, "");
+            var nobleBlood = ResolveNobleBloodSnapshot(pActor, pPrevious,
+                nobleDist);
+
+            string name = pActor.getName();
+            if (string.IsNullOrEmpty(given)) given = name;
+            if (string.IsNullOrEmpty(display)) display = name;
+            var kingdom = ResolveActorKingdomSnapshot(pActor, pPrevious);
+            var city = ResolveActorCitySnapshot(pActor, pPrevious);
+            var social = ResolveSocialTitleSnapshot(pActor,
+                kingdom.kingdomName, kingdom.kingdomColor, city.cityName);
+            long clanId = pActor.clan?.data?.id ?? -1L;
+            bool currentClan = clanId >= 0L;
+            double deathTime = pAlive
+                ? pPrevious?.death_time ?? -1d
+                : LineageService.CurTime();
+
+            return new ActorArchiveTableItem
+            {
+                id = pActor.data.id,
+                given_name = given ?? "",
+                display_name = display ?? "",
+                family_name = family ?? "",
+                clan_name = clan ?? "",
+                lineage_id = lineageId,
+                shi_id = shiId,
+                asset_id = pActor.asset?.id ?? pPrevious?.asset_id ?? "",
+                subspecies_id = pActor.subspecies?.getID() ?? -1L,
+                subspecies_name = pActor.subspecies?.data?.name ?? "",
+                sex = pActor.isSexMale() ? 0 : 1,
+                status = status ?? LineageStatus.NONE,
+                noble_distance = nobleDist,
+                ever_noble_blood = nobleBlood.ever,
+                noble_origin_actor_id = nobleBlood.originId,
+                noble_origin_name = nobleBlood.originName ?? "",
+                noble_origin_distance = nobleBlood.distance,
+                name_integrated = integrated ? 1 : 0,
+                kingdom_id = kingdom.kingdomId,
+                kingdom_name = kingdom.kingdomName ?? "",
+                kingdom_color = !string.IsNullOrEmpty(kingdom.kingdomColor)
+                    ? kingdom.kingdomColor
+                    : pPrevious?.kingdom_color ?? "",
+                city_id = city.cityId,
+                city_name = city.cityName ?? "",
+                social_title = social.title ?? "",
+                social_title_color = social.color ?? "",
+                original_clan_id = currentClan
+                    ? clanId
+                    : pPrevious?.original_clan_id ?? -1L,
+                clan_color_text = currentClan
+                    ? pActor.clan?.getColor()?.color_text ?? ""
+                    : pPrevious?.clan_color_text ?? "",
+                clan_color_id = currentClan
+                    ? pActor.clan.data.color_id
+                    : pPrevious?.clan_color_id ?? -1,
+                clan_banner_icon_id = currentClan
+                    ? pActor.clan.data.banner_icon_id
+                    : pPrevious?.clan_banner_icon_id ?? -1,
+                clan_banner_background_id = currentClan
+                    ? pActor.clan.data.banner_background_id
+                    : pPrevious?.clan_banner_background_id ?? -1,
+                parent_id_1 = pActor.data.parent_id_1,
+                parent_id_2 = pActor.data.parent_id_2,
+                generation = pActor.data.generation,
+                birth_time = pPrevious?.birth_time ?? pActor.data.created_time,
+                death_time = deathTime,
+                death_cause = pAlive
+                    ? pPrevious?.death_cause ?? ""
+                    : deathCause ?? "",
+                is_alive = pAlive ? 1 : 0,
+                head = ResolveArchivedHead(pActor, pPrevious),
+                skin = FamilyTreePortraitIdentityRules.ResolveArchivedSkinId(
+                    currentSkinId: pActor.subspecies?.data?.skin_id ?? 0,
+                    hasCurrentSubspecies: pActor.subspecies?.data != null,
+                    previousSkinId: pPrevious?.skin ?? 0),
+                skin_set = FamilyTreePortraitIdentityRules.
+                    ResolveArchivedSkinSet(
+                        hasCurrentSubspecies:
+                            pActor.subspecies?.data != null,
+                        previousSkinSet: pPrevious?.skin_set ?? 0),
+                age_overgrowth = pActor.data.age_overgrowth,
+                phenotype_index = pActor.data.phenotype_index,
+                phenotype_shade = pActor.data.phenotype_shade,
+                founded_branch_shi_id = foundedBranchShi
+            };
         }
 
         internal static bool TryQueueCapturedDeath(
@@ -294,6 +334,37 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        private static FamilyTreeProjectionChange ResolveIdentityProjectionChange(
+            ActorArchiveTableItem pPrevious,
+            ActorArchiveTableItem pCurrent)
+        {
+            if (pPrevious == null || pCurrent == null)
+                return FamilyTreeProjectionChange.None;
+            bool changed =
+                !Same(pPrevious.given_name, pCurrent.given_name) ||
+                !Same(pPrevious.display_name, pCurrent.display_name) ||
+                !Same(pPrevious.social_title, pCurrent.social_title) ||
+                !Same(pPrevious.social_title_color,
+                    pCurrent.social_title_color) ||
+                pPrevious.status != pCurrent.status ||
+                pPrevious.noble_distance != pCurrent.noble_distance ||
+                !Same(pPrevious.kingdom_name, pCurrent.kingdom_name) ||
+                !Same(pPrevious.kingdom_color, pCurrent.kingdom_color) ||
+                !Same(pPrevious.city_name, pCurrent.city_name) ||
+                !Same(pPrevious.asset_id, pCurrent.asset_id) ||
+                pPrevious.subspecies_id != pCurrent.subspecies_id ||
+                pPrevious.sex != pCurrent.sex ||
+                pPrevious.head != pCurrent.head ||
+                pPrevious.skin != pCurrent.skin ||
+                pPrevious.skin_set != pCurrent.skin_set ||
+                pPrevious.age_overgrowth != pCurrent.age_overgrowth ||
+                pPrevious.phenotype_index != pCurrent.phenotype_index ||
+                pPrevious.phenotype_shade != pCurrent.phenotype_shade;
+            return changed
+                ? FamilyTreeProjectionChange.IdentityOrTitle
+                : FamilyTreeProjectionChange.None;
+        }
+
         private static FamilyTreeProjectionChange ResolveProjectionChange(
             ActorArchiveTableItem pPrevious,
             ActorArchiveTableItem pCurrent)
@@ -328,6 +399,7 @@ namespace AncientWarfare3.core.lineage
                  !Same(pPrevious.city_name, pCurrent.city_name) ||
                  !Same(pPrevious.asset_id, pCurrent.asset_id) ||
                  pPrevious.subspecies_id != pCurrent.subspecies_id ||
+                 pPrevious.sex != pCurrent.sex ||
                  pPrevious.head != pCurrent.head ||
                  pPrevious.skin != pCurrent.skin ||
                  pPrevious.skin_set != pCurrent.skin_set ||
@@ -450,7 +522,8 @@ namespace AncientWarfare3.core.lineage
             if (!Upsert(pActor, pAlive: true, pTraceOnly: false,
                     pForceSynchronous: true,
                     pAllowSynchronousFallback: true,
-                    pFinalizeProjection: false))
+                    pFinalizeProjection: false,
+                    pIdentityOnlyProjection: false))
                 return false;
             if (!HistoricalWriteService.FlushForSynchronousFallback(
                     System.TimeSpan.FromSeconds(5), out string flushError))

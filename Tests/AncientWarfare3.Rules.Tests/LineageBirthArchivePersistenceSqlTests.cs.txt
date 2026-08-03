@@ -7,6 +7,7 @@ internal static class LineageBirthArchivePersistenceSqlTests
 {
     public static void Run()
     {
+        StructuredResultAcceptsOnlyQueuedOrCommitted();
         AsyncEnvelopeUsesPerChildStateKeyAndReturnsTypedOutcome();
         OrdinaryBirthCommitsArchiveAndTwoEdges();
         ExplicitParentSlotsNormalizeArchiveSnapshot();
@@ -15,6 +16,29 @@ internal static class LineageBirthArchivePersistenceSqlTests
         ReplayWithoutSecondParentRemovesStaleEdge();
         SecondEdgeFailureRollsBackEverything();
         RepeatedBirthIsIdempotent();
+    }
+
+    private static void StructuredResultAcceptsOnlyQueuedOrCommitted()
+    {
+        var notEligible = new LineageBirthArchiveResult(
+            LineageBirthArchiveStatus.NotEligible, 100L, 10L, 20L,
+            "not eligible");
+        var queued = new LineageBirthArchiveResult(
+            LineageBirthArchiveStatus.Queued, 100L, 10L, 20L, "");
+        var committed = new LineageBirthArchiveResult(
+            LineageBirthArchiveStatus.Committed, 100L, 10L, 20L, "");
+        var failed = new LineageBirthArchiveResult(
+            LineageBirthArchiveStatus.Failed, 100L, 10L, 20L, "failed");
+
+        True(!notEligible.Accepted,
+            "not eligible births are not accepted persistence writes");
+        True(queued.Accepted, "queued births are accepted");
+        True(committed.Accepted, "synchronous commits are accepted");
+        True(!failed.Accepted, "failed births are not accepted");
+        Equal(100L, failed.ChildId, "result keeps the child id");
+        Equal(10L, failed.Parent1Id, "result keeps parent slot 1");
+        Equal(20L, failed.Parent2Id, "result keeps parent slot 2");
+        Equal("failed", failed.Reason, "result keeps the failure reason");
     }
 
     private static void AsyncEnvelopeUsesPerChildStateKeyAndReturnsTypedOutcome()

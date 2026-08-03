@@ -12,6 +12,14 @@ function Read-Source([string] $RelativePath) {
 
 $service = Read-Source `
     'Code/core/lineage/WesternLineageParentEdgeService.cs'
+$birthArchive = Read-Source `
+    'Code/core/lineage/LineageBirthArchiveService.cs'
+$birthModels = Read-Source `
+    'Code/core/lineage/LineageBirthArchiveModels.cs'
+$birthEnvelope = Read-Source `
+    'Code/core/lineage/LineageBirthArchiveAsyncWrite.cs'
+$archiveWriter = Read-Source `
+    'Code/core/lineage/LineageArchiveWriter.cs'
 $lineage = Read-Source 'Code/core/lineage/LineageService.cs'
 $birth = Read-Source 'Code/patch/AW_BirthPatch.cs'
 $naming = Read-Source `
@@ -24,9 +32,10 @@ $migration = Read-Source `
     'Code/core/lineage/WesternLineageMigrationService.cs'
 
 if ($service -notmatch
-        'if\s*\(\s*!pUseLightweightEdges\s*\)\s*return false;' -or
+        '(?s)if\s*\(\s*!pUseLightweightEdges\s*\).*' +
+        'LineageBirthArchiveStatus\.NotEligible' -or
     $service -notmatch
-        'LineageService\.RecordLightweightParentEdges\s*\(') {
+        'LineageBirthArchiveService\.TryRecord\s*\(') {
     throw 'The western birth service must require the precomputed lightweight ownership decision.'
 }
 if ($service -match '\.ResolveForActor\s*\(' -or
@@ -35,8 +44,8 @@ if ($service -match '\.ResolveForActor\s*\(' -or
 }
 
 foreach ($forbidden in @(
-    'ArchiveActor', 'ArchiveTraceableActor', 'LineageArchiveWriter',
-    'ActorArchive', 'EnsureLineageForNoble', 'InsertShiBranch',
+    'ArchiveTraceableActor', 'LineageArchiveWriter',
+    'EnsureLineageForNoble', 'InsertShiBranch',
     'CreateFamily', 'portrait')) {
     if ($service -match [regex]::Escape($forbidden)) {
         throw "Western commoner edge recording must not use $forbidden."
@@ -108,10 +117,6 @@ if ([regex]::Matches($birth,
     throw 'The birth hook must dispatch the chronicle event exactly once behind its exception boundary.'
 }
 
-if ($lineage -notmatch
-    'internal static bool RecordLightweightParentEdges\s*\(') {
-    throw 'LineageService must expose only a minimal internal lightweight edge API.'
-}
 if ($lineage -notmatch
     'WesternLineageEligibilityRules\.UsesAwLineageSystem\s*\(' -or
     $lineage -notmatch
@@ -192,9 +197,13 @@ foreach ($mutation in @('.set(', 'removeString(', 'Persist(', 'Ensure(')) {
     }
 }
 if ($babyName -notmatch
-        '!LineageService\.UsesAwLineageSystem\(__result\)\) return;' -or
-    $babyName -notmatch 'LineageService\.ArchiveActor\(__result') {
-    throw 'Post-birth archive work must stay behind the stable lineage-id gate.'
+        '(?s)!LineageService\.UsesAwLineageSystem\(__result\).*' +
+        '!LineageService\.HasTraceableArchive\(__result\)\) return;' -or
+    $babyName -notmatch
+        'LineageService\.RefreshArchivedIdentity\s*\(\s*__result\s*\)' -or
+    $babyName -match 'LineageBirthArchiveService\.TryRecord' -or
+    $babyName -match 'FamilyTreeProjectionChange\.FamilyStructure') {
+    throw 'Post-birth naming must refresh identity only and must not record birth or advance family structure.'
 }
 if ($unitTab -notmatch
     'showFamily\s*=\s*hasActor\s*&&\s*LineageService\.HasTraceableFamily\(actor\)') {
@@ -224,45 +233,169 @@ if ($fullBirthBody -notmatch
     $fullBirthBody -match 'ShouldUseLineageBirth\s*\(' -or
     $fullBirthBody -match 'WesternLineageParentEdgeService\.IsEligible' -or
     $fullBirthBody -notmatch
-        '(?s)InheritFromParents\s*\(.*RecordFamilyEdges\s*\(\s*pBaby,\s*pParent1,\s*pParent2\s*\)') {
-    throw 'The pre-admitted full path must record final-lineage edges only after inheritance.'
+        '(?s)InheritFromParents\s*\(.*ApplyDisplayName\s*\(\s*pBaby\s*\).*' +
+        'LineageBirthArchiveService\.TryRecord\s*\(\s*pBaby,\s*pParent1,\s*pParent2\s*\)' -or
+    $fullBirthBody -match 'RecordFamilyEdges\s*\(' -or
+    $fullBirthBody -match 'ArchiveActor\s*\(\s*pBaby') {
+    throw 'The pre-admitted full path must route its final snapshot and both parent edges through the atomic birth service.'
 }
 if ($mixedBirthBody -notmatch 'bool\s+pParentEdgesOwned' -or
     $mixedBirthBody -notmatch
-        'if\s*\(\s*!pParentEdgesOwned\s*\)\s*RecordFamilyEdges' -or
+        '(?s)if\s*\(\s*!pParentEdgesOwned\s*\)\s*' +
+        'LineageBirthArchiveService\.TryRecord\s*\(\s*pBaby,\s*pParent1,\s*pParent2\s*\)' -or
     $mixedBirthBody -match 'ShouldUseLineageBirth\s*\(' -or
-    $mixedBirthBody -match 'WesternLineageParentEdgeService\.IsEligible') {
-    throw 'Mixed ancestry may write edges only when neither lightweight nor full birth owns them.'
+    $mixedBirthBody -match 'WesternLineageParentEdgeService\.IsEligible' -or
+    $mixedBirthBody -match 'RecordFamilyEdges\s*\(' -or
+    $mixedBirthBody -match 'ArchiveTraceableActor\s*\(\s*pBaby') {
+    throw 'Mixed ancestry may own the atomic child archive only when neither lightweight nor full birth owns it.'
 }
 
-$recordStart = $lineage.IndexOf(
-    'private static bool RecordFamilyEdges',
+$plainBirthStart = $lineage.IndexOf(
+    'public static void OnActorBorn(Actor pActor)',
     [System.StringComparison]::Ordinal)
-$upsertStart = $lineage.IndexOf(
-    'private static bool UpsertFamilyEdge',
-    $recordStart, [System.StringComparison]::Ordinal)
-if ($recordStart -lt 0 -or $upsertStart -lt $recordStart) {
-    throw 'The bounded FamilyEdge writer could not be found.'
+$plainBirthBody = $lineage.Substring($plainBirthStart,
+    $fullBirthStart - $plainBirthStart)
+if ($plainBirthStart -lt 0 -or
+    $plainBirthBody -notmatch 'EnsureGivenName\s*\(' -or
+    $plainBirthBody -notmatch 'ApplyDisplayName\s*\(' -or
+    $plainBirthBody -match 'ArchiveActor\s*\(') {
+    throw 'OnActorBorn must remain name initialization without pre-parent archive persistence.'
 }
-$recordBody = $lineage.Substring($recordStart,
-    $upsertStart - $recordStart)
-if ([regex]::Matches($recordBody,
-        'UpsertFamilyEdge\s*\(').Count -ne 2 -or
-    $recordBody -notmatch 'BeginTransaction\s*\(' -or
-    [regex]::Matches($recordBody,
-        'AdvanceAfterSuccessfulSynchronousWrite\s*\(').Count -ne 1 -or
-    $recordBody -notmatch 'transaction\.Commit' -or
-    $recordBody -notmatch 'transaction\.Rollback\s*\(') {
-    throw 'Both parent slots must share one transaction, rollback together, and advance history once after commit.'
+
+foreach ($retired in @(
+    'RecordFamilyEdges', 'RecordLightweightParentEdges',
+    'UpsertFamilyEdge')) {
+    if ($lineage -match [regex]::Escape($retired)) {
+        throw "LineageService must not retain direct edge-only birth persistence: $retired"
+    }
 }
-if ($lineage -notmatch 'using System\.Data\.SQLite;' -or
-    $lineage -notmatch
-        '(?s)private static bool UpsertFamilyEdge\s*\(\s*SQLiteConnection.*SQLiteTransaction.*new SQLiteCommand.*Transaction\s*=\s*pTransaction.*UPDATE.*INSERT') {
-    throw 'FamilyEdge upserts must use direct SQLite commands in the shared transaction.'
+
+if ($archiveWriter -notmatch
+        'internal static ActorArchiveTableItem CaptureRelationshipSnapshot\s*\(' -or
+    $archiveWriter -notmatch
+        '(?s)private static bool Upsert\s*\(.*CaptureRelationshipSnapshot\s*\(' -or
+    $archiveWriter -notmatch
+        'internal static bool RefreshIdentity\s*\(') {
+    throw 'LineageArchiveWriter must share snapshot capture and expose an identity-only refresh path.'
 }
-if ([regex]::Matches($recordBody,
-        'UpsertFamilyEdge\s*\(').Count -ne 2) {
-    throw 'Each birth must perform at most the two parent-slot upserts.'
+if ($archiveWriter -notmatch
+        '(?s)!LineageService\.UsesAwLineageSystem\(pActor\).*' +
+        '!LineageService\.HasOriginalClan\(pActor\).*' +
+        '\(!pTraceOnly\s*\|\|\s*!traceableSpecies\).*' +
+        '\(!pIdentityOnlyProjection\s*\|\|\s*previous\s*==\s*null\)') {
+    throw 'Only identity-only refresh may bypass standalone archive admission for an existing row.'
+}
+$refreshIdentityStart = $archiveWriter.IndexOf(
+    'internal static bool RefreshIdentity',
+    [System.StringComparison]::Ordinal)
+$captureCoreStart = $archiveWriter.IndexOf(
+    'private static ActorArchiveTableItem CaptureRelationshipSnapshot',
+    $refreshIdentityStart, [System.StringComparison]::Ordinal)
+$identityProjectionStart = $archiveWriter.IndexOf(
+    'private static FamilyTreeProjectionChange ResolveIdentityProjectionChange',
+    [System.StringComparison]::Ordinal)
+$fullProjectionStart = $archiveWriter.IndexOf(
+    'private static FamilyTreeProjectionChange ResolveProjectionChange',
+    [System.StringComparison]::Ordinal)
+if ($refreshIdentityStart -lt 0 -or $captureCoreStart -lt 0 -or
+    $identityProjectionStart -lt 0 -or
+    $fullProjectionStart -lt $identityProjectionStart) {
+    throw 'The bounded identity-only archive projection path could not be located.'
+}
+$refreshIdentityBody = $archiveWriter.Substring($refreshIdentityStart,
+    $captureCoreStart - $refreshIdentityStart)
+$identityProjectionBody = $archiveWriter.Substring($identityProjectionStart,
+    $fullProjectionStart - $identityProjectionStart)
+if ($refreshIdentityBody -notmatch
+        'pIdentityOnlyProjection:\s*true' -or
+    $identityProjectionBody -notmatch
+        'pPrevious\.sex\s*!=\s*pCurrent\.sex' -or
+    $identityProjectionBody -match
+        'FamilyTreeProjectionChange\.FamilyStructure') {
+    throw 'Baby-name identity refresh must be structurally unable to advance FamilyStructure.'
+}
+
+if ($birthModels -notmatch 'enum LineageBirthArchiveStatus' -or
+    $birthModels -notmatch '(?s)NotEligible.*Queued.*Committed.*Failed' -or
+    $birthModels -notmatch
+        'readonly struct LineageBirthArchiveResult' -or
+    $birthModels -notmatch
+        '(?s)Accepted\s*=>\s*Status\s*==\s*LineageBirthArchiveStatus\.Queued\s*\|\|\s*' +
+        'Status\s*==\s*LineageBirthArchiveStatus\.Committed') {
+    throw 'Birth callers must receive a structured four-state result whose Accepted flag excludes NotEligible and Failed.'
+}
+if ($birthEnvelope -notmatch '"lineage-birth:v1:child:"' -or
+    $birthEnvelope -notmatch 'HistoricalWriteKind\.State') {
+    throw 'Each child birth must use one versioned State envelope key.'
+}
+if ($birthArchive -notmatch
+        'internal static LineageBirthArchiveResult TryRecord\s*\(' -or
+    $birthArchive -notmatch
+        'LineageArchiveWriter\.\s*CaptureRelationshipSnapshot\s*\(' -or
+    $birthArchive -notmatch
+        'HistoricalWriteService\.TryEnqueueCustom\s*\(' -or
+    $birthArchive -notmatch 'FlushForSynchronousFallback\s*\(' -or
+    $birthArchive -notmatch
+        '(?s)BeginTransaction\s*\(\).*LineageBirthArchivePersistence\.Execute\s*\(.*transaction\.Commit\s*\(' -or
+    $birthArchive -notmatch 'transaction\.Rollback\s*\(') {
+    throw 'The birth archive service must enqueue captured state and use one transactional synchronous fallback.'
+}
+$enqueueIndex = $birthArchive.IndexOf(
+    'HistoricalWriteService.TryEnqueueCustom',
+    [System.StringComparison]::Ordinal)
+$actorPublishIndex = $birthArchive.IndexOf(
+    'ActorArchivePendingStore.Publish',
+    [System.StringComparison]::Ordinal)
+$projectionPublishIndex = $birthArchive.IndexOf(
+    'FamilyTreeProjectionPendingStore.Publish',
+    [System.StringComparison]::Ordinal)
+if ($enqueueIndex -lt 0 -or $actorPublishIndex -lt $enqueueIndex -or
+    $projectionPublishIndex -lt $enqueueIndex) {
+    throw 'Birth pending state must be published only after queue acceptance.'
+}
+if ($birthArchive -notmatch
+        '(?s)OnCommitted\s*\(.*ActorArchivePendingStore\.Complete.*' +
+        'FamilyTreeProjectionPendingStore\.TryComplete.*' +
+        'FamilyTreeProjectionRevision\.Advance\s*\(\s*committedChange\s*\)' -or
+    $birthArchive -notmatch
+        '(?s)OnFailed\s*\(.*ActorArchivePendingStore\.Complete.*' +
+        'FamilyTreeProjectionPendingStore\.TryComplete' -or
+    [regex]::Matches($birthArchive,
+        'FamilyTreeProjectionRevision\.Advance\s*\(').Count -ne 2 -or
+    [regex]::Matches($birthArchive,
+        'FamilyTreeProjectionChange\.FamilyStructure').Count -ne 2) {
+    throw 'Birth completion must clear pending state and advance FamilyStructure exactly once after async or synchronous commit.'
+}
+if ($birthArchive -match
+        'HistoricalContentRevision\.AdvanceAfterSuccessfulSynchronousWrite' -or
+    $birthArchive -match 'HistoricalContentRevision\.Advance\s*\(') {
+    throw 'Synchronous birth fallback must let its single FamilyStructure advance publish the one historical revision.'
+}
+$notEligibleEnd = $birthArchive.IndexOf(
+    'try', [System.StringComparison]::Ordinal)
+$notEligibleBody = $birthArchive.Substring(0, $notEligibleEnd)
+if ($birthArchive -notmatch
+        '(?s)LineageBirthArchiveStatus\.Failed.*LogFailedRateLimited' -or
+    $notEligibleBody -match 'LogFailedRateLimited') {
+    throw 'Only failed birth archive results may use the centralized rate-limited warning.'
+}
+
+$syncLiveStart = $lineage.IndexOf(
+    'private static bool TrySyncLiveChildFromParent',
+    [System.StringComparison]::Ordinal)
+$syncArchivedStart = $lineage.IndexOf(
+    'private static bool TrySyncArchivedChildFromParent',
+    $syncLiveStart, [System.StringComparison]::Ordinal)
+if ($syncLiveStart -lt 0 -or $syncArchivedStart -lt $syncLiveStart) {
+    throw 'The bounded live-child sync path could not be located.'
+}
+$syncLiveBody = $lineage.Substring($syncLiveStart,
+    $syncArchivedStart - $syncLiveStart)
+if ($syncLiveBody -match 'LineageBirthArchiveService\.TryRecord' -or
+    $syncLiveBody -match 'RecordFamilyEdges' -or
+    $syncLiveBody -notmatch
+        'ArchiveActor\s*\(\s*pChild,\s*pAlive:\s*true,\s*pFinalizeProjection:\s*!pDeferProjection\s*\)') {
+    throw 'Live-child lineage sync must honor defer through archive projection finalization and must not reuse birth persistence.'
 }
 
 $admissionEnd = $lineage.IndexOf('private static void RecordBirthEvent',
