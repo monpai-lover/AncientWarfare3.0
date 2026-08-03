@@ -53,8 +53,10 @@ Require $labels 'ApplySortingLayer(bool pCountry, bool pMinimap)' `
 if ($labels.Contains('MapBox.isRenderMiniMap()')) {
     throw 'label sorting races the global minimap render flag'
 }
-Require $rules 'MapLabelVisualScale = 2.0f' `
-    'country and city map labels are not rendered at double visual size'
+Require $rules 'CountryLabelVisualScale = 2.0f' `
+    'country map labels no longer preserve their requested visual scale'
+Require $rules 'CityLabelVisualScale = 1.65f' `
+    'city map labels no longer use the tuned reduced visual scale'
 Require $labels `
     'ResolveRenderedLabelSize(pPlacement.Size, pCountry);' `
     'runtime labels bypass the shared map-label visual-size rule'
@@ -80,7 +82,11 @@ if ($sizeRule -notmatch `
     'Math\.Min\(maximum,\s*Math\.Max\(minimum,\s*pPlacementSize\)\)') {
     throw 'map label placement is not clamped to its logical size range first'
 }
-if ($sizeRule -notmatch 'logicalSize\s*\*\s*MapLabelVisualScale') {
+if ($sizeRule -notmatch `
+    'pCountry\s*\?\s*CountryLabelVisualScale\s*:\s*CityLabelVisualScale') {
+    throw 'map label visual scale does not distinguish country and city text'
+}
+if ($sizeRule -notmatch 'logicalSize\s*\*\s*visualScale') {
     throw 'map label visual scale is still swallowed by the logical size cap'
 }
 if ($service.Contains('"native:city:" +') -or

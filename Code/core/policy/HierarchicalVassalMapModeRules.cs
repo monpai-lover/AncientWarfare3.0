@@ -17,7 +17,8 @@ namespace AncientWarfare3.core.policy
         // two world units made ordinary city names nearly invisible.
         public const float CityLabelMaximumSize = 10.0f;
         public const float MaximumLabelSize = 40.0f;
-        public const float MapLabelVisualScale = 2.0f;
+        public const float CountryLabelVisualScale = 2.0f;
+        public const float CityLabelVisualScale = 1.65f;
         public const string CountryLabelMinimapSortingLayer = "MapOverlay";
         public const string CountryLabelMainMapSortingLayer = "EffectsBack";
         public const int CountryLabelMinimapSortingOrder = 32760;
@@ -43,7 +44,10 @@ namespace AncientWarfare3.core.policy
                 : CityLabelMaximumSize;
             float logicalSize = (float)Math.Min(maximum,
                 Math.Max(minimum, pPlacementSize));
-            return logicalSize * MapLabelVisualScale;
+            float visualScale = pCountry
+                ? CountryLabelVisualScale
+                : CityLabelVisualScale;
+            return logicalSize * visualScale;
         }
 
         internal static int GetLabelOutlinePassCount(bool pCountry)
