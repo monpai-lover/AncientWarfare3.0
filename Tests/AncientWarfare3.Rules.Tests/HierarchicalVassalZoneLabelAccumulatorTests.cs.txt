@@ -25,6 +25,14 @@ internal static class HierarchicalVassalZoneLabelAccumulatorTests
         Near(35d, metrics.Angle);
         Equal(false,
             new HierarchicalVassalZoneLabelAccumulator().TryBuild(out _));
+
+        diagonal.Reset();
+        Equal(false, diagonal.TryBuild(out _));
+        Equal(true, diagonal.Add(7, -4d, 6d, 5));
+        Equal(true, diagonal.TryBuild(out metrics));
+        Near(-4d, metrics.AnchorX);
+        Near(6d, metrics.AnchorY);
+        Equal(5, metrics.LandArea);
     }
 
     private static void Equal<T>(T expected, T actual)

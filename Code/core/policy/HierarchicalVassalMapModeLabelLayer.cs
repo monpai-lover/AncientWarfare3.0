@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 namespace AncientWarfare3.core.policy
@@ -17,6 +18,11 @@ namespace AncientWarfare3.core.policy
             new List<LabelNode>();
         private static readonly Dictionary<string, LabelNode> RuntimeNodes =
             new Dictionary<string, LabelNode>();
+        private static readonly Dictionary<NativeLabelIdentity, string>
+            NativeLabelKeys =
+                new Dictionary<NativeLabelIdentity, string>();
+        private static readonly List<string> NativeEvictionKeys =
+            new List<string>();
         private static GameObject _root;
         private static bool _activeKnown;
         private static bool _active;
@@ -65,9 +71,86 @@ namespace AncientWarfare3.core.policy
             HierarchicalVassalMapLabelRuntime.EvictCity(pCityId);
         }
 
+        internal static void EvictNativeCity(long pCityId)
+        {
+            EvictNativeLabels((pCountry, _, pEntityId) =>
+                !pCountry && pEntityId == pCityId);
+        }
+
+        internal static string GetNativeLabelKey(bool pCountry,
+            long pFocusId, long pEntityId)
+        {
+            var identity = new NativeLabelIdentity(pCountry, pFocusId,
+                pEntityId);
+            if (NativeLabelKeys.TryGetValue(identity, out string key))
+                return key;
+            key = "native:" + (pCountry ? "country:" : "city:") +
+                  pFocusId.ToString(CultureInfo.InvariantCulture) + ":" +
+                  pEntityId.ToString(CultureInfo.InvariantCulture);
+            NativeLabelKeys.Add(identity, key);
+            return key;
+        }
+
         internal static void EvictKingdom(long pKingdomId)
         {
             HierarchicalVassalMapLabelRuntime.EvictKingdom(pKingdomId);
+        }
+
+        internal static void EvictNativeKingdom(long pKingdomId)
+        {
+            EvictNativeLabels((pCountry, pFocusId, pEntityId) =>
+                pFocusId == pKingdomId ||
+                pCountry && pEntityId == pKingdomId);
+        }
+
+        private static void EvictNativeLabels(
+            Func<bool, long, long, bool> pShouldEvict)
+        {
+            if (pShouldEvict == null) return;
+            NativeEvictionKeys.Clear();
+            foreach (string key in RuntimeNodes.Keys)
+            {
+                if (!TryParseNativeLabelKey(key, out bool country,
+                        out long focusId, out long entityId) ||
+                    !pShouldEvict(country, focusId, entityId)) continue;
+                NativeEvictionKeys.Add(key);
+            }
+            for (int index = 0; index < NativeEvictionKeys.Count; index++)
+                RemoveRuntimeLabel(NativeEvictionKeys[index]);
+            NativeEvictionKeys.Clear();
+        }
+
+        private static bool TryParseNativeLabelKey(string pKey,
+            out bool pCountry, out long pFocusId, out long pEntityId)
+        {
+            pCountry = false;
+            pFocusId = -1L;
+            pEntityId = -1L;
+            const string countryPrefix = "native:country:";
+            const string cityPrefix = "native:city:";
+            int valueStart;
+            if (pKey?.StartsWith(countryPrefix,
+                    StringComparison.Ordinal) == true)
+            {
+                pCountry = true;
+                valueStart = countryPrefix.Length;
+            }
+            else if (pKey?.StartsWith(cityPrefix,
+                         StringComparison.Ordinal) == true)
+            {
+                valueStart = cityPrefix.Length;
+            }
+            else return false;
+
+            int separator = pKey.IndexOf(':', valueStart);
+            if (separator <= valueStart || separator >= pKey.Length - 1)
+                return false;
+            return long.TryParse(pKey.Substring(valueStart,
+                    separator - valueStart), NumberStyles.Integer,
+                    CultureInfo.InvariantCulture, out pFocusId) &&
+                long.TryParse(pKey.Substring(separator + 1),
+                    NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out pEntityId);
         }
 
         internal static void MarkKingdomDirty(Kingdom pKingdom)
@@ -174,6 +257,8 @@ namespace AncientWarfare3.core.policy
             _root = null;
             Nodes.Clear();
             RuntimeNodes.Clear();
+            NativeLabelKeys.Clear();
+            NativeEvictionKeys.Clear();
             _activeKnown = false;
             _active = false;
             _resolutionModeKnown = false;
@@ -261,8 +346,50 @@ namespace AncientWarfare3.core.policy
             if (string.IsNullOrWhiteSpace(pKey) ||
                 !RuntimeNodes.TryGetValue(pKey, out LabelNode node)) return;
             RuntimeNodes.Remove(pKey);
+            if (TryParseNativeLabelKey(pKey, out bool country,
+                    out long focusId, out long entityId))
+                NativeLabelKeys.Remove(new NativeLabelIdentity(country,
+                    focusId, entityId));
             Nodes.Remove(node);
             node.Destroy();
+        }
+
+        private readonly struct NativeLabelIdentity :
+            IEquatable<NativeLabelIdentity>
+        {
+            private readonly bool _country;
+            private readonly long _focusId;
+            private readonly long _entityId;
+
+            internal NativeLabelIdentity(bool pCountry, long pFocusId,
+                long pEntityId)
+            {
+                _country = pCountry;
+                _focusId = pFocusId;
+                _entityId = pEntityId;
+            }
+
+            public bool Equals(NativeLabelIdentity pOther)
+            {
+                return _country == pOther._country &&
+                       _focusId == pOther._focusId &&
+                       _entityId == pOther._entityId;
+            }
+
+            public override bool Equals(object pObject)
+            {
+                return pObject is NativeLabelIdentity other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = _country ? 1 : 0;
+                    hash = hash * 397 ^ _focusId.GetHashCode();
+                    return hash * 397 ^ _entityId.GetHashCode();
+                }
+            }
         }
 
         private static Color ResolveCountryLabelColor(Kingdom pKingdom)
@@ -361,9 +488,12 @@ namespace AncientWarfare3.core.policy
             {
                 _root.SetActive(true);
                 string value = pValue?.Trim() ?? string.Empty;
-                if (HasEquivalentLayout(value, pPosition, pSize, pColor,
-                        pOutlineColor, pCountry, pAngle,
-                        pCountryLabelGap)) return;
+                if (HasEquivalentLayout(value, pPosition, pSize, pCountry,
+                        pAngle, pCountryLabelGap))
+                {
+                    RefreshStyle(pColor, pOutlineColor);
+                    return;
+                }
                 _hasLayout = true;
                 _lastValue = value;
                 _lastPosition = pPosition;
@@ -396,8 +526,7 @@ namespace AncientWarfare3.core.policy
             }
 
             private bool HasEquivalentLayout(string pValue,
-                Vector3 pPosition, float pSize, Color pColor,
-                Color pOutlineColor, bool pCountry, float pAngle,
+                Vector3 pPosition, float pSize, bool pCountry, float pAngle,
                 int pCountryLabelGap)
             {
                 return _hasLayout && _country == pCountry &&
@@ -413,10 +542,8 @@ namespace AncientWarfare3.core.policy
                        Mathf.Abs(_lastSize - pSize) <
                            HierarchicalVassalLabelResultRules.SizeThreshold &&
                        AngleDistance(_lastAngle, pAngle) <
-                           HierarchicalVassalLabelResultRules.AngleThreshold &&
-                       _lastCountryLabelGap == pCountryLabelGap &&
-                       ColorsEqual(_lastColor, pColor) &&
-                       ColorsEqual(_lastOutlineColor, pOutlineColor);
+                            HierarchicalVassalLabelResultRules.AngleThreshold &&
+                       _lastCountryLabelGap == pCountryLabelGap;
             }
 
             private static float AngleDistance(float pLeft, float pRight)

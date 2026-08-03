@@ -87,5 +87,21 @@ namespace AncientWarfare3.core.policy
                 _maximumY - _minimumY + 1);
             return true;
         }
+
+        internal void Reset()
+        {
+            _zoneIds.Clear();
+            _weight = 0d;
+            _weightedX = 0d;
+            _weightedY = 0d;
+            _weightedXX = 0d;
+            _weightedYY = 0d;
+            _weightedXY = 0d;
+            _landArea = 0;
+            _minimumX = int.MaxValue;
+            _maximumX = int.MinValue;
+            _minimumY = int.MaxValue;
+            _maximumY = int.MinValue;
+        }
     }
 }

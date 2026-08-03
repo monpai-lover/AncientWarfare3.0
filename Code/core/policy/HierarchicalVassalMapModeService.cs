@@ -74,6 +74,16 @@ namespace AncientWarfare3.core.policy
                 new Dictionary<long, NativeCountryLabelEntry>();
         private static readonly Dictionary<long, NativeCityLabelEntry>
             NativeCityLabels = new Dictionary<long, NativeCityLabelEntry>();
+        private static readonly Stack<NativeCountryLabelEntry>
+            NativeCountryLabelPool = new Stack<NativeCountryLabelEntry>();
+        private static readonly Stack<NativeCityLabelEntry>
+            NativeCityLabelPool = new Stack<NativeCityLabelEntry>();
+        private static readonly List<NativeCountryLabelEntry>
+            NativeCountryPublishEntries = new List<NativeCountryLabelEntry>();
+        private static readonly List<NativeCityLabelEntry>
+            NativeCityPublishEntries = new List<NativeCityLabelEntry>();
+        private static readonly HashSet<string> NativeActiveLabelKeys =
+            new HashSet<string>();
         private static HierarchicalVassalHierarchyIndex _hierarchyIndex;
         private static bool _nativeDrawPassActive;
         private static HierarchicalVassalMapModeLayer _selectedLayer =
@@ -159,9 +169,9 @@ namespace AncientWarfare3.core.policy
             Kingdom pPhysicalKingdom)
         {
             if (pCity?.data == null || pCity.isRekt()) return null;
+            if (!IsValidKingdom(pPhysicalKingdom)) return null;
             if (IsCityLayer) return (IMetaObject)(object)pCity;
 
-            if (!IsValidKingdom(pPhysicalKingdom)) return null;
             EnsureHierarchyIndex();
             long representativeId = _hierarchyIndex?.ResolveRepresentative(
                 pPhysicalKingdom.id) ?? -1L;
@@ -175,8 +185,8 @@ namespace AncientWarfare3.core.policy
         internal static void BeginNativeDrawPass()
         {
             NativeDrawMetaCache.Clear();
-            NativeCountryLabels.Clear();
-            NativeCityLabels.Clear();
+            ReleaseNativeDrawEntries();
+            ClearNativePublishBuffers();
             _nativeDrawPassActive = true;
         }
 
@@ -195,7 +205,7 @@ namespace AncientWarfare3.core.policy
                 if (!NativeCityLabels.TryGetValue(city.id,
                         out NativeCityLabelEntry cityEntry))
                 {
-                    cityEntry = new NativeCityLabelEntry(city);
+                    cityEntry = AcquireNativeCityLabelEntry(city);
                     NativeCityLabels.Add(city.id, cityEntry);
                 }
                 cityEntry.Add(pZone);
@@ -207,7 +217,7 @@ namespace AncientWarfare3.core.policy
             if (!NativeCountryLabels.TryGetValue(representative.id,
                     out NativeCountryLabelEntry entry))
             {
-                entry = new NativeCountryLabelEntry(representative);
+                entry = AcquireNativeCountryLabelEntry(representative);
                 NativeCountryLabels.Add(representative.id, entry);
             }
             entry.Add(pZone);
@@ -227,6 +237,12 @@ namespace AncientWarfare3.core.policy
             {
                 try
                 {
+                    HierarchicalVassalMapModeLabelLayer.
+                        HideRuntimeLabelsExcept(NativeActiveLabelKeys);
+                }
+                catch { }
+                try
+                {
                     ModClass.LogWarning(
                         "Hierarchical native labels failed: " +
                         error.Message);
@@ -236,22 +252,24 @@ namespace AncientWarfare3.core.policy
             finally
             {
                 _nativeDrawPassActive = false;
-                NativeCountryLabels.Clear();
-                NativeCityLabels.Clear();
+                ClearNativePublishBuffers();
+                ReleaseNativeDrawEntries();
                 NativeDrawMetaCache.Clear();
             }
         }
 
         private static void PublishNativeCityLabels()
         {
-            var entries = new List<NativeCityLabelEntry>(
-                NativeCityLabels.Values);
-            entries.Sort((pLeft, pRight) =>
+            NativeCityPublishEntries.Clear();
+            foreach (NativeCityLabelEntry entry in NativeCityLabels.Values)
+                NativeCityPublishEntries.Add(entry);
+            NativeCityPublishEntries.Sort((pLeft, pRight) =>
                 pLeft.City.id.CompareTo(pRight.City.id));
-            var activeKeys = new HashSet<string>();
-            for (int index = 0; index < entries.Count; index++)
+            NativeActiveLabelKeys.Clear();
+            for (int index = 0; index < NativeCityPublishEntries.Count;
+                 index++)
             {
-                NativeCityLabelEntry entry = entries[index];
+                NativeCityLabelEntry entry = NativeCityPublishEntries[index];
                 City city = entry.City;
                 string displayName = city?.data?.name?.Trim();
                 if (string.IsNullOrWhiteSpace(displayName)) continue;
@@ -263,27 +281,31 @@ namespace AncientWarfare3.core.policy
                     Size = HierarchicalVassalMapModeGeometry.
                         CalculateCityLabelSize(entry.LandArea)
                 };
-                string key = "native:city:" + CurrentLabelFocusKey +
-                             ":" + city.id;
-                activeKeys.Add(key);
+                string key = HierarchicalVassalMapModeLabelLayer.
+                    GetNativeLabelKey(false, CurrentLabelFocusKey, city.id);
                 HierarchicalVassalMapModeLabelLayer.ApplyRuntimeLabel(
                     key, displayName, placement, 0, false, city.kingdom,
                     city);
+                NativeActiveLabelKeys.Add(key);
             }
             HierarchicalVassalMapModeLabelLayer.
-                HideRuntimeLabelsExcept(activeKeys);
+                HideRuntimeLabelsExcept(NativeActiveLabelKeys);
         }
 
         private static void PublishNativeCountryLabels()
         {
-            var entries = new List<NativeCountryLabelEntry>(
-                NativeCountryLabels.Values);
-            entries.Sort((pLeft, pRight) => CompareKingdoms(
+            NativeCountryPublishEntries.Clear();
+            foreach (NativeCountryLabelEntry entry in
+                     NativeCountryLabels.Values)
+                NativeCountryPublishEntries.Add(entry);
+            NativeCountryPublishEntries.Sort((pLeft, pRight) => CompareKingdoms(
                 pLeft.Kingdom, pRight.Kingdom));
-            var activeKeys = new HashSet<string>();
-            for (int index = 0; index < entries.Count; index++)
+            NativeActiveLabelKeys.Clear();
+            for (int index = 0; index < NativeCountryPublishEntries.Count;
+                 index++)
             {
-                NativeCountryLabelEntry entry = entries[index];
+                NativeCountryLabelEntry entry =
+                    NativeCountryPublishEntries[index];
                 Kingdom kingdom = entry.Kingdom;
                 string displayName = GetMapDisplayName(kingdom)?.Trim();
                 if (string.IsNullOrWhiteSpace(displayName)) continue;
@@ -291,16 +313,60 @@ namespace AncientWarfare3.core.policy
                         out HierarchicalVassalMapModeLabelPlacement placement,
                         out int gap)) continue;
 
-                string key = "native:country:" + CurrentLabelFocusKey +
-                             ":" + kingdom.id;
-                activeKeys.Add(key);
+                string key = HierarchicalVassalMapModeLabelLayer.
+                    GetNativeLabelKey(true, CurrentLabelFocusKey, kingdom.id);
                 HierarchicalVassalMapModeLabelLayer.ApplyRuntimeLabel(
                     key, HierarchicalVassalMapModeRules.FormatCountryLabel(
                         displayName, entry.HorizontalSpan), placement, gap,
                     true, kingdom, null);
+                NativeActiveLabelKeys.Add(key);
             }
             HierarchicalVassalMapModeLabelLayer.
-                HideRuntimeLabelsExcept(activeKeys);
+                HideRuntimeLabelsExcept(NativeActiveLabelKeys);
+        }
+
+        private static NativeCountryLabelEntry
+            AcquireNativeCountryLabelEntry(Kingdom pKingdom)
+        {
+            NativeCountryLabelEntry entry = NativeCountryLabelPool.Count > 0
+                ? NativeCountryLabelPool.Pop()
+                : new NativeCountryLabelEntry();
+            entry.Reset(pKingdom);
+            return entry;
+        }
+
+        private static NativeCityLabelEntry AcquireNativeCityLabelEntry(
+            City pCity)
+        {
+            NativeCityLabelEntry entry = NativeCityLabelPool.Count > 0
+                ? NativeCityLabelPool.Pop()
+                : new NativeCityLabelEntry();
+            entry.Reset(pCity);
+            return entry;
+        }
+
+        private static void ReleaseNativeDrawEntries()
+        {
+            foreach (NativeCountryLabelEntry entry in
+                     NativeCountryLabels.Values)
+            {
+                entry.Reset(null);
+                NativeCountryLabelPool.Push(entry);
+            }
+            NativeCountryLabels.Clear();
+            foreach (NativeCityLabelEntry entry in NativeCityLabels.Values)
+            {
+                entry.Reset(null);
+                NativeCityLabelPool.Push(entry);
+            }
+            NativeCityLabels.Clear();
+        }
+
+        private static void ClearNativePublishBuffers()
+        {
+            NativeCountryPublishEntries.Clear();
+            NativeCityPublishEntries.Clear();
+            NativeActiveLabelKeys.Clear();
         }
 
         private static bool TryBuildCountryPlacement(
@@ -804,6 +870,7 @@ namespace AncientWarfare3.core.policy
             if (pCity == null) return;
             InvalidateCityMeta(pCity);
             HierarchicalVassalMapModeLabelLayer.EvictCity(pCity.id);
+            HierarchicalVassalMapModeLabelLayer.EvictNativeCity(pCity.id);
             if (pCity.kingdom != null)
                 HierarchicalVassalMapModeLabelLayer.MarkKingdomDirty(
                     pCity.kingdom);
@@ -842,8 +909,10 @@ namespace AncientWarfare3.core.policy
             _hierarchyIndex = null;
             KingdomIndex.Clear();
             NativeDrawMetaCache.Clear();
-            NativeCountryLabels.Clear();
-            NativeCityLabels.Clear();
+            ClearNativePublishBuffers();
+            ReleaseNativeDrawEntries();
+            NativeCountryLabelPool.Clear();
+            NativeCityLabelPool.Clear();
             _nativeDrawPassActive = false;
             HierarchicalVassalMapModeLabelLayer.Reset();
         }
@@ -869,11 +938,17 @@ namespace AncientWarfare3.core.policy
                 if (pKingdom?.cities != null)
                     for (int index = 0; index < pKingdom.cities.Count; index++)
                         if (pKingdom.cities[index] != null)
+                        {
                             HierarchicalVassalMapModeLabelLayer.EvictCity(
                                 pKingdom.cities[index].id);
+                            HierarchicalVassalMapModeLabelLayer.
+                                EvictNativeCity(pKingdom.cities[index].id);
+                        }
             }
             catch { }
             HierarchicalVassalMapModeLabelLayer.EvictKingdom(pKingdomId);
+            HierarchicalVassalMapModeLabelLayer.
+                EvictNativeKingdom(pKingdomId);
             RequestNativeRedraw();
         }
 
@@ -1063,16 +1138,20 @@ namespace AncientWarfare3.core.policy
 
         private sealed class NativeCountryLabelEntry
         {
-            internal readonly Kingdom Kingdom;
+            internal Kingdom Kingdom { get; private set; }
             internal readonly HierarchicalVassalZoneLabelAccumulator
                 Accumulator = new HierarchicalVassalZoneLabelAccumulator();
             internal bool HasFallbackZoneCenter;
             internal Vector2 FallbackZoneCenter;
             internal int HorizontalSpan { get; set; } = 1;
 
-            internal NativeCountryLabelEntry(Kingdom pKingdom)
+            internal void Reset(Kingdom pKingdom)
             {
                 Kingdom = pKingdom;
+                Accumulator.Reset();
+                HasFallbackZoneCenter = false;
+                FallbackZoneCenter = Vector2.zero;
+                HorizontalSpan = 1;
             }
 
             internal void Add(TileZone pZone)
@@ -1093,12 +1172,14 @@ namespace AncientWarfare3.core.policy
         private sealed class NativeCityLabelEntry
         {
             private readonly HashSet<int> _zoneIds = new HashSet<int>();
-            internal readonly City City;
+            internal City City { get; private set; }
             internal int LandArea { get; private set; }
 
-            internal NativeCityLabelEntry(City pCity)
+            internal void Reset(City pCity)
             {
                 City = pCity;
+                _zoneIds.Clear();
+                LandArea = 0;
             }
 
             internal void Add(TileZone pZone)
