@@ -1986,6 +1986,7 @@ namespace AncientWarfare3.core.lineage
             ProposalRuntime.Clear();
             ClearConsortRequestTargetCursors();
             WartimeMilitaryPotentialService.ClearRuntime();
+            WarForceEliminationSettlementService.ClearRuntime();
         }
 
         public static void OnKingdomDestroyed(long pKingdomId)

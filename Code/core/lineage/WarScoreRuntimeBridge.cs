@@ -1219,6 +1219,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void QueueSettlementChecks(War pWar)
         {
+            if (WarForceEliminationSettlementService.QueueIfReady(pWar)) return;
             WarScoreDecisiveSettlementService.QueueIfDecisive(pWar);
             WarGoalSettlementRuntimeService.QueueIfReady(pWar);
             WarExhaustionSettlementRuntimeService.QueueIfReady(pWar);

@@ -27,6 +27,26 @@ namespace AncientWarfare3.core.lineage
         public int Score { get; }
     }
 
+    public sealed class WarForceObservationState
+    {
+        private int _lastMonthKey = int.MinValue;
+
+        public int AttackerZeroStreak { get; private set; }
+        public int DefenderZeroStreak { get; private set; }
+
+        public bool Observe(int pMonthKey, int pAttackerPotential,
+            int pDefenderPotential)
+        {
+            if (pMonthKey == _lastMonthKey) return false;
+            _lastMonthKey = pMonthKey;
+            AttackerZeroStreak = WarForceEliminationRules.NextZeroStreak(
+                pAttackerPotential, AttackerZeroStreak);
+            DefenderZeroStreak = WarForceEliminationRules.NextZeroStreak(
+                pDefenderPotential, DefenderZeroStreak);
+            return true;
+        }
+    }
+
     public static class WarForceEliminationRules
     {
         public const int RequiredZeroObservations = 2;

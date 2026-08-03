@@ -48,6 +48,47 @@ internal static class WarForceEliminationRulesTests
         Equal(5, WarForceEliminationRules.AddPotential(-2, 5),
             "negative facts do not reduce military potential");
         MilitaryPotentialReusesVanillaStatistics();
+        DuplicateObservationsInOneMonthDoNotConfirmExhaustion();
+        RuntimeWiresBoundedMonthlyObservationFirst();
+    }
+
+    private static void DuplicateObservationsInOneMonthDoNotConfirmExhaustion()
+    {
+        var state = new WarForceObservationState();
+        True(state.Observe(1201, 0, 0),
+            "first observation in a month is accepted");
+        Equal(1, state.AttackerZeroStreak,
+            "first month records one attacker zero");
+        False(state.Observe(1201, 0, 0),
+            "duplicate observation in one month is ignored");
+        Equal(1, state.AttackerZeroStreak,
+            "duplicate event cannot confirm attacker exhaustion");
+        True(state.Observe(1202, 0, 3),
+            "next month is accepted");
+        Equal(2, state.AttackerZeroStreak,
+            "second distinct month confirms attacker exhaustion");
+        Equal(0, state.DefenderZeroStreak,
+            "recovered defender clears its zero streak");
+    }
+
+    private static void RuntimeWiresBoundedMonthlyObservationFirst()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string authority = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWAuthorityCycleService.cs"));
+        string bridge = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "WarScoreRuntimeBridge.cs"));
+        True(authority.Contains(
+                "WarForceEliminationSettlementService." +
+                "ProcessAuthorityCycle"),
+            "authority cycle drains monthly war observations");
+        True(authority.Contains(
+                "WarForceEliminationSettlementService.ClearRuntime"),
+            "world reset clears war force observations");
+        True(bridge.Contains(
+                "if (WarForceEliminationSettlementService." +
+                "QueueIfReady(pWar)) return;"),
+            "force elimination runs before other settlement checks");
     }
 
     private static void MilitaryPotentialReusesVanillaStatistics()
