@@ -252,6 +252,16 @@ internal static class IntegratedNamingRulesTests
         legacyLibraries.Submit("罗斯女名", new[] { "安娜" });
         legacyLibraries.Submit("犹太男名", new[] { "大卫" });
         legacyLibraries.Submit("犹太女名", new[] { "米利暗" });
+        legacyLibraries.Submit("日本名字下", new[] { "子", "郎" });
+        legacyLibraries.Submit("天干", new[]
+        {
+            "甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"
+        });
+        legacyLibraries.Submit("地支", new[]
+        {
+            "子", "丑", "寅", "卯", "辰", "巳",
+            "午", "未", "申", "酉", "戌", "亥"
+        });
         legacyLibraries.InstallChineseNameLegacyAliases();
         Equal(2, legacyLibraries.GetWords("阿拉伯名字").Count,
             "old Arabic generator id keeps its merged legacy word library");
@@ -259,6 +269,28 @@ internal static class IntegratedNamingRulesTests
             "old Russian generator id keeps its merged legacy word library");
         Equal(2, legacyLibraries.GetWords("犹太人名").Count,
             "old Jewish generator id keeps its merged legacy word library");
+        Equal(2, legacyLibraries.GetWords("日本名字").Count,
+            "downloaded Japanese templates reuse the existing lower given-name library");
+        Equal(60, legacyLibraries.GetWords("天干地支").Count,
+            "a missing Ganzhi library is synthesized as the sexagenary cycle");
+        Equal(true, legacyLibraries.GetWords("天干地支").Contains("甲子"),
+            "the synthesized Ganzhi cycle starts with a valid pair");
+        Equal(true, legacyLibraries.GetWords("天干地支").Contains("癸亥"),
+            "the synthesized Ganzhi cycle contains the final valid pair");
+
+        var preloadedGanzhi = new AWWordLibraryManager();
+        preloadedGanzhi.Submit("天干地支", new[] { "现成词库" });
+        preloadedGanzhi.Submit("天干", new[] { "甲" });
+        preloadedGanzhi.Submit("地支", new[] { "子" });
+        preloadedGanzhi.InstallChineseNameLegacyAliases();
+        Equal("现成词库", preloadedGanzhi.GetWords("天干地支")[0],
+            "the complete recursive Ganzhi library is never overwritten");
+
+        var missingCompatibilityWarnings = new List<string>();
+        new AWWordLibraryManager().InstallChineseNameLegacyAliases(
+            missingCompatibilityWarnings.Add);
+        Equal(2, missingCompatibilityWarnings.Count,
+            "missing Japanese and Ganzhi sources each emit one bounded warning");
 
         var parameters = new Dictionary<string, string>
         {
