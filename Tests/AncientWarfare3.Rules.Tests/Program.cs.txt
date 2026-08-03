@@ -7552,6 +7552,7 @@ SuccessionDisputeSqlTests.Run();
 ConsistencyRegressionRulesTests.Run();
 CityArmyReinforcementRulesTests.Run();
 RebellionForceCollapseRulesTests.Run();
+WarForceEliminationRulesTests.Run();
 HistoricalFigureSpawnRulesTests.Run();
 Regression20260721Tests.Run();
 ArmyMapInformationRulesTests.Run();

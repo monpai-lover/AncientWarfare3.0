@@ -135,6 +135,7 @@
     <Compile Include="CityReservePoolRulesTests.cs.txt" />
     <Compile Include="CityReservePoolPersistenceRulesTests.cs.txt" />
     <Compile Include="RebellionForceCollapseRulesTests.cs.txt" />
+    <Compile Include="WarForceEliminationRulesTests.cs.txt" />
     <Compile Include="ArmyReplenishmentOperationRulesTests.cs.txt" />
     <Compile Include="CourtConscriptionLawRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyRecoveryRulesTests.cs.txt" />
@@ -269,6 +270,7 @@
     <Compile Include="..\..\Code\core\lineage\EmptyCityResettlementRules.cs" Link="Production\EmptyCityResettlementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarParticipantMobilizationBaselineRules.cs" Link="Production\WarParticipantMobilizationBaselineRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarScoreRules.cs" Link="Production\WarScoreRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarForceEliminationRules.cs" Link="Production\WarForceEliminationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarBattleEpisodeRules.cs" Link="Production\WarBattleEpisodeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarVictoryExhaustionRules.cs" Link="Production\WarVictoryExhaustionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarScorePersistence.cs" Link="Production\WarScorePersistence.cs" />

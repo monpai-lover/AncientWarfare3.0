@@ -1,0 +1,59 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarForceEliminationRulesTests
+{
+    public static void Run()
+    {
+        Equal(1, WarForceEliminationRules.NextZeroStreak(0, 0),
+            "first zero observation starts confirmation");
+        Equal(2, WarForceEliminationRules.NextZeroStreak(0, 1),
+            "second zero observation confirms exhaustion");
+        Equal(0, WarForceEliminationRules.NextZeroStreak(1, 2),
+            "positive potential clears the zero streak");
+
+        Equal(WarForceEliminationDecisionKind.None,
+            WarForceEliminationRules.Resolve(0, 0, 1, 1, 40).Kind,
+            "one zero month cannot settle a war");
+        Equal(WarForceEliminationDecisionKind.DefendersSurrender,
+            WarForceEliminationRules.Resolve(3, 0, 0, 2, -20).Kind,
+            "confirmed defender exhaustion overrides score");
+        Equal(WarForceEliminationDecisionKind.AttackersSurrender,
+            WarForceEliminationRules.Resolve(0, 4, 2, 0, 20).Kind,
+            "confirmed attacker exhaustion overrides score");
+
+        WarForceEliminationDecision attackerBenefit =
+            WarForceEliminationRules.Resolve(0, 0, 2, 2, 35);
+        Equal(WarForceEliminationDecisionKind.ScoreSettlement,
+            attackerBenefit.Kind,
+            "mutual exhaustion at positive score uses score settlement");
+        Equal(WarScoreSide.Attackers, attackerBenefit.Beneficiary,
+            "positive score benefits attackers");
+
+        WarForceEliminationDecision defenderBenefit =
+            WarForceEliminationRules.Resolve(0, 0, 2, 2, -35);
+        Equal(WarForceEliminationDecisionKind.ScoreSettlement,
+            defenderBenefit.Kind,
+            "mutual exhaustion at negative score uses score settlement");
+        Equal(WarScoreSide.Defenders, defenderBenefit.Beneficiary,
+            "negative score benefits defenders");
+        Equal(35, defenderBenefit.Score,
+            "benefit score is exposed as a positive budget");
+
+        Equal(WarForceEliminationDecisionKind.WhitePeace,
+            WarForceEliminationRules.Resolve(0, 0, 2, 2, 0).Kind,
+            "mutual exhaustion at zero score creates white peace");
+        Equal(int.MaxValue,
+            WarForceEliminationRules.AddPotential(int.MaxValue, 10),
+            "military potential clamps overflow");
+        Equal(5, WarForceEliminationRules.AddPotential(-2, 5),
+            "negative facts do not reduce military potential");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", got " +
+                                                actual);
+    }
+}

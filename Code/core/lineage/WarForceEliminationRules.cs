@@ -1,0 +1,82 @@
+using System;
+
+namespace AncientWarfare3.core.lineage
+{
+    public enum WarForceEliminationDecisionKind
+    {
+        None = 0,
+        AttackersSurrender = 1,
+        DefendersSurrender = 2,
+        ScoreSettlement = 3,
+        WhitePeace = 4
+    }
+
+    public readonly struct WarForceEliminationDecision
+    {
+        public WarForceEliminationDecision(
+            WarForceEliminationDecisionKind pKind,
+            WarScoreSide pBeneficiary, int pScore)
+        {
+            Kind = pKind;
+            Beneficiary = pBeneficiary;
+            Score = Math.Max(0, Math.Min(100, pScore));
+        }
+
+        public WarForceEliminationDecisionKind Kind { get; }
+        public WarScoreSide Beneficiary { get; }
+        public int Score { get; }
+    }
+
+    public static class WarForceEliminationRules
+    {
+        public const int RequiredZeroObservations = 2;
+
+        public static int NextZeroStreak(int pPotential,
+            int pCurrentStreak)
+        {
+            if (pPotential != 0) return 0;
+            return Math.Min(RequiredZeroObservations,
+                Math.Max(0, pCurrentStreak) + 1);
+        }
+
+        public static int AddPotential(int pFirst, int pSecond)
+        {
+            long total = (long)Math.Max(0, pFirst) +
+                         Math.Max(0, pSecond);
+            return total >= int.MaxValue ? int.MaxValue : (int)total;
+        }
+
+        public static WarForceEliminationDecision Resolve(
+            int pAttackerPotential, int pDefenderPotential,
+            int pAttackerZeroStreak, int pDefenderZeroStreak,
+            int pAttackerSignedScore)
+        {
+            bool attackersExhausted = pAttackerPotential == 0 &&
+                pAttackerZeroStreak >= RequiredZeroObservations;
+            bool defendersExhausted = pDefenderPotential == 0 &&
+                pDefenderZeroStreak >= RequiredZeroObservations;
+            if (!attackersExhausted && !defendersExhausted)
+                return new WarForceEliminationDecision(
+                    WarForceEliminationDecisionKind.None,
+                    WarScoreSide.None, 0);
+            if (attackersExhausted && !defendersExhausted)
+                return new WarForceEliminationDecision(
+                    WarForceEliminationDecisionKind.AttackersSurrender,
+                    WarScoreSide.Defenders, 100);
+            if (defendersExhausted && !attackersExhausted)
+                return new WarForceEliminationDecision(
+                    WarForceEliminationDecisionKind.DefendersSurrender,
+                    WarScoreSide.Attackers, 100);
+            if (pAttackerSignedScore == 0)
+                return new WarForceEliminationDecision(
+                    WarForceEliminationDecisionKind.WhitePeace,
+                    WarScoreSide.None, 0);
+            return new WarForceEliminationDecision(
+                WarForceEliminationDecisionKind.ScoreSettlement,
+                pAttackerSignedScore > 0
+                    ? WarScoreSide.Attackers
+                    : WarScoreSide.Defenders,
+                Math.Abs(pAttackerSignedScore));
+        }
+    }
+}
