@@ -21,6 +21,29 @@ namespace AncientWarfare3.core.lineage
             return !pPayloadPresent || pPayloadValid;
         }
 
+        public static bool ShouldExecute(int currentYear,
+            int earliestWarYear, int forcedWarYear, bool noticeReady)
+        {
+            if (earliestWarYear >= 0 && currentYear < earliestWarYear)
+                return false;
+            return noticeReady || forcedWarYear >= 0 &&
+                   currentYear >= forcedWarYear;
+        }
+
+        public static bool ShouldRevalidateMutableEligibility(
+            bool declarationLocked)
+        {
+            return !declarationLocked;
+        }
+
+        public static long ResolveTargetCityId(bool storedCityValid,
+            long storedCityId, long capitalCityId, long firstCityId)
+        {
+            if (storedCityValid && storedCityId >= 0L)
+                return storedCityId;
+            return capitalCityId >= 0L ? capitalCityId : firstCityId;
+        }
+
         public static bool MatchesDirectedWarPair(long recordAttackerId,
             long recordDefenderId, long warAttackerId,
             long warDefenderId)

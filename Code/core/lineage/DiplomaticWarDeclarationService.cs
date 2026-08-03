@@ -257,24 +257,16 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_TYPE,
-                out string warType, WarDecisionService.WAR_NORMAL);
-            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_GOAL_TYPE,
-                out string goalType, "");
-            if (!WarDecisionService.CanQueueWarPair(pAttacker, defender,
-                    warType, out string pairFailure,
-                    pSystemWar: IsSystemGoal(goalType)))
-            {
-                TerminateRecord(pAttacker, pRecord, "cancelled", pairFailure);
-                return;
-            }
-
             WarNoticeService.EnsureCurrentNotice(pAttacker);
             DiplomaticWarDeclarationLedgerService.SyncNoticeProjection(
                 pAttacker, pRecord.Signature);
-            if (!WarNoticeService.CanCompleteDiplomaticDeclaration(pAttacker))
+            bool noticeReady = WarNoticeService
+                .CanCompleteDiplomaticDeclaration(pAttacker);
+            if (!DiplomaticWarDeclarationLedgerRules.ShouldExecute(
+                    Date.getCurrentYear(), pRecord.EarliestWarYear,
+                    pRecord.ForcedWarYear, noticeReady))
                 return;
-            ExecutionResult result = Execute(pAttacker, defender);
+            ExecutionResult result = Execute(pAttacker, defender, pRecord);
             if (result.Started)
                 TerminateRecord(pAttacker, pRecord, "started", "");
             else
@@ -508,9 +500,9 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static ExecutionResult Execute(Kingdom pAttacker,
-            Kingdom pDefender)
+            Kingdom pDefender, DiplomaticWarDeclarationRecord pRecord)
         {
-            if (!TryBuildExecutionPlan(pAttacker, pDefender,
+            if (!TryBuildExecutionPlan(pAttacker, pDefender, pRecord,
                     out ExecutionPlan plan, out string failure))
                 return Failed(failure);
 
@@ -535,122 +527,55 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool TryBuildExecutionPlan(Kingdom pAttacker,
-            Kingdom pDefender, out ExecutionPlan pPlan,
+            Kingdom pDefender, DiplomaticWarDeclarationRecord pRecord,
+            out ExecutionPlan pPlan,
             out string pFailureReason)
         {
             pPlan = null;
             pFailureReason = "";
             if (pAttacker?.data == null || pDefender?.data == null ||
-                pAttacker.isRekt() || pDefender.isRekt())
+                pRecord == null || pAttacker.isRekt() ||
+                pDefender.isRekt())
             {
                 pFailureReason = "invalid_participants";
                 return false;
             }
 
-            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_GOAL_TYPE,
-                out string goalType, "");
-            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_TYPE,
-                out string warType, WarTypeForGoal(goalType));
-            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_REASON_KEY,
-                out string reasonKey, ReasonKeyForGoal(goalType));
-
+            string goalType = pRecord.GoalType ?? "";
+            string warType = string.IsNullOrEmpty(pRecord.WarType)
+                ? WarTypeForGoal(goalType)
+                : pRecord.WarType;
+            string reasonKey = string.IsNullOrEmpty(pRecord.ReasonKey)
+                ? ReasonKeyForGoal(goalType)
+                : pRecord.ReasonKey;
             bool systemWar = IsSystemGoal(goalType);
-            if (!CanQueueCurrentGoal(pAttacker, pDefender, goalType,
-                    warType, out pFailureReason)) return false;
-
-            City city = null;
-            long sourceCoreId = -1L;
-            long sourceClaimId = -1L;
-            long restorationClaimId = -1L;
-            Actor claimant = null;
+            City stored = FindCity(pRecord.TargetCityId);
+            bool storedValid = stored?.data != null && !stored.isRekt() &&
+                               stored.kingdom == pDefender;
+            City capital = pDefender.capital;
+            City first = WarTerritoryService.FindFirstTargetCity(pDefender);
+            long targetId = DiplomaticWarDeclarationLedgerRules
+                .ResolveTargetCityId(storedValid, pRecord.TargetCityId,
+                    capital?.data?.id ?? -1L, first?.data?.id ?? -1L);
+            City city = FindCity(targetId);
+            long sourceCoreId = pRecord.SourceCoreId;
+            long sourceClaimId = pRecord.SourceClaimId;
+            long restorationClaimId = pRecord.RestorationClaimId;
+            Actor claimant = FindActor(pRecord.ClaimantActorId);
 
             switch (goalType)
             {
                 case WarTerritoryService.GOAL_TAKE_MANDATE:
-                    if (!MandatePhaseService.CanContestMandate ||
-                        MandateService.GetCurrentMandateKingdom() != pDefender)
-                    {
-                        pFailureReason = "mandate_target_changed";
-                        return false;
-                    }
-                    city = pDefender.capital ??
-                           WarTerritoryService.FindFirstTargetCity(pDefender);
-                    break;
                 case WarTerritoryService.GOAL_MANDATE_CONQUEST:
-                    if (MandateService.GetCurrentMandateKingdom() != pAttacker)
-                    {
-                        pFailureReason = "attacker_lost_mandate";
-                        return false;
-                    }
-                    city = ResolveStoredTargetCity(pAttacker, pDefender) ??
-                           pDefender.capital ??
-                           WarTerritoryService.FindFirstTargetCity(pDefender);
-                    break;
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY:
                 case WarTerritoryService.GOAL_PRESS_CLAIM_CITY:
                 case WarTerritoryService.GOAL_RESTORE_KINGDOM:
-                {
-                    WarTerritoryService.WarTargetOption option =
-                        WarTerritoryService.FindBestTargetOption(
-                            pAttacker, pDefender, goalType);
-                    if (option == null)
-                    {
-                        pFailureReason = goalType ==
-                                         WarTerritoryService.GOAL_TAKE_CORE_CITY
-                            ? "missing_core_target"
-                            : goalType == WarTerritoryService
-                                .GOAL_PRESS_CLAIM_CITY
-                                ? "missing_claim_target"
-                                : "missing_restoration_target";
-                        return false;
-                    }
-                    city = option.target_city;
-                    sourceCoreId = option.source_core_id;
-                    sourceClaimId = option.source_claim_id;
-                    restorationClaimId = option.restoration_claim_id;
-                    claimant = FindActor(option.claimant_actor_id);
-                    break;
-                }
                 case WarTerritoryService.GOAL_FORCE_VASSAL:
                 case WarTerritoryService.GOAL_FORCE_TRIBUTARY:
-                    if (!pDefender.hasCities())
-                    {
-                        pFailureReason = "defender_has_no_city";
-                        return false;
-                    }
-                    city = pDefender.capital ??
-                           WarTerritoryService.FindFirstTargetCity(pDefender);
-                    break;
                 case WarTerritoryService.GOAL_INDEPENDENCE:
-                    if (VassalService.GetDiplomaticSuzerain(pAttacker) !=
-                        pDefender)
-                    {
-                        pFailureReason = "not_suzerain";
-                        return false;
-                    }
-                    city = pDefender.capital ??
-                           WarTerritoryService.FindFirstTargetCity(pDefender);
-                    break;
                 case WarTerritoryService.GOAL_REUNIFY_SUCCESSION:
-                    if (!SuccessionDisputeService.CanDeclareReunification(
-                            pAttacker, pDefender))
-                    {
-                        pFailureReason = "missing_reunification_claim";
-                        return false;
-                    }
-                    city = pDefender.capital ??
-                           WarTerritoryService.FindFirstTargetCity(pDefender);
-                    break;
                 case ZhuluWarRules.GoalTypeId:
-                    if (!ZhuluWarService.CanDeclare(pAttacker, pDefender,
-                            out pFailureReason))
-                        return false;
-                    city = pDefender.capital ??
-                           WarTerritoryService.FindFirstTargetCity(pDefender);
-                    break;
                 case WarTerritoryService.GOAL_NO_CB:
-                    city = pDefender.capital ??
-                           WarTerritoryService.FindFirstTargetCity(pDefender);
                     break;
                 default:
                     pFailureReason = "unknown_goal";
@@ -692,53 +617,6 @@ namespace AncientWarfare3.core.lineage
                 Goal = goal
             };
             return true;
-        }
-
-        private static bool CanQueueCurrentGoal(Kingdom pAttacker,
-            Kingdom pDefender, string pGoalType, string pWarType,
-            out string pFailureReason)
-        {
-            bool basicAllowed = WarDecisionService.CanQueueWarPair(
-                pAttacker, pDefender, pWarType, out string pairFailureReason,
-                IsSystemGoal(pGoalType));
-            bool hasNormalCb = WarDecisionService.HasValidCasusBelli(
-                pAttacker, pDefender, pWarType);
-            bool hasCoreTarget = WarTerritoryService
-                .FindBestCoreTargetCityForDecision(pAttacker, pDefender)
-                ?.data != null;
-            bool hasClaimTarget = WarTerritoryService
-                .FindBestClaimTargetCityForDecision(pAttacker, pDefender)
-                ?.data != null;
-            bool canForceVassal = WarDecisionService.CanForceVassal(
-                pAttacker, pDefender);
-            bool canForceTributary = WarDecisionService.CanForceTributary(
-                pAttacker, pDefender);
-            bool isIndependenceTarget = VassalService.GetDiplomaticSuzerain(pAttacker) ==
-                                        pDefender;
-            bool hasRestorationTarget = WarTerritoryService
-                .FindBestRestorationTargetCityForDecision(pAttacker,
-                    pDefender)?.data != null;
-            bool canReunifySuccession = SuccessionDisputeService
-                .CanDeclareReunification(pAttacker, pDefender);
-            bool canForceNoCb = WarDecisionService.CanForceNoCb(pAttacker);
-            return WarDecisionQueueRules.CanQueueGoal(pGoalType,
-                basicAllowed, pairFailureReason, hasNormalCb, canForceNoCb,
-                hasCoreTarget, hasClaimTarget, canForceVassal,
-                canForceTributary, isIndependenceTarget,
-                hasRestorationTarget, canReunifySuccession,
-                out pFailureReason);
-        }
-
-        private static City ResolveStoredTargetCity(Kingdom pAttacker,
-            Kingdom pDefender)
-        {
-            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_TARGET_CITY_ID,
-                out long targetCityId, -1L);
-            City city = FindCity(targetCityId);
-            return city?.data != null && !city.isRekt() &&
-                   city.kingdom == pDefender
-                ? city
-                : null;
         }
 
         private static void UpdateResolvedTarget(Kingdom pAttacker,

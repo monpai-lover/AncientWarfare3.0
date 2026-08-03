@@ -14,6 +14,15 @@ namespace AncientWarfare3.patch
             if (__instance?.data == null || __instance.isRekt() ||
                 __instance.isNeutral()) return;
 
+            try
+            {
+                DiplomaticWarDeclarationService.OnKingdomYear(__instance);
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning("War declaration deadline failed: " +
+                                    error.Message);
+            }
             long benchmark = RecentFeatureBenchmark.Begin();
             try { KingdomAnnualWorkService.Schedule(__instance); }
             finally

@@ -7644,6 +7644,7 @@ XiaPopulationRecoveryRulesTests.Run();
 WarAiGoalSelectionRulesTests.Run();
 SamePeopleWarIntentRulesTests.Run();
 DiplomaticWarAvailabilityRulesTests.Run();
+DiplomaticWarDeclarationLockRulesTests.Run();
 ZhuluWarRulesTests.Run();
 ZhuluAgeRulesTests.Run();
 XiaizationStatusDisplayRulesTests.Run();

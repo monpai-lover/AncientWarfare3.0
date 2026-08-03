@@ -292,9 +292,10 @@ internal static class ZhuluWarRulesTests
              declaration.Contains("ZhuluWarRules.GoalTypeId") &&
              declaration.Contains("ZhuluWarRules.WarTypeId"),
             "Zhulu exposes a normal diplomatic notice entry point");
-        True(declaration.Contains("case ZhuluWarRules.GoalTypeId:") &&
-             declaration.Contains("ZhuluWarService.CanDeclare("),
-            "Zhulu is revalidated when preparation completes");
+        True(declaration.Contains("case ZhuluWarRules.GoalTypeId:"),
+            "the locked declaration plan recognizes the Zhulu goal");
+        False(declaration.Contains("ZhuluWarService.CanDeclare("),
+            "pending Zhulu declarations do not revalidate mutable eligibility");
         True(declaration.Contains(
                  "ZhuluWarRules.GoalTypeId => ZhuluWarRules.WarTypeId") &&
              declaration.Contains(

@@ -221,7 +221,6 @@ namespace AncientWarfare3.core.policy
                 {
                     TemporaryLevyService.OnKingdomYear(pKingdom);
                     WartimeGarrisonService.OnKingdomYear(pKingdom);
-                    DiplomaticWarDeclarationService.OnKingdomYear(pKingdom);
                 });
         }
 

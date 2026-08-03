@@ -1,0 +1,63 @@
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomaticWarDeclarationLockRulesTests
+{
+    public static void Run()
+    {
+        False(DiplomaticWarDeclarationLedgerRules.ShouldExecute(
+                136, 137, 139, noticeReady: false),
+            "a declaration cannot start before its earliest year");
+        True(DiplomaticWarDeclarationLedgerRules.ShouldExecute(
+                137, 137, 139, noticeReady: true),
+            "a ready declaration starts from its earliest year");
+        True(DiplomaticWarDeclarationLedgerRules.ShouldExecute(
+                139, 137, 139, noticeReady: false),
+            "the forced year overrides an unready notice projection");
+        False(DiplomaticWarDeclarationLedgerRules
+                .ShouldRevalidateMutableEligibility(
+                    declarationLocked: true),
+            "an issued declaration does not revalidate mutable diplomacy");
+        True(DiplomaticWarDeclarationLedgerRules
+                .ShouldRevalidateMutableEligibility(
+                    declarationLocked: false),
+            "an immediate war still validates current diplomacy");
+        Equal(12L, DiplomaticWarDeclarationLedgerRules.ResolveTargetCityId(
+                true, 12L, 21L, 22L),
+            "a valid locked target remains stable");
+        Equal(21L, DiplomaticWarDeclarationLedgerRules.ResolveTargetCityId(
+                false, 12L, 21L, 22L),
+            "an invalid target falls back to the capital");
+        Equal(22L, DiplomaticWarDeclarationLedgerRules.ResolveTargetCityId(
+                false, 12L, -1L, 22L),
+            "a missing capital falls back to the first city");
+
+        string root = Directory.GetCurrentDirectory();
+        string patch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_KingdomPolicyPatch.cs"));
+        string annual = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "policy", "KingdomAnnualWorkService.cs"));
+        True(patch.Contains(
+                "DiplomaticWarDeclarationService.OnKingdomYear(__instance)"),
+            "the authoritative yearly callback owns declaration deadlines");
+        False(annual.Contains(
+                "DiplomaticWarDeclarationService.OnKingdomYear(pKingdom)"),
+            "the deferred annual pipeline no longer owns deadlines");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

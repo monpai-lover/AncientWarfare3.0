@@ -318,12 +318,18 @@ namespace AncientWarfare3.core.lineage
                 return null;
             }
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
-            if (type == MandateService.WAR_TIANMING && !MandatePhaseService.CanContestMandate)
+            bool revalidateMutableEligibility =
+                DiplomaticWarDeclarationLedgerRules
+                    .ShouldRevalidateMutableEligibility(pCasusBelliLocked);
+            if (revalidateMutableEligibility &&
+                type == MandateService.WAR_TIANMING &&
+                !MandatePhaseService.CanContestMandate)
             {
                 pFailureReason = "mandate_contest_closed";
                 return null;
             }
-            if (DiplomacyProposalRules.BlocksWarWithActivePact(
+            if (revalidateMutableEligibility &&
+                DiplomacyProposalRules.BlocksWarWithActivePact(
                     DiplomacyProposalService.HasActiveWarBlocker(
                         pAttacker, pDefender), pSystemWar,
                     independenceWar: type == "independence_war"))
@@ -338,9 +344,11 @@ namespace AncientWarfare3.core.lineage
                 return null;
             }
 
-            if (!pSystemWar && !CanPassVassalWarRules(pAttacker, pDefender,
-                    type, out pFailureReason)) return null;
-            if (!CanPassAllianceWarRules(pAttacker, pDefender, type,
+            if (revalidateMutableEligibility && !pSystemWar &&
+                !CanPassVassalWarRules(pAttacker, pDefender, type,
+                    out pFailureReason)) return null;
+            if (revalidateMutableEligibility &&
+                !CanPassAllianceWarRules(pAttacker, pDefender, type,
                     pSystemWar, out pFailureReason)) return null;
             try
             {
