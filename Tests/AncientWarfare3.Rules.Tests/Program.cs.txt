@@ -50,6 +50,34 @@ if (args.Length == 1 && args[0] == "--multiplayer-catalog")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--visible-surname-rename")
+{
+    VisibleSurnameRenameRulesTests.Run();
+    Console.WriteLine("Visible surname rename rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--visible-clan-rename")
+{
+    VisibleClanRenameRulesTests.Run();
+    Console.WriteLine("Visible clan rename rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--visible-surname-sql")
+{
+    VisibleSurnameRenameSqlRulesTests.Run();
+    Console.WriteLine("Visible surname SQL rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--feudatory-identity")
+{
+    FeudatoryIdentityRulesTests.Run();
+    Console.WriteLine("Feudatory identity rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--inheritance-slice")
 {
     InheritanceLawRulesTests.Run();
@@ -7567,6 +7595,10 @@ HierarchicalVassalMapActivationRulesTests.Run();
 HierarchicalVassalZoneLabelAccumulatorTests.Run();
 AW3MultiplayerWorldLoadRulesTests.Run();
 LineageRuntimePathRulesTests.Run();
+VisibleSurnameRenameRulesTests.Run();
+VisibleClanRenameRulesTests.Run();
+VisibleSurnameRenameSqlRulesTests.Run();
+FeudatoryIdentityRulesTests.Run();
 AW3RuntimeRestorePipelineTests.Run();
 AW3MultiplayerStrategicStateRulesTests.Run();
 AW3MultiplayerReplicationRulesTests.Run();

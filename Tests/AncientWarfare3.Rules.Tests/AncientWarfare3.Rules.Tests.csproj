@@ -168,6 +168,10 @@
     <Compile Include="AW3MultiplayerSuccessionRulesTests.cs.txt" />
     <Compile Include="AW3MultiplayerCatalogRulesTests.cs.txt" />
     <Compile Include="LineageRuntimePathRulesTests.cs.txt" />
+    <Compile Include="VisibleSurnameRenameRulesTests.cs.txt" />
+    <Compile Include="VisibleClanRenameRulesTests.cs.txt" />
+    <Compile Include="VisibleSurnameRenameSqlRulesTests.cs.txt" />
+    <Compile Include="FeudatoryIdentityRulesTests.cs.txt" />
     <Compile Include="ArmyRtsPlanPngTests.cs.txt" />
     <Compile Include="TestLocalizationStubs.cs.txt" />
     <Compile Include="TestModClassStub.cs.txt" />
@@ -583,6 +587,10 @@
     <Compile Include="..\..\Code\api\multiplayer\IAW3MultiplayerSuccessionProvider.cs" Link="Production\IAW3MultiplayerSuccessionProvider.cs" />
     <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerSuccessionFacade.cs" Link="Production\AW3MultiplayerSuccessionFacade.cs" />
     <Compile Include="..\..\Code\core\db\LineageRuntimePathRules.cs" Link="Production\LineageRuntimePathRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VisibleSurnameRenameRules.cs" Link="Production\VisibleSurnameRenameRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VisibleClanRenameRules.cs" Link="Production\VisibleClanRenameRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VisibleSurnameRenameSqlRules.cs" Link="Production\VisibleSurnameRenameSqlRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatoryIdentityRules.cs" Link="Production\FeudatoryIdentityRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDeathInvocationRules.cs" Link="Production\ActorDeathInvocationRules.cs" />
     <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanModels.cs" Link="Production\ArmyRtsPlanModels.cs" />
     <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanRules.cs" Link="Production\ArmyRtsPlanRules.cs" />
