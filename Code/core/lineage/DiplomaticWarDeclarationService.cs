@@ -621,6 +621,41 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        private static bool CanQueueCurrentGoal(Kingdom pAttacker,
+            Kingdom pDefender, string pGoalType, string pWarType,
+            out string pFailureReason)
+        {
+            bool basicAllowed = WarDecisionService.CanQueueWarPair(
+                pAttacker, pDefender, pWarType, out string pairFailureReason,
+                IsSystemGoal(pGoalType));
+            bool hasNormalCb = WarDecisionService.HasValidCasusBelli(
+                pAttacker, pDefender, pWarType);
+            bool hasCoreTarget = WarTerritoryService
+                .FindBestCoreTargetCityForDecision(pAttacker, pDefender)
+                ?.data != null;
+            bool hasClaimTarget = WarTerritoryService
+                .FindBestClaimTargetCityForDecision(pAttacker, pDefender)
+                ?.data != null;
+            bool canForceVassal = WarDecisionService.CanForceVassal(
+                pAttacker, pDefender);
+            bool canForceTributary = WarDecisionService.CanForceTributary(
+                pAttacker, pDefender);
+            bool isIndependenceTarget = VassalService.GetDiplomaticSuzerain(pAttacker) ==
+                                        pDefender;
+            bool hasRestorationTarget = WarTerritoryService
+                .FindBestRestorationTargetCityForDecision(pAttacker,
+                    pDefender)?.data != null;
+            bool canReunifySuccession = SuccessionDisputeService
+                .CanDeclareReunification(pAttacker, pDefender);
+            bool canForceNoCb = WarDecisionService.CanForceNoCb(pAttacker);
+            return WarDecisionQueueRules.CanQueueGoal(pGoalType,
+                basicAllowed, pairFailureReason, hasNormalCb, canForceNoCb,
+                hasCoreTarget, hasClaimTarget, canForceVassal,
+                canForceTributary, isIndependenceTarget,
+                hasRestorationTarget, canReunifySuccession,
+                out pFailureReason);
+        }
+
         private static void UpdateResolvedTarget(Kingdom pAttacker,
             City pCity, long pSourceCoreId, long pSourceClaimId,
             long pRestorationClaimId, Actor pClaimant)
