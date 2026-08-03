@@ -50,6 +50,29 @@ internal static class WarForceEliminationRulesTests
         MilitaryPotentialReusesVanillaStatistics();
         DuplicateObservationsInOneMonthDoNotConfirmExhaustion();
         RuntimeWiresBoundedMonthlyObservationFirst();
+        OrdinarySettlementUsesTheRequiredOfferMode();
+    }
+
+    private static void OrdinarySettlementUsesTheRequiredOfferMode()
+    {
+        Equal(WarForceSettlementOfferMode.Surrender,
+            WarForceEliminationRules.OfferMode(
+                WarForceEliminationDecisionKind.DefendersSurrender),
+            "one-sided exhaustion uses full surrender");
+        Equal(WarForceSettlementOfferMode.MaximumBenefit,
+            WarForceEliminationRules.OfferMode(
+                WarForceEliminationDecisionKind.ScoreSettlement),
+            "mutual exhaustion maximizes current-score benefit");
+        Equal(WarForceSettlementOfferMode.WhitePeace,
+            WarForceEliminationRules.OfferMode(
+                WarForceEliminationDecisionKind.WhitePeace),
+            "zero-score mutual exhaustion uses white peace");
+
+        string service = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "WarPeaceSettlementService.cs"));
+        True(service.Contains("ForceMilitaryEliminationSettlement"),
+            "ordinary settlement exposes an elimination entry point");
     }
 
     private static void DuplicateObservationsInOneMonthDoNotConfirmExhaustion()

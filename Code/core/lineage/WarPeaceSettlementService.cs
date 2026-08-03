@@ -201,6 +201,78 @@ namespace AncientWarfare3.core.lineage
             return AcceptAndExecuteOrResume(prepared.ProposalId);
         }
 
+        public WarPeaceExecutionResult ForceMilitaryEliminationSettlement(
+            WarPeaceSettlementDraft pDraft,
+            WarForceEliminationDecision pExpectedDecision)
+        {
+            if (AW3MultiplayerReplicaScope.IsReplicaSession)
+                return new WarPeaceExecutionResult(false, -1,
+                    "replica_read_only");
+            if (pDraft == null)
+                return new WarPeaceExecutionResult(false, -1,
+                    "invalid_settlement_participants");
+            War war = WarPeaceSettlementWorld.FindWar(pDraft.WarId);
+            if (!WarForceEliminationSettlementService.
+                    TryGetConfirmedDecision(war,
+                        out WarForceEliminationDecision current) ||
+                !SameDecision(pExpectedDecision, current))
+                return new WarPeaceExecutionResult(false, -1,
+                    "military_elimination_state_changed");
+
+            int effectiveScore = current.Kind ==
+                WarForceEliminationDecisionKind.AttackersSurrender ||
+                current.Kind ==
+                WarForceEliminationDecisionKind.DefendersSurrender
+                    ? -WarPeaceTermsRules.MaximumWarScore
+                    : current.Score;
+            pDraft.SignedWarScore = effectiveScore;
+            WarPeacePrepareResult prepared = PrepareWithForcedScore(
+                pDraft, effectiveScore);
+            if (!prepared.Success || prepared.Proposal == null)
+                return new WarPeaceExecutionResult(false,
+                    prepared.ProposalId, prepared.Reason);
+            return AcceptAndExecuteOrResume(prepared.ProposalId);
+        }
+
+        private WarPeacePrepareResult PrepareWithForcedScore(
+            WarPeaceSettlementDraft pDraft, int pSignedScore)
+        {
+            if (!_world.TryPrepareScope(pDraft, out string reason))
+                return new WarPeacePrepareResult(false, null,
+                    string.IsNullOrEmpty(reason)
+                        ? "invalid_settlement_scope"
+                        : reason);
+            pDraft.SignedWarScore = WarPeaceTermsRules.ClampSignedWarScore(
+                pSignedScore);
+            if (!WarPeaceSettlementValidationRules.TryMaterialize(pDraft,
+                    _world, out var terms, out reason))
+                return new WarPeacePrepareResult(false, null, reason);
+            if (!_world.TryPrepareScope(pDraft, out reason))
+                return new WarPeacePrepareResult(false, null,
+                    string.IsNullOrEmpty(reason)
+                        ? "participant_roster_changed"
+                        : reason);
+            if (!WarPeaceSettlementValidationRules.TryMaterialize(pDraft,
+                    _world, out terms, out reason))
+                return new WarPeacePrepareResult(false, null, reason);
+            if (!_store.TryCreate(pDraft, terms,
+                    out WarPeaceSettlementProposal proposal, out reason))
+                return new WarPeacePrepareResult(false, null,
+                    string.IsNullOrEmpty(reason)
+                        ? "settlement_persistence_failed"
+                        : reason);
+            return new WarPeacePrepareResult(true, proposal, "");
+        }
+
+        private static bool SameDecision(
+            WarForceEliminationDecision pExpected,
+            WarForceEliminationDecision pCurrent)
+        {
+            return pExpected.Kind == pCurrent.Kind &&
+                   pExpected.Beneficiary == pCurrent.Beneficiary &&
+                   pExpected.Score == pCurrent.Score;
+        }
+
         private static bool HasExactGoalTermBindings(
             WarPeaceSettlementDraft pDraft,
             IReadOnlyList<WarGoalSettlementFacts> pGoalFacts,

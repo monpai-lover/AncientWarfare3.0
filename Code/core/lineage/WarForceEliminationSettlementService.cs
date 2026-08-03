@@ -9,16 +9,22 @@ namespace AncientWarfare3.core.lineage
     internal static class WarForceEliminationSettlementService
     {
         private const int WarsPerAuthorityCycle = 2;
+        private const string QueuePrefix =
+            "war_force_elimination_settlement:";
+        private const int MaximumAttempts = 2;
         private static readonly MonthlyAuthorityWorkQueue<long> MonthlyWork =
             new MonthlyAuthorityWorkQueue<long>();
         private static readonly Dictionary<long, WarForceObservationState>
             Observations =
                 new Dictionary<long, WarForceObservationState>();
+        private static readonly HashSet<long> QueuedWarIds =
+            new HashSet<long>();
 
         public static void ClearRuntime()
         {
             MonthlyWork.Clear();
             Observations.Clear();
+            QueuedWarIds.Clear();
         }
 
         public static void ProcessAuthorityCycle()
@@ -42,8 +48,8 @@ namespace AncientWarfare3.core.lineage
             if (MonthlyWork.ScheduleMonth(monthKey, liveWarIds))
                 RemoveEndedObservations(liveSet);
             MonthlyWork.Drain(WarsPerAuthorityCycle,
-                (queuedMonth, warId) => ObserveWar(
-                    FindWar(warId), queuedMonth, out _));
+                (queuedMonth, warId) => ObserveAndQueue(
+                    FindWar(warId), queuedMonth));
         }
 
         public static bool QueueIfReady(War pWar)
@@ -52,8 +58,21 @@ namespace AncientWarfare3.core.lineage
                 !IsLiveWar(pWar)) return false;
             int monthKey = KingdomDecisionMonthlyRules.ToMonthKey(
                 Date.getCurrentYear(), Date.getCurrentMonth());
-            ObserveWar(pWar, monthKey, out _);
-            return false;
+            return ObserveAndQueue(pWar, monthKey);
+        }
+
+        private static bool ObserveAndQueue(War pWar, int pMonthKey)
+        {
+            if (!ObserveWar(pWar, pMonthKey,
+                    out WarForceEliminationDecision decision) ||
+                ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
+                RebellionDirectTerritoryTransferService.
+                    BlocksOrdinarySettlement(pWar) ||
+                WarPeaceSettlementService.Instance.
+                    HasActionableSettlement(pWar.data.id) ||
+                !QueuedWarIds.Add(pWar.data.id)) return false;
+            Enqueue(pWar.data.id, decision, 0);
+            return true;
         }
 
         internal static bool TryGetConfirmedDecision(War pWar,
@@ -91,7 +110,7 @@ namespace AncientWarfare3.core.lineage
             return pDecision.Kind != WarForceEliminationDecisionKind.None;
         }
 
-        private static bool TryReadPotentials(War pWar,
+        internal static bool TryReadPotentials(War pWar,
             out int pAttackers, out int pDefenders)
         {
             pAttackers = 0;
@@ -142,7 +161,101 @@ namespace AncientWarfare3.core.lineage
             foreach (long warId in Observations.Keys)
                 if (!pLive.Contains(warId)) stale.Add(warId);
             for (int i = 0; i < stale.Count; i++)
+            {
                 Observations.Remove(stale[i]);
+                QueuedWarIds.Remove(stale[i]);
+            }
+        }
+
+        private static void Enqueue(long pWarId,
+            WarForceEliminationDecision pDecision, int pAttempt)
+        {
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                QueuePrefix + pWarId, DeferredWorkClass.Runtime,
+                () => Process(pWarId, pDecision, pAttempt));
+        }
+
+        private static void Process(long pWarId,
+            WarForceEliminationDecision pExpected, int pAttempt)
+        {
+            if (AW3MultiplayerReplicaScope.IsReplicaSession)
+            {
+                QueuedWarIds.Remove(pWarId);
+                return;
+            }
+            War war = FindWar(pWarId);
+            if (!TryGetConfirmedDecision(war,
+                    out WarForceEliminationDecision decision) ||
+                !SameDecision(pExpected, decision) ||
+                ZhuluPeaceGuard.BlocksOrdinarySettlement(war) ||
+                RebellionDirectTerritoryTransferService.
+                    BlocksOrdinarySettlement(war))
+            {
+                QueuedWarIds.Remove(pWarId);
+                return;
+            }
+            Kingdom attacker = MainAttacker(war);
+            Kingdom defender = MainDefender(war);
+            bool surrender = decision.Kind ==
+                                 WarForceEliminationDecisionKind.
+                                     AttackersSurrender ||
+                             decision.Kind ==
+                                 WarForceEliminationDecisionKind.
+                                     DefendersSurrender;
+            Kingdom winner = decision.Beneficiary == WarScoreSide.Attackers
+                ? attacker
+                : defender;
+            Kingdom loser = winner == attacker ? defender : attacker;
+            Kingdom requester = surrender ? loser : winner;
+            Kingdom responder = surrender ? winner : loser;
+            WarPeaceDefaultOfferMode mode = ToRuntimeOfferMode(decision.Kind);
+            int signedScore = surrender ? -100 : decision.Score;
+            WarPeaceSettlementDraft draft = WarPeaceSettlementService.
+                Instance.BuildDefaultDraft(war, requester, responder,
+                    signedScore, mode);
+            draft.PlayerInitiated = false;
+            WarPeaceExecutionResult result = WarPeaceSettlementService.
+                Instance.ForceMilitaryEliminationSettlement(draft,
+                    decision);
+            if (result.Success || !IsLiveWar(war))
+            {
+                QueuedWarIds.Remove(pWarId);
+                Observations.Remove(pWarId);
+                return;
+            }
+            if (pAttempt < MaximumAttempts)
+            {
+                Enqueue(pWarId, decision, pAttempt + 1);
+                return;
+            }
+            QueuedWarIds.Remove(pWarId);
+            ModClass.LogWarning("War force elimination settlement failed " +
+                                "war=" + pWarId + " reason=" +
+                                result.Reason);
+        }
+
+        private static WarPeaceDefaultOfferMode ToRuntimeOfferMode(
+            WarForceEliminationDecisionKind pKind)
+        {
+            switch (WarForceEliminationRules.OfferMode(pKind))
+            {
+                case WarForceSettlementOfferMode.Surrender:
+                    return WarPeaceDefaultOfferMode.Surrender;
+                case WarForceSettlementOfferMode.MaximumBenefit:
+                    return WarPeaceDefaultOfferMode.
+                        ExhaustionMaximumBenefit;
+                default:
+                    return WarPeaceDefaultOfferMode.WhitePeace;
+            }
+        }
+
+        private static bool SameDecision(
+            WarForceEliminationDecision pExpected,
+            WarForceEliminationDecision pCurrent)
+        {
+            return pExpected.Kind == pCurrent.Kind &&
+                   pExpected.Beneficiary == pCurrent.Beneficiary &&
+                   pExpected.Score == pCurrent.Score;
         }
 
         private static bool IsLiveWar(War pWar)

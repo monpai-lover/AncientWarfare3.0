@@ -11,6 +11,13 @@ namespace AncientWarfare3.core.lineage
         WhitePeace = 4
     }
 
+    public enum WarForceSettlementOfferMode
+    {
+        WhitePeace = 0,
+        Surrender = 1,
+        MaximumBenefit = 2
+    }
+
     public readonly struct WarForceEliminationDecision
     {
         public WarForceEliminationDecision(
@@ -64,6 +71,21 @@ namespace AncientWarfare3.core.lineage
             long total = (long)Math.Max(0, pFirst) +
                          Math.Max(0, pSecond);
             return total >= int.MaxValue ? int.MaxValue : (int)total;
+        }
+
+        public static WarForceSettlementOfferMode OfferMode(
+            WarForceEliminationDecisionKind pKind)
+        {
+            switch (pKind)
+            {
+                case WarForceEliminationDecisionKind.AttackersSurrender:
+                case WarForceEliminationDecisionKind.DefendersSurrender:
+                    return WarForceSettlementOfferMode.Surrender;
+                case WarForceEliminationDecisionKind.ScoreSettlement:
+                    return WarForceSettlementOfferMode.MaximumBenefit;
+                default:
+                    return WarForceSettlementOfferMode.WhitePeace;
+            }
         }
 
         public static WarForceEliminationDecision Resolve(
