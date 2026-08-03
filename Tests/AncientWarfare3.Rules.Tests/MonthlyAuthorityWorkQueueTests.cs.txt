@@ -1,0 +1,115 @@
+using AncientWarfare3.core.performance;
+using AncientWarfare3.core.policy;
+
+internal static class MonthlyAuthorityWorkQueueTests
+{
+    public static void Run()
+    {
+        SchedulesEachMonthOnceAndDrainsInFifoOrder();
+        ResetScheduleGateAllowsExplicitSameMonthReschedule();
+        ClearDropsPendingWorkAndResetsTheMonthGate();
+        FailedItemDoesNotDropLaterPendingWork();
+        ExposesDedicatedMonthlyBenchmarkIds();
+    }
+
+    private static void SchedulesEachMonthOnceAndDrainsInFifoOrder()
+    {
+        var queue = new MonthlyAuthorityWorkQueue<int>();
+        True(queue.ScheduleMonth(1201, new[] { 1, 2, 3 }),
+            "first observation schedules the month");
+        Equal(false, queue.ScheduleMonth(1201, new[] { 4 }),
+            "same month is not duplicated");
+
+        var processed = new List<string>();
+        Equal(2, queue.Drain(2, (month, value) =>
+                processed.Add(month + ":" + value)),
+            "drain respects the item budget");
+        Equal(1, queue.PendingCount,
+            "unprocessed work remains pending");
+        True(queue.ScheduleMonth(1202, new[] { 4 }),
+            "new month appends while old work remains");
+        queue.Drain(8, (month, value) =>
+            processed.Add(month + ":" + value));
+
+        Equal("1201:1,1201:2,1201:3,1202:4",
+            string.Join(",", processed),
+            "FIFO order survives a month boundary");
+        Equal(0, queue.PendingCount,
+            "all scheduled work eventually drains");
+    }
+
+    private static void ResetScheduleGateAllowsExplicitSameMonthReschedule()
+    {
+        var queue = new MonthlyAuthorityWorkQueue<int>();
+        queue.ScheduleMonth(1301, new[] { 1 });
+        queue.ResetScheduleGate();
+
+        True(queue.ScheduleMonth(1301, new[] { 2 }),
+            "explicit invalidation permits a same-month reschedule");
+        var processed = new List<int>();
+        queue.Drain(8, (month, value) => processed.Add(value));
+        Equal("1,2", string.Join(",", processed),
+            "same-month reschedule appends without flushing older work");
+    }
+
+    private static void ClearDropsPendingWorkAndResetsTheMonthGate()
+    {
+        var queue = new MonthlyAuthorityWorkQueue<int>();
+        queue.ScheduleMonth(1401, new[] { 1, 2 });
+        queue.Clear();
+
+        Equal(0, queue.PendingCount, "clear removes all pending work");
+        True(queue.ScheduleMonth(1401, new[] { 3 }),
+            "clear permits the current month to be scheduled again");
+    }
+
+    private static void FailedItemDoesNotDropLaterPendingWork()
+    {
+        var queue = new MonthlyAuthorityWorkQueue<int>();
+        queue.ScheduleMonth(1501, new[] { 1, 2 });
+        try
+        {
+            queue.Drain(2, (month, value) =>
+            {
+                if (value == 1) throw new InvalidOperationException("expected");
+            });
+        }
+        catch (InvalidOperationException error) when (error.Message == "expected")
+        {
+        }
+
+        Equal(1, queue.PendingCount,
+            "a failed item does not remove later queued work");
+        int remaining = -1;
+        queue.Drain(1, (month, value) => remaining = value);
+        Equal(2, remaining, "later work remains drainable after a failure");
+    }
+
+    private static void ExposesDedicatedMonthlyBenchmarkIds()
+    {
+        Equal(65, RecentFeatureBenchmarkRules.EntryIds.Length,
+            "monthly work appends three benchmark entries");
+        Equal("aw3_month_ruler_household",
+            RecentFeatureBenchmarkRules.IdForIndex(62),
+            "ruler household month work has a stable benchmark id");
+        Equal("aw3_month_kingdom_policy",
+            RecentFeatureBenchmarkRules.IdForIndex(63),
+            "kingdom policy month work has a stable benchmark id");
+        Equal("aw3_month_preparation_levy",
+            RecentFeatureBenchmarkRules.IdForIndex(64),
+            "preparation levy month work has a stable benchmark id");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name +
+            ": expected true");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

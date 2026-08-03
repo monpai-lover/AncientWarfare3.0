@@ -22,6 +22,12 @@ namespace AncientWarfare3.core.lineage
             return captainExists && captainAlive;
         }
 
+        public static bool ShouldRetainCaptain(bool structurallyStable,
+            bool leaseEligible)
+        {
+            return structurallyStable && leaseEligible;
+        }
+
         public static bool ShouldRejectCaptainMutation(ArmyRtsMode pMode,
             bool replicaApplying, bool armyLive,
             bool currentCaptainExists, bool currentCaptainAlive,

@@ -31,15 +31,18 @@ namespace AncientWarfare3.patch
         private static void UpdateAi_Prefix(Actor __instance,
             out ActorAiBenchmarkState __state)
         {
+            __state = default;
+            if (!RuntimePerformanceDiagnostic.ShouldCollectActorDetail() ||
+                !RuntimePerformanceDiagnostic.TryConsumeActorDetailSample())
+                return;
+
             long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
             RuntimePerformanceDiagnostic.ActorRaceScopeToken raceToken =
                 RuntimePerformanceDiagnostic.BeginActorRaceScope(__instance);
             string taskId = __instance?.ai?.task?.id;
             __state = new ActorAiBenchmarkState(-1, 0L, diagnostic,
                 taskId, raceToken);
-            if ((!Bench.bench_enabled &&
-                 !RuntimePerformanceDiagnostic.IsSampling) ||
-                __instance?.ai?.task == null) return;
+            if (__instance?.ai?.task == null) return;
             RecentActorAiCategory category = RecentFeatureBenchmarkRules
                 .ClassifyActorAiTask(__instance.ai.task.id);
             int index = RecentFeatureBenchmarkRules.ActorAiIndex(category);
@@ -53,6 +56,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.b6_updateAI))]
         private static void UpdateAi_Postfix(ActorAiBenchmarkState __state)
         {
+            if (__state.Started == 0L && __state.DiagnosticStarted == 0L &&
+                __state.RaceToken.Started == 0L) return;
             try
             {
                 if (__state.Started != 0L)

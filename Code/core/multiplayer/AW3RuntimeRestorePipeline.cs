@@ -134,11 +134,11 @@ namespace AncientWarfare3.core.multiplayer
                     "AW3 save has no lineage archive; initialized a fresh archive.");
             }
 
-            return TryRebuildAfterReplicationInstall(strict);
+            return TryRebuildAfterReplicationInstall(strict, directory);
         }
 
         internal static AW3RestoreResult TryRebuildAfterReplicationInstall(
-            bool strict)
+            bool strict, string directory = null)
         {
             var stages = new List<AW3RestoreStage>
             {
@@ -215,6 +215,14 @@ namespace AncientWarfare3.core.multiplayer
                     MilitaryEmergencyService.RebuildRuntime),
                 new AW3RestoreStage("city_reserve_pools",
                     CityReservePoolService.RebuildRuntime),
+                new AW3RestoreStage("city_reserve_pool_snapshot", () =>
+                {
+                    if (string.IsNullOrWhiteSpace(directory)) return;
+                    if (!CityReservePoolService.TryRestoreSnapshot(
+                            directory, out string snapshotError) &&
+                        !string.IsNullOrEmpty(snapshotError))
+                        throw new InvalidOperationException(snapshotError);
+                }),
                 new AW3RestoreStage("army_replenishment_operations",
                     ArmyReplenishmentOperationService.RebuildRuntime),
                 new AW3RestoreStage("war_notices",

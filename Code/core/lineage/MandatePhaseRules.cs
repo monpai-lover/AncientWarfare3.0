@@ -47,6 +47,19 @@ namespace AncientWarfare3.core.lineage
         public const int StableRecoveryYears = 5;
         public const int ChaosCatalystThreshold = 90;
 
+        public static bool CanForceChaos(bool hasMandateHistory)
+        {
+            return hasMandateHistory;
+        }
+
+        public static MandatePhase NormalizeLoadedPhase(MandatePhase phase,
+            bool hasMandateHistory)
+        {
+            return phase == MandatePhase.Chaos && !hasMandateHistory
+                ? MandatePhase.Golden
+                : phase;
+        }
+
         public static MandatePhase PhaseAfterMandateEstablished(
             bool pHadPreviousMandate)
         {
@@ -67,6 +80,9 @@ namespace AncientWarfare3.core.lineage
 
         public static MandatePhase Evaluate(MandatePhaseFacts pFacts)
         {
+            MandatePhase normalized = NormalizeLoadedPhase(pFacts.Phase,
+                pFacts.HasMandateHistory);
+            if (normalized != pFacts.Phase) return normalized;
             bool hardChaos = pFacts.HasMandateHistory &&
                              (!pFacts.MandateActive || pFacts.MandateValue <= 0 ||
                               pFacts.ActiveClaimants);

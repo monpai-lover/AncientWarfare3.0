@@ -140,6 +140,9 @@ namespace AncientWarfare3.api.multiplayer
                         RulerHouseholdOfferWindow.Open(request.CountryId,
                             request.TargetCountryId);
                         break;
+                    case AW3WindowKind.Supporters:
+                        SupporterLeaderboardWindow.Open();
+                        break;
                     default:
                         return Result(AW3WindowOpenStatus.Unavailable,
                             request.Kind);

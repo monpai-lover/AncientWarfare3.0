@@ -31,6 +31,7 @@ namespace AncientWarfare3.ui
         public const string DIPLOMACY_CONVERSATIONS = "aw_diplomacy_conversations";
         public const string DIPLOMATIC_WAR_DECLARATION = "aw_diplomatic_war_declaration";
         public const string DIPLOMATIC_MARRIAGE = "aw_diplomatic_marriage";
+        public const string SUPPORTERS = "aw_supporters";
 
         public static void SafeShow(string pWindowId, System.Action pRefreshIfCurrent = null)
         {

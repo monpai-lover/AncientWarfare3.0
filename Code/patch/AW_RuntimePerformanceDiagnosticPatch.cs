@@ -1,3 +1,5 @@
+using System;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
 
@@ -11,7 +13,14 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
         private static void MapUpdate_Prefix()
         {
-            RuntimePerformanceDiagnostic.BeginFrame();
+            long benchmark = RecentFeatureBenchmark.BeginOutsideFrameStage();
+            try { RuntimePerformanceDiagnostic.BeginFrame(); }
+            finally
+            {
+                RecentFeatureBenchmark.EndOutsideFrameStage(
+                    RecentFeatureBenchmarkRules.PerformanceDiagnosticIndex,
+                    benchmark);
+            }
         }
 
         [HarmonyPostfix]
@@ -19,7 +28,37 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
         private static void MapUpdate_Postfix()
         {
-            RuntimePerformanceDiagnostic.FlushFrame();
+            long benchmark = RecentFeatureBenchmark.BeginOutsideFrameStage();
+            try { RuntimePerformanceDiagnostic.FlushFrame(); }
+            finally
+            {
+                try
+                {
+                    RecentFeatureBenchmark.EndOutsideFrameStage(
+                        RecentFeatureBenchmarkRules.PerformanceDiagnosticIndex,
+                        benchmark);
+                }
+                finally
+                {
+                    MapBoxFrameStageGuard.Run(
+                        "recent_feature_benchmark_flush",
+                        RecentFeatureBenchmark.Flush);
+                }
+            }
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
+        private static Exception FlushFailedFrame(Exception __exception)
+        {
+            if (__exception == null) return null;
+            MapBoxFrameStageGuard.Run(
+                "runtime_performance_diagnostic_fault_flush",
+                RuntimePerformanceDiagnostic.FlushFrame);
+            MapBoxFrameStageGuard.Run("recent_feature_benchmark_fault_flush",
+                RecentFeatureBenchmark.Flush);
+            return __exception;
         }
 
         [HarmonyPrefix]

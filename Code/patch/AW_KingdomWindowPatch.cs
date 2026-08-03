@@ -20,11 +20,12 @@ namespace AncientWarfare3.patch
         // ── 挂载顶部中段组件(查重,避免重复挂)──
         [HarmonyPrefix]
         [HarmonyPatch(typeof(KingdomWindow), "showTopPartInformation")]
-        public static void ShowTopPartInformation_Prefix(KingdomWindow __instance)
+        public static bool ShowTopPartInformation_Prefix(KingdomWindow __instance)
         {
-            if (__instance == null) return;
+            if (__instance == null) return false;
             if (__instance.GetComponent<KingdomWindowAddition>() == null)
                 __instance.gameObject.AddComponent<KingdomWindowAddition>();
+            return true;
         }
 
         // ── 头衔:stats 行(继承人交给原版 tryToShowActor 画,不在此重复)──

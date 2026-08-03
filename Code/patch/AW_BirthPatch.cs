@@ -27,6 +27,8 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
+            if (SyntheticLevyService.SuppressPersonalHistory(__instance))
+                return;
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
             if (!LineageService.IsNativeXiaCultureActor(__instance)) return;
 
@@ -44,6 +46,7 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (pBaby?.data == null) return;
+            if (SyntheticLevyService.SuppressPersonalHistory(pBaby)) return;
             try
             {
                 RulerHouseholdPregnancyService.ApplyBirthLegitimacy(pBaby,

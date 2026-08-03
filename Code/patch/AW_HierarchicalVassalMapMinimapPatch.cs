@@ -1,5 +1,6 @@
 using AncientWarfare3.core.policy;
 using HarmonyLib;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace AncientWarfare3.patch
@@ -11,19 +12,28 @@ namespace AncientWarfare3.patch
         private static bool _nativeArmyFlagSortingCaptured;
         private static int _nativeArmyFlagLayerId;
         private static int _nativeArmyFlagSortingOrder;
+        private static bool _nonEssentialAssetsCleared;
+        private static bool _unknownIconAssetCleared;
+        private static bool _iconFilteringActive;
+        private static readonly HashSet<string> ClearedIconAssetIds =
+            new HashSet<string>();
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.redrawMiniMap))]
-        private static void HideCityBoundariesForMinimap()
+        private static void PrepareHierarchicalLabelsForMinimap()
         {
-            HierarchicalVassalMapModeBoundaryLayer.SetMinimapHidden(true);
+            if (HierarchicalVassalMapModeService.IsActive())
+                HierarchicalVassalMapModeLabelLayer.
+                    ObserveResolutionMode(true);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.redrawMiniMap))]
-        private static void RestoreCityBoundariesAfterMinimap()
+        private static void RestoreHierarchicalLabelsAfterMinimap()
         {
-            HierarchicalVassalMapModeBoundaryLayer.SetMinimapHidden(false);
+            if (HierarchicalVassalMapModeService.IsActive())
+                HierarchicalVassalMapModeLabelLayer.
+                    ObserveResolutionMode(false);
         }
 
         [HarmonyPostfix]
@@ -32,7 +42,17 @@ namespace AncientWarfare3.patch
         private static void HideNonEssentialMinimapAssets()
         {
             if (!HierarchicalVassalMapModeService.IsActive() ||
-                AssetManager.quantum_sprites?.list == null) return;
+                AssetManager.quantum_sprites?.list == null)
+            {
+                ResetIconFilteringState();
+                return;
+            }
+            _iconFilteringActive = true;
+            if (AssetManager.quantum_sprites.list.Count == 0) return;
+            // QuantumSpriteManager.update runs every render frame. The
+            // minimap whitelist is static while this mode is active, so a
+            // full asset-list sweep is only needed on mode entry.
+            if (_nonEssentialAssetsCleared) return;
             foreach (QuantumSpriteAsset asset in
                      AssetManager.quantum_sprites.list)
             {
@@ -43,6 +63,7 @@ namespace AncientWarfare3.patch
                     asset.group_system.countActive() <= 0) continue;
                 asset.group_system.clearFull();
             }
+            _nonEssentialAssetsCleared = true;
         }
 
         [HarmonyPrefix]
@@ -62,6 +83,13 @@ namespace AncientWarfare3.patch
         [HarmonyPrefix]
         [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawLeaders")]
         private static bool SkipLeaderIcons(QuantumSpriteAsset pAsset)
+        {
+            return KeepOrClearMapIcons(pAsset);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawArmies")]
+        private static bool SkipArmyFlags(QuantumSpriteAsset pAsset)
         {
             return KeepOrClearMapIcons(pAsset);
         }
@@ -111,11 +139,37 @@ namespace AncientWarfare3.patch
 
         private static bool KeepOrClearMapIcons(QuantumSpriteAsset pAsset)
         {
-            if (!HierarchicalVassalMapModeService.IsActive()) return true;
-            // Returning false stops new markers, while clearFull removes the
-            // king/leader sprites retained from the frame before mode entry.
-            pAsset?.group_system?.clearFull();
+            if (!HierarchicalVassalMapModeService.IsActive())
+            {
+                ResetIconFilteringState();
+                return true;
+            }
+            _iconFilteringActive = true;
+
+            // Returning false stops new markers. Clear the retained native
+            // group only once per asset after map-mode entry; calling
+            // clearFull from every draw pass needlessly walks the full sprite
+            // pool while time is flowing.
+            string assetId = pAsset?.id;
+            bool firstAssetPass = string.IsNullOrEmpty(assetId)
+                ? !_unknownIconAssetCleared
+                : ClearedIconAssetIds.Add(assetId);
+            if (pAsset?.group_system != null && firstAssetPass)
+            {
+                if (string.IsNullOrEmpty(assetId))
+                    _unknownIconAssetCleared = true;
+                pAsset?.group_system?.clearFull();
+            }
             return false;
+        }
+
+        private static void ResetIconFilteringState()
+        {
+            if (!_iconFilteringActive) return;
+            _iconFilteringActive = false;
+            _nonEssentialAssetsCleared = false;
+            _unknownIconAssetCleared = false;
+            ClearedIconAssetIds.Clear();
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.asyncwork;
 using System.Collections.Generic;
 using AncientWarfare3.core.performance;
 #if !AW3_RULES_TESTS
@@ -408,7 +409,10 @@ namespace AncientWarfare3.core.pathfinding
                     AWPathMovementBridge.CaptureProfile(captain),
                     generation,
                     UnityEngine.Time.realtimeSinceStartupAsDouble,
-                    AWPathWorkClass.Operational);
+                    AWPathWorkClass.Operational,
+                    AWPathfindingBootstrap.Cache.SourceRevision,
+                    AWAsyncRuntime.WorldGeneration,
+                    captain.is_inside_boat);
                 bool accepted = _finder.Request(pathRequest,
                     out AWPathSubmissionDisposition disposition);
                 bool reused = disposition == AWPathSubmissionDisposition.Reused;

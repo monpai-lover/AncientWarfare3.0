@@ -4,6 +4,17 @@ internal static class ZhuluWarRulesTests
 {
     public static void Run()
     {
+        False(MandatePhaseRules.CanForceChaos(
+                hasMandateHistory: false),
+            "a world without a Mandate period cannot be forced into chaos");
+        True(MandatePhaseRules.CanForceChaos(
+                hasMandateHistory: true),
+            "a collapsed historical Mandate may enter chaos");
+        Equal(MandatePhase.Golden,
+            MandatePhaseRules.NormalizeLoadedPhase(MandatePhase.Chaos,
+                hasMandateHistory: false),
+            "an illegal pre-Mandate chaos save is repaired to golden");
+
         var valid = new ZhuluEligibilityFacts(MandatePhase.Chaos,
             attackerValid: true, defenderValid: true,
             attackerMandateEligible: true,
@@ -13,6 +24,19 @@ internal static class ZhuluWarRulesTests
             alreadyAtWar: false);
         True(ZhuluWarRules.CanStart(valid),
             "eligible Xia-system realms can contest during chaos");
+
+        var noMandateHistory = new ZhuluEligibilityFacts(
+            MandatePhase.Chaos, true, true, true, true, false, false,
+            false, false, false, ageOverride: false,
+            hasMandateHistory: false);
+        False(ZhuluWarRules.CanStart(noMandateHistory),
+            "ordinary chaos cannot create Zhulu before the first Mandate");
+
+        var explicitAge = new ZhuluEligibilityFacts(MandatePhase.Golden,
+            true, true, true, true, false, false, false, false, false,
+            ageOverride: true, hasMandateHistory: false);
+        True(ZhuluWarRules.CanStart(explicitAge),
+            "the explicit Zhulu age remains an intentional override");
 
         var renewal = new ZhuluEligibilityFacts(MandatePhase.Renewal,
             true, true, true, true, false, false, false, false, false);

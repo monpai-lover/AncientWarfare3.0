@@ -127,6 +127,31 @@ internal static class WesternLineageEligibilityRulesTests
                 requiresFullArchive: true),
             "invalid and non-civilized babies cannot enter the full path");
 
+        Equal(1, WesternLineageEligibilityRules.SelectParentSourceSlot(
+                parent1Male: true, parent1HasLineage: true,
+                parent1Complete: true, parent2Male: false,
+                parent2HasLineage: true, parent2Complete: true,
+                requireComplete: true),
+            "a complete male parent remains the preferred western source");
+        Equal(2, WesternLineageEligibilityRules.SelectParentSourceSlot(
+                parent1Male: true, parent1HasLineage: false,
+                parent1Complete: false, parent2Male: false,
+                parent2HasLineage: true, parent2Complete: true,
+                requireComplete: true),
+            "a complete female ruler supplies lineage when the father has none");
+        Equal(2, WesternLineageEligibilityRules.SelectParentSourceSlot(
+                parent1Male: true, parent1HasLineage: false,
+                parent1Complete: false, parent2Male: false,
+                parent2HasLineage: true, parent2Complete: true,
+                requireComplete: false),
+            "a female ruler supplies a surname when the father has no lineage");
+        Equal(true, WesternLineageEligibilityRules.ShouldEscalateRoyalChildBirth(
+                parentIsRuler: true, childRequiresFullArchive: false),
+            "a child of a reigning western ruler must receive a full lineage admission");
+        Equal(false, WesternLineageEligibilityRules.ShouldEscalateRoyalChildBirth(
+                parentIsRuler: false, childRequiresFullArchive: false),
+            "an ordinary western child remains on the lightweight path");
+
         AssertBirthAdmission(NamingProfileId.Western,
             biologicalXia: false, monkey: false, civilized: true,
             parentHasLineage: true, requiresFullArchive: false,

@@ -4,6 +4,7 @@ using System.Linq;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -44,6 +45,7 @@ namespace AncientWarfare3.core.lineage
 
         private static bool TryActiveVassal(Kingdom pKingdom, CourtSnapshot pCourt)
         {
+            if (!AWPerformanceSettings.EnableAiVassalActions) return false;
             if (VassalService.IsVassalKingdom(pKingdom)) return false;
             Kingdom threat = FindThreat(pKingdom);
             if (threat == null) return false;
@@ -59,6 +61,7 @@ namespace AncientWarfare3.core.lineage
 
         private static bool TryVassalWar(Kingdom pKingdom, CourtSnapshot pCourt)
         {
+            if (!AWPerformanceSettings.EnableAiVassalActions) return false;
             if (VassalService.IsVassalKingdom(pKingdom)) return false;
             int vassalSoftCap = CourtInstitutionEffectService.Read(pKingdom).
                 VassalSoftCap;

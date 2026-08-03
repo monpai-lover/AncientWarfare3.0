@@ -46,11 +46,24 @@ namespace AncientWarfare3.core.lineage
 
     internal static class CityMilitaryThreatFactsRules
     {
+        internal const double CacheLifetimeSeconds = 0.35d;
+
         internal static bool CanCache(bool pCycleActive, long pWarId,
             long pCityId, long pKingdomId)
         {
             return pCycleActive && pWarId >= 0L && pCityId >= 0L &&
                    pKingdomId >= 0L;
+        }
+
+        internal static bool ShouldReuse(bool pCycleActive,
+            long pCachedRevision, long pCurrentRevision, double pNow,
+            double pCachedAt)
+        {
+            if (!pCycleActive || pCachedRevision != pCurrentRevision ||
+                double.IsNaN(pNow) || double.IsInfinity(pNow) ||
+                double.IsNaN(pCachedAt) || double.IsInfinity(pCachedAt) ||
+                pNow < pCachedAt) return false;
+            return pNow - pCachedAt < CacheLifetimeSeconds;
         }
 
         internal static bool KeyMatches(CityMilitaryThreatKey pLeft,

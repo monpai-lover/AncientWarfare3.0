@@ -19,11 +19,21 @@ namespace AncientWarfare3.core.lineage
         {
             return Upsert(pActor, pAlive, pTraceOnly,
                 pForceSynchronous: false,
+                pAllowSynchronousFallback: true,
                 pFinalizeProjection: pFinalizeProjection);
+        }
+
+        public static bool QueueDeath(Actor pActor, bool pTraceOnly)
+        {
+            return Upsert(pActor, pAlive: false, pTraceOnly,
+                pForceSynchronous: false,
+                pAllowSynchronousFallback: false,
+                pFinalizeProjection: true);
         }
 
         private static bool Upsert(Actor pActor, bool pAlive,
             bool pTraceOnly, bool pForceSynchronous,
+            bool pAllowSynchronousFallback,
             bool pFinalizeProjection)
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
@@ -170,6 +180,11 @@ namespace AncientWarfare3.core.lineage
                 return true;
             }
 
+            if (!pForceSynchronous && !pAllowSynchronousFallback &&
+                ActorDeathArchiveService.EnqueueLineage(snapshot,
+                    projectionChange, pFinalizeProjection))
+                return true;
+
             if (!HistoricalWriteService.FlushForSynchronousFallback(
                     System.TimeSpan.FromSeconds(5), out string flushError))
             {
@@ -199,6 +214,82 @@ namespace AncientWarfare3.core.lineage
                     FamilyTreeProjectionPendingStore.FinalizeSynchronous(
                         id, projectionChange, finalWriteSucceeded: true);
                 AdvanceProjectionAfterCommit(committedChange);
+            }
+            return true;
+        }
+
+        internal static bool TryQueueCapturedDeath(
+            ActorArchiveTableItem pSnapshot,
+            FamilyTreeProjectionChange pProjectionChange,
+            bool pFinalizeProjection)
+        {
+            if (pSnapshot == null) return false;
+            long id = pSnapshot.id;
+            string table = ActorArchiveTableItem.GetTableName();
+            HistoricalSqlColumn[] inserts = SnapshotColumns(pSnapshot,
+                pIncludeId: true);
+            HistoricalSqlColumn[] updates = SnapshotColumns(pSnapshot,
+                pIncludeId: false);
+            if (!HistoricalWriteService.TryUpsertState(
+                    "actor-archive:" + id, table,
+                    new[] { new HistoricalSqlColumn("ID", id) }, updates,
+                    inserts, sequence =>
+                    {
+                        ActorArchivePendingStore.Complete(id, sequence);
+                        if (FamilyTreeProjectionPendingStore.TryComplete(
+                                id, sequence,
+                                out FamilyTreeProjectionChange committed))
+                            AdvanceProjectionAfterCommit(committed);
+                    }, out long queuedSequence, out _)) return false;
+
+            ActorArchivePendingStore.Publish(id, queuedSequence, pSnapshot);
+            if (pFinalizeProjection)
+                FamilyTreeProjectionPendingStore.Publish(id, queuedSequence,
+                    pProjectionChange);
+            else
+                FamilyTreeProjectionPendingStore.PublishDeferred(id,
+                    queuedSequence, writeAccepted: true);
+            return true;
+        }
+
+        internal static bool WriteCapturedDeathSynchronously(
+            ActorArchiveTableItem pSnapshot,
+            FamilyTreeProjectionChange pProjectionChange,
+            bool pFinalizeProjection)
+        {
+            if (pSnapshot == null) return false;
+            var db = LineageArchiveManager.Instance.OperatingDB;
+            if (db == null ||
+                !LineageArchiveManager.Instance.InitializeSuccessful)
+                return false;
+            if (!HistoricalWriteService.FlushForSynchronousFallback(
+                    System.TimeSpan.FromSeconds(5), out _)) return false;
+
+            string table = ActorArchiveTableItem.GetTableName();
+            bool exists = db.CheckKeyExist(table,
+                SimpleColumnConstraint.CreateEq("ID", pSnapshot.id));
+            ColumnVal[] values = SnapshotColumnValues(pSnapshot,
+                pIncludeId: !exists);
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                () =>
+                {
+                    if (exists)
+                        db.UpdateValue(table,
+                            new List<SimpleColumnConstraint>
+                            {
+                                SimpleColumnConstraint.CreateEq("ID",
+                                    pSnapshot.id)
+                            }, values);
+                    else
+                        db.Insert(table, values);
+                });
+            if (pFinalizeProjection)
+            {
+                FamilyTreeProjectionChange committed =
+                    FamilyTreeProjectionPendingStore.FinalizeSynchronous(
+                        pSnapshot.id, pProjectionChange,
+                        finalWriteSucceeded: true);
+                AdvanceProjectionAfterCommit(committed);
             }
             return true;
         }
@@ -358,6 +449,7 @@ namespace AncientWarfare3.core.lineage
 
             if (!Upsert(pActor, pAlive: true, pTraceOnly: false,
                     pForceSynchronous: true,
+                    pAllowSynchronousFallback: true,
                     pFinalizeProjection: false))
                 return false;
             if (!HistoricalWriteService.FlushForSynchronousFallback(

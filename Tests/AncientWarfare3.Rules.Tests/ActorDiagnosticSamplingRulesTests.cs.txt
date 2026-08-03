@@ -1,0 +1,39 @@
+using AncientWarfare3.core.policy;
+
+internal static class ActorDiagnosticSamplingRulesTests
+{
+    public static void Run()
+    {
+        Equal(false, ActorDiagnosticSamplingRules.ShouldCollect(
+                diagnosticsEnabled: false, benchmarkEnabled: false,
+                used: 0, budget: 16),
+            "disabled diagnostics do no Actor detail work");
+        Equal(true, ActorDiagnosticSamplingRules.ShouldCollect(
+                diagnosticsEnabled: true, benchmarkEnabled: false,
+                used: 0, budget: 16),
+            "the first diagnostic sample is accepted");
+        Equal(true, ActorDiagnosticSamplingRules.ShouldCollect(
+                diagnosticsEnabled: false, benchmarkEnabled: true,
+                used: 15, budget: 16),
+            "benchmarks share the detail budget");
+        Equal(false, ActorDiagnosticSamplingRules.ShouldCollect(
+                diagnosticsEnabled: true, benchmarkEnabled: false,
+                used: 16, budget: 16),
+            "the detail budget is bounded");
+        Equal(false, ActorDiagnosticSamplingRules.ShouldCollect(
+                diagnosticsEnabled: true, benchmarkEnabled: false,
+                used: -1, budget: 16),
+            "negative sample ordinals are rejected");
+        Equal(0, ActorDiagnosticSamplingRules.ClampBudget(-1),
+            "negative budgets clamp to zero");
+        Equal(64, ActorDiagnosticSamplingRules.ClampBudget(1000),
+            "the detail budget has a hard upper bound");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected=" + pExpected + ", actual=" + pActual);
+    }
+}

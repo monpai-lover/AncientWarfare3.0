@@ -27,16 +27,30 @@ namespace AncientWarfare3.patch
             }
             if (ArmyFieldIndexService.IsFieldCreationExempt(pActor, pCity))
                 return true;
-            if (ArmyFieldIndexService.Count(pCity.kingdom) <
-                ArmyEstablishmentRules.MaximumFieldArmies) return true;
-            if (ArmyFieldIndexService.TryRouteCappedCandidate(
+            if (ArmyFieldIndexService.TryRouteStandingCandidate(
                     pActor, pCity, out Army existing))
             {
                 __result = existing;
                 return false;
             }
-            __result = null;
-            return false;
+            Army occupied = null;
+            try { if (pCity.hasArmy()) occupied = pCity.getArmy(); }
+            catch { }
+            if (occupied?.data != null)
+            {
+                Army created = AWArmyService.CreateDetachedArmy(
+                    pCity.kingdom, pCity, pActor);
+                if (created?.data == null)
+                {
+                    __result = null;
+                    return false;
+                }
+                AWArmyService.EnsureOrdinaryNativeName(created,
+                    pCity.kingdom, pCity);
+                __result = created;
+                return false;
+            }
+            return true;
         }
 
         [HarmonyPostfix]

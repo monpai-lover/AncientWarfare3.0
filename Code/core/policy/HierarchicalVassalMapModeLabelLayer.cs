@@ -15,36 +15,153 @@ namespace AncientWarfare3.core.policy
 
         private static readonly List<LabelNode> Nodes =
             new List<LabelNode>();
+        private static readonly Dictionary<string, LabelNode> RuntimeNodes =
+            new Dictionary<string, LabelNode>();
         private static GameObject _root;
-        private static bool _dirty = true;
+        private static bool _activeKnown;
+        private static bool _active;
+        private static bool _resolutionModeKnown;
+        private static bool _lastMinimapMode;
         private static bool _reportedFailure;
 
         internal static void MarkDirty()
         {
-            _dirty = true;
+            _reportedFailure = false;
+            HierarchicalVassalMapLabelRuntime.MarkDirty(false);
+        }
+
+        internal static void ForceRebuild()
+        {
+            _reportedFailure = false;
+            HierarchicalVassalMapLabelRuntime.MarkDirty(true);
+        }
+
+        internal static void MarkViewChanged()
+        {
+            _reportedFailure = false;
+            HierarchicalVassalMapLabelRuntime.MarkViewChanged();
+        }
+
+        internal static void RequestRefresh()
+        {
+            _reportedFailure = false;
+            HierarchicalVassalMapLabelRuntime.RequestRefresh();
+        }
+
+        internal static void MarkCityDirty(City pCity)
+        {
+            _reportedFailure = false;
+            HierarchicalVassalMapLabelRuntime.MarkCityDirty(pCity);
+        }
+
+        internal static void MarkCityGeometryDirty(City pCity)
+        {
+            _reportedFailure = false;
+            HierarchicalVassalMapLabelRuntime.MarkCityGeometryDirty(pCity);
+        }
+
+        internal static void EvictCity(long pCityId)
+        {
+            HierarchicalVassalMapLabelRuntime.EvictCity(pCityId);
+        }
+
+        internal static void EvictKingdom(long pKingdomId)
+        {
+            HierarchicalVassalMapLabelRuntime.EvictKingdom(pKingdomId);
+        }
+
+        internal static void MarkKingdomDirty(Kingdom pKingdom)
+        {
+            _reportedFailure = false;
+            HierarchicalVassalMapLabelRuntime.MarkKingdomDirty(pKingdom);
+        }
+
+        internal static void MarkHierarchyDirty()
+        {
+            _reportedFailure = false;
+            HierarchicalVassalMapLabelRuntime.MarkHierarchyDirty();
+        }
+
+        internal static void ObserveResolutionMode(bool pMinimap)
+        {
+            if (_resolutionModeKnown && _lastMinimapMode == pMinimap) return;
+            _resolutionModeKnown = true;
+            _lastMinimapMode = pMinimap;
+            try
+            {
+                for (int index = 0; index < Nodes.Count; index++)
+                    Nodes[index]?.RefreshSortingLayer();
+            }
+            catch { }
+        }
+
+        internal static bool NeedsProcessFrame
+        {
+            get
+            {
+                return Config.game_loaded &&
+                       HierarchicalVassalMapLabelRuntime.NeedsProcessFrame;
+            }
+        }
+
+        internal static int RuntimeNodeCountForDiagnostics =>
+            RuntimeNodes.Count;
+
+        internal static void ObserveMapModeActive(bool pActive)
+        {
+            if (_activeKnown && _active == pActive) return;
+            _reportedFailure = false;
+            _activeKnown = true;
+            _active = pActive;
+            HierarchicalVassalMapLabelRuntime.ObserveMapModeActive(pActive);
+            if (pActive)
+            {
+                EnsureRoot();
+                SetRootActive(true);
+                return;
+            }
+            SetRootActive(false);
+        }
+
+        internal static void CancelUnpublishedJobs()
+        {
+            HierarchicalVassalMapLabelRuntime.CancelUnpublishedJobs();
         }
 
         internal static void ProcessFrame()
         {
+            if (_reportedFailure) return;
             try
             {
-                if (!Config.game_loaded ||
-                    !HierarchicalVassalMapModeService.IsActive())
+                if (!Config.game_loaded)
                 {
                     SetRootActive(false);
                     return;
                 }
 
-                EnsureRoot();
-                SetRootActive(true);
-                HierarchicalVassalMapModeService.RefreshIfWorldChanged();
-                if (_dirty) Rebuild();
+                if (_active)
+                {
+                    EnsureRoot();
+                    SetRootActive(true);
+                }
+                else
+                {
+                    SetRootActive(false);
+                }
+                HierarchicalVassalMapLabelRuntime.ProcessFrame();
             }
             catch (Exception error)
             {
+                try
+                {
+                    HierarchicalVassalMapLabelRuntime.
+                        RecoverFromProcessFailure();
+                }
+                catch { }
                 SetRootActive(false);
+                _reportedFailure = !HierarchicalVassalMapLabelRuntime.
+                    CanRetryProcessFailure;
                 if (_reportedFailure) return;
-                _reportedFailure = true;
                 try
                 {
                     ModClass.LogWarning(
@@ -56,6 +173,7 @@ namespace AncientWarfare3.core.policy
 
         internal static void Reset()
         {
+            HierarchicalVassalMapLabelRuntime.Reset();
             if (_root != null)
             {
                 if (Application.isPlaying) UnityEngine.Object.Destroy(_root);
@@ -63,7 +181,11 @@ namespace AncientWarfare3.core.policy
             }
             _root = null;
             Nodes.Clear();
-            _dirty = true;
+            RuntimeNodes.Clear();
+            _activeKnown = false;
+            _active = false;
+            _resolutionModeKnown = false;
+            _lastMinimapMode = false;
             _reportedFailure = false;
         }
 
@@ -75,149 +197,79 @@ namespace AncientWarfare3.core.policy
                 _root.transform.SetParent(World.world.transform, false);
         }
 
-        private static void Rebuild()
+        internal static void ApplyRuntimeLabel(string pKey, string pText,
+            HierarchicalVassalMapModeLabelPlacement pPlacement,
+            int pCountryLabelGap, bool pCountry, Kingdom pKingdom,
+            City pCity)
         {
-            _dirty = false;
-            HierarchicalVassalMapModeSnapshot snapshot =
-                HierarchicalVassalMapModeService.BuildVisibleSnapshot();
-            int nodeIndex = 0;
-            IReadOnlyList<HierarchicalVassalKingdomSnapshot> entries =
-                snapshot?.Entries;
-            if (entries != null)
+            if (string.IsNullOrWhiteSpace(pKey) ||
+                string.IsNullOrWhiteSpace(pText)) return;
+            EnsureRoot();
+            if (!RuntimeNodes.TryGetValue(pKey, out LabelNode node))
             {
-                bool cityLayer = HierarchicalVassalMapModeService.IsCityLayer;
-                for (int index = 0; index < entries.Count; index++)
-                {
-                    HierarchicalVassalKingdomSnapshot entry = entries[index];
-                    Kingdom kingdom = GetKingdom(entry?.KingdomId ?? -1L);
-                    if (entry == null || kingdom == null ||
-                        string.IsNullOrWhiteSpace(entry.DisplayName)) continue;
-                    if (cityLayer) continue;
-
-                    Color labelColor = ResolveCountryLabelColor(kingdom);
-                    Color outlineColor = ResolveCountryOutlineColor(kingdom);
-                    Vector3 position = new Vector3(
-                        entry.Centroid.x + TileCenterOffset,
-                        entry.Centroid.y + TileCenterOffset, LabelZ);
-                    float size = Mathf.Clamp(entry.LabelSize,
-                        CountryLabelMinSize, CountryLabelMaxSize);
-                    string label = string.IsNullOrWhiteSpace(
-                        entry.LabelDisplayName)
-                        ? entry.DisplayName
-                        : entry.LabelDisplayName;
-                    UseNode(ref nodeIndex, label, position,
-                        size, labelColor, outlineColor, true, entry.LabelAngle,
-                        entry.CountryLabelGap);
-
-                }
-            }
-
-            if (HierarchicalVassalMapModeService.IsCityLayer)
-                DrawCityLabels(snapshot, ref nodeIndex);
-
-            for (int index = nodeIndex; index < Nodes.Count; index++)
-                Nodes[index].SetActive(false);
-        }
-
-        private static void DrawCityLabels(
-            HierarchicalVassalMapModeSnapshot pSnapshot,
-            ref int pNodeIndex)
-        {
-            if (pSnapshot?.ZoneToKingdomId == null ||
-                pSnapshot.DrawableZones == null) return;
-
-            // Derive the city set from the visible snapshot instead of
-            // scanning every kingdom. This keeps focused hierarchy views
-            // bounded to their own terrain while still rendering every
-            // visible city.
-            var visibleCities = new Dictionary<long, City>();
-            for (int zoneIndex = 0;
-                 zoneIndex < pSnapshot.DrawableZones.Count; zoneIndex++)
-            {
-                TileZone zone = pSnapshot.DrawableZones[zoneIndex];
-                City city = zone?.city;
-                if (city?.data == null || city.isRekt() ||
-                    string.IsNullOrWhiteSpace(city.data.name)) continue;
-                if (!visibleCities.ContainsKey(city.id))
-                    visibleCities.Add(city.id, city);
-            }
-
-            var cities = new List<City>(visibleCities.Values);
-            cities.Sort((pLeft, pRight) => pLeft.id.CompareTo(pRight.id));
-            for (int cityIndex = 0; cityIndex < cities.Count; cityIndex++)
-            {
-                City city = cities[cityIndex];
-                if (city?.zones == null) continue;
-
-                var landTiles = new List<Vector2Int>();
-                bool visible = false;
-                for (int zoneIndex = 0; zoneIndex < city.zones.Count;
-                     zoneIndex++)
-                {
-                    TileZone zone = city.zones[zoneIndex];
-                    if (zone == null || zone.city != city || zone.id < 0 ||
-                        !pSnapshot.ZoneToKingdomId.ContainsKey(zone.id))
-                        continue;
-                    visible = true;
-                    if (zone.tiles == null) continue;
-                    for (int tileIndex = 0; tileIndex < zone.tiles.Length;
-                         tileIndex++)
-                    {
-                        WorldTile tile = zone.tiles[tileIndex];
-                        if (HierarchicalVassalMapModeService.IsVisibleLand(tile))
-                            landTiles.Add(new Vector2Int(tile.x, tile.y));
-                    }
-                }
-
-                if (!visible || landTiles.Count == 0) continue;
-
-                HierarchicalVassalMapModeGeometryMetrics metrics =
-                    HierarchicalVassalMapModeGeometry.CalculateMetrics(
-                        landTiles);
-                float size =
-                    HierarchicalVassalMapModeGeometry.CalculateCityLabelSize(
-                        metrics.Area);
-                Color color = ResolveCityLabelColor(city.kingdom);
-                Color outlineColor = ResolveCityOutlineColor(city.kingdom);
-                UseNode(ref pNodeIndex, city.data.name,
-                    new Vector3(metrics.Centroid.x + TileCenterOffset,
-                        metrics.Centroid.y + TileCenterOffset,
-                        LabelZ - 0.02f),
-                    size, color, outlineColor, false,
-                    metrics.Angle, 0);
-            }
-        }
-
-        private static void UseNode(ref int pIndex, string pText,
-            Vector3 pPosition, float pSize, Color pColor, Color pOutlineColor,
-            bool pCountry, float pAngle, int pCountryLabelGap)
-        {
-            LabelNode node;
-            if (pIndex >= Nodes.Count)
-            {
-                node = new LabelNode(_root.transform, pIndex);
+                node = new LabelNode(_root.transform, Nodes.Count);
+                RuntimeNodes[pKey] = node;
                 Nodes.Add(node);
             }
-            else
-            {
-                node = Nodes[pIndex];
-            }
 
-            node.Apply(pText, pPosition, pSize, pColor, pOutlineColor,
-                pCountry, pAngle, pCountryLabelGap);
-            pIndex++;
+            float size = pCountry
+                ? Mathf.Clamp(pPlacement.Size, CountryLabelMinSize,
+                    CountryLabelMaxSize)
+                : Mathf.Clamp(pPlacement.Size,
+                    HierarchicalVassalMapModeRules.CityLabelMinimumSize,
+                    HierarchicalVassalMapModeRules.CityLabelMaximumSize);
+            Color color = pCountry
+                ? ResolveCountryLabelColor(pKingdom)
+                : ResolveCityLabelColor(pCity?.kingdom ?? pKingdom);
+            Color outlineColor = pCountry
+                ? ResolveCountryOutlineColor(pKingdom)
+                : ResolveCityOutlineColor(pCity?.kingdom ?? pKingdom);
+            node.Apply(pText, new Vector3(
+                    pPlacement.Centroid.x + TileCenterOffset,
+                    pPlacement.Centroid.y + TileCenterOffset,
+                    pCountry ? LabelZ : LabelZ - 0.02f),
+                size, color, outlineColor, pCountry, pPlacement.Angle,
+                pCountryLabelGap);
         }
 
-        private static Kingdom GetKingdom(long pKingdomId)
+        internal static void HideRuntimeLabelsExcept(
+            ISet<string> pActiveKeys)
         {
-            if (pKingdomId < 0L || World.world?.kingdoms == null) return null;
-            try
-            {
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                    if (kingdom?.id == pKingdomId) return kingdom;
-            }
-            catch { }
-            return null;
+            foreach (KeyValuePair<string, LabelNode> pair in RuntimeNodes)
+                if (pActiveKeys == null || !pActiveKeys.Contains(pair.Key))
+                    pair.Value.SetActive(false);
+        }
+
+        internal static bool ShowRuntimeLabel(string pKey)
+        {
+            if (string.IsNullOrWhiteSpace(pKey) ||
+                !RuntimeNodes.TryGetValue(pKey, out LabelNode node))
+                return false;
+            node.SetActive(true);
+            return true;
+        }
+
+        internal static void RefreshRuntimeLabelStyle(string pKey,
+            bool pCountry, Kingdom pKingdom, City pCity)
+        {
+            if (string.IsNullOrWhiteSpace(pKey) ||
+                !RuntimeNodes.TryGetValue(pKey, out LabelNode node)) return;
+            Color color = pCountry
+                ? ResolveCountryLabelColor(pKingdom)
+                : ResolveCityLabelColor(pCity?.kingdom ?? pKingdom);
+            Color outlineColor = pCountry
+                ? ResolveCountryOutlineColor(pKingdom)
+                : ResolveCityOutlineColor(pCity?.kingdom ?? pKingdom);
+            node.RefreshStyle(color, outlineColor);
+        }
+
+        internal static void RemoveRuntimeLabel(string pKey)
+        {
+            if (string.IsNullOrWhiteSpace(pKey) ||
+                !RuntimeNodes.TryGetValue(pKey, out LabelNode node)) return;
+            RuntimeNodes.Remove(pKey);
+            Nodes.Remove(node);
+            node.Destroy();
         }
 
         private static Color ResolveCountryLabelColor(Kingdom pKingdom)
@@ -272,7 +324,7 @@ namespace AncientWarfare3.core.policy
         {
             private const int OutlinePassCount = 8;
             private const float CountryOutlineThicknessFactor = 0.05f;
-            private const float CityOutlineThicknessFactor = 1.0f;
+            private const float CityOutlineThicknessFactor = 0.08f;
             private const int CountryOutlineSortingOrder = 0;
             private const int CountryTextSortingOrder = 1;
             private const int CityBackgroundSortingOrder = 899;
@@ -286,6 +338,15 @@ namespace AncientWarfare3.core.policy
             private readonly SpriteRenderer _background;
             private readonly TextMesh[] _outlines;
             private readonly TextMesh _text;
+            private bool _country;
+            private bool _hasLayout;
+            private string _lastValue = string.Empty;
+            private Vector3 _lastPosition;
+            private float _lastSize;
+            private float _lastAngle;
+            private int _lastCountryLabelGap;
+            private Color _lastColor;
+            private Color _lastOutlineColor;
             private TextMesh[] _secondOutlines;
             private TextMesh _secondText;
 
@@ -306,10 +367,22 @@ namespace AncientWarfare3.core.policy
                 bool pCountry, float pAngle, int pCountryLabelGap)
             {
                 _root.SetActive(true);
+                string value = pValue?.Trim() ?? string.Empty;
+                if (HasEquivalentLayout(value, pPosition, pSize, pColor,
+                        pOutlineColor, pCountry, pAngle,
+                        pCountryLabelGap)) return;
+                _hasLayout = true;
+                _lastValue = value;
+                _lastPosition = pPosition;
+                _lastSize = pSize;
+                _lastAngle = pAngle;
+                _lastCountryLabelGap = pCountryLabelGap;
+                _lastColor = pColor;
+                _lastOutlineColor = pOutlineColor;
+                _country = pCountry;
                 _root.transform.position = pPosition;
                 _root.transform.rotation = Quaternion.identity;
                 _root.transform.localScale = Vector3.one;
-                string value = pValue?.Trim() ?? string.Empty;
                 bool splitCountry = pCountry && value.Length == 2 &&
                                     pCountryLabelGap > 0;
                 if (splitCountry)
@@ -327,6 +400,73 @@ namespace AncientWarfare3.core.policy
                 _root.transform.rotation = Quaternion.Euler(0f, 0f, pAngle);
                 ApplyBackground(pColor, pOutlineColor, pCountry, pSize,
                     value);
+            }
+
+            private bool HasEquivalentLayout(string pValue,
+                Vector3 pPosition, float pSize, Color pColor,
+                Color pOutlineColor, bool pCountry, float pAngle,
+                int pCountryLabelGap)
+            {
+                return _hasLayout && _country == pCountry &&
+                       string.Equals(_lastValue, pValue,
+                           StringComparison.Ordinal) &&
+                       Mathf.Abs(_lastPosition.x - pPosition.x) <
+                           HierarchicalVassalLabelResultRules.
+                               PositionThreshold &&
+                       Mathf.Abs(_lastPosition.y - pPosition.y) <
+                           HierarchicalVassalLabelResultRules.
+                               PositionThreshold &&
+                       Mathf.Abs(_lastPosition.z - pPosition.z) < 0.001f &&
+                       Mathf.Abs(_lastSize - pSize) <
+                           HierarchicalVassalLabelResultRules.SizeThreshold &&
+                       AngleDistance(_lastAngle, pAngle) <
+                           HierarchicalVassalLabelResultRules.AngleThreshold &&
+                       _lastCountryLabelGap == pCountryLabelGap &&
+                       ColorsEqual(_lastColor, pColor) &&
+                       ColorsEqual(_lastOutlineColor, pOutlineColor);
+            }
+
+            private static float AngleDistance(float pLeft, float pRight)
+            {
+                float distance = Mathf.Abs(pLeft - pRight) % 360f;
+                return distance > 180f ? 360f - distance : distance;
+            }
+
+            private static bool ColorsEqual(Color pLeft, Color pRight)
+            {
+                return Mathf.Abs(pLeft.r - pRight.r) < 0.001f &&
+                       Mathf.Abs(pLeft.g - pRight.g) < 0.001f &&
+                       Mathf.Abs(pLeft.b - pRight.b) < 0.001f &&
+                       Mathf.Abs(pLeft.a - pRight.a) < 0.001f;
+            }
+
+            internal void RefreshStyle(Color pColor, Color pOutlineColor)
+            {
+                _root.SetActive(true);
+                if (ColorsEqual(_lastColor, pColor) &&
+                    ColorsEqual(_lastOutlineColor, pOutlineColor)) return;
+                _lastColor = pColor;
+                _lastOutlineColor = pOutlineColor;
+                _text.color = pColor;
+                for (int index = 0; index < _outlines.Length; index++)
+                    _outlines[index].color = pOutlineColor;
+                if (_secondText != null)
+                {
+                    _secondText.color = pColor;
+                    for (int index = 0; index < _secondOutlines.Length;
+                         index++)
+                        _secondOutlines[index].color = pOutlineColor;
+                }
+                if (_background == null || _country) return;
+                Color backgroundColor = Color.Lerp(pOutlineColor,
+                    Color.black, 0.7f);
+                backgroundColor.a = 0.2f;
+                _background.color = backgroundColor;
+            }
+
+            internal void RefreshSortingLayer()
+            {
+                ApplySortingLayer(_country);
             }
 
             private void ApplySplitCountryLabel(string pValue, float pSize,
@@ -374,9 +514,16 @@ namespace AncientWarfare3.core.policy
                     pSize * (pCountry
                         ? CountryOutlineThicknessFactor
                         : CityOutlineThicknessFactor));
+                int outlinePassCount = HierarchicalVassalMapModeRules.
+                    GetLabelOutlinePassCount(pCountry);
                 for (int index = 0; index < pOutlines.Length; index++)
                 {
                     TextMesh outline = pOutlines[index];
+                    if (index >= outlinePassCount)
+                    {
+                        outline.gameObject.SetActive(false);
+                        continue;
+                    }
                     RefreshFont(outline);
                     outline.gameObject.SetActive(true);
                     outline.text = pValue;
@@ -384,7 +531,7 @@ namespace AncientWarfare3.core.policy
                     outline.fontStyle = pText.fontStyle;
                     outline.color = pOutlineColor;
                     float angle = index * Mathf.PI * 2f /
-                        pOutlines.Length;
+                        Math.Max(1, outlinePassCount);
                     outline.transform.localPosition = pCenter + new Vector3(
                         Mathf.Cos(angle) * outlineThickness,
                         Mathf.Sin(angle) * outlineThickness, 0.02f);
@@ -413,14 +560,21 @@ namespace AncientWarfare3.core.policy
 
             private void ApplySortingLayer(bool pCountry)
             {
+                bool minimap = false;
+                try { minimap = MapBox.isRenderMiniMap(); }
+                catch { }
                 int layerId = pCountry
-                    ? SortingLayer.NameToID("EffectsBack")
+                    ? SortingLayer.NameToID(
+                        HierarchicalVassalMapModeRules.
+                            ResolveCountryLabelSortingLayer(minimap))
                     : SortingLayer.NameToID("MapOverlay");
                 int outlineOrder = pCountry
-                    ? CountryOutlineSortingOrder
+                    ? HierarchicalVassalMapModeRules.
+                        ResolveCountryLabelSortingOrder(minimap)
                     : CityOutlineSortingOrder;
                 int textOrder = pCountry
-                    ? CountryTextSortingOrder
+                    ? HierarchicalVassalMapModeRules.
+                        ResolveCountryLabelSortingOrder(minimap) + 1
                     : CityTextSortingOrder;
                 ApplySorting(_text, layerId, textOrder);
                 for (int index = 0; index < _outlines.Length; index++)
@@ -437,7 +591,8 @@ namespace AncientWarfare3.core.policy
                 {
                     _background.sortingLayerID = layerId;
                     _background.sortingOrder = pCountry
-                        ? CountryOutlineSortingOrder - 1
+                        ? HierarchicalVassalMapModeRules.
+                            ResolveCountryLabelSortingOrder(minimap) - 1
                         : CityBackgroundSortingOrder;
                 }
             }
@@ -454,7 +609,14 @@ namespace AncientWarfare3.core.policy
             internal void SetActive(bool pActive)
             {
                 if (_root.activeSelf != pActive) _root.SetActive(pActive);
-                if (_background != null) _background.enabled = pActive;
+                if (_background != null)
+                    _background.enabled = pActive && !_country;
+            }
+
+            internal void Destroy()
+            {
+                if (Application.isPlaying) UnityEngine.Object.Destroy(_root);
+                else UnityEngine.Object.DestroyImmediate(_root);
             }
 
             private void ApplyBackground(Color pColor, Color pOutlineColor,

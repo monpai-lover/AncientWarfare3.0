@@ -1,0 +1,24 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalMapActivationRulesTests
+{
+    internal static void Run()
+    {
+        Equal(true, HierarchicalVassalMapActivationRules.ShouldOwnRenderer(
+                coordinatorActive: false, cachedAssetMatches: true),
+            "actual hierarchy asset owns rendering during toggle mismatch");
+        Equal(true, HierarchicalVassalMapActivationRules.ShouldOwnRenderer(
+                coordinatorActive: true, cachedAssetMatches: false),
+            "coordinator remains a compatible activation signal");
+        Equal(false, HierarchicalVassalMapActivationRules.ShouldOwnRenderer(
+                coordinatorActive: false, cachedAssetMatches: false),
+            "unrelated map modes do not activate hierarchy rendering");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

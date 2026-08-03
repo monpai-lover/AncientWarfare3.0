@@ -41,6 +41,7 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (KingdomIdentityContinuityService.ShouldSuppressNewKingdomEffects(__result)) return;
             ChronicleEvents.OnKingdomFounded(__result);
+            HierarchicalVassalMapModeService.MarkHierarchyDirty(__result);
             WesternLineageMigrationService.Request();
         }
 
@@ -50,6 +51,9 @@ namespace AncientWarfare3.patch
         internal static void RemoveKingdom_Prefix(Kingdom pKingdom,
             out VassalService.KingdomDestroyWarCleanupState __state)
         {
+            // UI and map-mode references are local state and must be cleared
+            // even when the destruction is being applied on a replica.
+            KingdomSelectionLifecycleService.OnKingdomDestroying(pKingdom);
             if (AW3MultiplayerReplicaScope.IsApplying)
             {
                 __state = default;
@@ -145,6 +149,8 @@ namespace AncientWarfare3.patch
                 __state?.id ?? -1L,
                 (__instance?.kingdom ?? pKingdom)?.id ?? -1L);
             CitySchoolSnapshotService.MarkDirty(__instance);
+            HierarchicalVassalMapModeService.MarkCityOwnershipChanged(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
         }
 
         [HarmonyPrefix]
@@ -175,6 +181,20 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), nameof(City.destroyCity))]
+        public static void DestroyCity_Postfix(City __instance)
+        {
+            HierarchicalVassalMapModeService.RemoveCity(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), nameof(City.addZone))]
+        public static void CityAddZone_Postfix(City __instance)
+        {
+            HierarchicalVassalMapModeService.MarkCityGeometryDirty(__instance);
+        }
+
+        [HarmonyPostfix]
         [HarmonyPriority(Priority.Last)]
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
@@ -198,6 +218,8 @@ namespace AncientWarfare3.patch
             ArmyRetreatService.OnCityControlChanged(__instance, null);
             ChronicleEvents.OnCityFounded(__instance);
             CityTechService.OnCityFounded(__instance);
+            HierarchicalVassalMapModeService.MarkCityOwnershipChanged(
+                __instance, null, __instance?.kingdom);
         }
 
         [HarmonyPrefix]

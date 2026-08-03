@@ -2561,20 +2561,20 @@ namespace AncientWarfare3.core.schools
         private static bool MatchesMembershipIdentity(SQLiteDataReader pReader,
             SchoolMembershipRecord pExpected)
         {
-            return ValueLong(pReader, 0, -1L) == pExpected.MembershipId &&
-                   ValueLong(pReader, 1, -1L) == pExpected.ActorId &&
-                   ValueString(pReader, 2) == pExpected.SchoolId &&
-                   ValueString(pReader, 3) == pExpected.Source.ToString() &&
-                   ValueString(pReader, 4) == pExpected.SourceId &&
-                   ValueLong(pReader, 5, -1L) == pExpected.TeacherActorId &&
-                   ValueLong(pReader, 6, -1L) == pExpected.CityId &&
-                   ValueInt(pReader, 7, -1) == pExpected.Generation &&
-                   SchoolMembershipPersistenceRules.ReputationMatches(
-                       ValueDouble(pReader, 8), pExpected.Reputation) &&
-                   ValueInt(pReader, 9, -1) == pExpected.StartYear &&
-                   ValueString(pReader, 14) == pExpected.Standing.ToString() &&
-                   ValueInt(pReader, 15, int.MinValue) ==
-                   pExpected.LoyaltyUntilYear;
+            if (pReader == null || pExpected == null) return false;
+            var persisted = new SchoolMembershipStableIdentity(
+                ValueLong(pReader, 0, -1L), ValueLong(pReader, 1, -1L),
+                ValueString(pReader, 2), ValueString(pReader, 3),
+                ValueString(pReader, 4), ValueLong(pReader, 5, -1L),
+                ValueLong(pReader, 6, -1L), ValueInt(pReader, 7, -1),
+                ValueInt(pReader, 9, -1));
+            var expected = new SchoolMembershipStableIdentity(
+                pExpected.MembershipId, pExpected.ActorId,
+                pExpected.SchoolId, pExpected.Source.ToString(),
+                pExpected.SourceId, pExpected.TeacherActorId,
+                pExpected.CityId, pExpected.Generation,
+                pExpected.StartYear);
+            return persisted.Equals(expected);
         }
 
         private static SchoolDeathPersistenceRowState ReadSchoolDeathAffiliationState(

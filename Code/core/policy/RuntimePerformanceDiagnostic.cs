@@ -38,6 +38,9 @@ namespace AncientWarfare3.core.policy
             new int[ActorDeathPerformanceRules.StageCount];
         private static long _frame;
         private static bool _sampling;
+        private static int _actorDetailSamples;
+        private const int ActorDetailBudgetPerFrame =
+            ActorDiagnosticSamplingRules.MaximumDetailSamplesPerFrame;
         private static long _sampleFrameStarted;
         private static long _actorWallTicks;
         private static long _actorAiTicks;
@@ -97,6 +100,7 @@ namespace AncientWarfare3.core.policy
         public static void BeginFrame()
         {
             if (_frame < long.MaxValue) _frame++;
+            Interlocked.Exchange(ref _actorDetailSamples, 0);
             _sampling = RuntimePerformanceDiagnosticRules.ShouldSample(
                 RuntimePerformanceDiagnosticRules.ShouldEnableDetailedSampling(
                     Enabled(), Bench.bench_enabled), _frame);
@@ -114,6 +118,24 @@ namespace AncientWarfare3.core.policy
         public static long BeginScope()
         {
             return _sampling ? Stopwatch.GetTimestamp() : 0L;
+        }
+
+        public static bool ShouldCollectActorDetail()
+        {
+            return _sampling || Bench.bench_enabled;
+        }
+
+        public static bool TryConsumeActorDetailSample()
+        {
+            if (!ShouldCollectActorDetail()) return false;
+            int used = Interlocked.Increment(ref _actorDetailSamples) - 1;
+            return ActorDiagnosticSamplingRules.ShouldCollect(_sampling,
+                Bench.bench_enabled, used, ActorDetailBudgetPerFrame);
+        }
+
+        public static bool ShouldCollectActorBatch()
+        {
+            return _sampling;
         }
 
         public static long BeginDeathEvent()
@@ -477,6 +499,8 @@ namespace AncientWarfare3.core.policy
                 pathDiagnostics.TraversalSyncFallbacks +
                 " path_generated=" + pathDiagnostics.Generated +
                 " path_reused=" + pathDiagnostics.Reused +
+                " path_reused_running=" +
+                pathDiagnostics.ReusedRunning +
                 " path_cancelled=" + pathDiagnostics.Cancelled +
                 " path_completed=" + pathDiagnostics.Completed +
                 " path_failed=" + pathDiagnostics.Failed +

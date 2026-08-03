@@ -1198,6 +1198,32 @@ namespace AncientWarfare3.core.lineage
             Controllers.Requeue(pArmy.id);
         }
 
+        private static void ClearIneligibleReplenishmentState(Army pArmy,
+            RuntimeState pRuntime)
+        {
+            if (pArmy?.data == null ||
+                ArmyReplenishmentOperationService.CanUseReservePool(pArmy))
+                return;
+            pArmy.data.get(
+                LineageKeys.ARMY_REPLENISHMENT_OPERATION_VERSION,
+                out int operationVersion, 0);
+            if (ArmyReplenishmentOperationRules.
+                    ShouldClearIneligibleOperation(
+                        operationVersion != 0,
+                        canUseReservePool: false))
+                ArmyReplenishmentOperationService.Clear(pArmy);
+            RemovePendingReplenishmentArrivals(pArmy.id);
+            if (pRuntime == null) return;
+            pRuntime.ReplenishmentRequested = false;
+            pRuntime.ReplenishmentRetryDue = false;
+            pRuntime.ReplenishmentProgress.Reset();
+            pRuntime.ReplenishmentBypass.Update(
+                replenishmentWindow: false,
+                needsReplenishment: false,
+                minimumForceReady: false,
+                bypassTriggered: false);
+        }
+
         public static bool TryGetCaptainTarget(Actor pActor,
             out WorldTile pTarget)
         {
@@ -2267,6 +2293,10 @@ namespace AncientWarfare3.core.lineage
             }
 
             bool commit = ArmyRtsRuntimeModeRules.ShouldCommit(pMode);
+            bool reservePoolEligible = ArmyReplenishmentOperationService.
+                CanUseReservePool(army);
+            if (commit && !reservePoolEligible)
+                ClearIneligibleReplenishmentState(army, runtime);
             if (commit)
             {
                 long formationDiagnostic = RuntimePerformanceDiagnostic.
@@ -2497,18 +2527,28 @@ namespace AncientWarfare3.core.lineage
             bool minimumForceReady =
                 ArmyLogisticsRules.HasMinimumOperationalForce(
                     rosterLiving);
-            bool replenishWindow = ArmyRtsRules.SupportsReplenishment(
-                pRecord.State);
+            bool replenishWindow = ArmyReplenishmentOperationService.
+                CanUseReservePool(pArmy) &&
+                ArmyRtsRules.SupportsReplenishment(pRecord.State);
             int targetStrength = ResolveMissionTargetStrength(pArmy,
                 kingdom, pRecord.Mission);
             pRuntime.ObservedLiving = rosterLiving;
             pRuntime.TargetStrength = targetStrength;
+            bool sourceReserveKnown = !replenishWindow;
+            bool sourceReserveAvailable = false;
+            if (replenishWindow)
+                sourceReserveKnown = ArmyReplenishmentOperationService.
+                    TryGetSourceReserveAvailability(pArmy,
+                        out sourceReserveAvailable);
+            bool replenishmentReserveAvailable = replenishWindow &&
+                (!sourceReserveKnown || sourceReserveAvailable);
             bool needsReplenishment = replenishWindow &&
+                replenishmentReserveAvailable &&
                 (ArmyRtsRules.NeedsReplenishment(rosterLiving,
                      targetStrength) ||
                  ArmyRtsRules.ShouldContinueRequestedReplenishment(
                      pRuntime.ReplenishmentRequested, rosterLiving,
-                     targetStrength));
+                     targetStrength, replenishmentReserveAvailable));
             double readinessTime = CurrentWorldTime();
             bool replenishmentStalled = pRuntime.ReplenishmentProgress.
                 Observe(replenishWindow &&
@@ -2608,7 +2648,7 @@ namespace AncientWarfare3.core.lineage
                  pRuntime.DirectorForceReady) || forcePreDeparture;
             facts.NeedsReplenishment = ArmyRtsRules.
                 ShouldRemainInReplenishment(needsReplenishment,
-                    departureStrengthReady);
+                    departureStrengthReady, replenishmentReserveAvailable);
             facts.TargetComplete = complete;
             facts.HoldRequired = pRecord.Mission.Role ==
                                      ArmyRtsRole.Defense ||
@@ -2641,6 +2681,8 @@ namespace AncientWarfare3.core.lineage
             RuntimeState pRuntime, ArmyRtsState pNext, bool pCommit)
         {
             if (pRuntime == null) return;
+            if (!ArmyReplenishmentOperationService.CanUseReservePool(pArmy))
+                return;
             if (!ArmyRtsRules.OwnsReplenishmentRequest(pNext))
             {
                 pRuntime.ReplenishmentRequested = false;
@@ -2681,10 +2723,11 @@ namespace AncientWarfare3.core.lineage
                 record.Mission.ProposalKind !=
                     ArmyRtsProposalKind.Attack) return;
             Kingdom kingdom = SafeKingdom(pArmy);
-            bool kingdomFrozen = CityReservePoolService.IsFrozen(kingdom);
+            bool wartime = CityReservePoolService.ResolveMobilizationPhase(
+                kingdom) == ArmyMobilizationPhase.War;
             bool exhaustionConfirmed = TemporaryLevyService.
                 HasConfirmedReserveExhaustion(kingdom, pArmy);
-            if (!kingdomFrozen || !exhaustionConfirmed) return;
+            if (!wartime || !exhaustionConfirmed) return;
             War war = FindWar(record.Mission.WarId);
             if (war?.data == null || war.hasEnded() ||
                 !WarScoreService.TryGetSnapshot(war, kingdom,
@@ -2697,7 +2740,7 @@ namespace AncientWarfare3.core.lineage
                 ShouldApplyReserveExhaustion(
                     attackAssignment: true,
                     reinforcementShortage: pReinforcementShortage,
-                    kingdomFrozen: kingdomFrozen,
+                    kingdomFrozen: wartime,
                     exhaustionConfirmed: exhaustionConfirmed,
                     alreadyApplied: existing >=
                         CityReservePoolRules.

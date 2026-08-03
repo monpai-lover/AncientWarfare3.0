@@ -13,6 +13,18 @@
       "Callback": "AWPerformanceSettings:SwitchArmyRts"
     },
     {
+      "Id": "AW3_ENABLE_AI_ALLIANCE_ACTIONS",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "AWPerformanceSettings:SwitchAiAllianceActions"
+    },
+    {
+      "Id": "AW3_ENABLE_AI_VASSAL_ACTIONS",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "AWPerformanceSettings:SwitchAiVassalActions"
+    },
+    {
       "Id": "AW3_SHOW_ARMY_RTS_VISUALS",
       "Type": "SWITCH",
       "BoolVal": false,

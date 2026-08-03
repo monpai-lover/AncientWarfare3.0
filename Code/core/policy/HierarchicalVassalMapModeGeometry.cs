@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 namespace AncientWarfare3.core.policy
@@ -37,7 +38,15 @@ namespace AncientWarfare3.core.policy
         internal static HierarchicalVassalMapModeGeometryMetrics
             CalculateMetrics(IReadOnlyList<Vector2Int> pLandTiles)
         {
-            List<Vector2Int> tiles = UniqueTiles(pLandTiles);
+            return CalculateMetrics(pLandTiles, default(CancellationToken));
+        }
+
+        internal static HierarchicalVassalMapModeGeometryMetrics
+            CalculateMetrics(IReadOnlyList<Vector2Int> pLandTiles,
+                CancellationToken pCancellationToken)
+        {
+            List<Vector2Int> tiles = UniqueTiles(pLandTiles,
+                pCancellationToken);
             if (tiles.Count == 0)
                 return new HierarchicalVassalMapModeGeometryMetrics
                 {
@@ -56,6 +65,7 @@ namespace AncientWarfare3.core.policy
             int maxY = int.MinValue;
             for (int index = 0; index < tiles.Count; index++)
             {
+                pCancellationToken.ThrowIfCancellationRequested();
                 Vector2Int tile = tiles[index];
                 sumX += tile.x;
                 sumY += tile.y;
@@ -78,6 +88,7 @@ namespace AncientWarfare3.core.policy
             double xy = 0d;
             for (int index = 0; index < tiles.Count; index++)
             {
+                pCancellationToken.ThrowIfCancellationRequested();
                 Vector2Int candidate = tiles[index];
                 if (candidate.x == rounded.x && candidate.y == rounded.y)
                     roundedVisible = true;
@@ -278,7 +289,17 @@ namespace AncientWarfare3.core.policy
             CalculateLabelPlacement(IReadOnlyList<Vector2Int> pLandTiles,
                 string pDisplayName, int pCountryLabelGap)
         {
-            List<Vector2Int> allTiles = UniqueTiles(pLandTiles);
+            return CalculateLabelPlacement(pLandTiles, pDisplayName,
+                pCountryLabelGap, default(CancellationToken));
+        }
+
+        internal static HierarchicalVassalMapModeLabelPlacement
+            CalculateLabelPlacement(IReadOnlyList<Vector2Int> pLandTiles,
+                string pDisplayName, int pCountryLabelGap,
+                CancellationToken pCancellationToken)
+        {
+            List<Vector2Int> allTiles = UniqueTiles(pLandTiles,
+                pCancellationToken);
             if (allTiles.Count == 0)
                 return new HierarchicalVassalMapModeLabelPlacement
                 {
@@ -288,9 +309,10 @@ namespace AncientWarfare3.core.policy
                         SmallTerritoryMinimumLabelSize
                 };
 
-            List<Vector2Int> component = LargestConnectedComponent(allTiles);
+            List<Vector2Int> component = LargestConnectedComponent(allTiles,
+                pCancellationToken);
             HierarchicalVassalMapModeGeometryMetrics metrics =
-                CalculateMetrics(component);
+                CalculateMetrics(component, pCancellationToken);
             var mask = new HashSet<Vector2Int>(component);
             Vector2 bestAnchor = metrics.Centroid;
             float bestCapacity = 0f;
@@ -301,19 +323,20 @@ namespace AncientWarfare3.core.policy
             {
                 bestCapacity = FindMaximumFittedSize(mask,
                     pDisplayName, pCountryLabelGap, bestAnchor,
-                    metrics.Angle, metrics);
+                    metrics.Angle, metrics, pCancellationToken);
             }
 
             List<Vector2Int> anchorCandidates = BuildAnchorCandidates(
-                component, metrics.Centroid);
+                component, metrics.Centroid, pCancellationToken);
             for (int index = 0; index < anchorCandidates.Count; index++)
             {
+                pCancellationToken.ThrowIfCancellationRequested();
                 Vector2Int candidateTile = anchorCandidates[index];
                 var candidateAnchor = new Vector2(candidateTile.x,
                     candidateTile.y);
                 float candidateCapacity = FindMaximumFittedSize(mask,
                     pDisplayName, pCountryLabelGap, candidateAnchor,
-                    metrics.Angle, metrics);
+                    metrics.Angle, metrics, pCancellationToken);
                 if (!IsBetterAnchor(candidateCapacity, candidateTile,
                         bestCapacity, bestAnchor, metrics.Centroid))
                     continue;
@@ -406,18 +429,26 @@ namespace AncientWarfare3.core.policy
 
         public static float CalculateCityLabelSize(int pArea)
         {
-            double scaled = Math.Sqrt(Math.Max(1, pArea)) * 0.065d;
-            return (float)Math.Max(0.14d, Math.Min(0.9d, scaled));
+            // City labels use a larger independent scale than country labels;
+            // the old 0.065 factor made names disappear on ordinary maps.
+            double scaled = Math.Sqrt(Math.Max(1, pArea)) * 0.325d;
+            return (float)Math.Max(
+                HierarchicalVassalMapModeRules.CityLabelMinimumSize,
+                Math.Min(
+                    HierarchicalVassalMapModeRules.CityLabelMaximumSize,
+                    scaled));
         }
 
         private static List<Vector2Int> UniqueTiles(
-            IReadOnlyList<Vector2Int> pLandTiles)
+            IReadOnlyList<Vector2Int> pLandTiles,
+            CancellationToken pCancellationToken = default(CancellationToken))
         {
             var result = new List<Vector2Int>();
             if (pLandTiles == null) return result;
             var seen = new HashSet<Vector2Int>();
             for (int index = 0; index < pLandTiles.Count; index++)
             {
+                pCancellationToken.ThrowIfCancellationRequested();
                 Vector2Int tile = pLandTiles[index];
                 if (seen.Add(tile)) result.Add(tile);
             }
@@ -425,13 +456,15 @@ namespace AncientWarfare3.core.policy
         }
 
         private static List<Vector2Int> LargestConnectedComponent(
-            IReadOnlyList<Vector2Int> pTiles)
+            IReadOnlyList<Vector2Int> pTiles,
+            CancellationToken pCancellationToken = default(CancellationToken))
         {
             var remaining = new HashSet<Vector2Int>(pTiles);
             var largest = new List<Vector2Int>();
             var queue = new Queue<Vector2Int>();
             while (remaining.Count > 0)
             {
+                pCancellationToken.ThrowIfCancellationRequested();
                 Vector2Int seed = default(Vector2Int);
                 foreach (Vector2Int tile in remaining)
                 {
@@ -443,6 +476,7 @@ namespace AncientWarfare3.core.policy
                 var current = new List<Vector2Int>();
                 while (queue.Count > 0)
                 {
+                    pCancellationToken.ThrowIfCancellationRequested();
                     Vector2Int tile = queue.Dequeue();
                     current.Add(tile);
                     EnqueueNeighbour(tile.x - 1, tile.y, remaining, queue);
@@ -464,7 +498,8 @@ namespace AncientWarfare3.core.policy
         }
 
         private static List<Vector2Int> BuildAnchorCandidates(
-            IReadOnlyList<Vector2Int> pTiles, Vector2 pCentroid)
+            IReadOnlyList<Vector2Int> pTiles, Vector2 pCentroid,
+            CancellationToken pCancellationToken = default(CancellationToken))
         {
             var candidates = new List<Vector2Int>();
             if (pTiles == null || pTiles.Count == 0) return candidates;
@@ -472,6 +507,7 @@ namespace AncientWarfare3.core.policy
             var nearest = new List<Vector2Int>();
             for (int index = 0; index < pTiles.Count; index++)
             {
+                pCancellationToken.ThrowIfCancellationRequested();
                 Vector2Int tile = pTiles[index];
                 int insert = nearest.Count;
                 double distance = DistanceSquared(tile, pCentroid);
@@ -484,7 +520,10 @@ namespace AncientWarfare3.core.policy
                     nearest.RemoveAt(nearest.Count - 1);
             }
             for (int index = 0; index < nearest.Count; index++)
+            {
+                pCancellationToken.ThrowIfCancellationRequested();
                 AddUniqueCandidate(candidates, nearest[index]);
+            }
 
             int remainingSlots = MaximumAnchorCandidates - candidates.Count;
             int stride = Math.Max(1, pTiles.Count / Math.Max(1,
@@ -492,7 +531,10 @@ namespace AncientWarfare3.core.policy
             for (int index = 0; index < pTiles.Count &&
                                 candidates.Count < MaximumAnchorCandidates;
                  index += stride)
+            {
+                pCancellationToken.ThrowIfCancellationRequested();
                 AddUniqueCandidate(candidates, pTiles[index]);
+            }
             return candidates;
         }
 
@@ -507,7 +549,8 @@ namespace AncientWarfare3.core.policy
         private static float FindMaximumFittedSize(
             HashSet<Vector2Int> pMask, string pDisplayName,
             int pCountryLabelGap, Vector2 pAnchor, float pAngle,
-            HierarchicalVassalMapModeGeometryMetrics pMetrics)
+            HierarchicalVassalMapModeGeometryMetrics pMetrics,
+            CancellationToken pCancellationToken = default(CancellationToken))
         {
             float low = 0f;
             float high = Math.Min(
@@ -516,9 +559,10 @@ namespace AncientWarfare3.core.policy
             for (int iteration = 0; iteration < FitSearchIterations;
                  iteration++)
             {
+                pCancellationToken.ThrowIfCancellationRequested();
                 float candidate = (low + high) * 0.5f;
                 if (EnvelopeFits(pMask, pDisplayName, pCountryLabelGap,
-                        pAnchor, pAngle, candidate))
+                        pAnchor, pAngle, candidate, pCancellationToken))
                     low = candidate;
                 else
                     high = candidate;
@@ -550,7 +594,8 @@ namespace AncientWarfare3.core.policy
 
         private static bool EnvelopeFits(HashSet<Vector2Int> pMask,
             string pDisplayName, int pCountryLabelGap, Vector2 pAnchor,
-            float pAngle, float pSize)
+            float pAngle, float pSize,
+            CancellationToken pCancellationToken = default(CancellationToken))
         {
             if (pMask == null || pMask.Count == 0 || pSize <= 0f)
                 return false;
@@ -575,6 +620,7 @@ namespace AncientWarfare3.core.policy
             int totalSamples = (xSteps + 1) * (ySteps + 1);
             for (int yIndex = 0; yIndex <= ySteps; yIndex++)
             {
+                pCancellationToken.ThrowIfCancellationRequested();
                 double localY = -halfHeight + halfHeight * 2d * yIndex /
                     ySteps;
                 for (int xIndex = 0; xIndex <= xSteps; xIndex++)

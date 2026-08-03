@@ -25,25 +25,29 @@ namespace AncientWarfare3.core.lineage
 
             ArmyStrategicIdCursor cursor = ArmyFieldIndexService.
                 CreateSnapshotCursor(pKingdom);
-            IReadOnlyList<long> armyIds = cursor.Take(
-                ArmyEstablishmentRules.MaximumFieldArmies);
             int available = 0;
             int supplyTotal = 0;
             int organizationTotal = 0;
-            for (int i = 0; i < armyIds.Count; i++)
+            while (!cursor.IsComplete)
             {
-                Army army = ArmyFieldIndexService.ResolveIndexedArmy(
-                    armyIds[i], pKingdom.id);
-                if (!IsAvailableFieldArmy(army)) continue;
-                ArmyOperationalStateView operational =
-                    ArmyLogisticsService.GetOperationalState(army);
-                if (operational.Supply <=
-                        ArmyLogisticsRules.CriticalSupply ||
-                    operational.Organization <
-                        ArmyLogisticsRules.RetreatOrganization) continue;
-                available++;
-                supplyTotal += operational.Supply;
-                organizationTotal += operational.Organization;
+                IReadOnlyList<long> armyIds = cursor.Take(
+                    ArmyEstablishmentRules.MaximumFieldArmies);
+                if (armyIds.Count == 0) break;
+                for (int i = 0; i < armyIds.Count; i++)
+                {
+                    Army army = ArmyFieldIndexService.ResolveIndexedArmy(
+                        armyIds[i], pKingdom.id);
+                    if (!IsAvailableFieldArmy(army)) continue;
+                    ArmyOperationalStateView operational =
+                        ArmyLogisticsService.GetOperationalState(army);
+                    if (operational.Supply <=
+                            ArmyLogisticsRules.CriticalSupply ||
+                        operational.Organization <
+                            ArmyLogisticsRules.RetreatOrganization) continue;
+                    available++;
+                    supplyTotal += operational.Supply;
+                    organizationTotal += operational.Organization;
+                }
             }
             int averageSupply = available <= 0
                 ? 0

@@ -31,6 +31,14 @@ internal static class ArmyMapInformationRulesTests
                 memberCount: 2,
                 minimumOperationalForce: 2),
             "a missionless operational army remains visible while awaiting orders");
+        Equal(ArmyRtsState.Assault,
+            ArmyMapInformationRules.ResolvePendingState(
+                hasProjection: false,
+                projectionState: ArmyRtsState.Idle,
+                memberCount: 2,
+                minimumOperationalForce: 2,
+                hasCombatActivity: true),
+            "a missionless army with an active combat target is shown fighting");
         Equal("aw_army_rts_state_replenish",
             ArmyMapInformationRules.PendingOperationLocalizationKey(
                 ArmyRtsState.Replenish),
@@ -39,6 +47,58 @@ internal static class ArmyMapInformationRulesTests
             ArmyMapInformationRules.PendingOperationLocalizationKey(
                 ArmyRtsState.Idle),
             "an operational missionless army explicitly awaits orders");
+        Equal("task_unit_aw_war_deployment",
+            ArmyMapInformationRules.PendingOperationLocalizationKey(
+                ArmyRtsState.Idle, royalGuardArmy: false,
+                activeDeployment: true, deploymentArrived: false),
+            "a missionless army marching to its notice frontier must not appear idle");
+        Equal("aw_war_deployment_ready",
+            ArmyMapInformationRules.PendingOperationLocalizationKey(
+                ArmyRtsState.Idle, royalGuardArmy: false,
+                activeDeployment: true, deploymentArrived: true),
+            "an army assembled at the notice frontier reports frontier readiness");
+        Equal(9, ArmyMapInformationRules.ResolvePendingShortage(
+                hasMission: false, missionTargetStrength: 0,
+                activeDeployment: true, standingTargetStrength: 22,
+                memberCount: 13, minimumOperationalForce: 2),
+            "notice deployment reports the standing establishment shortage");
+        Equal(0, ArmyMapInformationRules.ResolvePendingShortage(
+                hasMission: false, missionTargetStrength: 0,
+                activeDeployment: false, standingTargetStrength: 22,
+                memberCount: 13, minimumOperationalForce: 2),
+            "an idle peacetime army does not claim a mobilization shortage");
+        Equal(true, ArmyMapInformationRules.ShouldDisplayReserveManpower(
+                royalGuardArmy: false),
+            "ordinary army labels display shortage and reserve supply");
+        Equal(false, ArmyMapInformationRules.ShouldDisplayReserveManpower(
+                royalGuardArmy: true),
+            "royal guard labels omit ordinary reserve-pool fields");
+        Equal("task_unit_aw_guard_protect_king",
+            ArmyMapInformationRules.PendingOperationLocalizationKey(
+                ArmyRtsState.Replenish, royalGuardArmy: true),
+            "an under-strength royal guard keeps its protect-king task");
+        Equal("aw_army_rts_state_replenish",
+            ArmyMapInformationRules.PendingOperationLocalizationKey(
+                ArmyRtsState.Replenish, royalGuardArmy: false),
+            "an ordinary under-strength army keeps its replenishment task");
+        Equal(false, RoyalGuardArmyAssignmentRules.IsGuardArmyIdentity(
+                roleMarked: false, ordinaryArmy: true,
+                legacyNameMarked: false, captainRoyalGuard: true),
+            "a royal-guard captain cannot turn an ordinary army into a guard army");
+        Equal(true, RoyalGuardArmyAssignmentRules.IsGuardArmyIdentity(
+                roleMarked: true, ordinaryArmy: false,
+                legacyNameMarked: false, captainRoyalGuard: false),
+            "the explicit royal-guard role remains authoritative");
+        Equal(true, RoyalGuardArmyAssignmentRules.IsGuardArmyIdentity(
+                roleMarked: false, ordinaryArmy: false,
+                legacyNameMarked: true, captainRoyalGuard: true),
+            "a detached legacy guard army remains recoverable by its name and captain");
+        Equal(false, ArmyCaptainContinuityRules.ShouldRetainCaptain(
+                structurallyStable: true, leaseEligible: false),
+            "captain continuity cannot preserve a guard inside an ordinary army");
+        Equal(true, ArmyCaptainContinuityRules.ShouldRetainCaptain(
+                structurallyStable: true, leaseEligible: true),
+            "a stable eligible ordinary captain remains protected from churn");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

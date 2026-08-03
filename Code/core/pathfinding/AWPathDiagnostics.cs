@@ -24,6 +24,7 @@ namespace AncientWarfare3.core.pathfinding
             new ConcurrentQueue<AWPathDiagnosticEvent>();
         private long _generated;
         private long _reused;
+        private long _reusedRunning;
         private long _cancelled;
         private long _completed;
         private long _failed;
@@ -49,6 +50,7 @@ namespace AncientWarfare3.core.pathfinding
 
         public long Generated => Interlocked.Read(ref _generated);
         public long Reused => Interlocked.Read(ref _reused);
+        public long ReusedRunning => Interlocked.Read(ref _reusedRunning);
         public long Cancelled => Interlocked.Read(ref _cancelled);
         public long Completed => Interlocked.Read(ref _completed);
         public long Failed => Interlocked.Read(ref _failed);
@@ -82,6 +84,8 @@ namespace AncientWarfare3.core.pathfinding
 
         public void OnGenerated() => Interlocked.Increment(ref _generated);
         public void OnReused() => Interlocked.Increment(ref _reused);
+        public void OnReusedRunning() =>
+            Interlocked.Increment(ref _reusedRunning);
         public void OnSubmission(AWPathWorkClass pWorkClass,
             AWPathSubmissionDisposition pDisposition)
         {

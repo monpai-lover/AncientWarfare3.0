@@ -1,0 +1,192 @@
+using AncientWarfare3.core.lineage;
+using System;
+using System.IO;
+
+internal static class SyntheticLevyRulesTests
+{
+    internal static void Run()
+    {
+        Equal("aw_synthetic_levy", LineageKeys.SYNTHETIC_LEVY,
+            "synthetic provenance uses a stable actor key");
+        Equal("aw_synthetic_levy_source_city_id",
+            LineageKeys.SYNTHETIC_LEVY_SOURCE_CITY_ID,
+            "synthetic soldiers retain their source city");
+        Equal("aw_synthetic_levy_emergency_id",
+            LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID,
+            "synthetic soldiers retain their formal war emergency");
+        Equal("aw_synthetic_levy_ledger_released",
+            LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED,
+            "synthetic manpower is released from the live ledger once");
+        Equal(SyntheticLevyDisposition.RestoreCivilian,
+            SyntheticLevyRules.ResolveDemobilization(
+                synthetic: false, alive: true, militaryMerit: 0),
+            "an authentic levy returns to civilian life");
+        Equal(SyntheticLevyDisposition.RemoveActor,
+            SyntheticLevyRules.ResolveDemobilization(
+                synthetic: true, alive: true, militaryMerit: 0),
+            "an unmerited synthetic levy is removed after war");
+        Equal(SyntheticLevyDisposition.PromotePermanent,
+            SyntheticLevyRules.ResolveDemobilization(
+                synthetic: true, alive: true, militaryMerit: 1),
+            "military merit promotes a synthetic levy");
+        Equal(SyntheticLevyDisposition.Ignore,
+            SyntheticLevyRules.ResolveDemobilization(
+                synthetic: true, alive: false, militaryMerit: 10),
+            "dead levies are not demobilized twice");
+        Equal(true, SyntheticLevyRules.SuppressPersonalHistory(
+            synthetic: true, promoted: false),
+            "unpromoted synthetic actors have no person history");
+        Equal(false, SyntheticLevyRules.SuppressPersonalHistory(
+            synthetic: true, promoted: true),
+            "promoted actors enter normal history");
+        Equal(true, SyntheticLevyRules.AllowTask(
+            synthetic: true, SyntheticLevyTask.Military),
+            "synthetic soldiers can execute military tasks");
+        Equal(true, SyntheticLevyRules.AllowTask(
+            synthetic: true, SyntheticLevyTask.Healing),
+            "synthetic soldiers may heal");
+        Equal(false, SyntheticLevyRules.AllowTask(
+            synthetic: true, SyntheticLevyTask.Social),
+            "synthetic soldiers cannot socialize");
+        Equal(false, SyntheticLevyRules.AllowTask(
+            synthetic: true, SyntheticLevyTask.CivilianWork),
+            "synthetic soldiers cannot enter civilian work");
+        Equal(true, SyntheticLevyRules.ShouldClearSyntheticFields(
+            SyntheticLevyDisposition.PromotePermanent),
+            "promotion clears synthetic provenance");
+        Equal(true, SyntheticLevyRules.ShouldRemoveActor(
+            SyntheticLevyDisposition.RemoveActor),
+            "remove disposition destroys the temporary actor");
+        Equal(false, SyntheticLevyRules.ShouldRemoveActor(
+            SyntheticLevyDisposition.RestoreCivilian),
+            "authentic levies are not destroyed");
+        Equal(false, SyntheticLevySpawnScope.IsActive,
+            "synthetic creation scope starts inactive");
+        using (SyntheticLevySpawnScope.Open())
+        {
+            Equal(true, SyntheticLevySpawnScope.IsActive,
+                "synthetic creation scope suppresses intermediate callbacks");
+            using (SyntheticLevySpawnScope.Open())
+                Equal(true, SyntheticLevySpawnScope.IsActive,
+                    "nested synthetic creation remains active");
+            Equal(true, SyntheticLevySpawnScope.IsActive,
+                "disposing a nested scope preserves its parent");
+        }
+        Equal(false, SyntheticLevySpawnScope.IsActive,
+            "disposing the outer scope restores normal callbacks");
+        RuntimeCreationIsAtomicAndImmediatelyMilitary();
+        FormalWarReplenishmentUsesSyntheticReserveOnly();
+    }
+
+    private static void RuntimeCreationIsAtomicAndImmediatelyMilitary()
+    {
+        string root = RepositoryRoot();
+        string path = Path.Combine(root, "Code", "core", "lineage",
+            "SyntheticLevyService.cs");
+        Equal(true, File.Exists(path),
+            "the synthetic levy runtime boundary exists");
+        string source = File.ReadAllText(path);
+        int scope = source.IndexOf("SyntheticLevySpawnScope.Open()",
+            StringComparison.Ordinal);
+        int create = source.IndexOf("createNewUnit(",
+            StringComparison.Ordinal);
+        int mark = source.IndexOf("Mark(actor, city, kingdom, emergencyId)",
+            StringComparison.Ordinal);
+        int join = source.IndexOf("actor.joinCity(city)",
+            StringComparison.Ordinal);
+        int warrior = source.IndexOf("city.makeWarrior(actor)",
+            StringComparison.Ordinal);
+        int army = source.IndexOf("AWArmyService.AddToArmy(actor, army)",
+            StringComparison.Ordinal);
+        Equal(true, scope >= 0 && scope < create && create < mark &&
+                    mark < join && join < warrior && warrior < army,
+            "a generated actor is marked, joined, made Warrior, and assigned " +
+            "before leaving the synthetic spawn scope");
+        Equal(true, source.Contains(
+                "TemporaryLevyService.RegisterSyntheticLevy(",
+                StringComparison.Ordinal),
+            "generated soldiers enter the shared demobilization index");
+        Equal(true, source.Contains(
+                "TemporaryLevyService.OnActorInvalidated(actor)",
+                StringComparison.Ordinal),
+            "synthetic removal explicitly clears the demobilization index");
+    }
+
+    private static void FormalWarReplenishmentUsesSyntheticReserveOnly()
+    {
+        string root = RepositoryRoot();
+        string source = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "ArmyReplenishmentOperationService.cs"));
+        Equal(true, source.Contains(
+                "SyntheticLevyService.CreateBatch(",
+                StringComparison.Ordinal),
+            "formal-war replenishment materializes the city war reserve");
+        Equal(true, source.Contains(
+                "CityReservePoolService.TryReserveWarManpower(",
+                StringComparison.Ordinal),
+            "formal-war replenishment reserves abstract city manpower");
+        string levy = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "TemporaryLevyService.cs"));
+        Equal(true, levy.Contains(
+                "ResolveMobilizationPhase(pKingdom) ==\n" +
+                "                ArmyMobilizationPhase.Notice",
+                StringComparison.Ordinal),
+            "preparation recruitment is explicitly limited to Notice");
+        Equal(false, levy.Contains(
+                "bool mobilizationActive = ArmyMobilizationRules.CanConsume(",
+                StringComparison.Ordinal),
+            "formal War cannot keep the real-actor preparation plan alive");
+        int casualty = levy.IndexOf(
+            "public static void OnMilitaryCasualty(Actor pActor)",
+            StringComparison.Ordinal);
+        int casualtyEnd = levy.IndexOf(
+            "public static void OnKingdomDestroying", casualty,
+            StringComparison.Ordinal);
+        string casualtyBody = levy.Substring(casualty,
+            casualtyEnd - casualty);
+        Equal(true, casualtyBody.Contains(
+                "SyntheticLevySpawnScope.IsActive",
+                StringComparison.Ordinal),
+            "synthetic creation rollback cannot create casualty demand");
+        int disposition = levy.IndexOf(
+            "SyntheticLevyRules.ResolveDemobilization(",
+            StringComparison.Ordinal);
+        int clear = levy.IndexOf("ClearFields(pActor)", disposition,
+            StringComparison.Ordinal);
+        Equal(true, disposition >= 0 && clear > disposition,
+            "demobilization resolves synthetic disposition before clearing provenance");
+
+        string birth = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_BirthPatch.cs"));
+        string death = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_ActorDeathPatch.cs"));
+        string enlist = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_EnlistPatch.cs"));
+        Equal(true, enlist.Contains(
+                "SyntheticLevySpawnScope.IsActive &&\n" +
+                "                SyntheticLevyService.IsSynthetic(pActor)",
+                StringComparison.Ordinal),
+            "synthetic creation bypasses resident age and office enlistment guards");
+        Equal(true, birth.Contains(
+                "SyntheticLevyService.SuppressPersonalHistory(",
+                StringComparison.Ordinal),
+            "birth persistence ignores unpromoted synthetic soldiers");
+        Equal(true, death.Contains(
+                "SyntheticLevyService.SuppressPersonalHistory(",
+                StringComparison.Ordinal),
+            "death persistence ignores unpromoted synthetic soldiers");
+    }
+
+    private static string RepositoryRoot()
+    {
+        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "..", ".."));
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

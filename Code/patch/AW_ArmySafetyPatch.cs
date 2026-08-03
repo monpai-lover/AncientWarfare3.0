@@ -199,18 +199,36 @@ namespace AncientWarfare3.patch
                 AWArmyService.AddToArmy(current, __instance);
                 currentIsMember = IsArmyMember(__instance, current);
             }
-            if (ArmyCaptainContinuityRules.IsCurrentCaptainStable(
-                    currentExists,
-                    currentAlive,
-                    currentIsMember,
-                    captainIsCivilAuthority: currentAuthority))
+            bool currentLeaseEligible = currentExists &&
+                IsEligibleCaptain(__instance, current);
+            if (currentExists && currentAlive && currentIsMember &&
+                !currentLeaseEligible)
+            {
+                ReleaseIneligibleCaptainLease(__instance, current);
+                current = RawCaptain(__instance);
+                currentExists = current?.data != null;
+                currentAlive = IsLiveCaptainActor(current);
+                currentAuthority = IsCivilAuthority(current);
+                currentIsMember = IsArmyMember(__instance, current);
+                currentLeaseEligible = currentExists &&
+                    IsEligibleCaptain(__instance, current);
+            }
+            if (ArmyCaptainContinuityRules.ShouldRetainCaptain(
+                    ArmyCaptainContinuityRules.IsCurrentCaptainStable(
+                        currentExists,
+                        currentAlive,
+                        currentIsMember,
+                        captainIsCivilAuthority: currentAuthority),
+                    currentLeaseEligible))
             {
                 if (__instance.data.id_captain != current.data.id)
                     __instance.data.id_captain = current.data.id;
                 return false;
             }
-            if (ArmyCaptainContinuityRules.ShouldPreserveAssignedCaptain(
-                    currentExists, currentAlive, currentIsMember))
+            if (ArmyCaptainContinuityRules.ShouldRetainCaptain(
+                    ArmyCaptainContinuityRules.ShouldPreserveAssignedCaptain(
+                        currentExists, currentAlive, currentIsMember),
+                    currentLeaseEligible))
             {
                 if (__instance.data.id_captain != current.data.id)
                     __instance.data.id_captain = current.data.id;
@@ -223,6 +241,21 @@ namespace AncientWarfare3.patch
                 __instance.setCaptain(null);
             DetachCivilAuthorityCaptain(__instance, current);
             return false;
+        }
+
+        private static void ReleaseIneligibleCaptainLease(Army pArmy,
+            Actor pActor)
+        {
+            if (pArmy?.data == null || pActor?.data == null) return;
+            using (ArmyCaptainDisposalScope.Open(pArmy))
+            {
+                try { pArmy.setCaptain(null); }
+                catch { }
+            }
+            RoyalGuardService.StripActorFromNormalArmy(pActor);
+            ArmyRtsControllerService.ReleaseActor(pActor);
+            ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
+            ArmyStrategicIndexService.OnArmyRosterChanged(pArmy);
         }
 
         private static bool TrySelectStableCaptain(Army pArmy,

@@ -1,0 +1,101 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalLabelPrecomputeRulesTests
+{
+    internal static void Run()
+    {
+        RejectsSupersededAndStaleBatches();
+        KeepsLayerAndFocusInTheCacheKeyWithoutGlobalGenerationChurn();
+        CapturesSourcesInBoundedSlices();
+        AllowsOnlyBoundedWorkerRetries();
+        ExposesSilentRuntimePerformanceMetrics();
+    }
+
+    private static void RejectsSupersededAndStaleBatches()
+    {
+        Equal(false, HierarchicalVassalLabelBatchRules.CanAccept(
+                3L, 3L, 4L, 4L, true),
+            "superseded result is never accepted");
+        Equal(false, HierarchicalVassalLabelBatchRules.CanAccept(
+                2L, 3L, 4L, 4L, false),
+            "old world result is never accepted");
+        Equal(false, HierarchicalVassalLabelBatchRules.CanAccept(
+                3L, 3L, 4L, 5L, false),
+            "old source result is never accepted");
+        Equal(true, HierarchicalVassalLabelBatchRules.CanAccept(
+                3L, 3L, 4L, 4L, false),
+            "current unsuperseded result is accepted");
+    }
+
+    private static void KeepsLayerAndFocusInTheCacheKeyWithoutGlobalGenerationChurn()
+    {
+        var root = new HierarchicalVassalLabelCacheKey(7L, "country", -1L, 42L);
+        var focus = new HierarchicalVassalLabelCacheKey(7L, "country", 9L, 42L);
+        var city = new HierarchicalVassalLabelCacheKey(7L, "city", -1L, 42L);
+        var newWorld = new HierarchicalVassalLabelCacheKey(8L, "country", -1L, 42L);
+        Equal(false, root.Equals(focus), "focus is part of cache identity");
+        Equal(false, root.Equals(city), "layer is part of cache identity");
+        Equal(false, root.Equals(newWorld), "world generation is part of cache identity");
+        Equal(false, string.Equals(root.ToString(), focus.ToString(),
+                StringComparison.Ordinal),
+            "focus changes produce different storage keys");
+        Equal(false, string.Equals(root.ToString(), city.ToString(),
+                StringComparison.Ordinal),
+            "layer changes produce different storage keys");
+        Equal(false, string.Equals(root.ToString(), newWorld.ToString(),
+                StringComparison.Ordinal),
+            "world changes produce different storage keys");
+        Equal(true, root.Equals(new HierarchicalVassalLabelCacheKey(
+                7L, "country", -1L, 42L)),
+            "returning to the same focus reuses the original cache key");
+    }
+
+    private static void CapturesSourcesInBoundedSlices()
+    {
+        var cursor = new HierarchicalVassalLabelSourceCursor<int>(
+            new[] { 1, 2, 3, 4, 5 });
+        Equal(2, cursor.Take(2).Count,
+            "source discovery consumes only its requested slice");
+        Equal(3, cursor.Remaining,
+            "bounded discovery leaves the rest for later frames");
+        Equal(2, cursor.Take(2).Count,
+            "second slice remains bounded");
+        Equal(false, cursor.IsComplete,
+            "source discovery does not scan the whole source in one slice");
+        Equal(1, cursor.Take(99).Count,
+            "final slice is capped by remaining sources");
+        Equal(true, cursor.IsComplete,
+            "cursor completes only after all slices are consumed");
+    }
+
+    private static void AllowsOnlyBoundedWorkerRetries()
+    {
+        Equal(true, HierarchicalVassalLabelBatchRules.CanRetry(0),
+            "first worker fault is retriable");
+        Equal(true, HierarchicalVassalLabelBatchRules.CanRetry(1),
+            "second worker fault is retriable");
+        Equal(false, HierarchicalVassalLabelBatchRules.CanRetry(2),
+            "worker retry count is bounded");
+    }
+
+    private static void ExposesSilentRuntimePerformanceMetrics()
+    {
+        Equal("aw3_render_hierarchical_labels",
+            RecentFeatureBenchmarkRules.IdForIndex(
+                RecentFeatureBenchmarkRules.HierarchicalLabelsIndex),
+            "label precompute has an opt-in benchmark category");
+        Equal("aw3_render_hierarchical_hover",
+            RecentFeatureBenchmarkRules.IdForIndex(
+                RecentFeatureBenchmarkRules.HierarchicalHoverIndex),
+            "hierarchical hover has an opt-in benchmark category");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected " + pExpected + ", got " + pActual);
+    }
+}

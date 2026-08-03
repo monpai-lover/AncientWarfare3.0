@@ -3,12 +3,19 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.performance;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class RulerHouseholdPregnancyService
     {
-        private static int _lastProcessedMonthKey = int.MinValue;
+        private const int KingdomsPerAuthorityCycle = 1;
+        private static readonly MonthlyAuthorityWorkQueue<Kingdom>
+            MonthlyWork = new MonthlyAuthorityWorkQueue<Kingdom>();
+
+        internal static int PendingMonthlyWorkForDiagnostics =>
+            MonthlyWork.PendingCount;
 
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
@@ -117,7 +124,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void Reset()
         {
-            _lastProcessedMonthKey = int.MinValue;
+            MonthlyWork.Clear();
         }
 
         public static void ProcessAuthorityCycle()
@@ -126,15 +133,20 @@ namespace AncientWarfare3.core.lineage
                 return;
             int monthKey = RulerHouseholdPregnancyRules.ToMonthKey(
                 Date.getCurrentYear(), Date.getCurrentMonth());
-            if (!RulerHouseholdPregnancyRules.ShouldProcessMonth(monthKey,
-                    _lastProcessedMonthKey))
-                return;
-            _lastProcessedMonthKey = monthKey;
-            foreach (Kingdom kingdom in World.world.kingdoms)
+            MonthlyWork.ScheduleMonth(monthKey, World.world.kingdoms);
+            MonthlyWork.Drain(KingdomsPerAuthorityCycle,
+                (queuedMonthKey, kingdom) =>
             {
-                try { ProcessKingdomMonth(kingdom, monthKey); }
+                long benchmark = RecentFeatureBenchmark.Begin();
+                try { ProcessKingdomMonth(kingdom, queuedMonthKey); }
                 catch { }
-            }
+                finally
+                {
+                    RecentFeatureBenchmark.End(
+                        RecentFeatureBenchmarkRules.MonthRulerHouseholdIndex,
+                        benchmark);
+                }
+            });
         }
 
         private static void ProcessKingdomMonth(Kingdom pKingdom,

@@ -24,6 +24,23 @@ namespace AncientWarfare3.core.lineage
                 : ArmyRecruitmentDisposition.Reject;
         }
 
+        public static ArmyRecruitmentDisposition DecideCityRecruitment(
+            int existingOrdinaryArmyCount, int kingdomFieldArmyCount)
+        {
+            return existingOrdinaryArmyCount > 0
+                ? ArmyRecruitmentDisposition.Replenish
+                : ArmyRecruitmentDisposition.Create;
+        }
+
+        public static long SelectCanonicalCityArmy(long firstArmyId,
+            bool firstCaptainStable, long secondArmyId,
+            bool secondCaptainStable)
+        {
+            if (firstCaptainStable != secondCaptainStable)
+                return firstCaptainStable ? firstArmyId : secondArmyId;
+            return System.Math.Min(firstArmyId, secondArmyId);
+        }
+
         public static ArmyRecruitmentDisposition DecideFieldCreation(
             int fieldArmyCount, bool hasIndexedExistingArmy,
             bool candidateIsFieldArmy, bool exemptSpecialCreation)
@@ -43,7 +60,7 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldMaintainExcessFieldArmies(
             int fieldArmyCount)
         {
-            return fieldArmyCount > MaximumFieldArmies;
+            return false;
         }
 
         public static bool ShouldScheduleMaintenanceMerge(

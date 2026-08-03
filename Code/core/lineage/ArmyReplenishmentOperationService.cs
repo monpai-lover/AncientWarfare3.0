@@ -100,6 +100,9 @@ namespace AncientWarfare3.core.lineage
                 !IsControlledCity(pSourceCity, pKingdom) ||
                 !TryGetActiveMissionWar(pArmy, pKingdom, out _) ||
                 pRequestedShortage <= 0 ||
+                !ArmyMobilizationRules.CanConsume(
+                    CityReservePoolService.ResolveMobilizationPhase(
+                        pKingdom)) ||
                 !IsFinite(pStartTime)) return null;
 
             int approved =
@@ -128,9 +131,52 @@ namespace AncientWarfare3.core.lineage
                 return true;
             if (!TryGetLiveShortage(pArmy, out int liveShortage))
                 return false;
-            return ArmyReplenishmentOperationRules.ShouldFinishEarly(
-                       liveShortage) ||
+            int living;
+            try { living = Math.Max(0, pArmy.countUnits()); }
+            catch { living = 0; }
+            int target = living + Math.Max(0, liveShortage);
+            return ArmyReplenishmentOperationRules.ShouldReleaseDeparture(
+                       living, target) ||
                    CurrentWorldTime() >= state.DeadlineTime;
+        }
+
+        internal static bool TryGetSourceReserveAvailability(Army pArmy,
+            out bool pAvailable)
+        {
+            pAvailable = false;
+            if (pArmy?.data == null) return false;
+            Kingdom kingdom = SafeKingdom(pArmy);
+            if (!IsLiveKingdom(kingdom)) return false;
+
+            City sourceCity = null;
+            if (TryRead(pArmy,
+                    out ArmyReplenishmentOperationState operation))
+                sourceCity = FindCity(operation.SourceCityId);
+            if (sourceCity == null)
+            {
+                try { sourceCity = AWArmyService.FindAnchorCity(pArmy); }
+                catch { sourceCity = null; }
+            }
+            if (sourceCity?.data == null) return false;
+            if (!IsControlledCity(sourceCity, kingdom)) return true;
+            ArmyMobilizationPhase phase = CityReservePoolService.
+                ResolveMobilizationPhase(kingdom);
+            if (!ArmyMobilizationRules.CanConsume(phase)) return true;
+            int available;
+            if (phase == ArmyMobilizationPhase.War &&
+                TryGetActiveMissionWar(pArmy, kingdom, out War war))
+                available = CityReservePoolService.OpenOrReadWarReserve(
+                    sourceCity, war.data.id);
+            else
+                available = CityReservePoolService.CountAvailable(sourceCity);
+            if (available > 0)
+            {
+                pAvailable = true;
+                return true;
+            }
+            if (!TemporaryLevyService.HasConfirmedReserveExhaustion(
+                    kingdom, pArmy)) return false;
+            return true;
         }
 
         internal static void ProcessAuthorityCycle()
@@ -209,6 +255,21 @@ namespace AncientWarfare3.core.lineage
                 LineageKeys.ARMY_REPLENISHMENT_OPERATION_DEADLINE_TIME);
         }
 
+        internal static bool CanUseReservePool(Army pArmy)
+        {
+            try
+            {
+                if (pArmy?.data == null) return false;
+                bool ordinary =
+                    ArmyNativeNameService.IsOrdinaryArmy(pArmy);
+                bool royalGuard =
+                    RoyalGuardService.IsRoyalGuardArmy(pArmy);
+                return ArmyReplenishmentOperationRules.CanUseReservePool(
+                    ordinary, royalGuard);
+            }
+            catch { return false; }
+        }
+
         private static void ProcessOne(long pArmyId, double pNow)
         {
             Army army = FindArmy(pArmyId);
@@ -240,17 +301,9 @@ namespace AncientWarfare3.core.lineage
             City preferredCity = FindCity(state.SourceCityId);
             if (requested > 0)
             {
-                var candidates = new List<Actor>(requested);
-                CityReservePoolService.TryConsumeFromSourceCity(kingdom,
-                    preferredCity, requested, army, candidates,
-                    out confirmedExhausted);
-
-                int enlisted = TemporaryLevyService.EnlistReserveActors(
-                    kingdom, preferredCity, army, candidates,
-                    preparationRecruitment: false,
-                    pTrackReplenishmentArrival: false);
-                CityReservePoolService.RestoreRejectedCandidates(kingdom,
-                    preferredCity, army, candidates);
+                int enlisted = RecruitFormalWarShortage(army, kingdom,
+                    preferredCity, requested, out confirmedExhausted,
+                    out List<Actor> recruits);
                 if (enlisted > 0)
                 {
                     state.EnlistedCount =
@@ -258,7 +311,7 @@ namespace AncientWarfare3.core.lineage
                             state.ApprovedShortage,
                             state.EnlistedCount + enlisted);
                     Persist(army, state);
-                    TeleportSuccessfulRecruits(army, candidates);
+                    TeleportSuccessfulRecruits(army, recruits);
                     KingdomWarDirectorService.QueueArmyChanged(kingdom);
                 }
             }
@@ -272,7 +325,8 @@ namespace AncientWarfare3.core.lineage
             }
             bool reservesConfirmedExhausted = confirmedExhausted ||
                 deadlineReached && CityReservePoolService.
-                    CountAvailable(preferredCity) <= 0;
+                    OpenOrReadWarReserve(preferredCity,
+                        ResolveMissionWarId(army, kingdom)) <= 0;
             if (ArmyReplenishmentOperationRules.ShouldFinish(
                     liveShortage <= 0, reservesConfirmedExhausted,
                     deadlineReached))
@@ -283,6 +337,44 @@ namespace AncientWarfare3.core.lineage
                 Clear(army);
                 ArmyReplenishmentCompletionService.Complete(army);
             }
+        }
+
+        private static int RecruitFormalWarShortage(Army army,
+            Kingdom kingdom, City sourceCity, int requested,
+            out bool confirmedExhausted, out List<Actor> recruits)
+        {
+            recruits = new List<Actor>(Math.Min(Math.Max(0, requested),
+                TemporaryLevyRules.MaxRecruitsPerWorkItem));
+            confirmedExhausted = false;
+            if (sourceCity?.data == null || kingdom?.data == null ||
+                CityReservePoolService.ResolveMobilizationPhase(kingdom) !=
+                ArmyMobilizationPhase.War ||
+                !TryGetActiveMissionWar(army, kingdom, out War war))
+                return 0;
+
+            long emergencyId = war.data.id;
+            int available = CityReservePoolService.OpenOrReadWarReserve(
+                sourceCity, emergencyId);
+            int syntheticRequest = TemporaryLevyRules.SyntheticFallbackRequest(
+                ArmyMobilizationPhase.War, requested, available);
+            int reserved = CityReservePoolService.TryReserveWarManpower(
+                sourceCity, emergencyId, syntheticRequest);
+            int synthetic = SyntheticLevyService.CreateBatch(
+                sourceCity, kingdom, army, reserved, emergencyId, recruits);
+            CityReservePoolService.ReleaseUnmaterializedWarReservation(
+                sourceCity, emergencyId, reserved - synthetic);
+            confirmedExhausted = synthetic <= 0 &&
+                                 CityReservePoolService.OpenOrReadWarReserve(
+                                     sourceCity, emergencyId) <= 0;
+            return synthetic;
+        }
+
+        private static long ResolveMissionWarId(Army army,
+            Kingdom kingdom)
+        {
+            return TryGetActiveMissionWar(army, kingdom, out War war)
+                ? war.data.id
+                : -1L;
         }
 
         private static void TeleportSuccessfulRecruits(Army pArmy,
@@ -391,7 +483,7 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 return pArmy?.data != null && pArmy.isAlive() &&
-                       ArmyNativeNameService.IsOrdinaryArmy(pArmy);
+                       CanUseReservePool(pArmy);
             }
             catch { return false; }
         }

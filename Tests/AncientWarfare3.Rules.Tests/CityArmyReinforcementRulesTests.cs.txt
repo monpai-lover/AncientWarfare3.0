@@ -31,6 +31,28 @@ internal static class CityArmyReinforcementRulesTests
             "approved target alone defines displayed reinforcement shortage");
         Equal(0, CityArmyReinforcementRules.Shortage(40, 35),
             "a population decline never creates a negative shortage");
+
+        Equal(ArmyRecruitmentDisposition.Replenish,
+            ArmyEstablishmentRules.DecideCityRecruitment(
+                existingOrdinaryArmyCount: 1,
+                kingdomFieldArmyCount: 99),
+            "an existing city army is always reused even when full");
+        Equal(ArmyRecruitmentDisposition.Create,
+            ArmyEstablishmentRules.DecideCityRecruitment(
+                existingOrdinaryArmyCount: 0,
+                kingdomFieldArmyCount: 99),
+            "a city without an army may create one above the old realm cap");
+        Equal(10L, ArmyEstablishmentRules.SelectCanonicalCityArmy(
+                firstArmyId: 10L, firstCaptainStable: true,
+                secondArmyId: 5L, secondCaptainStable: false),
+            "a stable living captain preserves command continuity");
+        Equal(5L, ArmyEstablishmentRules.SelectCanonicalCityArmy(
+                firstArmyId: 10L, firstCaptainStable: true,
+                secondArmyId: 5L, secondCaptainStable: true),
+            "equal command continuity uses deterministic army identity");
+        Equal(false, ArmyEstablishmentRules.ShouldMaintainExcessFieldArmies(
+                fieldArmyCount: 99),
+            "realm army count is a scan budget and never a cross-city merge authority");
     }
 
     private static int TargetFor(CityArmyReinforcementAllocation[] pAllocations,

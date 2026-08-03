@@ -1,6 +1,7 @@
 using AncientWarfare3.core.policy;
 using HarmonyLib;
 using System.Reflection;
+using UnityEngine;
 
 namespace AncientWarfare3.patch
 {
@@ -11,7 +12,10 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_HierarchicalVassalMapNameplatePatch
     {
-        private static bool _cleared;
+        private static readonly MethodInfo ClearAll = AccessTools.Method(
+            typeof(NameplateManager), "clearAll");
+        private static NameplateManager _suppressedInstance;
+        private static Canvas _suppressedCanvas;
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(NameplateManager), nameof(NameplateManager.update))]
@@ -22,22 +26,27 @@ namespace AncientWarfare3.patch
             {
                 if (!HierarchicalVassalMapModeService.IsActive())
                 {
-                    _cleared = false;
+                    if (_suppressedCanvas != null)
+                        _suppressedCanvas.enabled = true;
+                    _suppressedCanvas = null;
+                    _suppressedInstance = null;
                     return true;
                 }
 
-                if (!_cleared)
+                if (!ReferenceEquals(_suppressedInstance, __instance))
                 {
-                    MethodInfo clearAll = AccessTools.Method(
-                        typeof(NameplateManager), "clearAll");
-                    clearAll?.Invoke(__instance, null);
-                    _cleared = true;
+                    if (_suppressedCanvas != null)
+                        _suppressedCanvas.enabled = true;
+                    _suppressedInstance = __instance;
+                    _suppressedCanvas = __instance.GetComponent<Canvas>();
+                    ClearAll?.Invoke(__instance, null);
                 }
+                if (_suppressedCanvas != null)
+                    _suppressedCanvas.enabled = false;
                 return false;
             }
             catch
             {
-                _cleared = true;
                 // Keep the dedicated layer alive even if the optional
                 // reflection cleanup is unavailable on a client build.
                 return false;

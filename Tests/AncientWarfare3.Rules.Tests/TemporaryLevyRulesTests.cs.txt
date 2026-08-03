@@ -5,12 +5,69 @@ internal static class TemporaryLevyRulesTests
 {
     public static void Run()
     {
+        AnnualRecruitmentStopsAfterWarStarts();
         RecoversEligibleOrphanWarriorsDuringWar();
         PreservesGarrisonAndAssignedSoldiers();
         NotifiesRtsForEveryRosterMembershipChange();
         PreparationScanRunsOnlyOnMonthTickOrInvalidation();
         DirectedReplenishmentNeverLeavesItsSourceCity();
         DirectedReserveExhaustionIsArmyScoped();
+        PreparationCreatesAndReplenishesCityArmy();
+        SyntheticRecruitmentStartsOnlyAfterFormalWar();
+    }
+
+    private static void SyntheticRecruitmentStartsOnlyAfterFormalWar()
+    {
+        Assert(TemporaryLevyRules.SyntheticFallbackRequest(
+                   ArmyMobilizationPhase.Notice, approvedShortage: 10,
+                   availableWarReserve: 10) == 0,
+            "notice preparation cannot generate actors");
+        Assert(TemporaryLevyRules.SyntheticFallbackRequest(
+                   ArmyMobilizationPhase.War, approvedShortage: 10,
+                   availableWarReserve: 7) == 7,
+            "formal war creates only the available replacement reserve");
+        Assert(TemporaryLevyRules.SyntheticFallbackRequest(
+                   ArmyMobilizationPhase.War, approvedShortage: 10,
+                   availableWarReserve: 2) == 2,
+            "war creation remains capped by the source city reserve");
+        Assert(TemporaryLevyRules.SyntheticFallbackRequest(
+                   ArmyMobilizationPhase.War, approvedShortage: 0,
+                   availableWarReserve: 10) == 0,
+            "a full army creates no synthetic soldiers");
+    }
+
+    private static void PreparationCreatesAndReplenishesCityArmy()
+    {
+        Assert(TemporaryLevyRules.PreparationRequest(
+                   establishmentAccepted: true, living: 0,
+                   target: 20, workItemLimit: 8) == 8,
+            "an accepted Create disposition recruits the first army batch");
+        Assert(TemporaryLevyRules.PreparationRequest(
+                   establishmentAccepted: true, living: 5,
+                   target: 20, workItemLimit: 8) == 8,
+            "an accepted Replenish disposition recruits the next batch");
+        Assert(TemporaryLevyRules.PreparationRequest(
+                   establishmentAccepted: false, living: 0,
+                   target: 20, workItemLimit: 8) == 0,
+            "a rejected establishment cannot consume reserves");
+        Assert(TemporaryLevyRules.CanRecruitBeforeFrontierReady(
+                activeNotice: true, sourceCityValid: true),
+            "frontier projection readiness cannot block city recruitment");
+        Assert(!TemporaryLevyRules.CanRecruitBeforeFrontierReady(
+                activeNotice: false, sourceCityValid: true),
+            "an ended notice cannot continue preparation recruitment");
+    }
+
+    private static void AnnualRecruitmentStopsAfterWarStarts()
+    {
+        Assert(!TemporaryLevyRules.ShouldRunAnnualRecruitment(
+                emergencyActive: true, activeNotice: false,
+                activeWar: true),
+            "a formal war must not start a new annual recruitment batch");
+        Assert(TemporaryLevyRules.ShouldRunAnnualRecruitment(
+                emergencyActive: true, activeNotice: false,
+                activeWar: false),
+            "annual recruitment remains available during a non-war emergency");
     }
 
     private static void DirectedReplenishmentNeverLeavesItsSourceCity()

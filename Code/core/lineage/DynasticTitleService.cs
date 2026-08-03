@@ -48,6 +48,9 @@ namespace AncientWarfare3.core.lineage
             Actor pParent2)
         {
             if (pChild?.data == null) return;
+            ActorAgeWorkService.MarkDirty(pChild);
+            ActorAgeWorkService.MarkDirty(pParent1);
+            ActorAgeWorkService.MarkDirty(pParent2);
             DynasticMaleLineContinuityService.OnChildBorn(pChild,
                 pParent1, pParent2);
             FeudatoryService.OnChildBorn(pChild, pParent1, pParent2);

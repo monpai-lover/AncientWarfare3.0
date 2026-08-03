@@ -19,10 +19,7 @@ namespace AncientWarfare3.patch
         {
             if (__instance?.data == null) return;
             if (__instance.isRekt() || !__instance.isAlive()) return;
-            DynasticTitleService.OnAgeUpdated(__instance);
-            StandingArmyPeacetimeService.RefreshJob(__instance);
-            DynasticReproductionService.ReleaseExistingMilitaryRole(
-                __instance);
+            ActorAgeWorkService.Process(__instance);
             if (!LineageService.IsXia(__instance)) return;
 
             long benchmark = UpdateAgeBenchmark.Begin();

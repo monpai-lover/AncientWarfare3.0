@@ -109,9 +109,18 @@ internal static class PathfindingCursorTests
             "the first request creates work");
         Assert(generator.Started.Wait(TimeSpan.FromSeconds(3)),
             "the active request reaches the worker");
-        Assert(finder.TryReuse(1, 17, AWPathRequestOptions.Default),
+        Assert(finder.TryReuse(request.ReuseKey),
             "the same active target is reused before another request is allocated");
-        Assert(!finder.TryReuse(1, 18, AWPathRequestOptions.Default),
+        var changedTarget = new AWPathReuseKey(1,
+            request.ReuseKey.StartRegion,
+            new AWPathRequestKey(18, pWater: false, pBlocks: false,
+                pLava: false, pRegionLimit: 0,
+                pBoundedMilitaryWater: false,
+                pMaximumConsecutiveWaterTiles: 0),
+            request.ReuseKey.TerrainRevision,
+            request.ReuseKey.WorldGeneration,
+            request.ReuseKey.InsideBoat);
+        Assert(!finder.TryReuse(changedTarget),
             "a changed target cannot reuse active work");
         generator.Release.Set();
         finder.StopAndDrain();

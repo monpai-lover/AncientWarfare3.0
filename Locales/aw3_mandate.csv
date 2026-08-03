@@ -115,6 +115,7 @@ aw_actor,人物,Actor,人物
 aw_city,城市,City,城市
 aw_grant_mandate,人工授予天命,Grant Mandate,人工授予天命
 aw_grant_mandate Description,点击一个有君主的文明国家并直接把现有天命转授给该国,Click a civilized realm with a ruler to transfer the Mandate directly,點擊一個有君主的文明國家並直接把現有天命轉授給該國
+aw_grant_mandate_description,点击一个有君主的文明国家，将现有天命直接转授给该国,Click a civilized realm with a ruler to transfer the current Mandate directly,點擊一個有君主的文明國家，將現有天命直接轉授給該國
 aw_grant_mandate_success,已授予天命,Mandate granted,已授予天命
 aw_grant_mandate_error_invalid,请点击一个存续的文明国家,Select an existing civilized realm,請點擊一個存續的文明國家
 aw_grant_mandate_error_no_king,目标国家没有君主,The target realm has no ruler,目標國家沒有君主

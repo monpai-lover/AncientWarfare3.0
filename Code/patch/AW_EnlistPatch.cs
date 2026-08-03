@@ -16,6 +16,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.makeWarrior))]
         public static bool MakeWarrior_Asylum_Prefix(Actor pActor)
         {
+            if (SyntheticLevySpawnScope.IsActive &&
+                SyntheticLevyService.IsSynthetic(pActor)) return true;
             return pActor?.data != null &&
                    !IsCivilAuthority(pActor) &&
                    SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(
@@ -46,6 +48,9 @@ namespace AncientWarfare3.patch
                 return true;
             }
             __state = MilitaryProfessionState.Capture(__instance);
+            if (pType == UnitProfession.Warrior &&
+                SyntheticLevySpawnScope.IsActive &&
+                SyntheticLevyService.IsSynthetic(__instance)) return true;
             bool actorIsDead = __instance?.data == null || __instance.isRekt() ||
                                !__instance.isAlive();
             if (pType != UnitProfession.Warrior &&

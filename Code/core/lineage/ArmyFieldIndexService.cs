@@ -7,24 +7,37 @@ namespace AncientWarfare3.core.lineage
     {
         private static readonly ArmyFieldIdentityIndex Index =
             new ArmyFieldIdentityIndex();
+        private static readonly Dictionary<long, long> CanonicalArmyByCity =
+            new Dictionary<long, long>();
+        private static readonly Dictionary<long, long> CityByArmy =
+            new Dictionary<long, long>();
 
         public static void OnArmyChanged(Army pArmy)
         {
             Kingdom changedKingdom = SafeKingdom(pArmy);
             if (!IsFieldArmy(pArmy, out Kingdom kingdom))
             {
-                if (pArmy != null) Index.Remove(pArmy.id);
+                if (pArmy != null)
+                {
+                    Index.Remove(pArmy.id);
+                    RemoveCityMapping(pArmy.id);
+                }
                 StandingArmyService.OnFieldArmyChanged(changedKingdom);
                 return;
             }
             Index.Register(pArmy.id, kingdom.id);
+            RegisterCityArmy(pArmy, kingdom);
             StandingArmyService.OnFieldArmyChanged(kingdom);
         }
 
         public static void OnArmyDisposed(Army pArmy)
         {
             Kingdom kingdom = SafeKingdom(pArmy);
-            if (pArmy != null) Index.Remove(pArmy.id);
+            if (pArmy != null)
+            {
+                Index.Remove(pArmy.id);
+                RemoveCityMapping(pArmy.id);
+            }
             StandingArmyService.OnFieldArmyChanged(kingdom);
         }
 
@@ -52,17 +65,55 @@ namespace AncientWarfare3.core.lineage
             return null;
         }
 
-        public static bool TryRouteCappedCandidate(Actor pActor,
-            City pCity, out Army pArmy)
+        public static bool TryGetCityArmy(City pCity, out Army pArmy)
         {
             pArmy = null;
             Kingdom kingdom = pCity?.kingdom;
-            if (pActor?.data == null || pCity?.data == null ||
-                kingdom?.data == null || pActor.kingdom != kingdom ||
-                Count(kingdom) < ArmyEstablishmentRules.MaximumFieldArmies)
-                return false;
+            if (pCity?.data == null || kingdom?.data == null) return false;
 
-            return TryRouteStandingCandidate(pActor, pCity, out pArmy);
+            if (CanonicalArmyByCity.TryGetValue(pCity.id, out long armyId))
+            {
+                Army indexed = ResolveIndexedArmy(armyId, kingdom.id);
+                if (IsCityArmy(indexed, pCity))
+                {
+                    pArmy = indexed;
+                    return true;
+                }
+                CanonicalArmyByCity.Remove(pCity.id);
+                CityByArmy.Remove(armyId);
+            }
+
+            Army cityArmy = null;
+            try { if (pCity.hasArmy()) cityArmy = pCity.getArmy(); }
+            catch { }
+            if (IsCityArmy(cityArmy, pCity))
+            {
+                RegisterCityArmy(cityArmy, kingdom);
+                if (CanonicalArmyByCity.TryGetValue(pCity.id,
+                        out armyId))
+                    pArmy = ResolveIndexedArmy(armyId, kingdom.id);
+            }
+            if (pArmy?.data == null)
+            {
+                ArmyStrategicIdCursor cursor = CreateSnapshotCursor(kingdom);
+                while (!cursor.IsComplete)
+                {
+                    IReadOnlyList<long> ids = cursor.Take(
+                        ArmyEstablishmentRules.MaximumFieldArmies);
+                    if (ids.Count == 0) break;
+                    for (int i = 0; i < ids.Count; i++)
+                    {
+                        Army candidate = ResolveIndexedArmy(ids[i],
+                            kingdom.id);
+                        if (IsCityArmy(candidate, pCity))
+                            RegisterCityArmy(candidate, kingdom);
+                    }
+                }
+                if (CanonicalArmyByCity.TryGetValue(pCity.id,
+                        out armyId))
+                    pArmy = ResolveIndexedArmy(armyId, kingdom.id);
+            }
+            return pArmy?.data != null;
         }
 
         public static bool TryRouteStandingCandidate(Actor pActor,
@@ -74,27 +125,7 @@ namespace AncientWarfare3.core.lineage
                 kingdom?.data == null || pActor.kingdom != kingdom ||
                 pActor.army != null) return false;
 
-            ArmyStrategicIdCursor cursor = CreateSnapshotCursor(kingdom);
-            IReadOnlyList<long> ids = cursor.Take(
-                ArmyEstablishmentRules.MaximumFieldArmies);
-            int bestUnits = int.MaxValue;
-            bool bestPreferred = false;
-            for (int i = 0; i < ids.Count; i++)
-            {
-                Army candidate = ResolveIndexedArmy(ids[i], kingdom.id);
-                if (candidate?.data == null) continue;
-                int units = SafeUnitCount(candidate);
-                bool preferred = AWArmyService.GetAnchorCityId(candidate) ==
-                                 pCity.id;
-                if (pArmy != null &&
-                    (!preferred || bestPreferred) &&
-                    (preferred != bestPreferred || units >= bestUnits))
-                    continue;
-                pArmy = candidate;
-                bestUnits = units;
-                bestPreferred = preferred;
-            }
-            if (pArmy?.data == null) return false;
+            if (!TryGetCityArmy(pCity, out pArmy)) return false;
             AWArmyService.AddToArmy(pActor, pArmy);
             return pActor.army == pArmy;
         }
@@ -116,6 +147,68 @@ namespace AncientWarfare3.core.lineage
         public static void ClearRuntime()
         {
             Index.Clear();
+            CanonicalArmyByCity.Clear();
+            CityByArmy.Clear();
+        }
+
+        private static void RegisterCityArmy(Army pArmy, Kingdom pKingdom)
+        {
+            long cityId = AWArmyService.GetAnchorCityId(pArmy);
+            RemoveCityMapping(pArmy.id);
+            if (cityId < 0L) return;
+            CityByArmy[pArmy.id] = cityId;
+            if (!CanonicalArmyByCity.TryGetValue(cityId,
+                    out long existingId) || existingId == pArmy.id)
+            {
+                CanonicalArmyByCity[cityId] = pArmy.id;
+                return;
+            }
+
+            Army existing = ResolveIndexedArmy(existingId, pKingdom.id);
+            if (existing?.data == null)
+            {
+                CanonicalArmyByCity[cityId] = pArmy.id;
+                return;
+            }
+            long canonicalId = ArmyEstablishmentRules.SelectCanonicalCityArmy(
+                existing.id, HasStableCaptain(existing), pArmy.id,
+                HasStableCaptain(pArmy));
+            Army canonical = canonicalId == existing.id ? existing : pArmy;
+            Army duplicate = canonicalId == existing.id ? pArmy : existing;
+            CanonicalArmyByCity[cityId] = canonical.id;
+            StandingArmyService.ScheduleCityDuplicateMerge(pKingdom,
+                duplicate, canonical);
+        }
+
+        private static void RemoveCityMapping(long pArmyId)
+        {
+            if (!CityByArmy.TryGetValue(pArmyId, out long cityId)) return;
+            CityByArmy.Remove(pArmyId);
+            if (CanonicalArmyByCity.TryGetValue(cityId, out long canonicalId) &&
+                canonicalId == pArmyId)
+                CanonicalArmyByCity.Remove(cityId);
+        }
+
+        private static bool IsCityArmy(Army pArmy, City pCity)
+        {
+            if (pArmy?.data == null || pCity?.kingdom?.data == null ||
+                AWArmyService.GetAnchorCityId(pArmy) != pCity.id)
+                return false;
+            return IsFieldArmy(pArmy, out Kingdom kingdom) &&
+                   kingdom == pCity.kingdom;
+        }
+
+        private static bool HasStableCaptain(Army pArmy)
+        {
+            Actor captain = null;
+            try { captain = pArmy?.getCaptain(); }
+            catch { }
+            try
+            {
+                return captain?.data != null && captain.army == pArmy &&
+                       !captain.isRekt() && captain.isAlive();
+            }
+            catch { return false; }
         }
 
         private static bool IsFieldArmy(Army pArmy, out Kingdom pKingdom)

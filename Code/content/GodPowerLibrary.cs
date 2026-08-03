@@ -281,10 +281,11 @@ namespace AncientWarfare3.content
             if (!PlayerConfig.dict.TryGetValue(optionId,
                     out PlayerOptionData data) || !data.boolVal)
             {
-                HierarchicalVassalMapModeService.Reset();
+                HierarchicalVassalMapModeLabelLayer.
+                    ObserveMapModeActive(false);
                 return;
             }
-            HierarchicalVassalMapModeService.DirtyMap();
+            HierarchicalVassalMapModeLabelLayer.RequestRefresh();
         }
 
         private static void SyncHierarchicalVassalLayerOption()

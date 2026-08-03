@@ -29,8 +29,20 @@ namespace AncientWarfare3.core.pathfinding
         private long _sourceRevision;
 
         public int GenerationId => (_overlayGeneration ?? _current)?.Id ?? -1;
+        public long SourceRevision => _sourceRevision;
         public int DirtyChunkCount => _dirtyChunks.Count;
         public int PendingOverlayChunkCount => _overlay.Count;
+
+        public int StartRegion(int pTileId)
+        {
+            AWTraversalGeneration generation = _overlayGeneration ?? _current;
+            if (generation == null || pTileId < 0 ||
+                pTileId >= generation.TileCount) return -1;
+            int x = pTileId % generation.Width;
+            int y = pTileId / generation.Width;
+            return x / generation.ChunkSize +
+                   y / generation.ChunkSize * generation.ChunksWide;
+        }
 
         public AWTraversalCache(AWPathDiagnostics pDiagnostics = null)
         {

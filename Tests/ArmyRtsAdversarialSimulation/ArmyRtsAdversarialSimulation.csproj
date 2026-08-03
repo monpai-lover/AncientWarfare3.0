@@ -33,6 +33,10 @@
              Link="Production\ArmyLifecycleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\TemporaryLevyRules.cs"
              Link="Production\TemporaryLevyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyMobilizationRules.cs"
+             Link="Production\ArmyMobilizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CityManpowerRules.cs"
+             Link="Production\CityManpowerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WartimeRecruitmentPopulationRules.cs"
              Link="Production\WartimeRecruitmentPopulationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\OccupiedCityCivilianProtectionRules.cs"

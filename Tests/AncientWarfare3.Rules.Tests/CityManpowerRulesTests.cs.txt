@@ -1,0 +1,43 @@
+using AncientWarfare3.core.lineage;
+using System;
+
+internal static class CityManpowerRulesTests
+{
+    internal static void Run()
+    {
+        Equal(0, CityManpowerRules.Capacity(0),
+            "an empty city has no manpower");
+        Equal(5, CityManpowerRules.Capacity(10),
+            "manpower is half of authentic population");
+        Equal(5, CityManpowerRules.Capacity(11),
+            "odd population rounds manpower down");
+        Equal(4, CityManpowerRules.AuthenticPopulation(
+            authenticResidents: 3, authenticMobilized: 1),
+            "mobilized authentic residents remain in the population base");
+        Equal(3, CityManpowerRules.NoticeHeadroom(
+            authenticPopulation: 10, activeCitySourcedMilitary: 2),
+            "notice recruitment excludes soldiers already mobilized");
+        Equal(0, CityManpowerRules.NoticeHeadroom(
+            authenticPopulation: 10, activeCitySourcedMilitary: 9),
+            "notice recruitment cannot exceed half of population");
+        Equal(3, CityManpowerRules.OpenWarReserve(
+            authenticPopulation: 10, livingCitySoldiers: 2),
+            "formal war snapshots only remaining manpower");
+        Equal(2, CityManpowerRules.WarReserveAvailable(
+            reserveCapacity: 3, consumed: 1),
+            "wartime creation permanently consumes the emergency reserve");
+        Equal(2, CityManpowerRules.RequiredSynthetic(
+            approvedShortage: 5, availableWarReserve: 2),
+            "synthetic creation is capped by wartime reserve");
+        Equal(0, CityManpowerRules.RequiredSynthetic(
+            approvedShortage: 5, availableWarReserve: 0),
+            "an exhausted wartime reserve cannot create actors");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

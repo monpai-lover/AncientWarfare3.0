@@ -6,6 +6,20 @@ internal static class CityReservePoolRulesTests
 {
     internal static void Run()
     {
+        Equal(20, CityReservePoolRules.ResolveAvailableManpower(
+            authenticResidents: 30, authenticMobilized: 10,
+            activeCitySourcedMilitary: 0),
+            "city manpower is half of all authentic residents");
+        Equal(5, CityReservePoolRules.ResolveAvailableManpower(
+            authenticResidents: 30, authenticMobilized: 10,
+            activeCitySourcedMilitary: 15),
+            "active source-city soldiers consume manpower headroom");
+        Equal(false, CityReservePoolRules.CanConfirmManpowerExhausted(
+            ledgerReady: false, availableManpower: 0),
+            "a missing ledger cannot masquerade as zero manpower");
+        Equal(true, CityReservePoolRules.CanConfirmManpowerExhausted(
+            ledgerReady: true, availableManpower: 0),
+            "a ready empty ledger confirms exhaustion");
         Equal(15, CityReservePoolRules.Capacity(50, 30),
             "limited law registers thirty percent of eligible civilians");
         Equal(25, CityReservePoolRules.Capacity(50, 50),
@@ -14,6 +28,14 @@ internal static class CityReservePoolRulesTests
             "expanded law registers seventy percent of eligible civilians");
         Equal(50, CityReservePoolRules.Capacity(50, 100),
             "full law registers every eligible civilian");
+        Equal(1, CityReservePoolRules.Capacity(1, 30),
+            "a non-zero limited law keeps one eligible civilian available");
+        Equal(1, CityReservePoolRules.Capacity(3, 50),
+            "small standard-law pools do not collapse to zero");
+        Equal(2, CityReservePoolRules.Capacity(3, 70),
+            "small expanded-law pools retain their exact rounded-down share");
+        Equal(0, CityReservePoolRules.Capacity(0, 30),
+            "an empty city still has no reserve capacity");
         Equal(true, CityReservePoolRules.ShouldAddForLawChange(
             frozen: true, oldPercent: 50, newPercent: 70),
             "raising the law is the only frozen-pool addition path");
@@ -43,8 +65,14 @@ internal static class CityReservePoolRulesTests
             "preparation accelerates city maintenance");
         Equal(8, CityReservePoolRules.ActorBudget(preparation: false),
             "peace candidate validation is bounded");
-        Equal(32, CityReservePoolRules.ActorBudget(preparation: true),
-            "preparation candidate validation remains bounded");
+        Equal(int.MaxValue, CityReservePoolRules.ActorBudget(preparation: true),
+            "preparation scans every resident without using it as an allocation size");
+        Equal(18, CityReservePoolRules.CapacityForPreparation(
+            eligibleCivilians: 61, lawPercent: 30, preparation: true),
+            "preparation reserve capacity still follows the conscription law");
+        Equal(18, CityReservePoolRules.CapacityForPreparation(
+            eligibleCivilians: 61, lawPercent: 30, preparation: false),
+            "peacetime reserve capacity still follows the conscription law");
         Equal(73, CityReservePoolRules.FullReconciliationBudget(
             residentCount: 61, indexedMemberCount: 12),
             "war start budgets one complete resident and member pass");
@@ -73,6 +101,14 @@ internal static class CityReservePoolRulesTests
         Equal(true, CityReservePoolRules.ShouldReconcileJoiningKingdom(
             warActive: true, liveKingdom: true),
             "a realm joining an active war reconciles every city before freezing");
+        Equal(11L, CityReservePoolRules.ResolveWarEmergencyId(
+            frozen: true, currentEmergencyId: 11L,
+            requestedEmergencyId: 22L),
+            "a parallel war cannot reset the first wartime reserve snapshot");
+        Equal(22L, CityReservePoolRules.ResolveWarEmergencyId(
+            frozen: false, currentEmergencyId: -1L,
+            requestedEmergencyId: 22L),
+            "the first formal war opens a new reserve snapshot");
         Equal(false, CityReservePoolRules.ShouldReconcileJoiningKingdom(
             warActive: false, liveKingdom: true),
             "an ended war cannot trigger a joining-realm reconciliation");
@@ -175,6 +211,33 @@ internal static class CityReservePoolRulesTests
         Equal(true, CityReservePoolRules.CanConsumeDuringPreparation(
             activeNotice: true, realmControlled: true, population: 21),
             "a prepared controlled city above the floor can donate");
+
+        Equal(true, CityReservePoolRules.CanConsumeForMobilization(
+            ArmyMobilizationPhase.Notice, realmControlled: true,
+            population: 21),
+            "notice preparation consumes the shared city ledger");
+        Equal(true, CityReservePoolRules.CanConsumeForMobilization(
+            ArmyMobilizationPhase.War, realmControlled: true,
+            population: 21),
+            "formal war consumes the same city ledger");
+        Equal(false, CityReservePoolRules.CanConsumeForMobilization(
+            ArmyMobilizationPhase.Peace, realmControlled: true,
+            population: 200),
+            "peace maintains but never consumes the reserve ledger");
+        Equal(false, CityReservePoolRules.CanConsumeForMobilization(
+            ArmyMobilizationPhase.Notice, realmControlled: false,
+            population: 200),
+            "a captured source city cannot supply its army");
+
+        Equal(false, CityReservePoolRules.CanConfirmExhausted(
+            reconciliationComplete: false, availableActorCount: 0),
+            "an uninitialized city ledger cannot masquerade as exhausted");
+        Equal(false, CityReservePoolRules.CanConfirmExhausted(
+            reconciliationComplete: true, availableActorCount: 1),
+            "a reconciled city with one reserve remains available");
+        Equal(true, CityReservePoolRules.CanConfirmExhausted(
+            reconciliationComplete: true, availableActorCount: 0),
+            "a complete empty city reconciliation confirms exhaustion");
 
         Equal(true, CityReservePoolRules.CanConfirmExhausted(
             kingdomFrozen: true, allIndexedCitiesChecked: true,

@@ -15,6 +15,20 @@ namespace AncientWarfare3.core.lineage
             return actorExists && actorAssetExists && kingdomAssetExists;
         }
 
+        public static bool CanEnterVanillaZoneProcessing(bool actorExists,
+            bool actorAssetExists, bool tileExists,
+            bool professionAssetExists, bool kingdomAssetExists)
+        {
+            return actorExists && actorAssetExists && tileExists &&
+                   professionAssetExists && kingdomAssetExists;
+        }
+
+        public static bool CanRenderUnit(bool actorExists,
+            bool actorAssetExists, bool tileExists)
+        {
+            return actorExists && actorAssetExists && tileExists;
+        }
+
         public static bool IsCityKingdomRepairable(
             bool cityKingdomAssetExists, bool cityKingdomIsRekt)
         {

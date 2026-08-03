@@ -55,6 +55,7 @@ namespace AncientWarfare3.core.performance
             ZhuluAgeDirectorService.Reset();
             AWLocalizedNameMigrationService.Reset();
             WesternLineageMigrationService.Reset();
+            ActorDeathArchiveService.Reset();
         }
 
         private static void ProcessCycle(AWAuthorityCycleGate pGate,
@@ -107,6 +108,7 @@ namespace AncientWarfare3.core.performance
 
         private static void DrainAuthorityCompletions()
         {
+            ActorDeathArchiveService.ProcessAuthorityCycle();
             AWAsyncRuntime.DrainMainThread(1.0, 32);
             HistoricalWriteService.DrainCompletions(0.5, 16);
         }

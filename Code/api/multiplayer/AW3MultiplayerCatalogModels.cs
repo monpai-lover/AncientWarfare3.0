@@ -58,7 +58,8 @@ namespace AncientWarfare3.api.multiplayer
         DiplomaticMarriage = 25,
         CivilServiceExam = 26,
         RulerHousehold = 27,
-        HouseholdOffer = 28
+        HouseholdOffer = 28,
+        Supporters = 29
     }
 
     public enum AW3WindowOpenStatus : byte

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -25,8 +26,23 @@ namespace AncientWarfare3.core.lineage
 
     internal static class CityMilitaryThreatFacts
     {
-        private static readonly Dictionary<CityMilitaryThreatKey, bool> Facts =
-            new Dictionary<CityMilitaryThreatKey, bool>();
+        private readonly struct FactEntry
+        {
+            internal FactEntry(bool pHostile, long pRevision,
+                double pCachedAt)
+            {
+                Hostile = pHostile;
+                Revision = pRevision;
+                CachedAt = pCachedAt;
+            }
+
+            internal bool Hostile { get; }
+            internal long Revision { get; }
+            internal double CachedAt { get; }
+        }
+
+        private static readonly Dictionary<CityMilitaryThreatKey, FactEntry>
+            Facts = new Dictionary<CityMilitaryThreatKey, FactEntry>();
         private static bool _cycleActive;
         private static long _requests;
         private static long _physicalScans;
@@ -38,13 +54,11 @@ namespace AncientWarfare3.core.lineage
 
         internal static void BeginAuthorityCycle()
         {
-            Facts.Clear();
             _cycleActive = true;
         }
 
         internal static void EndAuthorityCycle()
         {
-            Facts.Clear();
             _cycleActive = false;
         }
 
@@ -55,7 +69,12 @@ namespace AncientWarfare3.core.lineage
             pHostile = false;
             if (!TryCreateKey(pWar, pCity, pKingdom, out var key))
                 return false;
-            if (!Facts.TryGetValue(key, out pHostile)) return false;
+            if (!Facts.TryGetValue(key, out FactEntry entry) ||
+                !CityMilitaryThreatFactsRules.ShouldReuse(_cycleActive,
+                    entry.Revision, _revision, RealtimeSeconds(),
+                    entry.CachedAt))
+                return false;
+            pHostile = entry.Hostile;
             _hits++;
             return true;
         }
@@ -64,7 +83,8 @@ namespace AncientWarfare3.core.lineage
             bool pHostile)
         {
             if (!TryCreateKey(pWar, pCity, pKingdom, out var key)) return;
-            Facts[key] = pHostile;
+            Facts[key] = new FactEntry(pHostile, _revision,
+                RealtimeSeconds());
         }
 
         internal static void RecordPhysicalScan()
@@ -150,6 +170,16 @@ namespace AncientWarfare3.core.lineage
         private static void AdvanceRevision()
         {
             _revision = _revision == long.MaxValue ? 1L : _revision + 1L;
+        }
+
+        private static double RealtimeSeconds()
+        {
+            try { return UnityEngine.Time.realtimeSinceStartupAsDouble; }
+            catch
+            {
+                return (double)Stopwatch.GetTimestamp() /
+                       Stopwatch.Frequency;
+            }
         }
     }
 }

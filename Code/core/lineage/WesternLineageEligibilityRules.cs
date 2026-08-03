@@ -46,6 +46,39 @@ namespace AncientWarfare3.core.lineage
                    pProfile == NamingProfileId.OrcNomadic;
         }
 
+        /// <summary>
+        /// Selects the western family source without assuming that the
+        /// lineage-bearing parent must be male. A male source remains the
+        /// preferred convention, but a complete female ruler is a valid
+        /// fallback when the father has no compatible identity.
+        /// </summary>
+        public static int SelectParentSourceSlot(bool parent1Male,
+            bool parent1HasLineage, bool parent1Complete, bool parent2Male,
+            bool parent2HasLineage, bool parent2Complete,
+            bool requireComplete)
+        {
+            if (requireComplete)
+            {
+                if (parent1Male && parent1Complete) return 1;
+                if (parent2Male && parent2Complete) return 2;
+                if (parent1Complete) return 1;
+                if (parent2Complete) return 2;
+                return -1;
+            }
+
+            if (parent1Male && parent1HasLineage) return 1;
+            if (parent2Male && parent2HasLineage) return 2;
+            if (parent1HasLineage) return 1;
+            if (parent2HasLineage) return 2;
+            return -1;
+        }
+
+        public static bool ShouldEscalateRoyalChildBirth(
+            bool parentIsRuler, bool childRequiresFullArchive)
+        {
+            return parentIsRuler || childRequiresFullArchive;
+        }
+
         public static bool ShouldUseFullBirthPath(
             NamingProfileId pProfile, bool biologicalXia, bool monkey,
             bool civilized, bool parentHasLineage,

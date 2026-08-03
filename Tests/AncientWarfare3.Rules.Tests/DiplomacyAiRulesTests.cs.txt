@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 
 internal static class DiplomacyAiRulesTests
 {
@@ -10,5 +11,30 @@ internal static class DiplomacyAiRulesTests
         if (DiplomacyAiRules.ShouldRun(false))
             throw new InvalidOperationException(
                 "disabled diplomacy AI should not run");
+
+        AWPerformanceSettings.EnableAiAllianceActions = false;
+        if (DiplomacyAiRules.AllowsAiInitiation(
+                DiplomacyProposalType.Alliance))
+            throw new InvalidOperationException(
+                "disabled alliance AI should not initiate alliances");
+        if (!DiplomacyAiRules.AllowsAiInitiation(
+                DiplomacyProposalType.NonAggression))
+            throw new InvalidOperationException(
+                "alliance toggle must not disable non-aggression proposals");
+
+        AWPerformanceSettings.EnableAiVassalActions = false;
+        if (DiplomacyAiRules.AllowsAiInitiation(
+                DiplomacyProposalType.Vassalize) ||
+            DiplomacyAiRules.AllowsAiInitiation(
+                DiplomacyProposalType.Tributary))
+            throw new InvalidOperationException(
+                "disabled vassal AI should not initiate subject actions");
+        if (!DiplomacyAiRules.AllowsAiInitiation(
+                DiplomacyProposalType.EndVassal))
+            throw new InvalidOperationException(
+                "vassal toggle must not disable ending existing relations");
+
+        AWPerformanceSettings.EnableAiAllianceActions = true;
+        AWPerformanceSettings.EnableAiVassalActions = true;
     }
 }

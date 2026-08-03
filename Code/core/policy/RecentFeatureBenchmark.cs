@@ -13,6 +13,8 @@ namespace AncientWarfare3.core.policy
             new int[RecentFeatureBenchmarkRules.EntryIds.Length];
         private static long _totalTicks;
         private static int _totalCalls;
+        private static long _outsideVanillaFrameTicks;
+        private static int _outsideVanillaFrameCalls;
         private const int MaxTrackedScopeDepth = 64;
         [System.ThreadStatic]
         private static int _scopeDepth;
@@ -77,6 +79,23 @@ namespace AncientWarfare3.core.policy
             }
         }
 
+        public static long BeginOutsideFrameStage()
+        {
+            return Begin();
+        }
+
+        public static void EndOutsideFrameStage(int pIndex, long pStartTicks)
+        {
+            if (pStartTicks == 0L) return;
+            long elapsed = Stopwatch.GetTimestamp() -
+                           RecentFeatureBenchmarkRules.DecodeScopeStart(
+                               pStartTicks);
+            End(pIndex, pStartTicks);
+            if (elapsed < 0L) return;
+            Interlocked.Add(ref _outsideVanillaFrameTicks, elapsed);
+            Interlocked.Increment(ref _outsideVanillaFrameCalls);
+        }
+
         public static void Flush()
         {
             ArmyRtsBenchmarkSnapshot armyRts =
@@ -92,6 +111,13 @@ namespace AncientWarfare3.core.policy
             if (RecentFeatureBenchmarkRules.ShouldSaveSample(totalCalls))
                 Save(RecentFeatureBenchmarkRules.Total, totalTicks, totalCalls,
                     RecentFeatureBenchmarkRules.TotalParentGroup);
+            long outsideTicks = Interlocked.Read(
+                ref _outsideVanillaFrameTicks);
+            int outsideCalls = Volatile.Read(ref _outsideVanillaFrameCalls);
+            if (RecentFeatureBenchmarkRules.ShouldSaveSample(outsideCalls))
+                Save(RecentFeatureBenchmarkRules.OutsideVanillaFrameTotal,
+                    outsideTicks, outsideCalls,
+                    RecentFeatureBenchmarkRules.Group);
             for (int i = 0; i < Ticks.Length; i++)
             {
                 int count = Volatile.Read(ref Counts[i]);
@@ -144,6 +170,8 @@ namespace AncientWarfare3.core.policy
         {
             Interlocked.Exchange(ref _totalTicks, 0L);
             Interlocked.Exchange(ref _totalCalls, 0);
+            Interlocked.Exchange(ref _outsideVanillaFrameTicks, 0L);
+            Interlocked.Exchange(ref _outsideVanillaFrameCalls, 0);
             for (int i = 0; i < Ticks.Length; i++)
             {
                 Interlocked.Exchange(ref Ticks[i], 0L);

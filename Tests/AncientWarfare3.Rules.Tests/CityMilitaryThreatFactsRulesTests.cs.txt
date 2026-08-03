@@ -29,6 +29,18 @@ internal static class CityMilitaryThreatFactsRulesTests
         Assert(!CityMilitaryThreatFactsRules.ShouldAdvanceRevisionForInvalidation(
                 -1L),
             "an invalid state-change identifier cannot advance a fact revision");
+        Assert(CityMilitaryThreatFactsRules.ShouldReuse(true, 4L, 4L,
+                10.20d, 10.00d),
+            "a recent fact from the same revision may be reused across cycles");
+        Assert(!CityMilitaryThreatFactsRules.ShouldReuse(true, 4L, 4L,
+                10.36d, 10.00d),
+            "an expired fact must trigger a fresh physical scan");
+        Assert(!CityMilitaryThreatFactsRules.ShouldReuse(true, 4L, 5L,
+                10.20d, 10.00d),
+            "a changed revision must never reuse an old physical scan");
+        Assert(!CityMilitaryThreatFactsRules.ShouldReuse(false, 4L, 4L,
+                10.20d, 10.00d),
+            "facts are not reused outside an authority cycle");
     }
 
     private static void CacheEntryPointIsInstalledWithoutTileClosures()
@@ -40,6 +52,8 @@ internal static class CityMilitaryThreatFactsRulesTests
             "city hostile-military queries enter the authority-cycle cache");
         Assert(!source.Contains("tile.doUnits(actor =>"),
             "a physical city scan does not allocate one captured callback per tile");
+        Assert(source.Contains("HostilityByKingdom"),
+            "a physical city scan caches war relation checks per kingdom");
     }
 
     private static void LiveInvalidationUsesTheRevisionRule()

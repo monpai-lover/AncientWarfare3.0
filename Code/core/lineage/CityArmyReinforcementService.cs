@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -18,33 +17,10 @@ namespace AncientWarfare3.core.lineage
             int slots = EffectiveWarriorSlots(anchor, pKingdom);
             int capacity = CityArmyReinforcementRules.CityCapacity(population,
                 slots);
-            var requests = new List<CityArmyReinforcementRequest>();
-            foreach (Army candidate in World.world.armies)
-            {
-                if (!IsAnchoredOrdinaryArmy(candidate, pKingdom, anchor))
-                    continue;
-                int candidateLiving = SafeLiving(candidate);
-                requests.Add(new CityArmyReinforcementRequest(candidate.id,
-                    candidateLiving, slots, Priority(candidate)));
-            }
-
-            CityArmyReinforcementAllocation[] allocations =
-                CityArmyReinforcementRules.Allocate(capacity, requests);
-            for (int i = 0; i < allocations.Length; i++)
-                if (allocations[i].ArmyId == pArmy.id)
-                    return allocations[i].ApprovedTarget;
-            return living;
-        }
-
-        private static bool IsAnchoredOrdinaryArmy(Army pArmy,
-            Kingdom pKingdom, City pAnchor)
-        {
-            if (pArmy?.data == null || !pArmy.isAlive() ||
-                AWArmyService.IsSpecialArmy(pArmy)) return false;
-            City anchor = AWArmyService.FindAnchorCity(pArmy);
-            if (anchor?.data == null || anchor.id != pAnchor.id) return false;
-            return ReferenceEquals(AWArmyService.GetIntendedKingdom(pArmy,
-                anchor), pKingdom);
+            if (!ArmyFieldIndexService.TryGetCityArmy(anchor,
+                    out Army canonical) || canonical != pArmy)
+                return living;
+            return Math.Max(living, capacity);
         }
 
         private static bool IsValidAnchor(City pCity, Kingdom pKingdom)
@@ -75,23 +51,5 @@ namespace AncientWarfare3.core.lineage
             catch { return 0; }
         }
 
-        private static CityArmyPriority Priority(Army pArmy)
-        {
-            if (!ArmyRtsControllerService.TryGetMission(pArmy,
-                    out ArmyRtsMission mission))
-                return CityArmyPriority.Reserve;
-            switch (mission.ProposalKind)
-            {
-                case ArmyRtsProposalKind.Defend:
-                case ArmyRtsProposalKind.FrontHold:
-                    return CityArmyPriority.Frontline;
-                case ArmyRtsProposalKind.Attack:
-                    return CityArmyPriority.War;
-                default:
-                    return mission.WarId >= 0L
-                        ? CityArmyPriority.War
-                        : CityArmyPriority.Reserve;
-            }
-        }
     }
 }

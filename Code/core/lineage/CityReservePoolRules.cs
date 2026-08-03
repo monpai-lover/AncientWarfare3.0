@@ -11,11 +11,43 @@ namespace AncientWarfare3.core.lineage
         public const int PreparationActorBudget = 32;
         public const int ReserveExhaustionContribution = 20;
 
+        public static int ResolveAvailableManpower(
+            int authenticResidents, int authenticMobilized,
+            int activeCitySourcedMilitary)
+        {
+            int authentic = CityManpowerRules.AuthenticPopulation(
+                authenticResidents, authenticMobilized);
+            return CityManpowerRules.NoticeHeadroom(authentic,
+                activeCitySourcedMilitary);
+        }
+
+        public static bool CanConfirmManpowerExhausted(
+            bool ledgerReady, int availableManpower)
+        {
+            return ledgerReady && availableManpower <= 0;
+        }
+
         public static int Capacity(int eligibleCivilians, int percent)
         {
             long eligible = Math.Max(0, eligibleCivilians);
             long share = Math.Max(0, Math.Min(100, percent));
-            return (int)Math.Min(int.MaxValue, eligible * share / 100L);
+            if (eligible <= 0L || share <= 0L) return 0;
+
+            long capacity = eligible * share / 100L;
+            // Keep a non-empty reserve in small settlements.  The law still
+            // uses its exact percentage for normal-sized pools, but integer
+            // truncation must not turn every 1-3 person pool into zero.
+            if (capacity <= 0L) capacity = 1L;
+            return (int)Math.Min(int.MaxValue, capacity);
+        }
+
+        public static int CapacityForPreparation(int eligibleCivilians,
+            int lawPercent, bool preparation)
+        {
+            // Preparation changes when we scan and mobilize the pool, not how
+            // large the law permits the pool to become.  Keep the same
+            // 30/50/70/100% capacity in both phases.
+            return Capacity(eligibleCivilians, lawPercent);
         }
 
         public static bool ShouldAddForLawChange(bool frozen,
@@ -47,7 +79,7 @@ namespace AncientWarfare3.core.lineage
 
         public static int ActorBudget(bool preparation)
         {
-            return preparation ? PreparationActorBudget : PeaceActorBudget;
+            return preparation ? int.MaxValue : PeaceActorBudget;
         }
 
         public static int FullReconciliationBudget(int residentCount,
@@ -76,6 +108,14 @@ namespace AncientWarfare3.core.lineage
             bool liveKingdom)
         {
             return warActive && liveKingdom;
+        }
+
+        public static long ResolveWarEmergencyId(bool frozen,
+            long currentEmergencyId, long requestedEmergencyId)
+        {
+            if (frozen && currentEmergencyId >= 0L)
+                return currentEmergencyId;
+            return requestedEmergencyId;
         }
 
         public static bool CanMaintain(bool frozen, bool worldDayChanged)
@@ -112,6 +152,23 @@ namespace AncientWarfare3.core.lineage
             return activeNotice && realmControlled &&
                    WartimeRecruitmentPopulationRules.RecruitmentCapacity(
                        population, 1) > 0;
+        }
+
+        public static bool CanConsumeForMobilization(
+            ArmyMobilizationPhase phase, bool realmControlled,
+            int population)
+        {
+            return ArmyMobilizationRules.CanConsume(phase) &&
+                   realmControlled &&
+                   WartimeRecruitmentPopulationRules.RecruitmentCapacity(
+                       population, 1) > 0;
+        }
+
+        public static bool CanConfirmExhausted(
+            bool reconciliationComplete, int availableActorCount)
+        {
+            return ArmyMobilizationRules.ShouldConfirmExhausted(
+                reconciliationComplete, availableActorCount);
         }
 
         public static bool CanConfirmExhausted(bool kingdomFrozen,

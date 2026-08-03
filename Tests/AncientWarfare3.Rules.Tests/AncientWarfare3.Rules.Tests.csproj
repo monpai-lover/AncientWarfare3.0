@@ -9,11 +9,17 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="ActorDiagnosticSamplingRulesTests.cs.txt" />
+    <Compile Include="ActorAgeWorkRulesTests.cs.txt" />
+    <Compile Include="ActorDeathArchiveRulesTests.cs.txt" />
+    <Compile Include="ActorPresentationDirtyRulesTests.cs.txt" />
+    <Compile Include="AWPathRequestReuseRulesTests.cs.txt" />
     <Compile Include="ActiveMilitaryLifecycleRulesTests.cs.txt" />
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
     <Compile Include="RuntimePerformanceBudgetRulesTests.cs.txt" />
+    <Compile Include="MonthlyAuthorityWorkQueueTests.cs.txt" />
     <Compile Include="CourtReplacementSqlTests.cs.txt" />
     <Compile Include="CourtMeritRewardSqlTests.cs.txt" />
     <Compile Include="CourtMeritRewardFlowTests.cs.txt" />
@@ -110,6 +116,9 @@
     <Compile Include="ActorRacePerformanceRulesTests.cs.txt" />
     <Compile Include="ActorBatchPerformanceRulesTests.cs.txt" />
     <Compile Include="ArmyRtsControllerPerformanceRulesTests.cs.txt" />
+    <Compile Include="ArmyMobilizationRulesTests.cs.txt" />
+    <Compile Include="CityManpowerRulesTests.cs.txt" />
+    <Compile Include="SyntheticLevyRulesTests.cs.txt" />
     <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAsyncPlanningRulesTests.cs.txt" />
     <Compile Include="ActorKingdomSafetyRulesTests.cs.txt" />
@@ -124,6 +133,7 @@
     <Compile Include="TemporaryLevyRulesTests.cs.txt" />
     <Compile Include="CityArmyReinforcementRulesTests.cs.txt" />
     <Compile Include="CityReservePoolRulesTests.cs.txt" />
+    <Compile Include="CityReservePoolPersistenceRulesTests.cs.txt" />
     <Compile Include="RebellionForceCollapseRulesTests.cs.txt" />
     <Compile Include="ArmyReplenishmentOperationRulesTests.cs.txt" />
     <Compile Include="CourtConscriptionLawRulesTests.cs.txt" />
@@ -143,6 +153,8 @@
     <Compile Include="ConsistencyRegressionRulesTests.cs.txt" />
     <Compile Include="Regression20260721Tests.cs.txt" />
     <Compile Include="ArmyMapInformationRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalMapActivationRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalLabelPrecomputeRulesTests.cs.txt" />
     <Compile Include="AW3MultiplayerWorldLoadRulesTests.cs.txt" />
     <Compile Include="AW3RuntimeRestorePipelineTests.cs.txt" />
     <Compile Include="HistoricalFigureSpawnRulesTests.cs.txt" />
@@ -162,7 +174,13 @@
     <Compile Include="..\..\Code\content\figures\HistoricalFigureDef.cs" Link="Production\HistoricalFigureDef.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureSpawnRules.cs" Link="Production\HistoricalFigureSpawnRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityArmyReinforcementRules.cs" Link="Production\CityArmyReinforcementRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyEstablishmentRules.cs" Link="Production\ArmyEstablishmentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyMobilizationRules.cs" Link="Production\ArmyMobilizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CityManpowerRules.cs" Link="Production\CityManpowerRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SyntheticLevyRules.cs" Link="Production\SyntheticLevyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SyntheticLevySpawnScope.cs" Link="Production\SyntheticLevySpawnScope.cs" />
     <Compile Include="..\..\Code\core\lineage\CityReservePoolRules.cs" Link="Production\CityReservePoolRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CityReservePoolPersistenceRules.cs" Link="Production\CityReservePoolPersistenceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RebellionForceCollapseRules.cs" Link="Production\RebellionForceCollapseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyReplenishmentOperationRules.cs" Link="Production\ArmyReplenishmentOperationRules.cs" />
     <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerCatalog.cs" Link="Production\AW3MultiplayerCatalog.cs" />
@@ -272,6 +290,13 @@
     <Compile Include="..\..\Code\core\lineage\HeirRegistrationRules.cs" Link="Production\HeirRegistrationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MinimapActorMarkerRules.cs" Link="Production\MinimapActorMarkerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyMapInformationRules.cs" Link="Production\ArmyMapInformationRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalMapActivationRules.cs" Link="Production\HierarchicalVassalMapActivationRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalLabelInvalidationRules.cs" Link="Production\HierarchicalVassalLabelInvalidationRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalMapModeSchedulingRules.cs" Link="Production\HierarchicalVassalMapModeSchedulingRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalLabelPipelineRules.cs" Link="Production\HierarchicalVassalLabelPipelineRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalLabelCacheKey.cs" Link="Production\HierarchicalVassalLabelCacheKey.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalLabelBatchRules.cs" Link="Production\HierarchicalVassalLabelBatchRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalLabelSourceCursor.cs" Link="Production\HierarchicalVassalLabelSourceCursor.cs" />
     <Compile Include="..\..\Code\core\court\CityGovernorPlacementRules.cs" Link="Production\CityGovernorPlacementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\KingdomExtinctionRules.cs" Link="Production\KingdomExtinctionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NobleCaptureRules.cs" Link="Production\NobleCaptureRules.cs" />
@@ -453,6 +478,7 @@
     <Compile Include="..\..\Code\core\pathfinding\AWPathTypes.cs" Link="Production\AWPathTypes.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathLifecycleRules.cs" Link="Production\AWPathLifecycleRules.cs" />
     <Compile Include="..\..\Code\core\performance\RuntimePerformanceBudgetRules.cs" Link="Production\RuntimePerformanceBudgetRules.cs" />
+    <Compile Include="..\..\Code\core\performance\MonthlyAuthorityWorkQueue.cs" Link="Production\MonthlyAuthorityWorkQueue.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathStream.cs" Link="Production\AWPathStream.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWTraversalSnapshot.cs" Link="Production\AWTraversalSnapshot.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathRequest.cs" Link="Production\AWPathRequest.cs" />
@@ -488,6 +514,13 @@
     <Compile Include="..\..\Code\core\lineage\ActorProfessionLoadSafetyRules.cs" Link="Production\ActorProfessionLoadSafetyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorKingdomSafetyRules.cs" Link="Production\ActorKingdomSafetyRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDeathPerformanceRules.cs" Link="Production\ActorDeathPerformanceRules.cs" />
+    <Compile Include="..\..\Code\core\policy\ActorDiagnosticSamplingRules.cs" Link="Production\ActorDiagnosticSamplingRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ActorAgeWorkState.cs" Link="Production\ActorAgeWorkState.cs" />
+    <Compile Include="..\..\Code\core\lineage\ActorAgeWorkRules.cs" Link="Production\ActorAgeWorkRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ActorDeathArchiveModels.cs" Link="Production\ActorDeathArchiveModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\ActorDeathArchiveRules.cs" Link="Production\ActorDeathArchiveRules.cs" />
+    <Compile Include="..\..\Code\core\performance\AWActorPresentationDirtyRules.cs" Link="Production\AWActorPresentationDirtyRules.cs" />
+    <Compile Include="..\..\Code\core\performance\AWActorPresentationDirtyIndex.cs" Link="Production\AWActorPresentationDirtyIndex.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomFoodReliefRules.cs" Link="Production\KingdomFoodReliefRules.cs" />
     <Compile Include="..\..\Code\core\policy\CityMaintenanceBenchmarkRules.cs" Link="Production\CityMaintenanceBenchmarkRules.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomAnnualWorkRules.cs" Link="Production\KingdomAnnualWorkRules.cs" />

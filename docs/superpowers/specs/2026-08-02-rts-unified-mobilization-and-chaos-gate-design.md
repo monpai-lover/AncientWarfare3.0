@@ -20,25 +20,29 @@ as a data-model correction.
 3. Reserve ownership remains city-local. An ordinary army may consume only its
    source city's ledger; the implementation must not silently borrow actors
    from another city.
-4. An army may leave preparation at 80 percent of target strength. Recruitment
+4. A city may own at most one ordinary army. Royal guards, temporary slave
+   vanguards, and other explicitly special armies are exempt. The war director
+   changes the ordinary army's attack, defense, and relief mission instead of
+   creating another ordinary army for the same city.
+5. An army may leave preparation at 80 percent of target strength. Recruitment
    continues toward 100 percent while the notice or war remains active.
-5. The same ledger and consumption contract serves both notice preparation and
+6. The same ledger and consumption contract serves both notice preparation and
    active-war casualty replacement. Phase-specific code may change scheduling,
    but must not impose contradictory eligibility or frozen-state gates.
-6. An army cannot remain in `Replenish` forever. It exits when full, when its
+7. An army cannot remain in `Replenish` forever. It exits when full, when its
    city has no usable reserve after a complete reconciliation, or when its
    bounded wait expires. Reaching 80 percent releases deployment even while
    later reinforcement continues.
-7. Save/load restores the city ledger when possible and deterministically
+8. Save/load restores the city ledger when possible and deterministically
    rebuilds it from living eligible residents when persisted membership is
    absent, stale, or from an older save.
-8. Chaos is legal only after a Mandate period has existed. Forced transitions
+9. Chaos is legal only after a Mandate period has existed. Forced transitions
    must obey the same history gate as annual evaluation. A loaded `Chaos` phase
    with no Mandate history is repaired to `Golden`.
-9. Zhulu remains available during a legitimate post-Mandate Chaos phase and in
+10. Zhulu remains available during a legitimate post-Mandate Chaos phase and in
    the explicit Zhulu world age. A normal world with no Mandate history cannot
    start Zhulu wars merely because stale phase data says `Chaos`.
-10. Existing active Zhulu wars continue to settle normally; the new gate
+11. Existing active Zhulu wars continue to settle normally; the new gate
     controls only declarations.
 
 ## Architecture
@@ -73,6 +77,14 @@ state is not treated as a confirmed zero.
 The ledger capacity remains based on eligible residents and the active
 conscription law. Population protection and protected identities remain in the
 existing eligibility rules. No cross-city fallback is introduced.
+
+`AW_ARMY_CITY_ID` is the stable ownership key. At runtime and after load, an
+index enforces one live ordinary army per city. If legacy data contains several
+ordinary armies with the same source city, the service selects a canonical army
+using stable captain continuity and army ID, merges the other members into it,
+then disposes only the empty duplicate formations. It never resolves a
+duplicate by assigning it another city's reserve. A source city under foreign
+control cannot replenish its army; reclaiming the city restores access.
 
 ### Preparation Coordinator
 
@@ -151,6 +163,9 @@ hard conflict and continues to block save rather than corrupting history.
 Pure rule tests must cover:
 
 - `Create` and `Replenish` both receive a target and recruit;
+- one city cannot create a second ordinary army, and legacy duplicates merge
+  into one stable canonical army;
+- attack, defense, and relief assignments reuse the same city army;
 - notice and war phases both allow city-local consumption;
 - peace and inactive phases reject consumption;
 - 79 percent remains in preparation, 80 percent releases deployment, and 100

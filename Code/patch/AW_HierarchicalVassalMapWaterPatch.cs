@@ -10,8 +10,10 @@ namespace AncientWarfare3.patch
         private static void RestoreWaterColors(ZoneCalculator __instance,
             TileZone pZone)
         {
-            if (!HierarchicalVassalMapModeService.IsActive() ||
-                __instance == null || pZone?.tiles == null) return;
+            if (__instance == null || pZone?.tiles == null ||
+                !HierarchicalVassalMapModeRules.ShouldRestoreMixedZoneWater(
+                    HierarchicalVassalMapModeService.NativeDrawPassActive,
+                    pZone.tiles_with_ground, pZone.tiles.Length)) return;
 
             WorldTile[] tiles = pZone.tiles;
             for (int index = 0; index < tiles.Length; index++)

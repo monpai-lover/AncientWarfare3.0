@@ -90,9 +90,19 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), "Update")]
         private static void MapBoxUpdate_Prefix()
         {
-            if (!Config.game_loaded || SmoothLoader.isLoading()) return;
-            MapBoxFrameStageGuard.Run("school_death_retry",
-                SchoolMembershipService.ProcessDeathRetries);
+            long benchmark = RecentFeatureBenchmark.BeginOutsideFrameStage();
+            try
+            {
+                if (!Config.game_loaded || SmoothLoader.isLoading()) return;
+                MapBoxFrameStageGuard.Run("school_death_retry",
+                    SchoolMembershipService.ProcessDeathRetries);
+            }
+            finally
+            {
+                RecentFeatureBenchmark.EndOutsideFrameStage(
+                    RecentFeatureBenchmarkRules.SchoolDeathRetryIndex,
+                    benchmark);
+            }
         }
 
         [HarmonyPrefix]

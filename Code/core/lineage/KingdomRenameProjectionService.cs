@@ -26,6 +26,7 @@ namespace AncientWarfare3.core.lineage
             DevelopmentMapModeService.DirtyMapIfActive();
             WarClaimMapModeService.DirtyMapIfActive();
             WarCoreMapModeService.DirtyMapIfActive();
+            HierarchicalVassalMapModeService.MarkKingdomDirty(pKingdom);
             FamilyTreeProjectionRevision.Advance(
                 FamilyTreeProjectionChange.DynastyOrStateName);
         }

@@ -68,6 +68,9 @@ namespace AncientWarfare3.patch
         private static void Prefix(MethodBase __originalMethod,
             out SampleState __state)
         {
+            __state = default;
+            if (!RuntimePerformanceDiagnostic.ShouldCollectActorBatch())
+                return;
             ActorBatchPerformanceStage stage = ActorBatchPerformanceRules
                 .StageForMethod(__originalMethod?.Name);
             __state = new SampleState(stage,
@@ -77,6 +80,7 @@ namespace AncientWarfare3.patch
         [HarmonyPostfix]
         private static void Postfix(SampleState __state)
         {
+            if (__state.Started == 0L) return;
             RuntimePerformanceDiagnostic.EndActorBatch(__state.Stage,
                 __state.Started);
         }

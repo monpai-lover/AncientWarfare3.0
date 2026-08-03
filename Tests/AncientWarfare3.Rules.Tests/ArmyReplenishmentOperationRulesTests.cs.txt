@@ -28,6 +28,38 @@ internal static class ArmyReplenishmentOperationRulesTests
             "the first authority cycle consumes every approved missing slot");
         Equal(true, ArmyReplenishmentOperationRules.ShouldFinishEarly(
             liveShortage: 0), "a filled shortage finishes immediately");
+        Equal(false,
+            ArmyRtsRules.ShouldContinueRequestedReplenishment(
+                replenishmentRequested: true, currentStrength: 8,
+                targetStrength: 10, reserveAvailable: false),
+            "an exhausted source reserve cannot keep an army in replenishment");
+        Equal(true, ArmyReplenishmentOperationRules.
+            HasConsumableSourceReserve(ArmyMobilizationPhase.Notice,
+                availableCount: 20),
+            "notice preparation and formal war share the reserve ledger");
+        Equal(false, ArmyReplenishmentOperationRules.
+            HasConsumableSourceReserve(ArmyMobilizationPhase.War,
+                availableCount: 0),
+            "an empty wartime reserve pool cannot keep an army replenishing");
+        Equal(true, ArmyReplenishmentOperationRules.
+            HasConsumableSourceReserve(ArmyMobilizationPhase.War,
+                availableCount: 1),
+            "a wartime city with a reserve actor keeps replenishment available");
+        Equal(false, ArmyReplenishmentOperationRules.
+            HasConsumableSourceReserve(ArmyMobilizationPhase.Peace,
+                availableCount: 20),
+            "peace cannot consume indexed reserves");
+        Equal(false, ArmyReplenishmentOperationRules.ShouldReleaseDeparture(
+            living: 79, target: 100),
+            "an army below quorum remains in preparation");
+        Equal(true, ArmyReplenishmentOperationRules.ShouldReleaseDeparture(
+            living: 80, target: 100),
+            "an army at quorum may deploy while later replacements continue");
+        Equal(true,
+            ArmyRtsRules.ShouldContinueRequestedReplenishment(
+                replenishmentRequested: true, currentStrength: 8,
+                targetStrength: 10, reserveAvailable: true),
+            "a live source reserve keeps an outstanding replenishment request active");
         Equal(9, ArmyReplenishmentOperationRules.ClampEnlisted(
             approved: 9, persistedEnlisted: 40),
             "restore cannot overstate progress");
@@ -49,6 +81,23 @@ internal static class ArmyReplenishmentOperationRulesTests
         Equal(false, ArmyReplenishmentOperationRules.MustMaintainAttack(
             totalOrdinary: 1, minimum: 2, validEnemyTarget: true),
             "one actor is not sent alone");
+        Equal(true, ArmyReplenishmentOperationRules.CanUseReservePool(
+                ordinaryArmy: true, royalGuardArmy: false),
+            "an ordinary city army can use its city reserve pool");
+        Equal(false, ArmyReplenishmentOperationRules.CanUseReservePool(
+                ordinaryArmy: true, royalGuardArmy: true),
+            "a royal guard never uses the ordinary reserve pool even with stale ordinary identity");
+        Equal(false, ArmyReplenishmentOperationRules.CanUseReservePool(
+                ordinaryArmy: false, royalGuardArmy: false),
+            "other special armies cannot enter ordinary replenishment");
+        Equal(true,
+            ArmyReplenishmentOperationRules.ShouldClearIneligibleOperation(
+                hasPersistedOperation: true, canUseReservePool: false),
+            "a stale guard replenishment operation is repaired lazily");
+        Equal(false,
+            ArmyReplenishmentOperationRules.ShouldClearIneligibleOperation(
+                hasPersistedOperation: false, canUseReservePool: false),
+            "an ineligible army without stale state requires no persistence write");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

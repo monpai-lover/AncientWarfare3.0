@@ -1583,15 +1583,17 @@ namespace AncientWarfare3.core.lineage
             catch { return null; }
         }
 
-        private static bool IsRoyalGuardArmy(Army pArmy)
+        internal static bool IsRoyalGuardArmy(Army pArmy)
         {
             if (pArmy?.data == null) return false;
-            if (AWArmyService.IsRoleArmy(pArmy, AWArmyRole.RoyalGuard)) return true;
-            if (pArmy.hasCity()) return false;
             string name = pArmy.data.name ?? "";
-            if (name.Contains("\u7981\u536B\u519B")) return true;
             Actor captain = pArmy.getCaptain();
-            return IsRoyalGuard(captain);
+            return RoyalGuardArmyAssignmentRules.IsGuardArmyIdentity(
+                roleMarked: AWArmyService.IsRoleArmy(
+                    pArmy, AWArmyRole.RoyalGuard),
+                ordinaryArmy: ArmyNativeNameService.IsOrdinaryArmy(pArmy),
+                legacyNameMarked: name.Contains("\u7981\u536B\u519B"),
+                captainRoyalGuard: IsRoyalGuard(captain));
         }
 
         private static Army CreateDetachedGuardArmy(Kingdom pKingdom, Actor pCaptain, string pGuardName)

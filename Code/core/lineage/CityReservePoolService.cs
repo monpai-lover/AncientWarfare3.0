@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using AncientWarfare3.core.court;
+using Newtonsoft.Json;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -12,6 +14,14 @@ namespace AncientWarfare3.core.lineage
                 new SortedSet<long>();
             internal readonly SortedSet<long> ActorIds =
                 new SortedSet<long>();
+            internal int AuthenticPopulation;
+            internal int ActiveCitySourcedMilitary;
+            internal int SyntheticMobilized;
+            internal int WarReserveCapacity;
+            internal int WarReserveConsumed;
+            internal long WarEmergencyId = -1L;
+            internal long ReconciledWorldDay = -1L;
+            internal bool Ready;
         }
 
         private sealed class KingdomPoolState
@@ -26,6 +36,7 @@ namespace AncientWarfare3.core.lineage
                 new SortedSet<long>();
             internal long Generation;
             internal bool Frozen;
+            internal long EmergencyId = -1L;
             internal int CityCursor;
             internal long LawReconciliationAfterCityId = -1L;
         }
@@ -51,20 +62,206 @@ namespace AncientWarfare3.core.lineage
             WorldLoadRestorePending = false;
         }
 
+        private sealed class PersistedSnapshot
+        {
+            public int version = CityReservePoolPersistenceRules.
+                CurrentVersion;
+            public List<PersistedKingdom> kingdoms =
+                new List<PersistedKingdom>();
+        }
+
+        private sealed class PersistedKingdom
+        {
+            public long kingdom_id = -1L;
+            public long generation;
+            public bool frozen;
+            public long emergency_id = -1L;
+            public List<PersistedCity> cities = new List<PersistedCity>();
+        }
+
+        private sealed class PersistedCity
+        {
+            public long city_id = -1L;
+            public int authentic_population;
+            public int active_city_military;
+            public int synthetic_mobilized;
+            public int war_reserve_capacity;
+            public int war_reserve_consumed;
+            public long war_emergency_id = -1L;
+            public long reconciled_world_day = -1L;
+            public bool ready;
+        }
+
+        internal static void PrepareForSave()
+        {
+            if (World.world?.kingdoms == null) return;
+            if (States.Count == 0 && World.world.units != null)
+                RebuildRuntime();
+
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (!IsLivingKingdom(kingdom)) continue;
+                KingdomPoolState state = State(kingdom);
+                kingdom.data.set(LineageKeys.CITY_RESERVE_KINGDOM_GENERATION,
+                    state.Generation);
+                kingdom.data.set(LineageKeys.CITY_RESERVE_KINGDOM_FROZEN,
+                    state.Frozen);
+                if (kingdom.cities == null) continue;
+                for (int i = 0; i < kingdom.cities.Count; i++)
+                    ReconcileLedger(kingdom.cities[i], state);
+            }
+        }
+
+        internal static bool TryWriteSnapshot(string directory,
+            out string error)
+        {
+            error = string.Empty;
+            bool worldReady = World.world?.kingdoms != null &&
+                              World.world.units != null;
+            bool directoryValid = !string.IsNullOrWhiteSpace(directory);
+            if (!CityReservePoolPersistenceRules.ShouldWriteSnapshot(
+                    worldReady, directoryValid)) return false;
+
+            string path;
+            string temporary = string.Empty;
+            try
+            {
+                PrepareForSave();
+                path = CityReservePoolPersistenceRules.ResolveSnapshotPath(
+                    directory);
+                temporary = path + ".tmp";
+                var snapshot = new PersistedSnapshot();
+                foreach (Kingdom kingdom in World.world.kingdoms)
+                {
+                    if (!IsLivingKingdom(kingdom)) continue;
+                    KingdomPoolState state = State(kingdom);
+                    var persistedKingdom = new PersistedKingdom
+                    {
+                        kingdom_id = kingdom.id,
+                        generation = state.Generation,
+                        frozen = state.Frozen,
+                        emergency_id = state.EmergencyId
+                    };
+                    foreach (KeyValuePair<long, CityPool> entry in state.Cities)
+                    {
+                        CityPool pool = entry.Value;
+                        if (pool == null) continue;
+                        var persistedCity = new PersistedCity
+                        {
+                            city_id = entry.Key,
+                            authentic_population = pool.AuthenticPopulation,
+                            active_city_military =
+                                pool.ActiveCitySourcedMilitary,
+                            synthetic_mobilized = pool.SyntheticMobilized,
+                            war_reserve_capacity = pool.WarReserveCapacity,
+                            war_reserve_consumed = pool.WarReserveConsumed,
+                            war_emergency_id = pool.WarEmergencyId,
+                            reconciled_world_day = pool.ReconciledWorldDay,
+                            ready = pool.Ready
+                        };
+                        persistedKingdom.cities.Add(persistedCity);
+                    }
+                    snapshot.kingdoms.Add(persistedKingdom);
+                }
+
+                string payload = JsonConvert.SerializeObject(snapshot);
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(temporary, payload);
+                if (File.Exists(path)) File.Delete(path);
+                File.Move(temporary, path);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                error = exception.Message;
+                try
+                {
+                    if (!string.IsNullOrEmpty(temporary) &&
+                        File.Exists(temporary)) File.Delete(temporary);
+                }
+                catch { }
+                return false;
+            }
+        }
+
+        internal static bool TryRestoreSnapshot(string directory,
+            out string error)
+        {
+            error = string.Empty;
+            string path;
+            try
+            {
+                path = CityReservePoolPersistenceRules.ResolveSnapshotPath(
+                    directory);
+            }
+            catch (Exception exception)
+            {
+                error = exception.Message;
+                return false;
+            }
+            if (!CityReservePoolPersistenceRules.ShouldRestoreSnapshot(
+                    File.Exists(path), World.world != null)) return false;
+
+            try
+            {
+                PersistedSnapshot snapshot = JsonConvert.DeserializeObject<
+                    PersistedSnapshot>(File.ReadAllText(path));
+                if (snapshot?.kingdoms == null ||
+                    !CityReservePoolPersistenceRules.CanUseSnapshotVersion(
+                        snapshot.version)) return false;
+                for (int i = 0; i < snapshot.kingdoms.Count; i++)
+                {
+                    PersistedKingdom persisted = snapshot.kingdoms[i];
+                    Kingdom kingdom = ResolveKingdom(persisted.kingdom_id);
+                    if (!IsLivingKingdom(kingdom)) continue;
+                    kingdom.data.set(
+                        LineageKeys.CITY_RESERVE_KINGDOM_GENERATION,
+                        Math.Max(0L, persisted.generation));
+                    kingdom.data.set(LineageKeys.CITY_RESERVE_KINGDOM_FROZEN,
+                        persisted.frozen);
+                    KingdomPoolState state = State(kingdom);
+                    state.Generation = Math.Max(0L, persisted.generation);
+                    state.Frozen = persisted.frozen;
+                    state.EmergencyId = persisted.emergency_id;
+                    if (persisted.cities == null) continue;
+                    for (int c = 0; c < persisted.cities.Count; c++)
+                    {
+                        PersistedCity persistedCity = persisted.cities[c];
+                        City city = ResolveCity(persistedCity.city_id);
+                        if (city?.data == null || city.kingdom != kingdom)
+                            continue;
+                        CityPool pool = Pool(state, city.id);
+                        pool.AuthenticPopulation = Math.Max(0,
+                            persistedCity.authentic_population);
+                        pool.ActiveCitySourcedMilitary = Math.Max(0,
+                            persistedCity.active_city_military);
+                        pool.SyntheticMobilized = Math.Max(0,
+                            persistedCity.synthetic_mobilized);
+                        pool.WarReserveCapacity = Math.Max(0,
+                            persistedCity.war_reserve_capacity);
+                        pool.WarReserveConsumed = Math.Max(0,
+                            Math.Min(pool.WarReserveCapacity,
+                                persistedCity.war_reserve_consumed));
+                        pool.WarEmergencyId = persistedCity.war_emergency_id;
+                        pool.ReconciledWorldDay =
+                            persistedCity.reconciled_world_day;
+                        pool.Ready = persistedCity.ready;
+                    }
+                }
+                return true;
+            }
+            catch (Exception exception)
+            {
+                error = exception.Message;
+                return false;
+            }
+        }
+
         internal static void ProcessAuthorityCycle()
         {
             long worldDay = CurrentWorldDay();
-            bool worldDayChanged = worldDay != LastMaintenanceWorldDay;
-            if (!worldDayChanged) return;
+            if (worldDay == LastMaintenanceWorldDay) return;
             LastMaintenanceWorldDay = worldDay;
-
-            if (RestoreValidationPending &&
-                worldDay >= RestoreValidationDueWorldDay)
-            {
-                RebuildRuntime(validatePersistedMembers: true);
-                return;
-            }
-
             List<Kingdom> kingdoms = World.world?.kingdoms?.list;
             int kingdomCount = kingdoms?.Count ?? 0;
             if (kingdomCount <= 0) return;
@@ -74,42 +271,26 @@ namespace AncientWarfare3.core.lineage
             if (KingdomCursor >= kingdomCount) KingdomCursor = 0;
             if (!IsLivingKingdom(kingdom) || kingdom.cities == null ||
                 kingdom.cities.Count == 0) return;
-
             KingdomPoolState state = State(kingdom);
-            bool lawReconciliation =
-                state.LawReconciliationCityIds.Count > 0;
-            if (!CityReservePoolRules.CanMaintain(state.Frozen,
-                    worldDayChanged) && !lawReconciliation) return;
             bool preparation = WarNoticeService.HasActiveNotice(kingdom) &&
                                !state.Frozen;
             int cityBudget = CityReservePoolRules.CityBudget(preparation);
-            int actorBudget = CityReservePoolRules.ActorBudget(preparation);
             for (int i = 0; i < cityBudget && kingdom.cities.Count > 0; i++)
             {
-                bool explicitLawWork = TryNextLawReconciliationCity(state,
-                    out long cityId);
-                City city;
-                if (explicitLawWork)
-                    city = ResolveCity(cityId);
-                else
-                {
-                    if (state.CityCursor < 0 ||
-                        state.CityCursor >= kingdom.cities.Count)
-                        state.CityCursor = 0;
-                    city = kingdom.cities[state.CityCursor++];
-                }
-                bool complete = MaintainCity(kingdom, city, state,
-                    actorBudget, explicitLawWork && state.Frozen);
-                if (explicitLawWork && complete)
-                    state.LawReconciliationCityIds.Remove(cityId);
+                if (state.CityCursor < 0 ||
+                    state.CityCursor >= kingdom.cities.Count)
+                    state.CityCursor = 0;
+                ReconcileLedger(kingdom.cities[state.CityCursor++], state);
             }
         }
 
         internal static void OnWarStarted(War war)
         {
             if (war?.data == null || war.hasEnded()) return;
-            foreach (Kingdom kingdom in war.getAttackers()) Freeze(kingdom);
-            foreach (Kingdom kingdom in war.getDefenders()) Freeze(kingdom);
+            foreach (Kingdom kingdom in war.getAttackers())
+                OpenWarEmergency(kingdom, war.data.id);
+            foreach (Kingdom kingdom in war.getDefenders())
+                OpenWarEmergency(kingdom, war.data.id);
         }
 
         internal static void OnKingdomJoinedWar(War war, Kingdom kingdom)
@@ -118,9 +299,7 @@ namespace AncientWarfare3.core.lineage
             bool liveKingdom = IsLivingKingdom(kingdom);
             if (!CityReservePoolRules.ShouldReconcileJoiningKingdom(
                     warActive, liveKingdom)) return;
-            CompletePreWarReconciliation(kingdom,
-                new HashSet<long>());
-            Freeze(kingdom);
+            OpenWarEmergency(kingdom, war.data.id);
         }
 
         internal static void OnWarEnded(War war)
@@ -139,16 +318,7 @@ namespace AncientWarfare3.core.lineage
 
         internal static void OnActorBecameAdult(Actor actor)
         {
-            City city = actor?.city;
-            Kingdom kingdom = actor?.kingdom;
-            if (actor?.data == null || city?.data == null ||
-                kingdom?.data == null || city.kingdom != kingdom) return;
-
-            KingdomPoolState state = State(kingdom);
-            CityPool pool = Pool(state, city.id);
-            if (!IndexEligibleActor(actor, kingdom, city, pool)) return;
-            ReconcilePool(kingdom, city, state, pool,
-                allowFrozenAddition: false, additionBudget: 1);
+            MarkCityDirty(actor?.city);
         }
 
         internal static void OnActorReturnedToCivilian(Actor actor)
@@ -158,17 +328,15 @@ namespace AncientWarfare3.core.lineage
 
         internal static void OnActorInvalidated(Actor actor)
         {
-            RemoveActorFromIndexes(actor, actor?.kingdom, actor?.city);
+            MarkCityDirty(actor?.city);
         }
 
         internal static void OnActorCityChanged(Actor actor,
             City previousCity)
         {
             if (actor?.data == null || actor.city == previousCity) return;
-            if (ShouldDeferPersistedInvalidation(actor)) return;
-            RemoveActorFromIndexes(actor, previousCity?.kingdom,
-                previousCity);
-            OnActorReturnedToCivilian(actor);
+            MarkCityDirty(previousCity);
+            MarkCityDirty(actor.city);
         }
 
         internal static void OnActorKingdomChanged(Actor actor,
@@ -176,34 +344,17 @@ namespace AncientWarfare3.core.lineage
         {
             if (actor?.data == null || actor.kingdom == previousKingdom)
                 return;
-            if (ShouldDeferPersistedInvalidation(actor)) return;
-            RemoveActorFromIndexes(actor, previousKingdom, actor.city);
+            MarkCityDirty(actor.city);
         }
 
         internal static void OnActorEnlisted(Actor actor)
         {
-            // WorldBox may replay the profession transition while restoring a
-            // saved actor.  The profession postfix already defers persisted
-            // reserve invalidation in that window; the enlistment callback
-            // must not clear the same fields immediately afterwards.
-            if (ShouldDeferPersistedInvalidation(actor)) return;
-            RemoveActorFromIndexes(actor, actor?.kingdom, actor?.city);
+            MarkCityDirty(actor?.city);
         }
 
         internal static void OnActorProfessionChanged(Actor actor)
         {
-            City city = actor?.city;
-            Kingdom kingdom = actor?.kingdom;
-            if (ShouldDeferPersistedInvalidation(actor)) return;
-            if (actor?.data != null && city?.data != null &&
-                kingdom?.data != null && city.kingdom == kingdom &&
-                TemporaryLevyService.CanRegisterReserve(kingdom, city,
-                    actor))
-            {
-                OnActorReturnedToCivilian(actor);
-                return;
-            }
-            RemoveActorFromIndexes(actor, kingdom, city);
+            MarkCityDirty(actor?.city);
         }
 
         internal static void OnConscriptionLawChanged(Kingdom kingdom,
@@ -212,29 +363,8 @@ namespace AncientWarfare3.core.lineage
             if (kingdom?.data == null || previousLaw == nextLaw) return;
             KingdomPoolState state = State(kingdom);
             state.CityCursor = 0;
-            state.ActorCursors.Clear();
-            state.ValidationAfterActorIds.Clear();
-            int previousPercent = CourtConscriptionLawRules.ReservePercent(
-                previousLaw);
-            int nextPercent = CourtConscriptionLawRules.ReservePercent(
-                nextLaw);
-            foreach (KeyValuePair<long, CityPool> entry in state.Cities)
-            {
-                City city = ResolveCity(entry.Key);
-                ReconcilePool(kingdom, city, state, entry.Value,
-                    allowFrozenAddition: false, additionBudget: 0);
-            }
-            if (nextPercent > previousPercent && kingdom.cities != null)
-                for (int i = 0; i < kingdom.cities.Count; i++)
-                {
-                    City city = kingdom.cities[i];
-                    if (city?.data != null && city.kingdom == kingdom)
-                        state.LawReconciliationCityIds.Add(city.id);
-                }
-            if (!CityReservePoolRules.ShouldAddForLawChange(state.Frozen,
-                    previousPercent, nextPercent) && state.Frozen)
-                state.LawReconciliationCityIds.Clear();
-            state.LawReconciliationAfterCityId = -1L;
+            foreach (CityPool pool in state.Cities.Values)
+                pool.Ready = false;
             LastMaintenanceWorldDay = -1L;
         }
 
@@ -244,17 +374,8 @@ namespace AncientWarfare3.core.lineage
             if (city?.data == null || previousKingdom?.data == null ||
                 previousKingdom == currentKingdom ||
                 !States.TryGetValue(previousKingdom.id,
-                    out KingdomPoolState state) ||
-                !state.Cities.TryGetValue(city.id, out CityPool pool))
+                    out KingdomPoolState state))
                 return;
-
-            long[] actorIds = new long[pool.ActorIds.Count];
-            pool.ActorIds.CopyTo(actorIds);
-            for (int i = 0; i < actorIds.Length; i++)
-            {
-                Actor actor = ResolveActor(actorIds[i]);
-                if (actor?.data != null) ClearFields(actor);
-            }
             state.Cities.Remove(city.id);
             state.LawReconciliationCityIds.Remove(city.id);
             RemoveEmptyState(previousKingdom.id, state);
@@ -266,22 +387,21 @@ namespace AncientWarfare3.core.lineage
             if (city?.data == null || city.isRekt() ||
                 !IsLivingKingdom(kingdom)) return;
             KingdomPoolState state = State(kingdom);
-            CityPool pool = Pool(state, city.id);
-            int budget = CityReservePoolRules.FullReconciliationBudget(
-                city.units?.Count ?? 0, pool.ActorIds.Count);
-            MaintainCity(kingdom, city, state, budget,
-                allowFrozenAddition: true);
+            ReconcileLedger(city, state);
+            if (state.Frozen)
+                OpenCityWarReserve(city, state, state.EmergencyId);
         }
 
         internal static int CountAvailable(Kingdom kingdom)
         {
-            if (kingdom?.data == null ||
-                !States.TryGetValue(kingdom.id,
-                    out KingdomPoolState state)) return 0;
+            if (!IsLivingKingdom(kingdom) || kingdom.cities == null) return 0;
+            KingdomPoolState state = State(kingdom);
             long count = 0L;
-            foreach (CityPool pool in state.Cities.Values)
+            for (int i = 0; i < kingdom.cities.Count; i++)
             {
-                count += pool.ActorIds.Count;
+                City city = kingdom.cities[i];
+                ReconcileLedger(city, state);
+                count += CountAvailable(city, state);
                 if (count >= int.MaxValue) return int.MaxValue;
             }
             return (int)count;
@@ -290,12 +410,10 @@ namespace AncientWarfare3.core.lineage
         internal static int CountAvailable(City city)
         {
             Kingdom kingdom = city?.kingdom;
-            if (city?.data == null || kingdom?.data == null ||
-                !States.TryGetValue(kingdom.id,
-                    out KingdomPoolState state) ||
-                !state.Cities.TryGetValue(city.id, out CityPool pool))
-                return 0;
-            return pool.ActorIds.Count;
+            if (city?.data == null || !IsLivingKingdom(kingdom)) return 0;
+            KingdomPoolState state = State(kingdom);
+            ReconcileLedger(city, state);
+            return CountAvailable(city, state);
         }
 
         internal static bool IsFrozen(Kingdom kingdom)
@@ -320,164 +438,80 @@ namespace AncientWarfare3.core.lineage
             City preferredCity, int requested, Army targetArmy,
             List<Actor> destination, out bool confirmedExhausted)
         {
-            confirmedExhausted = false;
-            int requestedCount = Math.Max(0, requested);
-            if (requestedCount <= 0 || destination == null ||
-                preferredCity?.data == null || !IsLivingKingdom(kingdom) ||
-                !States.TryGetValue(kingdom.id,
-                    out KingdomPoolState state) || !state.Frozen)
-                return 0;
-            if (targetArmy?.data != null &&
-                AWArmyService.GetIntendedKingdom(targetArmy) != kingdom)
-                return 0;
-            if (!state.Cities.TryGetValue(preferredCity.id,
-                    out CityPool pool))
-            {
-                confirmedExhausted = true;
-                return 0;
-            }
-
-            bool realmControlled = !preferredCity.isRekt() &&
-                                   preferredCity.kingdom == kingdom &&
-                                   OccupiedCitySupplyService.CanProvideToRealm(
-                                       preferredCity, kingdom);
-            if (!CityReservePoolRules.CanConsumeFromCity(state.Frozen,
-                    realmControlled, SafePopulation(preferredCity)))
-                return 0;
-
-            int added = 0;
-            while (added < requestedCount &&
-                   CityReservePoolRules.TryTakeNextActorId(pool.ActorIds,
-                       out long actorId))
-            {
-                Actor actor = ResolveActor(actorId);
-                pool.EligibleActorIds.Remove(actorId);
-                if (!IsValidMember(actor, kingdom, preferredCity,
-                        state.Generation))
-                {
-                    if (actor?.data != null) ClearFields(actor);
-                    continue;
-                }
-                ClearFields(actor);
-                destination.Add(actor);
-                added++;
-            }
-
-            if (pool.ActorIds.Count == 0 && pool.EligibleActorIds.Count == 0)
-            {
-                state.Cities.Remove(preferredCity.id);
-                state.ActorCursors.Remove(preferredCity.id);
-                state.ValidationAfterActorIds.Remove(preferredCity.id);
-                state.LawReconciliationCityIds.Remove(preferredCity.id);
-                confirmedExhausted = true;
-            }
-            else
-                confirmedExhausted = pool.ActorIds.Count == 0;
-            return added;
+            return TryConsumeForMobilization(kingdom, preferredCity,
+                requested, targetArmy, allowArmyCreation: false,
+                destination, out confirmedExhausted);
         }
 
         internal static int TryConsumePreparationBatch(Kingdom kingdom,
             City preferredCity, int approvedShortage, Army targetArmy,
             List<Actor> destination, out bool confirmedExhausted)
         {
+            return TryConsumeForMobilization(kingdom, preferredCity,
+                approvedShortage, targetArmy,
+                allowArmyCreation: targetArmy?.data == null,
+                destination, out confirmedExhausted);
+        }
+
+        internal static int TryConsumeForMobilization(Kingdom kingdom,
+            City preferredCity, int requested, Army targetArmy,
+            bool allowArmyCreation, List<Actor> destination,
+            out bool confirmedExhausted)
+        {
             confirmedExhausted = false;
-            int requested = Math.Max(0, approvedShortage);
-            if (requested <= 0 || destination == null ||
-                !IsLivingKingdom(kingdom) ||
-                !WarNoticeService.HasActiveNotice(kingdom) ||
-                !States.TryGetValue(kingdom.id,
-                    out KingdomPoolState state) || state.Frozen ||
-                !IsControlledCity(preferredCity, kingdom) ||
-                !IsLiveOrdinaryTargetArmy(targetArmy, kingdom)) return 0;
-
-            if (!state.Cities.TryGetValue(preferredCity.id,
-                    out CityPool pool))
-            {
-                confirmedExhausted = true;
-                return 0;
-            }
-            if (!CityReservePoolRules.CanConsumeDuringPreparation(
-                    activeNotice: true,
-                    realmControlled: IsControlledCity(preferredCity,
-                        kingdom),
-                    population: SafePopulation(preferredCity)))
+            int requestedCount = Math.Max(0, requested);
+            if (requestedCount <= 0 || destination == null ||
+                preferredCity?.data == null || !IsLivingKingdom(kingdom))
                 return 0;
 
-            int added = 0;
-            while (added < requested &&
-                   CityReservePoolRules.TryTakeNextActorId(pool.ActorIds,
-                       out long actorId))
-            {
-                Actor actor = ResolveActor(actorId);
-                pool.EligibleActorIds.Remove(actorId);
-                if (!IsValidMember(actor, kingdom, preferredCity,
-                        state.Generation))
-                {
-                    if (actor?.data != null) ClearFields(actor);
-                    continue;
-                }
-                ClearFields(actor);
-                destination.Add(actor);
-                added++;
-            }
+            ArmyMobilizationPhase phase = ResolveMobilizationPhase(kingdom);
+            if (phase != ArmyMobilizationPhase.Notice) return 0;
+            bool realmControlled = IsControlledCity(preferredCity, kingdom) &&
+                                   OccupiedCitySupplyService.CanProvideToRealm(
+                                       preferredCity, kingdom);
+            if (!CityReservePoolRules.CanConsumeForMobilization(phase,
+                    realmControlled, SafePopulation(preferredCity))) return 0;
 
-            if (pool.ActorIds.Count == 0 &&
-                pool.EligibleActorIds.Count == 0)
-            {
-                state.Cities.Remove(preferredCity.id);
-                state.ActorCursors.Remove(preferredCity.id);
-                state.ValidationAfterActorIds.Remove(preferredCity.id);
-                state.LawReconciliationCityIds.Remove(preferredCity.id);
-                confirmedExhausted = true;
-            }
-            else
-                confirmedExhausted = pool.ActorIds.Count == 0;
+            bool creating = targetArmy?.data == null;
+            if (creating && (!allowArmyCreation ||
+                             !ArmyMobilizationRules.
+                                 CanCreateOrdinaryArmy(phase)) ||
+                !creating &&
+                (!IsLiveOrdinaryTargetArmy(targetArmy, kingdom) ||
+                 !CityReservePoolRules.MatchesSourceCity(
+                     preferredCity.id,
+                     AWArmyService.GetAnchorCityId(targetArmy)))) return 0;
+
+            KingdomPoolState state = State(kingdom);
+            ReconcileLedger(preferredCity, state);
+            CityPool pool = Pool(state, preferredCity.id);
+            int headroom = CountAvailable(preferredCity, state);
+            int limit = Math.Min(requestedCount, headroom);
+            int startCount = destination.Count;
+            bool complete = SelectAuthenticResidents(kingdom,
+                preferredCity, state, limit, destination);
+            int added = Math.Max(0, destination.Count - startCount);
+            confirmedExhausted =
+                CityReservePoolRules.CanConfirmManpowerExhausted(
+                    pool.Ready && (headroom <= 0 || complete),
+                    Math.Max(0, headroom - added));
             return added;
+        }
+
+        internal static ArmyMobilizationPhase ResolveMobilizationPhase(
+            Kingdom kingdom)
+        {
+            return ArmyMobilizationRules.Resolve(
+                IsLivingKingdom(kingdom),
+                WarNoticeService.HasActiveNotice(kingdom),
+                CountFormalWars(kingdom));
         }
 
         internal static void RestoreRejectedCandidates(Kingdom kingdom,
             City sourceCity, Army targetArmy,
             IReadOnlyList<Actor> candidates)
         {
-            if (kingdom?.data == null || sourceCity?.data == null ||
-                candidates == null ||
-                !States.TryGetValue(kingdom.id,
-                    out KingdomPoolState state)) return;
-
-            for (int i = 0; i < candidates.Count; i++)
-            {
-                Actor actor = candidates[i];
-                bool alive;
-                bool enlistedIntoTargetArmy;
-                try
-                {
-                    alive = actor?.data != null && actor.isAlive() &&
-                            !actor.isRekt();
-                    enlistedIntoTargetArmy = alive && actor.isWarrior() &&
-                                              actor.army == targetArmy;
-                }
-                catch
-                {
-                    alive = false;
-                    enlistedIntoTargetArmy = false;
-                }
-                bool reserveEligible = alive &&
-                    TemporaryLevyService.CanRegisterReserve(kingdom,
-                        sourceCity, actor);
-                if (!CityReservePoolRules.CanRestoreRejectedCandidate(
-                        sameKingdom: alive && actor.kingdom == kingdom &&
-                            sourceCity.kingdom == kingdom,
-                        sameCity: alive && actor.city == sourceCity,
-                        alive: alive, reserveEligible: reserveEligible,
-                        enlistedIntoTargetArmy: enlistedIntoTargetArmy))
-                    continue;
-
-                CityPool pool = Pool(state, sourceCity.id);
-                pool.EligibleActorIds.Add(actor.data.id);
-                SetMemberFields(actor, kingdom, sourceCity,
-                    state.Generation);
-                pool.ActorIds.Add(actor.data.id);
-            }
+            MarkCityDirty(sourceCity);
         }
 
         internal static void CompletePreWarReconciliation(War war)
@@ -508,11 +542,7 @@ namespace AncientWarfare3.core.lineage
                 City city = kingdom.cities[i];
                 if (city?.data == null || city.isRekt() ||
                     city.kingdom != kingdom) continue;
-                CityPool pool = Pool(state, city.id);
-                int budget = CityReservePoolRules.FullReconciliationBudget(
-                    city.units?.Count ?? 0, pool.ActorIds.Count);
-                MaintainCity(kingdom, city, state, budget,
-                    allowFrozenAddition: true);
+                ReconcileLedger(city, state);
             }
         }
 
@@ -524,97 +554,23 @@ namespace AncientWarfare3.core.lineage
         private static void RebuildRuntime(bool validatePersistedMembers)
         {
             ClearRuntime();
-            if (World.world?.units == null) return;
-            foreach (Actor actor in World.world.units)
-            {
-                if (actor?.data == null) continue;
-                City currentCity = actor.city;
-                Kingdom currentKingdom = actor.kingdom;
-                bool eligible = currentCity?.data != null &&
-                    currentKingdom?.data != null &&
-                    currentCity.kingdom == currentKingdom &&
-                    TemporaryLevyService.CanRegisterReserve(currentKingdom,
-                        currentCity, actor);
-
-                actor.data.get(LineageKeys.CITY_RESERVE_MEMBER,
-                    out bool member, false);
-                if (!member)
-                {
-                    if (eligible)
-                    {
-                        CityPool currentPool = Pool(State(currentKingdom),
-                            currentCity.id);
-                        currentPool.EligibleActorIds.Add(actor.data.id);
-                    }
-                    continue;
-                }
-
-                if (CityReservePoolRules.ShouldDeferPersistedMemberValidation(
-                        true, validatePersistedMembers))
-                    RestoreValidationPending = true;
-
-                actor.data.get(LineageKeys.CITY_RESERVE_CITY_ID,
-                    out long cityId, -1L);
-                actor.data.get(LineageKeys.CITY_RESERVE_KINGDOM_ID,
-                    out long kingdomId, -1L);
-                actor.data.get(LineageKeys.CITY_RESERVE_GENERATION,
-                    out long generation, -1L);
-                City city = ResolveCity(cityId);
-                Kingdom kingdom = ResolveKingdom(kingdomId);
-                bool sourceResolved = city?.data != null &&
-                    kingdom?.data != null && actor.city == city &&
-                    actor.kingdom == kingdom && city.kingdom == kingdom;
-                if (!sourceResolved)
-                {
-                    if (validatePersistedMembers) ClearFields(actor);
-                    continue;
-                }
-                bool currentlyEligible = TemporaryLevyService.
-                    CanRegisterReserve(kingdom, city, actor);
-                if (validatePersistedMembers && !currentlyEligible)
-                {
-                    ClearFields(actor);
-                    continue;
-                }
-                KingdomPoolState state = State(kingdom);
-                if (generation != state.Generation)
-                {
-                    if (validatePersistedMembers) ClearFields(actor);
-                    continue;
-                }
-                CityPool pool = Pool(state, city.id);
-                pool.EligibleActorIds.Add(actor.data.id);
-                pool.ActorIds.Add(actor.data.id);
-            }
-
-            if (RestoreValidationPending)
-            {
-                long worldDay = CurrentWorldDay();
-                RestoreValidationDueWorldDay = worldDay >= long.MaxValue
-                    ? long.MaxValue
-                    : worldDay + 1L;
-            }
-
             if (World.world?.kingdoms == null) return;
             foreach (Kingdom kingdom in World.world.kingdoms)
             {
                 if (!IsLivingKingdom(kingdom)) continue;
                 KingdomPoolState state = State(kingdom);
-                if (RestoreValidationPending && !validatePersistedMembers)
-                    continue;
-                foreach (KeyValuePair<long, CityPool> entry in state.Cities)
-                    ReconcilePool(kingdom, ResolveCity(entry.Key), state,
-                        entry.Value, allowFrozenAddition: false,
-                        additionBudget: 0);
+                if (kingdom.cities != null)
+                    for (int i = 0; i < kingdom.cities.Count; i++)
+                        ReconcileLedger(kingdom.cities[i], state);
                 int activeWarCount = CountFormalWars(kingdom);
-                kingdom.data.get(LineageKeys.CITY_RESERVE_KINGDOM_FROZEN,
-                    out bool persistedFrozen, false);
                 if (activeWarCount > 0)
                 {
-                    Freeze(kingdom);
+                    long emergencyId = ResolveFirstWarId(kingdom);
+                    OpenWarEmergency(kingdom, emergencyId);
                     continue;
                 }
-                if (persistedFrozen) ReevaluateFreeze(kingdom);
+                state.Frozen = false;
+                state.EmergencyId = -1L;
             }
         }
 
@@ -678,7 +634,9 @@ namespace AncientWarfare3.core.lineage
             if (pool.ActorIds.Count == 0) return actorBudget;
             state.ValidationAfterActorIds.TryGetValue(city.id,
                 out long afterActorId);
-            var inspectedIds = new List<long>(actorBudget);
+            // Keep the scan logically unbounded when the caller requests a
+            // full pass, but never use that value as an allocation size.
+            var inspectedIds = new List<long>(Math.Min(actorBudget, 256));
             foreach (long actorId in pool.ActorIds)
             {
                 if (actorId <= afterActorId) continue;
@@ -830,34 +788,116 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        private static void Freeze(Kingdom kingdom)
+        internal static int OpenOrReadWarReserve(City city,
+            long emergencyId)
         {
-            if (!IsLivingKingdom(kingdom)) return;
+            Kingdom kingdom = city?.kingdom;
+            if (!IsLivingKingdom(kingdom) || city?.data == null) return -1;
+            KingdomPoolState state = State(kingdom);
+            emergencyId = CityReservePoolRules.ResolveWarEmergencyId(
+                state.Frozen, state.EmergencyId, emergencyId);
+            if (emergencyId < 0L) return -1;
+            ReconcileLedger(city, state);
+            OpenCityWarReserve(city, state, emergencyId);
+            CityPool pool = Pool(state, city.id);
+            return CityManpowerRules.WarReserveAvailable(
+                pool.WarReserveCapacity, pool.WarReserveConsumed);
+        }
+
+        internal static int TryReserveWarManpower(City city,
+            long emergencyId, int requested)
+        {
+            KingdomPoolState state = city?.kingdom?.data != null
+                ? State(city.kingdom)
+                : null;
+            if (state == null) return 0;
+            emergencyId = CityReservePoolRules.ResolveWarEmergencyId(
+                state.Frozen, state.EmergencyId, emergencyId);
+            int available = OpenOrReadWarReserve(city, emergencyId);
+            if (available <= 0) return 0;
+            CityPool pool = Pool(state, city.id);
+            int reserved = Math.Min(Math.Max(0, requested), available);
+            pool.WarReserveConsumed += reserved;
+            return reserved;
+        }
+
+        internal static void ReleaseUnmaterializedWarReservation(City city,
+            long emergencyId, int count)
+        {
+            if (city?.data == null || count <= 0 ||
+                !States.TryGetValue(city.kingdom?.id ?? -1L,
+                    out KingdomPoolState state) ||
+                !state.Cities.TryGetValue(city.id, out CityPool pool)) return;
+            emergencyId = CityReservePoolRules.ResolveWarEmergencyId(
+                state.Frozen, state.EmergencyId, emergencyId);
+            if (
+                pool.WarEmergencyId != emergencyId) return;
+            pool.WarReserveConsumed = Math.Max(0,
+                pool.WarReserveConsumed - count);
+        }
+
+        internal static void OnAuthenticMobilized(City city, int count)
+        {
+            if (count > 0) MarkCityDirty(city);
+        }
+
+        internal static void OnSyntheticMobilized(City city, int count)
+        {
+            if (city?.data == null || count <= 0) return;
+            KingdomPoolState state = State(city.kingdom);
+            CityPool pool = Pool(state, city.id);
+            pool.SyntheticMobilized = SaturatingAdd(
+                pool.SyntheticMobilized, count);
+            pool.ActiveCitySourcedMilitary = SaturatingAdd(
+                pool.ActiveCitySourcedMilitary, count);
+            pool.Ready = true;
+        }
+
+        internal static void OnSyntheticRemoved(City city, int count)
+        {
+            if (city?.data == null || count <= 0) return;
+            KingdomPoolState state = State(city.kingdom);
+            CityPool pool = Pool(state, city.id);
+            pool.SyntheticMobilized = Math.Max(0,
+                pool.SyntheticMobilized - count);
+            pool.Ready = false;
+        }
+
+        private static void OpenWarEmergency(Kingdom kingdom,
+            long emergencyId)
+        {
+            if (!IsLivingKingdom(kingdom) || emergencyId < 0L) return;
             KingdomPoolState state = State(kingdom);
             if (state.Frozen) return;
             state.Generation = state.Generation >= long.MaxValue
                 ? long.MaxValue
                 : state.Generation + 1L;
             state.Frozen = true;
+            state.EmergencyId = emergencyId;
             kingdom.data.set(LineageKeys.CITY_RESERVE_KINGDOM_GENERATION,
                 state.Generation);
             kingdom.data.set(LineageKeys.CITY_RESERVE_KINGDOM_FROZEN, true);
-            foreach (CityPool pool in state.Cities.Values)
+            if (kingdom.cities == null) return;
+            for (int i = 0; i < kingdom.cities.Count; i++)
             {
-                long[] actorIds = new long[pool.ActorIds.Count];
-                pool.ActorIds.CopyTo(actorIds);
-                for (int i = 0; i < actorIds.Length; i++)
-                {
-                    Actor actor = ResolveActor(actorIds[i]);
-                    if (actor?.data == null)
-                    {
-                        pool.ActorIds.Remove(actorIds[i]);
-                        continue;
-                    }
-                    actor.data.set(LineageKeys.CITY_RESERVE_GENERATION,
-                        state.Generation);
-                }
+                City city = kingdom.cities[i];
+                ReconcileLedger(city, state);
+                OpenCityWarReserve(city, state, emergencyId);
             }
+        }
+
+        private static void OpenCityWarReserve(City city,
+            KingdomPoolState state, long emergencyId)
+        {
+            if (city?.data == null || state == null || emergencyId < 0L)
+                return;
+            CityPool pool = Pool(state, city.id);
+            if (pool.WarEmergencyId == emergencyId) return;
+            pool.WarReserveCapacity = CityManpowerRules.OpenWarReserve(
+                pool.AuthenticPopulation,
+                pool.ActiveCitySourcedMilitary);
+            pool.WarReserveConsumed = 0;
+            pool.WarEmergencyId = emergencyId;
         }
 
         private static void ReevaluateFreeze(Kingdom kingdom)
@@ -867,7 +907,103 @@ namespace AncientWarfare3.core.lineage
             if (!CityReservePoolRules.ShouldUnfreeze(activeWarCount)) return;
             KingdomPoolState state = State(kingdom);
             state.Frozen = false;
+            state.EmergencyId = -1L;
+            foreach (CityPool pool in state.Cities.Values)
+            {
+                pool.WarReserveCapacity = 0;
+                pool.WarReserveConsumed = 0;
+                pool.WarEmergencyId = -1L;
+            }
             kingdom.data.set(LineageKeys.CITY_RESERVE_KINGDOM_FROZEN, false);
+        }
+
+        private static void ReconcileLedger(City city,
+            KingdomPoolState state)
+        {
+            if (city?.data == null || state == null || city.isRekt() ||
+                !IsLivingKingdom(city.kingdom)) return;
+            CityPool pool = Pool(state, city.id);
+            pool.AuthenticPopulation = Math.Max(0,
+                SafePopulation(city) - pool.SyntheticMobilized);
+            pool.ActiveCitySourcedMilitary = CountCityArmyMembers(city);
+            pool.ReconciledWorldDay = CurrentWorldDay();
+            pool.Ready = true;
+        }
+
+        private static int CountAvailable(City city,
+            KingdomPoolState state)
+        {
+            CityPool pool = Pool(state, city.id);
+            if (!pool.Ready) return -1;
+            if (state.Frozen)
+            {
+                OpenCityWarReserve(city, state, state.EmergencyId);
+                return CityManpowerRules.WarReserveAvailable(
+                    pool.WarReserveCapacity, pool.WarReserveConsumed);
+            }
+            return CityManpowerRules.NoticeHeadroom(
+                pool.AuthenticPopulation,
+                pool.ActiveCitySourcedMilitary);
+        }
+
+        private static bool SelectAuthenticResidents(Kingdom kingdom,
+            City city, KingdomPoolState state, int requested,
+            List<Actor> destination)
+        {
+            if (requested <= 0 || city?.units == null ||
+                city.units.Count == 0) return true;
+            int residentCount = city.units.Count;
+            state.ActorCursors.TryGetValue(city.id, out int cursor);
+            if (cursor < 0 || cursor >= residentCount) cursor = 0;
+            int inspected = 0;
+            int selected = 0;
+            while (inspected < residentCount && selected < requested)
+            {
+                Actor actor = city.units[cursor++];
+                if (cursor >= residentCount) cursor = 0;
+                inspected++;
+                if (actor?.data == null ||
+                    destination.Contains(actor) ||
+                    !TemporaryLevyService.CanRegisterReserve(
+                        kingdom, city, actor)) continue;
+                destination.Add(actor);
+                selected++;
+            }
+            state.ActorCursors[city.id] = cursor;
+            return inspected >= residentCount;
+        }
+
+        private static void MarkCityDirty(City city)
+        {
+            Kingdom kingdom = city?.kingdom;
+            if (city?.data == null || !IsLivingKingdom(kingdom)) return;
+            Pool(State(kingdom), city.id).Ready = false;
+        }
+
+        private static int CountCityArmyMembers(City city)
+        {
+            if (!ArmyFieldIndexService.TryGetCityArmy(city, out Army army))
+                return 0;
+            try { return Math.Max(0, army.countUnits()); }
+            catch { return 0; }
+        }
+
+        private static int SaturatingAdd(int value, int addition)
+        {
+            long result = (long)Math.Max(0, value) + Math.Max(0, addition);
+            return (int)Math.Min(int.MaxValue, result);
+        }
+
+        private static long ResolveFirstWarId(Kingdom kingdom)
+        {
+            try
+            {
+                foreach (War war in kingdom.getWars())
+                    if (war?.data != null && !war.hasEnded())
+                        return war.data.id;
+            }
+            catch { }
+            return -1L;
         }
 
         private static int CountFormalWars(Kingdom kingdom)

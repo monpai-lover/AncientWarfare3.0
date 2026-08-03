@@ -5,6 +5,7 @@ using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -222,6 +223,14 @@ namespace AncientWarfare3.core.lineage
             if (!Ready || pRequester?.data == null ||
                 pResponder?.data == null || pRequester.isRekt() ||
                 pResponder.isRekt() || pRequester == pResponder) return false;
+            if (!pPlayerInitiated &&
+                !DiplomacyAiRules.AllowsAiInitiation(pType))
+            {
+                pReason = pType == DiplomacyProposalType.Alliance
+                    ? "ai_alliance_actions_disabled"
+                    : "ai_vassal_actions_disabled";
+                return false;
+            }
             if (!DiplomacyProposalRules.IsUnilateral(pType) &&
                 HasPendingPair(pRequester.id, pResponder.id))
             {
@@ -3276,7 +3285,8 @@ namespace AncientWarfare3.core.lineage
             if (TryPrepareJoinWarCandidate(pRequester, contact, opinion,
                     requesterPowerRatio, out PreparedAiProposal joinWar))
                 pCandidates.Add(joinWar);
-            if (TryPrepareVassalizationCandidate(pRequester, contact,
+            if (AWPerformanceSettings.EnableAiVassalActions &&
+                TryPrepareVassalizationCandidate(pRequester, contact,
                     opinion, requesterPowerRatio,
                     out PreparedAiProposal vassalization))
                 pCandidates.Add(vassalization);
@@ -3288,12 +3298,14 @@ namespace AncientWarfare3.core.lineage
                     requesterPowerRatio,
                     out PreparedAiProposal endAlliance))
                 pCandidates.Add(endAlliance);
-            if (pRequester.power >= Math.Max(1, contact.power) * 2.4f &&
+            if (AWPerformanceSettings.EnableAiVassalActions &&
+                pRequester.power >= Math.Max(1, contact.power) * 2.4f &&
                 opinion >= 0)
                 AddOrdinaryAiCandidate(pCandidates, pRequester, contact,
                     DiplomacyProposalType.Tributary, opinion,
                     requesterPowerRatio);
-            if (opinion >= 60)
+            if (AWPerformanceSettings.EnableAiAllianceActions &&
+                opinion >= 60)
                 AddOrdinaryAiCandidate(pCandidates, pRequester, contact,
                     DiplomacyProposalType.Alliance, opinion,
                     requesterPowerRatio);
@@ -3387,7 +3399,8 @@ namespace AncientWarfare3.core.lineage
                     opinion, requesterPowerRatio, pMandateReport,
                     out PreparedAiProposal joinWar))
                 pCandidates.Add(joinWar);
-            if (TryPrepareVassalizationCandidateReadOnly(pRequester,
+            if (AWPerformanceSettings.EnableAiVassalActions &&
+                TryPrepareVassalizationCandidateReadOnly(pRequester,
                     contact, opinion, requesterPowerRatio, pMandateReport,
                     out PreparedAiProposal vassalization))
                 pCandidates.Add(vassalization);
@@ -3399,12 +3412,14 @@ namespace AncientWarfare3.core.lineage
                     requesterPowerRatio,
                     out PreparedAiProposal endAlliance))
                 pCandidates.Add(endAlliance);
-            if (pRequester.power >= Math.Max(1, contact.power) * 2.4f &&
+            if (AWPerformanceSettings.EnableAiVassalActions &&
+                pRequester.power >= Math.Max(1, contact.power) * 2.4f &&
                 opinion >= 0)
                 AddOrdinaryAiCandidateReadOnly(pCandidates, pRequester,
                     contact, DiplomacyProposalType.Tributary, opinion,
                     requesterPowerRatio, pMandateReport);
-            if (opinion >= 60)
+            if (AWPerformanceSettings.EnableAiAllianceActions &&
+                opinion >= 60)
                 AddOrdinaryAiCandidateReadOnly(pCandidates, pRequester,
                     contact, DiplomacyProposalType.Alliance, opinion,
                     requesterPowerRatio, pMandateReport);

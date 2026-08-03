@@ -61,7 +61,6 @@ namespace AncientWarfare3.core.schools
         private static readonly HashSet<long> QueuedDeathRetries = new HashSet<long>();
         private static readonly Dictionary<long, PendingSchoolDeath> PendingDeathsByActor =
             new Dictionary<long, PendingSchoolDeath>();
-        private const int MaxDeathRetryBackoffFrames = 240;
         private const int MaxDeathRetryQueueScan = 16;
         private static long _deathRetryFrame;
         private static int _standingWorkYear = -1;
@@ -414,11 +413,8 @@ namespace AncientWarfare3.core.schools
             var pending = new PendingSchoolDeath(pActor, current, affiliation, master,
                 wasQualifiedTeacher, city, year, city?.data?.id ?? -1L, cause,
                 WorldTime());
-            SchoolDeathOutcome outcome = PersistPendingDeath(pending,
-                pReconcileUnknown: false);
-            if (outcome != SchoolDeathOutcome.Committed)
-                QueueDeathRetry(pending, pDestroy);
-            return outcome;
+            QueueDeathRetry(pending, pDestroy);
+            return SchoolDeathOutcome.Failed;
         }
 
         private static SchoolDeathOutcome PersistPendingDeath(PendingSchoolDeath pending,
@@ -686,8 +682,7 @@ namespace AncientWarfare3.core.schools
 
         private static int DeathRetryBackoffFrames(int pAttempts)
         {
-            int exponent = Math.Max(0, Math.Min(8, pAttempts - 1));
-            return Math.Min(MaxDeathRetryBackoffFrames, 1 << exponent);
+            return ActorDeathArchiveRules.RetryDelayFrames(pAttempts);
         }
 
         private static void ClearDeathRetry(long pActorId, bool pCancelQueued)

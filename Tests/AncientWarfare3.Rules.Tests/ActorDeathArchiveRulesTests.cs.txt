@@ -1,0 +1,51 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ActorDeathArchiveRulesTests
+{
+    public static void Run()
+    {
+        Equal("death:7:42:3:lineage_archive",
+            ActorDeathArchiveRules.Key(7, 42, 3, "lineage_archive"),
+            "death archive keys are stable and stage-specific");
+        Equal(true, ActorDeathArchiveRules.AcceptCompletion(
+                resultWorldGeneration: 7, currentWorldGeneration: 7,
+                resultDeathRevision: 3, currentDeathRevision: 3),
+            "matching world and death revisions commit");
+        Equal(false, ActorDeathArchiveRules.AcceptCompletion(
+                resultWorldGeneration: 7, currentWorldGeneration: 8,
+                resultDeathRevision: 3, currentDeathRevision: 3),
+            "old-world completion is stale");
+        Equal(false, ActorDeathArchiveRules.AcceptCompletion(
+                resultWorldGeneration: 7, currentWorldGeneration: 7,
+                resultDeathRevision: 2, currentDeathRevision: 3),
+            "older death revisions are stale");
+        Equal(1, ActorDeathArchiveRules.RetryDelayFrames(1),
+            "the first retry waits one frame");
+        Equal(8, ActorDeathArchiveRules.RetryDelayFrames(4),
+            "retry delay grows exponentially");
+        Equal(256, ActorDeathArchiveRules.RetryDelayFrames(20),
+            "retry delay has a hard cap");
+        Equal(true, ActorDeathArchiveRules.ShouldUseSynchronousFallback(
+                writerReady: false, queueAccepted: false),
+            "an unavailable writer uses the bounded main-thread fallback");
+        Equal(true, ActorDeathArchiveRules.ShouldUseSynchronousFallback(
+                writerReady: true, queueAccepted: false),
+            "a full writer queue uses the bounded main-thread fallback");
+        Equal(false, ActorDeathArchiveRules.ShouldUseSynchronousFallback(
+                writerReady: true, queueAccepted: true),
+            "accepted asynchronous work needs no fallback");
+        Equal(true, ActorDeathArchiveRules.ReadyForSave(
+                captured: 0, running: 0, retries: 0, completions: 0),
+            "save requires every death queue to be empty");
+        Equal(false, ActorDeathArchiveRules.ReadyForSave(
+                captured: 0, running: 1, retries: 0, completions: 0),
+            "running death work blocks save");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected=" + pExpected + ", actual=" + pActual);
+    }
+}

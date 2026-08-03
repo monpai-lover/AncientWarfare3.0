@@ -82,18 +82,22 @@ namespace AncientWarfare3.core.pathfinding
         public AWPathRequest(long pActorId, int pStartTileId, int pTargetTileId,
             AWPathRequestOptions pOptions, AWActorTraversalProfile pProfile,
             AWTraversalGeneration pGeneration, double pCreatedTime,
-            bool pHighPriority)
+            bool pHighPriority, long pTerrainRevision = 0L,
+            long pWorldGeneration = 0L, bool pInsideBoat = false)
             : this(pActorId, pStartTileId, pTargetTileId, pOptions, pProfile,
                 pGeneration, pCreatedTime, pHighPriority
                     ? AWPathWorkClass.Operational
-                    : AWPathWorkClass.Ambient)
+                    : AWPathWorkClass.Ambient, pTerrainRevision,
+                pWorldGeneration, pInsideBoat)
         {
         }
 
         public AWPathRequest(long pActorId, int pStartTileId, int pTargetTileId,
             AWPathRequestOptions pOptions, AWActorTraversalProfile pProfile,
             AWTraversalGeneration pGeneration, double pCreatedTime,
-            AWPathWorkClass pWorkClass = AWPathWorkClass.Ambient)
+            AWPathWorkClass pWorkClass = AWPathWorkClass.Ambient,
+            long pTerrainRevision = 0L, long pWorldGeneration = 0L,
+            bool pInsideBoat = false)
         {
             ActorId = pActorId;
             StartTileId = pStartTileId;
@@ -104,6 +108,9 @@ namespace AncientWarfare3.core.pathfinding
                 pOptions.LimitPathfindingRegions,
                 pOptions.BoundedMilitaryWater,
                 pOptions.MaximumConsecutiveWaterTiles);
+            ReuseKey = new AWPathReuseKey(pActorId,
+                StartRegion(pStartTileId, pGeneration), Key,
+                pTerrainRevision, pWorldGeneration, pInsideBoat);
             Profile = pProfile;
             Generation = pGeneration?.Retain() ?? throw new ArgumentNullException(nameof(pGeneration));
             CreatedTime = pCreatedTime;
@@ -117,6 +124,7 @@ namespace AncientWarfare3.core.pathfinding
         public int TargetTileId { get; }
         public AWPathRequestOptions Options { get; }
         public AWPathRequestKey Key { get; }
+        public AWPathReuseKey ReuseKey { get; }
         public AWActorTraversalProfile Profile { get; }
         public AWTraversalGeneration Generation { get; }
         public int WorldGeneration => Generation.Id;
@@ -125,6 +133,18 @@ namespace AncientWarfare3.core.pathfinding
         public bool HighPriority => WorkClass == AWPathWorkClass.Operational;
         public CancellationTokenSource Cancellation { get; }
         public AWPathStream Stream { get; }
+
+        private static int StartRegion(int pTileId,
+            AWTraversalGeneration pGeneration)
+        {
+            if (pGeneration == null || pGeneration.Width <= 0 ||
+                pTileId < 0 || pTileId >= pGeneration.TileCount)
+                return -1;
+            int x = pTileId % pGeneration.Width;
+            int y = pTileId / pGeneration.Width;
+            return x / pGeneration.ChunkSize +
+                   y / pGeneration.ChunkSize * pGeneration.ChunksWide;
+        }
 
         public bool Matches(int pTargetTileId, AWPathRequestOptions pOptions)
         {

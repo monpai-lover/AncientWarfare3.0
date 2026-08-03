@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.performance;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.lineage
@@ -165,11 +166,40 @@ namespace AncientWarfare3.core.lineage
         private static readonly Dictionary<long, CaptainRecoveryPlan>
             CaptainRecoveryPlans = new Dictionary<long, CaptainRecoveryPlan>();
         private static readonly HashSet<long> ActiveActorIds = new HashSet<long>();
+        private const int PreparationKingdomsPerAuthorityCycle = 2;
+        private static readonly MonthlyAuthorityWorkQueue<Kingdom>
+            PreparationMonthlyWork =
+                new MonthlyAuthorityWorkQueue<Kingdom>();
+
+        internal static int PendingMonthlyWorkForDiagnostics =>
+            PreparationMonthlyWork.PendingCount;
+
         private static int LastPreparationMonthKey = int.MinValue;
 
         public static bool IsTemporaryLevy(Actor pActor)
         {
             return pActor?.data != null && ActiveActorIds.Contains(pActor.data.id);
+        }
+
+        internal static void RegisterSyntheticLevy(Actor pActor,
+            Kingdom pKingdom, City pCity, long pEmergencyId)
+        {
+            if (pActor?.data == null || pKingdom?.data == null ||
+                pCity?.data == null) return;
+            LevyPool pool = Pool(pKingdom.id);
+            pool.ActiveWarId = pEmergencyId;
+            pActor.data.set(LineageKeys.TEMPORARY_LEVY, true);
+            pActor.data.set(LineageKeys.TEMPORARY_LEVY_KINGDOM_ID,
+                pKingdom.id);
+            pActor.data.set(LineageKeys.TEMPORARY_LEVY_NOTICE_SIGNATURE,
+                string.Empty);
+            pActor.data.set(LineageKeys.TEMPORARY_LEVY_ORIGINAL_CITY_ID,
+                pCity.id);
+            pActor.data.set(LineageKeys.TEMPORARY_LEVY_WAR_ID,
+                pEmergencyId);
+            pActor.data.set(LineageKeys.SOLDIER_SERVICE_START_TIME, -1f);
+            pool.ActorIds.Add(pActor.data.id);
+            ActiveActorIds.Add(pActor.data.id);
         }
 
         internal static bool CanRegisterReserve(Kingdom pKingdom, City pCity,
@@ -254,7 +284,8 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnMilitaryCasualty(Actor pActor)
         {
-            if (pActor?.data == null || !pActor.isWarrior()) return;
+            if (SyntheticLevySpawnScope.IsActive ||
+                pActor?.data == null || !pActor.isWarrior()) return;
             Kingdom kingdom = pActor.kingdom;
             if (kingdom?.data == null || kingdom.isRekt() ||
                 !MilitaryEmergencyService.HasAny(kingdom)) return;
@@ -471,8 +502,10 @@ namespace AncientWarfare3.core.lineage
             }
             bool emergencyActive = MilitaryEmergencyService.HasAny(pKingdom);
             bool activeNotice = WarNoticeService.HasActiveNotice(pKingdom);
+            bool activeWar = MilitaryEmergencyService.TryGetActiveWarId(
+                pKingdom, out _);
             if (!TemporaryLevyRules.ShouldRunAnnualRecruitment(
-                    emergencyActive, activeNotice))
+                    emergencyActive, activeNotice, activeWar))
             {
                 if (activeNotice)
                     RecruitmentPlans.Remove(pKingdom.id);
@@ -497,11 +530,29 @@ namespace AncientWarfare3.core.lineage
             if (World.world?.kingdoms == null) return;
             int monthKey = TemporaryLevyRules.ToMonthKey(
                 Date.getCurrentYear(), Date.getCurrentMonth());
-            if (!TemporaryLevyRules.ShouldProcessPreparationMonth(monthKey,
-                    LastPreparationMonthKey)) return;
-            LastPreparationMonthKey = monthKey;
-            foreach (Kingdom kingdom in World.world.kingdoms)
-                ProcessPreparationMonth(kingdom, monthKey);
+            if (TemporaryLevyRules.ShouldProcessPreparationMonth(monthKey,
+                    LastPreparationMonthKey))
+            {
+                LastPreparationMonthKey = monthKey;
+                PreparationMonthlyWork.ScheduleMonth(monthKey,
+                    World.world.kingdoms);
+            }
+            PreparationMonthlyWork.Drain(
+                PreparationKingdomsPerAuthorityCycle,
+                (queuedMonthKey, kingdom) =>
+                {
+                    long benchmark = RecentFeatureBenchmark.Begin();
+                    try
+                    {
+                        ProcessPreparationMonth(kingdom, queuedMonthKey);
+                    }
+                    finally
+                    {
+                        RecentFeatureBenchmark.End(
+                            RecentFeatureBenchmarkRules.MonthPreparationLevyIndex,
+                            benchmark);
+                    }
+                });
         }
 
         private static void ProcessPreparationMonth(Kingdom pKingdom,
@@ -517,7 +568,9 @@ namespace AncientWarfare3.core.lineage
             }
 
             bool emergencyActive = MilitaryEmergencyService.HasAny(pKingdom);
-            bool activeNotice = WarNoticeService.HasActiveNotice(pKingdom);
+            bool activeNotice = CityReservePoolService.
+                ResolveMobilizationPhase(pKingdom) ==
+                ArmyMobilizationPhase.Notice;
             if (!emergencyActive || !activeNotice)
             {
                 CancelPreparationRecruitment(pKingdom);
@@ -605,6 +658,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
             LastPreparationMonthKey = int.MinValue;
+            PreparationMonthlyWork.ResetScheduleGate();
             if (AutonomousRestorationService.IsActiveCampaignKingdom(pKingdom))
             {
                 RecruitmentPlans.Remove(pKingdom.id);
@@ -644,6 +698,7 @@ namespace AncientWarfare3.core.lineage
             CaptainRecoveryPlans.Clear();
             ActiveActorIds.Clear();
             LastPreparationMonthKey = int.MinValue;
+            PreparationMonthlyWork.Clear();
             if (World.world?.units != null)
             {
                 foreach (Actor actor in World.world.units)
@@ -679,6 +734,7 @@ namespace AncientWarfare3.core.lineage
             CaptainRecoveryPlans.Clear();
             ActiveActorIds.Clear();
             LastPreparationMonthKey = int.MinValue;
+            PreparationMonthlyWork.Clear();
         }
 
         private static void ScheduleRecruitmentYear(Kingdom pKingdom, int pYear)
@@ -805,7 +861,8 @@ namespace AncientWarfare3.core.lineage
                 CancelPreparationRecruitment(kingdom);
                 return;
             }
-            if (!WarNoticeService.HasActiveNotice(kingdom))
+            if (CityReservePoolService.ResolveMobilizationPhase(kingdom) !=
+                ArmyMobilizationPhase.Notice)
             {
                 CancelPreparationRecruitment(kingdom);
                 return;
@@ -829,23 +886,28 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            int approvedShortage = disposition ==
-                                    ArmyRecruitmentDisposition.Replenish
-                ? ApprovedTargetShortage(kingdom, targetArmy)
-                : 0;
-            var candidates = new List<Actor>(Math.Min(
-                TemporaryLevyRules.MaxRecruitsPerWorkItem,
-                Math.Max(0, approvedShortage)));
+            int living = SafeArmyCount(targetArmy);
+            int targetStrength = targetArmy?.data != null
+                ? StandingArmyService.TargetStrength(targetArmy, kingdom)
+                : PreparationTargetStrength(kingdom, city);
+            int requested = TemporaryLevyRules.PreparationRequest(
+                establishmentAccepted:
+                    disposition != ArmyRecruitmentDisposition.Reject,
+                living, targetStrength,
+                TemporaryLevyRules.MaxRecruitsPerWorkItem);
+            var candidates = new List<Actor>(requested);
             bool confirmedExhausted = false;
-            if (approvedShortage > 0)
-                CityReservePoolService.TryConsumePreparationBatch(
-                    kingdom, city, Math.Min(approvedShortage,
-                        TemporaryLevyRules.MaxRecruitsPerWorkItem),
-                    targetArmy, candidates, out confirmedExhausted);
-            int recruited = EnlistReserveActors(kingdom, city, targetArmy,
-                candidates, preparationRecruitment: true);
-            int remainingShortage = ApprovedTargetShortage(kingdom,
-                targetArmy);
+            if (requested > 0)
+                CityReservePoolService.TryConsumeForMobilization(
+                    kingdom, city, requested, targetArmy,
+                    allowArmyCreation:
+                        disposition == ArmyRecruitmentDisposition.Create,
+                    candidates, out confirmedExhausted);
+            int recruited = EnlistPreparationActors(kingdom, city,
+                disposition, ref targetArmy, candidates);
+            int remainingShortage = targetArmy?.data != null
+                ? ApprovedTargetShortage(kingdom, targetArmy)
+                : Math.Max(0, targetStrength);
             bool cityWorkComplete = confirmedExhausted ||
                                     remainingShortage <= 0 ||
                                     candidates.Count == 0;
@@ -879,12 +941,7 @@ namespace AncientWarfare3.core.lineage
             bool preferredTargetsReady = ArmyDeploymentService.
                 TryGetPreferredLevyCityCount(pKingdom,
                     out int preferredCityCount);
-            if (TemporaryLevyRules.ShouldWaitForPreparationTargets(
-                    activeNotice: true, preferredTargetsReady))
-            {
-                pWaitingForFrontier = true;
-                return false;
-            }
+            if (!preferredTargetsReady) preferredCityCount = 0;
 
             int cityCount = pKingdom.cities?.Count ?? 0;
             int candidateCount = preferredCityCount + cityCount;
@@ -1103,9 +1160,12 @@ namespace AncientWarfare3.core.lineage
 
             var candidates = new List<Actor>(
                 TemporaryLevyRules.MaxRecruitsPerWorkItem);
-            int scanned = CityReservePoolService.TryConsumeFromSourceCity(
+            int scanned = CityReservePoolService.TryConsumeForMobilization(
                 kingdom, city, TemporaryLevyRules.MaxRecruitsPerWorkItem,
-                establishmentArmy, candidates,
+                establishmentArmy,
+                allowArmyCreation:
+                    disposition == ArmyRecruitmentDisposition.Create,
+                candidates,
                 out bool confirmedExhausted);
             int recruited = 0;
             for (int i = 0; i < candidates.Count; i++)
@@ -1544,10 +1604,13 @@ namespace AncientWarfare3.core.lineage
             bool confirmedExhausted = false;
             int scanned = 0;
             if (establishmentReady)
-                scanned = CityReservePoolService.TryConsumeFromSourceCity(
+                scanned = CityReservePoolService.TryConsumeForMobilization(
                     kingdom, city,
                     TemporaryLevyRules.CasualtyReinforcementBatchLimit(
-                        demand), establishmentArmy, candidates,
+                        demand), establishmentArmy,
+                    allowArmyCreation:
+                        disposition == ArmyRecruitmentDisposition.Create,
+                    candidates,
                     out confirmedExhausted);
             int recruited = 0;
             var scanSummary = default(RecruitmentScanSummary);
@@ -1623,6 +1686,58 @@ namespace AncientWarfare3.core.lineage
             return CityArmyReinforcementRules.Shortage(living, approved);
         }
 
+        private static int PreparationTargetStrength(Kingdom pKingdom,
+            City pCity)
+        {
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.kingdom != pKingdom) return 0;
+            int population;
+            int slots;
+            try { population = Math.Max(0, pCity.getPopulationPeople()); }
+            catch { population = 0; }
+            try { slots = Math.Max(0, pCity.status.warrior_slots); }
+            catch { slots = 0; }
+            slots = MandateMilitaryPhaseService.EffectiveWarriorSlots(
+                pKingdom, slots);
+            return CityArmyReinforcementRules.CityCapacity(population,
+                slots);
+        }
+
+        private static int SafeArmyCount(Army pArmy)
+        {
+            try { return Math.Max(0, pArmy?.countUnits() ?? 0); }
+            catch { return 0; }
+        }
+
+        private static int EnlistPreparationActors(Kingdom pKingdom,
+            City pSourceCity, ArmyRecruitmentDisposition pDisposition,
+            ref Army pTargetArmy, IReadOnlyList<Actor> pCandidates)
+        {
+            if (pKingdom?.data == null || pSourceCity?.data == null ||
+                pCandidates == null ||
+                CityReservePoolService.ResolveMobilizationPhase(pKingdom) !=
+                ArmyMobilizationPhase.Notice) return 0;
+            int recruited = 0;
+            for (int i = 0; i < pCandidates.Count; i++)
+            {
+                Actor actor = pCandidates[i];
+                ArmyRecruitmentDisposition disposition =
+                    pTargetArmy?.data == null
+                        ? pDisposition
+                        : ArmyRecruitmentDisposition.Replenish;
+                if (disposition == ArmyRecruitmentDisposition.Reject ||
+                    !Enlist(pKingdom, pSourceCity, actor, disposition,
+                        ref pTargetArmy,
+                        pTrackReplenishmentArrival: false))
+                {
+                    CityReservePoolService.OnActorReturnedToCivilian(actor);
+                    continue;
+                }
+                recruited++;
+            }
+            return recruited;
+        }
+
         internal static int EnlistReserveActors(Kingdom kingdom, City source,
             Army targetArmy, IReadOnlyList<Actor> candidates,
             bool preparationRecruitment,
@@ -1632,7 +1747,8 @@ namespace AncientWarfare3.core.lineage
                 candidates == null || AWArmyService.IsSpecialArmy(targetArmy) ||
                 AWArmyService.GetIntendedKingdom(targetArmy) != kingdom ||
                 preparationRecruitment &&
-                !WarNoticeService.HasActiveNotice(kingdom)) return 0;
+                CityReservePoolService.ResolveMobilizationPhase(kingdom) !=
+                ArmyMobilizationPhase.Notice) return 0;
             int recruited = 0;
             Army target = targetArmy;
             for (int i = 0; i < candidates.Count; i++)
@@ -2175,10 +2291,17 @@ namespace AncientWarfare3.core.lineage
             bool createdArmy = false;
             try
             {
+                if (army?.data != null &&
+                    !CityReservePoolRules.MatchesSourceCity(pCity.id,
+                        AWArmyService.GetAnchorCityId(army)))
+                    return false;
                 if (army?.data == null &&
                     pDisposition == ArmyRecruitmentDisposition.Create)
                 {
-                    if (pCity.hasArmy())
+                    if (ArmyFieldIndexService.TryGetCityArmy(pCity,
+                            out Army canonical))
+                        army = canonical;
+                    else if (pCity.hasArmy())
                         army = AWArmyService.CreateDetachedArmy(
                             pCity.kingdom, pCity, pActor);
                     else
@@ -2191,6 +2314,8 @@ namespace AncientWarfare3.core.lineage
             if (TemporaryLevyRules.ShouldAssignArmyAnchor(createdArmy,
                     AWArmyService.GetAnchorCityId(army)))
                 army.data.set(LineageKeys.AW_ARMY_CITY_ID, pCity.id);
+            AWArmyService.EnsureOrdinaryNativeName(army, pCity.kingdom,
+                pCity);
             pEstablishmentArmy = army;
             if (pActor.army != army) AWArmyService.AddToArmy(pActor, army);
             bool memberAssigned = pActor.army == army;
@@ -2311,6 +2436,22 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.TEMPORARY_LEVY_KINGDOM_ID, out long recordedKingdomId, -1L);
             bool sameKingdom = pActor.kingdom?.id == pMobilizingKingdomId && recordedKingdomId == pMobilizingKingdomId;
             bool living = !pActor.isRekt() && pActor.isAlive();
+            SyntheticLevyDisposition disposition =
+                SyntheticLevyRules.ResolveDemobilization(
+                    SyntheticLevyService.IsSynthetic(pActor), living,
+                    GeneralService.GetMerit(pActor));
+            if (disposition == SyntheticLevyDisposition.RemoveActor)
+            {
+                ClearFields(pActor);
+                SyntheticLevyService.RemoveWithoutPersonalHistory(pActor);
+                return;
+            }
+            if (disposition == SyntheticLevyDisposition.PromotePermanent)
+            {
+                ClearFields(pActor);
+                SyntheticLevyService.Promote(pActor);
+                return;
+            }
             ClearFields(pActor);
             if (sameKingdom && living)
             {

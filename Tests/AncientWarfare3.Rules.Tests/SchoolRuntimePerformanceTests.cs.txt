@@ -218,6 +218,28 @@ internal static class SchoolRuntimePerformanceTests
                 pExpectedActorId: 17, pRuntimeActorId: 18),
             "a reused actor reference cannot commit another actor's membership");
 
+        var deathIdentity = new SchoolMembershipStableIdentity(
+            membershipId: 1772, actorId: 8266, schoolId: "ru",
+            sourceType: "LaterDiscipleship",
+            sourceId: "elite:11:137:8266:8253",
+            teacherActorId: 8253, cityId: 11, generation: 6,
+            startYear: 137);
+        Equal(deathIdentity, new SchoolMembershipStableIdentity(
+                membershipId: 1772, actorId: 8266, schoolId: "ru",
+                sourceType: "LaterDiscipleship",
+                sourceId: "elite:11:137:8266:8253",
+                teacherActorId: 8253, cityId: 11, generation: 6,
+                startYear: 137),
+            "death closing matches the immutable membership identity");
+        Equal(false, deathIdentity.Equals(
+                new SchoolMembershipStableIdentity(
+                    membershipId: 1772, actorId: 8266, schoolId: "mo",
+                    sourceType: "LaterDiscipleship",
+                    sourceId: "elite:11:137:8266:8253",
+                    teacherActorId: 8253, cityId: 11, generation: 6,
+                    startYear: 137)),
+            "death closing rejects a different school membership");
+
         True(FormalAffiliationTransferRules.Allows(42, 7, 11, 42, 7, 11),
             "exact committed transfer is allowed");
         Equal(false,

@@ -7,6 +7,7 @@ using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.performance;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 using UnityEngine;
 
@@ -44,59 +45,69 @@ namespace AncientWarfare3.patch
         private static void BeforeMapBoxUpdate(MapBox __instance,
             out MapBoxUpdateScope __state)
         {
-            AWCooperativeSimulationRunner runner =
-                AWCooperativeSimulationRunner.Instance;
-            bool replicaSession =
-                AW3MultiplayerReplicaScope.IsReplicaSession;
-            if (runner.RequiresControl &&
-                !replicaSession &&
-                Config.game_loaded &&
-                !SmoothLoader.isLoading())
+            long benchmark = RecentFeatureBenchmark.BeginOutsideFrameStage();
+            try
             {
-                _schedulerLifecycleOwned = true;
-            }
+                AWCooperativeSimulationRunner runner =
+                    AWCooperativeSimulationRunner.Instance;
+                bool replicaSession =
+                    AW3MultiplayerReplicaScope.IsReplicaSession;
+                if (runner.RequiresControl &&
+                    !replicaSession &&
+                    Config.game_loaded &&
+                    !SmoothLoader.isLoading())
+                {
+                    _schedulerLifecycleOwned = true;
+                }
 
-            if (runner.RequiresControl)
-            {
-                EnsureActorReadBoundary("mapbox.frame_begin");
-                EnsureBuildingReadBoundary("mapbox.frame_begin");
-            }
+                if (runner.RequiresControl)
+                {
+                    EnsureActorReadBoundary("mapbox.frame_begin");
+                    EnsureBuildingReadBoundary("mapbox.frame_begin");
+                }
 
-            AWPresentationCommandQueue.DrainMainThread();
-            __state = new MapBoxUpdateScope();
-            ArmyRtsTransportService.ObserveFrameClock(
-                Time.realtimeSinceStartupAsDouble,
-                __instance == null || __instance.isPaused());
+                AWPresentationCommandQueue.DrainMainThread();
+                __state = new MapBoxUpdateScope();
+                ArmyRtsTransportService.ObserveFrameClock(
+                    Time.realtimeSinceStartupAsDouble,
+                    __instance == null || __instance.isPaused());
 
-            bool measureHost = AWFrameSchedulerRules.ShouldMeasureHost(
-                runner.RequiresControl,
-                AWPerformanceSettings.EnableSchedulerDiagnostics);
-            if (measureHost)
-            {
-                __state.HostMeasurement =
-                    AWFramePriorityGovernor.StartHostMeasurement();
-            }
-
-            bool advancePresentationClock =
-                AWFrameSchedulerRules.ShouldAdvancePresentationClock(
+                bool measureHost = AWFrameSchedulerRules.ShouldMeasureHost(
                     runner.RequiresControl,
-                    replicaSession);
-            if (Config.game_loaded &&
-                !SmoothLoader.isLoading() &&
-                AWPerformanceSettings.EnableFramePriorityScheduler &&
-                runner.RequiresControl &&
-                !replicaSession)
-            {
-                AWActorPresentationSnapshots.RequestCapture();
-            }
+                    AWPerformanceSettings.EnableSchedulerDiagnostics);
+                if (measureHost)
+                {
+                    __state.HostMeasurement =
+                        AWFramePriorityGovernor.StartHostMeasurement();
+                }
 
-            if (Config.game_loaded &&
-                !SmoothLoader.isLoading() &&
-                advancePresentationClock)
+                bool advancePresentationClock =
+                    AWFrameSchedulerRules.ShouldAdvancePresentationClock(
+                        runner.RequiresControl,
+                        replicaSession);
+                if (Config.game_loaded &&
+                    !SmoothLoader.isLoading() &&
+                    AWPerformanceSettings.EnableFramePriorityScheduler &&
+                    runner.RequiresControl &&
+                    !replicaSession)
+                {
+                    AWActorPresentationSnapshots.RequestCapture();
+                }
+
+                if (Config.game_loaded &&
+                    !SmoothLoader.isLoading() &&
+                    advancePresentationClock)
+                {
+                    AnimationHelper.updateTime(
+                        Time.unscaledDeltaTime,
+                        Time.unscaledDeltaTime);
+                }
+            }
+            finally
             {
-                AnimationHelper.updateTime(
-                    Time.unscaledDeltaTime,
-                    Time.unscaledDeltaTime);
+                RecentFeatureBenchmark.EndOutsideFrameStage(
+                    RecentFeatureBenchmarkRules.SchedulerPrefixIndex,
+                    benchmark);
             }
         }
 
@@ -105,28 +116,38 @@ namespace AncientWarfare3.patch
         private static void AfterMapBoxUpdate(MapBox __instance,
             ref MapBoxUpdateScope __state)
         {
+            long benchmark = RecentFeatureBenchmark.BeginOutsideFrameStage();
             try
             {
-                AWCooperativeSimulationRunner runner =
-                    AWCooperativeSimulationRunner.Instance;
-                if (runner.RequiresControl || runner.ControlledThisFrame)
+                try
                 {
-                    runner.FinishPresentationFrame();
+                    AWCooperativeSimulationRunner runner =
+                        AWCooperativeSimulationRunner.Instance;
+                    if (runner.RequiresControl || runner.ControlledThisFrame)
+                    {
+                        runner.FinishPresentationFrame();
+                    }
                 }
-            }
-            catch (Exception error)
-            {
-                HandleBackgroundSimulationFault(error);
+                catch (Exception error)
+                {
+                    HandleBackgroundSimulationFault(error);
+                }
+                finally
+                {
+                    CloseHostMeasurement(ref __state);
+                }
+
+                RefreshControlledPresentation(__instance);
+                AWWorldTimeRateTracker.Update(__instance);
+                AWSimulationTickBenchmark.SyncCaptureState();
+                TryLogSchedulerDiagnostics();
             }
             finally
             {
-                CloseHostMeasurement(ref __state);
+                RecentFeatureBenchmark.EndOutsideFrameStage(
+                    RecentFeatureBenchmarkRules.SchedulerPostfixIndex,
+                    benchmark);
             }
-
-            RefreshControlledPresentation(__instance);
-            AWWorldTimeRateTracker.Update(__instance);
-            AWSimulationTickBenchmark.SyncCaptureState();
-            TryLogSchedulerDiagnostics();
         }
 
         [HarmonyFinalizer]

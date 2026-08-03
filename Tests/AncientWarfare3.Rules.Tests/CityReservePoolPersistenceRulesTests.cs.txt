@@ -1,0 +1,67 @@
+using AncientWarfare3.core.lineage;
+using System;
+using System.IO;
+
+internal static class CityReservePoolPersistenceRulesTests
+{
+    internal static void Run()
+    {
+        Equal(2, CityReservePoolPersistenceRules.CurrentVersion,
+            "count ledgers use snapshot version two");
+        Equal(false, CityReservePoolPersistenceRules.CanUseSnapshotVersion(1),
+            "actor-id snapshots rebuild instead of restoring stale members");
+        Equal(true, CityReservePoolPersistenceRules.CanUseSnapshotVersion(2),
+            "count-ledger snapshots restore directly");
+        Equal("aw3_city_reserve_pools.json",
+            CityReservePoolPersistenceRules.SnapshotFileName,
+            "reserve pool persistence uses a stable save sidecar name");
+        Equal(true, CityReservePoolPersistenceRules.ShouldWriteSnapshot(
+            worldReady: true, directoryValid: true),
+            "a ready world writes the reserve pool snapshot");
+        Equal(false, CityReservePoolPersistenceRules.ShouldWriteSnapshot(
+            worldReady: false, directoryValid: true),
+            "an unavailable world cannot write a reserve pool snapshot");
+        Equal(false, CityReservePoolPersistenceRules.ShouldWriteSnapshot(
+            worldReady: true, directoryValid: false),
+            "an invalid save directory cannot write a reserve pool snapshot");
+        Equal(true, CityReservePoolPersistenceRules.ShouldRestoreSnapshot(
+            snapshotExists: true, worldLoaded: true),
+            "a loaded world applies an existing reserve pool snapshot");
+        Equal(false, CityReservePoolPersistenceRules.ShouldRestoreSnapshot(
+            snapshotExists: false, worldLoaded: true),
+            "a missing reserve pool snapshot falls back to actor data rebuild");
+        Equal(true, CityReservePoolPersistenceRules.ShouldRunFinalRebuild(
+            worldLoaded: true, actorCallbacksComplete: true),
+            "actor callbacks require a final reserve pool rebuild");
+        Equal(false, CityReservePoolPersistenceRules.ShouldRunFinalRebuild(
+            worldLoaded: true, actorCallbacksComplete: false),
+            "reserve pool rebuild waits until actor callbacks complete");
+
+        string savePatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_SavePatch.cs"));
+        Equal(true, savePatch.Contains("PrepareForSave") &&
+                    savePatch.Contains("TryWriteSnapshot"),
+            "vanilla saves flush and publish reserve pool state");
+        string restorePipeline = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "multiplayer",
+            "AW3RuntimeRestorePipeline.cs"));
+        Equal(true, restorePipeline.Contains("TryRestoreSnapshot") &&
+                    restorePipeline.Contains("city_reserve_pools"),
+            "world loads restore and rebuild reserve pool state");
+        Equal(true, restorePipeline.IndexOf(
+                        "new AW3RestoreStage(\"city_reserve_pools\"",
+                        StringComparison.Ordinal) <
+                    restorePipeline.IndexOf(
+                        "new AW3RestoreStage(\"city_reserve_pool_snapshot\"",
+                        StringComparison.Ordinal),
+            "load rebuilds derived population before applying consumed wartime reserve");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

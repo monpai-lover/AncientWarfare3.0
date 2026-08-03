@@ -60,6 +60,13 @@ if (args.Length == 1 && args[0] == "--xia-monkey-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--hierarchical-label-precompute")
+{
+    HierarchicalVassalLabelPrecomputeRulesTests.Run();
+    Console.WriteLine("Hierarchical vassal label precompute rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--diplomacy-ai")
 {
     DiplomacyAiRulesTests.Run();
@@ -148,6 +155,13 @@ if (args.Length == 1 && args[0] == "--scheduler-load-safety-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--monthly-authority-work")
+{
+    MonthlyAuthorityWorkQueueTests.Run();
+    Console.WriteLine("AW3 monthly authority work queue rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--actor-kingdom-safety-slice")
 {
     ActorKingdomSafetyRulesTests.Run();
@@ -187,8 +201,46 @@ if (args.Length == 1 && args[0] == "--western-goal-regressions")
 
 if (args.Length == 1 && args[0] == "--city-reserve-pool-slice")
 {
-    CityReservePoolRulesTests.Run();
+CityReservePoolRulesTests.Run();
+CityReservePoolPersistenceRulesTests.Run();
     Console.WriteLine("AW3 city reserve pool rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--actor-runtime")
+{
+    ActorDiagnosticSamplingRulesTests.Run();
+    ActorAgeWorkRulesTests.Run();
+    ActorDeathArchiveRulesTests.Run();
+    ActorPresentationDirtyRulesTests.Run();
+    AWPathRequestReuseRulesTests.Run();
+    PathfindingPerformanceTests.Run();
+    PathfindingCursorTests.Run();
+    SchoolRuntimePerformanceTests.Run();
+    Console.WriteLine("AW3 actor runtime rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--army-rts")
+{
+    ArmyMobilizationRulesTests.Run();
+    CityManpowerRulesTests.Run();
+    SyntheticLevyRulesTests.Run();
+    CityReservePoolRulesTests.Run();
+    CityReservePoolPersistenceRulesTests.Run();
+    TemporaryLevyRulesTests.Run();
+    ArmyReplenishmentOperationRulesTests.Run();
+    ArmyRtsPreDepartureDeadlineRulesTests.Run();
+    CityArmyReinforcementRulesTests.Run();
+    ZhuluWarRulesTests.Run();
+    Console.WriteLine("AW3 army RTS rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--army-mobilization-slice")
+{
+    ArmyMobilizationRulesTests.Run();
+    Console.WriteLine("AW3 army mobilization rules passed.");
     return;
 }
 
@@ -6640,7 +6692,7 @@ Equal(false, InheritanceCandidateRules.IsFastAdultRoyalCandidate(
         enslaved: false, mad: false, domestic: true,
         sameLineage: false, sameShi: false),
     "an unrelated adult cannot unlock a royal succession law");
-Equal(50, RecentFeatureBenchmarkRules.EntryIds.Length,
+Equal(65, RecentFeatureBenchmarkRules.EntryIds.Length,
     "every recently added runtime subsystem has a dedicated benchmark entry");
 Equal(RecentFeatureBenchmarkRules.EntryIds.Length,
     RecentFeatureBenchmarkRules.EntryIds.Distinct(StringComparer.Ordinal).Count(),
@@ -6648,6 +6700,27 @@ Equal(RecentFeatureBenchmarkRules.EntryIds.Length,
 Equal("aw3_recent_runtime_summary",
     RecentFeatureBenchmarkRules.TotalParentGroup,
     "AW3 diagnostic CPU time does not pollute the original game-total group");
+Equal("aw3_frame_outside_vanilla_total",
+    RecentFeatureBenchmarkRules.OutsideVanillaFrameTotal,
+    "Harmony frame work outside native game_total has its own total");
+foreach ((int index, string id) in new[]
+         {
+             (52, "aw3_frame_actor_kingdom_repair"),
+             (53, "aw3_frame_school_death_retry"),
+             (54, "aw3_frame_scheduler_prefix"),
+             (55, "aw3_frame_scheduler_postfix"),
+             (56, "aw3_frame_rts_visualization"),
+             (57, "aw3_frame_rts_speech_bubbles"),
+             (58, "aw3_frame_rts_plan_snapshot"),
+             (59, "aw3_frame_family_tree_cleanup"),
+             (60, "aw3_frame_localized_name_refresh"),
+             (61, "aw3_frame_performance_diagnostic"),
+             (62, "aw3_month_ruler_household"),
+             (63, "aw3_month_kingdom_policy"),
+             (64, "aw3_month_preparation_levy")
+         })
+    Equal(id, RecentFeatureBenchmarkRules.IdForIndex(index),
+        "MapBox frame benchmark indices remain append-only");
 Equal("aw3_city_runtime",
     CityMaintenanceBenchmarkRules.Group,
     "legacy AW3 city diagnostics do not pollute the original game-total group");
@@ -7482,6 +7555,7 @@ RebellionForceCollapseRulesTests.Run();
 HistoricalFigureSpawnRulesTests.Run();
 Regression20260721Tests.Run();
 ArmyMapInformationRulesTests.Run();
+HierarchicalVassalMapActivationRulesTests.Run();
 AW3MultiplayerWorldLoadRulesTests.Run();
 LineageRuntimePathRulesTests.Run();
 AW3RuntimeRestorePipelineTests.Run();
@@ -7499,5 +7573,10 @@ ActiveMilitaryLifecycleRulesTests.Run();
 ArmyLogisticsSustainmentRulesTests.Run();
 ArmyRtsRouteChoiceRulesTests.Run();
 ArmyRtsReplenishmentArrivalRulesTests.Run();
+ActorDiagnosticSamplingRulesTests.Run();
+ActorAgeWorkRulesTests.Run();
+ActorDeathArchiveRulesTests.Run();
+ActorPresentationDirtyRulesTests.Run();
+AWPathRequestReuseRulesTests.Run();
 
 Console.WriteLine("Rule tests passed.");

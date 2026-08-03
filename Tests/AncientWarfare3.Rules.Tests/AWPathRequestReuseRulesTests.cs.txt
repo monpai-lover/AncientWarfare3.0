@@ -1,0 +1,50 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class AWPathRequestReuseRulesTests
+{
+    public static void Run()
+    {
+        var request = new AWPathRequestKey(20, pWater: false,
+            pBlocks: false, pLava: false, pRegionLimit: 32,
+            pBoundedMilitaryWater: false,
+            pMaximumConsecutiveWaterTiles: 0);
+        var same = new AWPathReuseKey(actorId: 42, startRegion: 10,
+            request, terrainRevision: 7, worldGeneration: 3,
+            insideBoat: false);
+        Equal(true, AWPathRequestReuseRules.CanReuse(same, same,
+                ageTicks: 2, maximumAgeTicks: 8),
+            "equivalent live request is reused");
+        var changedTerrain = new AWPathReuseKey(42, 10, request,
+            terrainRevision: 8, worldGeneration: 3, insideBoat: false);
+        Equal(false, AWPathRequestReuseRules.CanReuse(same,
+                changedTerrain, 2, 8),
+            "terrain changes invalidate reuse");
+        var changedStart = new AWPathReuseKey(42, 11, request,
+            terrainRevision: 7, worldGeneration: 3, insideBoat: false);
+        Equal(false, AWPathRequestReuseRules.CanReuse(same, changedStart,
+                2, 8),
+            "meaningful start-region changes invalidate reuse");
+        var changedBoat = new AWPathReuseKey(42, 10, request,
+            terrainRevision: 7, worldGeneration: 3, insideBoat: true);
+        Equal(false, AWPathRequestReuseRules.CanReuse(same, changedBoat,
+                2, 8),
+            "boarding state changes invalidate reuse");
+        var changedActor = new AWPathReuseKey(43, 10, request,
+            terrainRevision: 7, worldGeneration: 3, insideBoat: false);
+        Equal(false, AWPathRequestReuseRules.CanReuse(same, changedActor,
+                2, 8),
+            "paths are never shared across Actors");
+        Equal(false, AWPathRequestReuseRules.CanReuse(same, same,
+                ageTicks: 9, maximumAgeTicks: 8),
+            "expired completed paths are not reused");
+        Equal(2048, AWPathRequestReuseRules.ClampCompletedCapacity(9000),
+            "completed reuse cache has a hard capacity");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected=" + pExpected + ", actual=" + pActual);
+    }
+}

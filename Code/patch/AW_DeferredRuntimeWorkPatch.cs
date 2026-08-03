@@ -16,29 +16,22 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), "Update")]
         private static void MapBoxUpdate_Postfix()
         {
-            MapBoxFrameStageGuard.Run("family_tree_cleanup",
-                DrainFamilyTreeCleanup);
+            MeasureOutside(RecentFeatureBenchmarkRules.FamilyTreeCleanupIndex,
+                "family_tree_cleanup", DrainFamilyTreeCleanup);
             if (!Config.game_loaded || SmoothLoader.isLoading())
             {
-                MapBoxFrameStageGuard.Run("recent_feature_benchmark_flush",
-                    RecentFeatureBenchmark.Flush);
                 return;
             }
 
-            try
-            {
-                MapBoxFrameStageGuard.Run("historical_read_completion",
-                    DrainPresentationCompletionsMeasured);
-                MapBoxFrameStageGuard.Run("localized_name_refresh",
-                    AWLocalizedNameRefreshService.ProcessFrame);
-                MapBoxFrameStageGuard.Run("school_map_presentation",
-                    ProcessSchoolMapPresentationMeasured);
-            }
-            finally
-            {
-                MapBoxFrameStageGuard.Run("recent_feature_benchmark_flush",
-                    RecentFeatureBenchmark.Flush);
-            }
+            MeasureOutside(RecentFeatureBenchmarkRules.AsyncCommitIndex,
+                "historical_read_completion", DrainPresentationCompletions);
+            MeasureOutside(
+                RecentFeatureBenchmarkRules.LocalizedNameRefreshIndex,
+                "localized_name_refresh",
+                AWLocalizedNameRefreshService.ProcessFrame);
+            MeasureOutside(RecentFeatureBenchmarkRules.SchoolMapIndex,
+                "school_map_presentation",
+                SchoolMapModeService.ProcessFrame);
         }
 
         private static void DrainPresentationCompletions()
@@ -49,18 +42,6 @@ namespace AncientWarfare3.patch
         private static void DrainFamilyTreeCleanup()
         {
             FamilyTreeDeferredCleanupHost.Drain(8);
-        }
-
-        private static void DrainPresentationCompletionsMeasured()
-        {
-            Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
-                DrainPresentationCompletions);
-        }
-
-        private static void ProcessSchoolMapPresentationMeasured()
-        {
-            Measure(RecentFeatureBenchmarkRules.SchoolMapIndex,
-                SchoolMapModeService.ProcessFrame);
         }
 
         [HarmonyPriority(Priority.Last)]
@@ -81,13 +62,14 @@ namespace AncientWarfare3.patch
             ArmyRtsBenchmark.Reset();
         }
 
-        private static void Measure(int pIndex, System.Action pAction)
+        private static void MeasureOutside(int pIndex, string pStage,
+            System.Action pAction)
         {
-            long benchmark = RecentFeatureBenchmark.Begin();
-            try { pAction(); }
+            long benchmark = RecentFeatureBenchmark.BeginOutsideFrameStage();
+            try { MapBoxFrameStageGuard.Run(pStage, pAction); }
             finally
             {
-                RecentFeatureBenchmark.End(pIndex, benchmark);
+                RecentFeatureBenchmark.EndOutsideFrameStage(pIndex, benchmark);
             }
         }
     }

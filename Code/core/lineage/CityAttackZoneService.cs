@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -139,6 +140,8 @@ namespace AncientWarfare3.core.lineage
         {
             private readonly War _war;
             private readonly Kingdom _observingKingdom;
+            private readonly Dictionary<long, bool> HostilityByKingdom =
+                new Dictionary<long, bool>();
 
             internal HostileMilitaryScanContext(War pWar,
                 Kingdom pObservingKingdom)
@@ -159,14 +162,23 @@ namespace AncientWarfare3.core.lineage
                     actorKingdom?.data == null ||
                     actorKingdom == _observingKingdom)
                     return true;
-                try
+                long actorKingdomId;
+                try { actorKingdomId = actorKingdom.id; }
+                catch { return true; }
+                if (!HostilityByKingdom.TryGetValue(actorKingdomId,
+                        out bool hostile))
                 {
-                    Found = !_war.onTheSameSide(_observingKingdom,
-                                actorKingdom) &&
-                            _war.isInWarWith(_observingKingdom,
-                                actorKingdom);
+                    try
+                    {
+                        hostile = !_war.onTheSameSide(_observingKingdom,
+                                      actorKingdom) &&
+                                  _war.isInWarWith(_observingKingdom,
+                                      actorKingdom);
+                    }
+                    catch { hostile = false; }
+                    HostilityByKingdom[actorKingdomId] = hostile;
                 }
-                catch { Found = false; }
+                Found = hostile;
                 return !Found;
             }
         }

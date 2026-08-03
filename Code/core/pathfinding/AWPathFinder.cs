@@ -136,11 +136,12 @@ namespace AncientWarfare3.core.pathfinding
                 pDisposition = AWPathSubmissionDisposition.Submitted;
                 if (_active.TryGetValue(pRequest.ActorId, out PathfindingTask existing))
                 {
-                    if (CanReuse(existing, pRequest.TargetTileId,
-                            pRequest.Options))
+                    if (CanReuse(existing, pRequest.ReuseKey))
                     {
                         pRequest.Dispose();
                         pDisposition = AWPathSubmissionDisposition.Reused;
+                        if (existing.WorkerStarted)
+                            _diagnostics?.OnReusedRunning();
                         _diagnostics?.OnSubmission(existing.Request.WorkClass,
                             pDisposition);
                         return true;
@@ -183,11 +184,13 @@ namespace AncientWarfare3.core.pathfinding
             }
         }
 
-        public bool TryReuse(long pActorId, int pTargetTileId,
-            AWPathRequestOptions pOptions)
+        public bool TryReuse(AWPathReuseKey pReuseKey)
         {
-            if (!_active.TryGetValue(pActorId, out PathfindingTask existing) ||
-                !CanReuse(existing, pTargetTileId, pOptions)) return false;
+            if (!_active.TryGetValue(pReuseKey.ActorId,
+                    out PathfindingTask existing) ||
+                !CanReuse(existing, pReuseKey)) return false;
+            if (existing.WorkerStarted)
+                _diagnostics?.OnReusedRunning();
             _diagnostics?.OnSubmission(existing.Request.WorkClass,
                 AWPathSubmissionDisposition.Reused);
             return true;
@@ -220,10 +223,12 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         private static bool CanReuse(PathfindingTask pTask,
-            int pTargetTileId, AWPathRequestOptions pOptions)
+            AWPathReuseKey pReuseKey)
         {
             if (pTask?.Request == null ||
-                !pTask.Request.Matches(pTargetTileId, pOptions)) return false;
+                !AWPathRequestReuseRules.CanReuse(pTask.Request.ReuseKey,
+                    pReuseKey, ageTicks: 0L, maximumAgeTicks: 0L))
+                return false;
             return !IsTerminal(pTask.Request.Stream.State) ||
                    pTask.Request.Stream.HasPendingSteps;
         }

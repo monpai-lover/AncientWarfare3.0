@@ -67,6 +67,21 @@ namespace AncientWarfare3.core.policy
         public const int ArmyRtsWatchdogIndex = 47;
         public const int CivilServiceExamAnnualIndex = 48;
         public const int CivilServiceExamRuntimeIndex = 49;
+        public const int HierarchicalLabelsIndex = 50;
+        public const int HierarchicalHoverIndex = 51;
+        public const int ActorKingdomRepairIndex = 52;
+        public const int SchoolDeathRetryIndex = 53;
+        public const int SchedulerPrefixIndex = 54;
+        public const int SchedulerPostfixIndex = 55;
+        public const int RtsVisualizationIndex = 56;
+        public const int RtsSpeechBubblesIndex = 57;
+        public const int RtsPlanSnapshotIndex = 58;
+        public const int FamilyTreeCleanupIndex = 59;
+        public const int LocalizedNameRefreshIndex = 60;
+        public const int PerformanceDiagnosticIndex = 61;
+        public const int MonthRulerHouseholdIndex = 62;
+        public const int MonthKingdomPolicyIndex = 63;
+        public const int MonthPreparationLevyIndex = 64;
 
         public const string Pathfinding = "aw3_runtime_pathfinding";
         public const string Schools = "aw3_runtime_schools";
@@ -129,6 +144,36 @@ namespace AncientWarfare3.core.policy
             "aw3_year_civil_service_exam";
         public const string CivilServiceExamRuntime =
             "aw3_runtime_civil_service_exam";
+        public const string HierarchicalLabels =
+            "aw3_render_hierarchical_labels";
+        public const string HierarchicalHover =
+            "aw3_render_hierarchical_hover";
+        public const string ActorKingdomRepair =
+            "aw3_frame_actor_kingdom_repair";
+        public const string SchoolDeathRetry =
+            "aw3_frame_school_death_retry";
+        public const string SchedulerPrefix = "aw3_frame_scheduler_prefix";
+        public const string SchedulerPostfix = "aw3_frame_scheduler_postfix";
+        public const string RtsVisualization =
+            "aw3_frame_rts_visualization";
+        public const string RtsSpeechBubbles =
+            "aw3_frame_rts_speech_bubbles";
+        public const string RtsPlanSnapshot =
+            "aw3_frame_rts_plan_snapshot";
+        public const string FamilyTreeCleanup =
+            "aw3_frame_family_tree_cleanup";
+        public const string LocalizedNameRefresh =
+            "aw3_frame_localized_name_refresh";
+        public const string PerformanceDiagnostic =
+            "aw3_frame_performance_diagnostic";
+        public const string MonthRulerHousehold =
+            "aw3_month_ruler_household";
+        public const string MonthKingdomPolicy =
+            "aw3_month_kingdom_policy";
+        public const string MonthPreparationLevy =
+            "aw3_month_preparation_levy";
+        public const string OutsideVanillaFrameTotal =
+            "aw3_frame_outside_vanilla_total";
 
         public static readonly string[] EntryIds =
         {
@@ -181,7 +226,22 @@ namespace AncientWarfare3.core.policy
             ArmyRtsLogistics,
             ArmyRtsWatchdog,
             CivilServiceExamAnnual,
-            CivilServiceExamRuntime
+            CivilServiceExamRuntime,
+            HierarchicalLabels,
+            HierarchicalHover,
+            ActorKingdomRepair,
+            SchoolDeathRetry,
+            SchedulerPrefix,
+            SchedulerPostfix,
+            RtsVisualization,
+            RtsSpeechBubbles,
+            RtsPlanSnapshot,
+            FamilyTreeCleanup,
+            LocalizedNameRefresh,
+            PerformanceDiagnostic,
+            MonthRulerHousehold,
+            MonthKingdomPolicy,
+            MonthPreparationLevy
         };
 
         public static RecentActorAiCategory ClassifyActorAiTask(

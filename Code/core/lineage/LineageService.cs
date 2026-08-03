@@ -223,13 +223,28 @@ namespace AncientWarfare3.core.lineage
                                     UsesAwLineageSystem(pParent1) || UsesAwLineageSystem(pParent2);
             NamingProfileId profile = AWCultureNamingTraditionService
                 .ResolveForActorReadOnly(pBaby).Profile;
+            bool parentIsRuler = IsReigningRuler(pParent1) ||
+                                 IsReigningRuler(pParent2);
             return WesternLineageEligibilityRules.ResolveBirthAdmission(
                 profile, biologicalXia: IsXia(pBaby),
                 monkey: IsCivilizedMonkey(pBaby),
                 civilized: pBaby.asset?.civ == true,
                 parentHasLineage: parentHasLineage,
                 requiresFullArchive:
-                RequiresFullArchiveAdmission(pBaby));
+                WesternLineageEligibilityRules.ShouldEscalateRoyalChildBirth(
+                    parentIsRuler, RequiresFullArchiveAdmission(pBaby)));
+        }
+
+        private static bool IsReigningRuler(Actor pActor)
+        {
+            if (pActor == null) return false;
+            try
+            {
+                if (pActor.isKing()) return true;
+            }
+            catch { }
+            try { return ReferenceEquals(pActor.kingdom?.king, pActor); }
+            catch { return false; }
         }
 
         internal static bool RequiresFullArchiveAdmission(Actor pActor)
@@ -357,23 +372,22 @@ namespace AncientWarfare3.core.lineage
 
         private static Actor PickPatrilinealSource(Actor pParent1, Actor pParent2)
         {
-            Actor father = PickFather(pParent1, pParent2);
-            if (father != null && HasLineageData(father)) return father;
-            return null;
+            int slot = WesternLineageEligibilityRules.SelectParentSourceSlot(
+                pParent1?.isSexMale() == true, HasLineageData(pParent1),
+                HasCompleteLineageData(pParent1),
+                pParent2?.isSexMale() == true, HasLineageData(pParent2),
+                HasCompleteLineageData(pParent2), requireComplete: false);
+            return slot == 1 ? pParent1 : slot == 2 ? pParent2 : null;
         }
 
         private static Actor PickCompletePatrilinealSource(Actor pParent1, Actor pParent2)
         {
-            Actor father = PickFather(pParent1, pParent2);
-            if (father != null && HasCompleteLineageData(father)) return father;
-            return null;
-        }
-
-        private static Actor PickFather(Actor pParent1, Actor pParent2)
-        {
-            if (pParent1 != null && pParent1.isSexMale()) return pParent1;
-            if (pParent2 != null && pParent2.isSexMale()) return pParent2;
-            return null;
+            int slot = WesternLineageEligibilityRules.SelectParentSourceSlot(
+                pParent1?.isSexMale() == true, HasLineageData(pParent1),
+                HasCompleteLineageData(pParent1),
+                pParent2?.isSexMale() == true, HasLineageData(pParent2),
+                HasCompleteLineageData(pParent2), requireComplete: true);
+            return slot == 1 ? pParent1 : slot == 2 ? pParent2 : null;
         }
 
         private static bool HasLineageData(Actor pActor)
@@ -471,9 +485,12 @@ namespace AncientWarfare3.core.lineage
 
         private static Actor PickLooseClanFather(Actor pParent1, Actor pParent2)
         {
-            Actor father = PickFather(pParent1, pParent2);
-            if (father != null && HasClanName(father)) return father;
-            return null;
+            int slot = WesternLineageEligibilityRules.SelectParentSourceSlot(
+                pParent1?.isSexMale() == true, HasClanName(pParent1),
+                HasClanName(pParent1),
+                pParent2?.isSexMale() == true, HasClanName(pParent2),
+                HasClanName(pParent2), requireComplete: false);
+            return slot == 1 ? pParent1 : slot == 2 ? pParent2 : null;
         }
 
         private static bool HasClanName(Actor pActor)

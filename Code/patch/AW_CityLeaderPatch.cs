@@ -36,8 +36,17 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(CityBehCheckLeader), "checkFindLeader")]
         public static bool CheckFindLeader_Prefix(City pCity)
         {
-            if (pCity == null) return true;
-            if (pCity.hasLeader() || pCity.isGettingCaptured()) return false;
+            if (pCity?.data == null || pCity.isRekt()) return false;
+            if (pCity.hasLeader())
+            {
+                if (IsLiveCityLeader(pCity, pCity.leader) ||
+                    pCity.isGettingCaptured()) return false;
+                // Native City can retain a dead/disposed leader pointer for a
+                // tick. Clear it before selecting a replacement.
+                try { pCity.removeLeader(); }
+                catch { return false; }
+            }
+            if (pCity.isGettingCaptured()) return false;
 
             Kingdom kingdom = pCity.kingdom;
             long heirId = GetHeirId(kingdom);
@@ -58,7 +67,10 @@ namespace AncientWarfare3.patch
             if (actor != null &&
                 !ActiveMilitaryLifecycleService.
                     TryPrepareCivilAppointment(actor))
+            {
+                CityLeaderCandidateRetryService.RecordFailure(pCity, actor);
                 actor = null;
+            }
             if (actor != null)
             {
                 City previousCity = actor.city;
@@ -74,11 +86,14 @@ namespace AncientWarfare3.patch
                         : CourtService.TryAssignCityGovernor(actor, kingdom, pCity);
                     if (appointed)
                     {
+                        CityLeaderCandidateRetryService.Clear(pCity, actor);
                         CityGovernorPlacementService.OnCommittedAssignment(
                             pCity, actor);
                     }
                     else
                     {
+                        CityLeaderCandidateRetryService.RecordFailure(pCity,
+                            actor);
                         if (pCity.leader == actor)
                             pCity.removeLeader();
                         if (previousCity != null && actor.city != previousCity)
@@ -91,9 +106,11 @@ namespace AncientWarfare3.patch
             if (civilServiceCareer) return false;
 
             int bestScore = 0;
-            foreach (Actor unit in pCity.units)
+            foreach (Actor unit in pCity.getUnits())
             {
-                if (!IsDirectLeaderCandidate(unit, heirId)) continue;
+                if (!IsDirectLeaderCandidate(unit, heirId, kingdom, pCity) ||
+                    CityLeaderCandidateRetryService.IsSuppressed(pCity, unit))
+                    continue;
 
                 int dice = 1;
                 if (unit.isFavorite()) dice += 2;
@@ -108,7 +125,10 @@ namespace AncientWarfare3.patch
             if (actor != null &&
                 ActiveMilitaryLifecycleService.
                     TryPrepareCivilAppointment(actor))
+            {
                 pCity.setLeader(actor, pNew: true);
+                CityLeaderCandidateRetryService.Clear(pCity, actor);
+            }
             return false;
         }
 
@@ -126,9 +146,13 @@ namespace AncientWarfare3.patch
             using ListPool<Actor> commonCandidates = new ListPool<Actor>();
             foreach (City city in pKingdom.getCities())
             {
+                if (!IsValidSourceCity(city, pKingdom)) continue;
                 foreach (Actor unit in city.getUnits())
                 {
-                    if (!IsRealmLeaderCandidate(unit, pHeirId)) continue;
+                    if (!IsRealmLeaderCandidate(unit, pHeirId, pKingdom,
+                            city) ||
+                        CityLeaderCandidateRetryService.IsSuppressed(pCity,
+                            unit)) continue;
                     if (!HistoricalSchoolEducationService.CanAppoint(unit,
                             pKingdom, CourtOfficeLayer.City,
                             CourtOfficeId.Governor)) continue;
@@ -159,7 +183,10 @@ namespace AncientWarfare3.patch
             using ListPool<Actor> candidates = new ListPool<Actor>();
             foreach (Actor unit in pCity.getUnits())
             {
-                if (!IsDirectLeaderCandidate(unit, pHeirId)) continue;
+                if (!IsDirectLeaderCandidate(unit, pHeirId, pKingdom,
+                        pCity) ||
+                    CityLeaderCandidateRetryService.IsSuppressed(pCity, unit))
+                    continue;
                 if (!HistoricalSchoolEducationService.CanAppoint(unit,
                         pKingdom, CourtOfficeLayer.City,
                         CourtOfficeId.Governor)) continue;
@@ -177,9 +204,10 @@ namespace AncientWarfare3.patch
             return pCandidates[0];
         }
 
-        private static bool IsRealmLeaderCandidate(Actor pUnit, long pHeirId)
+        private static bool IsRealmLeaderCandidate(Actor pUnit, long pHeirId,
+            Kingdom pKingdom, City pSourceCity)
         {
-            if (pUnit?.data == null) return false;
+            if (!IsLiveCandidate(pUnit, pKingdom, pSourceCity)) return false;
             if (ActiveMilitaryLifecycleService.
                     HasActiveMilitaryIdentity(pUnit)) return false;
             if (!RoyalAsylumRules.CanPerformProtectedRole(
@@ -189,8 +217,7 @@ namespace AncientWarfare3.patch
             pUnit.data.get(LineageKeys.COURT_OFFICE_ID,
                 out string currentOffice, "");
             if (!string.IsNullOrEmpty(currentOffice)) return false;
-            return pUnit.isUnitFitToRule() && !pUnit.isKing() &&
-                   !pUnit.isCityLeader();
+            return pUnit.isUnitFitToRule();
         }
 
         private static bool CanServeTarget(Actor pActor, City pTarget)
@@ -210,9 +237,10 @@ namespace AncientWarfare3.patch
             catch { return 0; }
         }
 
-        private static bool IsDirectLeaderCandidate(Actor pUnit, long pHeirId)
+        private static bool IsDirectLeaderCandidate(Actor pUnit, long pHeirId,
+            Kingdom pKingdom, City pSourceCity)
         {
-            if (pUnit?.data == null) return false;
+            if (!IsLiveCandidate(pUnit, pKingdom, pSourceCity)) return false;
             if (ActiveMilitaryLifecycleService.
                     HasActiveMilitaryIdentity(pUnit)) return false;
             if (!RoyalAsylumRules.CanPerformProtectedRole(
@@ -225,6 +253,60 @@ namespace AncientWarfare3.patch
             return CivilServiceExamRules.CanEnterActingGovernorCandidatePool(
                 pUnit.is_profession_citizen,
                 !string.IsNullOrEmpty(currentOffice));
+        }
+
+        private static bool IsLiveCandidate(Actor pUnit, Kingdom pKingdom,
+            City pSourceCity)
+        {
+            bool hasData = pUnit?.data != null;
+            bool alive = false;
+            bool rekt = true;
+            bool isKing = false;
+            bool isCityLeader = false;
+            bool isLeaderProfession = false;
+            try
+            {
+                if (hasData)
+                {
+                    alive = pUnit.isAlive();
+                    rekt = pUnit.isRekt();
+                    isKing = pUnit.isKing();
+                    isCityLeader = pUnit.isCityLeader();
+                    isLeaderProfession = pUnit.isProfession(
+                        UnitProfession.Leader);
+                }
+            }
+            catch { }
+            bool sourceValid = pSourceCity?.data != null &&
+                               !pSourceCity.isRekt();
+            bool sourceKingdomMatches = sourceValid &&
+                                        pSourceCity.kingdom == pKingdom;
+            bool actorKingdomMatches = hasData && pUnit.kingdom == pKingdom;
+            bool actorCityMatches = hasData && pUnit.city == pSourceCity;
+            if (!CityLeaderCandidateRules.CanUseCandidate(hasData, alive,
+                    rekt, actorKingdomMatches, actorCityMatches, sourceValid,
+                    sourceKingdomMatches, isKing, isCityLeader,
+                    isLeaderProfession)) return false;
+            try
+            {
+                Actor registered = World.world?.units?.get(pUnit.data.id);
+                return ReferenceEquals(registered, pUnit);
+            }
+            catch { return false; }
+        }
+
+        private static bool IsValidSourceCity(City pCity,
+            Kingdom pKingdom)
+        {
+            return pCity?.data != null && !pCity.isRekt() &&
+                   pCity.kingdom == pKingdom;
+        }
+
+        private static bool IsLiveCityLeader(City pCity, Actor pLeader)
+        {
+            return pLeader?.data != null && !pLeader.isRekt() &&
+                   pLeader.isAlive() && pLeader.city == pCity &&
+                   pLeader.kingdom == pCity.kingdom && pLeader.isCityLeader();
         }
 
         private static long GetHeirId(Kingdom pKingdom)

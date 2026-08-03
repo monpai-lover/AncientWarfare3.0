@@ -101,7 +101,9 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
     {
         MethodInfo method = typeof(ArmyRtsRules).GetMethod(
             "ShouldRemainInReplenishment",
-            BindingFlags.Public | BindingFlags.Static);
+            BindingFlags.Public | BindingFlags.Static, binder: null,
+            types: new[] { typeof(bool), typeof(bool) },
+            modifiers: null);
         if (method == null)
             throw new InvalidOperationException(
                 "RTS must retain an understrength army in replenishment regardless of route-recovery bypasses");

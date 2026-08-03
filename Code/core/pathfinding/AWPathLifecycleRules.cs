@@ -88,6 +88,77 @@ namespace AncientWarfare3.core.pathfinding
         }
     }
 
+    public readonly struct AWPathReuseKey : IEquatable<AWPathReuseKey>
+    {
+        public AWPathReuseKey(long actorId, int startRegion,
+            AWPathRequestKey request, long terrainRevision,
+            long worldGeneration, bool insideBoat)
+        {
+            ActorId = actorId;
+            StartRegion = startRegion;
+            Request = request;
+            TerrainRevision = terrainRevision;
+            WorldGeneration = worldGeneration;
+            InsideBoat = insideBoat;
+        }
+
+        public long ActorId { get; }
+        public int StartRegion { get; }
+        public AWPathRequestKey Request { get; }
+        public long TerrainRevision { get; }
+        public long WorldGeneration { get; }
+        public bool InsideBoat { get; }
+
+        public bool Equals(AWPathReuseKey pOther)
+        {
+            return ActorId == pOther.ActorId &&
+                   StartRegion == pOther.StartRegion &&
+                   Request.Equals(pOther.Request) &&
+                   TerrainRevision == pOther.TerrainRevision &&
+                   WorldGeneration == pOther.WorldGeneration &&
+                   InsideBoat == pOther.InsideBoat;
+        }
+
+        public override bool Equals(object pObject)
+        {
+            return pObject is AWPathReuseKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = ActorId.GetHashCode();
+                hash = hash * 397 ^ StartRegion;
+                hash = hash * 397 ^ Request.GetHashCode();
+                hash = hash * 397 ^ TerrainRevision.GetHashCode();
+                hash = hash * 397 ^ WorldGeneration.GetHashCode();
+                hash = hash * 397 ^ (InsideBoat ? 1 : 0);
+                return hash;
+            }
+        }
+    }
+
+    public static class AWPathRequestReuseRules
+    {
+        public const int MaximumCompletedCapacity = 2048;
+
+        public static bool CanReuse(AWPathReuseKey pExisting,
+            AWPathReuseKey pRequested, long ageTicks,
+            long maximumAgeTicks)
+        {
+            return ageTicks >= 0L && maximumAgeTicks >= 0L &&
+                   ageTicks <= maximumAgeTicks &&
+                   pExisting.Equals(pRequested);
+        }
+
+        public static int ClampCompletedCapacity(int pCapacity)
+        {
+            return Math.Max(0, Math.Min(MaximumCompletedCapacity,
+                pCapacity));
+        }
+    }
+
     public enum AWPathSlotAction
     {
         Enqueue,
@@ -239,6 +310,33 @@ namespace AncientWarfare3.core.pathfinding
         {
             return nextPollAt <= 0d || now >= nextPollAt;
         }
+
+        public static bool ShouldPollEverySimulationPass(bool schedulerActive,
+            bool customPathOwned)
+        {
+            return schedulerActive && customPathOwned;
+        }
+
+        public static bool HasUsableMovementBatch(bool actorExists,
+            bool actorAlive, bool batchExists, bool movementQueueExists)
+        {
+            return actorExists && actorAlive && batchExists &&
+                   movementQueueExists;
+        }
+
+        public static float NormalizeMovementElapsed(float elapsed,
+            float fallback, bool schedulerActive)
+        {
+            if (!schedulerActive) return Math.Max(0f, elapsed);
+            if (float.IsNaN(elapsed) || float.IsInfinity(elapsed) ||
+                elapsed <= 0f)
+                return float.IsNaN(fallback) || float.IsInfinity(fallback)
+                    ? FixedSchedulerElapsedSeconds
+                    : Math.Max(FixedSchedulerElapsedSeconds, fallback);
+            return elapsed;
+        }
+
+        private const float FixedSchedulerElapsedSeconds = 0.02f;
 
         public static double WaitingPollInterval(bool highPriority)
         {

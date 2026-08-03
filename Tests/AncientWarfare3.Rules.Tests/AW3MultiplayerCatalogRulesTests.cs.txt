@@ -31,8 +31,8 @@ internal static class AW3MultiplayerCatalogRulesTests
         IReadOnlyList<AW3CommandDescriptor> commands =
             AW3MultiplayerCatalog.Commands;
 
-        Equal(29, windows.Count, "current AW3 window count");
-        Equal(29, windows.Select(value => value.WindowId).Distinct(
+        Equal(30, windows.Count, "current AW3 window count");
+        Equal(30, windows.Select(value => value.WindowId).Distinct(
                 StringComparer.Ordinal).Count(),
             "window IDs are unique");
         Equal(Enum.GetValues<AW3WindowKind>().Length, windows.Count,

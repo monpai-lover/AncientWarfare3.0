@@ -15,11 +15,24 @@ namespace AncientWarfare3.core.lineage
 
         public static void ReleaseExistingMilitaryRole(Actor pActor)
         {
-            if (pActor?.data == null) return;
+            ReleaseExistingMilitaryRole(pActor,
+                ShouldReleaseExistingMilitaryRole(pActor));
+        }
+
+        internal static void ReleaseExistingMilitaryRole(Actor pActor,
+            bool pShouldRelease)
+        {
+            if (!pShouldRelease || pActor?.data == null) return;
+            pActor.stopBeingWarrior();
+        }
+
+        public static bool ShouldReleaseExistingMilitaryRole(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
             bool warrior;
             try { warrior = pActor.isWarrior(); }
-            catch { return; }
-            if (!warrior) return;
+            catch { return false; }
+            if (!warrior) return false;
             bool careerStanding = StandingArmyPeacetimeService
                 .IsCareerStandingSoldier(pActor);
             bool militaryEmergency = StandingArmyPeacetimeService
@@ -28,22 +41,20 @@ namespace AncientWarfare3.core.lineage
             bool cityAttackOrder = StandingArmyPeacetimeService
                 .HasCityAttackOrder(pActor);
             if (careerStanding || militaryEmergency || inCombat ||
-                cityAttackOrder) return;
+                cityAttackOrder) return false;
             bool reproductionProtected =
                 ShouldProtectFromOrdinaryMilitaryService(pActor);
             bool currentHeir = !reproductionProtected &&
                                HeirService.IsCurrentHeir(
                                    pActor.kingdom, pActor);
-            if (!DynasticReproductionRules
-                    .ShouldReleaseExistingMilitaryRole(warrior,
-                        currentHeir,
-                        reproductionProtected,
-                        careerStanding,
-                        militaryEmergency,
-                        inCombat,
-                        cityAttackOrder))
-                return;
-            pActor.stopBeingWarrior();
+            return DynasticReproductionRules
+                .ShouldReleaseExistingMilitaryRole(warrior,
+                    currentHeir,
+                    reproductionProtected,
+                    careerStanding,
+                    militaryEmergency,
+                    inCombat,
+                    cityAttackOrder);
         }
 
         public static float ReproductionDecisionWeight(Actor pActor,

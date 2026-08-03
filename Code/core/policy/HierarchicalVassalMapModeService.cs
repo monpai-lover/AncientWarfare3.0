@@ -1,31 +1,99 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
-using UnityEngine;
 
 namespace AncientWarfare3.core.policy
 {
+    internal sealed class HierarchicalVassalMapLabelTerritorySource
+    {
+        internal readonly Kingdom Kingdom;
+        internal readonly IReadOnlyList<TileZone> Zones;
+        internal readonly HashSet<int> ZoneIds;
+        internal readonly bool HasVisibleLand;
+
+        internal HierarchicalVassalMapLabelTerritorySource(Kingdom pKingdom,
+            IReadOnlyList<TileZone> pZones)
+            : this(pKingdom, pZones, null, false)
+        {
+            if (Zones == null) return;
+            for (int index = 0; index < Zones.Count; index++)
+            {
+                TileZone zone = Zones[index];
+                if (zone?.id >= 0)
+                {
+                    ZoneIds.Add(zone.id);
+                    if (zone.tiles_with_ground > 0) HasVisibleLand = true;
+                }
+            }
+        }
+
+        internal HierarchicalVassalMapLabelTerritorySource(Kingdom pKingdom,
+            IReadOnlyList<TileZone> pZones, HashSet<int> pZoneIds,
+            bool pHasVisibleLand)
+        {
+            Kingdom = pKingdom;
+            Zones = pZones ?? Array.Empty<TileZone>();
+            ZoneIds = pZoneIds ?? new HashSet<int>();
+            HasVisibleLand = pHasVisibleLand;
+        }
+    }
+
+    internal sealed class HierarchicalVassalMapLabelCitySource
+    {
+        internal readonly City City;
+        internal readonly IReadOnlyList<TileZone> Zones;
+        internal readonly HashSet<int> ZoneIds;
+        internal readonly bool HasVisibleLand;
+
+        internal HierarchicalVassalMapLabelCitySource(City pCity,
+            IReadOnlyList<TileZone> pZones, HashSet<int> pZoneIds,
+            bool pHasVisibleLand)
+        {
+            City = pCity;
+            Zones = pZones ?? Array.Empty<TileZone>();
+            ZoneIds = pZoneIds ?? new HashSet<int>();
+            HasVisibleLand = pHasVisibleLand;
+        }
+    }
+
     internal static class HierarchicalVassalMapModeService
     {
         public const string POWER_ID =
             HierarchicalVassalMapModeRules.POWER_ID;
+
         private static readonly HierarchicalVassalMapModeState State =
             new HierarchicalVassalMapModeState();
-        private static HierarchicalVassalMapModeSnapshot _rootSnapshot;
-        private static readonly Dictionary<long,
-            HierarchicalVassalMapModeSnapshot> FocusedSnapshots =
-                new Dictionary<long, HierarchicalVassalMapModeSnapshot>();
-        private static HierarchicalVassalMapModeSnapshot _visibleSnapshot;
-        private static long _visibleSnapshotRevision = long.MinValue;
-        private static int _revisionCheckCounter;
+        private static Dictionary<long, Kingdom> KingdomIndex =
+            new Dictionary<long, Kingdom>();
+        private static readonly Dictionary<int, NativeZoneMetaCacheEntry>
+            NativeDrawMetaCache =
+                new Dictionary<int, NativeZoneMetaCacheEntry>();
+        private static HierarchicalVassalHierarchyIndex _hierarchyIndex;
+        private static bool _nativeDrawPassActive;
         private static HierarchicalVassalMapModeLayer _selectedLayer =
             HierarchicalVassalMapModeLayer.Countries;
 
-        private const int RevisionCheckIntervalFrames = 15;
-
         public static bool IsActive()
         {
-            return AWMapModeCoordinator.IsActive(POWER_ID);
+            bool coordinatorActive = false;
+            bool cachedAssetMatches = false;
+            try
+            {
+                coordinatorActive = AWMapModeCoordinator.IsActive(POWER_ID);
+            }
+            catch { }
+            try
+            {
+                MetaTypeAsset cached = World.world?.getCachedMapMetaAsset();
+                cachedAssetMatches = cached != null &&
+                    (ReferenceEquals(cached,
+                         AWMapModeMetaLibrary.HierarchicalVassalAsset) ||
+                     cached.map_mode ==
+                         AWMapModeMetaTypes.HierarchicalVassal);
+            }
+            catch { }
+            return HierarchicalVassalMapActivationRules.ShouldOwnRenderer(
+                coordinatorActive, cachedAssetMatches);
         }
 
         public static HierarchicalVassalMapModeLayer GetSelectedLayer()
@@ -35,9 +103,19 @@ namespace AncientWarfare3.core.policy
 
         internal static void SetSelectedLayerFromOption(int pZoneOption)
         {
-            _selectedLayer = HierarchicalVassalMapModeOptionRules.ResolveLayer(
-                pZoneOption);
-            HierarchicalVassalMapModeLabelLayer.MarkDirty();
+            HierarchicalVassalMapModeLayer nextLayer =
+                HierarchicalVassalMapModeOptionRules.ResolveLayer(pZoneOption);
+            bool changed = nextLayer != _selectedLayer;
+            _selectedLayer = nextLayer;
+            if (changed)
+            {
+                NativeDrawMetaCache.Clear();
+                HierarchicalVassalMapModeLabelLayer.MarkViewChanged();
+            }
+            else
+            {
+                HierarchicalVassalMapModeLabelLayer.RequestRefresh();
+            }
         }
 
         public static bool IsCityLayer =>
@@ -45,133 +123,368 @@ namespace AncientWarfare3.core.policy
 
         public static IMetaObject GetMetaForZone(TileZone pZone)
         {
-            if (!IsActive()) return null;
-            HierarchicalVassalMapModeSnapshot snapshot =
-                BuildVisibleSnapshot();
-            if (pZone == null || snapshot == null || pZone.id < 0 ||
-                !snapshot.ZoneToKingdomId.TryGetValue(pZone.id,
-                    out long mappedKingdomId)) return null;
-            if (IsCityLayer)
-                return IsVisibleCity(pZone.city, snapshot)
-                    ? (IMetaObject)(object)pZone.city
-                    : null;
-            Kingdom kingdom = GetKingdom(mappedKingdomId);
-            return IsValidKingdom(kingdom) ? kingdom : null;
+            if (pZone == null || pZone.id < 0 ||
+                !ContainsVisibleLand(pZone)) return null;
+            City city = pZone.city;
+            Kingdom physicalKingdom = city?.kingdom;
+            if (_nativeDrawPassActive &&
+                NativeDrawMetaCache.TryGetValue(pZone.id,
+                    out NativeZoneMetaCacheEntry cached) &&
+                ReferenceEquals(cached.Zone, pZone) &&
+                ReferenceEquals(cached.City, city) &&
+                ReferenceEquals(cached.PhysicalKingdom,
+                    physicalKingdom)) return cached.Meta;
+
+            IMetaObject resolved = ResolveMetaForZone(
+                city, physicalKingdom);
+            if (_nativeDrawPassActive)
+                NativeDrawMetaCache[pZone.id] =
+                    new NativeZoneMetaCacheEntry(pZone, city,
+                        physicalKingdom, resolved);
+            return resolved;
+        }
+
+        private static IMetaObject ResolveMetaForZone(City pCity,
+            Kingdom pPhysicalKingdom)
+        {
+            if (pCity?.data == null || pCity.isRekt()) return null;
+            if (IsCityLayer) return (IMetaObject)(object)pCity;
+
+            if (!IsValidKingdom(pPhysicalKingdom)) return null;
+            EnsureHierarchyIndex();
+            long representativeId = _hierarchyIndex?.ResolveRepresentative(
+                pPhysicalKingdom.id) ?? -1L;
+            if (representativeId < 0L) return null;
+            Kingdom representative = GetKingdom(representativeId);
+            return IsValidKingdom(representative)
+                ? representative
+                : pPhysicalKingdom;
+        }
+
+        internal static void BeginNativeDrawPass()
+        {
+            _nativeDrawPassActive = true;
+        }
+
+        internal static void EndNativeDrawPass()
+        {
+            _nativeDrawPassActive = false;
+        }
+
+        internal static bool NativeDrawPassActive => _nativeDrawPassActive;
+
+        internal static void RebuildHierarchyIndex()
+        {
+            NativeDrawMetaCache.Clear();
+            var rawSuzerainIds = new Dictionary<long, long>();
+            KingdomIndex.Clear();
+            try
+            {
+                if (World.world?.kingdoms != null)
+                {
+                    foreach (Kingdom kingdom in World.world.kingdoms)
+                    {
+                        if (!IsValidKingdom(kingdom)) continue;
+                        KingdomIndex[kingdom.id] = kingdom;
+                        rawSuzerainIds[kingdom.id] = SafeSuzerainId(kingdom);
+                    }
+                }
+            }
+            catch { }
+            _hierarchyIndex = HierarchicalVassalHierarchyIndex.Build(
+                rawSuzerainIds, State.IsRoot ? -1L : State.FocusKingdomId);
+        }
+
+        private static void EnsureHierarchyIndex()
+        {
+            if (_hierarchyIndex == null) RebuildHierarchyIndex();
+        }
+
+        internal static long CurrentLabelFocusKey =>
+            State.IsRoot ? -1L : State.FocusKingdomId;
+
+        internal static IReadOnlyList<Kingdom> LabelDiscoveryKingdoms
+        {
+            get
+            {
+                try
+                {
+                    return World.world?.kingdoms?.list ??
+                           (IReadOnlyList<Kingdom>)Array.Empty<Kingdom>();
+                }
+                catch { return Array.Empty<Kingdom>(); }
+            }
+        }
+
+        internal static IReadOnlyList<City> LabelDiscoveryCities(
+            Kingdom pKingdom) => pKingdom?.cities;
+
+        internal static bool IsLabelDiscoveryKingdom(Kingdom pKingdom) =>
+            IsValidKingdom(pKingdom);
+
+        internal static long LabelDiscoverySuzerainId(Kingdom pKingdom) =>
+            SafeSuzerainId(pKingdom);
+
+        internal static bool TryGetCachedLabelHierarchy(
+            out HierarchicalVassalHierarchyIndex pIndex)
+        {
+            pIndex = _hierarchyIndex;
+            return pIndex != null;
+        }
+
+        internal static bool TryAcceptLabelHierarchy(
+            HierarchicalVassalHierarchyIndex pIndex,
+            Dictionary<long, Kingdom> pKingdoms, long pFocus)
+        {
+            if (pIndex == null || pKingdoms == null ||
+                pFocus != CurrentLabelFocusKey ||
+                pIndex.FocusKingdomId != CurrentLabelFocusKey) return false;
+            _hierarchyIndex = pIndex;
+            KingdomIndex = pKingdoms;
+            NativeDrawMetaCache.Clear();
+            return true;
+        }
+
+        internal static HierarchicalVassalLabelDiscoveryJob
+            BeginLabelSourceDiscovery(
+                HierarchicalVassalLabelDiscoveryKind pKind, long pFocus)
+        {
+            return new HierarchicalVassalLabelDiscoveryJob(pKind, pFocus);
+        }
+
+        internal static long ResolveVisibleRepresentativeId(
+            Kingdom pPhysicalKingdom)
+        {
+            if (!IsValidKingdom(pPhysicalKingdom)) return -1L;
+            EnsureHierarchyIndex();
+            return _hierarchyIndex?.ResolveRepresentative(
+                pPhysicalKingdom.id) ?? -1L;
+        }
+
+        internal static IReadOnlyList<City> GetVisibleCities()
+        {
+            EnsureHierarchyIndex();
+            var cities = new List<City>();
+            var seenCityIds = new HashSet<long>();
+            try
+            {
+                if (World.world?.kingdoms == null) return cities;
+                foreach (Kingdom container in World.world.kingdoms)
+                {
+                    if (!IsValidKingdom(container)) continue;
+                    foreach (City city in container.getCities())
+                    {
+                        Kingdom currentOwner = city?.kingdom;
+                        if (city?.data != null && !city.isRekt() &&
+                            IsValidKingdom(currentOwner) &&
+                            _hierarchyIndex.ResolveRepresentative(
+                                currentOwner.id) >= 0L &&
+                            seenCityIds.Add(city.id))
+                            cities.Add(city);
+                    }
+                }
+            }
+            catch { }
+            cities.Sort((pLeft, pRight) => pLeft.id.CompareTo(pRight.id));
+            return cities;
+        }
+
+        internal static IReadOnlyList<City> GetAllLabelCities()
+        {
+            var cities = new List<City>();
+            var seenCityIds = new HashSet<long>();
+            try
+            {
+                if (World.world?.kingdoms == null) return cities;
+                foreach (Kingdom container in World.world.kingdoms)
+                {
+                    if (!IsValidKingdom(container)) continue;
+                    foreach (City city in container.getCities())
+                    {
+                        Kingdom currentOwner = city?.kingdom;
+                        if (city?.data != null && !city.isRekt() &&
+                            IsValidKingdom(currentOwner) &&
+                            seenCityIds.Add(city.id))
+                            cities.Add(city);
+                    }
+                }
+            }
+            catch { }
+            cities.Sort((pLeft, pRight) => pLeft.id.CompareTo(pRight.id));
+            return cities;
+        }
+
+        internal static IReadOnlyList<HierarchicalVassalMapLabelTerritorySource>
+            GetVisibleLabelTerritories()
+        {
+            EnsureHierarchyIndex();
+            return BuildLabelTerritories(_hierarchyIndex);
+        }
+
+        internal static IReadOnlyList<HierarchicalVassalMapLabelTerritorySource>
+            GetRootLabelTerritories()
+        {
+            var rawSuzerainIds = new Dictionary<long, long>();
+            try
+            {
+                if (World.world?.kingdoms == null)
+                    return Array.Empty<
+                        HierarchicalVassalMapLabelTerritorySource>();
+                foreach (Kingdom kingdom in World.world.kingdoms)
+                {
+                    if (!IsValidKingdom(kingdom)) continue;
+                    rawSuzerainIds[kingdom.id] = SafeSuzerainId(kingdom);
+                }
+            }
+            catch { }
+            HierarchicalVassalHierarchyIndex rootIndex =
+                HierarchicalVassalHierarchyIndex.Build(rawSuzerainIds, -1L);
+            return BuildLabelTerritories(rootIndex);
+        }
+
+        private static IReadOnlyList<HierarchicalVassalMapLabelTerritorySource>
+            BuildLabelTerritories(HierarchicalVassalHierarchyIndex pIndex)
+        {
+            var builders = new Dictionary<long, LabelTerritoryBuilder>();
+            var seenCityIds = new HashSet<long>();
+            try
+            {
+                if (World.world?.kingdoms == null)
+                    return Array.Empty<
+                        HierarchicalVassalMapLabelTerritorySource>();
+                foreach (Kingdom container in World.world.kingdoms)
+                {
+                    if (!IsValidKingdom(container)) continue;
+                    foreach (City city in container.getCities())
+                    {
+                        Kingdom currentOwner = city?.kingdom;
+                        if (city?.data == null || city.isRekt() ||
+                            city.zones == null ||
+                            !seenCityIds.Add(city.id) ||
+                            !IsValidKingdom(currentOwner)) continue;
+                        long representativeId = pIndex.
+                            ResolveRepresentative(currentOwner.id);
+                        if (representativeId < 0L) continue;
+                        if (!builders.TryGetValue(representativeId,
+                                out LabelTerritoryBuilder builder))
+                        {
+                            Kingdom representative = GetKingdom(
+                                representativeId);
+                            if (!IsValidKingdom(representative)) continue;
+                            builder = new LabelTerritoryBuilder(representative);
+                            builders.Add(representativeId, builder);
+                        }
+                        builder.AddZones(city.zones);
+                    }
+                }
+            }
+            catch { }
+
+            var result = new List<
+                HierarchicalVassalMapLabelTerritorySource>(builders.Count);
+            foreach (LabelTerritoryBuilder builder in builders.Values)
+                result.Add(builder.Build());
+            result.Sort((pLeft, pRight) => CompareKingdoms(
+                pLeft.Kingdom, pRight.Kingdom));
+            return result;
+        }
+
+        internal static string GetMapDisplayName(Kingdom pKingdom)
+        {
+            return SafeDisplayName(pKingdom);
         }
 
         internal static bool TryGetDisplayedRealm(TileZone pZone,
             out Kingdom pKingdom, out List<TileZone> pZones)
         {
-            pKingdom = null;
-            pZones = null;
-            if (pZone == null || pZone.id < 0) return false;
-            HierarchicalVassalMapModeSnapshot snapshot =
-                BuildVisibleSnapshot();
-            if (snapshot?.ZoneToKingdomId == null ||
-                !snapshot.ZoneToKingdomId.TryGetValue(pZone.id,
-                    out long kingdomId)) return false;
-            Kingdom kingdom = GetKingdom(kingdomId);
-            if (!IsValidKingdom(kingdom)) return false;
-            IReadOnlyList<HierarchicalVassalKingdomSnapshot> entries =
-                snapshot.Entries;
-            for (int index = 0; index < entries.Count; index++)
+            long benchmark = RecentFeatureBenchmark.Begin();
+            try
             {
-                HierarchicalVassalKingdomSnapshot entry = entries[index];
-                if (entry == null || entry.KingdomId != kingdomId) continue;
-                pKingdom = kingdom;
-                pZones = entry.DrawableZones;
-                return pZones != null && pZones.Count > 0;
+                pKingdom = null;
+                pZones = null;
+                Kingdom physical = pZone?.city?.kingdom;
+                if (pZone == null || pZone.id < 0 ||
+                    !IsValidKingdom(physical)) return false;
+                EnsureHierarchyIndex();
+                long representativeId = _hierarchyIndex?.
+                    ResolveRepresentative(physical.id) ?? -1L;
+                Kingdom representative = GetKingdom(representativeId);
+                if (!IsValidKingdom(representative)) return false;
+
+                var zones = new List<TileZone>();
+                var seenZoneIds = new HashSet<int>();
+                var seenCityIds = new HashSet<long>();
+                try
+                {
+                    IReadOnlyList<long> memberIds = _hierarchyIndex.
+                        GetRepresentativeMembers(representativeId);
+                    for (int memberIndex = 0; memberIndex < memberIds.Count;
+                         memberIndex++)
+                    {
+                        Kingdom container = GetKingdom(memberIds[memberIndex]);
+                        if (!IsValidKingdom(container)) continue;
+                        foreach (City city in container.getCities())
+                        {
+                            if (city?.data == null || city.isRekt() ||
+                                city.zones == null ||
+                                !seenCityIds.Add(city.id)) continue;
+                            Kingdom currentOwner = city.kingdom;
+                            if (!IsValidKingdom(currentOwner) ||
+                                _hierarchyIndex.ResolveRepresentative(
+                                    currentOwner.id) != representativeId)
+                                continue;
+                            for (int zoneIndex = 0;
+                                 zoneIndex < city.zones.Count; zoneIndex++)
+                            {
+                                TileZone zone = city.zones[zoneIndex];
+                                if (zone?.id >= 0 &&
+                                    seenZoneIds.Add(zone.id) &&
+                                    ContainsVisibleLand(zone)) zones.Add(zone);
+                            }
+                        }
+                    }
+                }
+                catch { }
+                pKingdom = representative;
+                pZones = zones;
+                return zones.Count > 0;
             }
-            return false;
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.HierarchicalHoverIndex,
+                    benchmark);
+            }
         }
 
         internal static bool IsFocused => !State.IsRoot;
 
         internal static long FocusKingdomId => State.FocusKingdomId;
 
-        internal static HierarchicalVassalMapModeSnapshot BuildVisibleSnapshot()
-        {
-            if (_visibleSnapshot != null) return _visibleSnapshot;
-            if (State.IsRoot)
-            {
-                if (_rootSnapshot == null)
-                    _rootSnapshot = BuildRootSnapshot();
-                _visibleSnapshot = _rootSnapshot;
-                return _visibleSnapshot;
-            }
-
-            long focusKingdomId = State.FocusKingdomId;
-            if (!FocusedSnapshots.TryGetValue(focusKingdomId,
-                    out _visibleSnapshot))
-            {
-                _visibleSnapshot = BuildFocusedSnapshot(focusKingdomId);
-                FocusedSnapshots[focusKingdomId] = _visibleSnapshot;
-            }
-            return _visibleSnapshot;
-        }
-
-        internal static void RefreshIfWorldChanged()
-        {
-            if (_visibleSnapshotRevision != long.MinValue &&
-                ++_revisionCheckCounter < RevisionCheckIntervalFrames)
-                return;
-
-            _revisionCheckCounter = 0;
-            long revision = ComputeWorldRevision();
-            if (revision == _visibleSnapshotRevision) return;
-
-            _visibleSnapshotRevision = revision;
-            InvalidateSnapshotCaches();
-            HierarchicalVassalMapModeLabelLayer.MarkDirty();
-        }
-
-        public static void DrawZones(MetaTypeAsset pAsset)
-        {
-            ZoneCalculator calculator = World.world?.zone_calculator;
-            if (pAsset == null || calculator == null ||
-                World.world?.kingdoms == null) return;
-            HierarchicalVassalMapModeSnapshot snapshot =
-                BuildVisibleSnapshot();
-            IReadOnlyList<TileZone> drawableZones = snapshot?.DrawableZones;
-            if (drawableZones == null) return;
-            for (int index = 0; index < drawableZones.Count; index++)
-            {
-                TileZone zone = drawableZones[index];
-                if (zone == null || zone.id < 0 ||
-                    !snapshot.ZoneToKingdomId.ContainsKey(zone.id)) continue;
-                calculator.drawBegin();
-                calculator.drawZoneMeta(zone, pAsset, GetMetaForZone);
-                calculator.drawEnd(zone);
-            }
-        }
-
         public static bool HandleZoneClick(WorldTile pTile, string pPowerId)
         {
-            // MetaTypeAsset.click_action_zone invokes this delegate without a
-            // power id, while the selected god-power path supplies one. The
-            // active map mode is the authoritative guard for both routes.
             if (!IsActive()) return false;
-            HierarchicalVassalMapModeSnapshot visible =
-                BuildVisibleSnapshot();
             TileZone clickedZone = pTile?.zone;
             if (clickedZone == null || clickedZone.id < 0)
                 return ReturnToRootFromUnmappedClick();
-            if (!visible.ZoneToKingdomId.TryGetValue(clickedZone.id,
-                    out long clickedKingdomId))
-                return SwitchToPhysicalRealm(clickedZone, pTile, pPowerId);
-            Kingdom clicked = GetKingdom(clickedKingdomId);
-            if (!IsValidKingdom(clicked)) return false;
+            Kingdom physical = clickedZone.city?.kingdom;
+            if (!IsValidKingdom(physical))
+                return ReturnToRootFromUnmappedClick();
 
             if (IsCityLayer)
             {
                 City city = clickedZone.city;
-                if (!IsVisibleCity(city, visible)) return false;
-                try
-                {
-                    return TryInspectCity(pTile, pPowerId);
-                }
-                catch { return false; }
+                if (city?.data == null || city.isRekt()) return false;
+                return TryInspectCity(pTile, pPowerId);
             }
+
+            EnsureHierarchyIndex();
+            long clickedKingdomId = _hierarchyIndex?.ResolveRepresentative(
+                physical.id) ?? -1L;
+            if (clickedKingdomId < 0L)
+                return SwitchToPhysicalRealm(clickedZone, pTile, pPowerId);
+            Kingdom clicked = GetKingdom(clickedKingdomId);
+            if (!IsValidKingdom(clicked)) return false;
 
             if (!State.IsRoot && clicked.id == State.FocusKingdomId)
             {
@@ -181,21 +494,12 @@ namespace AncientWarfare3.core.policy
                 return inspected || popped;
             }
 
-            HierarchyContext context = BuildContext();
-            if (!context.Kingdoms.ContainsKey(clicked.id)) return false;
-
-            bool hasChildren = context.DirectVassalsBySuzerainId.TryGetValue(
-                                   clicked.id,
-                                   out List<Kingdom> clickedChildren) &&
-                               clickedChildren.Count > 0;
-
+            bool hasChildren = _hierarchyIndex.GetDirectChildren(clicked.id).
+                Count > 0;
             if (!State.IsRoot)
             {
-                if (!context.DirectVassalsBySuzerainId.TryGetValue(
-                        State.FocusKingdomId, out List<Kingdom> children) ||
-                    !ContainsKingdom(children, clicked.id))
-                    return false;
-
+                if (!ContainsKingdomId(_hierarchyIndex.GetDirectChildren(
+                        State.FocusKingdomId), clicked.id)) return false;
                 bool advanced = State.TryPushFocus(clicked.id,
                     (int)KingdomTitleService.GetTitle(clicked), hasChildren);
                 if (advanced) RefreshView();
@@ -205,7 +509,6 @@ namespace AncientWarfare3.core.policy
 
             if (!hasChildren)
                 return TryInspectKingdom(clicked, pTile, pPowerId);
-
             if (!State.TryPushFocus(clicked.id,
                     (int)KingdomTitleService.GetTitle(clicked), true))
                 return false;
@@ -228,16 +531,14 @@ namespace AncientWarfare3.core.policy
             Kingdom physicalKingdom = pClickedZone?.city?.kingdom;
             if (!IsValidKingdom(physicalKingdom))
                 return ReturnToRootFromUnmappedClick();
-
-            HierarchyContext context = BuildContext();
-            Kingdom root = ResolveHierarchyRoot(context, physicalKingdom);
+            Kingdom root = ResolveHierarchyRoot(physicalKingdom);
             if (!IsValidKingdom(root))
                 return ReturnToRootFromUnmappedClick();
 
             State.Reset();
-            bool hasChildren = context.DirectVassalsBySuzerainId.TryGetValue(
-                                   root.id, out List<Kingdom> children) &&
-                               children.Count > 0;
+            RebuildHierarchyIndex();
+            bool hasChildren = _hierarchyIndex.GetDirectChildren(root.id).
+                Count > 0;
             bool focused = State.TryPushFocus(root.id,
                 (int)KingdomTitleService.GetTitle(root), hasChildren);
             RefreshView();
@@ -246,325 +547,139 @@ namespace AncientWarfare3.core.policy
             return true;
         }
 
-        private static Kingdom ResolveHierarchyRoot(HierarchyContext pContext,
-            Kingdom pKingdom)
+        private static Kingdom ResolveHierarchyRoot(Kingdom pKingdom)
         {
-            if (pContext == null || !IsValidKingdom(pKingdom) ||
-                !pContext.Kingdoms.ContainsKey(pKingdom.id)) return null;
+            if (!IsValidKingdom(pKingdom)) return null;
             Kingdom current = pKingdom;
             var visited = new HashSet<long>();
             while (IsValidKingdom(current) && visited.Add(current.id))
             {
-                long suzerainId = EffectiveSuzerainId(pContext, current.id);
-                if (suzerainId < 0L ||
-                    !pContext.Kingdoms.TryGetValue(suzerainId,
-                        out Kingdom suzerain))
-                    return current;
+                Kingdom suzerain = GetKingdom(SafeSuzerainId(current));
+                if (!IsValidKingdom(suzerain)) return current;
                 current = suzerain;
             }
-            return current;
+            return pKingdom;
+        }
+
+        private static bool ContainsKingdomId(IReadOnlyList<long> pKingdomIds,
+            long pKingdomId)
+        {
+            if (pKingdomIds == null) return false;
+            for (int index = 0; index < pKingdomIds.Count; index++)
+                if (pKingdomIds[index] == pKingdomId) return true;
+            return false;
         }
 
         public static void DirtyMap()
         {
-            InvalidateSnapshotCaches();
-            _visibleSnapshotRevision = long.MinValue;
-            _revisionCheckCounter = 0;
-            HierarchicalVassalMapModeLabelLayer.MarkDirty();
-            try { AWMapModeMetaLibrary.ClearDynamicMetaCache(); }
-            catch { }
-            try { World.world?.zone_calculator?.dirtyAndClear(); }
-            catch { }
+            NativeDrawMetaCache.Clear();
+            HierarchicalVassalMapModeLabelLayer.ForceRebuild();
+        }
+
+        public static void MarkCityDirty(City pCity)
+        {
+            if (pCity?.data == null) return;
+            InvalidateCityMeta(pCity);
+            HierarchicalVassalMapModeLabelLayer.MarkCityDirty(pCity);
+        }
+
+        internal static void MarkCityGeometryDirty(City pCity)
+        {
+            if (pCity?.data == null) return;
+            InvalidateCityMeta(pCity);
+            // City.addZone already invalidates WorldBox's native zone layer.
+            // AW3 only accumulates the changed zone for label placement.
+            HierarchicalVassalMapModeLabelLayer.MarkCityGeometryDirty(pCity);
+        }
+
+        internal static void RemoveCity(City pCity)
+        {
+            if (pCity == null) return;
+            InvalidateCityMeta(pCity);
+            HierarchicalVassalMapModeLabelLayer.EvictCity(pCity.id);
+            if (pCity.kingdom != null)
+                HierarchicalVassalMapModeLabelLayer.MarkKingdomDirty(
+                    pCity.kingdom);
+        }
+
+        public static void MarkKingdomDirty(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            HierarchicalVassalMapModeLabelLayer.MarkKingdomDirty(pKingdom);
+        }
+
+        public static void MarkHierarchyDirty(params Kingdom[] pAffectedKingdoms)
+        {
+            _hierarchyIndex = null;
+            NativeDrawMetaCache.Clear();
+            HierarchicalVassalMapModeLabelLayer.MarkHierarchyDirty();
+        }
+
+        internal static void MarkCityOwnershipChanged(City pCity,
+            Kingdom pOldKingdom, Kingdom pNewKingdom)
+        {
+            if (pCity?.data == null) return;
+            long oldKingdomId = pOldKingdom?.id ?? -1L;
+            long newKingdomId = pNewKingdom?.id ?? -1L;
+            if (oldKingdomId == newKingdomId) return;
+            if (!HierarchicalVassalMapModeRules.ShouldUseLocalOwnershipRefresh(
+                    oldKingdomId, newKingdomId)) return;
+            MarkCityDirty(pCity);
         }
 
         public static void Reset()
         {
             State.Reset();
+            _hierarchyIndex = null;
+            KingdomIndex.Clear();
+            NativeDrawMetaCache.Clear();
+            _nativeDrawPassActive = false;
             HierarchicalVassalMapModeLabelLayer.Reset();
-            DirtyMap();
+        }
+
+        internal static void OnKingdomDestroying(Kingdom pKingdom)
+        {
+            long pKingdomId = pKingdom?.id ?? -1L;
+            if (pKingdomId < 0L) return;
+            bool wasFocused = false;
+            IReadOnlyList<long> breadcrumbs = State.Breadcrumbs;
+            for (int index = 0; index < breadcrumbs.Count; index++)
+            {
+                if (breadcrumbs[index] != pKingdomId) continue;
+                wasFocused = true;
+                break;
+            }
+            if (wasFocused) State.Reset();
+            KingdomIndex.Remove(pKingdomId);
+            _hierarchyIndex = null;
+            NativeDrawMetaCache.Clear();
+            try
+            {
+                if (pKingdom?.cities != null)
+                    for (int index = 0; index < pKingdom.cities.Count; index++)
+                        if (pKingdom.cities[index] != null)
+                            HierarchicalVassalMapModeLabelLayer.EvictCity(
+                                pKingdom.cities[index].id);
+            }
+            catch { }
+            HierarchicalVassalMapModeLabelLayer.EvictKingdom(pKingdomId);
+            HierarchicalVassalMapModeLabelLayer.ForceRebuild();
         }
 
         private static void RefreshView()
         {
-            if (State.IsRoot)
-                _visibleSnapshot = _rootSnapshot;
-            else if (!FocusedSnapshots.TryGetValue(State.FocusKingdomId,
-                         out _visibleSnapshot))
-                _visibleSnapshot = null;
-            HierarchicalVassalMapModeLabelLayer.MarkDirty();
-            try { World.world?.zone_calculator?.dirtyAndClear(); }
-            catch { }
+            _hierarchyIndex = null;
+            NativeDrawMetaCache.Clear();
+            HierarchicalVassalMapModeLabelLayer.MarkViewChanged();
         }
 
-        private static void InvalidateSnapshotCaches()
+        private static void InvalidateCityMeta(City pCity)
         {
-            _rootSnapshot = null;
-            FocusedSnapshots.Clear();
-            _visibleSnapshot = null;
-        }
-
-        public static HierarchicalVassalMapModeSnapshot BuildRootSnapshot()
-        {
-            HierarchyContext context = BuildContext();
-            return BuildRootSnapshot(context);
-        }
-
-        public static HierarchicalVassalMapModeSnapshot BuildFocusedSnapshot(
-            long pFocusKingdomId)
-        {
-            HierarchyContext context = BuildContext();
-            if (!context.Kingdoms.TryGetValue(pFocusKingdomId,
-                    out Kingdom focus))
-                return BuildRootSnapshot(context);
-
-            var snapshot = new HierarchicalVassalMapModeSnapshot
+            if (pCity?.zones == null) return;
+            for (int index = 0; index < pCity.zones.Count; index++)
             {
-                FocusKingdomId = pFocusKingdomId
-            };
-            snapshot.AddFocusedEntry(BuildEntry(context, focus,
-                new List<Kingdom> { focus }, snapshot));
-            IReadOnlyList<Kingdom> children = GetChildren(context, focus);
-            for (int index = 0; index < children.Count; index++)
-            {
-                var territory = new List<Kingdom>();
-                CollectSubtree(context, children[index], territory,
-                    new HashSet<long>());
-                snapshot.AddFocusedEntry(BuildEntry(context,
-                    children[index], territory, snapshot));
-            }
-            return snapshot;
-        }
-
-        private static HierarchicalVassalMapModeSnapshot BuildRootSnapshot(
-            HierarchyContext pContext)
-        {
-            var snapshot = new HierarchicalVassalMapModeSnapshot();
-            var roots = new List<Kingdom>();
-            foreach (KeyValuePair<long, Kingdom> pair in pContext.Kingdoms)
-                if (EffectiveSuzerainId(pContext, pair.Key) < 0L)
-                    roots.Add(pair.Value);
-            roots.Sort(CompareKingdoms);
-
-            for (int index = 0; index < roots.Count; index++)
-            {
-                var territory = new List<Kingdom>();
-                CollectSubtree(pContext, roots[index], territory,
-                    new HashSet<long>());
-                snapshot.AddRootEntry(BuildEntry(pContext, roots[index],
-                    territory, snapshot));
-            }
-            return snapshot;
-        }
-
-        private static HierarchyContext BuildContext()
-        {
-            var context = new HierarchyContext();
-            try
-            {
-                if (World.world?.kingdoms == null) return context;
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                {
-                    if (!IsValidKingdom(kingdom)) continue;
-                    context.Kingdoms[kingdom.id] = kingdom;
-                }
-            }
-            catch
-            {
-                return context;
-            }
-
-            foreach (KeyValuePair<long, Kingdom> pair in context.Kingdoms)
-                context.RawSuzerainIds[pair.Key] = SafeSuzerainId(pair.Value);
-            var resolutionStates = new Dictionary<long, byte>();
-            var resolutionPath = new List<long>();
-            var cyclicKingdomIds = new HashSet<long>();
-            foreach (long kingdomId in context.Kingdoms.Keys)
-                ResolveEffectiveSuzerainId(context, kingdomId,
-                    resolutionStates, resolutionPath, cyclicKingdomIds);
-            foreach (KeyValuePair<long, long> pair in
-                     context.EffectiveSuzerainIds)
-            {
-                if (pair.Value < 0L ||
-                    !context.Kingdoms.TryGetValue(pair.Key,
-                        out Kingdom child)) continue;
-                if (!context.DirectVassalsBySuzerainId.TryGetValue(pair.Value,
-                        out List<Kingdom> children))
-                {
-                    children = new List<Kingdom>();
-                    context.DirectVassalsBySuzerainId[pair.Value] = children;
-                }
-                children.Add(child);
-            }
-            foreach (List<Kingdom> children in
-                     context.DirectVassalsBySuzerainId.Values)
-                children.Sort(CompareKingdoms);
-            return context;
-        }
-
-        private static void ResolveEffectiveSuzerainId(
-            HierarchyContext pContext, long pKingdomId,
-            Dictionary<long, byte> pStates, List<long> pPath,
-            HashSet<long> pCyclicKingdomIds)
-        {
-            if (!pContext.Kingdoms.ContainsKey(pKingdomId)) return;
-            if (pStates.TryGetValue(pKingdomId, out byte state))
-            {
-                if (state == 1)
-                    MarkCyclePathInvalid(pPath, pCyclicKingdomIds);
-                return;
-            }
-
-            pStates[pKingdomId] = 1;
-            pPath.Add(pKingdomId);
-            long suzerainId = RawSuzerainId(pContext, pKingdomId);
-            if (suzerainId >= 0L &&
-                pContext.Kingdoms.ContainsKey(suzerainId))
-                ResolveEffectiveSuzerainId(pContext, suzerainId, pStates,
-                    pPath, pCyclicKingdomIds);
-            if (suzerainId >= 0L &&
-                pCyclicKingdomIds.Contains(suzerainId))
-                pCyclicKingdomIds.Add(pKingdomId);
-
-            pContext.EffectiveSuzerainIds[pKingdomId] =
-                pCyclicKingdomIds.Contains(pKingdomId) ||
-                suzerainId < 0L ||
-                !pContext.Kingdoms.ContainsKey(suzerainId)
-                    ? -1L
-                    : suzerainId;
-            pPath.RemoveAt(pPath.Count - 1);
-            pStates[pKingdomId] = 2;
-        }
-
-        private static void MarkCyclePathInvalid(IList<long> pPath,
-            HashSet<long> pCyclicKingdomIds)
-        {
-            for (int index = 0; index < pPath.Count; index++)
-                pCyclicKingdomIds.Add(pPath[index]);
-        }
-
-        private static long RawSuzerainId(HierarchyContext pContext,
-            long pKingdomId)
-        {
-            return pContext.RawSuzerainIds.TryGetValue(pKingdomId,
-                out long suzerainId) ? suzerainId : -1L;
-        }
-
-        private static long EffectiveSuzerainId(HierarchyContext pContext,
-            long pKingdomId)
-        {
-            return pContext.EffectiveSuzerainIds.TryGetValue(pKingdomId,
-                out long suzerainId) ? suzerainId : -1L;
-        }
-
-        private static IReadOnlyList<Kingdom> GetChildren(
-            HierarchyContext pContext,
-            Kingdom pSuzerain)
-        {
-            if (!IsValidKingdom(pSuzerain)) return EmptyKingdoms;
-            return pContext.DirectVassalsBySuzerainId.TryGetValue(
-                pSuzerain.id, out List<Kingdom> children)
-                ? children
-                : EmptyKingdoms;
-        }
-
-        private static void CollectSubtree(HierarchyContext pContext,
-            Kingdom pRoot, List<Kingdom> pResult, HashSet<long> pVisited)
-        {
-            if (!IsValidKingdom(pRoot) || !pVisited.Add(pRoot.id)) return;
-            pResult.Add(pRoot);
-            IReadOnlyList<Kingdom> children = GetChildren(pContext, pRoot);
-            for (int index = 0; index < children.Count; index++)
-                CollectSubtree(pContext, children[index], pResult, pVisited);
-        }
-
-        private static HierarchicalVassalKingdomSnapshot BuildEntry(
-            HierarchyContext pContext, Kingdom pKingdom,
-            IList<Kingdom> pTerritoryKingdoms,
-            HierarchicalVassalMapModeSnapshot pOwner)
-        {
-            var entry = new HierarchicalVassalKingdomSnapshot
-            {
-                KingdomId = pKingdom.id,
-                Title = KingdomTitleService.GetTitle(pKingdom),
-                SuzerainId = EffectiveSuzerainId(pContext, pKingdom.id),
-                DisplayName = SafeDisplayName(pKingdom),
-                ColorKey = SafeColorKey(pKingdom)
-            };
-            IReadOnlyList<Kingdom> direct = GetChildren(pContext, pKingdom);
-            for (int index = 0; index < direct.Count; index++)
-                entry.AddDirectVassal(direct[index].id);
-
-            var seenTiles = new HashSet<Vector2Int>();
-            for (int index = 0; index < pTerritoryKingdoms.Count; index++)
-                AddKingdomTerritory(pTerritoryKingdoms[index], entry,
-                    pOwner, seenTiles);
-            entry.SortLandTiles(CompareTiles);
-            HierarchicalVassalMapModeGeometryMetrics metrics =
-                HierarchicalVassalMapModeGeometry.CalculateMetrics(
-                    entry.LandTiles);
-            entry.LabelDisplayName = HierarchicalVassalMapModeRules.
-                FormatCountryLabel(entry.DisplayName, metrics.SpanX);
-            entry.CountryLabelGap = HierarchicalVassalMapModeRules.
-                CalculateCountryLabelGapLevel(entry.LabelDisplayName,
-                    metrics.SpanX);
-            HierarchicalVassalMapModeLabelPlacement placement =
-                HierarchicalVassalMapModeGeometry.CalculateLabelPlacement(
-                    entry.LandTiles, entry.LabelDisplayName,
-                    entry.CountryLabelGap);
-            entry.Area = metrics.Area;
-            entry.Centroid = placement.Centroid;
-            entry.LabelSize = placement.Size;
-            entry.LabelAngle = placement.Angle;
-            return entry;
-        }
-
-        private static void AddKingdomTerritory(Kingdom pTerritoryKingdom,
-            HierarchicalVassalKingdomSnapshot pEntry,
-            HierarchicalVassalMapModeSnapshot pOwner,
-            HashSet<Vector2Int> pSeenTiles)
-        {
-            if (!IsValidKingdom(pTerritoryKingdom)) return;
-            try
-            {
-                foreach (City city in pTerritoryKingdom.getCities())
-                {
-                    if (city?.data == null || city.isRekt() ||
-                        city.kingdom != pTerritoryKingdom ||
-                        city.zones == null) continue;
-                    for (int zoneIndex = 0;
-                         zoneIndex < city.zones.Count; zoneIndex++)
-                    {
-                        TileZone zone = city.zones[zoneIndex];
-                        if (zone == null || zone.city != city) continue;
-                        // A zone containing no land should remain untouched by
-                        // the political overlay. Mixed zones still render and
-                        // let the dedicated water patch restore their liquid
-                        // tiles to the native terrain color.
-                        if (!ContainsVisibleLand(zone)) continue;
-                        if (zone.id >= 0)
-                        {
-                            pOwner.MapZone(zone.id, pEntry.KingdomId);
-                            pOwner.AddDrawableZone(zone);
-                            pEntry.AddDrawableZone(zone);
-                        }
-                        WorldTile[] tiles = zone.tiles;
-                        if (tiles == null) continue;
-                        for (int tileIndex = 0;
-                             tileIndex < tiles.Length; tileIndex++)
-                        {
-                            WorldTile tile = tiles[tileIndex];
-                            if (!IsVisibleLand(tile)) continue;
-                            var position = new Vector2Int(tile.x, tile.y);
-                            if (pSeenTiles.Add(position))
-                                pEntry.AddLandTile(position);
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // A stale city or zone is skipped without invalidating the
-                // rest of the deterministic snapshot.
+                TileZone zone = pCity.zones[index];
+                if (zone?.id >= 0) NativeDrawMetaCache.Remove(zone.id);
             }
         }
 
@@ -577,32 +692,13 @@ namespace AncientWarfare3.core.policy
 
         internal static bool ContainsVisibleLand(TileZone pZone)
         {
-            if (pZone?.tiles == null) return false;
-            WorldTile[] tiles = pZone.tiles;
-            for (int index = 0; index < tiles.Length; index++)
-                if (IsVisibleLand(tiles[index])) return true;
-            return false;
+            return pZone != null && pZone.tiles_with_ground > 0;
         }
 
         private static bool IsValidKingdom(Kingdom pKingdom)
         {
             return pKingdom?.data != null && !pKingdom.isRekt() &&
                    pKingdom.isCiv() && !pKingdom.isNeutral();
-        }
-
-        private static bool IsVisibleCity(City pCity,
-            HierarchicalVassalMapModeSnapshot pSnapshot)
-        {
-            if (pCity?.data == null || pCity.isRekt() ||
-                pSnapshot?.ZoneToKingdomId == null || pCity.zones == null)
-                return false;
-            for (int index = 0; index < pCity.zones.Count; index++)
-            {
-                TileZone zone = pCity.zones[index];
-                if (zone != null && pSnapshot.ZoneToKingdomId.ContainsKey(zone.id))
-                    return true;
-            }
-            return false;
         }
 
         private static bool TryInspectCity(WorldTile pTile, string pPowerId)
@@ -614,8 +710,7 @@ namespace AncientWarfare3.core.policy
                     TrySelectAndInspect(city, "city")) return true;
                 return ActionLibrary.inspectCity(pTile, pPowerId);
             }
-            catch { }
-            return false;
+            catch { return false; }
         }
 
         private static bool TryInspectKingdom(Kingdom pKingdom,
@@ -628,8 +723,7 @@ namespace AncientWarfare3.core.policy
                     TrySelectAndInspect(pKingdom, "kingdom")) return true;
                 return ActionLibrary.inspectKingdom(pTile, pPowerId);
             }
-            catch { }
-            return false;
+            catch { return false; }
         }
 
         private static bool TrySelectAndInspect(object pNanoObject,
@@ -644,126 +738,38 @@ namespace AncientWarfare3.core.policy
                 object asset = libraryType?.GetField(pAssetField,
                     System.Reflection.BindingFlags.Public |
                     System.Reflection.BindingFlags.Static)?.GetValue(null);
-                System.Reflection.MethodInfo select = asset?.GetType()
-                    .GetMethod("selectAndInspect");
+                System.Reflection.MethodInfo select = asset?.GetType().
+                    GetMethod("selectAndInspect");
                 if (select == null) return false;
                 System.Reflection.ParameterInfo[] parameters =
                     select.GetParameters();
                 if (parameters.Length == 4)
                 {
-                    select.Invoke(asset, new object[] { pNanoObject,
-                        false, false, false });
+                    select.Invoke(asset, new object[]
+                    {
+                        pNanoObject, false, false, false
+                    });
                     return true;
                 }
                 if (parameters.Length == 3)
                 {
-                    select.Invoke(asset, new object[] { pNanoObject,
-                        false, false });
+                    select.Invoke(asset, new object[]
+                    {
+                        pNanoObject, false, false
+                    });
                     return true;
                 }
-                select.Invoke(asset, new object[] { pNanoObject });
+                select.Invoke(asset, new[] { pNanoObject });
                 return true;
             }
             catch { return false; }
         }
 
-        private static long ComputeWorldRevision()
-        {
-            unchecked
-            {
-                long hash = 1469598103934665603L;
-                try
-                {
-                    if (World.world?.kingdoms == null) return hash;
-                    foreach (Kingdom kingdom in World.world.kingdoms)
-                    {
-                        if (!IsValidKingdom(kingdom)) continue;
-                        AddRevision(ref hash, kingdom.id);
-                        AddRevision(ref hash, SafeSuzerainId(kingdom));
-                        AddRevision(ref hash, (int)KingdomTitleService.GetTitle(
-                            kingdom));
-                        AddRevision(ref hash, SafeDisplayName(kingdom));
-                        AddRevision(ref hash, SafeColorKey(kingdom));
-
-                        foreach (City city in kingdom.getCities())
-                        {
-                            if (city?.data == null || city.isRekt()) continue;
-                            AddRevision(ref hash, city.id);
-                            AddRevision(ref hash, city.kingdom?.id ?? -1L);
-                            AddRevision(ref hash, ReadMemberString(city.data,
-                                "name"));
-                            if (city.zones == null) continue;
-                            AddRevision(ref hash, city.zones.Count);
-                            for (int zoneIndex = 0;
-                                 zoneIndex < city.zones.Count; zoneIndex++)
-                            {
-                                TileZone zone = city.zones[zoneIndex];
-                                if (zone == null) continue;
-                                AddRevision(ref hash, zone.id);
-                                AddRevision(ref hash,
-                                    zone.city?.id ?? -1L);
-                                AddRevision(ref hash,
-                                    zone.tiles?.Length ?? 0);
-                            }
-                        }
-                    }
-                }
-                catch
-                {
-                    // A transient world mutation should force a rebuild on the
-                    // next check instead of leaving stale labels indefinitely.
-                    return long.MinValue + 1L;
-                }
-                return hash;
-            }
-        }
-
-        private static void AddRevision(ref long pHash, long pValue)
-        {
-            unchecked
-            {
-                pHash ^= pValue;
-                pHash *= 1099511628211L;
-            }
-        }
-
-        private static void AddRevision(ref long pHash, int pValue)
-        {
-            AddRevision(ref pHash, (long)pValue);
-        }
-
-        private static void AddRevision(ref long pHash, string pValue)
-        {
-            string value = pValue ?? string.Empty;
-            AddRevision(ref pHash, value.Length);
-            for (int index = 0; index < value.Length; index++)
-                AddRevision(ref pHash, value[index]);
-        }
-
-        private static string ReadMemberString(object pObject,
-            string pMemberName)
-        {
-            if (pObject == null || string.IsNullOrEmpty(pMemberName))
-                return string.Empty;
-            try
-            {
-                Type type = pObject.GetType();
-                var property = type.GetProperty(pMemberName);
-                if (property != null)
-                    return property.GetValue(pObject, null)?.ToString() ??
-                        string.Empty;
-                var field = type.GetField(pMemberName);
-                return field?.GetValue(pObject)?.ToString() ?? string.Empty;
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
-
         private static Kingdom GetKingdom(long pKingdomId)
         {
             if (pKingdomId < 0L || World.world?.kingdoms == null) return null;
+            if (KingdomIndex.TryGetValue(pKingdomId, out Kingdom indexed) &&
+                IsValidKingdom(indexed)) return indexed;
             try
             {
                 foreach (Kingdom kingdom in World.world.kingdoms)
@@ -773,25 +779,10 @@ namespace AncientWarfare3.core.policy
             return null;
         }
 
-        private static bool ContainsKingdom(IReadOnlyList<Kingdom> pKingdoms,
-            long pKingdomId)
-        {
-            if (pKingdoms == null) return false;
-            for (int index = 0; index < pKingdoms.Count; index++)
-                if (pKingdoms[index]?.id == pKingdomId) return true;
-            return false;
-        }
-
         private static long SafeSuzerainId(Kingdom pKingdom)
         {
             try { return VassalService.GetSuzerainId(pKingdom); }
             catch { return -1L; }
-        }
-
-        private static string SafeColorKey(Kingdom pKingdom)
-        {
-            try { return HistoryColors.FromKingdom(pKingdom) ?? string.Empty; }
-            catch { return string.Empty; }
         }
 
         private static string SafeDisplayName(Kingdom pKingdom)
@@ -817,26 +808,52 @@ namespace AncientWarfare3.core.policy
                 : pLeft.id.CompareTo(pRight.id);
         }
 
-        private static int CompareTiles(Vector2Int pLeft, Vector2Int pRight)
+        private sealed class LabelTerritoryBuilder
         {
-            int xOrder = pLeft.x.CompareTo(pRight.x);
-            return xOrder != 0 ? xOrder : pLeft.y.CompareTo(pRight.y);
+            private readonly Kingdom _kingdom;
+            private readonly List<TileZone> _zones = new List<TileZone>();
+            private readonly HashSet<int> _zoneIds = new HashSet<int>();
+
+            internal LabelTerritoryBuilder(Kingdom pKingdom)
+            {
+                _kingdom = pKingdom;
+            }
+
+            internal void AddZones(IReadOnlyList<TileZone> pZones)
+            {
+                if (pZones == null) return;
+                for (int index = 0; index < pZones.Count; index++)
+                {
+                    TileZone zone = pZones[index];
+                    if (zone?.id >= 0 && _zoneIds.Add(zone.id))
+                        _zones.Add(zone);
+                }
+            }
+
+            internal HierarchicalVassalMapLabelTerritorySource Build()
+            {
+                _zones.Sort((pLeft, pRight) =>
+                    pLeft.id.CompareTo(pRight.id));
+                return new HierarchicalVassalMapLabelTerritorySource(
+                    _kingdom, _zones);
+            }
         }
 
-        private sealed class HierarchyContext
+        private readonly struct NativeZoneMetaCacheEntry
         {
-            public readonly Dictionary<long, Kingdom> Kingdoms =
-                new Dictionary<long, Kingdom>();
-            public readonly Dictionary<long, long> EffectiveSuzerainIds =
-                new Dictionary<long, long>();
-            public readonly Dictionary<long, long> RawSuzerainIds =
-                new Dictionary<long, long>();
-            public readonly Dictionary<long, List<Kingdom>>
-                DirectVassalsBySuzerainId =
-                    new Dictionary<long, List<Kingdom>>();
-        }
+            internal readonly TileZone Zone;
+            internal readonly City City;
+            internal readonly Kingdom PhysicalKingdom;
+            internal readonly IMetaObject Meta;
 
-        private static readonly IReadOnlyList<Kingdom> EmptyKingdoms =
-            new List<Kingdom>().AsReadOnly();
+            internal NativeZoneMetaCacheEntry(TileZone pZone, City pCity,
+                Kingdom pPhysicalKingdom, IMetaObject pMeta)
+            {
+                Zone = pZone;
+                City = pCity;
+                PhysicalKingdom = pPhysicalKingdom;
+                Meta = pMeta;
+            }
+        }
     }
 }

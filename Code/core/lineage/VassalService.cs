@@ -703,6 +703,8 @@ namespace AncientWarfare3.core.lineage
             }
             KingdomStrategyRevisionService.MarkChanged(pVassal.id,
                 pSuzerain.id);
+            HierarchicalVassalMapModeService.MarkHierarchyDirty(
+                pVassal, pSuzerain);
             return true;
         }
 
@@ -778,6 +780,8 @@ namespace AncientWarfare3.core.lineage
             PullVassalIntoSuzerainWars(pTributary, pSuzerain);
             KingdomStrategyRevisionService.MarkChanged(pTributary.id,
                 pSuzerain.id);
+            HierarchicalVassalMapModeService.MarkHierarchyDirty(
+                pTributary, pSuzerain);
             pReason = "";
             return true;
         }
@@ -822,6 +826,8 @@ namespace AncientWarfare3.core.lineage
             DirtyVassalMap();
             KingdomStrategyRevisionService.MarkChanged(pVassal.id,
                 suzerainId);
+            HierarchicalVassalMapModeService.MarkHierarchyDirty(
+                pVassal, suzerain);
             return true;
         }
 

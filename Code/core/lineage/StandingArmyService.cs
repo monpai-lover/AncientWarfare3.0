@@ -49,6 +49,8 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<long, MergeWork>();
         private static readonly Dictionary<long, ArmyFieldUsabilityScan>
             UsabilityScans = new Dictionary<long, ArmyFieldUsabilityScan>();
+        private static readonly HashSet<long> CityDuplicateMergeSources =
+            new HashSet<long>();
 
         public static void MaintainCity(City pCity)
         {
@@ -112,6 +114,13 @@ namespace AncientWarfare3.core.lineage
             pDisposition = ArmyRecruitmentDisposition.Reject;
             pArmy = null;
             if (pKingdom?.data == null || pKingdom.isRekt()) return true;
+            if (pPreferredCity?.data != null &&
+                ArmyFieldIndexService.TryGetCityArmy(pPreferredCity,
+                    out pArmy))
+            {
+                pDisposition = ArmyRecruitmentDisposition.Replenish;
+                return true;
+            }
             if (!EstablishmentScans.TryGetValue(pKingdom.id,
                     out EstablishmentScan scan))
             {
@@ -137,8 +146,13 @@ namespace AncientWarfare3.core.lineage
 
             EstablishmentScans.Remove(pKingdom.id);
             pArmy = scan.ReplenishmentArmy;
-            pDisposition = ArmyEstablishmentRules.DecideRecruitment(
-                scan.FieldArmyCount, pArmy?.data != null);
+            pDisposition = pPreferredCity?.data != null
+                ? ArmyEstablishmentRules.DecideCityRecruitment(
+                    existingOrdinaryArmyCount: 0,
+                    kingdomFieldArmyCount: scan.FieldArmyCount)
+                : ArmyEstablishmentRules.DecideRecruitment(
+                    scan.FieldArmyCount, pArmy?.data != null);
+            if (pPreferredCity?.data != null) pArmy = null;
             TryScheduleOneMaintenance(pKingdom, scan);
             return true;
         }
@@ -210,13 +224,51 @@ namespace AncientWarfare3.core.lineage
             EstablishmentScans.Clear();
             MergeByKingdom.Clear();
             UsabilityScans.Clear();
+            CityDuplicateMergeSources.Clear();
+        }
+
+        internal static void ScheduleCityDuplicateMerge(Kingdom pKingdom,
+            Army pSource, Army pCanonical)
+        {
+            if (pKingdom?.data == null || pSource?.data == null ||
+                pCanonical?.data == null || pSource == pCanonical ||
+                !CityDuplicateMergeSources.Add(pSource.id)) return;
+            long kingdomId = pKingdom.id;
+            long sourceId = pSource.id;
+            long targetId = pCanonical.id;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                DeferredRuntimeWorkRules.CoalescingKey(
+                    "city_army_duplicate_merge", sourceId),
+                DeferredWorkClass.Runtime,
+                () => ProcessCityDuplicateMerge(kingdomId, sourceId,
+                    targetId));
+        }
+
+        private static void ProcessCityDuplicateMerge(long pKingdomId,
+            long pSourceId, long pTargetId)
+        {
+            CityDuplicateMergeSources.Remove(pSourceId);
+            Army source = ArmyFieldIndexService.ResolveIndexedArmy(
+                pSourceId, pKingdomId);
+            Army target = ArmyFieldIndexService.ResolveIndexedArmy(
+                pTargetId, pKingdomId);
+            if (source?.data == null || target?.data == null ||
+                source == target) return;
+            if (SafeUnitCount(source) <= 0)
+            {
+                ArmyInvalidCleanupQueue.ScheduleShell(source,
+                    AWArmyService.FindAnchorCity(source),
+                    ResolveKingdom(pKingdomId));
+                return;
+            }
+            AWArmyService.TryMergeOrdinaryArmyInto(source, target);
         }
 
         private static int CountNormalArmyUnits(City pCity)
         {
-            if (pCity?.data == null || !pCity.hasArmy()) return 0;
-            Army army = pCity.getArmy();
-            if (army?.data == null || !army.isAlive() || AWArmyService.IsSpecialArmy(army)) return 0;
+            if (pCity?.data == null ||
+                !ArmyFieldIndexService.TryGetCityArmy(pCity,
+                    out Army army)) return 0;
             try { return System.Math.Max(0, army.countUnits()); }
             catch { return 0; }
         }
@@ -636,8 +688,6 @@ namespace AncientWarfare3.core.lineage
             }
             if (ArmyFieldIndexService.TryRouteStandingCandidate(
                     pActor, pCity, out _)) return true;
-            if (ArmyFieldIndexService.Count(pCity.kingdom) >=
-                ArmyEstablishmentRules.MaximumFieldArmies) return false;
 
             Army created = null;
             bool detached = cityArmy != null;
@@ -652,6 +702,8 @@ namespace AncientWarfare3.core.lineage
                         : World.world?.armies?.newArmy(pActor, pCity);
                 }
                 if (created?.data == null) return false;
+                AWArmyService.EnsureOrdinaryNativeName(created,
+                    pCity.kingdom, pCity);
                 if (pActor.army != created)
                     AWArmyService.AddToArmy(pActor, created);
                 if (pActor.army != created)
@@ -682,6 +734,7 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 return pArmy.isAlive() &&
+                       AWArmyService.GetAnchorCityId(pArmy) == pCity.id &&
                        AWArmyService.GetIntendedKingdom(pArmy) ==
                        pCity.kingdom;
             }

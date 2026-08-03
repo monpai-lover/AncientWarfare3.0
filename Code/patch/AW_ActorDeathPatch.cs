@@ -37,6 +37,9 @@ namespace AncientWarfare3.patch
             __state = new DieState();
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
+            bool suppressPersonalHistory =
+                SyntheticLevyService.SuppressPersonalHistory(__instance);
+            ActorAgeWorkService.Remove(__instance.data.id);
             if (!__instance.isAlive()) return;
             __state.Diagnostic = RuntimePerformanceDiagnostic.BeginDeathEvent();
             if (__instance.isKing() && __instance.kingdom != null)
@@ -68,6 +71,7 @@ namespace AncientWarfare3.patch
                 RuntimePerformanceDiagnostic.EndDeathStage(
                     ActorDeathPerformanceStage.MilitaryIndexes, militaryStage);
             }
+            if (suppressPersonalHistory) return;
             TryRunDeathStage(__instance, ActorDeathPerformanceStage.DynasticTitle,
                 "dynastic title and feudatory succession",
                 () => DynasticTitleService.OnActorDying(__instance));
@@ -107,13 +111,15 @@ namespace AncientWarfare3.patch
                 TryRunDeathStage(__instance,
                     ActorDeathPerformanceStage.LineageArchive,
                     "traceable actor archive", () =>
-                    LineageService.ArchiveTraceableActor(__instance, pAlive: false));
+                    LineageArchiveWriter.QueueDeath(__instance,
+                        pTraceOnly: true));
                 return;
             }
 
             TryRunDeathStage(__instance, ActorDeathPerformanceStage.LineageArchive,
                 "lineage actor archive", () =>
-                LineageService.ArchiveActor(__instance, pAlive: false));
+                LineageArchiveWriter.QueueDeath(__instance,
+                    pTraceOnly: false));
 
             bool dyingKing = false;
             Kingdom dyingKingdom = null;
@@ -185,6 +191,7 @@ namespace AncientWarfare3.patch
             if (!__runOriginal) return;
             if (AW3MultiplayerReplicaScope.IsApplying ||
                 AW3MultiplayerReplicaScope.IsReplicaSession) return;
+            SyntheticLevyService.OnActorDied(__instance);
             if (__state?.DyingKingdom == null ||
                 __state.DyingKingActorId < 0L || __instance == null ||
                 __instance.isAlive()) return;

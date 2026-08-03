@@ -10,6 +10,8 @@ namespace AncientWarfare3.core.performance
         private static bool _configShowArmyMapInformation;
         private static bool _configAw3ArmyRtsScheduler;
         private static bool _configDiplomacyAiEnabled = true;
+        private static bool _configAiAllianceActionsEnabled = true;
+        private static bool _configAiVassalActionsEnabled = true;
 
         internal static event Action ArmyRtsDiagnosticsDisabled;
         internal static event Action ArmyMapInformationDisabled;
@@ -33,6 +35,10 @@ namespace AncientWarfare3.core.performance
         public static bool UseAw3ArmyRtsScheduler =>
             _configAw3ArmyRtsScheduler;
         public static bool EnableDiplomacyAi => _configDiplomacyAiEnabled;
+        public static bool EnableAiAllianceActions =>
+            _configAiAllianceActionsEnabled;
+        public static bool EnableAiVassalActions =>
+            _configAiVassalActionsEnabled;
 
         public const float RenderReserveMilliseconds = 2f;
         public const float MinimumSliceMilliseconds = 0.15f;
@@ -108,6 +114,16 @@ namespace AncientWarfare3.core.performance
         public static void SwitchDiplomacyAi(bool pValue)
         {
             _configDiplomacyAiEnabled = pValue;
+        }
+
+        public static void SwitchAiAllianceActions(bool pValue)
+        {
+            _configAiAllianceActionsEnabled = pValue;
+        }
+
+        public static void SwitchAiVassalActions(bool pValue)
+        {
+            _configAiVassalActionsEnabled = pValue;
         }
 
         public static void SetTargetRenderFps(float pValue)

@@ -28,6 +28,12 @@ namespace AncientWarfare3.core.lineage
                     pOnlyMain: false) != null;
             }
             catch { }
+            bool hasMandateHistory = false;
+            try
+            {
+                hasMandateHistory = MandateService.ReadReport()?.period_id >= 0;
+            }
+            catch { }
 
             bool allowed = ZhuluWarRules.CanStart(
                 new ZhuluEligibilityFacts(
@@ -45,7 +51,8 @@ namespace AncientWarfare3.core.lineage
                     WarTerritoryService.AreInSameAlliance(attacker,
                         defender),
                     alreadyAtWar,
-                    ageOverride: ageOverride));
+                    ageOverride: ageOverride,
+                    hasMandateHistory: hasMandateHistory));
             if (!allowed) reason = "zhulu_ineligible";
             return allowed;
         }

@@ -357,6 +357,8 @@ internal static class Regression20260721Tests
         Equal(true, armyMapInformationPatch.Contains(
                     "drawArmies") &&
                     armyMapInformationPatch.Contains(
+                        "using AncientWarfare3.core.policy;") &&
+                    armyMapInformationPatch.Contains(
                         "QuantumSpriteWithText") &&
                     armyMapInformationPatch.Contains("getAll()") &&
                     armyMapInformationPatch.Contains(

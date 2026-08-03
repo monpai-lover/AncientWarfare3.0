@@ -1,0 +1,74 @@
+using AncientWarfare3.core.lineage;
+using System;
+
+internal static class ArmyMobilizationRulesTests
+{
+    internal static void Run()
+    {
+        Equal(ArmyMobilizationPhase.Inactive,
+            ArmyMobilizationRules.Resolve(liveKingdom: false,
+                activeNotice: true, activeWarCount: 1),
+            "an invalid realm has no mobilization authority");
+        Equal(ArmyMobilizationPhase.Peace,
+            ArmyMobilizationRules.Resolve(true, false, 0),
+            "a peaceful realm only indexes its reserve");
+        Equal(ArmyMobilizationPhase.Notice,
+            ArmyMobilizationRules.Resolve(true, true, 0),
+            "a declaration notice starts preparation mobilization");
+        Equal(ArmyMobilizationPhase.War,
+            ArmyMobilizationRules.Resolve(true, true, 1),
+            "formal war takes precedence over a remaining notice");
+
+        Equal(false, ArmyMobilizationRules.CanConsume(
+            ArmyMobilizationPhase.Inactive),
+            "inactive realms cannot consume reserves");
+        Equal(false, ArmyMobilizationRules.CanConsume(
+            ArmyMobilizationPhase.Peace),
+            "peace only indexes reserves");
+        Equal(true, ArmyMobilizationRules.CanConsume(
+            ArmyMobilizationPhase.Notice),
+            "notice preparation consumes city reserves");
+        Equal(true, ArmyMobilizationRules.CanConsume(
+            ArmyMobilizationPhase.War),
+            "formal war consumes the same city reserve ledger");
+        Equal(true, ArmyMobilizationRules.CanCreateOrdinaryArmy(
+                ArmyMobilizationPhase.Notice),
+            "notice preparation may establish a city's first army");
+        Equal(true, ArmyMobilizationRules.CanCreateOrdinaryArmy(
+                ArmyMobilizationPhase.War),
+            "formal war may rebuild a city army destroyed in battle");
+        Equal(false, ArmyMobilizationRules.CanCreateOrdinaryArmy(
+                ArmyMobilizationPhase.Peace),
+            "peace maintenance cannot create a mobilized field army");
+
+        Equal(false, ArmyMobilizationRules.IsDeploymentReady(
+            living: 79, target: 100),
+            "seventy-nine percent remains in preparation");
+        Equal(true, ArmyMobilizationRules.IsDeploymentReady(
+            living: 80, target: 100),
+            "eighty percent releases deployment");
+        Equal(true, ArmyMobilizationRules.IsDeploymentReady(
+            living: 3, target: 3),
+            "a full small army is ready");
+        Equal(false, ArmyMobilizationRules.IsDeploymentReady(
+            living: 100, target: 0),
+            "an army without a target is not ready");
+
+        Equal(false, ArmyMobilizationRules.ShouldConfirmExhausted(
+            reconciliationComplete: false, available: 0),
+            "an uninitialized pool is not confirmed empty");
+        Equal(false, ArmyMobilizationRules.ShouldConfirmExhausted(
+            reconciliationComplete: true, available: 1),
+            "a reconciled non-empty pool remains available");
+        Equal(true, ArmyMobilizationRules.ShouldConfirmExhausted(
+            reconciliationComplete: true, available: 0),
+            "only a complete empty reconciliation confirms exhaustion");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

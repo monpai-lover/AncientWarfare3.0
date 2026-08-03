@@ -57,6 +57,14 @@ namespace AncientWarfare3.patch
             try
             {
                 if (string.IsNullOrEmpty(pFolder)) return;
+                CityReservePoolService.TryWriteSnapshot(pFolder,
+                    out string reserveSnapshotError);
+                if (!string.IsNullOrEmpty(reserveSnapshotError))
+                {
+                    ModClass.LogWarning(
+                        "City reserve pool snapshot write failed");
+                    ModClass.LogWarning(reserveSnapshotError);
+                }
                 if (!LineageArchiveManager.Instance.TryExportLineageArchive(
                         pFolder, out string error))
                 {
@@ -94,6 +102,7 @@ namespace AncientWarfare3.patch
             pCause = null;
             try
             {
+                CityReservePoolService.PrepareForSave();
                 core.lineage.DeferredRuntimeWorkService.FlushPersistent();
                 bool descentsResolved =
                     HistoricalSchoolDescentService.FlushPendingDescentsForSave();
@@ -110,6 +119,10 @@ namespace AncientWarfare3.patch
                 bool writesResolved =
                     HistoricalSchoolWriteBufferService.FlushForSave();
                 core.lineage.DeferredRuntimeWorkService.FlushPersistent();
+                bool deathArchivesResolved =
+                    ActorDeathArchiveService.FlushForSave(
+                        TimeSpan.FromSeconds(5),
+                        out string deathArchiveError);
                 bool asyncWritesResolved =
                     HistoricalWriteService.FlushForSave(
                         TimeSpan.FromSeconds(5), out string asyncWriteError);
@@ -117,6 +130,7 @@ namespace AncientWarfare3.patch
                     !nobleDeathsResolved ||
                     !runtimeStateResolved || !priorWritesResolved ||
                     !activitiesResolved || !writesResolved ||
+                    !deathArchivesResolved ||
                     !asyncWritesResolved)
                 {
                     pError = "unresolved school persistence " +
@@ -127,6 +141,8 @@ namespace AncientWarfare3.patch
                              " prior_writes=" + priorWritesResolved +
                              " activities=" + activitiesResolved +
                              " writes=" + writesResolved +
+                             " death_archives=" + deathArchivesResolved +
+                             " death_archive_error=" + deathArchiveError +
                              " async_writes=" + asyncWritesResolved +
                              " async_error=" + asyncWriteError +
                              " buffered=" +

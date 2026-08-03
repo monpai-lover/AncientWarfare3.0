@@ -89,5 +89,25 @@ internal static class ActorKingdomSafetyRulesTests
                 cityKingdomIsRekt: false,
                 wildKingdomIdExists: false),
             "actors without a valid repair source remain quarantined");
+
+        Equal(true, ActorKingdomSafetyRules.CanEnterVanillaZoneProcessing(
+                actorExists: true,
+                actorAssetExists: true,
+                tileExists: true,
+                professionAssetExists: true,
+                kingdomAssetExists: true),
+            "only fully initialized actors may enter vanilla zone processing");
+        Equal(false, ActorKingdomSafetyRules.CanEnterVanillaZoneProcessing(
+                actorExists: true,
+                actorAssetExists: true,
+                tileExists: true,
+                professionAssetExists: true,
+                kingdomAssetExists: false),
+            "a kingdomless actor must be quarantined before conquest scanning");
+        Equal(false, ActorKingdomSafetyRules.CanRenderUnit(
+                actorExists: true,
+                actorAssetExists: true,
+                tileExists: false),
+            "a unit without a current tile must be skipped by minimap rendering");
     }
 }

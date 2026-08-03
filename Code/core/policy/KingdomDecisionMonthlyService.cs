@@ -1,12 +1,19 @@
+using AncientWarfare3.core.performance;
+
 namespace AncientWarfare3.core.policy
 {
     internal static class KingdomDecisionMonthlyService
     {
-        private static int _lastProcessedMonthKey = int.MinValue;
+        private const int KingdomsPerAuthorityCycle = 1;
+        private static readonly MonthlyAuthorityWorkQueue<Kingdom>
+            MonthlyWork = new MonthlyAuthorityWorkQueue<Kingdom>();
+
+        internal static int PendingMonthlyWorkForDiagnostics =>
+            MonthlyWork.PendingCount;
 
         internal static void Reset()
         {
-            _lastProcessedMonthKey = int.MinValue;
+            MonthlyWork.Clear();
         }
 
         internal static void ProcessAuthorityCycle()
@@ -14,12 +21,23 @@ namespace AncientWarfare3.core.policy
             if (World.world?.kingdoms == null) return;
             int monthKey = KingdomDecisionMonthlyRules.ToMonthKey(
                 Date.getCurrentYear(), Date.getCurrentMonth());
-            if (!KingdomDecisionMonthlyRules.ShouldProcessMonth(monthKey,
-                    _lastProcessedMonthKey)) return;
-            _lastProcessedMonthKey = monthKey;
-            foreach (Kingdom kingdom in World.world.kingdoms)
-                KingdomPolicyService.OnKingdomDecisionMonth(kingdom,
-                    monthKey);
+            MonthlyWork.ScheduleMonth(monthKey, World.world.kingdoms);
+            MonthlyWork.Drain(KingdomsPerAuthorityCycle,
+                (queuedMonthKey, kingdom) =>
+                {
+                    long benchmark = RecentFeatureBenchmark.Begin();
+                    try
+                    {
+                        KingdomPolicyService.OnKingdomDecisionMonth(kingdom,
+                            queuedMonthKey);
+                    }
+                    finally
+                    {
+                        RecentFeatureBenchmark.End(
+                            RecentFeatureBenchmarkRules.MonthKingdomPolicyIndex,
+                            benchmark);
+                    }
+                });
         }
     }
 }

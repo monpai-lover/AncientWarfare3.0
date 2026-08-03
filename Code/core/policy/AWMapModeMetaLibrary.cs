@@ -102,8 +102,6 @@ namespace AncientWarfare3.core.policy
                 AWMapModeMetaTypes.HierarchicalVassal,
                 HierarchicalVassalMapModeService.POWER_ID,
                 HierarchicalVassalMapModeService.GetMetaForZone);
-            HierarchicalVassalAsset.draw_zones =
-                HierarchicalVassalMapModeService.DrawZones;
             HierarchicalVassalAsset.click_action_zone =
                 HierarchicalVassalMapModeService.HandleZoneClick;
         }
@@ -205,12 +203,26 @@ namespace AncientWarfare3.core.policy
         {
             MetaZoneGetMetaSimple getter = GetZoneGetter(pAsset);
             if (World.world?.kingdoms == null || ZoneManager == null || getter == null) return;
-            foreach (Kingdom kingdom in World.world.kingdoms)
+            bool hierarchical = AWMapModeMetaRules.IsRuntimeMeta(
+                pAsset?.map_mode ?? MetaType.None,
+                AWMapModeMetaTypes.HierarchicalVassal);
+            if (hierarchical)
+                HierarchicalVassalMapModeService.BeginNativeDrawPass();
+            try
             {
-                if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral()) continue;
-                if (!ShouldDrawKingdomZones(pAsset, kingdom)) continue;
-                foreach (City city in kingdom.getCities())
-                    DrawCityZones(pAsset, city, getter);
+                foreach (Kingdom kingdom in World.world.kingdoms)
+                {
+                    if (kingdom?.data == null || kingdom.isRekt() ||
+                        kingdom.isNeutral()) continue;
+                    if (!ShouldDrawKingdomZones(pAsset, kingdom)) continue;
+                    foreach (City city in kingdom.getCities())
+                        DrawCityZones(pAsset, city, getter);
+                }
+            }
+            finally
+            {
+                if (hierarchical)
+                    HierarchicalVassalMapModeService.EndNativeDrawPass();
             }
         }
 

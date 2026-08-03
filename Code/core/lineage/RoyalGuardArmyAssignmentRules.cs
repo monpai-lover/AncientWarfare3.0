@@ -7,5 +7,13 @@ namespace AncientWarfare3.core.lineage
         {
             return !actorIsRoyalGuard || !targetArmyExists || targetIsRoyalGuardArmy;
         }
+
+        public static bool IsGuardArmyIdentity(bool roleMarked,
+            bool ordinaryArmy, bool legacyNameMarked,
+            bool captainRoyalGuard)
+        {
+            return roleMarked || legacyNameMarked ||
+                   !ordinaryArmy && captainRoyalGuard;
+        }
     }
 }

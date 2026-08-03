@@ -69,6 +69,9 @@ namespace AncientWarfare3.core.lineage
         public static void ForceChaos(string pReason)
         {
             if (!EnsureLoaded()) return;
+            MandateReport report = MandateService.ReadReport();
+            if (!MandatePhaseRules.CanForceChaos(
+                    report?.period_id >= 0)) return;
             int year = SafeCurrentYear();
             SetPhase(MandatePhase.Chaos, year);
             _lastYear = year;
@@ -104,7 +107,9 @@ namespace AncientWarfare3.core.lineage
             _catalystScore = adjusted;
             int year = SafeCurrentYear();
             if (MandatePhaseRules.ShouldEnterChaosAfterCatalyst(
-                    _phase, year, PhaseSinceYear, _catalystScore))
+                    _phase, year, PhaseSinceYear, _catalystScore) &&
+                MandatePhaseRules.CanForceChaos(
+                    MandateService.ReadReport()?.period_id >= 0))
                 SetPhase(MandatePhase.Chaos, year);
             Persist(pReason ?? "catalyst_changed");
         }
@@ -221,6 +226,14 @@ namespace AncientWarfare3.core.lineage
                 if (_phaseSinceYear <= UNSET_YEAR)
                     _phaseSinceYear = SafeCurrentYear();
                 _loaded = true;
+                MandateReport report = MandateService.ReadReport();
+                MandatePhase normalized = MandatePhaseRules.
+                    NormalizeLoadedPhase(_phase, report?.period_id >= 0);
+                if (normalized != _phase)
+                {
+                    SetPhase(normalized, SafeCurrentYear());
+                    Persist("normalize_pre_mandate_chaos");
+                }
                 return true;
             }
             catch (Exception exception)

@@ -17,6 +17,16 @@ namespace AncientWarfare3.core.lineage
             (MaxPendingCasualtyReinforcements +
              MaxRecruitsPerWorkItem - 1) / MaxRecruitsPerWorkItem;
 
+        public static int SyntheticFallbackRequest(
+            ArmyMobilizationPhase phase, int approvedShortage,
+            int availableWarReserve)
+        {
+            return phase == ArmyMobilizationPhase.War
+                ? CityManpowerRules.RequiredSynthetic(approvedShortage,
+                    availableWarReserve)
+                : 0;
+        }
+
         public static bool ShouldRunRecruitmentWorkItem(bool emergencyActive,
             int completedWorkItems, int scannedCandidates, int recruitedActors)
         {
@@ -139,6 +149,22 @@ namespace AncientWarfare3.core.lineage
             return activeNotice && !preferredTargetsReady;
         }
 
+        public static bool CanRecruitBeforeFrontierReady(bool activeNotice,
+            bool sourceCityValid)
+        {
+            return activeNotice && sourceCityValid;
+        }
+
+        public static int PreparationRequest(bool establishmentAccepted,
+            int living, int target, int workItemLimit)
+        {
+            if (!establishmentAccepted || target <= 0 ||
+                workItemLimit <= 0) return 0;
+            int shortage = System.Math.Max(0,
+                target - System.Math.Max(0, living));
+            return System.Math.Min(shortage, workItemLimit);
+        }
+
         public static int ToMonthKey(int year, int month)
         {
             int normalizedMonth = System.Math.Max(1,
@@ -180,7 +206,14 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldRunAnnualRecruitment(bool emergencyActive,
             bool activeNotice)
         {
-            return emergencyActive && !activeNotice;
+            return ShouldRunAnnualRecruitment(emergencyActive, activeNotice,
+                activeWar: false);
+        }
+
+        public static bool ShouldRunAnnualRecruitment(bool emergencyActive,
+            bool activeNotice, bool activeWar)
+        {
+            return emergencyActive && !activeNotice && !activeWar;
         }
 
         public static bool ShouldUseDirectedReplenishmentAnchor(

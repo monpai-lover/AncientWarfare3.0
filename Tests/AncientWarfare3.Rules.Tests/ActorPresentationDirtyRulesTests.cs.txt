@@ -1,0 +1,66 @@
+using AncientWarfare3.core.performance;
+
+internal static class ActorPresentationDirtyRulesTests
+{
+    public static void Run()
+    {
+        var index = new AWActorPresentationDirtyIndex();
+        index.Reset(7);
+        Equal(true, index.MarkDirty(42),
+            "the first dirty mark is accepted");
+        Equal(false, index.MarkDirty(42),
+            "duplicate dirty IDs coalesce");
+        Equal(true, index.MarkRemoved(42),
+            "remove replaces a pending update");
+        Equal(false, index.MarkDirty(42),
+            "remove has precedence over later dirty marks");
+
+        var dirty = new List<long>();
+        var removed = new List<long>();
+        index.Take(dirty, removed, maximumItems: 8);
+        Equal(0, dirty.Count, "removed Actors are not recaptured");
+        Equal(1, removed.Count, "removed Actor is emitted once");
+        Equal(42L, removed[0], "the correct Actor is removed");
+
+        index.MarkDirty(1);
+        index.MarkDirty(2);
+        index.MarkDirty(3);
+        dirty.Clear();
+        removed.Clear();
+        index.Take(dirty, removed, maximumItems: 2);
+        Equal(2, dirty.Count, "capture item count is bounded");
+        Equal(1, index.PendingCount, "unconsumed dirty work remains queued");
+
+        index.Reset(8);
+        Equal(0, index.PendingCount,
+            "world generation reset clears stale dirty work");
+        Equal(8, index.WorldGeneration,
+            "world generation reset publishes the new generation");
+
+        Equal(true, AWActorPresentationDirtyRules.ShouldStop(
+                processed: 64, maximumItems: 64,
+                elapsedTicks: 1, budgetTicks: 100),
+            "item cap stops capture");
+        Equal(true, AWActorPresentationDirtyRules.ShouldStop(
+                processed: 1, maximumItems: 64,
+                elapsedTicks: 100, budgetTicks: 100),
+            "time budget stops capture");
+        Equal(false, AWActorPresentationDirtyRules.ShouldStop(
+                processed: 1, maximumItems: 64,
+                elapsedTicks: 99, budgetTicks: 100),
+            "capture continues below both bounds");
+        Equal(0, AWActorPresentationDirtyRules.AdvanceRepairCursor(
+                cursor: 9, visited: 1, total: 10),
+            "repair cursor wraps at the end");
+        Equal(true, AWActorPresentationDirtyRules.InitialCaptureComplete(
+                visited: 10, total: 10),
+            "initial capture completes only after every ID is visited");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected=" + pExpected + ", actual=" + pActual);
+    }
+}

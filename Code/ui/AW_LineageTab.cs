@@ -157,6 +157,14 @@ namespace AncientWarfare3.ui
             Register(groups, AWLineageTabLayoutRules.Settings,
                 diplomacyAiToggle);
 
+            PowerButton supportersButton = PowerButtonCreator.CreateSimpleButton(
+                "aw_supporter_leaderboard_btn",
+                () => windows.SupporterLeaderboardWindow.Open(),
+                SpriteTextureLoader.getSprite("ui/icons/iconKnowledge")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconClan"));
+            Register(groups, AWLineageTabLayoutRules.Settings,
+                supportersButton);
+
             ApplyNativeLayout(tab, groups);
         }
 

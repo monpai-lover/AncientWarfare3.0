@@ -320,15 +320,29 @@ namespace AncientWarfare3.core.presentation
                         out ArmyRtsStrategicProjection projection);
                 bool hasMission = ArmyRtsControllerService.TryGetMission(
                     pArmy, out ArmyRtsMission mission);
-                ResolveManpowerValues(pArmy, memberCount, hasProjection,
-                    hasMission, mission, out int replenishmentShortage,
-                    out int reserveSupply);
-                string manpowerText = ArmyMapInformationRules.
-                    ComposeManpowerText(
+                bool nativeCombatActivity = HasNativeCombatActivity(pArmy,
+                    pCaptain);
+                bool royalGuardArmy = IsRoyalGuardArmy(pArmy, pCaptain);
+                bool activeDeployment = !royalGuardArmy &&
+                    ArmyDeploymentService.HasActiveAssignment(pCaptain);
+                bool deploymentArrived = activeDeployment &&
+                    IsDeploymentArrived(pCaptain);
+                int replenishmentShortage = 0;
+                int reserveSupply = 0;
+                string manpowerText = string.Empty;
+                if (ArmyMapInformationRules.ShouldDisplayReserveManpower(
+                        royalGuardArmy))
+                {
+                    ResolveManpowerValues(pArmy, memberCount, hasProjection,
+                        hasMission, mission, activeDeployment,
+                        out replenishmentShortage,
+                        out reserveSupply);
+                    manpowerText = ArmyMapInformationRules.ComposeManpowerText(
                         Localize("aw_army_replenishment_shortage",
                             "Replenishment shortage"),
                         Localize("aw_army_reserve_supply", "Reserve supply"),
                         replenishmentShortage, reserveSupply);
+                }
                 if (!hasProjection || projection == null || !hasMission ||
                     mission == null)
                 {
@@ -338,13 +352,24 @@ namespace AncientWarfare3.core.presentation
                                 ? projection.State
                                 : ArmyRtsState.Idle,
                             memberCount,
-                            ArmyLogisticsRules.MinimumOperationalForce);
+                            ArmyLogisticsRules.MinimumOperationalForce,
+                            nativeCombatActivity);
                     string pendingOperation = Localize(
                         ArmyMapInformationRules.
-                            PendingOperationLocalizationKey(pendingState),
-                        pendingState == ArmyRtsState.Replenish
+                            PendingOperationLocalizationKey(pendingState,
+                                royalGuardArmy, activeDeployment,
+                                deploymentArrived),
+                        royalGuardArmy
+                            ? "Protecting the King"
+                            : activeDeployment
+                                ? deploymentArrived
+                                    ? "Frontier ready"
+                                    : "Deploying to the frontier"
+                            : pendingState == ArmyRtsState.Replenish
                             ? "Replenishing"
-                            : "Awaiting orders");
+                            : pendingState == ArmyRtsState.Assault
+                                ? "Assaulting"
+                                : "Awaiting orders");
                     pText = ArmyMapInformationRules.ComposeText(nativeName,
                         memberCount, SafeName(pCaptain), pendingOperation,
                         manpowerText: manpowerText);
@@ -362,9 +387,71 @@ namespace AncientWarfare3.core.presentation
             }
         }
 
+        private static bool IsRoyalGuardArmy(Army pArmy, Actor pCaptain)
+        {
+            try
+            {
+                _ = pCaptain;
+                return RoyalGuardService.IsRoyalGuardArmy(pArmy);
+            }
+            catch { return false; }
+        }
+
+        private static bool IsDeploymentArrived(Actor pCaptain)
+        {
+            if (pCaptain?.data == null) return false;
+            try
+            {
+                pCaptain.data.get(LineageKeys.DEPLOYMENT_ARRIVED,
+                    out bool arrived, false);
+                return arrived;
+            }
+            catch { return false; }
+        }
+
+        private static bool HasNativeCombatActivity(Army pArmy,
+            Actor pCaptain)
+        {
+            if (HasNativeCombatActivity(pCaptain)) return true;
+            if (pArmy?.units == null) return false;
+            int count;
+            try { count = Math.Min(pArmy.units.Count, 8); }
+            catch { return false; }
+            for (int index = 0; index < count; index++)
+            {
+                Actor actor;
+                try { actor = pArmy.units[index]; }
+                catch { continue; }
+                if (HasNativeCombatActivity(actor)) return true;
+            }
+            return false;
+        }
+
+        private static bool HasNativeCombatActivity(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            try
+            {
+                if (pActor.ai?.task?.in_combat == true) return true;
+            }
+            catch { }
+            try
+            {
+                if (!pActor.has_attack_target) return false;
+                BaseSimObject target = pActor.attack_target;
+                return target != null && target.isAlive() &&
+                       !target.isRekt() &&
+                       pActor.canAttackTarget(target,
+                           pCheckForFactions: true,
+                           pAttackBuildings: false);
+            }
+            catch { return false; }
+        }
+
         private static void ResolveManpowerValues(Army pArmy,
             int pMemberCount, bool pHasProjection, bool pHasMission,
-            ArmyRtsMission pMission, out int pShortage,
+            ArmyRtsMission pMission, bool pActiveDeployment,
+            out int pShortage,
             out int pReserveSupply)
         {
             pShortage = 0;
@@ -383,14 +470,21 @@ namespace AncientWarfare3.core.presentation
                 return;
             }
 
-            if (pHasMission && pMission != null)
-                pShortage = Math.Max(0,
-                    Math.Max(0, pMission.TargetStrength) -
-                    Math.Max(0, pMemberCount));
-            else
-                pShortage = Math.Max(0,
-                    ArmyLogisticsRules.MinimumOperationalForce -
-                    Math.Max(0, pMemberCount));
+            int standingTarget = 0;
+            if (pActiveDeployment)
+            {
+                try
+                {
+                    standingTarget = StandingArmyService.TargetStrength(pArmy,
+                        AWArmyService.GetIntendedKingdom(pArmy));
+                }
+                catch { }
+            }
+            pShortage = ArmyMapInformationRules.ResolvePendingShortage(
+                pHasMission && pMission != null,
+                pMission?.TargetStrength ?? 0, pActiveDeployment,
+                standingTarget, pMemberCount,
+                ArmyLogisticsRules.MinimumOperationalForce);
 
             City sourceCity = ResolveReserveSourceCity(pArmy);
             pReserveSupply = ResolveAuthoritativeReserveSupply(sourceCity);

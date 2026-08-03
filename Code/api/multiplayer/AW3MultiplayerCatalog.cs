@@ -117,7 +117,9 @@ namespace AncientWarfare3.api.multiplayer
                     "aw_ruler_household_offer", "ui/icons/iconFamily",
                     AW3WindowCategory.DiplomacyAndWar,
                     AW3WindowContextRequirement.Country |
-                    AW3WindowContextRequirement.TargetCountry)
+                    AW3WindowContextRequirement.TargetCountry),
+                Window(AW3WindowKind.Supporters, "aw_supporters",
+                    "ui/icons/iconKnowledge", AW3WindowCategory.Records)
             });
 
         private static readonly IReadOnlyList<AW3CommandDescriptor>

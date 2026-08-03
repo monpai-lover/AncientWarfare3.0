@@ -1,5 +1,6 @@
 using System;
 using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.court;
 using AncientWarfare3.ui.windows;
 using HarmonyLib;
 
@@ -19,6 +20,7 @@ namespace AncientWarfare3.patch
                 throw new InvalidOperationException(
                     "AW3 world clear blocked: " + lifecycleError);
             FamilyTreeWindow.ResetWorldState();
+            CityLeaderCandidateRetryService.Reset();
             AWAsyncClearWorldGuard.Grant();
         }
 

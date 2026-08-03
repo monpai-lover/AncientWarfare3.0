@@ -30,6 +30,8 @@ namespace AncientWarfare3.core.asyncwork
         private static bool TryBeginWorldChangeLocked(out string pError)
         {
             long previousGeneration = AWAsyncRuntime.WorldGeneration;
+            if (!ActorDeathArchiveService.FlushForSave(WorldClearTimeout,
+                    out pError)) return false;
             if (!AWHistoricalReadService.ClearWorld(WorldClearTimeout,
                     out pError))
             {
@@ -75,6 +77,7 @@ namespace AncientWarfare3.core.asyncwork
             }
             ActorArchivePendingStore.Clear();
             FamilyTreeProjectionPendingStore.Clear();
+            ActorDeathArchiveService.Reset();
             pError = string.Empty;
             return true;
         }

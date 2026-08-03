@@ -89,8 +89,18 @@ namespace AncientWarfare3.core.lineage
             if (hasProjection) return projectionState;
             return Math.Max(0, memberCount) <
                    Math.Max(1, minimumOperationalForce)
-                ? ArmyRtsState.Replenish
-                : ArmyRtsState.Idle;
+                 ? ArmyRtsState.Replenish
+                 : ArmyRtsState.Idle;
+        }
+
+        public static ArmyRtsState ResolvePendingState(bool hasProjection,
+            ArmyRtsState projectionState, int memberCount,
+            int minimumOperationalForce, bool hasCombatActivity)
+        {
+            if (hasProjection) return projectionState;
+            if (hasCombatActivity) return ArmyRtsState.Assault;
+            return ResolvePendingState(hasProjection, projectionState,
+                memberCount, minimumOperationalForce);
         }
 
         public static string PendingOperationLocalizationKey(
@@ -99,6 +109,47 @@ namespace AncientWarfare3.core.lineage
             return pState == ArmyRtsState.Replenish
                 ? "aw_army_rts_state_replenish"
                 : "aw_army_rts_state_awaiting_orders";
+        }
+
+        public static string PendingOperationLocalizationKey(
+            ArmyRtsState pState, bool royalGuardArmy)
+        {
+            return royalGuardArmy
+                ? "task_unit_aw_guard_protect_king"
+                : PendingOperationLocalizationKey(pState);
+        }
+
+        public static string PendingOperationLocalizationKey(
+            ArmyRtsState pState, bool royalGuardArmy,
+            bool activeDeployment, bool deploymentArrived)
+        {
+            if (royalGuardArmy)
+                return "task_unit_aw_guard_protect_king";
+            if (activeDeployment)
+                return deploymentArrived
+                    ? "aw_war_deployment_ready"
+                    : "task_unit_aw_war_deployment";
+            return PendingOperationLocalizationKey(pState);
+        }
+
+        public static int ResolvePendingShortage(bool hasMission,
+            int missionTargetStrength, bool activeDeployment,
+            int standingTargetStrength, int memberCount,
+            int minimumOperationalForce)
+        {
+            int target = hasMission
+                ? missionTargetStrength
+                : activeDeployment
+                    ? standingTargetStrength
+                    : minimumOperationalForce;
+            return Math.Max(0, Math.Max(0, target) -
+                               Math.Max(0, memberCount));
+        }
+
+        public static bool ShouldDisplayReserveManpower(
+            bool royalGuardArmy)
+        {
+            return !royalGuardArmy;
         }
     }
 }

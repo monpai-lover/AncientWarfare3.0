@@ -13,7 +13,7 @@ namespace AncientWarfare3.core.lineage
             Actor general = pGeneral ?? FindActor(info?.general_actor_id ?? -1L);
             Kingdom kingdom = pCity.kingdom;
             bool activeFief = info != null;
-            bool generalAlive = general?.data != null && !general.isRekt() && general.isAlive();
+            bool generalAlive = IsRegisteredLiveActor(general);
             bool sameKingdom = generalAlive && kingdom?.data != null && general.kingdom == kingdom;
             bool slave = generalAlive && SlaveService.IsSlave(general);
             bool king = generalAlive && general.isKing();
@@ -94,6 +94,18 @@ namespace AncientWarfare3.core.lineage
             if (pActorId < 0) return null;
             try { return World.world?.units?.get(pActorId); }
             catch { return null; }
+        }
+
+        private static bool IsRegisteredLiveActor(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            try
+            {
+                if (pActor.isRekt() || !pActor.isAlive()) return false;
+                Actor registered = World.world?.units?.get(pActor.data.id);
+                return ReferenceEquals(registered, pActor);
+            }
+            catch { return false; }
         }
     }
 }

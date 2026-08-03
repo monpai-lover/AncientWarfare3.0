@@ -1,0 +1,73 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ActorAgeWorkRulesTests
+{
+    public static void Run()
+    {
+        var same = new ActorAgeWorkState(isAdult: true, profession: 2,
+            inPermanentArmy: true, atWar: true, dynasticEligible: false,
+            shouldUsePeacetimeJob: false,
+            shouldReleaseMilitaryRole: false, yearBucket: 12);
+        Equal(ActorAgeWorkStage.None,
+            ActorAgeWorkRules.Resolve(same, same, force: false),
+            "unchanged Actor state performs no AW3 age work");
+
+        var child = new ActorAgeWorkState(isAdult: false, profession: 2,
+            inPermanentArmy: false, atWar: false, dynasticEligible: true,
+            shouldUsePeacetimeJob: false,
+            shouldReleaseMilitaryRole: false, yearBucket: 12);
+        var adult = new ActorAgeWorkState(isAdult: true, profession: 2,
+            inPermanentArmy: false, atWar: false, dynasticEligible: true,
+            shouldUsePeacetimeJob: false,
+            shouldReleaseMilitaryRole: false, yearBucket: 12);
+        Has(ActorAgeWorkRules.Resolve(child, adult, force: false),
+            ActorAgeWorkStage.DynasticTitle,
+            "adulthood triggers dynastic-title work");
+
+        var jobChanged = new ActorAgeWorkState(isAdult: true,
+            profession: 2, inPermanentArmy: true, atWar: false,
+            dynasticEligible: false, shouldUsePeacetimeJob: true,
+            shouldReleaseMilitaryRole: false, yearBucket: 12);
+        Has(ActorAgeWorkRules.Resolve(same, jobChanged, force: false),
+            ActorAgeWorkStage.StandingArmyJob,
+            "peacetime job decision changes trigger job refresh");
+
+        var releaseChanged = new ActorAgeWorkState(isAdult: true,
+            profession: 2, inPermanentArmy: false, atWar: false,
+            dynasticEligible: true, shouldUsePeacetimeJob: false,
+            shouldReleaseMilitaryRole: true, yearBucket: 12);
+        Has(ActorAgeWorkRules.Resolve(adult, releaseChanged, force: false),
+            ActorAgeWorkStage.MilitaryRoleRelease,
+            "reproduction protection changes trigger military release");
+
+        var nextYear = new ActorAgeWorkState(isAdult: true, profession: 2,
+            inPermanentArmy: true, atWar: true, dynasticEligible: false,
+            shouldUsePeacetimeJob: false,
+            shouldReleaseMilitaryRole: false, yearBucket: 13);
+        ActorAgeWorkStage annual = ActorAgeWorkRules.Resolve(same, nextYear,
+            force: false);
+        Has(annual, ActorAgeWorkStage.StandingArmyJob,
+            "annual fallback preserves reproduction timeout recovery");
+        Has(annual, ActorAgeWorkStage.MilitaryRoleRelease,
+            "annual fallback rechecks dynastic military release");
+
+        Equal(ActorAgeWorkStage.All,
+            ActorAgeWorkRules.Resolve(same, same, force: true),
+            "forced refresh executes every age stage");
+    }
+
+    private static void Has(ActorAgeWorkStage pActual,
+        ActorAgeWorkStage pExpected, string pMessage)
+    {
+        if ((pActual & pExpected) == 0)
+            throw new InvalidOperationException(pMessage +
+                ": actual=" + pActual);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected=" + pExpected + ", actual=" + pActual);
+    }
+}

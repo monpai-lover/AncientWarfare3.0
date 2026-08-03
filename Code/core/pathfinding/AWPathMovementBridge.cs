@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using AncientWarfare3.content;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using ai;
 using life.taxi;
@@ -58,9 +60,25 @@ namespace AncientWarfare3.core.pathfinding
             int targetTileId = pTarget.data.tile_id;
             AWPathWorkClass workClass = pRetainedWorkClass ??
                 ClassifyWork(pActor, actorId);
+            long terrainRevision = AWPathfindingBootstrap.Cache.SourceRevision;
+            long worldGeneration = AWAsyncRuntime.WorldGeneration;
+            bool insideBoat = pActor.is_inside_boat;
             long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
             bool reused;
-            try { reused = finder.TryReuse(actorId, targetTileId, pOptions); }
+            try
+            {
+                var reuseKey = new AWPathReuseKey(actorId,
+                    AWPathfindingBootstrap.Cache.StartRegion(
+                        pActor.current_tile.data.tile_id),
+                    new AWPathRequestKey(targetTileId,
+                        pOptions.PathOnWater, pOptions.WalkOnBlocks,
+                        pOptions.WalkOnLava,
+                        pOptions.LimitPathfindingRegions,
+                        pOptions.BoundedMilitaryWater,
+                        pOptions.MaximumConsecutiveWaterTiles),
+                    terrainRevision, worldGeneration, insideBoat);
+                reused = finder.TryReuse(reuseKey);
+            }
             finally
             {
                 RuntimePerformanceDiagnostic.EndDetail("path_submit_reuse",
@@ -93,7 +111,8 @@ namespace AncientWarfare3.core.pathfinding
                     var request = new AWPathRequest(actorId,
                         pActor.current_tile.data.tile_id, targetTileId,
                         pOptions, profile, generation, now,
-                        workClass);
+                        workClass, terrainRevision, worldGeneration,
+                        insideBoat);
                     diagnostic = RuntimePerformanceDiagnostic.BeginScope();
                     bool accepted;
                     try
@@ -146,7 +165,7 @@ namespace AncientWarfare3.core.pathfinding
                 pActor.clearOldPath();
                 pActor.setTileTarget(pTarget);
                 pActor.next_step_position = pActor.current_tile.posV3;
-                pActor.setNotMoving();
+                TrySetNotMoving(pActor);
             }
             finally
             {
@@ -260,19 +279,19 @@ namespace AncientWarfare3.core.pathfinding
                 case AWPathPollKind.Completed:
                     if (TryContinueBoundedSegment(pActor)) return true;
                     AWArmyMarchService.OnPathEnded(pActor);
-                    pActor.setNotMoving();
+                    TrySetNotMoving(pActor);
                     RetryContexts.Remove(pActor.data.id);
                     OwnedActors.Remove(pActor.data.id);
                     AWPathfindingBootstrap.RecoveryManager.OnProgress(pActor.data.id);
                     return true;
                 case AWPathPollKind.Failed:
                     AWArmyMarchService.OnPathEnded(pActor);
-                    pActor.setNotMoving();
+                    TrySetNotMoving(pActor);
                     HandleFailure(pActor, pPoll.FailureReason);
                     return true;
                 case AWPathPollKind.Cancelled:
                     AWArmyMarchService.OnPathEnded(pActor);
-                    pActor.setNotMoving();
+                    TrySetNotMoving(pActor);
                     RetryContexts.Remove(pActor.data.id);
                     OwnedActors.Remove(pActor.data.id);
                     AWPathfindingBootstrap.RecoveryManager.Clear(pActor.data.id);
@@ -320,7 +339,7 @@ namespace AncientWarfare3.core.pathfinding
                     context.DueTime, context.SubmittedAt,
                     context.WorkClass, now + interval);
             }
-            pActor.setNotMoving();
+            TrySetNotMoving(pActor);
             pActor.next_step_position = pActor.current_tile?.posV3 ?? pActor.next_step_position;
             pActor.timer_action = (float)interval;
         }
@@ -391,6 +410,13 @@ namespace AncientWarfare3.core.pathfinding
         {
             if (pActor?.data == null) return true;
             long actorId = pActor.data.id;
+            if (AWPathLifecycleRules.ShouldPollEverySimulationPass(
+                    schedulerActive: AWPerformanceSettings.Mode ==
+                        AWSimulationMode.Large &&
+                        AWSimulationStepContext.IsActive &&
+                        Config.time_scale_asset?.multiplier > 0f,
+                    customPathOwned: HasOwnedPathState(actorId)))
+                return true;
             if (TerminalPolls.ContainsKey(actorId)) return true;
             if (TransportContexts.TryGetValue(actorId,
                     out TransportContext transport))
@@ -453,6 +479,24 @@ namespace AncientWarfare3.core.pathfinding
             float pWalkedDistance = 0f)
         {
             if (pActor?.asset == null) return;
+            bool actorAlive = false;
+            try { actorAlive = pActor.data != null && pActor.isAlive(); }
+            catch { }
+            bool batchExists = pActor.batch != null;
+            bool queueExists = batchExists &&
+                               pActor.batch.c_update_movement != null;
+            if (!AWPathLifecycleRules.HasUsableMovementBatch(
+                    pActor.data != null, actorAlive, batchExists,
+                    queueExists))
+            {
+                Cancel(pActor, AWPathFailureReason.CancelledByNewRequest);
+                return;
+            }
+            pElapsed = AWPathLifecycleRules.NormalizeMovementElapsed(
+                pElapsed, World.world?.delta_time ?? 0.02f,
+                schedulerActive: AWPerformanceSettings.Mode ==
+                    AWSimulationMode.Large && AWSimulationStepContext.IsActive &&
+                    Config.time_scale_asset?.multiplier > 0f);
             float movementBudget = pActor._current_combined_movement_speed * pElapsed;
             bool canFlip = pActor.asset.can_flip && pActor.checkFlip();
             AWPathFinder.ReadyPathCursor customPathCursor = default;
@@ -558,12 +602,13 @@ namespace AncientWarfare3.core.pathfinding
 
             if (useFastMove)
             {
-                FastMoveTo(pActor, tile, adjacentStep);
+                if (!FastMoveTo(pActor, tile, adjacentStep)) return false;
                 AWPathfindingBootstrap.PathDiagnostics.OnFastStep();
             }
             else if (CanReplayMoveToSideEffects(slowMoveReason))
             {
-                FastMoveToWithMoveToSideEffects(pActor, tile, adjacentStep);
+                if (!FastMoveToWithMoveToSideEffects(pActor, tile,
+                        adjacentStep)) return false;
                 AWPathfindingBootstrap.PathDiagnostics.OnFastStep();
             }
             else
@@ -600,29 +645,44 @@ namespace AncientWarfare3.core.pathfinding
             }
         }
 
-        private static void FastMoveTo(Actor pActor, WorldTile pTile, bool pAdjacentStep)
+        private static bool FastMoveTo(Actor pActor, WorldTile pTile,
+            bool pAdjacentStep)
         {
-            SetMoveStepTile(pActor, pTile, pAdjacentStep);
+            if (!SetMoveStepTile(pActor, pTile, pAdjacentStep)) return false;
             pActor.next_step_position = new Vector2(pTile.posV3.x, pTile.posV3.y);
+            return true;
         }
 
-        private static void FastMoveToWithMoveToSideEffects(Actor pActor, WorldTile pTile,
-            bool pAdjacentStep)
+        private static bool FastMoveToWithMoveToSideEffects(Actor pActor,
+            WorldTile pTile, bool pAdjacentStep)
         {
             if (!pActor.has_attack_target && pActor.current_tile != null && pTile.isOnFire() &&
                 !pActor.current_tile.isOnFire() && !pActor.isImmuneToFire())
             {
                 pActor.cancelAllBeh();
-                return;
+                return false;
             }
 
-            SetMoveStepTile(pActor, pTile, pAdjacentStep);
+            if (!SetMoveStepTile(pActor, pTile, pAdjacentStep)) return false;
             ApplyStepActionForCurrentTile(pActor);
             pActor.next_step_position = new Vector2(pTile.posV3.x, pTile.posV3.y);
+            return true;
         }
 
-        private static void SetMoveStepTile(Actor pActor, WorldTile pTile, bool pAdjacentStep)
+        private static bool SetMoveStepTile(Actor pActor, WorldTile pTile,
+            bool pAdjacentStep)
         {
+            bool actorExists = pActor?.data != null;
+            bool actorAlive = false;
+            try { actorAlive = actorExists && pActor.isAlive(); }
+            catch { }
+            bool batchExists = pActor?.batch != null;
+            bool movementQueueExists = batchExists &&
+                                       pActor.batch.c_update_movement != null;
+            if (!AWPathLifecycleRules.HasUsableMovementBatch(actorExists,
+                    actorAlive, batchExists, movementQueueExists) ||
+                pTile?.data == null || pActor.current_tile?.data == null)
+                return false;
             if (!pActor._is_moving)
             {
                 pActor._is_moving = true;
@@ -636,6 +696,7 @@ namespace AncientWarfare3.core.pathfinding
                 pActor.dirty_current_tile = true;
             else
                 pActor.current_tile = pTile;
+            return true;
         }
 
         private static void ApplyStepActionForCurrentTile(Actor pActor)
@@ -698,7 +759,7 @@ namespace AncientWarfare3.core.pathfinding
             TransportContexts[actorId] = new TransportContext(pActor, pTarget.data.tile_id,
                 retry.Options, now, pObservedInsideBoat: false,
                 pNextPollAt: now);
-            pActor.setNotMoving();
+            TrySetNotMoving(pActor);
             pActor.next_step_position = pActor.current_tile.posV3;
             return true;
         }
@@ -791,7 +852,7 @@ namespace AncientWarfare3.core.pathfinding
 
         private static void HandleFailure(Actor pActor, AWPathFailureReason pReason)
         {
-            pActor.setNotMoving();
+            TrySetNotMoving(pActor);
             if (TryStartNarrowWaterRecovery(pActor, pReason)) return;
             double now = Time.realtimeSinceStartupAsDouble;
             AWPathRetryDecision retry = AWPathfindingBootstrap.RecoveryManager.OnFailure(
@@ -863,7 +924,7 @@ namespace AncientWarfare3.core.pathfinding
             pActor.beh_tile_target = continueBehaviour
                 ? pActor.current_tile
                 : null;
-            pActor.setNotMoving();
+            TrySetNotMoving(pActor);
             pActor.timer_action = 0f;
             if (!continueBehaviour)
             {
@@ -879,7 +940,7 @@ namespace AncientWarfare3.core.pathfinding
             double now = Time.realtimeSinceStartupAsDouble;
             if (now < context.DueTime)
             {
-                pActor.setNotMoving();
+                TrySetNotMoving(pActor);
                 pActor.timer_action = (float)Math.Max(0.01d, context.DueTime - now);
                 return true;
             }
@@ -888,7 +949,7 @@ namespace AncientWarfare3.core.pathfinding
                 target.data.tile_id != context.TargetTileId)
             {
                 Cancel(pActor, AWPathFailureReason.CancelledByNewRequest);
-                pActor.setNotMoving();
+                TrySetNotMoving(pActor);
                 return true;
             }
             RetryContexts[pActor.data.id] = new RetryContext(
@@ -913,7 +974,7 @@ namespace AncientWarfare3.core.pathfinding
             AWPathfindingBootstrap.RecoveryManager.Clear(actorId);
             pActor.clearOldPath();
             pActor.clearTileTarget();
-            pActor.setNotMoving();
+            TrySetNotMoving(pActor);
             pActor.timer_action = 0f;
         }
 
@@ -924,6 +985,26 @@ namespace AncientWarfare3.core.pathfinding
             RetryContexts[pActorId] = new RetryContext(context.TargetTileId,
                 context.Options, context.GenerationId, pPending: false, 0d,
                 now, context.WorkClass, pNextPollAt: now);
+        }
+
+        private static void TrySetNotMoving(Actor pActor)
+        {
+            if (pActor == null) return;
+            try
+            {
+                bool batchExists = pActor.batch != null;
+                bool queueExists = batchExists &&
+                                   pActor.batch.c_update_movement != null;
+                if (batchExists && queueExists)
+                    pActor.setNotMoving();
+                else
+                    pActor._is_moving = false;
+            }
+            catch
+            {
+                try { pActor._is_moving = false; }
+                catch { }
+            }
         }
 
         private static float BoundaryDistance(float pDistanceSquared)

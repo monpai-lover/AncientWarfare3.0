@@ -9,7 +9,8 @@ namespace AncientWarfare3.core.lineage
             bool attackerMandateEligible, bool defenderMandateEligible,
             bool attackerIsSubject, bool sameSubjectTree,
             bool diplomaticBlocked, bool sameAlliance,
-            bool alreadyAtWar, bool ageOverride = false)
+            bool alreadyAtWar, bool ageOverride = false,
+            bool hasMandateHistory = true)
         {
             Phase = phase;
             AttackerValid = attackerValid;
@@ -22,6 +23,7 @@ namespace AncientWarfare3.core.lineage
             SameAlliance = sameAlliance;
             AlreadyAtWar = alreadyAtWar;
             AgeOverride = ageOverride;
+            HasMandateHistory = hasMandateHistory;
         }
 
         public MandatePhase Phase { get; }
@@ -35,6 +37,7 @@ namespace AncientWarfare3.core.lineage
         public bool SameAlliance { get; }
         public bool AlreadyAtWar { get; }
         public bool AgeOverride { get; }
+        public bool HasMandateHistory { get; }
     }
 
     public enum ZhuluWarOutcome
@@ -61,6 +64,7 @@ namespace AncientWarfare3.core.lineage
         public static bool CanStart(ZhuluEligibilityFacts facts)
         {
             bool eraGate = facts.AgeOverride ||
+                           facts.HasMandateHistory &&
                            facts.Phase == MandatePhase.Chaos &&
                            facts.AttackerMandateEligible &&
                            facts.DefenderMandateEligible;

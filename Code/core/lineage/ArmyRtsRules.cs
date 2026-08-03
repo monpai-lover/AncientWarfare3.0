@@ -206,6 +206,16 @@ namespace AncientWarfare3.core.lineage
                    Math.Max(0, targetStrength);
         }
 
+        public static bool ShouldContinueRequestedReplenishment(
+            bool replenishmentRequested, int currentStrength,
+            int targetStrength, bool reserveAvailable)
+        {
+            return reserveAvailable &&
+                   ShouldContinueRequestedReplenishment(
+                       replenishmentRequested, currentStrength,
+                       targetStrength);
+        }
+
         public static bool HasDepartureStrength(int living,
             int targetStrength, bool minimumForceReady,
             bool replenishmentBypassActive)
@@ -220,6 +230,15 @@ namespace AncientWarfare3.core.lineage
             bool needsReplenishment, bool departureStrengthReady)
         {
             return needsReplenishment || !departureStrengthReady;
+        }
+
+        public static bool ShouldRemainInReplenishment(
+            bool needsReplenishment, bool departureStrengthReady,
+            bool reserveAvailable)
+        {
+            return reserveAvailable &&
+                   ShouldRemainInReplenishment(needsReplenishment,
+                       departureStrengthReady);
         }
 
         public static bool ShouldHandoffObjective(ArmyRtsState nextState,

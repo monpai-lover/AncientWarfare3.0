@@ -19,6 +19,7 @@ internal static class PathfindingPerformanceTests
         BoundedMilitaryWaterCrossingIsEnforced();
         RegionLimitedPathReturnsABoundedSegment();
         InitialTraversalPublicationCannotStarveOnLiveDirtyChunks();
+        LargeSchedulerPathProgressRules();
     }
 
     private static void RuntimeSubmittersClassifyPathWorkExplicitly()
@@ -31,6 +32,12 @@ internal static class PathfindingPerformanceTests
             "ArmyRouteProvider.cs"));
         Assert(bridge.Contains("AWPathWorkClassRules.Classify("),
             "actor paths classify operational, essential, and ambient work");
+        Assert(bridge.Contains("ShouldPollEverySimulationPass("),
+            "large scheduler path ownership bypasses wall-clock poll starvation");
+        Assert(bridge.Contains("HasUsableMovementBatch("),
+            "custom movement refuses detached actor batches");
+        Assert(bridge.Contains("NormalizeMovementElapsed("),
+            "custom smooth movement normalizes an active scheduler elapsed step");
         Assert(bridge.Contains("HistoricalSchoolContent.EducationTravelTaskId"),
             "school journeys remain above ambient wandering");
         Assert(armyRoutes.Contains("AWPathWorkClass.Operational"),
@@ -45,6 +52,30 @@ internal static class PathfindingPerformanceTests
             "performance logs expose RTS city-threat cache effectiveness");
         Assert(diagnostics.Contains("rts_async_rejected_stale="),
             "performance logs expose rejected async front snapshots");
+    }
+
+    private static void LargeSchedulerPathProgressRules()
+    {
+        Assert(AWPathLifecycleRules.ShouldPollEverySimulationPass(
+                schedulerActive: true, customPathOwned: true),
+            "large scheduler must not wait on wall-clock polling for owned paths");
+        Assert(!AWPathLifecycleRules.ShouldPollEverySimulationPass(
+                schedulerActive: false, customPathOwned: true),
+            "native scheduler keeps the normal polling cadence");
+        Assert(AWPathLifecycleRules.HasUsableMovementBatch(
+                actorExists: true, actorAlive: true,
+                batchExists: true, movementQueueExists: true),
+            "a live actor with a movement batch can accept a custom step");
+        Assert(!AWPathLifecycleRules.HasUsableMovementBatch(
+                actorExists: true, actorAlive: true,
+                batchExists: false, movementQueueExists: false),
+            "a detached actor batch must never receive a movement step");
+        Assert(AWPathLifecycleRules.NormalizeMovementElapsed(
+                elapsed: 0f, fallback: 0.02f, schedulerActive: true) > 0f,
+            "an active large-scheduler tick must always advance movement time");
+        Assert(AWPathLifecycleRules.NormalizeMovementElapsed(
+                elapsed: 0f, fallback: 0.02f, schedulerActive: false) == 0f,
+            "native paused movement must not be invented by the bridge");
     }
 
     private static void WorkClassesPreserveOperationalCapacityWithFairness()

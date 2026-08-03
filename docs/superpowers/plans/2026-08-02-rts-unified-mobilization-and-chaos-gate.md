@@ -183,6 +183,10 @@ the army through existing `EnsureArmyMembership`, then passes `Replenish` for
 the rest. It updates the army anchor, mission target, deployment index, and
 roster notification exactly once.
 
+Before `Create`, query the city-owned ordinary-army index. If an army already
+exists for the city, convert the disposition to `Replenish`; never create a
+second ordinary army for that anchor.
+
 Remove preferred-frontier readiness as a recruitment gate. It remains a gate
 only for choosing the deployment destination.
 
@@ -233,6 +237,44 @@ Ensure `ArmyRtsControllerService` does not immediately recreate an operation
 when the same source city is confirmed exhausted in the current monthly epoch.
 
 - [ ] **Step 4: Run `--army-rts` and verify GREEN**
+
+### Task 4A: Enforce One Ordinary Army Per City
+
+**Files:**
+- Modify: `Code/core/lineage/ArmyFieldIndexService.cs`
+- Modify: `Code/core/lineage/StandingArmyService.cs`
+- Modify: `Code/core/lineage/ArmyEstablishmentRules.cs`
+- Modify: `Code/core/lineage/KingdomWarDirectorService.cs`
+- Modify: `Tests/AncientWarfare3.Rules.Tests/CityArmyReinforcementRulesTests.cs.txt`
+
+- [ ] **Step 1: Write failing ownership tests**
+
+```csharp
+False(ArmyEstablishmentRules.ShouldCreateForCity(
+    existingOrdinaryArmyCount: 1));
+True(ArmyEstablishmentRules.ShouldCreateForCity(
+    existingOrdinaryArmyCount: 0));
+Equal(10L, ArmyEstablishmentRules.SelectCanonicalCityArmy(
+    firstArmyId: 10L, firstCaptainStable: true,
+    secondArmyId: 5L, secondCaptainStable: false));
+```
+
+- [ ] **Step 2: Run `--army-rts` and verify RED**
+
+- [ ] **Step 3: Add a city-to-ordinary-army index**
+
+Index live non-special armies by `AW_ARMY_CITY_ID`. Registration rejects a
+second canonical owner and schedules a bounded merge into the existing army.
+Load rebuild applies the same deterministic selection. A captured source city
+does not permit another city to adopt the army or supply it.
+
+- [ ] **Step 4: Reuse the city army for strategy**
+
+`StandingArmyService.RequestEstablishment` first resolves the preferred city's
+canonical army. `KingdomWarDirectorService` assigns attack, defense, or relief
+missions to that army and does not create role-specific duplicates.
+
+- [ ] **Step 5: Run `--army-rts` and verify GREEN**
 
 ### Task 5: Repair Illegal Chaos And Gate Zhulu At The Source
 

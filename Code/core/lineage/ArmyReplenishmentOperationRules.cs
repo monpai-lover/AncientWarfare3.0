@@ -45,6 +45,24 @@ namespace AncientWarfare3.core.lineage
             return liveShortage <= 0;
         }
 
+        public static bool HasConsumableSourceReserve(bool poolFrozen,
+            int availableCount)
+        {
+            return poolFrozen && availableCount > 0;
+        }
+
+        public static bool HasConsumableSourceReserve(
+            ArmyMobilizationPhase phase, int availableCount)
+        {
+            return ArmyMobilizationRules.CanConsume(phase) &&
+                   availableCount > 0;
+        }
+
+        public static bool ShouldReleaseDeparture(int living, int target)
+        {
+            return ArmyMobilizationRules.IsDeploymentReady(living, target);
+        }
+
         public static bool ShouldFinish(bool pShortageResolved,
             bool pReservesConfirmedExhausted, bool pDeadlineReached)
         {
@@ -76,6 +94,18 @@ namespace AncientWarfare3.core.lineage
         {
             return validEnemyTarget &&
                    ShouldResumeAttack(totalOrdinary, minimum);
+        }
+
+        public static bool CanUseReservePool(bool ordinaryArmy,
+            bool royalGuardArmy)
+        {
+            return ordinaryArmy && !royalGuardArmy;
+        }
+
+        public static bool ShouldClearIneligibleOperation(
+            bool hasPersistedOperation, bool canUseReservePool)
+        {
+            return hasPersistedOperation && !canUseReservePool;
         }
     }
 }
