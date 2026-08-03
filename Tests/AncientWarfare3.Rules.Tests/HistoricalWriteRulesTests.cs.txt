@@ -490,6 +490,8 @@ internal static class HistoricalWriteRulesTests
         var birthCallbackTaken = new ManualResetEventSlim(false);
         var allowBirthCallback = new ManualResetEventSlim(false);
         var identityFailureFinished = new ManualResetEventSlim(false);
+        Exception birthDrainError = null;
+        Exception failureDrainError = null;
 
         long birthReplacedSequence = -1L;
         long identityReplacedSequence = -1L;
@@ -548,36 +550,91 @@ internal static class HistoricalWriteRulesTests
 
         var birthDrain = new Thread(() =>
         {
-            if (!worker.TryDequeueCompletion(
-                    out HistoricalWriteCompletion completion)) return;
-            callbacks.Take(completion.Sequences[0],
-                out Action<long, object> committed,
-                out Action<long, string> failed);
-            birthCallbackTaken.Set();
-            allowBirthCallback.Wait(TimeSpan.FromSeconds(2));
-            committed?.Invoke(completion.Sequences[0],
-                completion.Outcomes[0]);
+            try
+            {
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "birth drain dequeues the committed completion");
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                birthCallbackTaken.Set();
+                True(allowBirthCallback.Wait(ConcurrentDrainTimeout),
+                    "birth drain receives the main-thread release signal");
+                committed?.Invoke(completion.Sequences[0],
+                    completion.Outcomes[0]);
+            }
+            catch (Exception error)
+            {
+                birthDrainError = error;
+            }
         });
         var failureDrain = new Thread(() =>
         {
-            birthCallbackTaken.Wait(TimeSpan.FromSeconds(2));
-            if (!worker.TryDequeueCompletion(
-                    out HistoricalWriteCompletion completion)) return;
-            callbacks.Take(completion.Sequences[0],
-                out Action<long, object> committed,
-                out Action<long, string> failed);
-            failed?.Invoke(completion.Sequences[0], completion.Error);
-            identityFailureFinished.Set();
+            try
+            {
+                True(birthCallbackTaken.Wait(ConcurrentDrainTimeout),
+                    "failure drain waits until the birth callback is taken");
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "failure drain dequeues the identity failure");
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                failed?.Invoke(completion.Sequences[0], completion.Error);
+            }
+            catch (Exception error)
+            {
+                failureDrainError = error;
+            }
+            finally
+            {
+                identityFailureFinished.Set();
+            }
         });
-        birthDrain.Start();
-        failureDrain.Start();
-        True(identityFailureFinished.Wait(TimeSpan.FromSeconds(2)),
-            "newer identity failure runs before taken birth callback");
-        Equal(0L, Volatile.Read(ref revisionAdvanceCount),
+        bool birthDrainStarted = false;
+        bool failureDrainStarted = false;
+        bool identityFailureFinishedInTime = false;
+        bool birthDrainJoined = false;
+        bool failureDrainJoined = false;
+        int advanceCountBeforeBirthCommit = -1;
+        try
+        {
+            birthDrain.Start();
+            birthDrainStarted = true;
+            failureDrain.Start();
+            failureDrainStarted = true;
+            identityFailureFinishedInTime = identityFailureFinished.Wait(
+                ConcurrentDrainTimeout);
+            advanceCountBeforeBirthCommit = Volatile.Read(
+                ref revisionAdvanceCount);
+        }
+        finally
+        {
+            allowBirthCallback.Set();
+            birthCallbackTaken.Set();
+            if (birthDrainStarted)
+                birthDrainJoined = birthDrain.Join(ConcurrentDrainTimeout);
+            if (failureDrainStarted)
+                failureDrainJoined = failureDrain.Join(ConcurrentDrainTimeout);
+        }
+
+        string drainDiagnostics =
+            "; birth joined=" + birthDrainJoined +
+            ", failure joined=" + failureDrainJoined +
+            ", birth error=" + (birthDrainError?.ToString() ?? "none") +
+            ", failure error=" + (failureDrainError?.ToString() ?? "none");
+        True(identityFailureFinishedInTime,
+            "newer identity failure runs before taken birth callback" +
+            drainDiagnostics);
+        True(birthDrainJoined && failureDrainJoined,
+            "both completion drains exit after their explicit handshakes" +
+            drainDiagnostics);
+        True(birthDrainError == null && failureDrainError == null,
+            "completion drains finish without background exceptions" +
+            drainDiagnostics);
+        Equal(0L, advanceCountBeforeBirthCommit,
             "failure callback never advances projection revision");
-        allowBirthCallback.Set();
-        birthDrain.Join(TimeSpan.FromSeconds(2));
-        failureDrain.Join(TimeSpan.FromSeconds(2));
 
         Equal(1L, Volatile.Read(ref revisionAdvanceCount),
             "taken committed birth source advances exactly once after failure");
@@ -596,6 +653,8 @@ internal static class HistoricalWriteRulesTests
         var takeReturned = new ManualResetEventSlim(false);
         bool revisionReleased = false;
         bool enqueueSucceeded = false;
+        Exception producerError = null;
+        Exception consumerError = null;
         var envelope = new HistoricalWriteEnvelope(61L,
             "accepted-publication:61", string.Empty,
             Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
@@ -604,51 +663,113 @@ internal static class HistoricalWriteRulesTests
         worker.Start();
         var producer = new Thread(() =>
         {
-            enqueueSucceeded = callbacks.TryEnqueue(worker, envelope,
-                sequence =>
-                {
-                    acceptedEntered.Set();
-                    allowPendingPublication.Wait(TimeSpan.FromSeconds(2));
-                    pending.Publish(501L, sequence,
-                        FamilyTreeProjectionChange.FamilyStructure);
-                }, (sequence, outcome) =>
-                    revisionReleased = pending.TryComplete(501L, sequence,
-                        out FamilyTreeProjectionChange change) &&
-                        change == FamilyTreeProjectionChange.FamilyStructure,
-                null, out _);
+            try
+            {
+                enqueueSucceeded = callbacks.TryEnqueue(worker, envelope,
+                    sequence =>
+                    {
+                        acceptedEntered.Set();
+                        True(allowPendingPublication.Wait(
+                                ConcurrentDrainTimeout),
+                            "producer receives the pending-publication release signal");
+                        pending.Publish(501L, sequence,
+                            FamilyTreeProjectionChange.FamilyStructure);
+                    }, (sequence, outcome) =>
+                        revisionReleased = pending.TryComplete(501L, sequence,
+                            out FamilyTreeProjectionChange change) &&
+                            change == FamilyTreeProjectionChange.FamilyStructure,
+                    null, out _);
+            }
+            catch (Exception error)
+            {
+                producerError = error;
+            }
         });
-        producer.Start();
-
-        True(acceptedEntered.Wait(TimeSpan.FromSeconds(2)),
-            "accepted callback enters before publishing pending metadata");
-        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount > 0,
-                TimeSpan.FromSeconds(2)),
-            "the worker completes before pending publication");
         var consumer = new Thread(() =>
         {
-            if (!worker.TryDequeueCompletion(
-                    out HistoricalWriteCompletion completion)) return;
-            takeStarted.Set();
-            callbacks.Take(completion.Sequences[0],
-                out Action<long, object> committed,
-                out Action<long, string> failed);
-            takeReturned.Set();
-            committed?.Invoke(completion.Sequences[0],
-                completion.Outcomes[0]);
+            try
+            {
+                True(worker.TryDequeueCompletion(
+                        out HistoricalWriteCompletion completion),
+                    "consumer dequeues the completion");
+                takeStarted.Set();
+                callbacks.Take(completion.Sequences[0],
+                    out Action<long, object> committed,
+                    out Action<long, string> failed);
+                takeReturned.Set();
+                committed?.Invoke(completion.Sequences[0],
+                    completion.Outcomes[0]);
+            }
+            catch (Exception error)
+            {
+                consumerError = error;
+            }
+            finally
+            {
+                takeStarted.Set();
+            }
         });
-        consumer.Start();
-        True(takeStarted.Wait(TimeSpan.FromSeconds(2)),
-            "completion drain attempts callback lookup during acceptance");
-        True(SpinWait.SpinUntil(
+        bool producerStarted = false;
+        bool consumerStarted = false;
+        bool acceptedEnteredInTime = false;
+        bool completionPublishedInTime = false;
+        bool takeStartedInTime = false;
+        bool consumerBlockedInTime = false;
+        bool takeReturnedBeforePublication = false;
+        bool producerJoined = false;
+        bool consumerJoined = false;
+        try
+        {
+            producer.Start();
+            producerStarted = true;
+            acceptedEnteredInTime = acceptedEntered.Wait(
+                ConcurrentDrainTimeout);
+            completionPublishedInTime = SpinWait.SpinUntil(
+                () => worker.PendingCompletionCount > 0,
+                ConcurrentDrainTimeout);
+            consumer.Start();
+            consumerStarted = true;
+            takeStartedInTime = takeStarted.Wait(ConcurrentDrainTimeout);
+            consumerBlockedInTime = SpinWait.SpinUntil(
                 () => (consumer.ThreadState &
                        System.Threading.ThreadState.WaitSleepJoin) != 0,
-                TimeSpan.FromSeconds(2)),
-            "completion drain blocks on the acceptance registry lock");
-        False(takeReturned.IsSet,
+                ConcurrentDrainTimeout);
+            takeReturnedBeforePublication = takeReturned.IsSet;
+        }
+        finally
+        {
+            allowPendingPublication.Set();
+            if (producerStarted)
+                producerJoined = producer.Join(ConcurrentDrainTimeout);
+            if (consumerStarted)
+                consumerJoined = consumer.Join(ConcurrentDrainTimeout);
+        }
+
+        string threadDiagnostics =
+            "; producer joined=" + producerJoined +
+            ", consumer joined=" + consumerJoined +
+            ", producer error=" + (producerError?.ToString() ?? "none") +
+            ", consumer error=" + (consumerError?.ToString() ?? "none");
+        True(acceptedEnteredInTime,
+            "accepted callback enters before publishing pending metadata" +
+            threadDiagnostics);
+        True(completionPublishedInTime,
+            "the worker completes before pending publication" +
+            threadDiagnostics);
+        True(takeStartedInTime,
+            "completion drain attempts callback lookup during acceptance" +
+            threadDiagnostics);
+        True(consumerBlockedInTime,
+            "completion drain blocks on the acceptance registry lock" +
+            threadDiagnostics);
+        False(takeReturnedBeforePublication,
             "completion callback lookup cannot return before publication");
-        allowPendingPublication.Set();
-        producer.Join(TimeSpan.FromSeconds(2));
-        consumer.Join(TimeSpan.FromSeconds(2));
+        True(producerJoined && consumerJoined,
+            "producer and consumer exit after pending publication is released" +
+            threadDiagnostics);
+        True(producerError == null && consumerError == null,
+            "producer and consumer finish without background exceptions" +
+            threadDiagnostics);
 
         True(enqueueSucceeded, "interleaving test accepts the write");
         True(revisionReleased,
