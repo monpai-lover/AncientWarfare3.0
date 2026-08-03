@@ -7,7 +7,9 @@ if (-not (Test-Path -LiteralPath $verifier -PathType Leaf)) {
     throw "Source deployment verifier is missing: $verifier"
 }
 
-& $verifier -SelfTest
-if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-    throw "Source deployment verifier self-test failed with exit code $LASTEXITCODE."
+& cmd /c exit 7
+if ($LASTEXITCODE -ne 7) {
+    throw 'Failed to seed the stale LASTEXITCODE fixture.'
 }
+
+& $verifier -SelfTest

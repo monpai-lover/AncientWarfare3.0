@@ -41,6 +41,15 @@ function ConvertTo-RelativePath([string]$Root, [string]$FullName) {
     return $FullName.Substring($Root.Length + 1).Replace('\', '/')
 }
 
+function Test-IsTemporaryFile([System.IO.FileInfo]$File) {
+    if ($File.Name.StartsWith('~$', [System.StringComparison]::Ordinal) -or
+        $File.Name.EndsWith('~', [System.StringComparison]::Ordinal)) {
+        return $true
+    }
+
+    return $temporaryExtensions -icontains $File.Extension
+}
+
 function Test-IsExcludedFile([System.IO.FileInfo]$File, [string]$CollectionRoot) {
     $relative = ConvertTo-RelativePath $CollectionRoot $File.FullName
     $segments = $relative.Split('/')
@@ -52,12 +61,7 @@ function Test-IsExcludedFile([System.IO.FileInfo]$File, [string]$CollectionRoot)
         }
     }
 
-    if ($File.Name.StartsWith('~$', [System.StringComparison]::Ordinal) -or
-        $File.Name.EndsWith('~', [System.StringComparison]::Ordinal)) {
-        return $true
-    }
-
-    return $temporaryExtensions -icontains $File.Extension
+    return Test-IsTemporaryFile $File
 }
 
 function Get-ProductionManifest([string]$Root, [bool]$IsSource,
@@ -76,11 +80,10 @@ function Get-ProductionManifest([string]$Root, [bool]$IsSource,
     } else {
         Get-ChildItem -LiteralPath $codeRoot -Recurse -File | ForEach-Object {
             $relative = ConvertTo-RelativePath $resolvedRoot $_.FullName
-            if ($IsSource -and $_.Extension -ieq '.dll') {
-                $Failures.Add("Source production collection contains forbidden DLL: $relative")
-            }
             if ($_.Extension -ieq '.cs') {
                 $manifest[$relative] = $_.FullName
+            } elseif (-not (Test-IsTemporaryFile $_)) {
+                $Failures.Add("Unexpected non-source file in Code: $relative")
             }
         }
     }
@@ -224,11 +227,36 @@ function Invoke-SelfTest {
         }
         Remove-Item -LiteralPath (Join-Path $destination 'Code/Extra.cs')
 
+        Set-Content -LiteralPath (Join-Path $destination 'Code/Unexpected.dll') `
+            -Value 'unexpected-dll' -NoNewline
+        $unexpectedDll = Test-SourceDeployment $source $destination
+        if (-not ($unexpectedDll.Failures -match
+            '^Unexpected non-source file in Code: Code/Unexpected\.dll$')) {
+            $selfTestFailures.Add('destination Code DLL was not rejected clearly')
+        }
+        Remove-Item -LiteralPath (Join-Path $destination 'Code/Unexpected.dll')
+
+        Set-Content -LiteralPath (Join-Path $destination 'Code/Unexpected.json') `
+            -Value '{}' -NoNewline
+        $unexpectedJson = Test-SourceDeployment $source $destination
+        if (-not ($unexpectedJson.Failures -match
+            '^Unexpected non-source file in Code: Code/Unexpected\.json$')) {
+            $selfTestFailures.Add('destination Code JSON was not rejected clearly')
+        }
+        Remove-Item -LiteralPath (Join-Path $destination 'Code/Unexpected.json')
+
         Set-Content -LiteralPath (Join-Path $source 'ABPackages/Forbidden.dll') `
             -Value 'not-a-real-dll' -NoNewline
         $dll = Test-SourceDeployment $source $destination
         if (-not ($dll.Failures -match '^Source production collection contains forbidden DLL:')) {
             $selfTestFailures.Add('source DLL was not rejected clearly')
+        }
+        Remove-Item -LiteralPath (Join-Path $source 'ABPackages/Forbidden.dll')
+
+        $cleaned = Test-SourceDeployment $source $destination
+        if ($cleaned.Failures.Count -ne 0) {
+            $selfTestFailures.Add('cleaned fixture was rejected: ' +
+                ($cleaned.Failures -join '; '))
         }
 
         if ($selfTestFailures.Count -gt 0) {
@@ -239,7 +267,10 @@ function Invoke-SelfTest {
         Write-Output 'PASS: missing destination file rejected'
         Write-Output 'PASS: SHA256 mismatch rejected'
         Write-Output 'PASS: extra Code source rejected'
+        Write-Output 'PASS: destination Code DLL rejected'
+        Write-Output 'PASS: destination Code JSON rejected'
         Write-Output 'PASS: source DLL rejected'
+        Write-Output 'PASS: cleaned deployment accepted'
     } finally {
         if (Test-Path -LiteralPath $fixtureRoot) {
             Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
