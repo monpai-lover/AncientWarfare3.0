@@ -106,10 +106,31 @@ namespace AncientWarfare3.core.policy
             return diagnosticsEnabled || benchmarkEnabled;
         }
 
-        public static bool ShouldStartIntervalBaseline(bool intervalEnabled,
-            bool diagnosticsEnabled)
+        public static bool IsPerformanceFrameEligible(bool gameLoaded,
+            bool loaderActive)
         {
-            return diagnosticsEnabled && !intervalEnabled;
+            return gameLoaded && !loaderActive;
+        }
+
+        public static int PerformanceIntervalMode(bool frameEligible,
+            bool diagnosticsEnabled, bool benchmarkEnabled)
+        {
+            if (!frameEligible) return 0;
+            int mode = diagnosticsEnabled ? 1 : 0;
+            if (benchmarkEnabled) mode |= 2;
+            return mode;
+        }
+
+        public static bool ShouldStartIntervalBaseline(int previousMode,
+            int currentMode)
+        {
+            return currentMode != 0 && previousMode != currentMode;
+        }
+
+        public static bool ShouldFlushInterval(int baselineMode,
+            int currentMode)
+        {
+            return baselineMode != 0 && baselineMode == currentMode;
         }
 
         public static long IntervalFrameCount(long intervalStartFrame,

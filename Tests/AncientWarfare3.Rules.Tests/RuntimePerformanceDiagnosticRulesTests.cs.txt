@@ -18,6 +18,7 @@ internal static class RuntimePerformanceDiagnosticRulesTests
             "combined diagnostic and benchmark mode emits one text log");
         PerformanceIntervalMetricsUseRealElapsedTime();
         PerformanceIntervalLogUsesO1NativeCounts();
+        PerformanceIntervalLifecycleIsWorldAndModeBound();
         BenchmarkFallbackCannotBeReintercepted();
         GeneratedFallbackInvalidatesPendingCompletion();
         BenchmarkTimeoutRulesBoundPendingWait();
@@ -26,20 +27,135 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20();
     }
 
+    private static void PerformanceIntervalLifecycleIsWorldAndModeBound()
+    {
+        string source = Read("Code", "core", "policy",
+            "RuntimePerformanceDiagnostic.cs");
+        int begin = source.IndexOf("public static void BeginFrame()",
+            StringComparison.Ordinal);
+        int beginEnd = IndexAfter(source, "public static long BeginScope()",
+            begin);
+        True(begin >= 0 && beginEnd > begin,
+            "runtime diagnostics expose the frame-begin lifecycle");
+        string beginSource = source.Substring(begin, beginEnd - begin);
+        int frameIncrement = beginSource.IndexOf("_frame++",
+            StringComparison.Ordinal);
+        int modeRead = beginSource.IndexOf("CurrentIntervalMode()",
+            StringComparison.Ordinal);
+        int sampleDecision = beginSource.IndexOf("ShouldSample(",
+            StringComparison.Ordinal);
+        Contains(beginSource, "TerminateIntervalBaseline();",
+            "an ineligible frame terminates the current interval baseline");
+        True(frameIncrement >= 0 && modeRead > frameIncrement &&
+             sampleDecision > modeRead,
+            "global frame cadence remains intact before eligibility sampling");
+
+        int flush = source.IndexOf("public static void FlushFrame()",
+            StringComparison.Ordinal);
+        int flushEnd = IndexAfter(source,
+            "private static string DeathStageFields()", flush);
+        True(flush >= 0 && flushEnd > flush,
+            "runtime diagnostics expose the frame-flush lifecycle");
+        string flushSource = source.Substring(flush, flushEnd - flush);
+        int flushMode = flushSource.IndexOf("CurrentIntervalMode()",
+            StringComparison.Ordinal);
+        int flushGate = flushSource.IndexOf("ShouldFlushInterval(",
+            StringComparison.Ordinal);
+        int intervalClock = flushSource.IndexOf(
+            "long intervalEnded = Stopwatch.GetTimestamp();",
+            StringComparison.Ordinal);
+        Contains(flushSource, "TerminateIntervalBaseline();",
+            "an invalid flush terminates its mixed interval");
+        True(flushMode >= 0 && flushGate > flushMode &&
+             intervalClock > flushGate,
+            "world and mode are revalidated before PERF output work");
+
+        int modeHelper = source.IndexOf(
+            "private static int CurrentIntervalMode()",
+            StringComparison.Ordinal);
+        int modeHelperEnd = IndexAfter(source, "        private static ",
+            modeHelper + 1);
+        True(modeHelper >= 0 && modeHelperEnd > modeHelper,
+            "runtime diagnostics expose a shared world and mode snapshot");
+        string modeSource = source.Substring(modeHelper,
+            modeHelperEnd - modeHelper);
+        Contains(modeSource, "Config.game_loaded",
+            "PERF intervals require a loaded game");
+        Contains(modeSource, "SmoothLoader.isLoading()",
+            "PERF intervals exclude loader frames");
+        Contains(modeSource, "Bench.bench_enabled",
+            "PERF interval mode includes the benchmark switch");
+    }
+
     private static void PerformanceIntervalMetricsUseRealElapsedTime()
     {
         Equal(true, RuntimePerformanceDiagnosticRules.
+                IsPerformanceFrameEligible(
+                    gameLoaded: true, loaderActive: false),
+            "a loaded non-loader frame may participate in PERF intervals");
+        Equal(false, RuntimePerformanceDiagnosticRules.
+                IsPerformanceFrameEligible(
+                    gameLoaded: false, loaderActive: false),
+            "menu and unloaded frames cannot participate in PERF intervals");
+        Equal(false, RuntimePerformanceDiagnosticRules.
+                IsPerformanceFrameEligible(
+                    gameLoaded: true, loaderActive: true),
+            "smooth-loader frames cannot participate in PERF intervals");
+
+        int offMode = RuntimePerformanceDiagnosticRules.PerformanceIntervalMode(
+            frameEligible: true, diagnosticsEnabled: false,
+            benchmarkEnabled: false);
+        int diagnosticMode = RuntimePerformanceDiagnosticRules.
+            PerformanceIntervalMode(frameEligible: true,
+                diagnosticsEnabled: true, benchmarkEnabled: false);
+        int benchmarkMode = RuntimePerformanceDiagnosticRules.
+            PerformanceIntervalMode(frameEligible: true,
+                diagnosticsEnabled: false, benchmarkEnabled: true);
+        int combinedMode = RuntimePerformanceDiagnosticRules.
+            PerformanceIntervalMode(frameEligible: true,
+                diagnosticsEnabled: true, benchmarkEnabled: true);
+        Equal(0, offMode, "disabled diagnostics have no interval mode");
+        Equal(0, RuntimePerformanceDiagnosticRules.PerformanceIntervalMode(
+                frameEligible: false, diagnosticsEnabled: true,
+                benchmarkEnabled: true),
+            "an ineligible world frame has no interval mode");
+        True(diagnosticMode != benchmarkMode &&
+             diagnosticMode != combinedMode &&
+             benchmarkMode != combinedMode,
+            "diagnostics, benchmark, and combined intervals have distinct modes");
+
+        Equal(true, RuntimePerformanceDiagnosticRules.
                 ShouldStartIntervalBaseline(
-                    intervalEnabled: false, diagnosticsEnabled: true),
+                    previousMode: offMode, currentMode: diagnosticMode),
             "enabling diagnostics starts a new reportable interval");
         Equal(false, RuntimePerformanceDiagnosticRules.
                 ShouldStartIntervalBaseline(
-                    intervalEnabled: true, diagnosticsEnabled: true),
+                    previousMode: diagnosticMode,
+                    currentMode: diagnosticMode),
             "an active interval keeps its existing baseline");
+        Equal(true, RuntimePerformanceDiagnosticRules.
+                ShouldStartIntervalBaseline(
+                    previousMode: diagnosticMode,
+                    currentMode: benchmarkMode),
+            "switching from diagnostics to benchmark starts a new interval");
+        Equal(true, RuntimePerformanceDiagnosticRules.
+                ShouldStartIntervalBaseline(
+                    previousMode: diagnosticMode,
+                    currentMode: combinedMode),
+            "enabling benchmark mode starts a new combined interval");
         Equal(false, RuntimePerformanceDiagnosticRules.
                 ShouldStartIntervalBaseline(
-                    intervalEnabled: true, diagnosticsEnabled: false),
-            "disabling diagnostics does not start an interval");
+                    previousMode: diagnosticMode, currentMode: offMode),
+            "an ineligible or disabled frame terminates instead of starting");
+        Equal(true, RuntimePerformanceDiagnosticRules.ShouldFlushInterval(
+                baselineMode: diagnosticMode, currentMode: diagnosticMode),
+            "a matching eligible mode may emit its PERF interval");
+        Equal(false, RuntimePerformanceDiagnosticRules.ShouldFlushInterval(
+                baselineMode: diagnosticMode, currentMode: benchmarkMode),
+            "a mid-frame mode switch cannot emit a mixed interval");
+        Equal(false, RuntimePerformanceDiagnosticRules.ShouldFlushInterval(
+                baselineMode: diagnosticMode, currentMode: offMode),
+            "an unloaded or loading frame cannot emit a PERF interval");
         Equal(120L, RuntimePerformanceDiagnosticRules.IntervalFrameCount(
                 intervalStartFrame: 0L, currentFrame: 120L),
             "first sample reports every frame since the interval baseline");
@@ -85,7 +201,8 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         True(emitGate >= 0 && countRead > emitGate,
             "world counts are read only inside the low-frequency log sample");
 
-        int enableState = source.IndexOf("bool diagnosticsEnabled =",
+        int enableState = source.IndexOf(
+            "int currentMode = CurrentIntervalMode();",
             StringComparison.Ordinal);
         int baselineDecision = source.IndexOf(
             "ShouldStartIntervalBaseline(", enableState,

@@ -40,7 +40,7 @@ namespace AncientWarfare3.core.policy
         private static bool _sampling;
         private static long _intervalStarted;
         private static long _intervalFrameStarted;
-        private static bool _intervalEnabled;
+        private static int _intervalMode;
         private static int _actorDetailSamples;
         private const int ActorDetailBudgetPerFrame =
             ActorDiagnosticSamplingRules.MaximumDetailSamplesPerFrame;
@@ -103,18 +103,24 @@ namespace AncientWarfare3.core.policy
         public static void BeginFrame()
         {
             if (_frame < long.MaxValue) _frame++;
-            bool diagnosticsEnabled = RuntimePerformanceDiagnosticRules.
-                ShouldEnableDetailedSampling(Enabled(), Bench.bench_enabled);
-            if (RuntimePerformanceDiagnosticRules.ShouldStartIntervalBaseline(
-                    _intervalEnabled, diagnosticsEnabled))
+            Interlocked.Exchange(ref _actorDetailSamples, 0);
+            int currentMode = CurrentIntervalMode();
+            if (currentMode == 0)
             {
+                TerminateIntervalBaseline();
+                _sampling = false;
+                return;
+            }
+            if (RuntimePerformanceDiagnosticRules.ShouldStartIntervalBaseline(
+                    _intervalMode, currentMode))
+            {
+                ResetDeathInterval();
                 _intervalStarted = Stopwatch.GetTimestamp();
                 _intervalFrameStarted = Math.Max(0L, _frame - 1L);
             }
-            _intervalEnabled = diagnosticsEnabled;
-            Interlocked.Exchange(ref _actorDetailSamples, 0);
+            _intervalMode = currentMode;
             _sampling = RuntimePerformanceDiagnosticRules.ShouldSample(
-                diagnosticsEnabled, _frame);
+                currentMode != 0, _frame);
             if (_sampling)
             {
                 ResetSample();
@@ -370,6 +376,14 @@ namespace AncientWarfare3.core.policy
         public static void FlushFrame()
         {
             if (!_sampling) return;
+            int currentMode = CurrentIntervalMode();
+            if (!RuntimePerformanceDiagnosticRules.ShouldFlushInterval(
+                    _intervalMode, currentMode))
+            {
+                TerminateIntervalBaseline();
+                _sampling = false;
+                return;
+            }
             if (!RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
                     Enabled(), Bench.bench_enabled))
             {
@@ -750,6 +764,23 @@ namespace AncientWarfare3.core.policy
         private static bool Enabled()
         {
             return AWPerformanceSettings.EnablePerformanceDiagnostics;
+        }
+
+        private static int CurrentIntervalMode()
+        {
+            bool frameEligible = RuntimePerformanceDiagnosticRules.
+                IsPerformanceFrameEligible(Config.game_loaded,
+                    SmoothLoader.isLoading());
+            return RuntimePerformanceDiagnosticRules.PerformanceIntervalMode(
+                frameEligible, Enabled(), Bench.bench_enabled);
+        }
+
+        private static void TerminateIntervalBaseline()
+        {
+            _intervalStarted = 0L;
+            _intervalFrameStarted = 0L;
+            _intervalMode = 0;
+            ResetDeathInterval();
         }
 
         private static bool DeathDiagnosticsEnabled()
