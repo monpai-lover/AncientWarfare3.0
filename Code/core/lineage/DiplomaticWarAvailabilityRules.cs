@@ -29,6 +29,44 @@ namespace AncientWarfare3.core.lineage
         public string FailureReason { get; }
     }
 
+    public readonly struct DiplomaticWarSubmissionResolution
+    {
+        public DiplomaticWarSubmissionResolution(bool pCanSubmit,
+            string pFailureReason)
+        {
+            CanSubmit = pCanSubmit;
+            FailureReason = pFailureReason ?? "";
+        }
+
+        public bool CanSubmit { get; }
+        public string FailureReason { get; }
+    }
+
+    public static class DiplomaticWarSubmissionRules
+    {
+        public static DiplomaticWarSubmissionResolution Resolve(
+            bool pTargetCityIdentityValid,
+            bool pCanonicalOptionMatched,
+            bool pAuthoritativeGoalAllowed,
+            string pAuthoritativeFailureReason)
+        {
+            if (!pTargetCityIdentityValid)
+                return new DiplomaticWarSubmissionResolution(false,
+                    "target_city_changed");
+            if (pCanonicalOptionMatched)
+                return new DiplomaticWarSubmissionResolution(true, "");
+            if (!pAuthoritativeGoalAllowed)
+            {
+                return new DiplomaticWarSubmissionResolution(false,
+                    string.IsNullOrWhiteSpace(pAuthoritativeFailureReason)
+                        ? "unavailable"
+                        : pAuthoritativeFailureReason);
+            }
+            return new DiplomaticWarSubmissionResolution(false,
+                "war_target_option_changed");
+        }
+    }
+
     public static class DiplomaticWarAvailabilityRules
     {
         public static DiplomaticWarAvailabilityResult Resolve(

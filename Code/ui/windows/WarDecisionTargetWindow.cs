@@ -296,7 +296,7 @@ namespace AncientWarfare3.ui.windows
                 out string failureReason);
             bool available = option != null && goalAllowed;
             if (option == null && goalAllowed)
-                failureReason = "target_city_changed";
+                failureReason = "war_target_option_changed";
             City city = option?.target_city;
             string targetName = pTarget?.name ?? "?";
             string targetNameRich = RichKingdomName(pTarget);

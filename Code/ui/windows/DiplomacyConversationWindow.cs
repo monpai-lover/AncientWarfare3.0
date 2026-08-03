@@ -1407,6 +1407,9 @@ namespace AncientWarfare3.ui.windows
                 "target_city_changed" => AW_L10n.Text(
                     "aw_diplomacy_failure_target_city_changed",
                     "The target city changed hands"),
+                "war_target_option_changed" => AW_L10n.Text(
+                    "aw_diplomacy_failure_war_target_option_changed",
+                    "The basis for this war goal changed; select it again"),
                 "fabrication_unavailable" => AW_L10n.Text(
                     "aw_diplomacy_failure_fabrication_unavailable",
                     "No claim can be fabricated for this city"),

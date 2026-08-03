@@ -76,6 +76,50 @@ internal static class DiplomaticWarAvailabilityRulesTests
                     "missing_claim_target")
             }, 0), "no available row has no selection");
 
+        DiplomaticWarSubmissionResolution cityChanged =
+            DiplomaticWarSubmissionRules.Resolve(
+                pTargetCityIdentityValid: false,
+                pCanonicalOptionMatched: false,
+                pAuthoritativeGoalAllowed: false,
+                pAuthoritativeFailureReason: "missing_claim_target");
+        Equal(false, cityChanged.CanSubmit,
+            "destroyed or transferred target city cannot submit");
+        Equal("target_city_changed", cityChanged.FailureReason,
+            "destroyed or transferred target city has the stale reason");
+
+        DiplomaticWarSubmissionResolution goalBlocked =
+            DiplomaticWarSubmissionRules.Resolve(
+                pTargetCityIdentityValid: true,
+                pCanonicalOptionMatched: false,
+                pAuthoritativeGoalAllowed: false,
+                pAuthoritativeFailureReason: "missing_claim_target");
+        Equal(false, goalBlocked.CanSubmit,
+            "authoritatively blocked goal cannot submit");
+        Equal("missing_claim_target", goalBlocked.FailureReason,
+            "authoritative goal blocker is preserved");
+
+        DiplomaticWarSubmissionResolution basisChanged =
+            DiplomaticWarSubmissionRules.Resolve(
+                pTargetCityIdentityValid: true,
+                pCanonicalOptionMatched: false,
+                pAuthoritativeGoalAllowed: true,
+                pAuthoritativeFailureReason: "");
+        Equal(false, basisChanged.CanSubmit,
+            "city A losing its basis is not redirected to valid city B");
+        Equal("war_target_option_changed", basisChanged.FailureReason,
+            "changed canonical war basis requires reselection");
+
+        DiplomaticWarSubmissionResolution canonical =
+            DiplomaticWarSubmissionRules.Resolve(
+                pTargetCityIdentityValid: true,
+                pCanonicalOptionMatched: true,
+                pAuthoritativeGoalAllowed: true,
+                pAuthoritativeFailureReason: "");
+        Equal(true, canonical.CanSubmit,
+            "canonical option remains submittable");
+        Equal("", canonical.FailureReason,
+            "canonical option has no failure reason");
+
         DeclarationUiPreservesAvailabilityReasons();
         DeclarationSubmissionPreservesAuthorityReason();
         EveryKnownDeclarationReasonIsLocalized();
@@ -120,6 +164,12 @@ internal static class DiplomaticWarAvailabilityRulesTests
         True(decision.Contains("CanIssue(") &&
              decision.Contains("pSource, pTarget, pGoalType,"),
             "legacy blocked goal rows use authoritative validation");
+        False(decision.Contains(
+                "failureReason = \"target_city_changed\""),
+            "legacy live-city tooltip is not mislabeled as stale");
+        True(decision.Contains(
+                "failureReason = \"war_target_option_changed\""),
+            "legacy live-city tooltip requests war target reselection");
         string reportRows = Section(decision,
             "private void AddReportRows(",
             "private void AddProjectRows(");
@@ -155,11 +205,13 @@ internal static class DiplomaticWarAvailabilityRulesTests
             "host reserves stale target for a changed city identity");
         string missingOptionBranch = Section(handler,
             "if (option == null)", "bool issued =");
+        True(missingOptionBranch.Contains("CanIssue(attacker,"),
+            "host revalidates a filtered-out goal authoritatively");
         True(missingOptionBranch.Contains(
-                "TryIssue(attacker, defender,"),
-            "host submits a canonical request when a filtered option vanished");
-        True(missingOptionBranch.Contains("ReasonKeyForGoal(request.Key)"),
-            "host rebuilds a canonical reason key");
+                "DiplomaticWarSubmissionRules.Resolve("),
+            "host resolves a changed canonical option without redirecting");
+        False(missingOptionBranch.Contains("TryIssue("),
+            "filtered option branch never submits a redirected target");
         False(missingOptionBranch.Contains("StaleTarget"),
             "filtered option branch never reports a live city as stale");
         False(handler.Contains(
@@ -192,7 +244,8 @@ internal static class DiplomaticWarAvailabilityRulesTests
             "cannot_force_vassal", "cannot_force_tributary",
             "not_suzerain", "missing_restoration_target",
             "missing_reunification_claim", "missing_zhulu_cb",
-            "cannot_force_no_cb", "unknown_goal"
+            "cannot_force_no_cb", "unknown_goal",
+            "war_target_option_changed"
         };
 
         foreach (string reason in reasons)
