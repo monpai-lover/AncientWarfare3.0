@@ -659,6 +659,12 @@ namespace AncientWarfare3.core.lineage
                             pDefender)?.data != null;
                     break;
                 case WarTerritoryService.GOAL_PRESS_CLAIM_CITY:
+                    if (!WarDecisionService.HasValidCasusBelli(
+                            pAttacker, pDefender, pWarType))
+                    {
+                        pFailureReason = "missing_claim_target";
+                        return false;
+                    }
                     hasClaimTarget = WarTerritoryService
                         .FindBestClaimTargetCityForDecision(pAttacker,
                             pDefender)?.data != null;
@@ -685,6 +691,7 @@ namespace AncientWarfare3.core.lineage
                         .CanDeclareReunification(pAttacker, pDefender);
                     break;
                 case WarTerritoryService.GOAL_NO_CB:
+                case WarGoalTypeIds.LegacyNoCb:
                     canForceNoCb = WarDecisionService.CanForceNoCb(pAttacker);
                     break;
                 default:

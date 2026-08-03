@@ -165,8 +165,9 @@ internal static class DiplomaticWarAvailabilityRulesTests
                 StringComparison.Ordinal);
             True(probeIndex > goalSwitch,
                 probe + " runs only after goal selection");
-            Equal(1, Count(helper, probe),
-                probe + " has one goal-specific call site");
+            int expectedCount = probe == "HasValidCasusBelli(" ? 2 : 1;
+            Equal(expectedCount, Count(helper, probe),
+                probe + " has only goal-specific call sites");
         }
 
         foreach (string goalCase in new[]
@@ -176,9 +177,27 @@ internal static class DiplomaticWarAvailabilityRulesTests
                      "GOAL_PRESS_CLAIM_CITY:", "GOAL_FORCE_VASSAL:",
                      "GOAL_FORCE_TRIBUTARY:", "GOAL_INDEPENDENCE:",
                      "GOAL_RESTORE_KINGDOM:",
-                     "GOAL_REUNIFY_SUCCESSION:", "GOAL_NO_CB:"
+                     "GOAL_REUNIFY_SUCCESSION:", "GOAL_NO_CB:",
+                     "WarGoalTypeIds.LegacyNoCb:"
                  })
             True(helper.Contains(goalCase), goalCase + " is selected lazily");
+
+        string claimCase = Section(helper,
+            "case WarTerritoryService.GOAL_PRESS_CLAIM_CITY:",
+            "case WarTerritoryService.GOAL_FORCE_VASSAL:");
+        int claimValidity = claimCase.IndexOf("HasValidCasusBelli(",
+            StringComparison.Ordinal);
+        int missingClaim = claimCase.IndexOf(
+            "pFailureReason = \"missing_claim_target\";",
+            StringComparison.Ordinal);
+        int invalidReturn = claimCase.IndexOf("return false;", missingClaim,
+            StringComparison.Ordinal);
+        int claimFinder = claimCase.IndexOf(
+            "FindBestClaimTargetCityForDecision(",
+            StringComparison.Ordinal);
+        True(claimValidity >= 0 && missingClaim > claimValidity &&
+             invalidReturn > missingClaim && claimFinder > invalidReturn,
+            "claim validity expires stale claims before target lookup");
         True(helper.Contains("pFailureReason = \"unknown_goal\";"),
             "unknown goals keep their stable failure reason");
     }
