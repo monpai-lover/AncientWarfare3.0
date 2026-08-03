@@ -9,6 +9,11 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pKingdom.isRekt()) return;
             KingdomArchiveWriter.Upsert(pKingdom);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
+            KingdomRenameProjectionRefreshContract.Apply(
+                () => MandateService.RefreshKingdomNameProjection(pKingdom),
+                RulerAppellationService.InvalidateFamilyTreeProjectionCaches,
+                () => FamilyTreeProjectionRevision.Advance(
+                    FamilyTreeProjectionChange.DynastyOrStateName));
 
             try { World.world?.nameplate_manager?.clearCaches(); }
             catch { }

@@ -211,6 +211,15 @@ internal static class KingdomRenamePersistenceRulesTests
         Equal(true, AWLocalizedNameProjectionRefreshScope.
                 ShouldRefreshAutomatically(isEditing: false),
             "CreateRival restores automatic refresh when kingdom creation throws");
+
+        var semanticRefreshes = new List<string>();
+        KingdomRenameProjectionRefreshContract.Apply(
+            () => semanticRefreshes.Add("mandate"),
+            () => semanticRefreshes.Add("family-tree-cache"),
+            () => semanticRefreshes.Add("family-tree-revision"));
+        Equal("mandate,family-tree-cache,family-tree-revision",
+            string.Join(",", semanticRefreshes),
+            "one kingdom refresh applies every name-dependent semantic projection exactly once");
         Equal(true, SuccessionDisputeDisplayRules.
                 HasPersistedClosingQualifier(
                     SuccessionDisputeStatus.Active, rivalKingdomId: 20L),
@@ -251,6 +260,15 @@ internal static class KingdomRenamePersistenceRulesTests
                     projectionService.Contains(
                         "HierarchicalVassalMapModeService.MarkKingdomDirty"),
             "rename projection invalidates vanilla and hierarchical nameplates");
+        Equal(true, projectionService.Contains(
+                        "KingdomRenameProjectionRefreshContract.Apply") &&
+                    projectionService.Contains(
+                        "MandateService.RefreshKingdomNameProjection") &&
+                    projectionService.Contains(
+                        "RulerAppellationService.InvalidateFamilyTreeProjectionCaches") &&
+                    projectionService.Contains(
+                        "FamilyTreeProjectionChange.DynastyOrStateName"),
+            "rename projection binds all required semantic refresh callbacks");
         Equal(false, projectionService.Contains("DirtyMapIfActive"),
             "rename projection does not trigger unrelated map-mode redraws");
         Equal(false, projectionService.Contains("ModeGeometry") ||
