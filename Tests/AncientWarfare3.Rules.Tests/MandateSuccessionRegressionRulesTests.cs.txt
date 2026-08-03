@@ -1,3 +1,4 @@
+using System.Data.SQLite;
 using AncientWarfare3.core.lineage;
 
 internal static class MandateSuccessionRegressionRulesTests
@@ -6,6 +7,8 @@ internal static class MandateSuccessionRegressionRulesTests
     {
         ActiveMandateSuccessionRefreshesInstalledRuler();
         MandateTraitMovesToTheInstalledRuler();
+        FailedPersistenceRetriesBeforeRuntimeProjection();
+        MandateContextTargetsOnlyTheInstalledRulersLatestOpenReign();
         ActiveMandateKeepsItsImperialStateName();
         SavedMandateReignUsesImperialPosthumousRank();
     }
@@ -34,6 +37,131 @@ internal static class MandateSuccessionRegressionRulesTests
             "an idempotent refresh does not transfer the trait from the ruler to itself");
     }
 
+    private static void FailedPersistenceRetriesBeforeRuntimeProjection()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE MandateState(" +
+            "STATE_ID INTEGER PRIMARY KEY,ACTIVE INTEGER," +
+            "KINGDOM_ID INTEGER,PERIOD_ID INTEGER," +
+            "EMPEROR_ACTOR_ID INTEGER,EMPEROR_NAME TEXT," +
+            "DYNASTY_NAME TEXT," +
+            "UPDATED_TIME REAL);" +
+            "INSERT INTO MandateState VALUES" +
+            "(1,1,17,91,41,'Old','Old Dynasty',10);" +
+            "CREATE TRIGGER fail_mandate_succession BEFORE UPDATE ON " +
+            "MandateState BEGIN SELECT RAISE(ABORT," +
+            "'injected mandate succession failure'); END;");
+
+        var calls = new List<string>();
+        string error = "";
+        bool first = MandateSuccessionRules.TryCommitRulerProjection(
+            () =>
+            {
+                calls.Add("persist");
+                return MandateSuccessionPersistence.TryRefreshRuler(
+                    db, "MandateState", stateId: 1L, kingdomId: 17L,
+                    periodId: 91L, rulerActorId: 42L,
+                    rulerName: "New", dynastyName: "New Dynasty",
+                    updatedTime: 11d, pError: out error);
+            },
+            () => calls.Add("runtime"));
+        Equal(false, first,
+            "a failed MandateState refresh rejects runtime projection");
+        Equal(41L, Scalar(db,
+                "SELECT EMPEROR_ACTOR_ID FROM MandateState WHERE STATE_ID=1"),
+            "a failed refresh leaves the persisted emperor unchanged");
+        Equal("Old Dynasty", ScalarText(db,
+                "SELECT DYNASTY_NAME FROM MandateState WHERE STATE_ID=1"),
+            "a failed refresh leaves the persisted dynasty unchanged");
+        Equal("persist", string.Join(",", calls),
+            "failure stops before title trait and display projection");
+
+        Execute(db, "DROP TRIGGER fail_mandate_succession;");
+        bool second = MandateSuccessionRules.TryCommitRulerProjection(
+            () =>
+            {
+                calls.Add("persist");
+                return MandateSuccessionPersistence.TryRefreshRuler(
+                    db, "MandateState", stateId: 1L, kingdomId: 17L,
+                    periodId: 91L, rulerActorId: 42L,
+                    rulerName: "New", dynastyName: "New Dynasty",
+                    updatedTime: 12d, pError: out error);
+            },
+            () => calls.Add("runtime"));
+        Equal(true, second,
+            "the same installed ruler can retry after persistence recovers");
+        Equal(42L, Scalar(db,
+                "SELECT EMPEROR_ACTOR_ID FROM MandateState WHERE STATE_ID=1"),
+            "the successful retry persists the installed emperor");
+        Equal("New Dynasty", ScalarText(db,
+                "SELECT DYNASTY_NAME FROM MandateState WHERE STATE_ID=1"),
+            "the successful retry persists the installed dynasty");
+        Equal("persist,persist,runtime", string.Join(",", calls),
+            "runtime projection commits once and only after persistence");
+    }
+
+    private static void
+        MandateContextTargetsOnlyTheInstalledRulersLatestOpenReign()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "START_TIME REAL,END_TIME REAL);" +
+            "INSERT INTO KingdomReign VALUES" +
+            "(1,17,41,-1,2,'Old ruler',10,-1)," +
+            "(2,17,42,-1,2,'Current ruler',11,-1)," +
+            "(3,17,42,-1,2,'Older duplicate',9,-1);");
+
+        bool projected = ReignMandateProjectionPersistence.TryProject(
+            db, "KingdomReign", kingdomId: 17L, rulerActorId: 42L,
+            mandatePeriodId: 91L, emperorTitle: 4,
+            stateName: "Imperial State", out string error);
+        Equal(true, projected,
+            "the installed ruler's deterministic open reign is projected");
+        Equal(91L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "the latest installed-ruler reign receives the Mandate period");
+        Equal(4L, Scalar(db,
+                "SELECT HIGHEST_TITLE FROM KingdomReign WHERE REIGN_ID=2"),
+            "the latest installed-ruler reign receives imperial rank");
+        Equal("Imperial State", ScalarText(db,
+                "SELECT STATE_NAME_SNAPSHOT FROM KingdomReign " +
+                "WHERE REIGN_ID=2"),
+            "the latest installed-ruler reign receives the state snapshot");
+        Equal(-1L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=1"),
+            "the previous ruler's ordinary open reign remains unchanged");
+        Equal(2L, Scalar(db,
+                "SELECT HIGHEST_TITLE FROM KingdomReign WHERE REIGN_ID=1"),
+            "the previous ruler keeps its ordinary historical rank");
+        Equal("Old ruler", ScalarText(db,
+                "SELECT STATE_NAME_SNAPSHOT FROM KingdomReign " +
+                "WHERE REIGN_ID=1"),
+            "the previous ruler keeps its historical state snapshot");
+        Equal(-1L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=3"),
+            "an older duplicate open reign remains unchanged");
+
+        bool missing = ReignMandateProjectionPersistence.TryProject(
+            db, "KingdomReign", kingdomId: 17L, rulerActorId: 99L,
+            mandatePeriodId: 91L, emperorTitle: 4,
+            stateName: "Imperial State", out error);
+        Equal(false, missing,
+            "a missing installed-ruler open reign reports failure");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomReign " +
+                "WHERE MANDATE_PERIOD_ID=91"),
+            "a failed projection changes no unrelated reign");
+    }
+
     private static void ActiveMandateKeepsItsImperialStateName()
     {
         Equal(false, StateNameRules.ShouldProjectDynasticStateName(
@@ -58,5 +186,23 @@ internal static class MandateSuccessionRegressionRulesTests
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
             throw new InvalidOperationException(
                 $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static string ScalarText(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToString(command.ExecuteScalar()) ?? "";
     }
 }

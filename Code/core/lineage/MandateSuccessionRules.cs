@@ -1,3 +1,5 @@
+using System;
+
 namespace AncientWarfare3.core.lineage
 {
     public static class MandateSuccessionRules
@@ -19,6 +21,14 @@ namespace AncientWarfare3.core.lineage
             return projectionRefreshAccepted && previousActorId >= 0L &&
                    installedActorId >= 0L &&
                    previousActorId != installedActorId;
+        }
+
+        public static bool TryCommitRulerProjection(
+            Func<bool> pPersist, Action pCommitRuntime)
+        {
+            if (pPersist == null || !pPersist()) return false;
+            pCommitRuntime?.Invoke();
+            return true;
         }
 
         public static bool ShouldBlockPeacefulFellApart(bool pIsActiveMandate, int pMandateValue,

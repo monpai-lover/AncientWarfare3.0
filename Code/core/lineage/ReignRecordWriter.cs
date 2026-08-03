@@ -122,35 +122,22 @@ namespace AncientWarfare3.core.lineage
                 (float)pStartTime);
         }
 
-        public static void ProjectMandateContext(Kingdom pKingdom,
-            long pMandatePeriodId)
+        public static bool ProjectMandateContext(Kingdom pKingdom,
+            Actor pKing, long pMandatePeriodId)
         {
-            if (!Ready || pKingdom?.data == null || pMandatePeriodId < 0L)
-                return;
-            try
-            {
-                using var command = new SQLiteCommand(DB);
-                command.CommandText =
-                    "UPDATE " + TABLE +
-                    " SET MANDATE_PERIOD_ID=@period," +
-                    "HIGHEST_TITLE=CASE WHEN HIGHEST_TITLE<@emperor " +
-                    "THEN @emperor ELSE HIGHEST_TITLE END," +
-                    "STATE_NAME_SNAPSHOT=CASE WHEN @state<>'' THEN @state " +
-                    "ELSE STATE_NAME_SNAPSHOT END " +
-                    "WHERE KINGDOM_ID=@kingdom AND END_TIME=-1";
-                command.Parameters.AddWithValue("@period", pMandatePeriodId);
-                command.Parameters.AddWithValue("@emperor",
-                    (int)KingdomTitle.Emperor);
-                command.Parameters.AddWithValue("@state",
-                    pKingdom.name ?? "");
-                command.Parameters.AddWithValue("@kingdom", pKingdom.id);
-                command.ExecuteNonQuery();
-            }
-            catch (Exception error)
+            if (!Ready || pKingdom?.data == null || pKing?.data == null ||
+                pMandatePeriodId < 0L)
+                return false;
+            bool projected = ReignMandateProjectionPersistence.TryProject(
+                DB, TABLE, pKingdom.id, pKing.data.id, pMandatePeriodId,
+                (int)KingdomTitle.Emperor, pKingdom.name,
+                out string error);
+            if (!projected)
             {
                 ModClass.LogWarning("Project mandate reign context failed: " +
-                                    error.Message);
+                                    error);
             }
+            return projected;
         }
 
         public static bool TryRecoverCurrentProjection(Kingdom pKingdom,

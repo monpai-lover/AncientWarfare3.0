@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.lineage
             {
                 ReignRecordWriter.TryRecoverCurrentProjection(
                     pKingdom, pNewKing);
+                MandateService.OnRulerSucceeded(pKingdom, pNewKing);
                 return;
             }
             RecordPreviousKingLostThrone(pKingdom, lastKingId, pNewKing.data.id);
@@ -48,7 +49,6 @@ namespace AncientWarfare3.core.lineage
                     newShiId, changedRulingShi, newDynastyCreated))
                 WarnStateNameProjection(pKingdom, pNewKing);
             MandateService.OnRulerSucceeded(pKingdom, pNewKing);
-
             string kingName = pNewKing.getName();
 
             // 国家·换君

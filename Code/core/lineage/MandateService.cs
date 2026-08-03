@@ -223,30 +223,61 @@ namespace AncientWarfare3.core.lineage
             return ReadReportFromDb();
         }
 
-        public static void OnRulerSucceeded(Kingdom pKingdom, Actor pNewKing)
+        public static bool OnRulerSucceeded(Kingdom pKingdom,
+            Actor pNewKing)
         {
             if (!Ready || pKingdom?.data == null || pNewKing?.data == null)
-                return;
+                return false;
             MandateReport report = ReadReport();
             long liveKingActorId = pKingdom.king?.data?.id ?? -1L;
             bool refresh = MandateSuccessionRules.ShouldRefreshRulerProjection(
                 report.active, report.kingdom_id, pKingdom.id,
                 pNewKing.data.id, liveKingActorId);
-            if (!refresh) return;
+            if (!refresh) return true;
 
             long previousActorId = report.emperor_actor_id;
-            KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
-            UpsertState(pKingdom, report.period_id, report.mandate_value,
-                report.imperial_authority, report.dynasty_prestige,
-                report.core_control, report.vassal_loyalty,
-                report.crisis_level, Date.getCurrentYear(), ReadStartTime(),
-                report.origin_type, report.claimant_kind, null,
-                report.map_marker_kind);
-
-            if (MandateSuccessionRules.ShouldTransferRulerTrait(
-                    refresh, previousActorId, pNewKing.data.id))
+            string persistenceError = "";
+            try
             {
-                Actor previousRuler = FindActor(previousActorId);
+                bool committed = MandateSuccessionRules.
+                    TryCommitRulerProjection(
+                        () => report.emperor_actor_id == pNewKing.data.id ||
+                              MandateSuccessionPersistence.TryRefreshRuler(
+                                  DB,
+                                  MandateStateTableItem.GetTableName(),
+                                  STATE_ID, pKingdom.id, report.period_id,
+                                  pNewKing.data.id, pNewKing.getName(),
+                                  MakeDynastyName(pKingdom),
+                                  LineageService.CurTime(),
+                                  out persistenceError),
+                        () =>
+                        {
+                            MarkDirty();
+                            CommitRulerProjection(pKingdom, pNewKing,
+                                previousActorId, refresh);
+                        });
+                if (!committed)
+                    ModClass.LogWarning(
+                        "Mandate succession persistence failed: " +
+                        persistenceError);
+                return committed;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Mandate succession commit failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        private static void CommitRulerProjection(Kingdom pKingdom,
+            Actor pNewKing, long pPreviousActorId, bool pRefresh)
+        {
+            KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
+            if (MandateSuccessionRules.ShouldTransferRulerTrait(
+                    pRefresh, pPreviousActorId, pNewKing.data.id))
+            {
+                Actor previousRuler = FindActor(pPreviousActorId);
                 if (previousRuler?.data != null &&
                     previousRuler.hasTrait(TRAIT_TIANMING))
                     previousRuler.removeTrait(TRAIT_TIANMING);
@@ -447,7 +478,7 @@ namespace AncientWarfare3.core.lineage
                 XiaizationService.OnPseudoMandateDeclared(pKingdom);
             bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
-            ReignRecordWriter.ProjectMandateContext(pKingdom, periodId);
+            ReignRecordWriter.ProjectMandateContext(pKingdom, king, periodId);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
             FamilyTreeProjectionRevision.Advance(
                 FamilyTreeProjectionChange.RankOrMandate);
