@@ -15,6 +15,9 @@ internal static class HistoricalWriteRulesTests
         CompletionCannotRunBeforeAcceptedPendingPublication();
         NewerFailureCannotConsumeTakenCommittedSource();
         QueuedReplacementExplicitlyTransfersProjectionSource();
+        ConsecutiveQueuedReplacementsTransferProvenance();
+        InFlightCommitSurvivesFailedReplacementChain();
+        LatePrerequisiteFollowsReplacementChain();
     }
 
     public static void RunTerminalBatchFailure()
@@ -86,6 +89,261 @@ internal static class HistoricalWriteRulesTests
         CompletionCannotRunBeforeAcceptedPendingPublication();
         NewerFailureCannotConsumeTakenCommittedSource();
         QueuedReplacementExplicitlyTransfersProjectionSource();
+        ConsecutiveQueuedReplacementsTransferProvenance();
+        InFlightCommitSurvivesFailedReplacementChain();
+        LatePrerequisiteFollowsReplacementChain();
+    }
+
+    private static void ConsecutiveQueuedReplacementsTransferProvenance()
+    {
+        using var sink = new SuccessfulBatchSink();
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        var replacements = new List<long>();
+        FamilyTreeProjectionChange committedChange =
+            FamilyTreeProjectionChange.None;
+        string key = "replacement-chain:actor";
+
+        for (long sequence = 91L; sequence <= 93L; sequence++)
+        {
+            FamilyTreeProjectionChange ownChange = sequence == 91L
+                ? FamilyTreeProjectionChange.FamilyStructure
+                : sequence == 92L
+                    ? FamilyTreeProjectionChange.LifeStatus
+                    : FamilyTreeProjectionChange.IdentityOrTitle;
+            var envelope = new HistoricalWriteEnvelope(sequence, key,
+                string.Empty, Array.Empty<HistoricalSqlValue>(),
+                HistoricalWriteKind.State,
+                new AWAsyncStamp(1L, sequence, sequence));
+            True(callbacks.TryEnqueue(worker, envelope,
+                    (accepted, replaced) =>
+                    {
+                        replacements.Add(replaced);
+                        pending.TransferOwnership(701L, replaced, accepted);
+                        pending.Publish(701L, accepted, ownChange);
+                    }, (committed, outcome) =>
+                    {
+                        pending.TryComplete(701L, committed,
+                            out committedChange);
+                    }, null, out _),
+                "replacement chain accepts sequence " + sequence);
+        }
+
+        Equal(0L, replacements[0], "chain A replaces no sequence");
+        Equal(91L, replacements[1], "chain B replaces A");
+        Equal(92L, replacements[2], "chain C replaces B");
+        worker.Start();
+        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount > 0,
+                TimeSpan.FromSeconds(2)),
+            "replacement chain publishes one completion");
+        True(worker.TryDequeueCompletion(
+                out HistoricalWriteCompletion completion),
+            "replacement chain completion is available");
+        callbacks.Take(completion.Sequences[0],
+            out Action<long, object> committedCallback,
+            out Action<long, string> failureCallback);
+        committedCallback?.Invoke(completion.Sequences[0],
+            completion.Outcomes[0]);
+
+        Equal(93L, completion.Sequences[0],
+            "only chain C reaches the worker completion");
+        True(committedChange == FamilyTreeProjectionChange.FamilyStructure,
+            "A provenance transfers through B into C exactly once");
+        True(!pending.TryComplete(701L, 91L, out _) &&
+             !pending.TryComplete(701L, 92L, out _),
+            "chain A and B retain no orphaned provenance");
+    }
+
+    private static void InFlightCommitSurvivesFailedReplacementChain()
+    {
+        using var sink = new SuccessfulThenTerminalSink(
+            "injected replacement chain failure");
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        int revisionAdvanceCount = 0;
+        var commitTaken = new ManualResetEventSlim(false);
+        var allowCommit = new ManualResetEventSlim(false);
+        var failureFinished = new ManualResetEventSlim(false);
+
+        var independent = new HistoricalWriteEnvelope(101L,
+            "inflight-chain:independent", string.Empty,
+            Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
+            new AWAsyncStamp(1L, 101L, 101L));
+        True(callbacks.TryEnqueue(worker, independent,
+                (sequence, replaced) => pending.Publish(702L, sequence,
+                    FamilyTreeProjectionChange.FamilyStructure),
+                (sequence, outcome) =>
+                {
+                    if (pending.TryComplete(702L, sequence,
+                            out FamilyTreeProjectionChange change) &&
+                        change == FamilyTreeProjectionChange.FamilyStructure)
+                        Interlocked.Increment(ref revisionAdvanceCount);
+                }, null, out _),
+            "independent in-flight sequence is accepted");
+        worker.Start();
+        True(sink.FirstExecuteEntered.Wait(TimeSpan.FromSeconds(2)),
+            "independent sequence enters the worker before chain enqueue");
+
+        long expectedReplacement = 0L;
+        for (long sequence = 102L; sequence <= 104L; sequence++)
+        {
+            var envelope = new HistoricalWriteEnvelope(sequence,
+                "inflight-chain:replacement", string.Empty,
+                Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
+                new AWAsyncStamp(1L, sequence, sequence));
+            long expected = expectedReplacement;
+            True(callbacks.TryEnqueue(worker, envelope,
+                    (accepted, replaced) =>
+                    {
+                        Equal(expected, replaced,
+                            "replacement chain reports explicit owner");
+                        pending.TransferOwnership(702L, replaced, accepted);
+                        pending.Publish(702L, accepted,
+                            FamilyTreeProjectionChange.IdentityOrTitle);
+                    }, (committed, outcome) =>
+                    {
+                        if (pending.TryComplete(702L, committed, out _))
+                            Interlocked.Increment(ref revisionAdvanceCount);
+                    }, (failed, error) => pending.Fail(702L, failed),
+                    out _),
+                "in-flight replacement chain accepts " + sequence);
+            expectedReplacement = sequence;
+        }
+
+        sink.AllowFirstExecute.Set();
+        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount >= 2,
+                TimeSpan.FromSeconds(2)),
+            "worker publishes independent success and chain failure");
+        var commitDrain = new Thread(() =>
+        {
+            if (!worker.TryDequeueCompletion(
+                    out HistoricalWriteCompletion completion)) return;
+            callbacks.Take(completion.Sequences[0],
+                out Action<long, object> committed,
+                out Action<long, string> failed);
+            commitTaken.Set();
+            allowCommit.Wait(TimeSpan.FromSeconds(2));
+            committed?.Invoke(completion.Sequences[0],
+                completion.Outcomes[0]);
+        });
+        var failureDrain = new Thread(() =>
+        {
+            commitTaken.Wait(TimeSpan.FromSeconds(2));
+            if (!worker.TryDequeueCompletion(
+                    out HistoricalWriteCompletion completion)) return;
+            callbacks.Take(completion.Sequences[0],
+                out Action<long, object> committed,
+                out Action<long, string> failed);
+            failed?.Invoke(completion.Sequences[0], completion.Error);
+            failureFinished.Set();
+        });
+        commitDrain.Start();
+        failureDrain.Start();
+        True(failureFinished.Wait(TimeSpan.FromSeconds(2)),
+            "replacement chain failure runs before independent commit");
+        Equal(0L, Volatile.Read(ref revisionAdvanceCount),
+            "failed replacement chain never advances revision");
+        allowCommit.Set();
+        commitDrain.Join(TimeSpan.FromSeconds(2));
+        failureDrain.Join(TimeSpan.FromSeconds(2));
+
+        Equal(1L, Volatile.Read(ref revisionAdvanceCount),
+            "independent in-flight success advances exactly once");
+        True(!pending.TryComplete(702L, 102L, out _) &&
+             !pending.TryComplete(702L, 103L, out _) &&
+             !pending.TryComplete(702L, 104L, out _),
+            "C failure clears only the complete replacement chain");
+    }
+
+    private static void LatePrerequisiteFollowsReplacementChain()
+    {
+        FamilyTreeProjectionChange committedChange =
+            RunLatePrerequisiteChain(pFail: false, pActorId: 703L,
+                pFirstSequence: 111L);
+        True(committedChange == FamilyTreeProjectionChange.FamilyStructure,
+            "late prerequisite transfers from B through C on commit");
+
+        FamilyTreeProjectionChange failedChange =
+            RunLatePrerequisiteChain(pFail: true, pActorId: 704L,
+                pFirstSequence: 121L);
+        True(failedChange == FamilyTreeProjectionChange.None,
+            "failed C never advances its uncommitted prerequisite");
+    }
+
+    private static FamilyTreeProjectionChange RunLatePrerequisiteChain(
+        bool pFail, long pActorId, long pFirstSequence)
+    {
+        using IHistoricalWriteBatchSink sink = pFail
+            ? new TerminalBatchSink("injected prerequisite chain failure")
+            : new SuccessfulBatchSink();
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        FamilyTreeProjectionChange observedChange =
+            FamilyTreeProjectionChange.None;
+        string key = "late-prerequisite:" + pActorId;
+
+        for (long offset = 0L; offset < 3L; offset++)
+        {
+            long sequence = pFirstSequence + offset;
+            var envelope = new HistoricalWriteEnvelope(sequence, key,
+                string.Empty, Array.Empty<HistoricalSqlValue>(),
+                HistoricalWriteKind.State,
+                new AWAsyncStamp(1L, sequence, sequence));
+            True(callbacks.TryEnqueue(worker, envelope,
+                    (accepted, replaced) =>
+                    {
+                        pending.TransferOwnership(pActorId, replaced,
+                            accepted);
+                        pending.Publish(pActorId, accepted,
+                            FamilyTreeProjectionChange.None);
+                    }, (committed, outcome) =>
+                    {
+                        if (pending.TryComplete(pActorId, committed,
+                                out FamilyTreeProjectionChange change))
+                            observedChange = change;
+                    }, (failed, error) => pending.Fail(pActorId, failed),
+                    out _),
+                "late prerequisite chain accepts offset " + offset);
+            if (offset == 1L)
+                pending.IncludePrerequisite(pActorId,
+                    FamilyTreeProjectionChange.FamilyStructure);
+        }
+
+        worker.Start();
+        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount > 0,
+                TimeSpan.FromSeconds(2)),
+            "late prerequisite chain publishes a completion");
+        True(worker.TryDequeueCompletion(
+                out HistoricalWriteCompletion completion),
+            "late prerequisite completion is available");
+        callbacks.Take(completion.Sequences[0],
+            out Action<long, object> committedCallback,
+            out Action<long, string> failedCallback);
+        if (completion.IsCommitted)
+            committedCallback?.Invoke(completion.Sequences[0],
+                completion.Outcomes[0]);
+        else
+            failedCallback?.Invoke(completion.Sequences[0],
+                completion.Error);
+
+        True(!pending.TryComplete(pActorId, pFirstSequence, out _) &&
+             !pending.TryComplete(pActorId, pFirstSequence + 1L, out _) &&
+             !pending.TryComplete(pActorId, pFirstSequence + 2L, out _),
+            "late prerequisite chain leaves no orphaned owner");
+        pending.Publish(pActorId, pFirstSequence + 3L,
+            FamilyTreeProjectionChange.None);
+        True(pending.TryComplete(pActorId, pFirstSequence + 3L,
+                out FamilyTreeProjectionChange laterChange),
+            "later independent owner remains usable");
+        True(laterChange == FamilyTreeProjectionChange.None,
+            "failed prerequisite cannot leak into later owner");
+        return observedChange;
     }
 
     private static void QueuedReplacementExplicitlyTransfersProjectionSource()
