@@ -1,4 +1,4 @@
-using System;
+using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 
 namespace AncientWarfare3.core.lineage
@@ -34,11 +34,12 @@ namespace AncientWarfare3.core.lineage
         public static void ProcessFrame()
         {
             if (_rebuildPending) RebuildRuntime();
-            int count = Math.Min(MaximumArmiesPerFrame, Queue.WorkCount);
-            for (int i = 0; i < count; i++)
+            int scanBudget = Queue.WorkCount;
+            IReadOnlyList<WarArmyReturnQueueOrder> frame = Queue.TakeFrame(
+                MaximumArmiesPerFrame, scanBudget);
+            for (int i = 0; i < frame.Count; i++)
             {
-                if (!Queue.TryTake(out WarArmyReturnQueueOrder order))
-                    continue;
+                WarArmyReturnQueueOrder order = frame[i];
                 long armyId = order.ArmyId;
                 Army army = ResolveArmy(order.ArmyId);
                 Kingdom kingdom = ResolveKingdom(order.KingdomId);
@@ -84,6 +85,13 @@ namespace AncientWarfare3.core.lineage
             if (pArmyId < 0L) return;
             Queue.Cancel(pArmyId);
             ClearPersisted(ResolveArmy(pArmyId));
+        }
+
+        public static void OnArmyDisposed(Army pArmy)
+        {
+            if (pArmy == null) return;
+            Queue.RemoveDisposed(pArmy.id);
+            ClearPersisted(pArmy);
         }
 
         public static void ClearRuntime()

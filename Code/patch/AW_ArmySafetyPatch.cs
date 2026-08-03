@@ -853,6 +853,7 @@ namespace AncientWarfare3.patch
             out IDisposable __state)
         {
             __state = ArmyCaptainDisposalScope.Open(__instance);
+            WarArmyReturnService.OnArmyDisposed(__instance);
             ArmyRtsControllerService.Invalidate(__instance?.id ?? -1L);
             ArmyFormationService.RemoveArmy(__instance?.id ?? -1L);
             ArmyLogisticsService.OnArmyDisposed(__instance);

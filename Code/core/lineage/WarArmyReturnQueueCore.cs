@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
@@ -15,9 +16,12 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<long, WarArmyReturnQueueOrder>();
         private readonly Queue<long> _work = new Queue<long>();
         private readonly HashSet<long> _queuedIds = new HashSet<long>();
+        private readonly List<WarArmyReturnQueueOrder> _frameBatch =
+            new List<WarArmyReturnQueueOrder>();
 
         public int OrderCount => _orders.Count;
         public int WorkCount => _work.Count;
+        public int QueuedCount => _queuedIds.Count;
 
         public bool Begin(long pArmyId, long pKingdomId, long pTargetCityId)
         {
@@ -53,6 +57,26 @@ namespace AncientWarfare3.core.lineage
                    _orders.TryGetValue(armyId, out pOrder);
         }
 
+        public IReadOnlyList<WarArmyReturnQueueOrder> TakeFrame(
+            int maximumActive, int maximumScans)
+        {
+            _frameBatch.Clear();
+            int activeLimit = Math.Max(0, maximumActive);
+            int scanLimit = Math.Min(_work.Count,
+                Math.Max(0, maximumScans));
+            for (int scanned = 0;
+                 scanned < scanLimit && _frameBatch.Count < activeLimit;
+                 scanned++)
+            {
+                long armyId = _work.Dequeue();
+                if (!_queuedIds.Remove(armyId) ||
+                    !_orders.TryGetValue(armyId,
+                        out WarArmyReturnQueueOrder order)) continue;
+                _frameBatch.Add(order);
+            }
+            return _frameBatch;
+        }
+
         public bool Requeue(long pArmyId)
         {
             return _orders.ContainsKey(pArmyId) && EnqueueOnce(pArmyId);
@@ -61,6 +85,14 @@ namespace AncientWarfare3.core.lineage
         public bool Cancel(long pArmyId)
         {
             return pArmyId >= 0L && _orders.Remove(pArmyId);
+        }
+
+        public bool RemoveDisposed(long pArmyId)
+        {
+            if (pArmyId < 0L) return false;
+            bool removedOrder = _orders.Remove(pArmyId);
+            bool removedMembership = _queuedIds.Remove(pArmyId);
+            return removedOrder || removedMembership;
         }
 
         public bool Complete(long pArmyId)

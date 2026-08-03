@@ -25,8 +25,10 @@ internal static class WarArmyReturnRulesTests
 
         ReopenedOrderKeepsOneBoundedWorkItem();
         StaleCleanupConsumesOneBoundedToken();
+        StaleTokensDoNotConsumeActiveFrameBudget();
         ReturnIntentRestoresAfterRuntimeReset();
         InvalidRestoreFactsClearIntent();
+        DisposedArmyClearsRuntimeAndCannotRestore();
         PublishedMissionCancellationRules();
         ConsumerDropsReturnWhenActiveMissionAppears();
 
@@ -50,6 +52,14 @@ internal static class WarArmyReturnRulesTests
         string queueProcessing = Section(service,
             "public static void ProcessFrame(",
             "public static void ClearRuntime(");
+        True(queueProcessing.Contains(
+                 "int scanBudget = Queue.WorkCount;") &&
+             queueProcessing.Contains("Queue.TakeFrame(") &&
+             queueProcessing.Contains("scanBudget)"),
+            "service separates active processing quota from frame-start scan budget");
+        False(queueProcessing.Contains(
+                "Math.Min(MaximumArmiesPerFrame, Queue.WorkCount)"),
+            "stale work count does not define the active processing quota");
         int targetRecovery = queueProcessing.IndexOf(
             "if (!IsFriendlySafeCity(target, kingdom))",
             StringComparison.Ordinal);
@@ -78,6 +88,24 @@ internal static class WarArmyReturnRulesTests
         False(runtimeClear.Contains("ClearPersisted(") ||
               runtimeClear.Contains("AW_ARMY_RETURN_"),
             "runtime reset preserves persisted return intent");
+        string disposal = Section(service,
+            "public static void OnArmyDisposed(",
+            "public static void ClearRuntime()");
+        True(disposal.Contains("Queue.RemoveDisposed(pArmy.id)") &&
+             disposal.Contains("ClearPersisted(pArmy)"),
+            "army disposal directly clears runtime and persisted return state");
+        False(disposal.Contains("ResolveArmy(") ||
+              disposal.Contains("Cancel("),
+            "army disposal does not depend on the world index or recurse through cancel");
+
+        string armySafetyPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ArmySafetyPatch.cs"));
+        string disposePrefix = Section(armySafetyPatch,
+            "public static void ArmyDispose_Prefix(",
+            "[HarmonyPostfix]");
+        True(disposePrefix.Contains(
+                "WarArmyReturnService.OnArmyDisposed(__instance)"),
+            "Army.Dispose prefix clears return state while ArmyData is available");
 
         string restorePipeline = File.ReadAllText(Path.Combine(root, "Code",
             "core", "multiplayer", "AW3RuntimeRestorePipeline.cs"));
@@ -245,6 +273,39 @@ internal static class WarArmyReturnRulesTests
             "one take cannot drain an unbounded stale backlog");
     }
 
+    private static void StaleTokensDoNotConsumeActiveFrameBudget()
+    {
+        var queue = new WarArmyReturnQueueCore();
+        for (long armyId = 1L; armyId <= 8L; armyId++)
+        {
+            queue.Begin(armyId, 1L, 10L);
+            queue.Cancel(armyId);
+        }
+        for (long armyId = 9L; armyId <= 12L; armyId++)
+            queue.Begin(armyId, 1L, 11L);
+
+        int frameStartWork = queue.WorkCount;
+        IReadOnlyList<WarArmyReturnQueueOrder> frame = queue.TakeFrame(
+            maximumActive: 4, maximumScans: frameStartWork);
+
+        Equal(4, frame.Count,
+            "stale tokens do not consume the four active-order budget");
+        Equal(9L, frame[0].ArmyId, "first active order is preserved");
+        Equal(12L, frame[3].ArmyId, "fourth active order is preserved");
+        Equal(0, queue.WorkCount,
+            "frame-start scan budget bounds and drains the examined tokens");
+
+        for (long armyId = 20L; armyId <= 27L; armyId++)
+        {
+            queue.Begin(armyId, 1L, 12L);
+            queue.Cancel(armyId);
+        }
+        Equal(0, queue.TakeFrame(maximumActive: 4, maximumScans: 3).Count,
+            "a finite scan ceiling may stop before an active order");
+        Equal(5, queue.WorkCount,
+            "the frame drain examines no more than its explicit scan ceiling");
+    }
+
     private static void InvalidRestoreFactsClearIntent()
     {
         WarArmyReturnStoredIntent stored = WarArmyReturnPersistenceRules.Encode(
@@ -258,6 +319,28 @@ internal static class WarArmyReturnRulesTests
             Equal(false, WarArmyReturnPersistenceRules.TryRestore(stored,
                     facts, out _),
                 "death, arrival, or a valid mission clears persisted return");
+    }
+
+    private static void DisposedArmyClearsRuntimeAndCannotRestore()
+    {
+        WarArmyReturnStoredIntent stored = WarArmyReturnPersistenceRules.Encode(
+            armyId: 31L, kingdomId: 4L, targetCityId: 30L);
+        var queue = new WarArmyReturnQueueCore();
+        Equal(true, queue.Begin(stored.ArmyId, stored.KingdomId,
+                stored.TargetCityId),
+            "active return exists before disposal");
+        Equal(1, queue.QueuedCount,
+            "active return owns one queue membership before disposal");
+
+        Equal(true, queue.RemoveDisposed(stored.ArmyId),
+            "disposal removes active return runtime state");
+        Equal(0, queue.OrderCount,
+            "disposed army has no active return order");
+        Equal(0, queue.QueuedCount,
+            "disposed army has no queue membership");
+        Equal(false, WarArmyReturnPersistenceRules.TryRestore(stored,
+                RestoreFacts(armyAlive: false), out _),
+            "a disposed army cannot restore its former return intent");
     }
 
     private static WarArmyReturnRestoreFacts RestoreFacts(
