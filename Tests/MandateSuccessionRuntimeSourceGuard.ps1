@@ -4,6 +4,8 @@ $root = Split-Path -Parent $PSScriptRoot
 $chronicle = Get-Content -Raw (Join-Path $root 'Code/core/lineage/ChronicleEvents.cs')
 $mandate = Get-Content -Raw (Join-Path $root 'Code/core/lineage/MandateService.cs')
 $reigns = Get-Content -Raw (Join-Path $root 'Code/core/lineage/ReignRecordWriter.cs')
+$reignAccession = Get-Content -Raw (Join-Path $root `
+    'Code/core/lineage/ReignAccessionPersistence.cs')
 $declarationPersistence = Get-Content -Raw (Join-Path $root `
     'Code/core/lineage/MandateDeclarationPersistence.cs')
 $facts = Get-Content -Raw (Join-Path $root 'Code/core/lineage/RulerTitleFactService.cs')
@@ -79,19 +81,42 @@ $sameKingEnd = $chronicleCode.IndexOf('RecordPreviousKingLostThrone',
 if ($sameKingStart -lt 0 -or $sameKingEnd -le $sameKingStart -or
     -not $chronicleCode.Substring($sameKingStart,
         $sameKingEnd - $sameKingStart).Contains(
-            'ReignRecordWriter.EnsureOpenReign(')) {
-    throw 'same-ruler retry does not recover a missing open reign'
+            'ReignRecordWriter.TryTransitionReign(')) {
+    throw 'same-ruler retry does not rerun the atomic reign transition'
 }
 
 $openReign = $chronicleCode.LastIndexOf(
-    'ReignRecordWriter.EnsureOpenReign(')
+    'ReignRecordWriter.TryTransitionReign(')
 $installedKing = $chronicleCode.LastIndexOf(
     'pKingdom.king?.data?.id == pNewKing.data.id')
 $normalMandate = $chronicleCode.LastIndexOf(
     'MandateService.OnRulerSucceeded(')
+$lastKingProjection = $chronicleCode.LastIndexOf(
+    'ReignRecordWriter.ProjectCurrentReignStart(')
 if ($openReign -lt 0 -or $installedKing -le $openReign -or
-    $normalMandate -le $installedKing) {
+    $normalMandate -le $installedKing -or
+    $lastKingProjection -le $normalMandate) {
     throw 'normal accession does not ensure its open reign and installed king before Mandate commit'
+}
+
+Require $reignAccession 'pDb.BeginTransaction()' `
+    'ruler accession does not transactionally close and open reigns'
+RequireOrder $reignAccession 'CloseOld(' 'InsertNew(' `
+    'ruler accession does not close the old reign before opening the new reign'
+Require $reignAccession 'command.ExecuteNonQuery() != 1' `
+    'ruler accession does not observe failed close or insert writes'
+Require $declarationPersistence 'ExpectedPreviousActive' `
+    'Mandate replacement does not compare the expected old active holder'
+RequireOrder $declarationPersistence 'EndPreviousPeriod(' 'InsertPeriod(' `
+    'Mandate replacement does not end the old period inside the new transaction'
+
+$declareStart = $mandate.IndexOf('private static bool TryDeclareMandateCore')
+$declareEnd = $mandate.IndexOf('private static void PublishDeclaredMandate',
+    $declareStart)
+if ($declareStart -lt 0 -or $declareEnd -le $declareStart -or
+    $mandate.Substring($declareStart, $declareEnd - $declareStart).Contains(
+        'ClearMandate(')) {
+    throw 'Mandate replacement clears the old holder before the new transaction commits'
 }
 
 Write-Output 'Mandate succession runtime source guard passed.'

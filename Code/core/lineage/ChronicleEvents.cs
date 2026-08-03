@@ -27,38 +27,54 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID, out long lastKingId, -1L);
             if (lastKingId == pNewKing.data.id)
             {
-                ReignRecordWriter.TryRecoverCurrentProjection(
-                    pKingdom, pNewKing);
-                MandateAccessionCoordinator.TrySettle(
-                    () => ReignRecordWriter.EnsureOpenReign(
-                        pKingdom, pNewKing),
+                double retryStart = World.world.getCurWorldTime();
+                double persistedRetryStart = -1d;
+                string retryError = "";
+                bool retrySettled = MandateAccessionCoordinator.TrySettle(
+                    () => ReignRecordWriter.TryTransitionReign(
+                        pKingdom, pNewKing, retryStart,
+                        out persistedRetryStart, out retryError),
                     () => pKingdom.king?.data?.id == pNewKing.data.id,
                     () => MandateService.OnRulerSucceeded(
-                        pKingdom, pNewKing));
+                        pKingdom, pNewKing),
+                    () => ReignRecordWriter.ProjectCurrentReignStart(
+                        pKingdom, pNewKing, persistedRetryStart));
+                if (!retrySettled && !string.IsNullOrEmpty(retryError))
+                    ModClass.LogWarning("Ruler accession retry failed: " +
+                                        retryError);
                 return;
             }
-            RecordPreviousKingLostThrone(pKingdom, lastKingId, pNewKing.data.id);
-            pKingdom.data.set(LineageKeys.CHRONICLE_LAST_KING_ID, pNewKing.data.id);
-
             long previousDynastyShiId =
                 DynastyRecordWriter.GetCurrentDynastyShiId(pKingdom.id);
             pNewKing.data.get(LineageKeys.SHI_ID, out long newShiId, -1L);
             bool changedRulingShi = previousDynastyShiId >= 0 &&
                                     previousDynastyShiId != newShiId;
-            ReignRecordWriter.CloseOpenReign(pKingdom, "replaced");
-            ReignRecordWriter.ProjectCurrentReignStart(pKingdom,
-                pNewKing, World.world.getCurWorldTime());
+            double accessionTime = World.world.getCurWorldTime();
             bool newDynastyCreated =
                 DynastyRecordWriter.OnKingChanged(pKingdom, pNewKing);
             if (!ProjectDynasticStateNameForRuler(pKingdom, pNewKing,
                     newShiId, changedRulingShi, newDynastyCreated))
                 WarnStateNameProjection(pKingdom, pNewKing);
-            MandateAccessionCoordinator.TrySettle(
-                () => ReignRecordWriter.EnsureOpenReign(
-                    pKingdom, pNewKing),
+            double persistedStartTime = -1d;
+            string transitionError = "";
+            bool settled = MandateAccessionCoordinator.TrySettle(
+                () => ReignRecordWriter.TryTransitionReign(
+                    pKingdom, pNewKing, accessionTime,
+                    out persistedStartTime, out transitionError),
                 () => pKingdom.king?.data?.id == pNewKing.data.id,
                 () => MandateService.OnRulerSucceeded(
-                    pKingdom, pNewKing));
+                    pKingdom, pNewKing),
+                () => ReignRecordWriter.ProjectCurrentReignStart(
+                    pKingdom, pNewKing, persistedStartTime));
+            if (!settled)
+            {
+                if (!string.IsNullOrEmpty(transitionError))
+                    ModClass.LogWarning("Ruler accession persistence failed: " +
+                                        transitionError);
+                return;
+            }
+            RecordPreviousKingLostThrone(
+                pKingdom, lastKingId, pNewKing.data.id);
             string kingName = pNewKing.getName();
 
             // 国家·换君

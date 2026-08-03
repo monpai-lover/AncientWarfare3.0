@@ -29,6 +29,11 @@ namespace AncientWarfare3.core.lineage
             public string ClaimantKind = "orthodox";
             public string MapMarkerKind = "moh";
             public int EmperorTitle;
+            public bool ExpectedPreviousActive;
+            public long PreviousPeriodId = -1L;
+            public long PreviousKingdomId = -1L;
+            public int PreviousMandateValue;
+            public string PreviousEndReason = "replaced";
         }
 
         public static bool TryCommit(SQLiteConnection pDb,
@@ -46,6 +51,9 @@ namespace AncientWarfare3.core.lineage
             using SQLiteTransaction transaction = pDb.BeginTransaction();
             try
             {
+                if (pRequest.ExpectedPreviousActive)
+                    EndPreviousPeriod(pDb, transaction, pPeriodTable,
+                        pRequest);
                 InsertPeriod(pDb, transaction, pPeriodTable, pRequest);
                 UpsertState(pDb, transaction, pStateTable, pRequest);
                 if (!ReignMandateProjectionPersistence.TryProject(
@@ -84,7 +92,28 @@ namespace AncientWarfare3.core.lineage
                    pRequest.KingdomId >= 0L &&
                    pRequest.RulerActorId >= 0L &&
                    pRequest.StartMandate >= 0 &&
-                   pRequest.EmperorTitle >= 0;
+                   pRequest.EmperorTitle >= 0 &&
+                   (!pRequest.ExpectedPreviousActive ||
+                    (pRequest.PreviousPeriodId >= 0L &&
+                     pRequest.PreviousKingdomId >= 0L &&
+                     pRequest.PreviousKingdomId != pRequest.KingdomId));
+        }
+
+        private static void EndPreviousPeriod(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, string pTable, Request pRequest)
+        {
+            using var command = new SQLiteCommand(pDb)
+            {
+                Transaction = pTransaction,
+                CommandText = "UPDATE " + pTable +
+                    " SET END_TIME=@time,END_REASON=@previousEndReason," +
+                    "END_MANDATE=@previousMandate WHERE PERIOD_ID=@previousPeriod" +
+                    " AND KINGDOM_ID=@previousKingdom AND END_TIME=-1"
+            };
+            AddCommonParameters(command, pRequest);
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException(
+                    "mandate replacement expected one previous period");
         }
 
         private static void InsertPeriod(SQLiteConnection pDb,
@@ -129,7 +158,11 @@ namespace AncientWarfare3.core.lineage
             {
                 Transaction = pTransaction,
                 CommandText = "UPDATE " + pTable + " SET " + assignments +
-                              " WHERE STATE_ID=@state"
+                    " WHERE STATE_ID=@state AND " +
+                    (pRequest.ExpectedPreviousActive
+                        ? "ACTIVE=1 AND KINGDOM_ID=@previousKingdom " +
+                          "AND PERIOD_ID=@previousPeriod"
+                        : "ACTIVE=0")
             };
             AddCommonParameters(update, pRequest);
             int affected = update.ExecuteNonQuery();
@@ -137,6 +170,9 @@ namespace AncientWarfare3.core.lineage
             if (affected != 0)
                 throw new InvalidOperationException(
                     "mandate declaration updated multiple state rows");
+            if (pRequest.ExpectedPreviousActive)
+                throw new InvalidOperationException(
+                    "mandate replacement expected one previous state row");
 
             using var insert = new SQLiteCommand(pDb)
             {
@@ -199,6 +235,14 @@ namespace AncientWarfare3.core.lineage
                 pRequest.ClaimantKind ?? "orthodox");
             pCommand.Parameters.AddWithValue("@marker",
                 pRequest.MapMarkerKind ?? "moh");
+            pCommand.Parameters.AddWithValue("@previousPeriod",
+                pRequest.PreviousPeriodId);
+            pCommand.Parameters.AddWithValue("@previousKingdom",
+                pRequest.PreviousKingdomId);
+            pCommand.Parameters.AddWithValue("@previousMandate",
+                pRequest.PreviousMandateValue);
+            pCommand.Parameters.AddWithValue("@previousEndReason",
+                pRequest.PreviousEndReason ?? "replaced");
         }
     }
 }

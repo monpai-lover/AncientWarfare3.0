@@ -428,10 +428,15 @@ namespace AncientWarfare3.core.lineage
                                             hadPreviousMandate, pOriginType)
                 ? previousReport.period_id
                 : -1L;
-            if (previousReport.active && previousReport.kingdom_id != pKingdom.id)
-                ClearMandate(pReason == "player_grant"
-                    ? "player_grant_replaced"
-                    : "replaced");
+            bool replacingActiveMandate = previousReport.active &&
+                                           previousReport.kingdom_id !=
+                                           pKingdom.id;
+            Kingdom previousMandateKingdom = replacingActiveMandate
+                ? FindKingdom(previousReport.kingdom_id)
+                : null;
+            string replacementReason = pReason == "player_grant"
+                ? "player_grant_replaced"
+                : "replaced";
 
             long periodId = TableIdAllocator.Next(DB, MandatePeriodTableItem.GetTableName(), "PERIOD_ID");
             double now = LineageService.CurTime();
@@ -464,15 +469,30 @@ namespace AncientWarfare3.core.lineage
                 RebelOriginKingdomName = pRebelOrigin?.name ?? "",
                 ClaimantKind = pClaimantKind ?? "orthodox",
                 MapMarkerKind = markerKind,
-                EmperorTitle = (int)KingdomTitle.Emperor
+                EmperorTitle = (int)KingdomTitle.Emperor,
+                ExpectedPreviousActive = replacingActiveMandate,
+                PreviousPeriodId = replacingActiveMandate
+                    ? previousReport.period_id
+                    : -1L,
+                PreviousKingdomId = replacingActiveMandate
+                    ? previousReport.kingdom_id
+                    : -1L,
+                PreviousMandateValue = previousReport.mandate_value,
+                PreviousEndReason = replacementReason
             };
             string persistenceError = "";
-            bool declared = MandateDeclarationRules.TryCommitProjection(
+            bool declared = MandateDeclarationRules.TryCommitReplacement(
                 () => MandateDeclarationPersistence.TryCommit(
                     DB, MandatePeriodTableItem.GetTableName(),
                     MandateStateTableItem.GetTableName(),
                     KingdomReignTableItem.GetTableName(), request,
                     out persistenceError),
+                () =>
+                {
+                    if (replacingActiveMandate)
+                        PublishMandateEnded(previousMandateKingdom,
+                            previousReport, replacementReason);
+                },
                 () =>
                 {
                     PublishDeclaredMandate(pKingdom, king, periodId,
@@ -962,8 +982,6 @@ namespace AncientWarfare3.core.lineage
             MandateReport report = ReadReport();
             if (!Ready || !report.active) return;
 
-            RulerTitleRestorationStateService.MarkMandateLost(current);
-
             double now = LineageService.CurTime();
             DB.UpdateValue(MandatePeriodTableItem.GetTableName(),
                 new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("PERIOD_ID", report.period_id) },
@@ -977,25 +995,36 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("UPDATED_TIME", now),
                 ColumnVal.Create("CRISIS_LEVEL", "ended"));
 
+            PublishMandateEnded(current, report, pReason);
+        }
+
+        private static void PublishMandateEnded(Kingdom pCurrent,
+            MandateReport pReport, string pReason)
+        {
+            RulerTitleRestorationStateService.MarkMandateLost(pCurrent);
             PublishRuntimeMarkerProjection(false, -1L, "");
-            MandateMilitaryPhaseService.OnMandateEnded(current);
+            MandateMilitaryPhaseService.OnMandateEnded(pCurrent);
 
-            if (current?.king != null && current.king.hasTrait(TRAIT_TIANMING))
-                current.king.removeTrait(TRAIT_TIANMING);
+            if (pCurrent?.king != null &&
+                pCurrent.king.hasTrait(TRAIT_TIANMING))
+                pCurrent.king.removeTrait(TRAIT_TIANMING);
 
-            if (current?.data != null)
+            if (pCurrent?.data != null)
             {
-                HistoryWriter.RecordKingdom(current, "mandate_end",
-                    HistoryText.Kingdom(current) + H("aw_hist_edict_mandate_lost_prefix") +
+                HistoryWriter.RecordKingdom(pCurrent, "mandate_end",
+                    HistoryText.Kingdom(pCurrent) +
+                    H("aw_hist_edict_mandate_lost_prefix") +
                     HistoryText.PlainText(EndReasonLabel(pReason)) +
                     H("aw_hist_edict_mandate_lost_suffix"),
-                    HistoryTarget.Kingdom(current));
-                RecordEvent("mandate_end", current, current.king, null, 0, report.mandate_value,
-                    current.name + T("aw_hist_edict_mandate_lost_prefix") +
-                    EndReasonLabel(pReason) + T("aw_hist_edict_mandate_lost_suffix"));
+                    HistoryTarget.Kingdom(pCurrent));
+                RecordEvent("mandate_end", pCurrent, pCurrent.king, null, 0,
+                    pReport.mandate_value,
+                    pCurrent.name + T("aw_hist_edict_mandate_lost_prefix") +
+                    EndReasonLabel(pReason) +
+                    T("aw_hist_edict_mandate_lost_suffix"));
             }
 
-            RulerAppellationService.RefreshLivingProjection(current);
+            RulerAppellationService.RefreshLivingProjection(pCurrent);
             FamilyTreeProjectionRevision.Advance(
                 FamilyTreeProjectionChange.RankOrMandate);
 

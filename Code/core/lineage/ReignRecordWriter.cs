@@ -133,6 +133,74 @@ namespace AncientWarfare3.core.lineage
                    rulerActorId == pKing.data.id;
         }
 
+        public static bool TryTransitionReign(Kingdom pKingdom,
+            Actor pNewKing, double pStartTime,
+            out double pPersistedStartTime, out string pError)
+        {
+            pPersistedStartTime = -1d;
+            pError = "";
+            if (!Ready || pKingdom?.data == null || pNewKing?.data == null ||
+                pStartTime < 0d || !LineageService.IsXiaKingdom(pKingdom) ||
+                !LineageService.IsXia(pNewKing))
+                return false;
+
+            ReignInfo open = ReadOpenReignInfo(pKingdom.id);
+            int endPop = SafePopulation(pKingdom);
+            int endCities = SafeCityCount(pKingdom);
+            int endArmies = SafeArmyCount(pKingdom);
+            var (wins, losses) = open.IsValid
+                ? WarRecordWriter.GetWarRecord(
+                    pKingdom.id, open.StartTime, pStartTime)
+                : (0, 0);
+            pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME,
+                out string stem, "");
+            pNewKing.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            pKingdom.data.get(LineageKeys.MANDATE_PERIOD_ID,
+                out long mandatePeriodId, -1L);
+            int reignIndex = CountReigns(pKingdom.id) + 1;
+            string kingdomColor = HistoryColors.FromKingdom(pKingdom);
+            string rulerColor = HistoryColors.FromActor(pNewKing);
+            int highestTitle = (int)KingdomTitleService.GetTitle(pKingdom);
+            var request = new ReignAccessionPersistence.Request
+            {
+                KingdomId = pKingdom.id,
+                NewReignId = TableIdAllocator.Next(DB, TABLE, "REIGN_ID"),
+                NewRulerActorId = pNewKing.data.id,
+                NewKingdomColor = kingdomColor,
+                NewShiId = shiId,
+                NewDynastyId = DynastyRecordWriter.GetCurrentDynastyId(
+                    pKingdom.id),
+                NewMandatePeriodId = mandatePeriodId,
+                NewHighestTitle = highestTitle,
+                NewStateName = StateNameService.GetBoundOrCurrentName(
+                    pKingdom, shiId),
+                NewRulerName = pNewKing.getName(),
+                NewRulerColor = string.IsNullOrEmpty(rulerColor)
+                    ? kingdomColor
+                    : rulerColor,
+                NewReignIndex = reignIndex,
+                NewStartTime = pStartTime,
+                NewYearNameStem = stem ?? "",
+                NewYearNameColor = kingdomColor,
+                NewStartPopulation = endPop,
+                NewStartCityCount = endCities,
+                NewStartArmyCount = endArmies,
+                NewIsFounder = reignIndex == 1 ? 1 : 0,
+                OldEndTime = pStartTime,
+                OldEndReason = "replaced",
+                OldEndPopulation = endPop,
+                OldEndCityCount = endCities,
+                OldEndArmyCount = endArmies,
+                OldWarWins = wins,
+                OldWarLosses = losses,
+                OldLostCapital = 0,
+                OldHighestTitle = Math.Max(open.HighestTitle, highestTitle),
+                OldDeathCause = ""
+            };
+            return ReignAccessionPersistence.TryTransition(DB, TABLE,
+                request, out pPersistedStartTime, out pError);
+        }
+
         public static void ProjectCurrentReignStart(Kingdom pKingdom,
             Actor pKing, double pStartTime)
         {

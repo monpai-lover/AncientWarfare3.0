@@ -267,6 +267,7 @@
     <Compile Include="..\..\Code\core\lineage\MandateNameProjectionRules.cs" Link="Production\MandateNameProjectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateSuccessionRules.cs" Link="Production\MandateSuccessionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateAccessionCoordinator.cs" Link="Production\MandateAccessionCoordinator.cs" />
+    <Compile Include="..\..\Code\core\lineage\ReignAccessionPersistence.cs" Link="Production\ReignAccessionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateSuccessionPersistence.cs" Link="Production\MandateSuccessionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\ReignMandateProjectionPersistence.cs" Link="Production\ReignMandateProjectionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateDeclarationPersistence.cs" Link="Production\MandateDeclarationPersistence.cs" />

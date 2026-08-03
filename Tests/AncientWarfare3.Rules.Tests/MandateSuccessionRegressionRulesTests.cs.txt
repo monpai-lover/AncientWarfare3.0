@@ -8,9 +8,11 @@ internal static class MandateSuccessionRegressionRulesTests
         ActiveMandateSuccessionRefreshesInstalledRuler();
         MandateTraitMovesToTheInstalledRuler();
         AccessionSettlementRequiresOpenReignAndInstalledKing();
+        FailedReignTransitionRetriesBeforeProjectionAdvances();
         FailedPersistenceRetriesBeforeRuntimeProjection();
         MandateContextTargetsOnlyTheInstalledRulersLatestOpenReign();
         FailedMandateDeclarationRollsBackAndRetriesOnce();
+        ActiveMandateReplacementIsAtomicAndRetryable();
         ActiveMandateKeepsItsImperialStateName();
         SavedMandateReignUsesImperialPosthumousRank();
     }
@@ -159,6 +161,121 @@ internal static class MandateSuccessionRegressionRulesTests
             });
         Equal(true, settled, "a valid accession settles successfully");
         Equal(3, phase, "all accession phases execute in order");
+    }
+
+    private static void
+        FailedReignTransitionRetriesBeforeProjectionAdvances()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KINGDOM_COLOR TEXT,KING_ACTOR_ID INTEGER,SHI_ID INTEGER," +
+            "DYNASTY_ID INTEGER,MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "KING_NAME TEXT,KING_COLOR TEXT,REIGN_INDEX INTEGER," +
+            "START_TIME REAL,END_TIME REAL,YEAR_NAME_STEM TEXT," +
+            "YEAR_NAME_COLOR TEXT,END_REASON TEXT," +
+            "START_POPULATION INTEGER,START_CITY_COUNT INTEGER," +
+            "START_ARMY_COUNT INTEGER,END_POPULATION INTEGER," +
+            "END_CITY_COUNT INTEGER,END_ARMY_COUNT INTEGER," +
+            "IS_FOUNDER INTEGER,WAR_WINS INTEGER,WAR_LOSSES INTEGER," +
+            "LOST_CAPITAL INTEGER,DEATH_CAUSE TEXT);" +
+            "INSERT INTO KingdomReign VALUES" +
+            "(1,17,'old',41,1,1,-1,2,'Old State','Old King','old',1," +
+            "10,-1,'','','',100,2,3,0,0,0,1,0,0,0,'');" +
+            "CREATE TRIGGER fail_old_reign_close BEFORE UPDATE ON " +
+            "KingdomReign WHEN OLD.REIGN_ID=1 BEGIN SELECT RAISE(ABORT," +
+            "'injected old reign close failure'); END;");
+
+        var request = new ReignAccessionPersistence.Request
+        {
+            KingdomId = 17L,
+            NewReignId = 2L,
+            NewRulerActorId = 42L,
+            NewKingdomColor = "new",
+            NewShiId = 2L,
+            NewDynastyId = 2L,
+            NewMandatePeriodId = -1L,
+            NewHighestTitle = 2,
+            NewStateName = "New State",
+            NewRulerName = "New King",
+            NewRulerColor = "new",
+            NewReignIndex = 2,
+            NewStartTime = 11d,
+            NewYearNameStem = "",
+            NewYearNameColor = "new",
+            NewStartPopulation = 110,
+            NewStartCityCount = 3,
+            NewStartArmyCount = 4,
+            NewIsFounder = 0,
+            OldEndTime = 11d,
+            OldEndReason = "replaced",
+            OldEndPopulation = 110,
+            OldEndCityCount = 3,
+            OldEndArmyCount = 4,
+            OldWarWins = 0,
+            OldWarLosses = 0,
+            OldLostCapital = 0,
+            OldHighestTitle = 2,
+            OldDeathCause = ""
+        };
+        long lastKingId = 41L;
+        long mandateActorId = 41L;
+        string error = "";
+        bool first = MandateAccessionCoordinator.TrySettle(
+            () => ReignAccessionPersistence.TryTransition(
+                db, "KingdomReign", request, out error),
+            () => true,
+            () =>
+            {
+                mandateActorId = 42L;
+                return true;
+            },
+            () => lastKingId = 42L);
+        Equal(false, first,
+            "a failed old-reign close aborts accession settlement");
+        Equal(41L, lastKingId,
+            "a failed reign transition does not advance last king id");
+        Equal(41L, mandateActorId,
+            "a failed reign transition does not commit Mandate succession");
+        Equal(-1L, Scalar(db,
+                "SELECT END_TIME FROM KingdomReign WHERE REIGN_ID=1"),
+            "the old reign remains open after rollback");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomReign WHERE REIGN_ID=2"),
+            "the new reign is not half-created after rollback");
+
+        Execute(db, "DROP TRIGGER fail_old_reign_close;");
+        bool second = MandateAccessionCoordinator.TrySettle(
+            () => ReignAccessionPersistence.TryTransition(
+                db, "KingdomReign", request, out error),
+            () => true,
+            () =>
+            {
+                mandateActorId = 42L;
+                return true;
+            },
+            () => lastKingId = 42L);
+        Equal(true, second,
+            "the same accession succeeds after close persistence recovers");
+        Equal(42L, lastKingId,
+            "last king id advances only after the full settlement");
+        Equal(42L, mandateActorId,
+            "Mandate succession commits to the installed new king");
+        Equal(11L, Scalar(db,
+                "SELECT END_TIME FROM KingdomReign WHERE REIGN_ID=1"),
+            "the successful retry closes the old reign");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomReign WHERE KINGDOM_ID=17 " +
+                "AND KING_ACTOR_ID=42 AND END_TIME=-1"),
+            "the successful retry creates one new-ruler open reign");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomReign WHERE KINGDOM_ID=17 " +
+                "AND END_TIME=-1"),
+            "the successful retry leaves a unique open reign");
     }
 
     private static void
@@ -389,6 +506,174 @@ internal static class MandateSuccessionRegressionRulesTests
             "duplicate retry does not duplicate the trait projection");
         Equal(1, runtimePublishes,
             "duplicate retry does not duplicate runtime projection");
+    }
+
+    private static void ActiveMandateReplacementIsAtomicAndRetryable()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE MandatePeriod(" +
+            "PERIOD_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT,DYNASTY_NAME TEXT," +
+            "FOUNDER_ACTOR_ID INTEGER,FOUNDER_NAME TEXT,START_TIME REAL," +
+            "END_TIME REAL,END_REASON TEXT,START_MANDATE INTEGER," +
+            "END_MANDATE INTEGER,LEGAL_CORE_COUNT INTEGER," +
+            "ORIGIN_TYPE TEXT,REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT);" +
+            "INSERT INTO MandatePeriod VALUES" +
+            "(80,9,'Old Realm','old','Old Dynasty',31,'Old Emperor',1," +
+            "-1,'',30,44,0,'native',-1,'','orthodox');" +
+            "CREATE TABLE MandateState(" +
+            "STATE_ID INTEGER PRIMARY KEY,ACTIVE INTEGER," +
+            "KINGDOM_ID INTEGER,KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT," +
+            "DYNASTY_NAME TEXT,EMPEROR_ACTOR_ID INTEGER," +
+            "EMPEROR_NAME TEXT,PERIOD_ID INTEGER,MANDATE_VALUE INTEGER," +
+            "IMPERIAL_AUTHORITY INTEGER,DYNASTY_PRESTIGE INTEGER," +
+            "CORE_CONTROL REAL,VASSAL_LOYALTY REAL,CRISIS_LEVEL TEXT," +
+            "START_TIME REAL,UPDATED_TIME REAL,LAST_YEAR INTEGER," +
+            "ORIGIN_TYPE TEXT,ORIGINAL_CORE_COUNT INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT," +
+            "MAP_MARKER_KIND TEXT);" +
+            "INSERT INTO MandateState VALUES" +
+            "(1,1,9,'Old Realm','old','Old Dynasty',31,'Old Emperor',80," +
+            "44,40,2,1,1,'stable',1,2,100,'native',0,-1,''," +
+            "'orthodox','moh');" +
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "START_TIME REAL,END_TIME REAL);");
+
+        var request = new MandateDeclarationPersistence.Request
+        {
+            StateId = 1L,
+            PeriodId = 91L,
+            KingdomId = 17L,
+            KingdomName = "New Realm",
+            KingdomColor = "new",
+            DynastyName = "New Dynasty",
+            RulerActorId = 42L,
+            RulerName = "New Emperor",
+            StartTime = 12d,
+            CurrentYear = 101,
+            StartMandate = 30,
+            ImperialAuthority = 45,
+            DynastyPrestige = 0,
+            CoreControl = 1d,
+            VassalLoyalty = 1d,
+            CrisisLevel = "stable",
+            OriginType = "native",
+            ClaimantKind = "orthodox",
+            MapMarkerKind = "moh",
+            EmperorTitle = 4,
+            ExpectedPreviousActive = true,
+            PreviousPeriodId = 80L,
+            PreviousKingdomId = 9L,
+            PreviousMandateValue = 44,
+            PreviousEndReason = "replaced"
+        };
+        int oldEndPublishes = 0;
+        int newStartPublishes = 0;
+        string error = "";
+        bool missingReign = MandateDeclarationRules.TryCommitReplacement(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () => oldEndPublishes++,
+            () => newStartPublishes++);
+        Equal(false, missingReign,
+            "replacement rejects a missing new-ruler open reign");
+        AssertOldMandateStillActive(db,
+            "zero-row replacement failure preserves the old Mandate");
+        Equal(0, oldEndPublishes,
+            "zero-row failure publishes no old-Mandate ending");
+        Equal(0, newStartPublishes,
+            "zero-row failure publishes no new-Mandate start");
+
+        Execute(db,
+            "INSERT INTO KingdomReign VALUES" +
+            "(7,17,42,-1,2,'New Realm',11,-1);" +
+            "CREATE TRIGGER fail_replacement_reign BEFORE UPDATE ON " +
+            "KingdomReign BEGIN SELECT RAISE(ABORT," +
+            "'injected replacement reign failure'); END;");
+        bool exceptionFailure =
+            MandateDeclarationRules.TryCommitReplacement(
+                () => MandateDeclarationPersistence.TryCommit(
+                    db, "MandatePeriod", "MandateState", "KingdomReign",
+                    request, out error),
+                () => oldEndPublishes++,
+                () => newStartPublishes++);
+        Equal(false, exceptionFailure,
+            "replacement rejects a reign projection exception");
+        AssertOldMandateStillActive(db,
+            "exceptional replacement preserves the old Mandate");
+        Equal(-1L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
+            "exceptional replacement preserves the new ruler's ordinary reign");
+        Equal(0, oldEndPublishes,
+            "exceptional failure publishes no old-Mandate ending");
+        Equal(0, newStartPublishes,
+            "exceptional failure publishes no new-Mandate start");
+
+        Execute(db, "DROP TRIGGER fail_replacement_reign;");
+        bool success = MandateDeclarationRules.TryCommitReplacement(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () => oldEndPublishes++,
+            () => newStartPublishes++);
+        Equal(true, success, "the replacement safely retries");
+        Equal(12L, Scalar(db,
+                "SELECT END_TIME FROM MandatePeriod WHERE PERIOD_ID=80"),
+            "successful replacement ends the old period atomically");
+        Equal("replaced", ScalarText(db,
+                "SELECT END_REASON FROM MandatePeriod WHERE PERIOD_ID=80"),
+            "successful replacement records the old end reason");
+        Equal(17L, Scalar(db,
+                "SELECT KINGDOM_ID FROM MandateState WHERE STATE_ID=1"),
+            "successful replacement activates the new realm");
+        Equal(91L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"),
+            "successful replacement activates the new period");
+        Equal(91L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
+            "successful replacement projects the new ruler's reign");
+        Equal(1, oldEndPublishes,
+            "successful replacement publishes the old ending once");
+        Equal(1, newStartPublishes,
+            "successful replacement publishes the new start once");
+
+        bool duplicate = MandateDeclarationRules.TryCommitReplacement(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () => oldEndPublishes++,
+            () => newStartPublishes++);
+        Equal(false, duplicate,
+            "a committed replacement cannot be published twice");
+        Equal(1, oldEndPublishes,
+            "duplicate replacement does not repeat old history");
+        Equal(1, newStartPublishes,
+            "duplicate replacement does not repeat new history");
+    }
+
+    private static void AssertOldMandateStillActive(SQLiteConnection db,
+        string name)
+    {
+        Equal(1L, Scalar(db,
+                "SELECT ACTIVE FROM MandateState WHERE STATE_ID=1"), name);
+        Equal(9L, Scalar(db,
+                "SELECT KINGDOM_ID FROM MandateState WHERE STATE_ID=1"), name);
+        Equal(80L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"), name);
+        Equal(-1L, Scalar(db,
+                "SELECT END_TIME FROM MandatePeriod WHERE PERIOD_ID=80"), name);
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandatePeriod WHERE PERIOD_ID=91"),
+            name);
     }
 
     private static void ActiveMandateKeepsItsImperialStateName()

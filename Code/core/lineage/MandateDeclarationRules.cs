@@ -12,6 +12,15 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static bool TryCommitReplacement(Func<bool> pPersist,
+            Action pPublishPreviousEnd, Action pPublishNewStart)
+        {
+            if (pPersist == null || !pPersist()) return false;
+            pPublishPreviousEnd?.Invoke();
+            pPublishNewStart?.Invoke();
+            return true;
+        }
+
         public static bool RequiresMandateRitesForOrigin(string pDeclarationReason,
             string pOriginType, string pClaimantKind)
         {
