@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
+using UnityEngine;
 
 namespace AncientWarfare3.core.policy
 {
@@ -68,6 +69,9 @@ namespace AncientWarfare3.core.policy
         private static readonly Dictionary<int, NativeZoneMetaCacheEntry>
             NativeDrawMetaCache =
                 new Dictionary<int, NativeZoneMetaCacheEntry>();
+        private static readonly Dictionary<long, NativeCountryLabelEntry>
+            NativeCountryLabels =
+                new Dictionary<long, NativeCountryLabelEntry>();
         private static HierarchicalVassalHierarchyIndex _hierarchyIndex;
         private static bool _nativeDrawPassActive;
         private static HierarchicalVassalMapModeLayer _selectedLayer =
@@ -163,12 +167,153 @@ namespace AncientWarfare3.core.policy
 
         internal static void BeginNativeDrawPass()
         {
+            NativeDrawMetaCache.Clear();
+            NativeCountryLabels.Clear();
             _nativeDrawPassActive = true;
+        }
+
+        internal static void RecordNativeDrawZone(TileZone pZone)
+        {
+            if (!_nativeDrawPassActive || IsCityLayer || pZone == null ||
+                pZone.id < 0 || !ContainsVisibleLand(pZone)) return;
+
+            Kingdom representative = GetMetaForZone(pZone) as Kingdom;
+            if (!IsValidKingdom(representative)) return;
+            if (!NativeCountryLabels.TryGetValue(representative.id,
+                    out NativeCountryLabelEntry entry))
+            {
+                entry = new NativeCountryLabelEntry(representative);
+                NativeCountryLabels.Add(representative.id, entry);
+            }
+            entry.Add(pZone);
         }
 
         internal static void EndNativeDrawPass()
         {
-            _nativeDrawPassActive = false;
+            try
+            {
+                if (_nativeDrawPassActive && !IsCityLayer)
+                    PublishNativeCountryLabels();
+            }
+            catch (Exception error)
+            {
+                try
+                {
+                    ModClass.LogWarning(
+                        "Hierarchical native labels failed: " +
+                        error.Message);
+                }
+                catch { }
+            }
+            finally
+            {
+                _nativeDrawPassActive = false;
+                NativeCountryLabels.Clear();
+                NativeDrawMetaCache.Clear();
+            }
+        }
+
+        private static void PublishNativeCountryLabels()
+        {
+            var entries = new List<NativeCountryLabelEntry>(
+                NativeCountryLabels.Values);
+            entries.Sort((pLeft, pRight) => CompareKingdoms(
+                pLeft.Kingdom, pRight.Kingdom));
+            var activeKeys = new HashSet<string>();
+            for (int index = 0; index < entries.Count; index++)
+            {
+                NativeCountryLabelEntry entry = entries[index];
+                Kingdom kingdom = entry.Kingdom;
+                string displayName = GetMapDisplayName(kingdom)?.Trim();
+                if (string.IsNullOrWhiteSpace(displayName)) continue;
+                if (!TryBuildCountryPlacement(entry, displayName,
+                        out HierarchicalVassalMapModeLabelPlacement placement,
+                        out int gap)) continue;
+
+                string key = "native:country:" + CurrentLabelFocusKey +
+                             ":" + kingdom.id;
+                activeKeys.Add(key);
+                HierarchicalVassalMapModeLabelLayer.ApplyRuntimeLabel(
+                    key, HierarchicalVassalMapModeRules.FormatCountryLabel(
+                        displayName, entry.HorizontalSpan), placement, gap,
+                    true, kingdom, null);
+            }
+            HierarchicalVassalMapModeLabelLayer.
+                HideRuntimeLabelsExcept(activeKeys);
+        }
+
+        private static bool TryBuildCountryPlacement(
+            NativeCountryLabelEntry pEntry, string pDisplayName,
+            out HierarchicalVassalMapModeLabelPlacement pPlacement,
+            out int pGap)
+        {
+            pPlacement = default(HierarchicalVassalMapModeLabelPlacement);
+            pGap = 0;
+            if (pEntry.Accumulator.TryBuild(
+                    out HierarchicalVassalZoneLabelMetrics metrics))
+            {
+                pEntry.HorizontalSpan = metrics.SpanX;
+                var geometry = new HierarchicalVassalMapModeGeometryMetrics
+                {
+                    Area = metrics.LandArea,
+                    Centroid = new Vector2((float)metrics.AnchorX,
+                        (float)metrics.AnchorY),
+                    SpanX = metrics.SpanX,
+                    SpanY = metrics.SpanY,
+                    Angle = metrics.Angle
+                };
+                pGap = HierarchicalVassalMapModeRules.
+                    CalculateCountryLabelGapLevel(pDisplayName,
+                        metrics.SpanX);
+                pPlacement = new HierarchicalVassalMapModeLabelPlacement
+                {
+                    Centroid = geometry.Centroid,
+                    Angle = geometry.Angle,
+                    Size = HierarchicalVassalMapModeGeometry.
+                        CalculateLabelSize(geometry, pDisplayName, pGap)
+                };
+                return true;
+            }
+
+            if (!TryResolveCountryFallback(pEntry,
+                    out Vector2 fallback)) return false;
+            pPlacement = new HierarchicalVassalMapModeLabelPlacement
+            {
+                Centroid = fallback,
+                Angle = 0f,
+                Size = HierarchicalVassalMapModeRules.
+                    SmallTerritoryMinimumLabelSize
+            };
+            return true;
+        }
+
+        private static bool TryResolveCountryFallback(
+            NativeCountryLabelEntry pEntry, out Vector2 pPosition)
+        {
+            pPosition = Vector2.zero;
+            Kingdom kingdom = pEntry?.Kingdom;
+            try
+            {
+                if (kingdom?.hasCapital() == true &&
+                    kingdom.capital?.data != null)
+                {
+                    pPosition = kingdom.capital.city_center;
+                    return true;
+                }
+                if (kingdom != null)
+                {
+                    foreach (City city in kingdom.getCities())
+                    {
+                        if (city?.data == null || city.isRekt()) continue;
+                        pPosition = city.city_center;
+                        return true;
+                    }
+                }
+            }
+            catch { }
+            if (!pEntry.HasFallbackZoneCenter) return false;
+            pPosition = pEntry.FallbackZoneCenter;
+            return true;
         }
 
         internal static bool NativeDrawPassActive => _nativeDrawPassActive;
@@ -633,6 +778,7 @@ namespace AncientWarfare3.core.policy
             _hierarchyIndex = null;
             KingdomIndex.Clear();
             NativeDrawMetaCache.Clear();
+            NativeCountryLabels.Clear();
             _nativeDrawPassActive = false;
             HierarchicalVassalMapModeLabelLayer.Reset();
         }
@@ -836,6 +982,35 @@ namespace AncientWarfare3.core.policy
                     pLeft.id.CompareTo(pRight.id));
                 return new HierarchicalVassalMapLabelTerritorySource(
                     _kingdom, _zones);
+            }
+        }
+
+        private sealed class NativeCountryLabelEntry
+        {
+            internal readonly Kingdom Kingdom;
+            internal readonly HierarchicalVassalZoneLabelAccumulator
+                Accumulator = new HierarchicalVassalZoneLabelAccumulator();
+            internal bool HasFallbackZoneCenter;
+            internal Vector2 FallbackZoneCenter;
+            internal int HorizontalSpan { get; set; } = 1;
+
+            internal NativeCountryLabelEntry(Kingdom pKingdom)
+            {
+                Kingdom = pKingdom;
+            }
+
+            internal void Add(TileZone pZone)
+            {
+                WorldTile center = pZone?.centerTile;
+                if (center == null) return;
+                Vector3 position = center.posV;
+                if (!HasFallbackZoneCenter)
+                {
+                    HasFallbackZoneCenter = true;
+                    FallbackZoneCenter = position;
+                }
+                Accumulator.Add(pZone.id, position.x, position.y,
+                    pZone.tiles_with_ground);
             }
         }
 
