@@ -699,13 +699,16 @@ internal static class NameSystemRulesTests
             FamilyTreeProjectionChange.LifeStatus);
         pendingProjection.Publish(301L, 42L,
             FamilyTreeProjectionChange.None);
-        Equal(false, pendingProjection.TryComplete(301L, 41L, out _),
-            "an older replaced archive completion cannot consume newer metadata");
+        Equal(true, pendingProjection.TryComplete(301L, 41L,
+                out FamilyTreeProjectionChange committedDeath),
+            "an earlier committed archive releases its own metadata");
+        Equal(FamilyTreeProjectionChange.LifeStatus, committedDeath,
+            "the earlier completion retains its sequence provenance");
         Equal(true, pendingProjection.TryComplete(301L, 42L,
                 out FamilyTreeProjectionChange retainedDeath),
-            "the final coalesced archive sequence owns the retained metadata");
-        Equal(FamilyTreeProjectionChange.LifeStatus, retainedDeath,
-            "the final sequence retains an earlier death projection change");
+            "the final coalesced archive sequence remains completable");
+        Equal(FamilyTreeProjectionChange.None, retainedDeath,
+            "the final sequence cannot consume an already committed change twice");
         Equal(false, pendingProjection.TryComplete(301L, 42L, out _),
             "committed projection metadata is consumed exactly once");
 
@@ -723,8 +726,11 @@ internal static class NameSystemRulesTests
             FamilyTreeProjectionChange.FamilyStructure);
         pendingProjection.Publish(303L, 59L,
             FamilyTreeProjectionChange.None);
-        Equal(false, pendingProjection.TryComplete(303L, 59L, out _),
-            "a late publication from an older sequence cannot replace the owner");
+        Equal(true, pendingProjection.TryComplete(303L, 59L,
+                out FamilyTreeProjectionChange retainedOlderNone),
+            "a late publication from an older sequence remains attributable");
+        Equal(FamilyTreeProjectionChange.None, retainedOlderNone,
+            "the late older publication cannot inherit newer metadata");
         Equal(true, pendingProjection.TryComplete(303L, 60L,
                 out FamilyTreeProjectionChange retainedNewerStructure),
             "the newer sequence remains completable after an older publication");
@@ -820,16 +826,20 @@ internal static class NameSystemRulesTests
             deferredAfterIndependentRefresh.PublishDeferred(407L, 91L,
                 writeAccepted: true),
             "an accepted deferred write takes final sequence ownership");
-        Equal(false,
-            deferredAfterIndependentRefresh.TryComplete(407L, 90L, out _),
-            "the replaced independent completion cannot consume the owner");
+        Equal(true,
+            deferredAfterIndependentRefresh.TryComplete(407L, 90L,
+                out FamilyTreeProjectionChange committedRefresh),
+            "an earlier independent completion releases its own metadata");
+        Equal(FamilyTreeProjectionChange.IdentityOrTitle,
+            committedRefresh,
+            "the earlier refresh retains its sequence provenance");
         Equal(true,
             deferredAfterIndependentRefresh.TryComplete(407L, 91L,
                 out FamilyTreeProjectionChange independentRefresh),
-            "the deferred completion releases retained independent work");
-        Equal(FamilyTreeProjectionChange.IdentityOrTitle,
+            "the deferred completion remains independently completable");
+        Equal(FamilyTreeProjectionChange.None,
             independentRefresh,
-            "a deferred descendant write cannot swallow an older refresh");
+            "a deferred descendant write cannot repeat an older refresh");
 
         Equal(false,
             FamilyTreeProjectionRevisionRules.CanFinalizeFounderBoundary(

@@ -52,17 +52,20 @@ namespace AncientWarfare3.core.lineage
                         (sequence, stamp) =>
                             new LineageBirthArchiveEnvelope(sequence, stamp,
                                 write),
+                        sequence =>
+                        {
+                            ActorArchivePendingStore.Publish(childId,
+                                sequence, snapshot);
+                            FamilyTreeProjectionPendingStore.Publish(childId,
+                                sequence,
+                                FamilyTreeProjectionChange.FamilyStructure);
+                        },
                         (sequence, outcome) => OnCommitted(childId,
                             parent1Id, parent2Id, sequence, outcome),
                         (sequence, error) => OnFailed(childId, parent1Id,
                             parent2Id, sequence, error),
                         out long queuedSequence, out _))
                 {
-                    ActorArchivePendingStore.Publish(childId,
-                        queuedSequence, snapshot);
-                    FamilyTreeProjectionPendingStore.Publish(childId,
-                        queuedSequence,
-                        FamilyTreeProjectionChange.FamilyStructure);
                     return new LineageBirthArchiveResult(
                         LineageBirthArchiveStatus.Queued, childId,
                         parent1Id, parent2Id, string.Empty);
@@ -101,8 +104,7 @@ namespace AncientWarfare3.core.lineage
             long pParent2Id, long pSequence, string pError)
         {
             ActorArchivePendingStore.Complete(pChildId, pSequence);
-            FamilyTreeProjectionPendingStore.TryComplete(pChildId,
-                pSequence, out _);
+            FamilyTreeProjectionPendingStore.Fail(pChildId, pSequence);
             Failed(pChildId, pParent1Id, pParent2Id, pError);
         }
 

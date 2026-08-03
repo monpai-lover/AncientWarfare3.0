@@ -71,8 +71,10 @@ namespace AncientWarfare3.core.lineage
     {
         private sealed class Entry
         {
-            public long Sequence;
-            public FamilyTreeProjectionChange Change;
+            public long LatestSequence;
+            public readonly SortedDictionary<long,
+                FamilyTreeProjectionChange> Sources =
+                new SortedDictionary<long, FamilyTreeProjectionChange>();
         }
 
         private readonly object _gate = new object();
@@ -88,16 +90,13 @@ namespace AncientWarfare3.core.lineage
             {
                 if (_entries.TryGetValue(actorId, out Entry existing))
                 {
-                    existing.Change = FamilyTreeProjectionRevisionRules.
-                        MergeArchiveChanges(existing.Change, change);
+                    MergeSource(existing, 0L, change);
                     return;
                 }
 
-                _entries[actorId] = new Entry
-                {
-                    Sequence = 0L,
-                    Change = change
-                };
+                var entry = new Entry();
+                entry.Sources[0L] = change;
+                _entries[actorId] = entry;
             }
         }
 
@@ -108,18 +107,15 @@ namespace AncientWarfare3.core.lineage
             {
                 if (_entries.TryGetValue(actorId, out Entry existing))
                 {
-                    if (sequence < existing.Sequence) return;
-                    existing.Change = FamilyTreeProjectionRevisionRules.
-                        MergeArchiveChanges(existing.Change, change);
-                    existing.Sequence = sequence;
+                    MergeSource(existing, sequence, change);
+                    if (sequence > existing.LatestSequence)
+                        existing.LatestSequence = sequence;
                     return;
                 }
 
-                _entries[actorId] = new Entry
-                {
-                    Sequence = sequence,
-                    Change = change
-                };
+                var entry = new Entry { LatestSequence = sequence };
+                entry.Sources[sequence] = change;
+                _entries[actorId] = entry;
             }
         }
 
@@ -131,16 +127,17 @@ namespace AncientWarfare3.core.lineage
             {
                 if (_entries.TryGetValue(actorId, out Entry existing))
                 {
-                    if (sequence < existing.Sequence) return false;
-                    existing.Sequence = sequence;
+                    MergeSource(existing, sequence,
+                        FamilyTreeProjectionChange.None);
+                    if (sequence > existing.LatestSequence)
+                        existing.LatestSequence = sequence;
                     return true;
                 }
 
-                _entries[actorId] = new Entry
-                {
-                    Sequence = sequence,
-                    Change = FamilyTreeProjectionChange.None
-                };
+                var entry = new Entry { LatestSequence = sequence };
+                entry.Sources[sequence] =
+                    FamilyTreeProjectionChange.None;
+                _entries[actorId] = entry;
             }
             return true;
         }
@@ -151,14 +148,32 @@ namespace AncientWarfare3.core.lineage
             lock (_gate)
             {
                 if (!_entries.TryGetValue(actorId, out Entry existing) ||
-                    sequence <= 0L || existing.Sequence != sequence)
+                    sequence <= 0L ||
+                    !existing.Sources.ContainsKey(sequence))
                 {
                     change = FamilyTreeProjectionChange.None;
                     return false;
                 }
 
-                _entries.Remove(actorId);
-                change = existing.Change;
+                change = ConsumeThrough(existing, sequence);
+                if (existing.Sources.Count == 0)
+                    _entries.Remove(actorId);
+                return true;
+            }
+        }
+
+        public bool Fail(long actorId, long sequence)
+        {
+            lock (_gate)
+            {
+                if (!_entries.TryGetValue(actorId, out Entry existing) ||
+                    sequence <= 0L ||
+                    !existing.Sources.ContainsKey(sequence))
+                    return false;
+
+                ConsumeThrough(existing, sequence);
+                if (existing.Sources.Count == 0)
+                    _entries.Remove(actorId);
                 return true;
             }
         }
@@ -175,8 +190,49 @@ namespace AncientWarfare3.core.lineage
                     return finalChange;
                 _entries.Remove(actorId);
                 return FamilyTreeProjectionRevisionRules.MergeArchiveChanges(
-                    existing.Change, finalChange);
+                    MergeAll(existing), finalChange);
             }
+        }
+
+        private static void MergeSource(Entry entry, long sequence,
+            FamilyTreeProjectionChange change)
+        {
+            if (entry.Sources.TryGetValue(sequence,
+                    out FamilyTreeProjectionChange existing))
+                entry.Sources[sequence] = FamilyTreeProjectionRevisionRules.
+                    MergeArchiveChanges(existing, change);
+            else
+                entry.Sources[sequence] = change;
+        }
+
+        private static FamilyTreeProjectionChange ConsumeThrough(
+            Entry entry, long sequence)
+        {
+            var consumed = new List<long>();
+            FamilyTreeProjectionChange change =
+                FamilyTreeProjectionChange.None;
+            foreach (KeyValuePair<long, FamilyTreeProjectionChange> source
+                     in entry.Sources)
+            {
+                if (source.Key > sequence) break;
+                consumed.Add(source.Key);
+                change = FamilyTreeProjectionRevisionRules.
+                    MergeArchiveChanges(change, source.Value);
+            }
+            for (int index = 0; index < consumed.Count; index++)
+                entry.Sources.Remove(consumed[index]);
+            return change;
+        }
+
+        private static FamilyTreeProjectionChange MergeAll(Entry entry)
+        {
+            FamilyTreeProjectionChange change =
+                FamilyTreeProjectionChange.None;
+            foreach (FamilyTreeProjectionChange source in
+                     entry.Sources.Values)
+                change = FamilyTreeProjectionRevisionRules.
+                    MergeArchiveChanges(change, source);
+            return change;
         }
 
         public void Discard(long actorId)
@@ -217,6 +273,11 @@ namespace AncientWarfare3.core.lineage
             out FamilyTreeProjectionChange change)
         {
             return State.TryComplete(actorId, sequence, out change);
+        }
+
+        public static bool Fail(long actorId, long sequence)
+        {
+            return State.Fail(actorId, sequence);
         }
 
         public static FamilyTreeProjectionChange FinalizeSynchronous(

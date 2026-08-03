@@ -94,6 +94,7 @@
     <Compile Include="..\..\Code\core\db\HistoricalWriteModels.cs" Link="Production\HistoricalWriteModels.cs" />
     <Compile Include="..\..\Code\core\db\HistoricalWriteQueue.cs" Link="Production\HistoricalWriteQueue.cs" />
     <Compile Include="..\..\Code\core\db\HistoricalWriteWorker.cs" Link="Production\HistoricalWriteWorker.cs" />
+    <Compile Include="..\..\Code\core\db\HistoricalWriteCallbackRegistry.cs" Link="Production\HistoricalWriteCallbackRegistry.cs" />
     <Compile Include="..\..\Code\core\db\KingdomPolicyStateTableItem.cs" Link="Production\KingdomPolicyStateTableItem.cs" />
     <Compile Include="..\..\Code\core\db\KingdomCourtStateTableItem.cs" Link="Production\KingdomCourtStateTableItem.cs" />
     <Compile Include="..\..\Code\utils\SQLiteHelper.cs" Link="Production\SQLiteHelper.cs" />

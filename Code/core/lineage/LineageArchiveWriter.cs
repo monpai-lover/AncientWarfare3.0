@@ -73,20 +73,25 @@ namespace AncientWarfare3.core.lineage
                     new[] { new HistoricalSqlColumn("ID", id) }, updates,
                     inserts, sequence =>
                     {
+                        ActorArchivePendingStore.Publish(id, sequence,
+                            snapshot);
+                        if (pFinalizeProjection)
+                            FamilyTreeProjectionPendingStore.Publish(id,
+                                sequence, projectionChange);
+                        else
+                            FamilyTreeProjectionPendingStore.PublishDeferred(
+                                id, sequence, writeAccepted: true);
+                    }, sequence =>
+                    {
                         ActorArchivePendingStore.Complete(id, sequence);
                         if (FamilyTreeProjectionPendingStore.TryComplete(
                                 id, sequence,
                                 out FamilyTreeProjectionChange committedChange))
                             AdvanceProjectionAfterCommit(committedChange);
-                    }, out long queuedSequence, out _))
+                    }, (sequence, error) =>
+                        OnAsyncWriteFailed(id, sequence),
+                    out long queuedSequence, out _))
             {
-                ActorArchivePendingStore.Publish(id, queuedSequence, snapshot);
-                if (pFinalizeProjection)
-                    FamilyTreeProjectionPendingStore.Publish(id,
-                        queuedSequence, projectionChange);
-                else
-                    FamilyTreeProjectionPendingStore.PublishDeferred(id,
-                        queuedSequence, writeAccepted: true);
                 return true;
             }
 
@@ -275,20 +280,24 @@ namespace AncientWarfare3.core.lineage
                     new[] { new HistoricalSqlColumn("ID", id) }, updates,
                     inserts, sequence =>
                     {
+                        ActorArchivePendingStore.Publish(id, sequence,
+                            pSnapshot);
+                        if (pFinalizeProjection)
+                            FamilyTreeProjectionPendingStore.Publish(id,
+                                sequence, pProjectionChange);
+                        else
+                            FamilyTreeProjectionPendingStore.PublishDeferred(
+                                id, sequence, writeAccepted: true);
+                    }, sequence =>
+                    {
                         ActorArchivePendingStore.Complete(id, sequence);
                         if (FamilyTreeProjectionPendingStore.TryComplete(
                                 id, sequence,
                                 out FamilyTreeProjectionChange committed))
                             AdvanceProjectionAfterCommit(committed);
-                    }, out long queuedSequence, out _)) return false;
-
-            ActorArchivePendingStore.Publish(id, queuedSequence, pSnapshot);
-            if (pFinalizeProjection)
-                FamilyTreeProjectionPendingStore.Publish(id, queuedSequence,
-                    pProjectionChange);
-            else
-                FamilyTreeProjectionPendingStore.PublishDeferred(id,
-                    queuedSequence, writeAccepted: true);
+                    }, (sequence, error) =>
+                        OnAsyncWriteFailed(id, sequence),
+                    out long queuedSequence, out _)) return false;
             return true;
         }
 
@@ -423,6 +432,13 @@ namespace AncientWarfare3.core.lineage
             if (!FamilyTreeProjectionRevisionRules.ShouldAdvance(pChange))
                 return;
             FamilyTreeProjectionRevision.Advance(pChange);
+        }
+
+        private static void OnAsyncWriteFailed(long pActorId,
+            long pSequence)
+        {
+            ActorArchivePendingStore.Complete(pActorId, pSequence);
+            FamilyTreeProjectionPendingStore.Fail(pActorId, pSequence);
         }
 
         private static int ResolveArchivedHead(Actor pActor,

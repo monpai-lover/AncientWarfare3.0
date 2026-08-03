@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.lineage;
 
 internal static class HistoricalWriteRulesTests
 {
@@ -11,6 +12,7 @@ internal static class HistoricalWriteRulesTests
         RetryLimitProducesFailureCompletionForEverySequence();
         ExistingCompletionConstructorCreatesCommittedCompletion();
         CustomWriteApiRegistersAndDrainsExclusiveFailureCallbacks();
+        CompletionCannotRunBeforeAcceptedPendingPublication();
     }
 
     public static void RunTerminalBatchFailure()
@@ -79,6 +81,79 @@ internal static class HistoricalWriteRulesTests
     public static void RunCustomWriteApi()
     {
         CustomWriteApiRegistersAndDrainsExclusiveFailureCallbacks();
+        CompletionCannotRunBeforeAcceptedPendingPublication();
+    }
+
+    private static void CompletionCannotRunBeforeAcceptedPendingPublication()
+    {
+        using var sink = new SuccessfulBatchSink();
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        var callbacks = new HistoricalWriteCallbackRegistry();
+        var pending = new FamilyTreeProjectionPendingState();
+        var acceptedEntered = new ManualResetEventSlim(false);
+        var allowPendingPublication = new ManualResetEventSlim(false);
+        var takeStarted = new ManualResetEventSlim(false);
+        var takeReturned = new ManualResetEventSlim(false);
+        bool revisionReleased = false;
+        bool enqueueSucceeded = false;
+        var envelope = new HistoricalWriteEnvelope(61L,
+            "accepted-publication:61", string.Empty,
+            Array.Empty<HistoricalSqlValue>(), HistoricalWriteKind.State,
+            new AWAsyncStamp(1L, 61L, 61L));
+
+        worker.Start();
+        var producer = new Thread(() =>
+        {
+            enqueueSucceeded = callbacks.TryEnqueue(worker, envelope,
+                sequence =>
+                {
+                    acceptedEntered.Set();
+                    allowPendingPublication.Wait(TimeSpan.FromSeconds(2));
+                    pending.Publish(501L, sequence,
+                        FamilyTreeProjectionChange.FamilyStructure);
+                }, (sequence, outcome) =>
+                    revisionReleased = pending.TryComplete(501L, sequence,
+                        out FamilyTreeProjectionChange change) &&
+                        change == FamilyTreeProjectionChange.FamilyStructure,
+                null, out _);
+        });
+        producer.Start();
+
+        True(acceptedEntered.Wait(TimeSpan.FromSeconds(2)),
+            "accepted callback enters before publishing pending metadata");
+        True(SpinWait.SpinUntil(() => worker.PendingCompletionCount > 0,
+                TimeSpan.FromSeconds(2)),
+            "the worker completes before pending publication");
+        var consumer = new Thread(() =>
+        {
+            if (!worker.TryDequeueCompletion(
+                    out HistoricalWriteCompletion completion)) return;
+            takeStarted.Set();
+            callbacks.Take(completion.Sequences[0],
+                out Action<long, object> committed,
+                out Action<long, string> failed);
+            takeReturned.Set();
+            committed?.Invoke(completion.Sequences[0],
+                completion.Outcomes[0]);
+        });
+        consumer.Start();
+        True(takeStarted.Wait(TimeSpan.FromSeconds(2)),
+            "completion drain attempts callback lookup during acceptance");
+        True(SpinWait.SpinUntil(
+                () => (consumer.ThreadState &
+                       System.Threading.ThreadState.WaitSleepJoin) != 0,
+                TimeSpan.FromSeconds(2)),
+            "completion drain blocks on the acceptance registry lock");
+        False(takeReturned.IsSet,
+            "completion callback lookup cannot return before publication");
+        allowPendingPublication.Set();
+        producer.Join(TimeSpan.FromSeconds(2));
+        consumer.Join(TimeSpan.FromSeconds(2));
+
+        True(enqueueSucceeded, "interleaving test accepts the write");
+        True(revisionReleased,
+            "accepted pending publication must precede completion callback");
     }
 
     private static void TerminalBatchProducesFailureCompletionForEverySequence()
@@ -161,6 +236,9 @@ internal static class HistoricalWriteRulesTests
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "db",
             "HistoricalWriteService.cs"));
+        string registrySource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "db",
+            "HistoricalWriteCallbackRegistry.cs"));
 
         Matches(source,
             @"TryEnqueueCustom\s*\(\s*string\s+pOperationKey,\s*" +
@@ -168,31 +246,45 @@ internal static class HistoricalWriteRulesTests
             @"pFactory,\s*Action<long,\s*object>\s+pOnCommitted,\s*" +
             @"Action<long,\s*string>\s+pOnFailed",
             "custom write API accepts a failure callback");
-        Contains(source,
-            "FailureCallbacks[pSequence] = pOnFailed;",
-            "custom write API registers the failure callback");
-        Contains(source,
-            "FailureCallbacks.Remove(replaced.Sequence);",
-            "state replacement removes the stale failure callback");
+        Contains(registrySource,
+            "_failureCallbacks[pEnvelope.Sequence] = pOnFailed;",
+            "callback registry stores the failure callback");
+        Matches(source,
+            @"TryUpsertState\s*\(\s*string\s+pOperationKey,.*?" +
+            @"Action<long>\s+pOnCommitted,\s*" +
+            @"Action<long,\s*string>\s+pOnFailed,\s*" +
+            @"out\s+long\s+pSequence,\s*out\s+string\s+pError\)",
+            "state upsert API accepts a failure callback");
+        Matches(source,
+            @"TryUpsertState\s*\(\s*string\s+pOperationKey,.*?" +
+            @"Action<long>\s+pOnAccepted,\s*Action<long>\s+pOnCommitted,\s*" +
+            @"Action<long,\s*string>\s+pOnFailed",
+            "state upsert API accepts an atomic publication callback");
+        Matches(source,
+            @"TryUpsertState\s*\([^)]*Action<long>\s+pOnCommitted,\s*" +
+            @"out\s+long\s+pSequence,\s*out\s+string\s+pError\)\s*" +
+            @"\{\s*return\s+TryUpsertState\s*\(.*?null,\s*pOnCommitted,\s*null,\s*" +
+            @"out\s+pSequence,\s*out\s+pError\);",
+            "existing state upsert overload forwards null accepted and failure callbacks");
+        Contains(registrySource,
+            "RemoveLocked(pReplaced.Sequence);",
+            "state replacement removes stale callback registrations");
         Matches(source,
             @"TryEnqueueCustom\s*\([^\)]*pOnCommitted[^\)]*" +
             @"out\s+long\s+pSequence[^\)]*out\s+string\s+pError\)\s*" +
-            @"\{\s*return\s+TryEnqueueCustom\s*\([^;]*pOnCommitted,\s*" +
-            @"null,\s*out\s+pSequence,\s*out\s+pError\);",
-            "existing custom write overload forwards a null failure callback");
+            @"\{\s*return\s+TryEnqueueCustom\s*\([^;]*null,\s*" +
+            @"pOnCommitted,\s*null,\s*out\s+pSequence,\s*out\s+pError\);",
+            "existing custom write overload forwards null accepted and failure callbacks");
+        Contains(registrySource,
+            "pOnAccepted?.Invoke(pEnvelope.Sequence);",
+            "accepted pending publication runs inside callback registration");
         Contains(source,
             "if (completion.IsCommitted)",
             "completion drain selects callbacks by committed state");
-        Matches(source,
-            @"FailureCallbacks\.TryGetValue\s*\(\s*sequence,\s*" +
-            @"out\s+failureCallback\s*\);",
-            "completion drain reads the failure callback");
-        Contains(source,
-            "CommitCallbacks.Remove(sequence);",
-            "completion drain removes the success registration");
-        Contains(source,
-            "FailureCallbacks.Remove(sequence);",
-            "completion drain removes the failure registration");
+        Contains(source, "Callbacks.Take(sequence, out callback,",
+            "completion drain atomically takes both callback sides");
+        Contains(registrySource, "RemoveLocked(pSequence);",
+            "completion drain removes callback registrations exactly once");
         Matches(source,
             @"if\s*\(completion\.IsCommitted\)\s*\{[^}]*" +
             @"callback\?\.Invoke\(sequence,\s*" +
@@ -275,6 +367,24 @@ internal static class HistoricalWriteRulesTests
             IReadOnlyList<HistoricalWriteEnvelope> pOperations)
         {
             return HistoricalWriteBatchResult.Terminal(_error);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class SuccessfulBatchSink : IHistoricalWriteBatchSink
+    {
+        public void Open()
+        {
+        }
+
+        public HistoricalWriteBatchResult Execute(
+            IReadOnlyList<HistoricalWriteEnvelope> pOperations)
+        {
+            return HistoricalWriteBatchResult.Committed(
+                pOperations.Select(_ => (object)null).ToArray());
         }
 
         public void Dispose()
