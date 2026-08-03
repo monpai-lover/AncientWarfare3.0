@@ -6,6 +6,7 @@ namespace AncientWarfare3.core.lineage
     internal static class WarArmyReturnService
     {
         private const int MaximumArmiesPerFrame = 4;
+        private const int MaximumQueueScansPerFrame = 64;
 
         private static readonly WarArmyReturnQueueCore Queue =
             new WarArmyReturnQueueCore();
@@ -34,9 +35,8 @@ namespace AncientWarfare3.core.lineage
         public static void ProcessFrame()
         {
             if (_rebuildPending) RebuildRuntime();
-            int scanBudget = Queue.WorkCount;
             IReadOnlyList<WarArmyReturnQueueOrder> frame = Queue.TakeFrame(
-                MaximumArmiesPerFrame, scanBudget);
+                MaximumArmiesPerFrame, MaximumQueueScansPerFrame);
             for (int i = 0; i < frame.Count; i++)
             {
                 WarArmyReturnQueueOrder order = frame[i];

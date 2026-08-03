@@ -14,14 +14,16 @@ namespace AncientWarfare3.core.lineage
     {
         private readonly Dictionary<long, WarArmyReturnQueueOrder> _orders =
             new Dictionary<long, WarArmyReturnQueueOrder>();
-        private readonly Queue<long> _work = new Queue<long>();
-        private readonly HashSet<long> _queuedIds = new HashSet<long>();
+        private readonly LinkedList<long> _work = new LinkedList<long>();
+        private readonly Dictionary<long, LinkedListNode<long>> _queuedNodes =
+            new Dictionary<long, LinkedListNode<long>>();
         private readonly List<WarArmyReturnQueueOrder> _frameBatch =
             new List<WarArmyReturnQueueOrder>();
 
         public int OrderCount => _orders.Count;
         public int WorkCount => _work.Count;
-        public int QueuedCount => _queuedIds.Count;
+        public int QueuedCount => _queuedNodes.Count;
+        public int LastFrameScanCount { get; private set; }
 
         public bool Begin(long pArmyId, long pKingdomId, long pTargetCityId)
         {
@@ -50,31 +52,29 @@ namespace AncientWarfare3.core.lineage
 
         public bool TryTake(out WarArmyReturnQueueOrder pOrder)
         {
-            pOrder = null;
-            if (_work.Count == 0) return false;
-            long armyId = _work.Dequeue();
-            return _queuedIds.Remove(armyId) &&
-                   _orders.TryGetValue(armyId, out pOrder);
+            return TryPop(out pOrder);
         }
 
         public IReadOnlyList<WarArmyReturnQueueOrder> TakeFrame(
             int maximumActive, int maximumScans)
         {
             _frameBatch.Clear();
+            LastFrameScanCount = 0;
             int activeLimit = Math.Max(0, maximumActive);
-            int scanLimit = Math.Min(_work.Count,
-                Math.Max(0, maximumScans));
-            for (int scanned = 0;
-                 scanned < scanLimit && _frameBatch.Count < activeLimit;
-                 scanned++)
+            int scanLimit = Math.Max(0, maximumScans);
+            while (LastFrameScanCount < scanLimit &&
+                   _frameBatch.Count < activeLimit && _work.First != null)
             {
-                long armyId = _work.Dequeue();
-                if (!_queuedIds.Remove(armyId) ||
-                    !_orders.TryGetValue(armyId,
-                        out WarArmyReturnQueueOrder order)) continue;
+                LastFrameScanCount++;
+                if (!TryPop(out WarArmyReturnQueueOrder order)) continue;
                 _frameBatch.Add(order);
             }
             return _frameBatch;
+        }
+
+        internal void RestoreLegacyToken(long pArmyId)
+        {
+            if (pArmyId >= 0L) _work.AddLast(pArmyId);
         }
 
         public bool Requeue(long pArmyId)
@@ -84,15 +84,12 @@ namespace AncientWarfare3.core.lineage
 
         public bool Cancel(long pArmyId)
         {
-            return pArmyId >= 0L && _orders.Remove(pArmyId);
+            return RemoveOrderAndNode(pArmyId);
         }
 
         public bool RemoveDisposed(long pArmyId)
         {
-            if (pArmyId < 0L) return false;
-            bool removedOrder = _orders.Remove(pArmyId);
-            bool removedMembership = _queuedIds.Remove(pArmyId);
-            return removedOrder || removedMembership;
+            return RemoveOrderAndNode(pArmyId);
         }
 
         public bool Complete(long pArmyId)
@@ -104,14 +101,45 @@ namespace AncientWarfare3.core.lineage
         {
             _orders.Clear();
             _work.Clear();
-            _queuedIds.Clear();
+            _queuedNodes.Clear();
+            _frameBatch.Clear();
+            LastFrameScanCount = 0;
         }
 
         private bool EnqueueOnce(long pArmyId)
         {
-            if (!_queuedIds.Add(pArmyId)) return false;
-            _work.Enqueue(pArmyId);
+            if (_queuedNodes.ContainsKey(pArmyId)) return false;
+            _queuedNodes[pArmyId] = _work.AddLast(pArmyId);
             return true;
+        }
+
+        private bool TryPop(out WarArmyReturnQueueOrder pOrder)
+        {
+            pOrder = null;
+            LinkedListNode<long> node = _work.First;
+            if (node == null) return false;
+            _work.Remove(node);
+            long armyId = node.Value;
+            if (!_queuedNodes.TryGetValue(armyId,
+                    out LinkedListNode<long> indexedNode) ||
+                !ReferenceEquals(node, indexedNode)) return false;
+            _queuedNodes.Remove(armyId);
+            return _orders.TryGetValue(armyId, out pOrder);
+        }
+
+        private bool RemoveOrderAndNode(long pArmyId)
+        {
+            if (pArmyId < 0L) return false;
+            bool removedOrder = _orders.Remove(pArmyId);
+            bool removedNode = false;
+            if (_queuedNodes.TryGetValue(pArmyId,
+                    out LinkedListNode<long> node))
+            {
+                _queuedNodes.Remove(pArmyId);
+                _work.Remove(node);
+                removedNode = true;
+            }
+            return removedOrder || removedNode;
         }
     }
 

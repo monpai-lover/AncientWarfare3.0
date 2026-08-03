@@ -24,8 +24,10 @@ internal static class WarArmyReturnRulesTests
             "an army abroad retains return intent");
 
         ReopenedOrderKeepsOneBoundedWorkItem();
+        DisposedOrdersArePhysicallyRemovedAtScale();
         StaleCleanupConsumesOneBoundedToken();
         StaleTokensDoNotConsumeActiveFrameBudget();
+        BatchRequeueWaitsForNextFrame();
         ReturnIntentRestoresAfterRuntimeReset();
         InvalidRestoreFactsClearIntent();
         DisposedArmyClearsRuntimeAndCannotRestore();
@@ -39,8 +41,10 @@ internal static class WarArmyReturnRulesTests
             "the ended-war army return queue exists");
         string service = File.ReadAllText(servicePath);
         True(service.Contains("MaximumArmiesPerFrame") &&
+             service.Contains(
+                 "private const int MaximumQueueScansPerFrame = 64;") &&
              service.Contains("ArmyRtsTransportService.TryHandleActor"),
-            "the bounded queue reuses existing cross-island transport");
+            "the bounded queue uses a fixed scan ceiling and existing transport");
         False(service.Contains("RestoreCivilian(") ||
               service.Contains("removeFromArmy("),
             "army return intent never demobilizes standing or special armies");
@@ -53,13 +57,13 @@ internal static class WarArmyReturnRulesTests
             "public static void ProcessFrame(",
             "public static void ClearRuntime(");
         True(queueProcessing.Contains(
-                 "int scanBudget = Queue.WorkCount;") &&
+                 "MaximumQueueScansPerFrame") &&
              queueProcessing.Contains("Queue.TakeFrame(") &&
-             queueProcessing.Contains("scanBudget)"),
-            "service separates active processing quota from frame-start scan budget");
+             queueProcessing.Contains("MaximumQueueScansPerFrame)"),
+            "service uses a fixed defensive queue scan ceiling");
         False(queueProcessing.Contains(
-                "Math.Min(MaximumArmiesPerFrame, Queue.WorkCount)"),
-            "stale work count does not define the active processing quota");
+                "Queue.WorkCount"),
+            "queue length never becomes an unbounded per-frame scan ceiling");
         int targetRecovery = queueProcessing.IndexOf(
             "if (!IsFriendlySafeCity(target, kingdom))",
             StringComparison.Ordinal);
@@ -198,6 +202,10 @@ internal static class WarArmyReturnRulesTests
         var queue = new WarArmyReturnQueueCore();
         Equal(true, queue.Begin(7L, 1L, 10L), "first return begins");
         Equal(true, queue.Cancel(7L), "return can be cancelled");
+        Equal(0, queue.WorkCount,
+            "cancel physically removes its queued node");
+        Equal(0, queue.QueuedCount,
+            "cancel clears its node index entry");
         Equal(true, queue.Begin(7L, 1L, 11L),
             "same army can reopen before its old token drains");
 
@@ -226,6 +234,30 @@ internal static class WarArmyReturnRulesTests
         Equal(true, queue.Complete(order.ArmyId), "arrival completes order");
         Equal(0, queue.OrderCount, "completion clears active order");
         Equal(0, queue.WorkCount, "completion leaves no queued work");
+    }
+
+    private static void DisposedOrdersArePhysicallyRemovedAtScale()
+    {
+        var queue = new WarArmyReturnQueueCore();
+        for (long armyId = 1L; armyId <= 10000L; armyId++)
+        {
+            Equal(true, queue.Begin(armyId, 1L, 10L),
+                "return begins before disposal");
+            Equal(true, queue.RemoveDisposed(armyId),
+                "dispose removes the active return");
+        }
+
+        Equal(0, queue.OrderCount,
+            "bulk disposal leaves no active return orders");
+        Equal(0, queue.QueuedCount,
+            "bulk disposal leaves no node index entries");
+        Equal(0, queue.WorkCount,
+            "bulk disposal physically removes every queued node");
+        Equal(0, queue.TakeFrame(maximumActive: 4,
+                maximumScans: 64).Count,
+            "the next frame has no stale disposal work to scan");
+        Equal(0, queue.LastFrameScanCount,
+            "the next frame performs zero queue scans");
     }
 
     private static void ReturnIntentRestoresAfterRuntimeReset()
@@ -261,10 +293,7 @@ internal static class WarArmyReturnRulesTests
     {
         var queue = new WarArmyReturnQueueCore();
         for (long armyId = 1L; armyId <= 8L; armyId++)
-        {
-            queue.Begin(armyId, 1L, 10L);
-            queue.Cancel(armyId);
-        }
+            queue.RestoreLegacyToken(armyId);
         queue.Begin(9L, 1L, 11L);
 
         Equal(false, queue.TryTake(out _),
@@ -277,33 +306,48 @@ internal static class WarArmyReturnRulesTests
     {
         var queue = new WarArmyReturnQueueCore();
         for (long armyId = 1L; armyId <= 8L; armyId++)
-        {
-            queue.Begin(armyId, 1L, 10L);
-            queue.Cancel(armyId);
-        }
+            queue.RestoreLegacyToken(armyId);
         for (long armyId = 9L; armyId <= 12L; armyId++)
             queue.Begin(armyId, 1L, 11L);
 
-        int frameStartWork = queue.WorkCount;
         IReadOnlyList<WarArmyReturnQueueOrder> frame = queue.TakeFrame(
-            maximumActive: 4, maximumScans: frameStartWork);
+            maximumActive: 4, maximumScans: 64);
 
         Equal(4, frame.Count,
             "stale tokens do not consume the four active-order budget");
         Equal(9L, frame[0].ArmyId, "first active order is preserved");
         Equal(12L, frame[3].ArmyId, "fourth active order is preserved");
         Equal(0, queue.WorkCount,
-            "frame-start scan budget bounds and drains the examined tokens");
+            "fixed scan budget drains the examined compatibility tokens");
+        Equal(12, queue.LastFrameScanCount,
+            "compatibility cleanup scans each stale and active node once");
 
         for (long armyId = 20L; armyId <= 27L; armyId++)
-        {
-            queue.Begin(armyId, 1L, 12L);
-            queue.Cancel(armyId);
-        }
+            queue.RestoreLegacyToken(armyId);
         Equal(0, queue.TakeFrame(maximumActive: 4, maximumScans: 3).Count,
             "a finite scan ceiling may stop before an active order");
         Equal(5, queue.WorkCount,
             "the frame drain examines no more than its explicit scan ceiling");
+    }
+
+    private static void BatchRequeueWaitsForNextFrame()
+    {
+        var queue = new WarArmyReturnQueueCore();
+        for (long armyId = 1L; armyId <= 4L; armyId++)
+            queue.Begin(armyId, 1L, 10L);
+
+        IReadOnlyList<WarArmyReturnQueueOrder> frame = queue.TakeFrame(
+            maximumActive: 4, maximumScans: 64);
+        Equal(4, frame.Count, "first frame takes each active order once");
+        Equal(0, queue.WorkCount,
+            "taken batch is detached from the work queue");
+        for (int i = 0; i < frame.Count; i++)
+            Equal(true, queue.Requeue(frame[i].ArmyId),
+                "continued active order requeues once");
+        Equal(4, queue.WorkCount,
+            "requeued orders wait in the next frame queue");
+        Equal(4, frame.Count,
+            "requeue does not mutate the current frame batch");
     }
 
     private static void InvalidRestoreFactsClearIntent()
