@@ -14,7 +14,8 @@ namespace AncientWarfare3.core.lineage
             bool pHasRestorationTarget,
             out string pReason)
         {
-            return CanQueueGoal(pGoalType, pBasicAllowed, pHasNormalCb,
+            return CanQueueGoal(pGoalType, pBasicAllowed,
+                pBasicFailureReason: "invalid", pHasNormalCb,
                 pCanForceNoCb, pHasCoreTarget, pHasClaimTarget,
                 pCanForceVassal, pCanForceTributary,
                 pIsIndependenceTarget, pHasRestorationTarget,
@@ -34,9 +35,33 @@ namespace AncientWarfare3.core.lineage
             bool pCanReunifySuccession,
             out string pReason)
         {
+            return CanQueueGoal(pGoalType, pBasicAllowed,
+                pBasicFailureReason: "invalid", pHasNormalCb,
+                pCanForceNoCb, pHasCoreTarget, pHasClaimTarget,
+                pCanForceVassal, pCanForceTributary,
+                pIsIndependenceTarget, pHasRestorationTarget,
+                pCanReunifySuccession, out pReason);
+        }
+
+        public static bool CanQueueGoal(string pGoalType,
+            bool pBasicAllowed,
+            string pBasicFailureReason,
+            bool pHasNormalCb,
+            bool pCanForceNoCb,
+            bool pHasCoreTarget,
+            bool pHasClaimTarget,
+            bool pCanForceVassal,
+            bool pCanForceTributary,
+            bool pIsIndependenceTarget,
+            bool pHasRestorationTarget,
+            bool pCanReunifySuccession,
+            out string pReason)
+        {
             if (!pBasicAllowed)
             {
-                pReason = "basic_blocked";
+                pReason = string.IsNullOrWhiteSpace(pBasicFailureReason)
+                    ? "invalid"
+                    : pBasicFailureReason;
                 return false;
             }
 

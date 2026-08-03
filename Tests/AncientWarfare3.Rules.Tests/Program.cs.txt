@@ -212,6 +212,14 @@ if (args.Length == 1 && args[0] == "--war-ai-slice")
     return;
 }
 
+if (args.Length == 1 &&
+    args[0] == "--diplomatic-war-availability-slice")
+{
+    DiplomaticWarAvailabilityRulesTests.Run();
+    Console.WriteLine("Diplomatic war availability rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--zhulu-war-slice")
 {
     ZhuluWarRulesTests.Run();
@@ -7573,6 +7581,7 @@ ActorDeathInvocationRulesTests.Run();
 XiaPopulationRecoveryRulesTests.Run();
 WarAiGoalSelectionRulesTests.Run();
 SamePeopleWarIntentRulesTests.Run();
+DiplomaticWarAvailabilityRulesTests.Run();
 ZhuluWarRulesTests.Run();
 ZhuluAgeRulesTests.Run();
 XiaizationStatusDisplayRulesTests.Run();

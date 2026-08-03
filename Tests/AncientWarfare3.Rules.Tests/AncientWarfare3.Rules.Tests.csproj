@@ -145,6 +145,7 @@
     <Compile Include="XiaPopulationRecoveryRulesTests.cs.txt" />
     <Compile Include="WarAiGoalSelectionRulesTests.cs.txt" />
     <Compile Include="SamePeopleWarIntentRulesTests.cs.txt" />
+    <Compile Include="DiplomaticWarAvailabilityRulesTests.cs.txt" />
     <Compile Include="ZhuluWarRulesTests.cs.txt" />
     <Compile Include="ZhuluAgeRulesTests.cs.txt" />
     <Compile Include="XiaizationStatusDisplayRulesTests.cs.txt" />

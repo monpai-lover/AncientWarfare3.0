@@ -1,0 +1,35 @@
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomaticWarAvailabilityRulesTests
+{
+    public static void Run()
+    {
+        foreach (string expected in new[]
+                 {
+                     "invalid", "non_aggression_pact", "same_alliance",
+                     "vassal_external_war_blocked", "already_at_war"
+                 })
+        {
+            bool allowed = WarDecisionQueueRules.CanQueueGoal(
+                pGoalType: "take_core_city", pBasicAllowed: false,
+                pBasicFailureReason: expected, pHasNormalCb: false,
+                pCanForceNoCb: false, pHasCoreTarget: true,
+                pHasClaimTarget: false, pCanForceVassal: false,
+                pCanForceTributary: false,
+                pIsIndependenceTarget: false,
+                pHasRestorationTarget: false,
+                pCanReunifySuccession: false,
+                pReason: out string actual);
+            Equal(false, allowed, "blocked pair remains blocked");
+            Equal(expected, actual,
+                "pair failure reason survives goal validation");
+        }
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

@@ -598,7 +598,7 @@ namespace AncientWarfare3.core.lineage
             out string pFailureReason)
         {
             bool basicAllowed = WarDecisionService.CanQueueWarPair(
-                pAttacker, pDefender, pWarType, out pFailureReason,
+                pAttacker, pDefender, pWarType, out string pairFailureReason,
                 IsSystemGoal(pGoalType));
             bool hasNormalCb = WarDecisionService.HasValidCasusBelli(
                 pAttacker, pDefender, pWarType);
@@ -621,10 +621,11 @@ namespace AncientWarfare3.core.lineage
                 .CanDeclareReunification(pAttacker, pDefender);
             bool canForceNoCb = WarDecisionService.CanForceNoCb(pAttacker);
             return WarDecisionQueueRules.CanQueueGoal(pGoalType,
-                basicAllowed, hasNormalCb, canForceNoCb, hasCoreTarget,
-                hasClaimTarget, canForceVassal, canForceTributary,
-                isIndependenceTarget, hasRestorationTarget,
-                canReunifySuccession, out pFailureReason);
+                basicAllowed, pairFailureReason, hasNormalCb, canForceNoCb,
+                hasCoreTarget, hasClaimTarget, canForceVassal,
+                canForceTributary, isIndependenceTarget,
+                hasRestorationTarget, canReunifySuccession,
+                out pFailureReason);
         }
 
         private static City ResolveStoredTargetCity(Kingdom pAttacker,
