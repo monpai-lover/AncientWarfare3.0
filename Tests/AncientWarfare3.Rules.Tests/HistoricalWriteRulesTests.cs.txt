@@ -7,6 +7,7 @@ internal static class HistoricalWriteRulesTests
     public static void Run()
     {
         TerminalBatchProducesFailureCompletionForEverySequence();
+        OpenFailureProducesFailureCompletionForEverySequence();
         RetryLimitProducesFailureCompletionForEverySequence();
         ExistingCompletionConstructorCreatesCommittedCompletion();
         CustomWriteApiRegistersAndDrainsExclusiveFailureCallbacks();
@@ -17,6 +18,11 @@ internal static class HistoricalWriteRulesTests
         TerminalBatchProducesFailureCompletionForEverySequence();
         RetryLimitProducesFailureCompletionForEverySequence();
         ExistingCompletionConstructorCreatesCommittedCompletion();
+    }
+
+    public static void RunOpenFailure()
+    {
+        OpenFailureProducesFailureCompletionForEverySequence();
     }
 
     private static void RetryLimitProducesFailureCompletionForEverySequence()
@@ -78,7 +84,7 @@ internal static class HistoricalWriteRulesTests
     private static void TerminalBatchProducesFailureCompletionForEverySequence()
     {
         using var sink = new TerminalBatchSink("injected terminal failure");
-        using var worker = new HistoricalWriteWorker(sink, batchSize: 8,
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
             retryDelayMilliseconds: 0, maxRetryAttempts: 1);
         for (long sequence = 1L; sequence <= 3L; sequence++)
         {
@@ -103,12 +109,51 @@ internal static class HistoricalWriteRulesTests
             ReadProperty<string>(result, "Error"),
             "terminal batch completion preserves its error");
         Equal(3, result.Sequences.Count,
-            "terminal batch completion covers every in-flight sequence");
+            "terminal batch completion covers every accepted sequence");
         Equal(1L, result.Sequences[0], "terminal completion sequence 1");
         Equal(2L, result.Sequences[1], "terminal completion sequence 2");
         Equal(3L, result.Sequences[2], "terminal completion sequence 3");
+        Equal(0, worker.PendingCount,
+            "terminal failure leaves no accepted operation pending");
         False(worker.TryDequeueCompletion(out _),
             "terminal batch publishes exactly one completion");
+    }
+
+    private static void OpenFailureProducesFailureCompletionForEverySequence()
+    {
+        using var sink = new OpenFailureSink("injected open failure");
+        using var worker = new HistoricalWriteWorker(sink, batchSize: 1,
+            retryDelayMilliseconds: 0, maxRetryAttempts: 1);
+        for (long sequence = 31L; sequence <= 33L; sequence++)
+        {
+            string key = "open-failure-test:" + sequence;
+            var envelope = new HistoricalWriteEnvelope(sequence, key,
+                string.Empty, Array.Empty<HistoricalSqlValue>(),
+                HistoricalWriteKind.Append,
+                new AWAsyncStamp(1L, sequence, sequence));
+            True(worker.TryEnqueue(envelope, out _),
+                "open-failure test accepts sequence " + sequence);
+        }
+
+        worker.Start();
+        True(SpinWait.SpinUntil(() => worker.TerminalFaulted,
+                TimeSpan.FromSeconds(2)),
+            "open failure faults the worker");
+        True(worker.TryDequeueCompletion(out HistoricalWriteCompletion result),
+            "open failure publishes a completion");
+        False(ReadProperty<bool>(result, "IsCommitted"),
+            "open-failure completion is not committed");
+        Equal("injected open failure", ReadProperty<string>(result, "Error"),
+            "open-failure completion preserves its error");
+        Equal(3, result.Sequences.Count,
+            "open-failure completion covers every accepted sequence");
+        Equal(31L, result.Sequences[0], "open completion sequence 31");
+        Equal(32L, result.Sequences[1], "open completion sequence 32");
+        Equal(33L, result.Sequences[2], "open completion sequence 33");
+        Equal(0, worker.PendingCount,
+            "open failure leaves no accepted operation pending");
+        False(worker.TryDequeueCompletion(out _),
+            "open failure publishes exactly one completion");
     }
 
     private static void CustomWriteApiRegistersAndDrainsExclusiveFailureCallbacks()
@@ -257,6 +302,32 @@ internal static class HistoricalWriteRulesTests
         {
             ExecuteCount++;
             return HistoricalWriteBatchResult.Retryable(_error);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class OpenFailureSink : IHistoricalWriteBatchSink
+    {
+        private readonly string _error;
+
+        public OpenFailureSink(string pError)
+        {
+            _error = pError;
+        }
+
+        public void Open()
+        {
+            throw new InvalidOperationException(_error);
+        }
+
+        public HistoricalWriteBatchResult Execute(
+            IReadOnlyList<HistoricalWriteEnvelope> pOperations)
+        {
+            throw new InvalidOperationException(
+                "open-failure sink must not execute a batch");
         }
 
         public void Dispose()

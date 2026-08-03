@@ -394,6 +394,7 @@ namespace AncientWarfare3.core.db
                     lock (_gate)
                     {
                         _openFailed = true;
+                        EnqueueFailureCompletionLocked(null, error.Message);
                         SetTerminalFaultLocked(error.Message);
                     }
                     return;
@@ -545,9 +546,22 @@ namespace AncientWarfare3.core.db
         private void EnqueueFailureCompletionLocked(
             IReadOnlyList<HistoricalWriteEnvelope> pBatch, string pError)
         {
-            _completions.Enqueue(new HistoricalWriteCompletion(pBatch,
-                Array.Empty<object>(), false, pError));
+            int batchCount = pBatch?.Count ?? 0;
+            var failed = new List<HistoricalWriteEnvelope>(batchCount +
+                _queue.Count);
+            if (pBatch != null)
+                for (int index = 0; index < pBatch.Count; index++)
+                    failed.Add(pBatch[index]);
+            while (_queue.TryDequeue(out HistoricalWriteEnvelope queued))
+                failed.Add(queued);
             _inFlightCount = 0;
+            if (failed.Count > 0)
+            {
+                // A terminal worker cannot wait for the completion consumer.
+                // This final aggregate may exceed the bounded queue by one.
+                _completions.Enqueue(new HistoricalWriteCompletion(failed,
+                    Array.Empty<object>(), false, pError));
+            }
             Monitor.PulseAll(_gate);
         }
 
