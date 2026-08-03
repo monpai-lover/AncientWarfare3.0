@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui.windows;
 using HarmonyLib;
@@ -13,6 +14,7 @@ namespace AncientWarfare3.patch
         private static bool _dispatched;
         private static int _slot = -1;
         private static string _path = string.Empty;
+        private static string _pendingPath = string.Empty;
         private static long _validationActorId = -1L;
 
         internal static void Initialize()
@@ -81,23 +83,128 @@ namespace AncientWarfare3.patch
             if (!Directory.Exists(path))
             {
                 ModClass.LogWarning(
-                    "AW3 benchmark auto-load directory is missing: " + path);
+                    "AW3 benchmark auto-load invalid: directory is missing " +
+                    "path=" + path);
                 return;
             }
-            if (_validationActorId > 0L)
-                MapBox.on_world_loaded += OnValidationWorldLoaded;
-            LoadingScreen.TransitionAction load = () =>
-                World.world?.save_manager?.loadWorld(path, false);
+
+            _pendingPath = Path.GetFullPath(path);
+            MapBox.on_world_loaded -= OnBenchmarkWorldLoaded;
+            MapBox.on_world_loaded += OnBenchmarkWorldLoaded;
+            LoadingScreen.TransitionAction load = () => LoadBenchmarkWorld(path);
             ModClass.LogInfo("AW3 benchmark auto-load dispatch: " + path);
-            if (World.world?.transition_screen != null)
-                World.world.transition_screen.startTransition(load);
-            else
-                load();
+            try
+            {
+                if (World.world?.transition_screen != null)
+                    World.world.transition_screen.startTransition(load);
+                else
+                    load();
+            }
+            catch (Exception error)
+            {
+                FailBenchmarkAutoLoad("dispatch failed", error.ToString());
+            }
         }
 
-        private static void OnValidationWorldLoaded()
+        private static void LoadBenchmarkWorld(string path)
         {
-            MapBox.on_world_loaded -= OnValidationWorldLoaded;
+            try
+            {
+                SaveManager saveManager = World.world?.save_manager;
+                if (saveManager == null)
+                {
+                    FailBenchmarkAutoLoad("load manager is missing", path);
+                    return;
+                }
+                saveManager.loadWorld(path, false);
+            }
+            catch (Exception error)
+            {
+                FailBenchmarkAutoLoad("load invocation failed", error.ToString());
+            }
+        }
+
+        private static void OnBenchmarkWorldLoaded()
+        {
+            string expectedPath = _pendingPath;
+            if (!AW3SaveDirectoryRegistry.TryGet(out string loadedPath))
+            {
+                StopWaitingForBenchmarkWorld();
+                ModClass.LogWarning(
+                    "AW3 benchmark auto-load invalid: completed world has no " +
+                    "save directory expected=" + expectedPath);
+                return;
+            }
+            if (!IsSameBenchmarkPath(_pendingPath, loadedPath))
+            {
+                StopWaitingForBenchmarkWorld();
+                ModClass.LogWarning(
+                    "AW3 benchmark auto-load invalid: unexpected world loaded " +
+                    "expected=" + expectedPath + " actual=" + loadedPath);
+                return;
+            }
+
+            StopWaitingForBenchmarkWorld();
+            Config.paused = false;
+            try
+            {
+                Config.setWorldSpeed("x20");
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "AW3 benchmark auto-load invalid: failed to select x20 " +
+                    error);
+                return;
+            }
+
+            bool selectedX20 = Config.time_scale_asset != null &&
+                               Config.time_scale_asset.id == "x20";
+            float multiplier = Config.time_scale_asset?.multiplier ?? 0f;
+            if (!selectedX20 || Math.Abs(multiplier - 20f) > 0.001f)
+            {
+                string speed = Config.time_scale_asset?.id ?? "missing";
+                ModClass.LogWarning(
+                    "AW3 benchmark auto-load invalid: x20 was not selected " +
+                    "speed=" + speed + " multiplier=" + multiplier);
+                return;
+            }
+
+            ModClass.LogInfo(
+                "AW3 benchmark auto-load ready: speed=x20 multiplier=20 " +
+                "path=" + loadedPath);
+            OpenValidationFamilyTree();
+        }
+
+        private static bool IsSameBenchmarkPath(string expectedPath,
+            string loadedPath)
+        {
+            if (!RuntimePerformanceDiagnosticRules.
+                    TryResolveBenchmarkAutoLoadPath(expectedPath,
+                        out string expected) ||
+                !RuntimePerformanceDiagnosticRules.
+                    TryResolveBenchmarkAutoLoadPath(loadedPath,
+                        out string actual))
+                return false;
+            return string.Equals(expected, actual,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void FailBenchmarkAutoLoad(string reason, string detail)
+        {
+            StopWaitingForBenchmarkWorld();
+            ModClass.LogWarning("AW3 benchmark auto-load invalid: " + reason +
+                                " detail=" + detail);
+        }
+
+        private static void StopWaitingForBenchmarkWorld()
+        {
+            MapBox.on_world_loaded -= OnBenchmarkWorldLoaded;
+            _pendingPath = string.Empty;
+        }
+
+        private static void OpenValidationFamilyTree()
+        {
             if (_validationActorId <= 0L) return;
             try
             {

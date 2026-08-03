@@ -96,7 +96,7 @@ namespace AncientWarfare3.core.policy
         public static bool ShouldEmitTextLog(bool diagnosticsEnabled,
             bool benchmarkEnabled)
         {
-            return diagnosticsEnabled;
+            return diagnosticsEnabled || benchmarkEnabled;
         }
 
         public static long ExclusiveTicks(long totalTicks, long nestedTicks)

@@ -13,6 +13,7 @@
     <Compile Include="LineageBirthArchivePersistenceSqlTests.cs.txt" />
     <Compile Include="HistoricalWriteRulesTests.cs.txt" />
     <Compile Include="ActorDiagnosticSamplingRulesTests.cs.txt" />
+    <Compile Include="RuntimePerformanceDiagnosticRulesTests.cs.txt" />
     <Compile Include="ActorAgeWorkRulesTests.cs.txt" />
     <Compile Include="ActorDeathArchiveRulesTests.cs.txt" />
     <Compile Include="ActorPresentationDirtyRulesTests.cs.txt" />
@@ -553,6 +554,7 @@
     <Compile Include="..\..\Code\core\lineage\ActorKingdomSafetyRules.cs" Link="Production\ActorKingdomSafetyRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDeathPerformanceRules.cs" Link="Production\ActorDeathPerformanceRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDiagnosticSamplingRules.cs" Link="Production\ActorDiagnosticSamplingRules.cs" />
+    <Compile Include="..\..\Code\core\policy\RuntimePerformanceDiagnosticRules.cs" Link="Production\RuntimePerformanceDiagnosticRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorAgeWorkState.cs" Link="Production\ActorAgeWorkState.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorAgeWorkRules.cs" Link="Production\ActorAgeWorkRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorDeathArchiveModels.cs" Link="Production\ActorDeathArchiveModels.cs" />

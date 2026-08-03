@@ -1,0 +1,74 @@
+using AncientWarfare3.core.policy;
+
+internal static class RuntimePerformanceDiagnosticRulesTests
+{
+    public static void Run()
+    {
+        Equal(false, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
+                diagnosticsEnabled: false, benchmarkEnabled: false),
+            "disabled diagnostics and benchmark mode emit no text log");
+        Equal(true, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
+                diagnosticsEnabled: true, benchmarkEnabled: false),
+            "diagnostic mode emits the runtime diagnostic text log");
+        Equal(true, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
+                diagnosticsEnabled: false, benchmarkEnabled: true),
+            "benchmark mode emits the runtime diagnostic text log");
+        Equal(true, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
+                diagnosticsEnabled: true, benchmarkEnabled: true),
+            "combined diagnostic and benchmark mode emits one text log");
+        BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20();
+    }
+
+    private static void BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_RuntimeBenchmarkAutoLoadPatch.cs"));
+
+        Contains(source, "private static void OnBenchmarkWorldLoaded()",
+            "benchmark auto-load has a dedicated completion callback");
+        int subscribe = source.IndexOf(
+            "MapBox.on_world_loaded += OnBenchmarkWorldLoaded;",
+            StringComparison.Ordinal);
+        int dispatch = source.IndexOf("loadWorld(path, false)",
+            StringComparison.Ordinal);
+        True(subscribe >= 0 && dispatch > subscribe,
+            "completion is subscribed before the benchmark load dispatch");
+        Contains(source, "AW3SaveDirectoryRegistry.TryGet(out string loadedPath)",
+            "completion observes the directory actually loaded by WorldBox");
+        Contains(source, "IsSameBenchmarkPath(_pendingPath, loadedPath)",
+            "an unrelated world-loaded event cannot make the benchmark ready");
+        Contains(source, "MapBox.on_world_loaded -= OnBenchmarkWorldLoaded;",
+            "completion and failure paths can release the one-shot subscription");
+        Contains(source, "Config.paused = false;",
+            "the completed benchmark is explicitly unpaused");
+        Contains(source, "Config.setWorldSpeed(\"x20\");",
+            "the completed benchmark requests x20 speed");
+        Contains(source, "Config.time_scale_asset.id == \"x20\"",
+            "the benchmark verifies the active speed asset");
+        Contains(source, "speed=x20 multiplier=20",
+            "the ready log exposes the required speed and multiplier");
+        Contains(source, "benchmark auto-load invalid",
+            "failed completion emits a machine-detectable warning");
+        Equal(false, source.Contains("Task.Run(") ||
+                     source.Contains("new Thread("),
+            "benchmark world-load handling remains on the game thread");
+    }
+
+    private static void Contains(string value, string token, string message)
+    {
+        True(value.Contains(token, StringComparison.Ordinal), message);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                ": expected=" + expected + ", actual=" + actual);
+    }
+}

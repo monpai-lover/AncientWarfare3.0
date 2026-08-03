@@ -8,6 +8,13 @@ using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--runtime-diagnostic-rules")
+{
+    RuntimePerformanceDiagnosticRulesTests.Run();
+    Console.WriteLine("AW3 runtime diagnostic rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--lineage-family-migration-slice")
 {
     LineageFamilyArchiveMigrationTests.Run();
@@ -7633,6 +7640,7 @@ if (recruitmentPriorityRule != null)
 PathfindingPerformanceTests.Run();
 PathMovementExecutorRulesTests.Run();
 RuntimePerformanceBudgetRulesTests.Run();
+RuntimePerformanceDiagnosticRulesTests.Run();
 PathfindingCursorTests.Run();
 CourtReplacementSqlTests.Run();
 CourtMeritRewardSqlTests.Run();
