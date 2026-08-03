@@ -229,6 +229,20 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
         private static void CheckBenchmarkAutoLoadTimeout_Postfix()
         {
+            CheckPendingBenchmarkAutoLoadTimeout();
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
+        private static Exception CheckBenchmarkAutoLoadTimeout_Finalizer(Exception __exception)
+        {
+            if (__exception != null)
+                CheckPendingBenchmarkAutoLoadTimeout();
+            return __exception;
+        }
+
+        private static void CheckPendingBenchmarkAutoLoadTimeout()
+        {
             if (!_waitingForBenchmarkWorld) return;
             long nowUtcTicks = DateTime.UtcNow.Ticks;
             if (!RuntimePerformanceDiagnosticRules.

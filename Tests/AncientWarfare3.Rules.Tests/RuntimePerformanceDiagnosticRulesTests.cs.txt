@@ -20,6 +20,7 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         GeneratedFallbackInvalidatesPendingCompletion();
         BenchmarkTimeoutRulesBoundPendingWait();
         BenchmarkTimeoutPollingIsPendingOnlyAndCleansUp();
+        BenchmarkTimeoutCoversExceptionalMapUpdate();
         BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20();
     }
 
@@ -109,19 +110,16 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         string source = Read("Code", "patch",
             "AW_RuntimeBenchmarkAutoLoadPatch.cs");
         int timeoutPoll = source.IndexOf(
-            "private static void CheckBenchmarkAutoLoadTimeout_Postfix()",
+            "private static void CheckPendingBenchmarkAutoLoadTimeout()",
             StringComparison.Ordinal);
-        int pendingGate = source.IndexOf(
-            "if (!_waitingForBenchmarkWorld) return;", timeoutPoll,
-            StringComparison.Ordinal);
-        int clockRead = source.IndexOf("DateTime.UtcNow.Ticks", pendingGate,
-            StringComparison.Ordinal);
-        int timeoutRule = source.IndexOf(
-            "HasBenchmarkAutoLoadTimedOut(", clockRead,
-            StringComparison.Ordinal);
-        int timeoutInvalid = source.IndexOf(
-            "FailBenchmarkAutoLoad(\"timed out\"", timeoutRule,
-            StringComparison.Ordinal);
+        int pendingGate = IndexAfter(source,
+            "if (!_waitingForBenchmarkWorld) return;", timeoutPoll);
+        int clockRead = IndexAfter(source, "DateTime.UtcNow.Ticks",
+            pendingGate);
+        int timeoutRule = IndexAfter(source,
+            "HasBenchmarkAutoLoadTimedOut(", clockRead);
+        int timeoutInvalid = IndexAfter(source,
+            "FailBenchmarkAutoLoad(\"timed out\"", timeoutRule);
         int stop = source.IndexOf(
             "private static void StopWaitingForBenchmarkWorld()",
             StringComparison.Ordinal);
@@ -138,6 +136,37 @@ internal static class RuntimePerformanceDiagnosticRulesTests
             "timeout polling is a pending-only fast branch with explicit invalid");
         True(stop >= 0 && clearPending > stop && unsubscribe > stop,
             "timeout failure clears pending state and releases the callback");
+    }
+
+    private static void BenchmarkTimeoutCoversExceptionalMapUpdate()
+    {
+        string source = Read("Code", "patch",
+            "AW_RuntimeBenchmarkAutoLoadPatch.cs");
+        const string helperCall =
+            "CheckPendingBenchmarkAutoLoadTimeout();";
+        int postfix = source.IndexOf(
+            "private static void CheckBenchmarkAutoLoadTimeout_Postfix()",
+            StringComparison.Ordinal);
+        int postfixCall = IndexAfter(source, helperCall, postfix);
+        int finalizerAttribute = IndexAfter(source, "[HarmonyFinalizer]",
+            postfix);
+        int finalizer = IndexAfter(source,
+            "private static Exception " +
+            "CheckBenchmarkAutoLoadTimeout_Finalizer(Exception __exception)",
+            finalizerAttribute);
+        int finalizerCall = IndexAfter(source, helperCall, finalizer);
+        int returnException = IndexAfter(source, "return __exception;",
+            finalizerCall);
+        int helper = source.IndexOf(
+            "private static void CheckPendingBenchmarkAutoLoadTimeout()",
+            StringComparison.Ordinal);
+
+        True(postfix >= 0 && postfixCall > postfix &&
+             finalizerAttribute > postfixCall && finalizer > finalizerAttribute &&
+             finalizerCall > finalizer && returnException > finalizerCall,
+            "normal and exceptional MapBox.Update paths share timeout cleanup");
+        True(helper >= 0 && helper != postfix && helper != finalizer,
+            "timeout state logic has one shared implementation");
     }
 
     private static void BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20()
@@ -186,6 +215,13 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         pathParts[0] = Directory.GetCurrentDirectory();
         Array.Copy(parts, 0, pathParts, 1, parts.Length);
         return File.ReadAllText(Path.Combine(pathParts));
+    }
+
+    private static int IndexAfter(string value, string token, int startIndex)
+    {
+        return startIndex < 0
+            ? -1
+            : value.IndexOf(token, startIndex, StringComparison.Ordinal);
     }
 
     private static void True(bool value, string message)
