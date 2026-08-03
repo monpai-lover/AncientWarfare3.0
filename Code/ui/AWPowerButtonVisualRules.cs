@@ -17,5 +17,11 @@ namespace AncientWarfare3.ui
                    (!string.IsNullOrEmpty(pPowerId) &&
                     pPowerId.StartsWith("aw_", StringComparison.Ordinal));
         }
+
+        public static bool ShouldClearCancelIconOverride(string pPowerId)
+        {
+            return !string.IsNullOrEmpty(pPowerId) &&
+                   !ShouldPatchCancelIcon(pPowerId);
+        }
     }
 }

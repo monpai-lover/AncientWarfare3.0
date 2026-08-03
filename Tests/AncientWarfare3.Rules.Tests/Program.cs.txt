@@ -6666,6 +6666,15 @@ True(AWPowerButtonVisualRules.ShouldPatchCancelIcon("xia"),
     "AW powers use the corrected cancel icon path");
 Equal(false, AWPowerButtonVisualRules.ShouldPatchCancelIcon("spawn_human"),
     "vanilla powers keep the vanilla cancel icon path");
+True(AWPowerButtonVisualRules.ShouldClearCancelIconOverride("spawn_human"),
+    "selecting a vanilla power clears a stale AW3 cancel icon override");
+Equal(false,
+    AWPowerButtonVisualRules.ShouldClearCancelIconOverride("aw_grant_mandate"),
+    "switching between AW3 powers keeps the AW3 override path");
+Equal(false, AWPowerButtonVisualRules.ShouldClearCancelIconOverride("xia"),
+    "the Xia power keeps the corrected AW3 override path");
+Equal(false, AWPowerButtonVisualRules.ShouldClearCancelIconOverride(null),
+    "an invalid power does not mutate the current cancel icon");
 True(ArmyMarchRules.ShouldRecordLeaderStep(
         pHasArmy: true, pIsLeader: true, pHasValidTarget: true),
     "only a marching army leader records the shared route");

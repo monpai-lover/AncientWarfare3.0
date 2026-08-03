@@ -12,6 +12,13 @@ namespace AncientWarfare3.patch
             PowerButton pButton)
         {
             string powerId = pButton?.godPower?.id;
+            if (AWPowerButtonVisualRules.
+                ShouldClearCancelIconOverride(powerId))
+            {
+                if (__instance?.powerIcon != null)
+                    __instance.powerIcon.overrideSprite = null;
+                return true;
+            }
             if (!AWPowerButtonVisualRules.ShouldPatchCancelIcon(powerId))
                 return true;
             if (__instance?.powerIcon == null || pButton?.icon == null)
