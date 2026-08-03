@@ -61,6 +61,12 @@ internal static class DiplomaticWarAvailabilityRulesTests
                     "missing_core_target"),
                 new DiplomaticWarAvailabilityCandidate(true, "")
             }, 0), "selection moves to the first available goal");
+        Equal(1, DiplomaticWarAvailabilityRules.ResolveSelectedGoalIndex(
+            new[]
+            {
+                new DiplomaticWarAvailabilityCandidate(true, ""),
+                new DiplomaticWarAvailabilityCandidate(true, "")
+            }, 1), "available preferred selection is retained");
         Equal(-1, DiplomaticWarAvailabilityRules.ResolveSelectedGoalIndex(
             new[]
             {
