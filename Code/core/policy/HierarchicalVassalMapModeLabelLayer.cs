@@ -289,14 +289,8 @@ namespace AncientWarfare3.core.policy
                 Nodes.Add(node);
             }
 
-            float visualSize = pPlacement.Size * HierarchicalVassalMapModeRules.
-                MapLabelVisualScale;
-            float size = pCountry
-                ? Mathf.Clamp(visualSize, CountryLabelMinSize,
-                    CountryLabelMaxSize)
-                : Mathf.Clamp(visualSize,
-                    HierarchicalVassalMapModeRules.CityLabelMinimumSize,
-                    HierarchicalVassalMapModeRules.CityLabelMaximumSize);
+            float size = HierarchicalVassalMapModeRules.
+                ResolveRenderedLabelSize(pPlacement.Size, pCountry);
             Color color = pCountry
                 ? ResolveCountryLabelColor(pKingdom)
                 : ResolveCityLabelColor(pCity?.kingdom ?? pKingdom);

@@ -14,6 +14,9 @@ namespace AncientWarfare3.patch
             try
             {
                 bool active = HierarchicalVassalMapModeService.IsActive();
+                if (active)
+                    HierarchicalVassalMapModeLabelLayer.
+                        ObserveResolutionMode(MapBox.isRenderMiniMap());
                 HierarchicalVassalMapModeLabelLayer.ObserveMapModeActive(active);
                 if (HierarchicalVassalMapModeLabelLayer.NeedsProcessFrame)
                     HierarchicalVassalMapModeLabelLayer.ProcessFrame();

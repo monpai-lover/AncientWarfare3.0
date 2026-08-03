@@ -7,6 +7,10 @@ $labels = Get-Content -Raw -LiteralPath (Join-Path $root `
     'Code\core\policy\HierarchicalVassalMapModeLabelLayer.cs')
 $rules = Get-Content -Raw -LiteralPath (Join-Path $root `
     'Code\core\policy\HierarchicalVassalMapModeRules.cs')
+$minimapPatch = Get-Content -Raw -LiteralPath (Join-Path $root `
+    'Code\patch\AW_HierarchicalVassalMapMinimapPatch.cs')
+$framePatch = Get-Content -Raw -LiteralPath (Join-Path $root `
+    'Code\patch\AW_HierarchicalVassalMapLabelPatch.cs')
 
 function Require([string]$text, [string]$needle, [string]$message) {
     if (-not $text.Contains($needle)) { throw $message }
@@ -52,10 +56,33 @@ if ($labels.Contains('MapBox.isRenderMiniMap()')) {
 Require $rules 'MapLabelVisualScale = 2.0f' `
     'country and city map labels are not rendered at double visual size'
 Require $labels `
-    'pPlacement.Size * HierarchicalVassalMapModeRules.' `
-    'the double label scale is declared but not applied to placements'
-Require $labels 'MapLabelVisualScale' `
-    'the placement scale does not use the shared map-label multiplier'
+    'ResolveRenderedLabelSize(pPlacement.Size, pCountry);' `
+    'runtime labels bypass the shared map-label visual-size rule'
+Require $rules 'ResolveRenderedLabelSize(' `
+    'map label visual scaling is not centralized'
+Require $framePatch `
+    'ObserveResolutionMode(MapBox.isRenderMiniMap());' `
+    'map label sorting does not follow the authoritative resolution state'
+if ($minimapPatch.Contains('PrepareHierarchicalLabelsForMinimap') -or
+    $minimapPatch.Contains('RestoreHierarchicalLabelsAfterMinimap')) {
+    throw 'map label sorting still treats pixel redraw as the render lifecycle'
+}
+
+$sizeRuleStart = $rules.IndexOf('ResolveRenderedLabelSize(')
+$sizeRuleEnd = $rules.IndexOf(
+    'internal static int GetLabelOutlinePassCount(', $sizeRuleStart)
+if ($sizeRuleStart -lt 0 -or $sizeRuleEnd -le $sizeRuleStart) {
+    throw 'map label visual-size rule could not be inspected'
+}
+$sizeRule = $rules.Substring($sizeRuleStart,
+    $sizeRuleEnd - $sizeRuleStart)
+if ($sizeRule -notmatch `
+    'Math\.Min\(maximum,\s*Math\.Max\(minimum,\s*pPlacementSize\)\)') {
+    throw 'map label placement is not clamped to its logical size range first'
+}
+if ($sizeRule -notmatch 'logicalSize\s*\*\s*MapLabelVisualScale') {
+    throw 'map label visual scale is still swallowed by the logical size cap'
+}
 if ($service.Contains('"native:city:" +') -or
     $service.Contains('"native:country:" +')) {
     throw 'native label keys still allocate once per label per redraw'

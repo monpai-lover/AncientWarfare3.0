@@ -32,6 +32,20 @@ namespace AncientWarfare3.core.policy
         private const int CountryLabelGapSpanStep = 24;
         private const int MaximumCountryLabelGap = 4;
 
+        internal static float ResolveRenderedLabelSize(
+            float pPlacementSize, bool pCountry)
+        {
+            float minimum = pCountry
+                ? SmallTerritoryMinimumLabelSize
+                : CityLabelMinimumSize;
+            float maximum = pCountry
+                ? MaximumLabelSize
+                : CityLabelMaximumSize;
+            float logicalSize = (float)Math.Min(maximum,
+                Math.Max(minimum, pPlacementSize));
+            return logicalSize * MapLabelVisualScale;
+        }
+
         internal static int GetLabelOutlinePassCount(bool pCountry)
         {
             return pCountry

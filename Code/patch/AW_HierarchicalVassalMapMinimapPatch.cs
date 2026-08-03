@@ -13,24 +13,6 @@ namespace AncientWarfare3.patch
         private static readonly HashSet<string> ClearedIconAssetIds =
             new HashSet<string>();
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(MapBox), nameof(MapBox.redrawMiniMap))]
-        private static void PrepareHierarchicalLabelsForMinimap()
-        {
-            if (HierarchicalVassalMapModeService.IsActive())
-                HierarchicalVassalMapModeLabelLayer.
-                    ObserveResolutionMode(true);
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MapBox), nameof(MapBox.redrawMiniMap))]
-        private static void RestoreHierarchicalLabelsAfterMinimap()
-        {
-            if (HierarchicalVassalMapModeService.IsActive())
-                HierarchicalVassalMapModeLabelLayer.
-                    ObserveResolutionMode(false);
-        }
-
         [HarmonyPostfix]
         [HarmonyPatch(typeof(QuantumSpriteManager),
             nameof(QuantumSpriteManager.update))]
