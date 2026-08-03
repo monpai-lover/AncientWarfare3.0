@@ -224,11 +224,17 @@ namespace AncientWarfare3.core.multiplayer
                     CityReservePoolService.RebuildRuntime),
                 new AW3RestoreStage("city_reserve_pool_snapshot", () =>
                 {
-                    if (string.IsNullOrWhiteSpace(directory)) return;
-                    if (!CityReservePoolService.TryRestoreSnapshot(
-                            directory, out string snapshotError) &&
+                    bool snapshotRestored = false;
+                    string snapshotError = string.Empty;
+                    if (!string.IsNullOrWhiteSpace(directory))
+                        snapshotRestored = CityReservePoolService.
+                            TryRestoreSnapshot(directory,
+                                out snapshotError);
+                    if (!snapshotRestored &&
                         !string.IsNullOrEmpty(snapshotError))
                         throw new InvalidOperationException(snapshotError);
+                    CityReservePoolService.FinalizeRuntimeRestore(
+                        snapshotRestored);
                 }),
                 new AW3RestoreStage("army_replenishment_operations",
                     ArmyReplenishmentOperationService.RebuildRuntime),

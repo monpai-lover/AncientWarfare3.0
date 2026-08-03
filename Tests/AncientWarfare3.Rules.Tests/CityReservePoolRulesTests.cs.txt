@@ -46,6 +46,7 @@ internal static class CityReservePoolRulesTests
         Equal(20, CityReservePoolRules.RequiredRemovalCount(
             memberCount: 35, capacity: 15),
             "lowering removes only excess registrations");
+        CombinedMobilizedAndPoolCountObeysLawCapacity();
 
         Equal(true, CityReservePoolRules.CanEnroll(
             alive: true, adult: true, localResident: true,
@@ -93,6 +94,7 @@ internal static class CityReservePoolRulesTests
             sameKingdom: true, sameCity: false, alive: true,
             reserveEligible: true, enlistedIntoTargetArmy: false),
             "a migrant cannot be returned to the former city's pool");
+        RejectedCandidateReturnIsDeterministicAndIdempotent();
         Equal(true, CityReservePoolRules.MatchesSourceCity(
             sourceCityId: 10L, candidateCityId: 10L),
             "an army may consume reserves raised by its source city");
@@ -276,8 +278,89 @@ internal static class CityReservePoolRulesTests
         Equal(false, CityReservePoolRules.ShouldDeferCallbackInvalidation(
             hasPersistedMember: true, restoreInFlight: false),
             "normal profession changes still validate reserve members");
+        WarEntryWaitsForCompleteRestoreValidation();
 
         PreparationUsesMaintainedActorPool();
+    }
+
+    private static void CombinedMobilizedAndPoolCountObeysLawCapacity()
+    {
+        int Capacity(int eligible, int mobilized, int percent) =>
+            CityReservePoolRules.AvailablePoolCapacity(eligible, mobilized,
+                percent);
+
+        Equal(7, Capacity(eligible: 42, mobilized: 8, percent: 30),
+            "consuming eight of fifty limited-law residents cannot refill " +
+            "the pool above fifteen combined soldiers and members");
+        Equal(7, Capacity(eligible: 42, mobilized: 7, percent: 30),
+            "a soldier death lowers the lawful combined cohort before refill");
+        Equal(8, Capacity(eligible: 43, mobilized: 7, percent: 30),
+            "a demobilized resident deterministically reopens one pool slot");
+        Equal(14, Capacity(eligible: 49, mobilized: 0, percent: 30),
+            "a civilian migration lowers the source-city pool capacity");
+        Equal(7, Capacity(eligible: 42, mobilized: 8, percent: 30),
+            "limited law leaves seven pool slots after eight mobilizations");
+        Equal(17, Capacity(eligible: 42, mobilized: 8, percent: 50),
+            "standard law applies to mobilized soldiers plus pool members");
+        Equal(27, Capacity(eligible: 42, mobilized: 8, percent: 70),
+            "expanded law applies to mobilized soldiers plus pool members");
+        Equal(42, Capacity(eligible: 42, mobilized: 8, percent: 100),
+            "full law permits every remaining eligible civilian in the pool");
+        Equal(1, Capacity(eligible: 1, mobilized: 0, percent: 30),
+            "a small non-empty city retains one reserve member");
+        Equal(0, Capacity(eligible: 0, mobilized: 1, percent: 30),
+            "the small-city minimum is already consumed by its soldier");
+    }
+
+    private static void RejectedCandidateReturnIsDeterministicAndIdempotent()
+    {
+        var eligible = new SortedSet<long>();
+        var members = new SortedSet<long>();
+        Equal(true, CityReservePoolRules.RestoreRejectedActorId(
+                eligible, members, 11L, sameKingdom: true, sameCity: true,
+                alive: true, reserveEligible: true,
+                enlistedIntoTargetArmy: false),
+            "a failed local candidate returns to its source pool");
+        Equal(true, CityReservePoolRules.RestoreRejectedActorId(
+                eligible, members, 11L, sameKingdom: true, sameCity: true,
+                alive: true, reserveEligible: true,
+                enlistedIntoTargetArmy: false),
+            "replaying the same failed return is harmless");
+        Equal(1, eligible.Count,
+            "the eligible index contains one copy after replay");
+        Equal(1, members.Count,
+            "the member index contains one copy after replay");
+        Equal(false, CityReservePoolRules.RestoreRejectedActorId(
+                eligible, members, 12L, sameKingdom: true, sameCity: false,
+                alive: true, reserveEligible: true,
+                enlistedIntoTargetArmy: false),
+            "a migrated candidate cannot return to the old city pool");
+        Equal(false, CityReservePoolRules.RestoreRejectedActorId(
+                eligible, members, 13L, sameKingdom: true, sameCity: true,
+                alive: true, reserveEligible: true,
+                enlistedIntoTargetArmy: true),
+            "a candidate enlisted into the target army stays out");
+        Equal(false, members.Contains(12L) || members.Contains(13L),
+            "rejected return guards never add an invalid actor id");
+    }
+
+    private static void WarEntryWaitsForCompleteRestoreValidation()
+    {
+        Equal(true, CityReservePoolRules.
+                RequiresImmediateWarEntryValidation(true),
+            "pending restore validation runs immediately before war entry");
+        Equal(false, CityReservePoolRules.CanAdvanceWarEntry(
+                restoreValidationPending: true,
+                validationCompleted: false),
+            "an incomplete restored generation cannot enter a war");
+        Equal(true, CityReservePoolRules.CanAdvanceWarEntry(
+                restoreValidationPending: true,
+                validationCompleted: true),
+            "a completely reconciled restored generation may enter a war");
+        Equal(true, CityReservePoolRules.CanAdvanceWarEntry(
+                restoreValidationPending: false,
+                validationCompleted: false),
+            "ordinary war entry does not require an unrelated validation");
     }
 
     private static void PreparationUsesMaintainedActorPool()
@@ -302,7 +385,7 @@ internal static class CityReservePoolRulesTests
                 StringComparison.Ordinal),
             "notice mobilization must consume the law-limited actor pool");
         Equal(true, source.Contains(
-                "CityReservePoolRules.CanRestoreRejectedCandidate(",
+                "CityReservePoolRules.RestoreRejectedActorId(",
                 StringComparison.Ordinal),
             "a failed enlistment must restore its actor to the source pool");
         Equal(true, source.Contains(

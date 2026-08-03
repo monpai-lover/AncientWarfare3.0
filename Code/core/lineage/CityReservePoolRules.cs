@@ -41,6 +41,21 @@ namespace AncientWarfare3.core.lineage
             return (int)Math.Min(int.MaxValue, capacity);
         }
 
+        public static int AvailablePoolCapacity(int eligibleCivilians,
+            int activeCitySourcedMilitary, int percent)
+        {
+            long eligible = Math.Max(0, eligibleCivilians);
+            long mobilized = Math.Max(0, activeCitySourcedMilitary);
+            long share = Math.Max(0, Math.Min(100, percent));
+            long cohort = eligible + mobilized;
+            if (cohort <= 0L || share <= 0L) return 0;
+
+            long combinedCapacity = cohort * share / 100L;
+            if (combinedCapacity <= 0L) combinedCapacity = 1L;
+            long available = Math.Max(0L, combinedCapacity - mobilized);
+            return (int)Math.Min(int.MaxValue, available);
+        }
+
         public static int CapacityForPreparation(int eligibleCivilians,
             int lawPercent, bool preparation)
         {
@@ -96,6 +111,19 @@ namespace AncientWarfare3.core.lineage
         {
             return sameKingdom && sameCity && alive && reserveEligible &&
                    !enlistedIntoTargetArmy;
+        }
+
+        public static bool RestoreRejectedActorId(
+            SortedSet<long> eligibleActorIds, SortedSet<long> actorIds,
+            long actorId, bool sameKingdom, bool sameCity, bool alive,
+            bool reserveEligible, bool enlistedIntoTargetArmy)
+        {
+            if (eligibleActorIds == null || actorIds == null || actorId < 0L ||
+                !CanRestoreRejectedCandidate(sameKingdom, sameCity, alive,
+                    reserveEligible, enlistedIntoTargetArmy)) return false;
+            eligibleActorIds.Add(actorId);
+            actorIds.Add(actorId);
+            return true;
         }
 
         public static bool MatchesSourceCity(long sourceCityId,
@@ -193,6 +221,18 @@ namespace AncientWarfare3.core.lineage
             bool hasPersistedMember, bool restoreInFlight)
         {
             return hasPersistedMember && restoreInFlight;
+        }
+
+        public static bool RequiresImmediateWarEntryValidation(
+            bool restoreValidationPending)
+        {
+            return restoreValidationPending;
+        }
+
+        public static bool CanAdvanceWarEntry(bool restoreValidationPending,
+            bool validationCompleted)
+        {
+            return !restoreValidationPending || validationCompleted;
         }
 
         public static bool ShouldApplyReserveExhaustion(

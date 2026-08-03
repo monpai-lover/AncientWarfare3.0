@@ -326,6 +326,7 @@ namespace AncientWarfare3.core.lineage
             bool liveKingdom = IsLivingKingdom(kingdom);
             if (!CityReservePoolRules.ShouldReconcileJoiningKingdom(
                     warActive, liveKingdom)) return;
+            if (!EnsureRestoreValidationForWarEntry()) return;
             CompletePreWarReconciliation(kingdom,
                 new HashSet<long>());
             OpenWarEmergency(kingdom, war.data.id);
@@ -660,7 +661,10 @@ namespace AncientWarfare3.core.lineage
                 bool reserveEligible = alive &&
                     TemporaryLevyService.CanRegisterReserve(kingdom,
                         sourceCity, actor);
-                if (!CityReservePoolRules.CanRestoreRejectedCandidate(
+                CityPool pool = Pool(state, sourceCity.id);
+                if (!CityReservePoolRules.RestoreRejectedActorId(
+                        pool.EligibleActorIds, pool.ActorIds,
+                        actor?.data?.id ?? -1L,
                         sameKingdom: alive && actor.kingdom == kingdom &&
                             sourceCity.kingdom == kingdom,
                         sameCity: alive && actor.city == sourceCity,
@@ -668,29 +672,100 @@ namespace AncientWarfare3.core.lineage
                         enlistedIntoTargetArmy: enlistedIntoTargetArmy))
                     continue;
 
-                CityPool pool = Pool(state, sourceCity.id);
-                pool.EligibleActorIds.Add(actor.data.id);
                 SetMemberFields(actor, kingdom, sourceCity,
                     state.Generation);
-                pool.ActorIds.Add(actor.data.id);
             }
+            CityPool sourcePool = Pool(state, sourceCity.id);
+            ReconcilePool(kingdom, sourceCity, state, sourcePool,
+                allowFrozenAddition: false, additionBudget: 0);
             MarkCityDirty(sourceCity);
         }
 
         internal static void CompletePreWarReconciliation(War war)
         {
             if (war?.data == null || war.hasEnded()) return;
-            if (RestoreValidationPending)
-            {
-                if (CurrentWorldDay() < RestoreValidationDueWorldDay)
-                    return;
-                RebuildRuntime(validatePersistedMembers: true);
-            }
+            if (!EnsureRestoreValidationForWarEntry()) return;
             var participantIds = new HashSet<long>();
             foreach (Kingdom kingdom in war.getAttackers())
                 CompletePreWarReconciliation(kingdom, participantIds);
             foreach (Kingdom kingdom in war.getDefenders())
                 CompletePreWarReconciliation(kingdom, participantIds);
+        }
+
+        internal static bool PrepareWarEntry(Kingdom first,
+            Kingdom second = null)
+        {
+            if (!EnsureRestoreValidationForWarEntry()) return false;
+            var participantIds = new HashSet<long>();
+            CompletePreWarReconciliation(first, participantIds);
+            CompletePreWarReconciliation(second, participantIds);
+            return true;
+        }
+
+        private static bool EnsureRestoreValidationForWarEntry()
+        {
+            bool validationPending = CityReservePoolRules.
+                RequiresImmediateWarEntryValidation(
+                    RestoreValidationPending);
+            if (!validationPending) return true;
+            bool validationCompleted = ValidatePendingRestoreRuntime();
+            return CityReservePoolRules.CanAdvanceWarEntry(
+                validationPending, validationCompleted);
+        }
+
+        private static bool ValidatePendingRestoreRuntime()
+        {
+            if (World.world?.units == null ||
+                World.world.kingdoms == null) return false;
+
+            foreach (Actor actor in World.world.units)
+            {
+                if (actor?.data == null) continue;
+                actor.data.get(LineageKeys.CITY_RESERVE_MEMBER,
+                    out bool member, false);
+                if (!member) continue;
+                actor.data.get(LineageKeys.CITY_RESERVE_CITY_ID,
+                    out long cityId, -1L);
+                actor.data.get(LineageKeys.CITY_RESERVE_KINGDOM_ID,
+                    out long kingdomId, -1L);
+                actor.data.get(LineageKeys.CITY_RESERVE_GENERATION,
+                    out long generation, -1L);
+                City city = ResolveCity(cityId);
+                Kingdom kingdom = ResolveKingdom(kingdomId);
+                KingdomPoolState state = kingdom?.data != null
+                    ? State(kingdom)
+                    : null;
+                bool valid = city?.data != null && state != null &&
+                    actor.city == city && actor.kingdom == kingdom &&
+                    city.kingdom == kingdom &&
+                    generation == state.Generation &&
+                    TemporaryLevyService.CanRegisterReserve(kingdom, city,
+                        actor);
+                if (!valid)
+                {
+                    RemoveActorFromIndexes(actor, kingdom, city);
+                    continue;
+                }
+                CityPool pool = Pool(state, city.id);
+                pool.EligibleActorIds.Add(actor.data.id);
+                pool.ActorIds.Add(actor.data.id);
+            }
+
+            RestoreValidationPending = false;
+            RestoreValidationDueWorldDay = -1L;
+            var reconciledKingdomIds = new HashSet<long>();
+            foreach (Kingdom kingdom in World.world.kingdoms)
+                CompletePreWarReconciliation(kingdom,
+                    reconciledKingdomIds);
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (CountFormalWars(kingdom) > 0)
+                    OpenWarEmergency(kingdom,
+                        ResolveFirstWarId(kingdom));
+                else
+                    ReevaluateFreeze(kingdom);
+            }
+            return true;
         }
 
         private static void CompletePreWarReconciliation(Kingdom kingdom,
@@ -717,6 +792,39 @@ namespace AncientWarfare3.core.lineage
         internal static void RebuildRuntime()
         {
             RebuildRuntime(validatePersistedMembers: false);
+        }
+
+        internal static void FinalizeRuntimeRestore(bool snapshotRestored)
+        {
+            bool formalWarActive = false;
+            if (World.world?.kingdoms != null)
+                foreach (Kingdom kingdom in World.world.kingdoms)
+                    if (CountFormalWars(kingdom) > 0)
+                    {
+                        formalWarActive = true;
+                        break;
+                    }
+            CityReservePoolFinalRestoreActions actions =
+                CityReservePoolPersistenceRules.ResolveFinalRestoreActions(
+                    snapshotRestored, actorCallbacksComplete: true,
+                    formalWarActive);
+            if ((actions & CityReservePoolFinalRestoreActions.
+                    ValidateMembers) == 0) return;
+
+            RebuildRuntime(validatePersistedMembers: true);
+            if (World.world?.kingdoms == null) return;
+            var reconciledKingdomIds = new HashSet<long>();
+            foreach (Kingdom kingdom in World.world.kingdoms)
+                CompletePreWarReconciliation(kingdom,
+                    reconciledKingdomIds);
+
+            if ((actions & CityReservePoolFinalRestoreActions.
+                    RestoreWarEmergency) == 0) return;
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (CountFormalWars(kingdom) <= 0) continue;
+                OpenWarEmergency(kingdom, ResolveFirstWarId(kingdom));
+            }
         }
 
         private static void RebuildRuntime(bool validatePersistedMembers)
@@ -964,8 +1072,10 @@ namespace AncientWarfare3.core.lineage
                 city.kingdom != kingdom || pool == null) return;
             int percent = CourtConscriptionLawRules.ReservePercent(
                 CourtAuxiliaryLawService.GetConscriptionLaw(kingdom));
-            int capacity = CityReservePoolRules.Capacity(
-                pool.EligibleActorIds.Count, percent);
+            pool.ActiveCitySourcedMilitary = CountCityArmyMembers(city);
+            int capacity = CityReservePoolRules.AvailablePoolCapacity(
+                pool.EligibleActorIds.Count,
+                pool.ActiveCitySourcedMilitary, percent);
             ShrinkPoolToCapacity(pool, capacity);
             if (additionBudget <= 0 ||
                 state.Frozen && !allowFrozenAddition ||
@@ -992,8 +1102,9 @@ namespace AncientWarfare3.core.lineage
             }
             for (int i = 0; i < invalidIds.Count; i++)
                 pool.EligibleActorIds.Remove(invalidIds[i]);
-            capacity = CityReservePoolRules.Capacity(
-                pool.EligibleActorIds.Count, percent);
+            capacity = CityReservePoolRules.AvailablePoolCapacity(
+                pool.EligibleActorIds.Count,
+                pool.ActiveCitySourcedMilitary, percent);
             ShrinkPoolToCapacity(pool, capacity);
         }
 

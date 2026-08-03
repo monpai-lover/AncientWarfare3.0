@@ -75,7 +75,14 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(WarManager), nameof(WarManager.newWar))]
         public static bool NewWar_Prefix(Kingdom pAttacker, Kingdom pDefender, WarTypeAsset pType, ref War __result)
         {
-            if (!WarDecisionService.ShouldBlockWarStart(pAttacker, pDefender, pType)) return true;
+            if (WarDecisionService.ShouldBlockWarStart(pAttacker, pDefender,
+                    pType))
+            {
+                __result = null;
+                return false;
+            }
+            if (CityReservePoolService.PrepareWarEntry(pAttacker,
+                    pDefender)) return true;
             __result = null;
             return false;
         }
@@ -339,9 +346,11 @@ namespace AncientWarfare3.patch
             bool lookupSucceeded =
                 WarParticipantEntrySourceService.Instance.TryCanJoinWar(
                     pWar.data.id, pKingdom.id, out bool sourceAllowsJoin);
-            return WarParticipantLifecycleRules.CanJoin(wasOnSide,
+            bool canJoin = WarParticipantLifecycleRules.CanJoin(wasOnSide,
                 initializingMainBelligerent, lookupSucceeded,
                 hasSeparatePeaceExit: !sourceAllowsJoin);
+            return canJoin && CityReservePoolService.PrepareWarEntry(
+                pKingdom);
         }
 
         private static void CompleteJoin(War pWar, Kingdom pKingdom,
