@@ -269,11 +269,11 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         public static bool ShouldUseCustomSmoothMovement(
-            bool hasCustomPathState, bool hasVanillaLocalPath,
-            bool hasVanillaGlobalPath)
+            bool largeSchedulerEnabled, bool hasCustomPathState,
+            bool hasVanillaLocalPath, bool hasVanillaGlobalPath)
         {
-            return hasCustomPathState && !hasVanillaLocalPath &&
-                   !hasVanillaGlobalPath;
+            return largeSchedulerEnabled && hasCustomPathState &&
+                   !hasVanillaLocalPath && !hasVanillaGlobalPath;
         }
 
         public static bool ShouldExpirePendingRequest(double startedAt,

@@ -20,6 +20,7 @@
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
+    <Compile Include="PathMovementExecutorRulesTests.cs.txt" />
     <Compile Include="RuntimePerformanceBudgetRulesTests.cs.txt" />
     <Compile Include="MonthlyAuthorityWorkQueueTests.cs.txt" />
     <Compile Include="CourtReplacementSqlTests.cs.txt" />

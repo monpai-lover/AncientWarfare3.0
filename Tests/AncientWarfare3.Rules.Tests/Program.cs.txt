@@ -6755,18 +6755,22 @@ True(AWPathLifecycleRules.ShouldInspectCustomPathState(
         hasTransportContext: false),
     "an actor with a retry context remains owned by AW3 pathfinding");
 Equal(false, AWPathLifecycleRules.ShouldUseCustomSmoothMovement(
+        largeSchedulerEnabled: true,
         hasCustomPathState: false, hasVanillaLocalPath: true,
         hasVanillaGlobalPath: false),
     "a loaded vanilla local path bypasses AW3 smooth movement");
 Equal(false, AWPathLifecycleRules.ShouldUseCustomSmoothMovement(
+        largeSchedulerEnabled: true,
         hasCustomPathState: false, hasVanillaLocalPath: false,
         hasVanillaGlobalPath: false),
     "an unowned moving actor bypasses AW3 smooth movement");
 True(AWPathLifecycleRules.ShouldUseCustomSmoothMovement(
+        largeSchedulerEnabled: true,
         hasCustomPathState: true, hasVanillaLocalPath: false,
         hasVanillaGlobalPath: false),
     "an AW3-owned path uses the custom smooth cursor");
 Equal(false, AWPathLifecycleRules.ShouldUseCustomSmoothMovement(
+        largeSchedulerEnabled: true,
         hasCustomPathState: true, hasVanillaLocalPath: true,
         hasVanillaGlobalPath: false),
     "a vanilla local path wins over stale AW3 ownership state");
@@ -7604,6 +7608,7 @@ if (recruitmentPriorityRule != null)
 }
 
 PathfindingPerformanceTests.Run();
+PathMovementExecutorRulesTests.Run();
 RuntimePerformanceBudgetRulesTests.Run();
 PathfindingCursorTests.Run();
 CourtReplacementSqlTests.Run();

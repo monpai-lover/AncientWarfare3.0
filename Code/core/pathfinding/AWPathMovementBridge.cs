@@ -443,6 +443,7 @@ namespace AncientWarfare3.core.pathfinding
         {
             if (pActor?.data == null) return false;
             return AWPathLifecycleRules.ShouldUseCustomSmoothMovement(
+                AWPerformanceSettings.EnableFramePriorityScheduler,
                 HasOwnedPathState(pActor.data.id),
                 pActor.isFollowingLocalPath(),
                 pActor.current_path_global != null);

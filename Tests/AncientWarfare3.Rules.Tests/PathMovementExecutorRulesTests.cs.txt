@@ -1,0 +1,36 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class PathMovementExecutorRulesTests
+{
+    public static void Run()
+    {
+        False(AWPathLifecycleRules.ShouldUseCustomSmoothMovement(
+                largeSchedulerEnabled: false,
+                hasCustomPathState: true,
+                hasVanillaLocalPath: false,
+                hasVanillaGlobalPath: false),
+            "Native reuses vanilla frame movement for an AW3 path");
+        True(AWPathLifecycleRules.ShouldUseCustomSmoothMovement(
+                largeSchedulerEnabled: true,
+                hasCustomPathState: true,
+                hasVanillaLocalPath: false,
+                hasVanillaGlobalPath: false),
+            "Large retains AW3 smooth streamed movement");
+        False(AWPathLifecycleRules.ShouldUseCustomSmoothMovement(
+                largeSchedulerEnabled: true,
+                hasCustomPathState: true,
+                hasVanillaLocalPath: true,
+                hasVanillaGlobalPath: false),
+            "a vanilla local path wins over stale AW3 ownership");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}
