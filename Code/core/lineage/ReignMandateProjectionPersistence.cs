@@ -9,6 +9,15 @@ namespace AncientWarfare3.core.lineage
             long kingdomId, long rulerActorId, long mandatePeriodId,
             int emperorTitle, string stateName, out string pError)
         {
+            return TryProject(pDb, null, pTable, kingdomId, rulerActorId,
+                mandatePeriodId, emperorTitle, stateName, out pError);
+        }
+
+        public static bool TryProject(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, string pTable,
+            long kingdomId, long rulerActorId, long mandatePeriodId,
+            int emperorTitle, string stateName, out string pError)
+        {
             pError = "";
             if (pDb == null ||
                 !string.Equals(pTable, "KingdomReign",
@@ -22,7 +31,10 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
-                using var command = new SQLiteCommand(pDb);
+                using var command = new SQLiteCommand(pDb)
+                {
+                    Transaction = pTransaction
+                };
                 command.CommandText =
                     "UPDATE " + pTable +
                     " SET MANDATE_PERIOD_ID=@period," +

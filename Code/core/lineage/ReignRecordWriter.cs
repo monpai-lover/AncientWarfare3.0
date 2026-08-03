@@ -55,10 +55,13 @@ namespace AncientWarfare3.core.lineage
 
         // ── 外部接口 ──
 
-        public static void OpenReign(Kingdom pKingdom, Actor pNewKing)
+        public static bool OpenReign(Kingdom pKingdom, Actor pNewKing)
         {
-            if (!Ready || pKingdom?.data == null || pNewKing?.data == null) return;
-            if (!LineageService.IsXiaKingdom(pKingdom) || !LineageService.IsXia(pNewKing)) return;
+            if (!Ready || pKingdom?.data == null || pNewKing?.data == null)
+                return false;
+            if (!LineageService.IsXiaKingdom(pKingdom) ||
+                !LineageService.IsXia(pNewKing))
+                return false;
             long reignId = TableIdAllocator.Next(DB, TABLE, "REIGN_ID");
             int idx = CountReigns(pKingdom.id) + 1;
             double now = World.world.getCurWorldTime();
@@ -107,8 +110,27 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("DEATH_CAUSE",        ""));
                 pKingdom.data.set(LineageKeys.KINGDOM_REIGN_START,
                     (float)now);
+                return true;
             }
-            catch (Exception e) { ModClass.LogWarning("ReignRecordWriter.OpenReign: " + e.Message); }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("ReignRecordWriter.OpenReign: " +
+                                    e.Message);
+                return false;
+            }
+        }
+
+        public static bool EnsureOpenReign(Kingdom pKingdom, Actor pKing)
+        {
+            if (!Ready || pKingdom?.data == null || pKing?.data == null)
+                return false;
+            if (!TryReadUniqueOpenRuler(pKingdom.id, out long rulerActorId))
+                return false;
+            if (rulerActorId == pKing.data.id) return true;
+            if (rulerActorId >= 0L || !OpenReign(pKingdom, pKing))
+                return false;
+            return TryReadUniqueOpenRuler(pKingdom.id, out rulerActorId) &&
+                   rulerActorId == pKing.data.id;
         }
 
         public static void ProjectCurrentReignStart(Kingdom pKingdom,
@@ -186,6 +208,33 @@ namespace AncientWarfare3.core.lineage
             catch (Exception error)
             {
                 ModClass.LogWarning("Reign projection recovery failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        private static bool TryReadUniqueOpenRuler(long pKingdomId,
+            out long pRulerActorId)
+        {
+            pRulerActorId = -1L;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText =
+                    "SELECT COUNT(*),COALESCE(MAX(KING_ACTOR_ID),-1) FROM " +
+                    TABLE + " WHERE KINGDOM_ID=@kingdom AND END_TIME=-1";
+                command.Parameters.AddWithValue("@kingdom", pKingdomId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                if (!reader.Read()) return false;
+                int count = Convert.ToInt32(reader.GetValue(0));
+                if (count == 0) return true;
+                if (count != 1) return false;
+                pRulerActorId = Convert.ToInt64(reader.GetValue(1));
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Read open reign identity failed: " +
                                     error.Message);
                 return false;
             }

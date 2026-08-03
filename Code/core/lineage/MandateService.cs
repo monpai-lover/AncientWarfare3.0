@@ -438,76 +438,123 @@ namespace AncientWarfare3.core.lineage
             Actor king = pKingdom.king;
             HeirService.EnsureLegitimateLine(pKingdom, king);
             string dynastyName = MakeDynastyName(pKingdom);
+            bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
+            int currentYear = Date.getCurrentYear();
+            string markerKind = MarkerKind(pOriginType, pClaimantKind);
+            var request = new MandateDeclarationPersistence.Request
+            {
+                StateId = STATE_ID,
+                PeriodId = periodId,
+                KingdomId = pKingdom.id,
+                KingdomName = pKingdom.name ?? "",
+                KingdomColor = HistoryColors.FromKingdom(pKingdom),
+                DynastyName = dynastyName,
+                RulerActorId = king?.data?.id ?? -1L,
+                RulerName = king?.getName() ?? "",
+                StartTime = now,
+                CurrentYear = currentYear,
+                StartMandate = START_VALUE,
+                ImperialAuthority = 45,
+                DynastyPrestige = 0,
+                CoreControl = 1d,
+                VassalLoyalty = 1d,
+                CrisisLevel = "stable",
+                OriginType = pOriginType ?? "native",
+                RebelOriginKingdomId = pRebelOrigin?.id ?? -1L,
+                RebelOriginKingdomName = pRebelOrigin?.name ?? "",
+                ClaimantKind = pClaimantKind ?? "orthodox",
+                MapMarkerKind = markerKind,
+                EmperorTitle = (int)KingdomTitle.Emperor
+            };
+            string persistenceError = "";
+            bool declared = MandateDeclarationRules.TryCommitProjection(
+                () => MandateDeclarationPersistence.TryCommit(
+                    DB, MandatePeriodTableItem.GetTableName(),
+                    MandateStateTableItem.GetTableName(),
+                    KingdomReignTableItem.GetTableName(), request,
+                    out persistenceError),
+                () =>
+                {
+                    PublishDeclaredMandate(pKingdom, king, periodId,
+                        previousPeriodId, hadPreviousMandate,
+                        wasAlreadyEmperor, currentYear, dynastyName,
+                        pOriginType, pClaimantKind, markerKind);
+                });
+            if (!declared)
+                ModClass.LogWarning("Mandate declaration persistence failed: " +
+                                    persistenceError);
+            return declared;
+        }
 
-            DB.Insert(MandatePeriodTableItem.GetTableName(),
-                ColumnVal.Create("PERIOD_ID", periodId),
-                ColumnVal.Create("KINGDOM_ID", pKingdom.id),
-                ColumnVal.Create("KINGDOM_NAME", pKingdom.name ?? ""),
-                ColumnVal.Create("KINGDOM_COLOR", HistoryColors.FromKingdom(pKingdom)),
-                ColumnVal.Create("DYNASTY_NAME", dynastyName),
-                ColumnVal.Create("FOUNDER_ACTOR_ID", king?.data?.id ?? -1L),
-                ColumnVal.Create("FOUNDER_NAME", king?.getName() ?? ""),
-                ColumnVal.Create("START_TIME", now),
-                ColumnVal.Create("END_TIME", -1.0),
-                ColumnVal.Create("END_REASON", ""),
-                ColumnVal.Create("START_MANDATE", START_VALUE),
-                ColumnVal.Create("END_MANDATE", START_VALUE),
-                ColumnVal.Create("LEGAL_CORE_COUNT", 0),
-                ColumnVal.Create("ORIGIN_TYPE", pOriginType ?? "native"),
-                ColumnVal.Create("REBEL_ORIGIN_KINGDOM_ID", pRebelOrigin?.id ?? -1L),
-                ColumnVal.Create("REBEL_ORIGIN_KINGDOM_NAME", pRebelOrigin?.name ?? ""),
-                ColumnVal.Create("CLAIMANT_KIND", pClaimantKind ?? "orthodox"));
-
-            UpsertState(pKingdom, periodId, START_VALUE, 45, 0, 1f, 1f, "stable", Date.getCurrentYear(), now,
-                pOriginType, pClaimantKind, pRebelOrigin, MarkerKind(pOriginType, pClaimantKind));
-            pKingdom.data.set(LineageKeys.MANDATE_PERIOD_ID, periodId);
+        private static void PublishDeclaredMandate(Kingdom pKingdom,
+            Actor pKing, long pPeriodId, long pPreviousPeriodId,
+            bool pHadPreviousMandate, bool pWasAlreadyEmperor,
+            int pCurrentYear, string pDynastyName, string pOriginType,
+            string pClaimantKind, string pMarkerKind)
+        {
+            pKingdom.data.set(LineageKeys.MANDATE_PERIOD_ID, pPeriodId);
             pKingdom.data.set(LineageKeys.MANDATE_VALUE, START_VALUE);
             pKingdom.data.set(LineageKeys.MANDATE_AUTHORITY, 45);
-            pKingdom.data.set(LineageKeys.MANDATE_ORIGIN_TYPE, pOriginType ?? "native");
-            pKingdom.data.set(LineageKeys.MANDATE_CLAIMANT_KIND, pClaimantKind ?? "orthodox");
-            pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, MarkerKind(pOriginType, pClaimantKind));
+            pKingdom.data.set(LineageKeys.MANDATE_ORIGIN_TYPE,
+                pOriginType ?? "native");
+            pKingdom.data.set(LineageKeys.MANDATE_CLAIMANT_KIND,
+                pClaimantKind ?? "orthodox");
+            pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND,
+                pMarkerKind);
+            PublishRuntimeMarkerProjection(true, pKingdom.id, pMarkerKind);
+            MarkDirty();
             MandatePhaseService.OnMandateEstablished(
-                hadPreviousMandate, Date.getCurrentYear());
+                pHadPreviousMandate, pCurrentYear);
             if (pOriginType == "self_restoration" ||
-                pOriginType == MandateFeudatoryCompletionRules.RestorationOrigin)
+                pOriginType == MandateFeudatoryCompletionRules.
+                    RestorationOrigin)
             {
-                pKingdom.data.set(LineageKeys.RESTORATION_REFUNDER_ELIGIBLE, false);
-                RulerTitleRestorationStateService.MarkMandateRegained(pKingdom);
+                pKingdom.data.set(
+                    LineageKeys.RESTORATION_REFUNDER_ELIGIBLE, false);
+                RulerTitleRestorationStateService.MarkMandateRegained(
+                    pKingdom);
             }
-            if (pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo")
+            if (pOriginType == "pseudo_foreign" ||
+                pClaimantKind == "foreign_pseudo")
                 XiaizationService.OnPseudoMandateDeclared(pKingdom);
-            bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
-            ReignRecordWriter.ProjectMandateContext(pKingdom, king, periodId);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
             FamilyTreeProjectionRevision.Advance(
                 FamilyTreeProjectionChange.RankOrMandate);
-            if (king != null && !king.hasTrait(TRAIT_TIANMING)) king.addTrait(TRAIT_TIANMING);
-            if (wasAlreadyEmperor &&
-                (hadPreviousMandate || pOriginType == "self_restoration" ||
-                 pOriginType == MandateFeudatoryCompletionRules.RestorationOrigin))
+            if (pKing != null && !pKing.hasTrait(TRAIT_TIANMING))
+                pKing.addTrait(TRAIT_TIANMING);
+            if (pWasAlreadyEmperor &&
+                (pHadPreviousMandate || pOriginType == "self_restoration" ||
+                 pOriginType == MandateFeudatoryCompletionRules.
+                     RestorationOrigin))
                 EraChangeTriggerService.Mark(pKingdom,
-                    EraChangeReason.RestoredMandate, "mandate:" + periodId);
-            CreateLegalCores(pKingdom, periodId, previousPeriodId);
-            UpdateOriginalCoreCount(periodId);
+                    EraChangeReason.RestoredMandate,
+                    "mandate:" + pPeriodId);
+            CreateLegalCores(pKingdom, pPeriodId, pPreviousPeriodId);
+            UpdateOriginalCoreCount(pPeriodId);
 
-            string startEventType = MandateStartRecordRules.EventType(pOriginType, pClaimantKind);
-            RecordEvent(startEventType, pKingdom, king, null, 0, START_VALUE,
-                pKingdom.name + T("aw_hist_edict_mandate_claimed_mid") + dynastyName +
-                T("aw_hist_edict_mandate_claimed_suffix"));
+            string startEventType = MandateStartRecordRules.EventType(
+                pOriginType, pClaimantKind);
+            RecordEvent(startEventType, pKingdom, pKing, null, 0,
+                START_VALUE,
+                pKingdom.name + T("aw_hist_edict_mandate_claimed_mid") +
+                pDynastyName + T("aw_hist_edict_mandate_claimed_suffix"));
             HistoryWriter.RecordKingdom(pKingdom, startEventType,
-                HistoryText.Kingdom(pKingdom) + H("aw_hist_edict_mandate_claimed_mid") +
-                HistoryText.PlainText(dynastyName) +
+                HistoryText.Kingdom(pKingdom) +
+                H("aw_hist_edict_mandate_claimed_mid") +
+                HistoryText.PlainText(pDynastyName) +
                 H("aw_hist_edict_mandate_claimed_suffix"),
                 HistoryTarget.Kingdom(pKingdom));
-            if (king?.data != null)
-                HistoryWriter.RecordPerson(king.data.id, pKingdom, king.getName(), startEventType,
-                    HistoryText.Actor(king) + H("aw_hist_edict_actor_claimed_mandate"), ChronicleCategory.HONOR,
+            if (pKing?.data != null)
+                HistoryWriter.RecordPerson(pKing.data.id, pKingdom,
+                    pKing.getName(), startEventType,
+                    HistoryText.Actor(pKing) +
+                    H("aw_hist_edict_actor_claimed_mandate"),
+                    ChronicleCategory.HONOR,
                     HistoryTarget.Kingdom(pKingdom));
 
             DirtyAllMaps();
             ClearPendingMandateConqueror();
-            return true;
         }
 
         public static bool TryGrantMandateByPlayer(Kingdom pTarget, out string pReason)

@@ -29,7 +29,12 @@ namespace AncientWarfare3.core.lineage
             {
                 ReignRecordWriter.TryRecoverCurrentProjection(
                     pKingdom, pNewKing);
-                MandateService.OnRulerSucceeded(pKingdom, pNewKing);
+                MandateAccessionCoordinator.TrySettle(
+                    () => ReignRecordWriter.EnsureOpenReign(
+                        pKingdom, pNewKing),
+                    () => pKingdom.king?.data?.id == pNewKing.data.id,
+                    () => MandateService.OnRulerSucceeded(
+                        pKingdom, pNewKing));
                 return;
             }
             RecordPreviousKingLostThrone(pKingdom, lastKingId, pNewKing.data.id);
@@ -48,7 +53,12 @@ namespace AncientWarfare3.core.lineage
             if (!ProjectDynasticStateNameForRuler(pKingdom, pNewKing,
                     newShiId, changedRulingShi, newDynastyCreated))
                 WarnStateNameProjection(pKingdom, pNewKing);
-            MandateService.OnRulerSucceeded(pKingdom, pNewKing);
+            MandateAccessionCoordinator.TrySettle(
+                () => ReignRecordWriter.EnsureOpenReign(
+                    pKingdom, pNewKing),
+                () => pKingdom.king?.data?.id == pNewKing.data.id,
+                () => MandateService.OnRulerSucceeded(
+                    pKingdom, pNewKing));
             string kingName = pNewKing.getName();
 
             // 国家·换君
@@ -63,8 +73,6 @@ namespace AncientWarfare3.core.lineage
                     HistoryText.Kingdom(pKingdom) + H("aw_hist_person_ascended_suffix"),
                     ChronicleCategory.HONOR);
 
-            // 结构表：新朝和国号先提交，再打开新君主世系。
-            ReignRecordWriter.OpenReign(pKingdom, pNewKing);
             if (HeirTitleRules.IsImperialOrMandate(pKingdom) &&
                 !RepublicGovernmentService.IsRepublic(pKingdom))
                 YearNameService.TryStartAccessionEra(pKingdom, pNewKing);

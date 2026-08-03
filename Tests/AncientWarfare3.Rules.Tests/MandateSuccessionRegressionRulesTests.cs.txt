@@ -7,8 +7,10 @@ internal static class MandateSuccessionRegressionRulesTests
     {
         ActiveMandateSuccessionRefreshesInstalledRuler();
         MandateTraitMovesToTheInstalledRuler();
+        AccessionSettlementRequiresOpenReignAndInstalledKing();
         FailedPersistenceRetriesBeforeRuntimeProjection();
         MandateContextTargetsOnlyTheInstalledRulersLatestOpenReign();
+        FailedMandateDeclarationRollsBackAndRetriesOnce();
         ActiveMandateKeepsItsImperialStateName();
         SavedMandateReignUsesImperialPosthumousRank();
     }
@@ -104,6 +106,62 @@ internal static class MandateSuccessionRegressionRulesTests
     }
 
     private static void
+        AccessionSettlementRequiresOpenReignAndInstalledKing()
+    {
+        int phase = 0;
+        bool missingReign = MandateAccessionCoordinator.TrySettle(
+            () => false,
+            () => throw new InvalidOperationException(
+                "king identity checked before an open reign exists"),
+            () => throw new InvalidOperationException(
+                "Mandate committed without an open reign"));
+        Equal(false, missingReign,
+            "a missing open reign blocks Mandate succession");
+
+        bool wrongKing = MandateAccessionCoordinator.TrySettle(
+            () =>
+            {
+                Equal(0, phase, "open reign is ensured first");
+                phase = 1;
+                return true;
+            },
+            () =>
+            {
+                Equal(1, phase, "installed king is checked second");
+                phase = 2;
+                return false;
+            },
+            () => throw new InvalidOperationException(
+                "Mandate committed for a stale king"));
+        Equal(false, wrongKing,
+            "a stale king blocks Mandate succession after reign creation");
+        Equal(2, phase, "a rejected king never reaches Mandate commit");
+
+        phase = 0;
+        bool settled = MandateAccessionCoordinator.TrySettle(
+            () =>
+            {
+                Equal(0, phase, "open reign is ensured first on success");
+                phase = 1;
+                return true;
+            },
+            () =>
+            {
+                Equal(1, phase, "installed king is confirmed second");
+                phase = 2;
+                return true;
+            },
+            () =>
+            {
+                Equal(2, phase, "Mandate commits only after both gates");
+                phase = 3;
+                return true;
+            });
+        Equal(true, settled, "a valid accession settles successfully");
+        Equal(3, phase, "all accession phases execute in order");
+    }
+
+    private static void
         MandateContextTargetsOnlyTheInstalledRulersLatestOpenReign()
     {
         using var db = new SQLiteConnection(
@@ -160,6 +218,177 @@ internal static class MandateSuccessionRegressionRulesTests
                 "SELECT COUNT(*) FROM KingdomReign " +
                 "WHERE MANDATE_PERIOD_ID=91"),
             "a failed projection changes no unrelated reign");
+    }
+
+    private static void FailedMandateDeclarationRollsBackAndRetriesOnce()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE MandatePeriod(" +
+            "PERIOD_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT,DYNASTY_NAME TEXT," +
+            "FOUNDER_ACTOR_ID INTEGER,FOUNDER_NAME TEXT,START_TIME REAL," +
+            "END_TIME REAL,END_REASON TEXT,START_MANDATE INTEGER," +
+            "END_MANDATE INTEGER,LEGAL_CORE_COUNT INTEGER," +
+            "ORIGIN_TYPE TEXT,REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT);" +
+            "CREATE TABLE MandateState(" +
+            "STATE_ID INTEGER PRIMARY KEY,ACTIVE INTEGER," +
+            "KINGDOM_ID INTEGER,KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT," +
+            "DYNASTY_NAME TEXT,EMPEROR_ACTOR_ID INTEGER," +
+            "EMPEROR_NAME TEXT,PERIOD_ID INTEGER,MANDATE_VALUE INTEGER," +
+            "IMPERIAL_AUTHORITY INTEGER,DYNASTY_PRESTIGE INTEGER," +
+            "CORE_CONTROL REAL,VASSAL_LOYALTY REAL,CRISIS_LEVEL TEXT," +
+            "START_TIME REAL,UPDATED_TIME REAL,LAST_YEAR INTEGER," +
+            "ORIGIN_TYPE TEXT,ORIGINAL_CORE_COUNT INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT," +
+            "MAP_MARKER_KIND TEXT);" +
+            "INSERT INTO MandateState(STATE_ID,ACTIVE,KINGDOM_ID," +
+            "PERIOD_ID) VALUES(1,0,-1,-1);" +
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "START_TIME REAL,END_TIME REAL);" +
+            "CREATE TRIGGER fail_declaration_reign BEFORE UPDATE ON " +
+            "KingdomReign BEGIN SELECT RAISE(ABORT," +
+            "'injected declaration reign failure'); END;");
+
+        var request = new MandateDeclarationPersistence.Request
+        {
+            StateId = 1L,
+            PeriodId = 91L,
+            KingdomId = 17L,
+            KingdomName = "Imperial State",
+            KingdomColor = "#abcdef",
+            DynastyName = "New Dynasty",
+            RulerActorId = 42L,
+            RulerName = "New Emperor",
+            StartTime = 12d,
+            CurrentYear = 101,
+            StartMandate = 30,
+            ImperialAuthority = 45,
+            DynastyPrestige = 0,
+            CoreControl = 1d,
+            VassalLoyalty = 1d,
+            CrisisLevel = "stable",
+            OriginType = "native",
+            RebelOriginKingdomId = -1L,
+            RebelOriginKingdomName = "",
+            ClaimantKind = "orthodox",
+            MapMarkerKind = "moh",
+            EmperorTitle = 4
+        };
+        int historyPublishes = 0;
+        int traitPublishes = 0;
+        int runtimePublishes = 0;
+        string error = "";
+        bool first = MandateDeclarationRules.TryCommitProjection(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () =>
+            {
+                historyPublishes++;
+                traitPublishes++;
+                runtimePublishes++;
+            });
+        Equal(false, first,
+            "a failed reign projection rejects Mandate declaration");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM MandatePeriod"),
+            "failed declaration rolls back its period");
+        Equal(0L, Scalar(db,
+                "SELECT ACTIVE FROM MandateState WHERE STATE_ID=1"),
+            "failed declaration leaves no active Mandate state");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM KingdomReign"),
+            "zero-row failure does not invent a reign");
+        Equal(0, historyPublishes,
+            "failed declaration publishes no history");
+        Equal(0, traitPublishes,
+            "failed declaration publishes no trait");
+        Equal(0, runtimePublishes,
+            "failed declaration publishes no runtime projection");
+
+        Execute(db,
+            "INSERT INTO KingdomReign VALUES" +
+            "(7,17,42,-1,2,'Ordinary State',11,-1);");
+        bool exceptionFailure =
+            MandateDeclarationRules.TryCommitProjection(
+                () => MandateDeclarationPersistence.TryCommit(
+                    db, "MandatePeriod", "MandateState", "KingdomReign",
+                    request, out error),
+                () =>
+                {
+                    historyPublishes++;
+                    traitPublishes++;
+                    runtimePublishes++;
+                });
+        Equal(false, exceptionFailure,
+            "a reign projection exception rejects Mandate declaration");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM MandatePeriod"),
+            "exceptional declaration rolls back its period");
+        Equal(0L, Scalar(db,
+                "SELECT ACTIVE FROM MandateState WHERE STATE_ID=1"),
+            "exceptional declaration leaves no active Mandate state");
+        Equal(-1L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
+            "exceptional declaration leaves the ordinary reign unchanged");
+        Equal(0, historyPublishes,
+            "exceptional declaration publishes no history");
+        Equal(0, traitPublishes,
+            "exceptional declaration publishes no trait");
+        Equal(0, runtimePublishes,
+            "exceptional declaration publishes no runtime projection");
+
+        Execute(db, "DROP TRIGGER fail_declaration_reign;");
+        bool second = MandateDeclarationRules.TryCommitProjection(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () =>
+            {
+                historyPublishes++;
+                traitPublishes++;
+                runtimePublishes++;
+            });
+        Equal(true, second,
+            "the declaration safely retries after persistence recovers");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM MandatePeriod"),
+            "successful retry creates exactly one period");
+        Equal(1L, Scalar(db,
+                "SELECT ACTIVE FROM MandateState WHERE STATE_ID=1"),
+            "successful retry activates Mandate state");
+        Equal(91L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
+            "successful retry projects the ruler's reign");
+        Equal(1, historyPublishes,
+            "successful retry publishes history once");
+        Equal(1, traitPublishes,
+            "successful retry publishes the trait once");
+        Equal(1, runtimePublishes,
+            "successful retry publishes runtime state once");
+
+        bool duplicate = MandateDeclarationRules.TryCommitProjection(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () =>
+            {
+                historyPublishes++;
+                traitPublishes++;
+                runtimePublishes++;
+            });
+        Equal(false, duplicate,
+            "the committed period cannot be published a second time");
+        Equal(1, historyPublishes,
+            "duplicate retry does not duplicate history");
+        Equal(1, traitPublishes,
+            "duplicate retry does not duplicate the trait projection");
+        Equal(1, runtimePublishes,
+            "duplicate retry does not duplicate runtime projection");
     }
 
     private static void ActiveMandateKeepsItsImperialStateName()
