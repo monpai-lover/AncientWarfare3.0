@@ -904,7 +904,8 @@ namespace AncientWarfare3.core.lineage
                         disposition == ArmyRecruitmentDisposition.Create,
                     candidates, out confirmedExhausted);
             int recruited = EnlistPreparationActors(kingdom, city,
-                disposition, ref targetArmy, candidates);
+                disposition, ref targetArmy, candidates,
+                ref confirmedExhausted);
             int remainingShortage = targetArmy?.data != null
                 ? ApprovedTargetShortage(kingdom, targetArmy)
                 : Math.Max(0, targetStrength);
@@ -1177,6 +1178,12 @@ namespace AncientWarfare3.core.lineage
                         ref establishmentArmy)) continue;
                 recruited++;
             }
+            int availableAfterReturn = CityReservePoolService.
+                RestoreRejectedCandidates(kingdom, city,
+                    establishmentArmy, candidates);
+            confirmedExhausted = CityReservePoolRules.
+                ResolveConfirmedExhaustionAfterReturn(confirmedExhausted,
+                    availableAfterReturn);
             plan.CompletedWorkItems++;
             plan.ScannedCandidates += scanned;
             plan.RecruitedActors += recruited;
@@ -1629,6 +1636,12 @@ namespace AncientWarfare3.core.lineage
                             ref establishmentArmy)) continue;
                     recruited++;
                 }
+            int availableAfterReturn = CityReservePoolService.
+                RestoreRejectedCandidates(kingdom, city,
+                    establishmentArmy, candidates);
+            confirmedExhausted = CityReservePoolRules.
+                ResolveConfirmedExhaustionAfterReturn(confirmedExhausted,
+                    availableAfterReturn);
             scanSummary.EnlistFailures = Math.Max(0,
                 candidates.Count - recruited);
             LogRecoveryBatch(kingdom, plan, targetArmy, city, demand,
@@ -1711,30 +1724,33 @@ namespace AncientWarfare3.core.lineage
 
         private static int EnlistPreparationActors(Kingdom pKingdom,
             City pSourceCity, ArmyRecruitmentDisposition pDisposition,
-            ref Army pTargetArmy, IReadOnlyList<Actor> pCandidates)
+            ref Army pTargetArmy, IReadOnlyList<Actor> pCandidates,
+            ref bool pConfirmedExhausted)
         {
             if (pKingdom?.data == null || pSourceCity?.data == null ||
-                pCandidates == null ||
-                CityReservePoolService.ResolveMobilizationPhase(pKingdom) !=
-                ArmyMobilizationPhase.Notice) return 0;
+                pCandidates == null) return 0;
             int recruited = 0;
-            for (int i = 0; i < pCandidates.Count; i++)
-            {
-                Actor actor = pCandidates[i];
-                ArmyRecruitmentDisposition disposition =
-                    pTargetArmy?.data == null
-                        ? pDisposition
-                        : ArmyRecruitmentDisposition.Replenish;
-                if (disposition == ArmyRecruitmentDisposition.Reject ||
-                    !Enlist(pKingdom, pSourceCity, actor, disposition,
-                        ref pTargetArmy,
-                        pTrackReplenishmentArrival: false))
+            if (CityReservePoolService.ResolveMobilizationPhase(pKingdom) ==
+                ArmyMobilizationPhase.Notice)
+                for (int i = 0; i < pCandidates.Count; i++)
                 {
-                    CityReservePoolService.OnActorReturnedToCivilian(actor);
-                    continue;
+                    Actor actor = pCandidates[i];
+                    ArmyRecruitmentDisposition disposition =
+                        pTargetArmy?.data == null
+                            ? pDisposition
+                            : ArmyRecruitmentDisposition.Replenish;
+                    if (disposition == ArmyRecruitmentDisposition.Reject ||
+                        !Enlist(pKingdom, pSourceCity, actor, disposition,
+                            ref pTargetArmy,
+                            pTrackReplenishmentArrival: false)) continue;
+                    recruited++;
                 }
-                recruited++;
-            }
+            int availableAfterReturn = CityReservePoolService.
+                RestoreRejectedCandidates(pKingdom, pSourceCity,
+                    pTargetArmy, pCandidates);
+            pConfirmedExhausted = CityReservePoolRules.
+                ResolveConfirmedExhaustionAfterReturn(pConfirmedExhausted,
+                    availableAfterReturn);
             return recruited;
         }
 
@@ -1743,28 +1759,27 @@ namespace AncientWarfare3.core.lineage
             bool preparationRecruitment,
             bool pTrackReplenishmentArrival = true)
         {
-            if (kingdom?.data == null || targetArmy?.data == null ||
-                candidates == null || AWArmyService.IsSpecialArmy(targetArmy) ||
-                AWArmyService.GetIntendedKingdom(targetArmy) != kingdom ||
-                preparationRecruitment &&
-                CityReservePoolService.ResolveMobilizationPhase(kingdom) !=
-                ArmyMobilizationPhase.Notice) return 0;
+            if (kingdom?.data == null || source?.data == null ||
+                candidates == null) return 0;
             int recruited = 0;
             Army target = targetArmy;
-            for (int i = 0; i < candidates.Count; i++)
-            {
-                Actor actor = candidates[i];
-                City donorCity = actor?.city ?? source;
-                if (donorCity?.data == null ||
-                    !Enlist(kingdom, donorCity, actor,
-                        ArmyRecruitmentDisposition.Replenish, ref target,
-                        pTrackReplenishmentArrival))
+            bool canEnlist = targetArmy?.data != null &&
+                !AWArmyService.IsSpecialArmy(targetArmy) &&
+                AWArmyService.GetIntendedKingdom(targetArmy) == kingdom &&
+                (!preparationRecruitment ||
+                 CityReservePoolService.ResolveMobilizationPhase(kingdom) ==
+                 ArmyMobilizationPhase.Notice);
+            if (canEnlist)
+                for (int i = 0; i < candidates.Count; i++)
                 {
-                    CityReservePoolService.OnActorReturnedToCivilian(actor);
-                    continue;
+                    Actor actor = candidates[i];
+                    City donorCity = actor?.city ?? source;
+                    if (donorCity?.data == null ||
+                        !Enlist(kingdom, donorCity, actor,
+                            ArmyRecruitmentDisposition.Replenish, ref target,
+                            pTrackReplenishmentArrival)) continue;
+                    recruited++;
                 }
-                recruited++;
-            }
             return recruited;
         }
 
@@ -2088,7 +2103,12 @@ namespace AncientWarfare3.core.lineage
                 Enlist(pKingdom, donorCity, candidate,
                     ArmyRecruitmentDisposition.Replenish, ref target))
                 pRecruited++;
-            return confirmedExhausted;
+            int availableAfterReturn = CityReservePoolService.
+                RestoreRejectedCandidates(pKingdom, pCity,
+                    target, candidates);
+            return CityReservePoolRules.
+                ResolveConfirmedExhaustionAfterReturn(confirmedExhausted,
+                    availableAfterReturn);
         }
 
         private static void RemoveCaptainRecoveryPlansForKingdom(

@@ -36,6 +36,7 @@ internal static class CityReservePoolPersistenceRulesTests
         Equal(false, CityReservePoolPersistenceRules.ShouldRunFinalRebuild(
             worldLoaded: true, actorCallbacksComplete: false),
             "reserve pool rebuild waits until actor callbacks complete");
+        MissingSnapshotFinalizesActorPoolOnTheRestoreFrame();
 
         string savePatch = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "patch",
@@ -56,6 +57,28 @@ internal static class CityReservePoolPersistenceRulesTests
                         "new AW3RestoreStage(\"city_reserve_pool_snapshot\"",
                         StringComparison.Ordinal),
             "load rebuilds derived population before applying consumed wartime reserve");
+    }
+
+    private static void MissingSnapshotFinalizesActorPoolOnTheRestoreFrame()
+    {
+        int Actions(bool snapshotRestored, bool callbacksComplete,
+            bool formalWarActive) => Convert.ToInt32(
+                CityReservePoolPersistenceRules.ResolveFinalRestoreActions(
+                    snapshotRestored, callbacksComplete, formalWarActive));
+
+        Equal(7, Actions(snapshotRestored: false, callbacksComplete: true,
+                formalWarActive: true),
+            "a missing wartime sidecar validates actors, populates the pool, " +
+            "and restores the emergency immediately");
+        Equal(3, Actions(snapshotRestored: false, callbacksComplete: true,
+                formalWarActive: false),
+            "a missing peacetime sidecar validates and populates immediately");
+        Equal(0, Actions(snapshotRestored: true, callbacksComplete: true,
+                formalWarActive: true),
+            "a restored count ledger is not overwritten by fallback rebuild");
+        Equal(0, Actions(snapshotRestored: false, callbacksComplete: false,
+                formalWarActive: true),
+            "fallback rebuilding waits only while actor callbacks are incomplete");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

@@ -3,6 +3,15 @@ using System.IO;
 
 namespace AncientWarfare3.core.lineage
 {
+    [Flags]
+    public enum CityReservePoolFinalRestoreActions
+    {
+        None = 0,
+        ValidateMembers = 1,
+        PopulateActorPool = 2,
+        RestoreWarEmergency = 4
+    }
+
     public static class CityReservePoolPersistenceRules
     {
         public const int CurrentVersion = 2;
@@ -30,6 +39,21 @@ namespace AncientWarfare3.core.lineage
             bool actorCallbacksComplete)
         {
             return worldLoaded && actorCallbacksComplete;
+        }
+
+        public static CityReservePoolFinalRestoreActions
+            ResolveFinalRestoreActions(bool snapshotRestored,
+                bool actorCallbacksComplete, bool formalWarActive)
+        {
+            if (snapshotRestored || !actorCallbacksComplete)
+                return CityReservePoolFinalRestoreActions.None;
+            CityReservePoolFinalRestoreActions actions =
+                CityReservePoolFinalRestoreActions.ValidateMembers |
+                CityReservePoolFinalRestoreActions.PopulateActorPool;
+            if (formalWarActive)
+                actions |= CityReservePoolFinalRestoreActions.
+                    RestoreWarEmergency;
+            return actions;
         }
 
         public static string ResolveSnapshotPath(string directory)

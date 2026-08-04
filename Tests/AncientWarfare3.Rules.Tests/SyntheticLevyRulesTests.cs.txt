@@ -125,13 +125,18 @@ internal static class SyntheticLevyRulesTests
                 "CityReservePoolService.TryReserveWarManpower(",
                 StringComparison.Ordinal),
             "formal-war replenishment reserves abstract city manpower");
-        string levy = File.ReadAllText(Path.Combine(root, "Code", "core",
-            "lineage", "TemporaryLevyService.cs"));
-        Equal(true, levy.Contains(
-                "ResolveMobilizationPhase(pKingdom) ==\n" +
-                "                ArmyMobilizationPhase.Notice",
+        string reservePool = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "CityReservePoolService.cs"));
+        Equal(true, reservePool.Contains(
+                "if (phase != ArmyMobilizationPhase.Notice) return 0;",
                 StringComparison.Ordinal),
             "preparation recruitment is explicitly limited to Notice");
+        Equal(true, reservePool.Contains(
+                "CityReservePoolRules.TryTakeNextActorId(pool.ActorIds,",
+                StringComparison.Ordinal),
+            "notice preparation consumes real indexed reserve actors");
+        string levy = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "TemporaryLevyService.cs"));
         Equal(false, levy.Contains(
                 "bool mobilizationActive = ArmyMobilizationRules.CanConsume(",
                 StringComparison.Ordinal),
@@ -161,7 +166,7 @@ internal static class SyntheticLevyRulesTests
         string death = File.ReadAllText(Path.Combine(root, "Code", "patch",
             "AW_ActorDeathPatch.cs"));
         string enlist = File.ReadAllText(Path.Combine(root, "Code", "patch",
-            "AW_EnlistPatch.cs"));
+            "AW_EnlistPatch.cs")).Replace("\r\n", "\n");
         Equal(true, enlist.Contains(
                 "SyntheticLevySpawnScope.IsActive &&\n" +
                 "                SyntheticLevyService.IsSynthetic(pActor)",
