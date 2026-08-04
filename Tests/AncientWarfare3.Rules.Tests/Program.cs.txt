@@ -11,6 +11,7 @@ using AncientWarfare3.ui;
 if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
 {
     ArmyRtsWarLifecycleRulesTests.Run();
+    PreparationRecruitmentProtectionRulesTests.Run();
     Console.WriteLine("RTS war lifecycle rules passed.");
     return;
 }
@@ -7787,6 +7788,7 @@ ArmyLogisticsSustainmentRulesTests.Run();
 ArmyRtsRouteChoiceRulesTests.Run();
 ArmyRtsReplenishmentArrivalRulesTests.Run();
 ArmyRtsWarLifecycleRulesTests.Run();
+PreparationRecruitmentProtectionRulesTests.Run();
 ActorDiagnosticSamplingRulesTests.Run();
 ActorAgeWorkRulesTests.Run();
 ActorDeathArchiveRulesTests.Run();

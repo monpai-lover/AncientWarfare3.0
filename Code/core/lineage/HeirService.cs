@@ -381,6 +381,28 @@ namespace AncientWarfare3.core.lineage
             return heirId >= 0 && heirId == pActor.data.id;
         }
 
+        public static bool IsRecognizedSuccessionCandidate(
+            Kingdom pKingdom, Actor pActor)
+        {
+            if (pKingdom?.data == null || pActor?.data == null) return false;
+            if (IsCurrentHeir(pKingdom, pActor)) return true;
+            pActor.data.get(LineageKeys.IS_HEIR, out bool registered, false);
+            if (registered) return true;
+
+            Actor king = pKingdom.king;
+            long referenceKingId = ResolveReferenceKingId(pKingdom, king);
+            if (referenceKingId < 0L || pActor.kingdom != pKingdom ||
+                !IsHeirBaseEligible(pActor, pKingdom, king) ||
+                pActor.data.id == referenceKingId) return false;
+            long ancestor = LineageQuery.NearestCommonAgnaticAncestor(
+                referenceKingId, pActor.data.id, out int kingDepth,
+                out int candidateDepth);
+            if (ancestor < 0L) return false;
+            int tier = HeirGenerationRules.ClassifyTier(
+                kingDepth == 0, candidateDepth - kingDepth);
+            return HeirGenerationRules.IsEligible(tier);
+        }
+
         public static void ClearHeir(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;

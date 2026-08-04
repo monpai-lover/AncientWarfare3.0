@@ -152,6 +152,7 @@
     <Compile Include="ArmyRtsPreDepartureDeadlineRulesTests.cs.txt" />
     <Compile Include="ArmyRtsReplenishmentArrivalRulesTests.cs.txt" />
     <Compile Include="ArmyRtsWarLifecycleRulesTests.cs.txt" />
+    <Compile Include="PreparationRecruitmentProtectionRulesTests.cs.txt" />
     <Compile Include="ArmyLogisticsSustainmentRulesTests.cs.txt" />
     <Compile Include="ArmyRtsRouteChoiceRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyRulesTests.cs.txt" />
@@ -362,6 +363,7 @@
     <Compile Include="..\..\Code\core\lineage\GarrisonSortieService.cs" Link="Production\GarrisonSortieService.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRules.cs" Link="Production\ArmyRtsRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsWarLifecycleRules.cs" Link="Production\ArmyRtsWarLifecycleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PreparationRecruitmentProtectionRules.cs" Link="Production\PreparationRecruitmentProtectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsReplenishmentArrivalRules.cs" Link="Production\ArmyRtsReplenishmentArrivalRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyCaptainContinuityRules.cs" Link="Production\ArmyCaptainContinuityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRuntimeMode.cs" Link="Production\ArmyRtsRuntimeMode.cs" />

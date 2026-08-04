@@ -1,0 +1,41 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class PreparationRecruitmentProtectionRulesTests
+{
+    public static void Run()
+    {
+        AssertProtected(anyRecognizedHeir: true,
+            message: "every recognized succession candidate is protected");
+        AssertProtected(king: true, message: "a king is protected");
+        AssertProtected(cityLeader: true,
+            message: "a city leader is protected");
+        AssertProtected(hasOffice: true,
+            message: "an official is protected regardless of office layer");
+        AssertProtected(currentArmyCaptain: true,
+            message: "a serving army captain is protected from ordinary recruitment");
+        AssertProtected(existingProtection: true,
+            message: "an identity protected by another subsystem remains protected");
+
+        Assert(!PreparationRecruitmentProtectionRules.IsProtected(
+                anyRecognizedHeir: false, king: false,
+                cityLeader: false, hasOffice: false,
+                currentArmyCaptain: false, existingProtection: false),
+            "an ordinary eligible resident remains available for preparation recruitment");
+    }
+
+    private static void AssertProtected(bool anyRecognizedHeir = false,
+        bool king = false, bool cityLeader = false, bool hasOffice = false,
+        bool currentArmyCaptain = false, bool existingProtection = false,
+        string message = "identity must be protected")
+    {
+        Assert(PreparationRecruitmentProtectionRules.IsProtected(
+                anyRecognizedHeir, king, cityLeader, hasOffice,
+                currentArmyCaptain, existingProtection), message);
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

@@ -2197,19 +2197,29 @@ namespace AncientWarfare3.core.lineage
         private static bool IsProtectedIdentity(Kingdom pKingdom, Actor pActor,
             bool pAllowSlave)
         {
-            if (pActor.isKing() || pActor.isCityLeader() || HeirService.IsCurrentHeir(pKingdom, pActor))
-                return true;
-            if (GeneralService.IsActiveGeneralFast(pActor) || RoyalGuardService.IsRoyalGuard(pActor) ||
-                RoyalAsylumService.IsActive(pActor) ||
-                (!pAllowSlave && SlaveService.IsSlave(pActor))) return true;
-            if (DynasticReproductionService
-                .ShouldProtectFromOrdinaryMilitaryService(pActor)) return true;
-            if (pActor.army != null && AWArmyService.IsSpecialArmy(pActor.army)) return true;
-            if (!HistoricalMasterVocationService.CanEnter(pActor, HistoricalMasterMilitaryContext.OrdinaryWarrior))
-                return true;
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
-            pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
-            return !string.IsNullOrEmpty(office) && layer != CourtOfficeLayer.Military;
+            bool currentArmyCaptain = false;
+            try
+            {
+                currentArmyCaptain = pActor.army?.getCaptain() == pActor;
+            }
+            catch { }
+            bool existingProtection =
+                GeneralService.IsActiveGeneralFast(pActor) ||
+                RoyalGuardService.IsRoyalGuard(pActor) ||
+                RoyalAsylumService.IsActive(pActor) ||
+                !pAllowSlave && SlaveService.IsSlave(pActor) ||
+                DynasticReproductionService.
+                    ShouldProtectFromOrdinaryMilitaryService(pActor) ||
+                pActor.army != null &&
+                    AWArmyService.IsSpecialArmy(pActor.army) ||
+                !HistoricalMasterVocationService.CanEnter(pActor,
+                    HistoricalMasterMilitaryContext.OrdinaryWarrior);
+            return PreparationRecruitmentProtectionRules.IsProtected(
+                HeirService.IsRecognizedSuccessionCandidate(pKingdom,
+                    pActor), pActor.isKing(), pActor.isCityLeader(),
+                !string.IsNullOrEmpty(office), currentArmyCaptain,
+                existingProtection);
         }
 
         private static bool PassesOriginalEligibilityWithoutCapacity(
