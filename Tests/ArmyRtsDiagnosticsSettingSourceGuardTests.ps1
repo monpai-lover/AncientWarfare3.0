@@ -164,8 +164,18 @@ try {
         $localeEn.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description'
     $descriptionCh =
         $localeCh.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description'
+    $teamNoticeSuffix = ' ' + [char]0x5F00 + [char]0x542F +
+        [char]0x89C6 + [char]0x4E3A + [char]0x52A0 + [char]0x5165 +
+        [char]0x6625 + [char]0x79CB + [char]0x5236 + [char]0x4F5C +
+        [char]0x7EC4
     $simplifiedLabel = 'RTS ' + [char]0x8BCA + [char]0x65AD +
-        [char]0x8F93 + [char]0x51FA
+        [char]0x8F93 + [char]0x51FA + $teamNoticeSuffix
+    $simplifiedSchedulerLabel = [string]([char]0x542F) + [char]0x7528 +
+        [char]0x8C03 + [char]0x5EA6 + [char]0x8BCA + [char]0x65AD +
+        $teamNoticeSuffix
+    $simplifiedPerformanceLabel = [string]([char]0x542F) + [char]0x7528 +
+        [char]0x6027 + [char]0x80FD + [char]0x8BCA + [char]0x65AD +
+        $teamNoticeSuffix
     $simplifiedLog = [string]([char]0x8BCA) + [char]0x65AD +
         [char]0x65E5 + [char]0x5FD7
     $simplifiedTactical = [string]([char]0x6218) + [char]0x672F
@@ -187,6 +197,14 @@ try {
         if ([string]::IsNullOrWhiteSpace($labelCh)) {
             $failures.Add('the Traditional Chinese RTS diagnostics label is missing')
         }
+    }
+    if ($localeCz.'AW3_ENABLE_SCHEDULER_DIAGNOSTICS' -ne
+        $simplifiedSchedulerLabel) {
+        $failures.Add('the Simplified Chinese scheduler diagnostics label is incorrect')
+    }
+    if ($localeCz.'AW3_ENABLE_PERFORMANCE_DIAGNOSTICS' -ne
+        $simplifiedPerformanceLabel) {
+        $failures.Add('the Simplified Chinese performance diagnostics label is incorrect')
     }
     if ([string]::IsNullOrWhiteSpace($descriptionCz) -or
         [string]::IsNullOrWhiteSpace($descriptionEn) -or
