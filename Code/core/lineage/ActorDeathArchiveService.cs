@@ -43,11 +43,13 @@ namespace AncientWarfare3.core.lineage
             if (Pending.ContainsKey(actorId))
             {
                 Pending[actorId] = item;
+                FamilyTreeProjectionRevision.Advance(pProjectionChange);
                 return true;
             }
             if (Pending.Count >= Capacity) return false;
             Pending[actorId] = item;
             Order.Enqueue(actorId);
+            FamilyTreeProjectionRevision.Advance(pProjectionChange);
             return true;
         }
 
@@ -114,8 +116,20 @@ namespace AncientWarfare3.core.lineage
                     Order.Enqueue(actorId);
                     continue;
                 }
-                if (LineageArchiveWriter.TryQueueCapturedDeath(item.Snapshot,
-                        item.ProjectionChange, item.FinalizeProjection))
+                bool queueAccepted =
+                    LineageArchiveWriter.TryQueueCapturedDeath(item.Snapshot,
+                        item.ProjectionChange, item.FinalizeProjection);
+                if (queueAccepted)
+                {
+                    Pending.Remove(actorId);
+                    continue;
+                }
+                if (ActorDeathArchiveRules.ShouldAttemptSynchronousWrite(
+                        queueAccepted) &&
+                    LineageArchiveWriter.WriteCapturedDeathSynchronously(
+                        item.Snapshot, item.ProjectionChange,
+                        item.FinalizeProjection,
+                        TimeSpan.FromMilliseconds(25)))
                 {
                     Pending.Remove(actorId);
                     continue;

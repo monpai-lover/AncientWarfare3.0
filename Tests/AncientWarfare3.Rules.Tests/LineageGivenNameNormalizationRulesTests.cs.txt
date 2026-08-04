@@ -1,0 +1,60 @@
+using AncientWarfare3.core.lineage;
+
+internal static class LineageGivenNameNormalizationRulesTests
+{
+    public static void Run()
+    {
+        Equal("雨立", LineageGivenNameNormalizationRules.Normalize(
+                "房雨立", "房", "房", true, true, false),
+            "a complete male family prefix is removed once");
+        Equal("强", LineageGivenNameNormalizationRules.Normalize(
+                "强姜", "姜", "姬", true, false, false),
+            "a complete female family suffix is removed once");
+        Equal("承志", LineageGivenNameNormalizationRules.Normalize(
+                "欧阳承志", "欧阳", "欧阳", true, true, false),
+            "a compound family token is removed as a whole");
+        Equal("房", LineageGivenNameNormalizationRules.Normalize(
+                "房", "房", "房", true, true, false),
+            "normalization never removes the entire given value");
+        Equal("婷婷", LineageGivenNameNormalizationRules.Normalize(
+                "婷婷", "房", "房", true, true, false),
+            "legal repeated given-name characters are preserved");
+        Equal("雨立", LineageGivenNameNormalizationRules.Normalize(
+                "雨立", "房", "房", true, true, false),
+            "a clean given name is unchanged");
+
+        string normalized = LineageGivenNameNormalizationRules.Normalize(
+            "房雨立", "房", "房", true, true, false);
+        Equal(normalized, LineageGivenNameNormalizationRules.Normalize(
+                normalized, "房", "房", true, true, false),
+            "normalization is idempotent");
+
+        Equal("房雨立", LineageDisplayNameRules.Build(
+                "房雨立", "房", "房", true, true, false),
+            "male display composition does not duplicate a dirty family prefix");
+        Equal("姬雨立", LineageDisplayNameRules.Build(
+                "姬雨立", "姜", "姬", true, false, true),
+            "integrated display composition does not duplicate a dirty clan prefix");
+        Equal("强姜", LineageDisplayNameRules.Build(
+                "强姜", "姜", "姬", true, false, false),
+            "female display composition does not duplicate a dirty family suffix");
+
+        ForeignPseudoNameParts dirtyForeign =
+            ForeignPseudoLineageRules.ResolveNameParts(
+                "房雨立", "房氏", "房雨立", "房", "", "房", "房国");
+        Equal("雨立", dirtyForeign.GivenName,
+            "foreign capture normalizes an existing dirty given name");
+        ForeignPseudoNameParts cleanForeign =
+            ForeignPseudoLineageRules.ResolveNameParts(
+                "房雨立", "房氏", "雨立", "房", "", "房", "房国");
+        Equal("雨立", cleanForeign.GivenName,
+            "foreign capture preserves an existing clean given name");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

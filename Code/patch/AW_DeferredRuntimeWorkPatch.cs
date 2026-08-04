@@ -25,6 +25,7 @@ namespace AncientWarfare3.patch
 
             MeasureOutside(RecentFeatureBenchmarkRules.AsyncCommitIndex,
                 "historical_read_completion", DrainPresentationCompletions);
+            ArmyMembershipReconciliationService.ProcessFrame();
             MeasureOutside(
                 RecentFeatureBenchmarkRules.LocalizedNameRefreshIndex,
                 "localized_name_refresh",
@@ -54,6 +55,7 @@ namespace AncientWarfare3.patch
             FamilyTreeDeferredCleanupHost.InvalidateWorld(long.MinValue);
             AWLocalizedNameRefreshService.Clear();
             ArmyCaptainDisposalScope.ClearRuntime();
+            ArmyMembershipReconciliationService.ClearRuntime();
             ArmyRetreatService.ClearRuntime();
             ArmyRtsControllerService.ClearRuntime();
             ArmyStallWatchdogService.ClearRuntime();

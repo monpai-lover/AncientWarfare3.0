@@ -40,6 +40,12 @@ namespace AncientWarfare3.core.lineage
                 parsedFamily, visibleClan, kingdomFallback);
 
             string givenName = existingGiven;
+            if (!string.IsNullOrEmpty(givenName))
+            {
+                givenName = LineageGivenNameNormalizationRules.Normalize(
+                    givenName, familyName, clanName, isNoble: true,
+                    isMale: true, isNameIntegrated: false);
+            }
             if (string.IsNullOrEmpty(givenName))
             {
                 givenName = RemoveFamily(displayName, familyName);

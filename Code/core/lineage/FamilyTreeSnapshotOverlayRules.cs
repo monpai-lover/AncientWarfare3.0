@@ -4,8 +4,10 @@ namespace AncientWarfare3.core.lineage
     {
         public static bool ResolveAlive(bool snapshotAlive,
             bool hasPendingArchive, bool pendingArchiveAlive,
-            bool liveKnownDead)
+            bool liveKnownDead, bool runtimeAuthorityReady,
+            bool runtimeActorMissing)
         {
+            if (runtimeAuthorityReady && runtimeActorMissing) return false;
             bool archiveAlive = hasPendingArchive
                 ? pendingArchiveAlive
                 : snapshotAlive;

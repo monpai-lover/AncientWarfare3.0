@@ -247,6 +247,21 @@ namespace AncientWarfare3.core.lineage
         public static void AddToArmy(Actor pActor, Army pArmy)
         {
             if (pActor?.data == null || pArmy?.data == null) return;
+            Kingdom intendedKingdom = GetIntendedKingdom(pArmy);
+            bool runtimeStable = Config.game_loaded &&
+                                 !SmoothLoader.isLoading() &&
+                                 World.world != null &&
+                                 !AW3MultiplayerReplicaScope.IsApplying;
+            ArmyMembershipOwnershipDecision ownershipDecision =
+                ArmyMembershipOwnershipRules.Decide(runtimeStable,
+                    intendedKingdom?.data == null
+                        ? -1L
+                        : intendedKingdom.id,
+                    pActor.kingdom?.data == null
+                        ? -1L
+                        : pActor.kingdom.id);
+            if (ownershipDecision ==
+                ArmyMembershipOwnershipDecision.Release) return;
             if (!RoyalAsylumRules.CanPerformProtectedRole(
                     RoyalAsylumService.IsActive(pActor))) return;
             if (!HistoricalMasterVocationService.CanJoinArmy(pActor, pArmy)) return;

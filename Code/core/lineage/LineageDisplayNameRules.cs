@@ -78,6 +78,8 @@ namespace AncientWarfare3.core.lineage
             string given = givenName ?? "";
             string family = familyName ?? "";
             string clan = clanName ?? "";
+            given = LineageGivenNameNormalizationRules.Normalize(given,
+                family, clan, isNoble, isMale, isNameIntegrated);
 
             if (isNameIntegrated)
             {

@@ -357,41 +357,9 @@ namespace AncientWarfare3.core.lineage
                     pFormerKingdom?.id ?? -1L,
                     pCurrentKingdom?.id ?? -1L)) return;
 
-            bool wasCaptain = false;
-            using (ArmyCaptainDisposalScope.Open(pFormerArmy))
-            {
-                try
-                {
-                    wasCaptain = ReferenceEquals(pFormerArmy.getCaptain(),
-                        pActor);
-                }
-                catch { }
-                try
-                {
-                    if (ReferenceEquals(pActor.army, pFormerArmy))
-                        pActor.removeFromArmy();
-                }
-                catch
-                {
-                    try
-                    {
-                        if (ReferenceEquals(pActor.army, pFormerArmy))
-                            pActor.setArmy(null);
-                    }
-                    catch { }
-                }
-                if (wasCaptain)
-                {
-                    try { pFormerArmy.setCaptain(null); }
-                    catch { }
-                }
-            }
-
-            ArmyRtsControllerService.ReleaseActor(pActor);
-            ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
-            TemporaryLevyService.OnActorInvalidated(pActor);
-            WartimeGarrisonService.OnActorInvalidated(pActor);
-            MandateMilitaryPhaseService.Clear(pActor);
+            if (!ArmyMembershipReconciliationService.ReleaseForeignMember(
+                    pActor, pFormerArmy)) return;
+            ArmyRtsControllerService.OnArmyRosterChanged(pFormerArmy);
             ArmyStrategicIndexService.OnArmyRosterChanged(pFormerArmy);
         }
 

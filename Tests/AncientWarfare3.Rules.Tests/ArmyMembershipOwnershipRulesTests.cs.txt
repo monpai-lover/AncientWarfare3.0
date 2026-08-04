@@ -1,0 +1,55 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyMembershipOwnershipRulesTests
+{
+    public static void Run()
+    {
+        Equal(ArmyMembershipOwnershipDecision.Keep,
+            ArmyMembershipOwnershipRules.Decide(true, 12L, 12L),
+            "same-kingdom army membership is retained");
+        Equal(ArmyMembershipOwnershipDecision.Release,
+            ArmyMembershipOwnershipRules.Decide(true, 12L, 44L),
+            "stable foreign army membership is released");
+        Equal(ArmyMembershipOwnershipDecision.Defer,
+            ArmyMembershipOwnershipRules.Decide(true, -1L, 44L),
+            "unknown intended army ownership is deferred");
+        Equal(ArmyMembershipOwnershipDecision.Defer,
+            ArmyMembershipOwnershipRules.Decide(false, 12L, 44L),
+            "loading or replica application defers reconciliation");
+        Equal(ArmyMembershipOwnershipDecision.Release,
+            ArmyMembershipOwnershipRules.Decide(true, 12L, -1L),
+            "a stable actor without a kingdom leaves a kingdom army");
+        Equal(ArmyMembershipOwnershipDecision.Keep,
+            ArmyMembershipOwnershipRules.Decide(true, 44L, 44L),
+            "a completed whole-army transfer retains its transferred members");
+        Equal(true, ArmyMembershipOwnershipRules.ShouldReleaseRosterEntry(
+                actorValid: false, backlinkMatches: false,
+                ArmyMembershipOwnershipDecision.Keep),
+            "invalid roster entries are removed even without an actor backlink");
+        Equal(true, ArmyMembershipOwnershipRules.ShouldReleaseRosterEntry(
+                actorValid: true, backlinkMatches: false,
+                ArmyMembershipOwnershipDecision.Keep),
+            "a same-kingdom actor linked elsewhere is removed from the stale roster");
+        Equal(false, ArmyMembershipOwnershipRules.ShouldReleaseRosterEntry(
+                actorValid: true, backlinkMatches: true,
+                ArmyMembershipOwnershipDecision.Keep),
+            "a valid two-sided same-kingdom membership is retained");
+        Equal(true, ArmyMembershipOwnershipRules.ShouldReleaseRosterEntry(
+                actorValid: true, backlinkMatches: true,
+                ArmyMembershipOwnershipDecision.Release),
+            "a valid two-sided foreign membership is released");
+        Equal(1, ArmyMembershipOwnershipRules.UnknownOwnerRetryDelayFrames(1),
+            "the first unknown-owner retry waits one frame");
+        Equal(32, ArmyMembershipOwnershipRules.UnknownOwnerRetryDelayFrames(6),
+            "unknown-owner retries use a bounded exponential delay");
+        Equal(32, ArmyMembershipOwnershipRules.UnknownOwnerRetryDelayFrames(20),
+            "unknown-owner retry delay has a hard cap");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

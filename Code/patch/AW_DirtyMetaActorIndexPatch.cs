@@ -1,4 +1,5 @@
 using AncientWarfare3.core.performance;
+using AncientWarfare3.core.lineage;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -22,6 +23,14 @@ namespace AncientWarfare3.patch
         private static bool UpdateArmyUnits(ArmyManager __instance)
         {
             return !AWDirtyMetaActorIndex.TryApply(__instance);
+        }
+
+        [HarmonyPostfix, HarmonyPatch(typeof(ArmyManager),
+            "updateDirtyUnits")]
+        private static void UpdateArmyUnits_Postfix(
+            ArmyManager __instance)
+        {
+            ArmyMembershipReconciliationService.EnqueueAll(__instance);
         }
 
         [HarmonyPrefix, HarmonyPatch(typeof(LanguageManager), "updateDirtyUnits")]

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 using AncientWarfare3.utils;
@@ -63,6 +64,10 @@ namespace AncientWarfare3.core.lineage
                     : pIdentityOnlyProjection
                         ? ResolveIdentityProjectionChange(previous, snapshot)
                         : ResolveProjectionChange(previous, snapshot);
+            if (ActorDeathArchiveRules.ShouldQueueDeathInMemory(pAlive,
+                    pForceSynchronous, pAllowSynchronousFallback))
+                return ActorDeathArchiveService.EnqueueLineage(snapshot,
+                    projectionChange, pFinalizeProjection);
             HistoricalSqlColumn[] inserts = SnapshotColumns(snapshot,
                 pIncludeId: true);
             HistoricalSqlColumn[] updates = SnapshotColumns(snapshot,
@@ -188,9 +193,23 @@ namespace AncientWarfare3.core.lineage
             var nobleBlood = ResolveNobleBloodSnapshot(pActor, pPrevious,
                 nobleDist);
 
-            string name = pActor.getName();
+            string name = pActor.data.name ?? pActor.getName();
             if (string.IsNullOrEmpty(given)) given = name;
             if (string.IsNullOrEmpty(display)) display = name;
+            NamingProfileId namingProfile = NamingProfileId.None;
+            try
+            {
+                namingProfile = AWCultureNamingTraditionService
+                    .ResolveForActorReadOnly(pActor).Profile;
+            }
+            catch { }
+            if (namingProfile != NamingProfileId.Western &&
+                namingProfile != NamingProfileId.OrcNomadic)
+            {
+                given = LineageGivenNameNormalizationRules.Normalize(given,
+                    family, clan, status == LineageStatus.NOBLE,
+                    pActor.isSexMale(), integrated);
+            }
             var kingdom = ResolveActorKingdomSnapshot(pActor, pPrevious);
             var city = ResolveActorCitySnapshot(pActor, pPrevious);
             var social = ResolveSocialTitleSnapshot(pActor,
@@ -316,7 +335,8 @@ namespace AncientWarfare3.core.lineage
         internal static bool WriteCapturedDeathSynchronously(
             ActorArchiveTableItem pSnapshot,
             FamilyTreeProjectionChange pProjectionChange,
-            bool pFinalizeProjection)
+            bool pFinalizeProjection,
+            System.TimeSpan? pOrderingTimeout = null)
         {
             if (pSnapshot == null) return false;
             var db = LineageArchiveManager.Instance.OperatingDB;
@@ -324,7 +344,8 @@ namespace AncientWarfare3.core.lineage
                 !LineageArchiveManager.Instance.InitializeSuccessful)
                 return false;
             if (!HistoricalWriteService.FlushForSynchronousFallback(
-                    System.TimeSpan.FromSeconds(5), out _)) return false;
+                    pOrderingTimeout ?? System.TimeSpan.FromSeconds(5),
+                    out _)) return false;
 
             string table = ActorArchiveTableItem.GetTableName();
             bool exists = db.CheckKeyExist(table,

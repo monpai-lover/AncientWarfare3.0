@@ -550,6 +550,7 @@ if (args.Length == 1 && args[0] == "--guest-office-end-slice")
 if (args.Length == 1 && args[0] == "--name-system-slice")
 {
     NameSystemRulesTests.Run();
+    LineageGivenNameNormalizationRulesTests.Run();
     KingdomRenamePersistenceRulesTests.Run();
     Console.WriteLine("AW3 name-system rules passed.");
     return;
@@ -7729,6 +7730,8 @@ OfficialCareerRewardCooldownPersistenceSqlTests.Run();
 OfficialCareerClosePersistenceSqlTests.Run();
 CourtDispositionSqlTests.Run();
 NameSystemRulesTests.Run();
+LineageGivenNameNormalizationRulesTests.Run();
+ArmyMembershipOwnershipRulesTests.Run();
 KingdomRenamePersistenceRulesTests.Run();
 XiaExpansionAndCivMonkeyNamingRulesTests.Run();
 IntegratedNamingRulesTests.Run();
