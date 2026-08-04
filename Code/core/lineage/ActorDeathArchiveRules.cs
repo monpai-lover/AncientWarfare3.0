@@ -44,6 +44,13 @@ namespace AncientWarfare3.core.lineage
             return !queueAccepted;
         }
 
+        public static bool ShouldQueueDeathInMemory(bool alive,
+            bool forceSynchronous, bool allowSynchronousFallback)
+        {
+            return !alive && !forceSynchronous &&
+                   !allowSynchronousFallback;
+        }
+
         public static bool ReadyForSave(int captured, int running,
             int retries, int completions)
         {

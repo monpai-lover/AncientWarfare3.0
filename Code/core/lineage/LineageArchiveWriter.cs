@@ -64,6 +64,10 @@ namespace AncientWarfare3.core.lineage
                     : pIdentityOnlyProjection
                         ? ResolveIdentityProjectionChange(previous, snapshot)
                         : ResolveProjectionChange(previous, snapshot);
+            if (ActorDeathArchiveRules.ShouldQueueDeathInMemory(pAlive,
+                    pForceSynchronous, pAllowSynchronousFallback))
+                return ActorDeathArchiveService.EnqueueLineage(snapshot,
+                    projectionChange, pFinalizeProjection);
             HistoricalSqlColumn[] inserts = SnapshotColumns(snapshot,
                 pIncludeId: true);
             HistoricalSqlColumn[] updates = SnapshotColumns(snapshot,
