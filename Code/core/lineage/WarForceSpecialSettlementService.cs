@@ -48,12 +48,12 @@ namespace AncientWarfare3.core.lineage
                                     ZhuluZeroForceFallback.AttackersWin;
                 Kingdom winner = attackersWin
                     ? pWar.getMainAttacker()
-                    : ResolveDefenderRecipient(pWar);
+                    : ZhuluWarService.ResolveLiveDeclaredDefender(pWar);
                 IEnumerable<Kingdom> losers = attackersWin
                     ? pWar.getDefenders()
                     : pWar.getAttackers();
                 if (winner?.data == null || winner.isRekt() ||
-                    !TransferAllCities(losers, winner))
+                    !TransferAllCities(pWar, losers, winner))
                     return WarForceSpecialSettlementResult.Failed;
                 EndIfLive(pWar, attackersWin
                     ? WarWinner.Attackers
@@ -105,10 +105,11 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        internal static bool TransferAllCities(
+        internal static bool TransferAllCities(War pWar,
             IEnumerable<Kingdom> pLosers, Kingdom pWinner)
         {
-            if (pLosers == null || pWinner?.data == null) return false;
+            if (pLosers == null ||
+                !CanContinueForcedTransfer(pWar, pWinner)) return false;
             var cities = new List<City>();
             foreach (Kingdom loser in pLosers)
             {
@@ -117,12 +118,16 @@ namespace AncientWarfare3.core.lineage
             }
             for (int i = 0; i < cities.Count; i++)
             {
+                if (!CanContinueForcedTransfer(pWar, pWinner))
+                    return !IsWarActive(pWar);
                 City city = cities[i];
                 if (city?.data == null || city.isRekt() ||
                     city.kingdom == pWinner) continue;
                 city.joinAnotherKingdom(pWinner, pCaptured: false,
                     pRebellion: false);
                 if (city.kingdom != pWinner) return false;
+                if (!CanContinueForcedTransfer(pWar, pWinner))
+                    return !IsWarActive(pWar);
             }
             return true;
         }
@@ -188,19 +193,24 @@ namespace AncientWarfare3.core.lineage
             catch { return null; }
         }
 
-        private static Kingdom ResolveDefenderRecipient(War pWar)
+        private static bool CanContinueForcedTransfer(War pWar,
+            Kingdom pWinner)
         {
-            Kingdom principal = pWar?.getMainDefender();
-            if (principal?.data != null && !principal.isRekt())
-                return principal;
+            bool recipientValid;
             try
             {
-                foreach (Kingdom defender in pWar.getDefenders())
-                    if (defender?.data != null && !defender.isRekt())
-                        return defender;
+                recipientValid = pWinner?.data != null &&
+                                 !pWinner.isRekt() && pWinner.isAlive();
             }
-            catch { }
-            return null;
+            catch { recipientValid = false; }
+            return ZhuluWarRules.CanContinueForcedTransfer(
+                IsWarActive(pWar), recipientValid);
+        }
+
+        private static bool IsWarActive(War pWar)
+        {
+            try { return pWar?.data != null && !pWar.hasEnded(); }
+            catch { return false; }
         }
 
         private static void EndIfLive(War pWar, WarWinner pWinner)

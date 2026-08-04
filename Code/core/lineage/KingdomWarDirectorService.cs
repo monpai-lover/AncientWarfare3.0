@@ -346,7 +346,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarStarted(War pWar)
         {
-            if (!IsActiveWar(pWar)) return;
+            if (!ZhuluWarService.ShouldEnrollInAw3Systems(pWar)) return;
             CityMilitaryThreatFacts.InvalidateWar(pWar);
             ArmyRtsAsyncPlanningService.InvalidateWar(pWar.data.id);
             IReadOnlyList<long> participants = RegisterWar(pWar);
@@ -367,6 +367,15 @@ namespace AncientWarfare3.core.lineage
             ArmyRtsControllerService.InvalidateWar(warId);
             RemoveWar(warId);
             ScheduleParticipants(new List<long>(participants));
+        }
+
+        public static void CleanupExcludedWar(War pWar)
+        {
+            if (pWar?.data == null) return;
+            CityMilitaryThreatFacts.InvalidateWar(pWar);
+            ArmyRtsAsyncPlanningService.InvalidateWar(pWar.data.id);
+            ArmyRtsControllerService.InvalidateWar(pWar.data.id);
+            RemoveWar(pWar.data.id);
         }
 
         public static void OnWarParticipantChanged(War pWar,
@@ -564,9 +573,7 @@ namespace AncientWarfare3.core.lineage
             if (World.world?.wars == null) return;
             foreach (War war in World.world.wars)
             {
-                if (!IsActiveWar(war)) continue;
-                IReadOnlyList<long> participants = RegisterWar(war);
-                ScheduleParticipants(participants);
+                OnWarStarted(war);
             }
         }
 

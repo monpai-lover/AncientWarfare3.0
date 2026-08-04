@@ -1479,6 +1479,13 @@ namespace AncientWarfare3.core.lineage
         public static void OnWarStart(Kingdom pSelf, Kingdom pOpponent,
             string pOpponentName, string pWarName)
         {
+            OnWarStart(pSelf,
+                HistoryText.Kingdom(pOpponent, pOpponentName), pWarName);
+        }
+
+        public static void OnWarStart(Kingdom pSelf,
+            HistoryText pOpponent, string pWarName)
+        {
             if (pSelf?.data == null) return;
             bool hasWarName = WarRuntimeDisplayRules.IsDisplayName(pWarName);
             HistoryText started = hasWarName
@@ -1487,7 +1494,7 @@ namespace AncientWarfare3.core.lineage
                   H("aw_hist_war_started_named_close")
                 : H("aw_hist_war_started");
             HistoryWriter.RecordKingdom(pSelf, KingdomEvent.WAR_START,
-                H("aw_hist_war_with_prefix") + HistoryText.Kingdom(pOpponent, pOpponentName) +
+                H("aw_hist_war_with_prefix") + pOpponent +
                 started);
         }
 
@@ -1501,6 +1508,14 @@ namespace AncientWarfare3.core.lineage
         public static void OnWarEnd(Kingdom pSelf, Kingdom pOpponent,
             string pOpponentName, string pWarName, HistoryText pResult)
         {
+            OnWarEnd(pSelf,
+                HistoryText.Kingdom(pOpponent, pOpponentName), pWarName,
+                pResult);
+        }
+
+        public static void OnWarEnd(Kingdom pSelf, HistoryText pOpponent,
+            string pWarName, HistoryText pResult)
+        {
             if (pSelf?.data == null) return;
             HistoryText warName = WarRuntimeDisplayRules.IsDisplayName(
                     pWarName)
@@ -1508,7 +1523,7 @@ namespace AncientWarfare3.core.lineage
                   HistoryText.PlainText(" - ")
                 : HistoryText.PlainText("");
             HistoryWriter.RecordKingdom(pSelf, KingdomEvent.WAR_END,
-                H("aw_hist_war_with_prefix") + HistoryText.Kingdom(pOpponent, pOpponentName) +
+                H("aw_hist_war_with_prefix") + pOpponent +
                 H("aw_hist_war_ended_mid") + warName + pResult);
             SlaveService.FlushPendingWarSlaveCaptures(pSelf);
         }

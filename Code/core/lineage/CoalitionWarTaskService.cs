@@ -217,7 +217,8 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarStarted(War pWar)
         {
-            if (pWar?.data != null) RequestRefresh(pWar.data.id);
+            if (!ZhuluWarService.ShouldEnrollInAw3Systems(pWar)) return;
+            RequestRefresh(pWar.data.id);
         }
 
         public static void OnWarEnded(War pWar)
@@ -377,7 +378,7 @@ namespace AncientWarfare3.core.lineage
             ClearRuntime();
             if (World.world?.wars == null) return;
             foreach (War war in World.world.wars)
-                if (IsActiveWar(war)) RequestRefresh(war.data.id);
+                OnWarStarted(war);
         }
 
         public static void ClearRuntime()

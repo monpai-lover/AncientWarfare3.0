@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.presentation;
@@ -93,13 +94,17 @@ namespace AncientWarfare3.patch
         public static void NewWar_Postfix(War __result)
         {
             if (__result?.data == null) return;
-            WarRecordWriter.OnWarStart(__result);
             if (ZhuluWarService.IsZhuluWar(__result,
                     requireActive: false))
             {
+                if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
+                ZhuluWarService.PersistDeclaredDefender(__result,
+                    ZhuluWarDeclarationScope.CurrentDefenderId);
+                WarRecordWriter.OnWarStart(__result);
                 RecordNativeZhuluStart(__result);
                 return;
             }
+            WarRecordWriter.OnWarStart(__result);
             RecordMainBelligerents(__result);
             WarScoreService.StartWar(__result);
             CityReservePoolService.OnWarStarted(__result);
@@ -261,6 +266,8 @@ namespace AncientWarfare3.patch
             if (ZhuluWarService.IsZhuluWar(pWar,
                     requireActive: false))
             {
+                if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
+                CleanupLegacyZhuluRuntime(pWar);
                 DiplomaticWarDeclarationService.OnWarEnded(pWar);
                 WarRecordWriter.OnWarEnd(pWar, pWinner);
                 DiplomacyConversationService.RecordWarEnded(pWar, pWinner);
@@ -340,11 +347,13 @@ namespace AncientWarfare3.patch
         {
             DiplomacyConversationService.RecordWarStarted(pWar);
             Kingdom attacker = pWar.getMainAttacker();
-            Kingdom defender = pWar.getMainDefender();
+            Kingdom defender =
+                ZhuluWarService.ResolvePrincipalDefender(pWar);
+            HistoryText defenderHistory =
+                DeclaredDefenderHistory(pWar, defender);
             string name = WarRuntimeDisplayService.Resolve(pWar);
             if (attacker?.data != null)
-                ChronicleEvents.OnWarStart(attacker, defender,
-                    defender?.name ?? "未知", name);
+                ChronicleEvents.OnWarStart(attacker, defenderHistory, name);
             if (defender?.data != null)
                 ChronicleEvents.OnWarStart(defender, attacker,
                     attacker?.name ?? "未知", name);
@@ -354,16 +363,51 @@ namespace AncientWarfare3.patch
             WarWinner pWinner)
         {
             Kingdom attacker = pWar.getMainAttacker();
-            Kingdom defender = pWar.getMainDefender();
+            Kingdom defender =
+                ZhuluWarService.ResolvePrincipalDefender(pWar);
+            HistoryText defenderHistory =
+                DeclaredDefenderHistory(pWar, defender);
             var result = WarRecordWriter.WinnerLabelRich(pWinner,
                 attacker, defender);
             string name = WarRuntimeDisplayService.Resolve(pWar);
             if (attacker?.data != null)
-                ChronicleEvents.OnWarEnd(attacker, defender,
-                    defender?.name ?? "未知", name, result);
+                ChronicleEvents.OnWarEnd(attacker, defenderHistory, name,
+                    result);
             if (defender?.data != null)
                 ChronicleEvents.OnWarEnd(defender, attacker,
                     attacker?.name ?? "未知", name, result);
+        }
+
+        private static HistoryText DeclaredDefenderHistory(War pWar,
+            Kingdom pDefender)
+        {
+            if (pDefender?.data != null)
+                return HistoryText.Kingdom(pDefender,
+                    pDefender.name ?? "\u672A\u77E5");
+            if (!ZhuluWarService.TryGetDeclaredDefenderIdentity(pWar,
+                    out long defenderId, out string name,
+                    out string color))
+                return HistoryText.PlainText("\u672A\u77E5");
+            if (string.IsNullOrEmpty(name)) name = "\u672A\u77E5";
+            return HistoryText.Reference(name, color, "kingdom", defenderId);
+        }
+
+        private static void CleanupLegacyZhuluRuntime(War pWar)
+        {
+            if (pWar?.data == null) return;
+            WarParticipantEntrySourceService.Instance.
+                TryEndAllActiveSourcesForWar(pWar.data.id,
+                    LineageService.CurTime());
+            ArmyReplenishmentOperationService.OnWarEnded(pWar);
+            KingdomWarDirectorService.CleanupExcludedWar(pWar);
+            ArmyRtsWarLifecycleService.OnWarEnded(pWar);
+            CoalitionWarTaskService.OnWarEnded(pWar);
+            WarMilitaryFactsService.OnWarEnded(pWar);
+            ArmyLogisticsService.OnWarEnded(pWar);
+            ArmyStallWatchdogService.OnWarEnded(pWar);
+            ArmyRtsPlanSnapshotService.OnWarEnded(pWar);
+            WarTerritoryService.ResolveLegacyZhuluGoals(pWar.data.id,
+                "legacy_zhulu_closed");
         }
 
         private static void OnKingdomLeftWar(War pWar, Kingdom pKingdom)

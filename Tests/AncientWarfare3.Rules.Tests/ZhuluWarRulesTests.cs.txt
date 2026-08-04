@@ -93,6 +93,32 @@ internal static class ZhuluWarRulesTests
         Equal(ZhuluZeroForceFallback.AttackersWin,
             ZhuluWarRules.ResolveZeroForceFallback(1, 0),
             "defender-only exhaustion awards all defender land to attackers");
+        False(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
+                ZhuluWarRules.WarTypeId, active: true),
+            "active native Zhulu wars never enter AW3 military systems");
+        True(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
+                "aw_normal_war", active: true),
+            "active ordinary wars retain AW3 military systems");
+        False(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
+                "aw_normal_war", active: false),
+            "ended wars never rebuild AW3 military state");
+        True(ZhuluWarRules.RequiresLegacyRosterMigration(
+                ZhuluWarRules.WarTypeId, active: true,
+                hasDeclaredDefender: false),
+            "an unmarked active Zhulu war is a legacy roster");
+        False(ZhuluWarRules.RequiresLegacyRosterMigration(
+                ZhuluWarRules.WarTypeId, active: true,
+                hasDeclaredDefender: true),
+            "a marked native Zhulu war survives restore");
+        True(ZhuluWarRules.CanContinueForcedTransfer(
+                warActive: true, recipientValid: true),
+            "forced transfer continues only while its context is live");
+        False(ZhuluWarRules.CanContinueForcedTransfer(
+                warActive: false, recipientValid: true),
+            "native war completion stops the remaining transfer snapshot");
+        False(ZhuluWarRules.CanContinueForcedTransfer(
+                warActive: true, recipientValid: false),
+            "recipient loss stops the remaining transfer snapshot");
 
         double adjacent = ZhuluWarRules.ScoreTarget(120f, 100f,
             directlyAdjacent: true, capitalDistance: 20f);
@@ -241,6 +267,30 @@ internal static class ZhuluWarRulesTests
             "core", "multiplayer", "AW3RuntimeRestorePipeline.cs"));
         string forceSpecial = File.ReadAllText(Path.Combine(lineage,
             "WarForceSpecialSettlementService.cs"));
+        string warDecision = File.ReadAllText(Path.Combine(lineage,
+            "WarDecisionService.cs"));
+        string warRecord = File.ReadAllText(Path.Combine(lineage,
+            "WarRecordWriter.cs"));
+        string conversation = File.ReadAllText(Path.Combine(lineage,
+            "DiplomacyConversationService.cs"));
+        string chronicles = File.ReadAllText(Path.Combine(lineage,
+            "ChronicleEvents.cs"));
+        string keys = File.ReadAllText(Path.Combine(lineage,
+            "LineageKeys.cs"));
+        string migrationPath = Path.Combine(lineage,
+            "ZhuluWarMigrationService.cs");
+        string coalition = File.ReadAllText(Path.Combine(lineage,
+            "CoalitionWarTaskService.cs"));
+        string director = File.ReadAllText(Path.Combine(lineage,
+            "KingdomWarDirectorService.cs"));
+        string missionPersistence = File.ReadAllText(Path.Combine(lineage,
+            "ArmyMissionPersistence.cs"));
+        string logistics = File.ReadAllText(Path.Combine(lineage,
+            "ArmyLogisticsService.cs"));
+        string emergency = File.ReadAllText(Path.Combine(lineage,
+            "MilitaryEmergencyService.cs"));
+        string reservePool = File.ReadAllText(Path.Combine(lineage,
+            "CityReservePoolService.cs"));
         string[] peaceEntrypoints =
         {
             "DiplomacyProposalService.cs",
@@ -342,6 +392,75 @@ internal static class ZhuluWarRulesTests
              FalseText(forceSpecial,
                  "ZhuluWarSettlementService.QueueForceElimination"),
             "force exhaustion uses only the bounded zhulu zero-force fallback");
+        True(keys.Contains("ZHULU_DECLARED_DEFENDER_ID"),
+            "Zhulu persists the originally declared defender");
+        True(keys.Contains("ZHULU_DECLARED_DEFENDER_NAME") &&
+             keys.Contains("ZHULU_DECLARED_DEFENDER_COLOR") &&
+             service.Contains("TryGetDeclaredDefenderIdentity("),
+            "Zhulu retains defender identity after realm extinction");
+        True(warDecision.Contains(
+                 "ZhuluWarDeclarationScope.Open(pDefender)") &&
+             warPatch.Contains("PersistDeclaredDefender(__result"),
+            "the native start scope persists its defender before history");
+        True(warRecord.Contains(
+                 "ZhuluWarService.ResolvePrincipalDefender(pWar)") &&
+             declaration.Contains(
+                 "ZhuluWarService.ResolvePrincipalDefender(pWar)"),
+            "history and declaration ledgers use the persisted Zhulu defender");
+        True(conversation.Contains(
+                 "ZhuluWarService.ResolvePrincipalDefender(pWar)") &&
+             conversation.Contains("RecordArchivedWarOpponent("),
+            "diplomacy history falls back to the archived Zhulu defender");
+        True(declaration.Contains("ReconcileEndedWarPairById(") &&
+             warPatch.Contains("DeclaredDefenderHistory(pWar,"),
+            "ended Zhulu ledgers and chronicles survive defender extinction");
+        True(chronicles.Contains("HistoryText pOpponent") &&
+             warPatch.Contains("HistoryText.Reference(name, color,") &&
+             warPatch.Contains("\"kingdom\", defenderId)"),
+            "Zhulu chronicles retain archived defender identity and color");
+        int zhuluStartBranch = warPatch.IndexOf(
+            "if (ZhuluWarService.IsZhuluWar(__result",
+            StringComparison.Ordinal);
+        int zhuluStartReplicaGate = warPatch.IndexOf(
+            "if (AW3MultiplayerReplicaScope.IsReplicaSession) return;",
+            zhuluStartBranch, StringComparison.Ordinal);
+        int zhuluDefenderPersistence = warPatch.IndexOf(
+            "ZhuluWarService.PersistDeclaredDefender(__result",
+            zhuluStartBranch, StringComparison.Ordinal);
+        True(zhuluStartBranch >= 0 &&
+             zhuluStartReplicaGate > zhuluStartBranch &&
+             zhuluStartReplicaGate < zhuluDefenderPersistence,
+            "replica Zhulu starts return before persistence and history writes");
+        True(File.Exists(migrationPath) &&
+             restore.Contains("ZhuluWarMigrationService.RebuildRuntime"),
+            "save restore migrates legacy Zhulu rosters");
+        True(restore.IndexOf("ZhuluWarMigrationService.RebuildRuntime",
+                 StringComparison.Ordinal) <
+             restore.IndexOf("CoalitionWarTaskService.RebuildRuntime",
+                 StringComparison.Ordinal),
+            "legacy Zhulu migration precedes AW3 military rebuilds");
+        True(coalition.Contains("ShouldEnrollInAw3Systems(pWar)") &&
+             director.Contains("ShouldEnrollInAw3Systems(pWar)") &&
+             logistics.Contains("ShouldEnrollInAw3Systems(pWar)") &&
+             emergency.Contains("ShouldEnrollInAw3Systems(pWar)"),
+            "all war-index rebuild boundaries reject native Zhulu wars");
+        True(missionPersistence.Contains("IsZhuluWar(war") &&
+             missionPersistence.Contains(
+                 "AW3MultiplayerReplicaScope.IsReplicaSession") &&
+             warPatch.Contains("AW3MultiplayerReplicaScope.IsReplicaSession"),
+            "replica restore ignores Zhulu military state without world writes");
+        True(reservePool.Contains("ShouldEnrollInAw3Systems(war)"),
+            "reserve-pool restore ignores native Zhulu wars");
+        True(forceSpecial.Contains(
+                 "CanContinueForcedTransfer(pWar, pWinner)") &&
+             forceSpecial.Contains("ResolveLiveDeclaredDefender(pWar)"),
+            "zero-force fallback uses the declared defender and rechecks each transfer");
+        True(warPatch.Contains("CleanupLegacyZhuluRuntime(pWar)") &&
+             territory.Contains("ResolveLegacyZhuluGoals(") &&
+             territory.Contains("WAR_ID=@war AND GOAL_TYPE=@goal AND RESOLVED=0"),
+            "Zhulu end closes stale runtime state and only its legacy open goals");
+        True(territory.Contains("WAR_ID=@w AND RESOLVED=0"),
+            "resolved legacy goals no longer pollute active goal checks");
         True(locales.Contains("war_type_zhulu_war") &&
              locales.Contains("aw_war_goal_zhulu_annexation") &&
              locales.Contains(ZhuluWarRules.SettlementBlockedReason),

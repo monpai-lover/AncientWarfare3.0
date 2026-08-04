@@ -255,7 +255,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarStarted(War pWar)
         {
-            if (pWar?.data == null) return;
+            if (!ZhuluWarService.ShouldEnrollInAw3Systems(pWar)) return;
             foreach (Kingdom kingdom in pWar.getAttackers())
                 OnKingdomWarStateChanged(kingdom);
             foreach (Kingdom kingdom in pWar.getDefenders())

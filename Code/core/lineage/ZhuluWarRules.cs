@@ -114,6 +114,27 @@ namespace AncientWarfare3.core.lineage
             return ZhuluZeroForceFallback.None;
         }
 
+        public static bool ShouldEnrollInAw3WarSystems(string pWarType,
+            bool active)
+        {
+            return active && !string.Equals(pWarType, WarTypeId,
+                StringComparison.Ordinal);
+        }
+
+        public static bool RequiresLegacyRosterMigration(string pWarType,
+            bool active, bool hasDeclaredDefender)
+        {
+            return active && !hasDeclaredDefender &&
+                   string.Equals(pWarType, WarTypeId,
+                       StringComparison.Ordinal);
+        }
+
+        public static bool CanContinueForcedTransfer(bool warActive,
+            bool recipientValid)
+        {
+            return warActive && recipientValid;
+        }
+
         public static bool HasActiveClaimants(bool activeRebels,
             bool activeZhulu)
         {

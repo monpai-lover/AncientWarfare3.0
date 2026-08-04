@@ -150,7 +150,17 @@ namespace AncientWarfare3.core.lineage
         public static void RecordWarStarted(War pWar)
         {
             Kingdom attacker = pWar?.getMainAttacker();
-            Kingdom defender = pWar?.getMainDefender();
+            Kingdom defender =
+                ZhuluWarService.ResolvePrincipalDefender(pWar);
+            if (defender?.data == null &&
+                ZhuluWarService.TryGetDeclaredDefenderIdentity(pWar,
+                    out long defenderId, out string defenderName, out _))
+            {
+                RecordArchivedWarOpponent(attacker, defenderId,
+                    defenderName, attacker, "war_declared",
+                    WarRuntimeDisplayService.Resolve(pWar));
+                return;
+            }
             Record(attacker, defender, attacker, "war_declared",
                 WarRuntimeDisplayService.Resolve(pWar));
         }
@@ -165,9 +175,19 @@ namespace AncientWarfare3.core.lineage
         public static void RecordWarEnded(War pWar, WarWinner pWinner)
         {
             Kingdom attacker = pWar?.getMainAttacker();
-            Kingdom defender = pWar?.getMainDefender();
+            Kingdom defender =
+                ZhuluWarService.ResolvePrincipalDefender(pWar);
             Kingdom speaker = pWinner == WarWinner.Attackers ? attacker :
                 pWinner == WarWinner.Defenders ? defender : null;
+            if (defender?.data == null &&
+                ZhuluWarService.TryGetDeclaredDefenderIdentity(pWar,
+                    out long defenderId, out string defenderName, out _))
+            {
+                RecordArchivedWarOpponent(attacker, defenderId,
+                    defenderName, speaker, "war_ended_named",
+                    WarRuntimeDisplayService.Resolve(pWar));
+                return;
+            }
             Record(attacker, defender, speaker, "war_ended_named",
                 WarRuntimeDisplayService.Resolve(pWar));
         }
@@ -794,6 +814,50 @@ namespace AncientWarfare3.core.lineage
                     "aw_diplomacy_status_processing", "Processing response"),
                 _ => AW_L10n.Text("aw_diplomacy_status_pending", "Awaiting response")
             };
+        }
+
+        private static void RecordArchivedWarOpponent(Kingdom pAttacker,
+            long pDefenderId, string pDefenderName, Kingdom pSpeaker,
+            string pEventType, string pDetail)
+        {
+            if (!Ready || pAttacker?.data == null || pDefenderId < 0L ||
+                !DiplomacyConversationRules.TryNormalizePair(
+                    pAttacker.id, pDefenderId,
+                    out DiplomacyKingdomPair pair)) return;
+            try
+            {
+                double eventTime = LineageService.CurTime();
+                Kingdom context = pSpeaker?.data != null
+                    ? pSpeaker
+                    : pAttacker;
+                long eventId = TableIdAllocator.Next(DB,
+                    DiplomacyDialogueTableItem.GetTableName(), "EVENT_ID");
+                DB.Insert(DiplomacyDialogueTableItem.GetTableName(),
+                    ColumnVal.Create("EVENT_ID", eventId),
+                    ColumnVal.Create("KINGDOM_A_ID", pair.FirstKingdomId),
+                    ColumnVal.Create("KINGDOM_B_ID", pair.SecondKingdomId),
+                    ColumnVal.Create("SPEAKER_KINGDOM_ID",
+                        pSpeaker?.id ?? -1L),
+                    ColumnVal.Create("SPEAKER_NAME",
+                        RealmDisplayName(context)),
+                    ColumnVal.Create("TARGET_NAME",
+                        pDefenderName ?? ""),
+                    ColumnVal.Create("EVENT_TYPE", pEventType ?? ""),
+                    ColumnVal.Create("DETAIL", pDetail ?? ""),
+                    ColumnVal.Create("EVENT_YEAR", SafeYear()),
+                    ColumnVal.Create("EVENT_TIME", eventTime),
+                    ColumnVal.Create("YEAR_PREFIX",
+                        HistoryWriter.BuildYearPrefix(eventTime, context)),
+                    ColumnVal.Create("SPEAKER_TITLE",
+                        DiplomaticSenderTitle(context)));
+                TrimPair(pair);
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning(
+                    "Archived diplomacy dialogue write failed: " +
+                    exception.Message);
+            }
         }
 
         private static void Record(Kingdom pKingdomA, Kingdom pKingdomB,

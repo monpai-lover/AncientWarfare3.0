@@ -39,7 +39,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarStarted(War pWar)
         {
-            if (pWar?.data == null || pWar.hasEnded()) return;
+            if (!ZhuluWarService.ShouldEnrollInAw3Systems(pWar)) return;
             long warId = pWar.data.id;
             foreach (Kingdom kingdom in pWar.getAttackers())
             {

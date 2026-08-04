@@ -859,7 +859,35 @@ namespace AncientWarfare3.core.lineage
         public static bool HasWarGoal(long pWarId)
         {
             if (!Ready || pWarId < 0) return false;
-            return CountSql(WarGoalTableItem.GetTableName(), "WAR_ID=@w", ("@w", pWarId)) > 0;
+            return CountSql(WarGoalTableItem.GetTableName(),
+                "WAR_ID=@w AND RESOLVED=0", ("@w", pWarId)) > 0;
+        }
+
+        public static int ResolveLegacyZhuluGoals(long pWarId,
+            string pResult)
+        {
+            if (!Ready || pWarId < 0L) return 0;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText =
+                    $"UPDATE {WarGoalTableItem.GetTableName()} " +
+                    "SET RESOLVED=1, RESOLVED_TIME=@time, RESULT=@result " +
+                    "WHERE WAR_ID=@war AND GOAL_TYPE=@goal AND RESOLVED=0";
+                command.Parameters.AddWithValue("@time",
+                    LineageService.CurTime());
+                command.Parameters.AddWithValue("@result", pResult ?? "");
+                command.Parameters.AddWithValue("@war", pWarId);
+                command.Parameters.AddWithValue("@goal",
+                    GOAL_ZHULU_ANNEXATION);
+                return command.ExecuteNonQuery();
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("ResolveLegacyZhuluGoals failed war=" +
+                                    pWarId + ": " + exception.Message);
+                return 0;
+            }
         }
 
         public static bool HasOpenGoalType(long pWarId, params string[] pGoalTypes)

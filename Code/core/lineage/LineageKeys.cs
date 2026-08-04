@@ -716,6 +716,12 @@ namespace AncientWarfare3.core.lineage
         public const string KINGDOM_ERA_SOURCE_EVENT_ID = "aw_era_source_event_id";
         public const string KINGDOM_ERA_LAST_AI_CHECK_YEAR = "aw_era_last_ai_check_year";
         public const string KINGDOM_TITLE = "aw_title";
+        public const string ZHULU_DECLARED_DEFENDER_ID =
+            "aw_zhulu_declared_defender_id";
+        public const string ZHULU_DECLARED_DEFENDER_NAME =
+            "aw_zhulu_declared_defender_name";
+        public const string ZHULU_DECLARED_DEFENDER_COLOR =
+            "aw_zhulu_declared_defender_color";
     }
 
     internal static class SuccessionMode

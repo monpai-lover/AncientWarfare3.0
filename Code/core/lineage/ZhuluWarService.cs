@@ -1,5 +1,47 @@
+using System;
+
 namespace AncientWarfare3.core.lineage
 {
+    internal static class ZhuluWarDeclarationScope
+    {
+        [ThreadStatic] private static long _declaredDefenderId;
+        [ThreadStatic] private static int _depth;
+
+        public static long CurrentDefenderId => _depth > 0
+            ? _declaredDefenderId
+            : -1L;
+
+        public static IDisposable Open(Kingdom pDefender)
+        {
+            long previousId = _declaredDefenderId;
+            int previousDepth = _depth;
+            _declaredDefenderId = pDefender?.data?.id ?? -1L;
+            _depth = checked(previousDepth + 1);
+            return new Lease(previousId, previousDepth);
+        }
+
+        private sealed class Lease : IDisposable
+        {
+            private readonly long _previousId;
+            private readonly int _previousDepth;
+            private bool _disposed;
+
+            public Lease(long pPreviousId, int pPreviousDepth)
+            {
+                _previousId = pPreviousId;
+                _previousDepth = pPreviousDepth;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _declaredDefenderId = _previousId;
+                _depth = _previousDepth;
+                _disposed = true;
+            }
+        }
+    }
+
     internal static class ZhuluWarService
     {
         public static bool CanDeclare(Kingdom attacker, Kingdom defender,
@@ -101,6 +143,85 @@ namespace AncientWarfare3.core.lineage
             if (!requireActive) return true;
             try { return !war.hasEnded(); }
             catch { return false; }
+        }
+
+        public static bool ShouldEnrollInAw3Systems(War pWar)
+        {
+            if (pWar?.data == null) return false;
+            bool active;
+            try { active = !pWar.hasEnded(); }
+            catch { active = false; }
+            return ZhuluWarRules.ShouldEnrollInAw3WarSystems(
+                pWar.getAsset()?.id, active);
+        }
+
+        public static bool PersistDeclaredDefender(War pWar,
+            long pDefenderId)
+        {
+            if (!IsZhuluWar(pWar, requireActive: false) ||
+                pDefenderId < 0L) return false;
+            pWar.data.set(LineageKeys.ZHULU_DECLARED_DEFENDER_ID,
+                pDefenderId);
+            Kingdom defender = null;
+            try { defender = World.world?.kingdoms?.get(pDefenderId); }
+            catch { }
+            pWar.data.set(LineageKeys.ZHULU_DECLARED_DEFENDER_NAME,
+                defender?.name ?? "");
+            pWar.data.set(LineageKeys.ZHULU_DECLARED_DEFENDER_COLOR,
+                defender?.data != null
+                    ? HistoryColors.FromKingdom(defender)
+                    : "");
+            return true;
+        }
+
+        public static bool TryGetDeclaredDefenderId(War pWar,
+            out long pDefenderId)
+        {
+            pDefenderId = -1L;
+            if (!IsZhuluWar(pWar, requireActive: false)) return false;
+            pWar.data.get(LineageKeys.ZHULU_DECLARED_DEFENDER_ID,
+                out pDefenderId, -1L);
+            return pDefenderId >= 0L;
+        }
+
+        public static bool TryGetDeclaredDefenderIdentity(War pWar,
+            out long pDefenderId, out string pName, out string pColor)
+        {
+            pName = "";
+            pColor = "";
+            if (!TryGetDeclaredDefenderId(pWar, out pDefenderId))
+                return false;
+            pWar.data.get(LineageKeys.ZHULU_DECLARED_DEFENDER_NAME,
+                out pName, "");
+            pWar.data.get(LineageKeys.ZHULU_DECLARED_DEFENDER_COLOR,
+                out pColor, "");
+            return true;
+        }
+
+        public static Kingdom ResolveDeclaredDefender(War pWar)
+        {
+            if (!TryGetDeclaredDefenderId(pWar, out long defenderId))
+                return null;
+            try
+            {
+                Kingdom defender = World.world?.kingdoms?.get(defenderId);
+                return defender?.data != null ? defender : null;
+            }
+            catch { return null; }
+        }
+
+        public static Kingdom ResolveLiveDeclaredDefender(War pWar)
+        {
+            Kingdom defender = ResolveDeclaredDefender(pWar);
+            return IsValidRealm(defender) ? defender : null;
+        }
+
+        public static Kingdom ResolvePrincipalDefender(War pWar)
+        {
+            if (IsZhuluWar(pWar, requireActive: false))
+                return ResolveDeclaredDefender(pWar);
+            try { return pWar?.getMainDefender(); }
+            catch { return null; }
         }
 
         public static bool IsOpposingZhuluCapture(City city,
