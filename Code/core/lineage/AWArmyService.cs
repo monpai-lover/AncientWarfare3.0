@@ -5,12 +5,16 @@ using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
+using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class AWArmyService
     {
         private static readonly MethodInfo NewArmyObjectMethod = ResolveNewArmyObjectMethod();
+        private static readonly NewArmyObjectDelegate NewArmyObjectInvoker =
+            ReflectionDelegateFactory.TryCreate<NewArmyObjectDelegate>(
+                NewArmyObjectMethod);
         private static readonly FieldInfo ArmyCityField = typeof(Army).GetField("_city",
             BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo ArmyKingdomField = typeof(Army).GetField("_kingdom",
@@ -24,6 +28,8 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<long, string>();
         private static readonly HashSet<Army> SpecialArmiesBeingCreated =
             new HashSet<Army>();
+
+        private delegate Army NewArmyObjectDelegate(ArmyManager pManager);
 
         internal static bool IsSpecialArmyCreationInProgress(Army pArmy)
         {
@@ -755,7 +761,7 @@ namespace AncientWarfare3.core.lineage
             bool initialized = false;
             try
             {
-                army = NewArmyObjectMethod.Invoke(World.world.armies, null) as Army;
+                army = CreateNativeArmyObject(World.world.armies);
                 if (army == null) return null;
 
                 SpecialArmiesBeingCreated.Add(army);
@@ -796,6 +802,13 @@ namespace AncientWarfare3.core.lineage
                 type = type.BaseType;
             }
             return null;
+        }
+
+        private static Army CreateNativeArmyObject(ArmyManager pManager)
+        {
+            if (NewArmyObjectInvoker != null)
+                return NewArmyObjectInvoker(pManager);
+            return NewArmyObjectMethod?.Invoke(pManager, null) as Army;
         }
 
         internal static void DetachArmyFromCity(Army pArmy,

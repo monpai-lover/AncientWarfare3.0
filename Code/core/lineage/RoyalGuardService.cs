@@ -35,9 +35,14 @@ namespace AncientWarfare3.core.lineage
         private const int SEARCH_COOLDOWN_PRUNE_THRESHOLD = 256;
         private const double THREAT_SEARCH_MISS_COOLDOWN = 2.0;
         private static readonly MethodInfo NewArmyObjectMethod = ResolveNewArmyObjectMethod();
+        private static readonly NewArmyObjectDelegate NewArmyObjectInvoker =
+            ReflectionDelegateFactory.TryCreate<NewArmyObjectDelegate>(
+                NewArmyObjectMethod);
         private static readonly Dictionary<long, double> ThreatSearchNextAllowed = new Dictionary<long, double>();
         private static readonly System.Random Rng = new System.Random();
         private static bool _creatingGuardArmy;
+
+        private delegate Army NewArmyObjectDelegate(ArmyManager pManager);
 
         private sealed class GuardCandidate
         {
@@ -1606,7 +1611,7 @@ namespace AncientWarfare3.core.lineage
             bool initialized = false;
             try
             {
-                army = NewArmyObjectMethod.Invoke(World.world.armies, null) as Army;
+                army = CreateNativeArmyObject(World.world.armies);
                 if (army == null) return null;
 
                 _creatingGuardArmy = true;
@@ -1657,6 +1662,13 @@ namespace AncientWarfare3.core.lineage
                 type = type.BaseType;
             }
             return null;
+        }
+
+        private static Army CreateNativeArmyObject(ArmyManager pManager)
+        {
+            if (NewArmyObjectInvoker != null)
+                return NewArmyObjectInvoker(pManager);
+            return NewArmyObjectMethod?.Invoke(pManager, null) as Army;
         }
 
         private static Actor PickArmyCaptainReplacement(Army pArmy)
