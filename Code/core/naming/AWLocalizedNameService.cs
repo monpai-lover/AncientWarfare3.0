@@ -28,8 +28,11 @@ namespace AncientWarfare3.core.naming
                      string family = ResolveActorFamily(pActor);
                      if (!string.IsNullOrEmpty(family))
                          pParameters[AWNameDataKeys.FamilyNameInTemplate] = family;
-                 }, pGenerated => PersistActorGeneratedComponents(
-                     pActor, pGenerated));
+                }, (pGenerated, pSelectedName) =>
+                    PersistActorGeneratedComponents(pActor, pGenerated,
+                        pSelectedName), pGenerated =>
+                    AWActorInitialNameRules.ResolveGeneratedName(
+                        pGenerated.Name, pGenerated.Components));
         }
 
         private static bool TryProjectHistoricalFigure(Actor pActor,
@@ -309,7 +312,8 @@ namespace AncientWarfare3.core.naming
             string pMetaType, string pGeneratorId, long pObjectId,
             long pCultureId,
             Action<AWNameGeneratorAsset, Dictionary<string, string>> pFill,
-            Action<AWGeneratedName> pCaptureGenerated = null)
+            Action<AWGeneratedName, string> pCaptureGenerated = null,
+            Func<AWGeneratedName, string> pSelectGeneratedName = null)
         {
             pData.get(AWNameDataKeys.GeneratorId, out string existingGenerator,
                 string.Empty);
@@ -334,12 +338,13 @@ namespace AncientWarfare3.core.naming
             {
                 AWGeneratedName generated = GenerateIdentity(pGeneratorId,
                     pObjectId, pCultureId, pFill);
-                chineseName = generated.Name;
+                chineseName = pSelectGeneratedName?.Invoke(generated) ??
+                              generated.Name;
                 if (!string.IsNullOrWhiteSpace(chineseName))
                 {
                     pData.set(AWNameDataKeys.ChineseName,
                         chineseName.Trim());
-                    pCaptureGenerated?.Invoke(generated);
+                    pCaptureGenerated?.Invoke(generated, chineseName.Trim());
                 }
             }
 
@@ -448,27 +453,20 @@ namespace AncientWarfare3.core.naming
         }
 
         private static void PersistActorGeneratedComponents(Actor pActor,
-            AWGeneratedName pGenerated)
+            AWGeneratedName pGenerated, string pSelectedName)
         {
             if (pActor?.data == null || pGenerated?.Components == null) return;
-            if (pGenerated.Components.TryGetValue(
-                    AWNameDataKeys.FamilyNameInTemplate, out string family) &&
-                !string.IsNullOrWhiteSpace(family))
-            {
-                family = family.Trim();
-                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, family);
-                pActor.data.set(AWNameDataKeys.FamilyComponent, family);
-            }
-            if (pGenerated.Components.TryGetValue("given_name",
-                    out string given) && !string.IsNullOrWhiteSpace(given))
-            {
-                given = given.Trim();
-                pActor.data.set(AWNameDataKeys.GivenName, given);
-                pActor.data.get(LineageKeys.GIVEN_NAME,
-                    out string lineageGiven, string.Empty);
-                if (string.IsNullOrWhiteSpace(lineageGiven))
-                    pActor.data.set(LineageKeys.GIVEN_NAME, given);
-            }
+            string given = pGenerated.Components.TryGetValue("given_name",
+                               out string taggedGiven) &&
+                           !string.IsNullOrWhiteSpace(taggedGiven)
+                ? taggedGiven.Trim()
+                : (pSelectedName ?? string.Empty).Trim();
+            if (given.Length == 0) return;
+            pActor.data.set(AWNameDataKeys.GivenName, given);
+            pActor.data.get(LineageKeys.GIVEN_NAME,
+                out string lineageGiven, string.Empty);
+            if (string.IsNullOrWhiteSpace(lineageGiven))
+                pActor.data.set(LineageKeys.GIVEN_NAME, given);
         }
 
         internal static string GenerateValue(string pGeneratorId,

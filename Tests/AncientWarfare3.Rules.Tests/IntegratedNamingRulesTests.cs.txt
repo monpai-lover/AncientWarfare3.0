@@ -315,6 +315,28 @@ internal static class IntegratedNamingRulesTests
         Equal(false, parameters.ContainsKey("family"),
             "returning generated components still never mutates caller parameters");
 
+        Equal("Given",
+            AWActorInitialNameRules.ResolveGeneratedName(
+                "Family Middle Given",
+                new Dictionary<string, string>
+                {
+                    ["family_name"] = "Family",
+                    ["middle_name"] = "Middle",
+                    ["given_name"] = "Given"
+                }),
+            "actor creation keeps only the tagged given name");
+        Equal("Given",
+            AWActorInitialNameRules.ResolveGeneratedName("FamilyGiven",
+                new Dictionary<string, string>
+                {
+                    ["family_name"] = "Family"
+                }),
+            "legacy actor templates without a given tag drop family components");
+        Equal("Solo",
+            AWActorInitialNameRules.ResolveGeneratedName("Solo",
+                new Dictionary<string, string>()),
+            "an untagged single actor name remains intact");
+
         Equal(string.Empty,
             AWNameTemplate.Create("<missing>", 1f)
                 .GenerateName(context, libraries),

@@ -449,6 +449,7 @@
     <Compile Include="..\..\Code\core\naming\AWWordLibraryAsset.cs" Link="Production\AWWordLibraryAsset.cs" />
     <Compile Include="..\..\Code\core\naming\AWWordLibraryManager.cs" Link="Production\AWWordLibraryManager.cs" />
     <Compile Include="..\..\Code\core\naming\AWNameTemplate.cs" Link="Production\AWNameTemplate.cs" />
+    <Compile Include="..\..\Code\core\naming\AWActorInitialNameRules.cs" Link="Production\AWActorInitialNameRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWNameGeneratorAsset.cs" Link="Production\AWNameGeneratorAsset.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameProjectionRules.cs" Link="Production\AWLocalizedNameProjectionRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedMottoProjectionRules.cs" Link="Production\AWLocalizedMottoProjectionRules.cs" />

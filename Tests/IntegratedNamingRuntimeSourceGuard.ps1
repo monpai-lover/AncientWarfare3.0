@@ -8,6 +8,7 @@ $required = @(
     'Code/patch/naming/AW_ActorLocalizedNamePatch.cs'
     'Code/patch/naming/AW_WorldLocalizedNamePatches.cs'
     'Code/patch/naming/AW_LanguageChangeNamePatch.cs'
+    'Code/core/naming/AWActorInitialNameRules.cs'
 )
 
 foreach ($relative in $required) {
@@ -20,6 +21,8 @@ $service = Get-Content -LiteralPath (Join-Path $repoRoot $required[0]) -Raw
 $mottoService = Get-Content -LiteralPath (Join-Path $repoRoot $required[1]) -Raw
 $localizedNameService = Get-Content -LiteralPath (Join-Path $repoRoot `
     'Code/core/naming/AWLocalizedNameService.cs') -Raw
+$actorInitialNameRules = Get-Content -LiteralPath (Join-Path $repoRoot `
+    'Code/core/naming/AWActorInitialNameRules.cs') -Raw
 $actorNamePatch = Get-Content -LiteralPath (Join-Path $repoRoot `
     'Code/patch/naming/AW_ActorLocalizedNamePatch.cs') -Raw
 $parameterGetters = Get-Content -LiteralPath (Join-Path $repoRoot `
@@ -44,6 +47,29 @@ foreach ($token in @(
 if ($localizedNameService -notmatch
     'HistoricalFigureNameRules\.ShouldProtect\s*\(') {
     throw 'Integrated actor naming must bypass localized generation for historical figures.'
+}
+if ($localizedNameService -notmatch
+    'AWActorInitialNameRules\.ResolveGeneratedName\s*\(' -or
+    $actorInitialNameRules -notmatch '"given_name"' -or
+    $actorInitialNameRules -notmatch '"family_name"' -or
+    $actorInitialNameRules -notmatch '"middle_name"') {
+    throw 'Actor creation must reduce generated identities to one given name.'
+}
+$actorCaptureStart = $localizedNameService.IndexOf(
+    'private static void PersistActorGeneratedComponents')
+$generateValueStart = $localizedNameService.IndexOf(
+    'internal static string GenerateValue', $actorCaptureStart)
+if ($actorCaptureStart -lt 0 -or $generateValueStart -le $actorCaptureStart) {
+    throw 'Actor generated-component capture boundaries are unavailable.'
+}
+$actorCapture = $localizedNameService.Substring($actorCaptureStart,
+    $generateValueStart - $actorCaptureStart)
+if ($actorCapture -match 'CHINESE_FAMILY_NAME|FamilyComponent') {
+    throw 'Actor creation must not persist a template surname before AW3 creates a family branch.'
+}
+if ($actorCapture -notmatch 'pSelectedName' -or
+    $actorCapture -notmatch 'LineageKeys\.GIVEN_NAME') {
+    throw 'Actor creation must persist the selected single name for later family projection.'
 }
 if ($actorNamePatch -notmatch 'UsesAwLineageSystem\s*\(' -or
     $actorNamePatch -notmatch 'HistoricalFigureService\.TRAIT_FIGURE' -or

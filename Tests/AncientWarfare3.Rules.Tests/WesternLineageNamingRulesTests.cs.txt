@@ -171,11 +171,46 @@ internal static class WesternLineageNamingRulesTests
                 NamingProfileId.Western, WesternNamingTradition.Van,
                 AWNamingObjectKind.Actor, "elf", "human_name"),
             "an elf in another western culture still uses elf given names");
-        Equal("Xia_name",
+        Equal("elf_city",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.Von,
+                AWNamingObjectKind.City, "elf", "elf_city"),
+            "western naming never replaces an elf city generator");
+        Equal("dwarf_kingdom",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.De,
+                AWNamingObjectKind.Kingdom, "dwarf", "dwarf_kingdom"),
+            "western naming never replaces a dwarf kingdom generator");
+        Equal("civ_bear_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.Di,
+                AWNamingObjectKind.Actor, "civ_bear", "civ_bear_name"),
+            "other civilized species keep their explicit actor generator");
+        Equal("elf_given_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Xia, WesternNamingTradition.Von,
+                AWNamingObjectKind.Actor, "elf", "elf_name"),
+            "Xiaized culture does not replace an elf birth name");
+        Equal("western_von_name",
             AWCultureNamingTraditionRules.ResolveGeneratorId(
                 NamingProfileId.Xia, WesternNamingTradition.Von,
                 AWNamingObjectKind.Actor, "human", "human_name"),
-            "a fully Xiaized foreign actor uses the Xia given-name route");
+            "Xiaized culture does not replace a human birth name");
+        Equal("Xia_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Xia, WesternNamingTradition.Von,
+                AWNamingObjectKind.Actor, "Xia", "Xia_name"),
+            "biological Xia keeps the Xia birth-name generator");
+        Equal("orc_nomadic_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.OrcNomadic, WesternNamingTradition.Von,
+                AWNamingObjectKind.Actor, "orc", "orc_name"),
+            "orc birth names keep the dedicated orc single-name generator");
+        Equal("orc_nomadic_name",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Xia, WesternNamingTradition.Von,
+                AWNamingObjectKind.Actor, "orc", "orc_name"),
+            "Xiaized culture does not replace an orc birth name");
         Equal("Xia_kingdom",
             AWCultureNamingTraditionRules.ResolveGeneratorId(
                 NamingProfileId.Xia, WesternNamingTradition.Von,
