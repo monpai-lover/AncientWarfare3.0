@@ -70,6 +70,7 @@
     <Compile Include="CourtDispositionSqlTests.cs.txt" />
     <Compile Include="CourtDispositionPerformanceTests.cs.txt" />
     <Compile Include="NameSystemRulesTests.cs.txt" />
+    <Compile Include="LineageGivenNameNormalizationRulesTests.cs.txt" />
     <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
     <Compile Include="IntegratedNamingRulesTests.cs.txt" />
     <Compile Include="ActorLocalizedNameBoundaryRulesTests.cs.txt" />
@@ -249,6 +250,7 @@
   <ItemGroup>
     <Compile Include="..\..\Code\core\lineage\ShiBranchRules.cs" Link="Production\ShiBranchRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageDisplayNameRules.cs" Link="Production\LineageDisplayNameRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\LineageGivenNameNormalizationRules.cs" Link="Production\LineageGivenNameNormalizationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageBranchRules.cs" Link="Production\LineageBranchRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirTitleSelectionRules.cs" Link="Production\HeirTitleSelectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FamilyTreeProjectionRevision.cs" Link="Production\FamilyTreeProjectionRevision.cs" />
