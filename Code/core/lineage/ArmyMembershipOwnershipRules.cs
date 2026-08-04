@@ -19,5 +19,21 @@ namespace AncientWarfare3.core.lineage
                 ? ArmyMembershipOwnershipDecision.Keep
                 : ArmyMembershipOwnershipDecision.Release;
         }
+
+        public static bool ShouldReleaseRosterEntry(bool actorValid,
+            bool backlinkMatches,
+            ArmyMembershipOwnershipDecision ownershipDecision)
+        {
+            return !actorValid || !backlinkMatches ||
+                   ownershipDecision ==
+                   ArmyMembershipOwnershipDecision.Release;
+        }
+
+        public static int UnknownOwnerRetryDelayFrames(int attempt)
+        {
+            int shift = System.Math.Max(0,
+                System.Math.Min(5, attempt - 1));
+            return 1 << shift;
+        }
     }
 }

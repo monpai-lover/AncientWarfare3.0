@@ -37,6 +37,7 @@ if ($dirtyPatch -notmatch 'HarmonyPostfix[\s\S]*ArmyManager[\s\S]*ArmyMembership
 
 $requiredCleanup = @(
     'ArmyMembershipOwnershipRules.Decide',
+    'ArmyMembershipOwnershipRules.ShouldReleaseRosterEntry',
     'removeFromArmy',
     'units.Remove',
     'if (ownedByNewArmy) return changed;',
@@ -52,6 +53,11 @@ foreach ($token in $requiredCleanup) {
     if (-not $service.Contains($token)) {
         throw "Army reconciliation is missing required cleanup: $token"
     }
+}
+if (-not $service.Contains('MaxUnknownOwnerRetries') -or
+    -not $service.Contains('ScheduleUnknownOwnerRetry') -or
+    -not $service.Contains('PromoteDelayedRetries')) {
+    throw 'Unknown army ownership must use bounded delayed retries instead of per-frame self-enqueue.'
 }
 
 Write-Output 'Army membership reconciliation source guard passed.'
