@@ -15,6 +15,8 @@ $posthumous = Get-Content -Raw (Join-Path $root 'Code/core/lineage/PosthumousTit
 $history = Get-Content -Raw (Join-Path $root 'Code/core/lineage/HistoryWriter.cs')
 $dynastyWriter = Get-Content -Raw (Join-Path $root `
     'Code/core/lineage/DynastyRecordWriter.cs')
+$dynastyRules = Get-Content -Raw (Join-Path $root `
+    'Code/core/lineage/DynastyTransitionRules.cs')
 $restore = Get-Content -Raw (Join-Path $root `
     'Code/core/multiplayer/AW3RuntimeRestorePipeline.cs')
 $indexes = Get-Content -Raw (Join-Path $root `
@@ -298,10 +300,17 @@ Require $chronicleCode 'DynastyTransitionRules.TryResolve(' `
     'Chronicle does not stop accession after a dynasty persistence failure'
 Require $reigns 'TryProjectCurrentReignDynasty' `
     'new reigns cannot be attributed to a dynasty created after the reign gate'
+Require $reigns 'TryReadCurrentReignDynasty' `
+    'dynasty retry cannot observe whether the open reign has converged'
 Require $chronicleCode 'ReignRecordWriter.TryProjectCurrentReignDynasty(' `
     'Chronicle leaves a dynasty-changing reign attributed to the old dynasty'
-Require $chronicleCode 'ShouldProjectCreatedDynasty(' `
-    'Chronicle requires a dynasty id for legitimate no-change accession'
+Require $chronicleCode 'ResolveReignProjection(' `
+    'Chronicle still decides reign projection from transition status alone'
+Require $chronicleCode 'ShouldProjectStateNameAsCreatedDynasty(' `
+    'NoChange retry cannot restore new-dynasty state-name semantics'
+if ($dynastyRules.Contains('ShouldProjectCreatedDynasty(')) {
+    throw 'status-only dynasty projection rule can strand a partial retry'
+}
 if ($chronicleCode.Contains('DynastyRecordWriter.OnKingChanged(')) {
     throw 'Chronicle still treats dynasty no-change and failure as the same boolean'
 }
@@ -310,12 +319,22 @@ $transition = $chronicleCode.LastIndexOf(
     'ReignRecordWriter.TryTransitionReign(')
 $dynasty = $chronicleCode.LastIndexOf(
     'DynastyRecordWriter.TryOnKingChanged(')
+$currentDynasty = $chronicleCode.LastIndexOf(
+    'DynastyRecordWriter.GetCurrentDynastyId(')
+$readReignDynasty = $chronicleCode.LastIndexOf(
+    'ReignRecordWriter.TryReadCurrentReignDynasty(')
+$resolveDynasty = $chronicleCode.LastIndexOf(
+    'DynastyTransitionRules.ResolveReignProjection(')
 $reignDynasty = $chronicleCode.LastIndexOf(
     'ReignRecordWriter.TryProjectCurrentReignDynasty(')
 $stateName = $chronicleCode.LastIndexOf(
     'ProjectDynasticStateNameForRuler(')
 if ($transition -lt 0 -or $dynasty -le $transition -or
-    $reignDynasty -le $dynasty -or $stateName -le $reignDynasty) {
+    $currentDynasty -le $dynasty -or
+    $readReignDynasty -le $currentDynasty -or
+    $resolveDynasty -le $readReignDynasty -or
+    $reignDynasty -le $resolveDynasty -or
+    $stateName -le $reignDynasty) {
     throw 'dynasty or state-name publication occurs before the reign DB gate'
 }
 

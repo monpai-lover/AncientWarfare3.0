@@ -67,12 +67,36 @@ namespace AncientWarfare3.core.lineage
                         DynastyRecordWriter.TryOnKingChanged(
                             pKingdom, pNewKing);
                     if (!DynastyTransitionRules.TryResolve(dynastyStatus,
-                            out newDynastyCreated))
+                            out _))
                         return false;
-                    if (DynastyTransitionRules.ShouldProjectCreatedDynasty(
-                            dynastyStatus) &&
+                    long currentDynastyId =
+                        DynastyRecordWriter.GetCurrentDynastyId(
+                            pKingdom.id);
+                    long openReignDynastyId = -1L;
+                    if (currentDynastyId >= 0L &&
+                        !ReignRecordWriter.TryReadCurrentReignDynasty(
+                            pKingdom, pNewKing, out openReignDynastyId,
+                            out string dynastyReadError))
+                    {
+                        ModClass.LogWarning(
+                            "Reign dynasty read failed: " +
+                            dynastyReadError);
+                        return false;
+                    }
+                    DynastyReignProjectionDisposition dynastyDisposition =
+                        DynastyTransitionRules.ResolveReignProjection(
+                            dynastyStatus, currentDynastyId,
+                            openReignDynastyId);
+                    if (dynastyDisposition ==
+                        DynastyReignProjectionDisposition.Failure)
+                        return false;
+                    newDynastyCreated = DynastyTransitionRules.
+                        ShouldProjectStateNameAsCreatedDynasty(
+                            dynastyStatus, dynastyDisposition);
+                    if (dynastyDisposition ==
+                        DynastyReignProjectionDisposition.Reconcile &&
                         !ReignRecordWriter.TryProjectCurrentReignDynasty(
-                            pKingdom, pNewKing,
+                            pKingdom, pNewKing, currentDynastyId,
                             out string dynastyProjectionError))
                     {
                         ModClass.LogWarning(

@@ -7,6 +7,14 @@ namespace AncientWarfare3.core.lineage
         Failure
     }
 
+    public enum DynastyReignProjectionDisposition
+    {
+        Failure,
+        SkipNoDynasty,
+        Converged,
+        Reconcile
+    }
+
     public static class DynastyTransitionRules
     {
         public static bool TryResolve(DynastyTransitionStatus pStatus,
@@ -16,10 +24,30 @@ namespace AncientWarfare3.core.lineage
             return pStatus != DynastyTransitionStatus.Failure;
         }
 
-        public static bool ShouldProjectCreatedDynasty(
-            DynastyTransitionStatus pStatus)
+        public static DynastyReignProjectionDisposition
+            ResolveReignProjection(DynastyTransitionStatus pStatus,
+                long currentDynastyId, long openReignDynastyId)
         {
-            return pStatus == DynastyTransitionStatus.Created;
+            if (pStatus == DynastyTransitionStatus.Failure)
+                return DynastyReignProjectionDisposition.Failure;
+            if (currentDynastyId < 0L)
+                return pStatus == DynastyTransitionStatus.Created
+                    ? DynastyReignProjectionDisposition.Failure
+                    : DynastyReignProjectionDisposition.SkipNoDynasty;
+            if (pStatus == DynastyTransitionStatus.Created)
+                return DynastyReignProjectionDisposition.Reconcile;
+            return currentDynastyId == openReignDynastyId
+                ? DynastyReignProjectionDisposition.Converged
+                : DynastyReignProjectionDisposition.Reconcile;
+        }
+
+        public static bool ShouldProjectStateNameAsCreatedDynasty(
+            DynastyTransitionStatus pStatus,
+            DynastyReignProjectionDisposition pDisposition)
+        {
+            return pStatus != DynastyTransitionStatus.Failure &&
+                   pDisposition ==
+                   DynastyReignProjectionDisposition.Reconcile;
         }
     }
 }

@@ -9,6 +9,7 @@ internal static class MandateSuccessionRegressionRulesTests
         MandateTraitMovesToTheInstalledRuler();
         AccessionSettlementRequiresOpenReignAndInstalledKing();
         DynastyTransitionStatusSeparatesContinuityFromFailure();
+        DynastyProjectionPartialSuccessRetriesToConvergence();
         FailedReignTransitionRetriesBeforeProjectionAdvances();
         FailedPersistenceRetriesBeforeRuntimeProjection();
         MandateContextTargetsOnlyTheInstalledRulersLatestOpenReign();
@@ -189,13 +190,6 @@ internal static class MandateSuccessionRegressionRulesTests
             "a created dynasty is a successful transition result");
         Equal(true, created,
             "a created transition reports the new dynasty");
-        Equal(true, DynastyTransitionRules.ShouldProjectCreatedDynasty(
-                DynastyTransitionStatus.Created),
-            "a created dynasty must be projected onto the new reign");
-        Equal(false, DynastyTransitionRules.ShouldProjectCreatedDynasty(
-                DynastyTransitionStatus.NoChange),
-            "no-change accession does not require a dynasty id");
-
         long noChangeLastKingId = 41L;
         bool noChangeSettled = MandateAccessionCoordinator.TrySettle(
             () => true,
@@ -209,8 +203,7 @@ internal static class MandateSuccessionRegressionRulesTests
                     "no-change dynasty status is successful");
                 Equal(false, noChangeCreated,
                     "no-change status reports no created dynasty");
-                return !DynastyTransitionRules.
-                    ShouldProjectCreatedDynasty(status);
+                return true;
             },
             () => true,
             () => true,
@@ -243,6 +236,131 @@ internal static class MandateSuccessionRegressionRulesTests
             "dynasty failure stops before installed-king and Mandate work");
         Equal(41L, lastKingId,
             "dynasty failure cannot advance the last-king projection");
+    }
+
+    private static void
+        DynastyProjectionPartialSuccessRetriesToConvergence()
+    {
+        Equal(DynastyReignProjectionDisposition.Reconcile,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.Created, currentDynastyId: 2L,
+                openReignDynastyId: 1L),
+            "created D2 always reconciles the current reign");
+        Equal(DynastyReignProjectionDisposition.Reconcile,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.Created, currentDynastyId: 2L,
+                openReignDynastyId: 2L),
+            "created status preserves new-dynasty publication semantics");
+        Equal(DynastyReignProjectionDisposition.Reconcile,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.NoChange, currentDynastyId: 2L,
+                openReignDynastyId: 1L),
+            "NoChange retries a persisted D2 that has not reached R2");
+        Equal(DynastyReignProjectionDisposition.Converged,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.NoChange, currentDynastyId: 2L,
+                openReignDynastyId: 2L),
+            "NoChange with matching ids is already converged");
+        Equal(DynastyReignProjectionDisposition.SkipNoDynasty,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.NoChange, currentDynastyId: -1L,
+                openReignDynastyId: 1L),
+            "legitimate no-dynasty continuity skips reconciliation");
+        Equal(DynastyReignProjectionDisposition.Failure,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.Failure, currentDynastyId: 2L,
+                openReignDynastyId: 1L),
+            "dynasty persistence failure short-circuits reconciliation");
+
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,DYNASTY_ID INTEGER," +
+            "START_TIME REAL,END_TIME REAL);" +
+            "INSERT INTO KingdomReign VALUES(2,17,42,1,11,-1);");
+
+        const long currentDynastyId = 2L;
+        long lastKingId = 41L;
+        int dynastyProjectionAttempts = 0;
+        int stateNameProjections = 0;
+        string error = "";
+
+        bool PublishDynasty(DynastyTransitionStatus status,
+            bool failProjection)
+        {
+            if (!ReignMandateProjectionPersistence.TryReadDynasty(
+                    db, "KingdomReign", kingdomId: 17L,
+                    rulerActorId: 42L, out long reignDynastyId,
+                    out error))
+                return false;
+            DynastyReignProjectionDisposition disposition =
+                DynastyTransitionRules.ResolveReignProjection(status,
+                    currentDynastyId, reignDynastyId);
+            if (disposition == DynastyReignProjectionDisposition.Failure)
+                return false;
+            bool createdSemantic = DynastyTransitionRules.
+                ShouldProjectStateNameAsCreatedDynasty(status, disposition);
+            if (disposition ==
+                DynastyReignProjectionDisposition.Reconcile)
+            {
+                dynastyProjectionAttempts++;
+                if (failProjection ||
+                    !ReignMandateProjectionPersistence.TryProjectDynasty(
+                        db, "KingdomReign", kingdomId: 17L,
+                        rulerActorId: 42L, dynastyId: currentDynastyId,
+                        out error))
+                    return false;
+            }
+            if (createdSemantic) stateNameProjections++;
+            return true;
+        }
+
+        bool first = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () => PublishDynasty(DynastyTransitionStatus.Created,
+                failProjection: true),
+            () => true,
+            () => true,
+            () => lastKingId = 42L);
+        Equal(false, first,
+            "first created-dynasty reign projection failure remains retryable");
+        Equal(1L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "failed projection leaves R2 on D1");
+        Equal(0, stateNameProjections,
+            "state-name projection waits for reign dynasty convergence");
+        Equal(41L, lastKingId,
+            "partial dynasty success cannot advance last king id");
+
+        bool retry = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () => PublishDynasty(DynastyTransitionStatus.NoChange,
+                failProjection: false),
+            () => true,
+            () => true,
+            () => lastKingId = 42L);
+        Equal(true, retry,
+            "NoChange retry reconciles the previously created dynasty");
+        Equal(2L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "retry converges R2 from D1 to D2");
+        Equal(2, dynastyProjectionAttempts,
+            "created failure and NoChange retry each attempt projection");
+        Equal(1, stateNameProjections,
+            "recovered new-dynasty state-name semantics publish once");
+        Equal(42L, lastKingId,
+            "last king id advances only after dynasty convergence");
+
+        Equal(true, PublishDynasty(DynastyTransitionStatus.NoChange,
+                failProjection: false),
+            "matching NoChange retry is an idempotent success");
+        Equal(2, dynastyProjectionAttempts,
+            "matching dynasty ids do not issue another projection write");
+        Equal(1, stateNameProjections,
+            "matching dynasty ids do not repeat state-name projection");
     }
 
     private static void

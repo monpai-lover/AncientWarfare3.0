@@ -223,8 +223,36 @@ namespace AncientWarfare3.core.lineage
             }
             long dynastyId = DynastyRecordWriter.GetCurrentDynastyId(
                 pKingdom.id);
+            return TryProjectCurrentReignDynasty(pKingdom, pKing,
+                dynastyId, out pError);
+        }
+
+        public static bool TryProjectCurrentReignDynasty(Kingdom pKingdom,
+            Actor pKing, long pDynastyId, out string pError)
+        {
+            pError = "";
+            if (!Ready || pKingdom?.data == null || pKing?.data == null)
+            {
+                pError = "invalid current reign dynasty projection";
+                return false;
+            }
             return ReignMandateProjectionPersistence.TryProjectDynasty(
-                DB, TABLE, pKingdom.id, pKing.data.id, dynastyId,
+                DB, TABLE, pKingdom.id, pKing.data.id, pDynastyId,
+                out pError);
+        }
+
+        public static bool TryReadCurrentReignDynasty(Kingdom pKingdom,
+            Actor pKing, out long pDynastyId, out string pError)
+        {
+            pDynastyId = -1L;
+            pError = "";
+            if (!Ready || pKingdom?.data == null || pKing?.data == null)
+            {
+                pError = "invalid current reign dynasty read";
+                return false;
+            }
+            return ReignMandateProjectionPersistence.TryReadDynasty(
+                DB, TABLE, pKingdom.id, pKing.data.id, out pDynastyId,
                 out pError);
         }
 

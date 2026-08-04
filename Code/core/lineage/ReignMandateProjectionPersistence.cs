@@ -106,5 +106,46 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
         }
+
+        public static bool TryReadDynasty(SQLiteConnection pDb,
+            string pTable, long kingdomId, long rulerActorId,
+            out long pDynastyId, out string pError)
+        {
+            pDynastyId = -1L;
+            pError = "";
+            if (pDb == null ||
+                !string.Equals(pTable, "KingdomReign",
+                    StringComparison.Ordinal) ||
+                kingdomId < 0L || rulerActorId < 0L)
+            {
+                pError = "invalid reign dynasty read input";
+                return false;
+            }
+            try
+            {
+                using var command = new SQLiteCommand(pDb)
+                {
+                    CommandText = "SELECT IFNULL(DYNASTY_ID,-1) FROM " +
+                        pTable + " WHERE KINGDOM_ID=@kingdom " +
+                        "AND KING_ACTOR_ID=@actor AND END_TIME=-1 " +
+                        "ORDER BY START_TIME DESC,REIGN_ID DESC LIMIT 1"
+                };
+                command.Parameters.AddWithValue("@kingdom", kingdomId);
+                command.Parameters.AddWithValue("@actor", rulerActorId);
+                object value = command.ExecuteScalar();
+                if (value == null || value == DBNull.Value)
+                {
+                    pError = "current reign dynasty read found no row";
+                    return false;
+                }
+                pDynastyId = Convert.ToInt64(value);
+                return true;
+            }
+            catch (Exception error)
+            {
+                pError = error.Message;
+                return false;
+            }
+        }
     }
 }
