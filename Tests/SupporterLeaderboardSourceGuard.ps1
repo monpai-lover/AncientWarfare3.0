@@ -12,15 +12,20 @@ foreach ($path in @($data, $qr, $window, $item, $service, $tab, $ids, $locale)) 
     if (-not (Test-Path -LiteralPath $path)) { throw "missing supporter leaderboard source: $path" }
 }
 $csv = Get-Content -Raw -Encoding UTF8 -LiteralPath $data
-if ($csv -notmatch '(?m)^rank,name,amount,date$') { throw 'supporters.csv header is invalid' }
-if ($csv -notmatch '(?m)^1,Justin,20,') { throw 'Justin supporter entry is missing' }
-if ($csv -notmatch '(?m)^9,\u672a\u660e\u5929\u900d\u9065\u884c,20\.00,2026-08-02$') {
+if ($csv -notmatch '(?m)^rank,name,amount,date\r?$') { throw 'supporters.csv header is invalid' }
+if ($csv -notmatch '(?m)^1,Justin,40,2026-08-05\r?$') {
+    throw 'Justin supporter entry is missing or outdated'
+}
+if ([regex]::Matches($csv, '(?m)^\d+,Justin,[^,\r\n]+,[^\r\n]+\r?$').Count -ne 1) {
+    throw 'supporters.csv must contain exactly one Justin entry'
+}
+if ($csv -notmatch '(?m)^9,\u672a\u660e\u5929\u900d\u9065\u884c,20\.00,2026-08-02\r?$') {
     throw 'supporter entry 9 is missing'
 }
-if ($csv -notmatch '(?m)^10,\u963f\u826f,50,2026-08-04$') {
+if ($csv -notmatch '(?m)^10,\u963f\u826f,50,2026-08-04\r?$') {
     throw 'supporter entry 10 is missing'
 }
-if ($csv -notmatch '(?m)^11,MO,10,2026-08-04$') {
+if ($csv -notmatch '(?m)^11,MO,10,2026-08-04\r?$') {
     throw 'supporter entry 11 is missing'
 }
 foreach ($requiredRow in @(
@@ -35,9 +40,18 @@ foreach ($requiredRow in @(
     }
 }
 $source = Get-Content -Raw -Encoding UTF8 -LiteralPath $service
+if ($source -notmatch '(?s)Rank = 1,\s*Name = "Justin",\s*Amount = "40",\s*Date = "2026-08-05"') {
+    throw 'Justin supporter fallback is missing or outdated'
+}
+$builtIn = [regex]::Match(
+    $source,
+    '(?s)private static readonly IReadOnlyList<SupporterLeaderboardEntry> BuiltIn\s*=\s*new List<SupporterLeaderboardEntry>\s*\{(?<entries>.*?)\n\s*\};')
+if (-not $builtIn.Success -or
+    [regex]::Matches($builtIn.Groups['entries'].Value, 'Name = "Justin"').Count -ne 1) {
+    throw 'built-in supporter data must contain exactly one Justin entry'
+}
 foreach ($required in @(
         'supporters.csv',
-        'Name = "Justin"',
         'Name = "Jake"',
         'Name = "Beluga"',
         'Amount = "15"',

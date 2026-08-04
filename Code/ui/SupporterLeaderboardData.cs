@@ -31,8 +31,8 @@ namespace AncientWarfare3.ui
                 {
                     Rank = 1,
                     Name = "Justin",
-                    Amount = "20",
-                    Date = "2026-08-02"
+                    Amount = "40",
+                    Date = "2026-08-05"
                 },
                 new SupporterLeaderboardEntry
                 {
