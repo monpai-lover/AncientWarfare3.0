@@ -181,6 +181,16 @@ namespace AncientWarfare3.core.naming
                 pKind == AWNamingObjectKind.War)
                 return pExplicitGeneratorId ?? string.Empty;
 
+            if (pKind == AWNamingObjectKind.Actor &&
+                pProfile == NamingProfileId.Xia &&
+                !IsXiaSpecies(pSpeciesId))
+                return ResolveNativeActorGenerator(pSpeciesId, pTradition,
+                    pExplicitGeneratorId);
+            if (pProfile == NamingProfileId.Western &&
+                !IsHumanSpecies(pSpeciesId))
+                return ResolveNativeGenerator(pKind, pSpeciesId, pTradition,
+                    pExplicitGeneratorId);
+
             switch (pProfile)
             {
                 case NamingProfileId.OrcNomadic:
@@ -207,6 +217,15 @@ namespace AncientWarfare3.core.naming
                 pKind == AWNamingObjectKind.Item ||
                 pKind == AWNamingObjectKind.War)
                 return pExplicitGeneratorId ?? string.Empty;
+            if (pKind == AWNamingObjectKind.Actor &&
+                pProfile == NamingProfileId.Xia &&
+                !IsXiaSpecies(pSpeciesId))
+                return ResolveNativeActorGenerator(pSpeciesId,
+                    WesternNamingTradition.Von, pExplicitGeneratorId);
+            if (pProfile == NamingProfileId.Western &&
+                !IsHumanSpecies(pSpeciesId))
+                return ResolveNativeGenerator(pKind, pSpeciesId,
+                    WesternNamingTradition.Von, pExplicitGeneratorId);
             if (pProfile == NamingProfileId.OrcNomadic)
                 return AWOrcNomadicNamingRules.ResolveFallbackGeneratorId(
                     pKind);
@@ -286,12 +305,8 @@ namespace AncientWarfare3.core.naming
             string pSpeciesId, string pExplicitGeneratorId)
         {
             if (pKind == AWNamingObjectKind.Actor)
-            {
-                if (UsesSpeciesGivenNameGenerator(pSpeciesId))
-                    return pSpeciesId + "_given_name";
                 return "western_" + SerializeTradition(pTradition) +
                        "_name";
-            }
 
             return pKind switch
             {
@@ -305,6 +320,42 @@ namespace AncientWarfare3.core.naming
                 AWNamingObjectKind.Subspecies => "western_subspecies",
                 _ => pExplicitGeneratorId ?? string.Empty
             };
+        }
+
+        private static string ResolveNativeGenerator(AWNamingObjectKind pKind,
+            string pSpeciesId, WesternNamingTradition pTradition,
+            string pExplicitGeneratorId)
+        {
+            return pKind == AWNamingObjectKind.Actor
+                ? ResolveNativeActorGenerator(pSpeciesId, pTradition,
+                    pExplicitGeneratorId)
+                : pExplicitGeneratorId ?? string.Empty;
+        }
+
+        private static string ResolveNativeActorGenerator(string pSpeciesId,
+            WesternNamingTradition pTradition, string pExplicitGeneratorId)
+        {
+            if (IsHumanSpecies(pSpeciesId))
+                return "western_" + SerializeTradition(pTradition) +
+                       "_name";
+            if (UsesSpeciesGivenNameGenerator(pSpeciesId))
+                return pSpeciesId + "_given_name";
+            if (string.Equals(pSpeciesId, "orc", StringComparison.Ordinal))
+                return AWOrcNomadicNamingRules.ResolveGeneratorId(
+                    AWNamingObjectKind.Actor);
+            return pExplicitGeneratorId ?? string.Empty;
+        }
+
+        private static bool IsHumanSpecies(string pSpeciesId)
+        {
+            return string.Equals(pSpeciesId, "human",
+                StringComparison.Ordinal);
+        }
+
+        private static bool IsXiaSpecies(string pSpeciesId)
+        {
+            return string.Equals(pSpeciesId, "Xia",
+                StringComparison.Ordinal);
         }
 
         private static bool UsesSpeciesGivenNameGenerator(string pSpeciesId)

@@ -150,6 +150,35 @@ foreach ($expectation in @(
     }
 }
 
+foreach ($id in @(
+    'western_von_name',
+    'western_de_name',
+    'western_van_name',
+    'western_di_name',
+    'elf_given_name',
+    'dwarf_given_name',
+    'orc_nomadic_name'
+)) {
+    $generator = @($creatureGenerators |
+        Where-Object { $_.id -eq $id })
+    if ($generator.Count -ne 1) {
+        throw "$id must be defined exactly once."
+    }
+    $templates = @($generator[0].templates)
+    if ($null -ne $generator[0].default_template) {
+        $templates += $generator[0].default_template
+    }
+    foreach ($template in $templates) {
+        $format = [string]$template.format
+        $givenTokenCount = [regex]::Matches($format,
+            ':given_name[}>]').Count
+        if ($givenTokenCount -ne 1 -or
+            $format -match ':(?:family|middle)_name[}>]') {
+            throw "$id must generate one given name without family or middle-name components."
+        }
+    }
+}
+
 $nomadicMarker = ([string][char]0x6E38) + ([string][char]0x7267)
 $orcMarker = ([string][char]0x517D) + ([string][char]0x4EBA)
 foreach ($entry in $resourceExpectations.GetEnumerator()) {
