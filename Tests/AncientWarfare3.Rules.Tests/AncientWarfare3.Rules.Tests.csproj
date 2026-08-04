@@ -79,6 +79,9 @@
     <Compile Include="KingdomRenamePersistenceRulesTests.cs.txt" />
     <Compile Include="LocalizedNameProfileReadinessRulesTests.cs.txt" />
     <Compile Include="WesternLineageNamingRulesTests.cs.txt" />
+    <Compile Include="WesternSurnameInheritanceRulesTests.cs.txt" />
+    <Compile Include="WesternSurnameInheritancePersistenceSqlTests.cs.txt" />
+    <Compile Include="WesternSurnameRepairRulesTests.cs.txt" />
     <Compile Include="WesternFamilyIdentityRulesTests.cs.txt" />
     <Compile Include="WesternLineageEligibilityRulesTests.cs.txt" />
     <Compile Include="WesternBilateralFamilyTreeRulesTests.cs.txt" />

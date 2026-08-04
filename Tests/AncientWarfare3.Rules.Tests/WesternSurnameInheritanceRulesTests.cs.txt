@@ -1,0 +1,6 @@
+public static class WesternSurnameInheritanceRulesTests
+{
+    public static void Run()
+    {
+    }
+}

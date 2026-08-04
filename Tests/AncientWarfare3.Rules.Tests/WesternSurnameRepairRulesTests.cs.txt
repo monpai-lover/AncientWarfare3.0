@@ -1,0 +1,6 @@
+public static class WesternSurnameRepairRulesTests
+{
+    public static void Run()
+    {
+    }
+}
