@@ -2,6 +2,15 @@ using System;
 
 namespace AncientWarfare3.core.lineage
 {
+    public enum ArmyRtsCombatControlDecision
+    {
+        KeepStrategicControl = 0,
+        ReleaseToVanilla = 1,
+        KeepVanillaControl = 2,
+        ReacquireStrategicControl = 3,
+        ReacquireForWithdrawal = 4
+    }
+
     public enum ArmyRtsWarPhase
     {
         PreparationRecruitment = 0,
@@ -48,6 +57,36 @@ namespace AncientWarfare3.core.lineage
             bool transportActive, bool movementActive)
         {
             return !combatActive && !transportActive && !movementActive;
+        }
+
+        public static ArmyRtsCombatControlDecision ResolveCombatControl(
+            ArmyRtsWarPhase phase, bool withdrawalRequired,
+            bool insideTargetTerritory, bool hostileCombatUnitNearby,
+            bool objectiveOpen)
+        {
+            if (phase == ArmyRtsWarPhase.Withdrawal ||
+                phase == ArmyRtsWarPhase.Replenishing)
+                return ArmyRtsCombatControlDecision.KeepStrategicControl;
+            if (withdrawalRequired)
+                return ArmyRtsCombatControlDecision.
+                    ReacquireForWithdrawal;
+            if (phase == ArmyRtsWarPhase.VanillaCombat)
+            {
+                if (!insideTargetTerritory || !hostileCombatUnitNearby ||
+                    !objectiveOpen)
+                    return ArmyRtsCombatControlDecision.
+                        ReacquireStrategicControl;
+                return ArmyRtsCombatControlDecision.KeepVanillaControl;
+            }
+            return ShouldReleaseToVanilla(insideTargetTerritory,
+                hostileCombatUnitNearby) && objectiveOpen
+                ? ArmyRtsCombatControlDecision.ReleaseToVanilla
+                : ArmyRtsCombatControlDecision.KeepStrategicControl;
+        }
+
+        public static bool OwnsTacticalActors(ArmyRtsWarPhase phase)
+        {
+            return phase != ArmyRtsWarPhase.VanillaCombat;
         }
     }
 }

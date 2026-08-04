@@ -154,6 +154,7 @@
     <Compile Include="ArmyRtsWarLifecycleRulesTests.cs.txt" />
     <Compile Include="PreparationRecruitmentProtectionRulesTests.cs.txt" />
     <Compile Include="ArmyRtsWarLifecycleStateTests.cs.txt" />
+    <Compile Include="ArmyRtsCombatHandoffRulesTests.cs.txt" />
     <Compile Include="ArmyLogisticsSustainmentRulesTests.cs.txt" />
     <Compile Include="ArmyRtsRouteChoiceRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyRulesTests.cs.txt" />

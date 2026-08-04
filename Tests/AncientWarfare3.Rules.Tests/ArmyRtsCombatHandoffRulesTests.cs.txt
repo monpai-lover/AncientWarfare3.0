@@ -1,0 +1,75 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsCombatHandoffRulesTests
+{
+    public static void Run()
+    {
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.StrategicMovement,
+                withdrawalRequired: false, insideTargetTerritory: true,
+                hostileCombatUnitNearby: true, objectiveOpen: true) ==
+               ArmyRtsCombatControlDecision.ReleaseToVanilla,
+            "target-territory hostile contact releases tactical control");
+
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.StrategicMovement,
+                withdrawalRequired: false, insideTargetTerritory: false,
+                hostileCombatUnitNearby: true, objectiveOpen: true) ==
+               ArmyRtsCombatControlDecision.KeepStrategicControl,
+            "passing through enemy territory retains RTS movement");
+
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.VanillaCombat,
+                withdrawalRequired: true, insideTargetTerritory: true,
+                hostileCombatUnitNearby: true, objectiveOpen: true) ==
+               ArmyRtsCombatControlDecision.ReacquireForWithdrawal,
+            "the 20 percent threshold overrides vanilla combat");
+
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.Withdrawal,
+                withdrawalRequired: true, insideTargetTerritory: false,
+                hostileCombatUnitNearby: false, objectiveOpen: true) ==
+               ArmyRtsCombatControlDecision.KeepStrategicControl,
+            "an active withdrawal must not be reassigned every frame");
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.Withdrawal,
+                withdrawalRequired: true, insideTargetTerritory: true,
+                hostileCombatUnitNearby: true, objectiveOpen: true) ==
+               ArmyRtsCombatControlDecision.KeepStrategicControl,
+            "withdrawal ownership must not hand control back to vanilla combat");
+
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.VanillaCombat,
+                withdrawalRequired: false, insideTargetTerritory: true,
+                hostileCombatUnitNearby: false, objectiveOpen: true) ==
+               ArmyRtsCombatControlDecision.ReacquireStrategicControl,
+            "RTS resumes strategic control when defenders are driven away");
+
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.VanillaCombat,
+                withdrawalRequired: false, insideTargetTerritory: true,
+                hostileCombatUnitNearby: true, objectiveOpen: false) ==
+               ArmyRtsCombatControlDecision.ReacquireStrategicControl,
+            "objective completion leaves vanilla combat ownership");
+
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.VanillaCombat,
+                withdrawalRequired: false, insideTargetTerritory: true,
+                hostileCombatUnitNearby: true, objectiveOpen: true) ==
+               ArmyRtsCombatControlDecision.KeepVanillaControl,
+            "active target-city combat remains under vanilla AI");
+
+        Assert(!ArmyRtsWarLifecycleRules.OwnsTacticalActors(
+                ArmyRtsWarPhase.VanillaCombat),
+            "RTS actor patches must remain disabled during vanilla combat");
+        Assert(ArmyRtsWarLifecycleRules.OwnsTacticalActors(
+                ArmyRtsWarPhase.Withdrawal),
+            "RTS actor patches resume ownership for withdrawal");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

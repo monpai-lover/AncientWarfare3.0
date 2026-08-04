@@ -2341,6 +2341,12 @@ namespace AncientWarfare3.core.lineage
                 CanUseReservePool(army);
             if (commit && !reservePoolEligible)
                 ClearIneligibleReplenishmentState(army, runtime);
+            if (commit && TryHandleWarCombatOwnership(army, record,
+                    runtime))
+            {
+                Controllers.Requeue(pArmyId);
+                return;
+            }
             if (commit)
             {
                 long formationDiagnostic = RuntimePerformanceDiagnostic.
@@ -2526,6 +2532,129 @@ namespace AncientWarfare3.core.lineage
             if (anchor?.data == null) return;
             ArmyFormationService.ObserveArmy(pArmy, anchor,
                 pDeploymentEligible: pState == ArmyRtsState.Deploy);
+        }
+
+        private static bool TryHandleWarCombatOwnership(Army pArmy,
+            ArmyRtsControllerRecord pRecord, RuntimeState pRuntime)
+        {
+            if (pArmy?.data == null || pRecord?.Mission == null ||
+                pRuntime == null) return false;
+            ArmyRtsWarLifecycleRecord lifecycle =
+                ArmyRtsWarLifecycleService.OnMissionAssigned(pArmy,
+                    pRecord.Mission);
+            if (lifecycle == null) return false;
+            City target = FindCity(pRecord.Mission.TargetCityId);
+            Actor captain = SafeCaptain(pArmy);
+            City currentCity = null;
+            try { currentCity = captain?.current_tile?.zone?.city; }
+            catch { }
+            bool insideTarget = target?.data != null &&
+                                currentCity == target;
+            Kingdom kingdom = SafeKingdom(pArmy);
+            War war = FindWar(pRecord.Mission.WarId);
+            bool hostileInside = insideTarget &&
+                CityAttackZoneService.HasHostileMilitaryInside(war,
+                    target, kingdom);
+            bool objectiveOpen = target?.data != null &&
+                !TargetComplete(pArmy, pRecord.Mission, target, kingdom);
+            bool withdrawalRequired = ArmyRtsWarLifecycleRules.
+                ShouldWithdraw(SafeUnitCount(pArmy),
+                    lifecycle.BaselineStrength);
+            ArmyRtsCombatControlDecision decision =
+                ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                    lifecycle.Phase, withdrawalRequired, insideTarget,
+                    hostileInside, objectiveOpen);
+            switch (decision)
+            {
+                case ArmyRtsCombatControlDecision.ReleaseToVanilla:
+                    ReleaseToVanillaCombat(pArmy, pRecord, pRuntime);
+                    return true;
+                case ArmyRtsCombatControlDecision.KeepVanillaControl:
+                    return true;
+                case ArmyRtsCombatControlDecision.
+                    ReacquireStrategicControl:
+                    ReacquireFromVanillaCombat(pArmy, pRecord, pRuntime,
+                        ArmyRtsWarPhase.StrategicMovement);
+                    return false;
+                case ArmyRtsCombatControlDecision.ReacquireForWithdrawal:
+                    ReacquireFromVanillaCombat(pArmy, pRecord, pRuntime,
+                        ArmyRtsWarPhase.Withdrawal);
+                    Controllers.SetState(pArmy.id, ArmyRtsState.Retreat);
+                    if (!ArmyRetreatService.AssignArmyRetreat(pArmy))
+                        RecoverUnavailableRetreat(pArmy);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static void ReleaseToVanillaCombat(Army pArmy,
+            ArmyRtsControllerRecord pRecord, RuntimeState pRuntime)
+        {
+            ArmyRtsWarLifecycleService.TrySetPhase(
+                pRecord.Mission.WarId, pArmy.id,
+                ArmyRtsWarPhase.VanillaCombat);
+            ArmyRouteProviderService.Cancel(pArmy.id,
+                ArmyRouteCancelReason.TargetReplaced);
+            AWArmyMarchService.ClearArmy(pArmy.id);
+            ArmyRtsTransportService.ReleaseArmy(pArmy);
+            ArmyFormationService.RemoveArmy(pArmy.id);
+            ResetStrategicMovementRuntime(pRuntime);
+            ReleaseArmyActors(pArmy);
+        }
+
+        private static void ReacquireFromVanillaCombat(Army pArmy,
+            ArmyRtsControllerRecord pRecord, RuntimeState pRuntime,
+            ArmyRtsWarPhase pPhase)
+        {
+            ArmyRtsWarLifecycleService.TrySetPhase(
+                pRecord.Mission.WarId, pArmy.id, pPhase);
+            ClearArmyAttackTargets(pArmy);
+            ArmyRouteProviderService.Cancel(pArmy.id,
+                ArmyRouteCancelReason.TargetReplaced);
+            AWArmyMarchService.ClearArmy(pArmy.id);
+            ArmyFormationService.RemoveArmy(pArmy.id);
+            ResetStrategicMovementRuntime(pRuntime);
+            pRuntime.JobCursor.Reopen();
+        }
+
+        private static void ResetStrategicMovementRuntime(
+            RuntimeState pRuntime)
+        {
+            if (pRuntime == null) return;
+            pRuntime.RouteSubmitted = false;
+            pRuntime.RouteArrived = false;
+            pRuntime.TransportRouteConfirmed = false;
+            pRuntime.ForceTransportRoute = false;
+            pRuntime.RouteProgress = 0;
+            pRuntime.AnchorTileId = -1;
+            pRuntime.AlternateTargetTileId = -1;
+            pRuntime.FollowerRouteInstallCursor = 0;
+            pRuntime.PursuitRoute.Reset();
+        }
+
+        private static void ClearArmyAttackTargets(Army pArmy)
+        {
+            int count;
+            try { count = pArmy?.units?.Count ?? 0; }
+            catch { count = 0; }
+            for (int i = 0; i < count; i++)
+            {
+                Actor actor;
+                try { actor = pArmy.units[i]; }
+                catch { continue; }
+                ClearActorAttackTarget(actor);
+            }
+            ClearActorAttackTarget(SafeCaptain(pArmy));
+        }
+
+        private static void ClearActorAttackTarget(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            try { pActor.clearAttackTarget(); }
+            catch { }
+            try { pActor.beh_actor_target = null; }
+            catch { }
         }
 
         private static ArmyRtsTransitionFacts BuildFacts(Army pArmy,
@@ -3543,6 +3672,16 @@ namespace AncientWarfare3.core.lineage
         private static bool ShouldOwnMilitaryActor(Actor pActor,
             bool pMissionActive)
         {
+            Army actorArmy = pActor?.army;
+            if (pMissionActive && actorArmy?.data != null &&
+                Controllers.TryGet(actorArmy.id,
+                    out ArmyRtsControllerRecord record) &&
+                ArmyRtsWarLifecycleService.TryGet(
+                    record?.Mission?.WarId ?? -1L, actorArmy.id,
+                    out ArmyRtsWarLifecycleRecord lifecycle) &&
+                !ArmyRtsWarLifecycleRules.OwnsTacticalActors(
+                    lifecycle.Phase))
+                return false;
             bool actorValid = IsLiveActor(pActor);
             bool hasArmyIndex;
             try { hasArmyIndex = pActor?.hasArmy() == true; }
