@@ -72,6 +72,7 @@ namespace AncientWarfare3.core.lineage
                 case "new_mandate_event":
                 case "new_kingdom_history":
                 case "new_person_history":
+                case "legal_cores":
                     return true;
                 default:
                     return false;

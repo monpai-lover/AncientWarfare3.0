@@ -178,6 +178,49 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static bool TryReadCoreSnapshotsByPeriod(
+            SQLiteConnection pDb, long pPeriodId,
+            out List<CoreCitySnapshot> pSnapshots, out string pError)
+        {
+            pSnapshots = new List<CoreCitySnapshot>();
+            pError = "";
+            if (pDb == null || pPeriodId < 0L)
+            {
+                pError = "invalid pending mandate core snapshot lookup";
+                return false;
+            }
+            try
+            {
+                using (SQLiteTransaction transaction = pDb.BeginTransaction())
+                {
+                    EnsureSchema(pDb, transaction);
+                    transaction.Commit();
+                }
+                using var command = new SQLiteCommand(pDb)
+                {
+                    CommandText = "SELECT c.CITY_ID,c.CITY_NAME," +
+                        "c.ORIGINAL_KINGDOM_ID,c.ORIGINAL_KINGDOM_NAME," +
+                        "c.ORIGINAL_KINGDOM_COLOR,c.CORE_TYPE," +
+                        "c.SNAPSHOT_SOURCE FROM " + CoreSnapshotTable +
+                        " c INNER JOIN " + Table +
+                        " o ON o.OPERATION_KEY=c.OPERATION_KEY " +
+                        "WHERE o.PERIOD_ID=@period ORDER BY c.CITY_ID"
+                };
+                command.Parameters.AddWithValue("@period", pPeriodId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    pSnapshots.Add(ReadCoreSnapshot(reader));
+                }
+                return true;
+            }
+            catch (Exception error)
+            {
+                pError = error.Message;
+                return false;
+            }
+        }
+
         public static bool TryReadPendingBatch(SQLiteConnection pDb,
             int pLimit, out List<PendingProjection> pPending,
             out string pError)
@@ -693,22 +736,25 @@ namespace AncientWarfare3.core.lineage
                 pPending.OperationKey);
             using SQLiteDataReader reader = command.ExecuteReader();
             while (reader.Read())
+                pPending.CoreCitySnapshots.Add(ReadCoreSnapshot(reader));
+        }
+
+        private static CoreCitySnapshot ReadCoreSnapshot(
+            SQLiteDataReader pReader)
+        {
+            return new CoreCitySnapshot
             {
-                pPending.CoreCitySnapshots.Add(new CoreCitySnapshot
-                {
-                    CityId = Convert.ToInt64(reader.GetValue(0)),
-                    CityName = Convert.ToString(reader.GetValue(1)) ?? "",
-                    OriginalKingdomId = Convert.ToInt64(reader.GetValue(2)),
-                    OriginalKingdomName = Convert.ToString(
-                        reader.GetValue(3)) ?? "",
-                    OriginalKingdomColor = Convert.ToString(
-                        reader.GetValue(4)) ?? "",
-                    CoreType = Convert.ToString(reader.GetValue(5)) ??
-                               "founding",
-                    SnapshotSource = Convert.ToString(reader.GetValue(6)) ??
-                                     ""
-                });
-            }
+                CityId = Convert.ToInt64(pReader.GetValue(0)),
+                CityName = Convert.ToString(pReader.GetValue(1)) ?? "",
+                OriginalKingdomId = Convert.ToInt64(pReader.GetValue(2)),
+                OriginalKingdomName = Convert.ToString(
+                    pReader.GetValue(3)) ?? "",
+                OriginalKingdomColor = Convert.ToString(
+                    pReader.GetValue(4)) ?? "",
+                CoreType = Convert.ToString(pReader.GetValue(5)) ??
+                           "founding",
+                SnapshotSource = Convert.ToString(pReader.GetValue(6)) ?? ""
+            };
         }
 
         private static bool EffectCompleted(SQLiteConnection pDb,

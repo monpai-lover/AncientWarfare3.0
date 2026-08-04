@@ -527,9 +527,11 @@ namespace AncientWarfare3.core.lineage
             bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
             int currentYear = Date.getCurrentYear();
             string markerKind = MarkerKind(pOriginType, pClaimantKind);
-            List<MandateProjectionOutboxPersistence.CoreCitySnapshot>
-                coreCitySnapshots = CaptureLegalCoreSnapshots(
-                    pKingdom, previousPeriodId, "declaration");
+            if (!TryCaptureLegalCoreSnapshots(pKingdom, previousPeriodId,
+                    "declaration",
+                    out List<MandateProjectionOutboxPersistence.
+                        CoreCitySnapshot> coreCitySnapshots))
+                return false;
             var request = new MandateDeclarationPersistence.Request
             {
                 StateId = STATE_ID,
@@ -689,7 +691,10 @@ namespace AncientWarfare3.core.lineage
                         return false;
                     return CreateLegalCores(pPending.PeriodId,
                         pPending.CoreCitySnapshots,
-                        pPending.OperationKey + ":legal_cores:");
+                        pPending.OperationKey + ":legal_cores:",
+                        requireCurrentStateUpdate:
+                            pDisposition ==
+                            MandateProjectionDisposition.Current);
                 case "new_maps":
                     DirtyAllMaps();
                     ClearPendingMandateConqueror();
@@ -2074,61 +2079,22 @@ namespace AncientWarfare3.core.lineage
         private static bool CreateLegalCores(long pPeriodId,
             IReadOnlyList<MandateProjectionOutboxPersistence.
                 CoreCitySnapshot> pSnapshots,
-            string pProjectionKeyPrefix)
+            string pProjectionKeyPrefix, bool requireCurrentStateUpdate)
         {
-            if (!Ready || pSnapshots == null) return false;
-            bool complete = true;
-            var inserted = new HashSet<long>();
-
-            foreach (MandateProjectionOutboxPersistence.CoreCitySnapshot
-                     snapshot in pSnapshots)
-            {
-                if (snapshot == null || snapshot.CityId < 0L ||
-                    inserted.Contains(snapshot.CityId))
-                    continue;
-                if (!InsertLegalCore(pPeriodId, snapshot.CityId,
-                        snapshot.CityName, snapshot.OriginalKingdomId,
-                        snapshot.OriginalKingdomName,
-                        snapshot.OriginalKingdomColor,
-                        snapshot.CoreType,
-                        pProjectionKeyPrefix + snapshot.CityId))
-                {
-                    complete = false;
-                    continue;
-                }
-                inserted.Add(snapshot.CityId);
-            }
-
-            if (!complete) return false;
-            int count = CountCoreCities(pPeriodId);
-            try
-            {
-                using var period = new SQLiteCommand(DB);
-                period.CommandText = "UPDATE " +
-                    MandatePeriodTableItem.GetTableName() +
-                    " SET LEGAL_CORE_COUNT=@count WHERE PERIOD_ID=@period";
-                period.Parameters.AddWithValue("@count", count);
-                period.Parameters.AddWithValue("@period", pPeriodId);
-                if (period.ExecuteNonQuery() != 1) return false;
-                using var state = new SQLiteCommand(DB);
-                state.CommandText = "UPDATE " +
-                    MandateStateTableItem.GetTableName() +
-                    " SET ORIGINAL_CORE_COUNT=@count,UPDATED_TIME=@time " +
-                    "WHERE STATE_ID=@state AND PERIOD_ID=@period AND ACTIVE=1";
-                state.Parameters.AddWithValue("@count", count);
-                state.Parameters.AddWithValue("@time", LineageService.CurTime());
-                state.Parameters.AddWithValue("@state", STATE_ID);
-                state.Parameters.AddWithValue("@period", pPeriodId);
-                if (state.ExecuteNonQuery() != 1) return false;
-                MarkDirty();
-                return true;
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Mandate legal core completion failed: " +
-                                    error.Message);
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                !Ready || pSnapshots == null)
                 return false;
-            }
+            bool projected = MandateLegalCoreProjectionPersistence.TryProject(
+                DB, STATE_ID, pPeriodId, pSnapshots, pProjectionKeyPrefix,
+                LineageService.CurTime(), requireCurrentStateUpdate,
+                out _, out string error);
+            if (!projected)
+                ModClass.LogWarning("Mandate legal core completion failed: " +
+                                    error);
+            else
+                MarkDirty();
+            return projected;
         }
 
         private static bool EnsurePendingCoreSnapshots(Kingdom pKingdom,
@@ -2136,9 +2102,11 @@ namespace AncientWarfare3.core.lineage
         {
             if (!string.IsNullOrEmpty(pPending.CoreSnapshotSource))
                 return true;
-            List<MandateProjectionOutboxPersistence.CoreCitySnapshot>
-                snapshots = CaptureLegalCoreSnapshots(pKingdom,
-                    pPending.PreviousPeriodId, "legacy");
+            if (!TryCaptureLegalCoreSnapshots(pKingdom,
+                    pPending.PreviousPeriodId, "legacy",
+                    out List<MandateProjectionOutboxPersistence.
+                        CoreCitySnapshot> snapshots))
+                return false;
             if (!MandateProjectionOutboxPersistence.
                     TryMigrateLegacyCoreSnapshots(DB,
                         pPending.OperationKey, snapshots,
@@ -2163,32 +2131,38 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        private static List<MandateProjectionOutboxPersistence.
-            CoreCitySnapshot> CaptureLegalCoreSnapshots(Kingdom pKingdom,
-            long pPreviousPeriodId, string pSnapshotSource)
+        private static bool TryCaptureLegalCoreSnapshots(Kingdom pKingdom,
+            long pPreviousPeriodId, string pSnapshotSource,
+            out List<MandateProjectionOutboxPersistence.CoreCitySnapshot>
+                pSnapshots)
         {
-            var result = new List<MandateProjectionOutboxPersistence.
+            pSnapshots = new List<MandateProjectionOutboxPersistence.
                 CoreCitySnapshot>();
             var captured = new HashSet<long>();
-            foreach (CoreCitySnapshot core in
-                     ReadCoreCitySnapshots(pPreviousPeriodId))
+            if (pPreviousPeriodId >= 0L)
             {
-                if (!MandateLegalCoreInheritanceRules.
-                        ShouldInheritPreviousCore(pPreviousPeriodId,
-                            core.city_id, captured.Contains(core.city_id)))
-                    continue;
-                result.Add(new MandateProjectionOutboxPersistence.
-                    CoreCitySnapshot
+                if (!MandateLegalCoreProjectionPersistence.
+                        TryReadInheritedSnapshots(DB, pPreviousPeriodId,
+                            out List<MandateProjectionOutboxPersistence.
+                                CoreCitySnapshot> inherited,
+                            out string error))
                 {
-                    CityId = core.city_id,
-                    CityName = core.city_name,
-                    OriginalKingdomId = core.original_kingdom_id,
-                    OriginalKingdomName = core.original_kingdom_name,
-                    OriginalKingdomColor = core.original_kingdom_color,
-                    CoreType = "inherited",
-                    SnapshotSource = pSnapshotSource ?? ""
-                });
-                captured.Add(core.city_id);
+                    ModClass.LogWarning(
+                        "Mandate inherited core snapshot failed: " + error);
+                    return false;
+                }
+                foreach (MandateProjectionOutboxPersistence.CoreCitySnapshot
+                         core in inherited)
+                {
+                    if (!MandateLegalCoreInheritanceRules.
+                            ShouldInheritPreviousCore(pPreviousPeriodId,
+                                core.CityId,
+                                captured.Contains(core.CityId)))
+                        continue;
+                    core.SnapshotSource = pSnapshotSource ?? "";
+                    pSnapshots.Add(core);
+                    captured.Add(core.CityId);
+                }
             }
             if (pKingdom?.data != null)
             {
@@ -2201,7 +2175,7 @@ namespace AncientWarfare3.core.lineage
                             ShouldAddFoundingCore(city.id,
                                 captured.Contains(city.id)))
                         continue;
-                    result.Add(new MandateProjectionOutboxPersistence.
+                    pSnapshots.Add(new MandateProjectionOutboxPersistence.
                         CoreCitySnapshot
                     {
                         CityId = city.id,
@@ -2215,145 +2189,9 @@ namespace AncientWarfare3.core.lineage
                     captured.Add(city.id);
                 }
             }
-            result.Sort((left, right) => left.CityId.CompareTo(right.CityId));
-            return result;
-        }
-
-        private static bool InsertLegalCore(long pPeriodId, long pCityId, string pCityName, long pOriginalKingdomId,
-            string pOriginalKingdomName, string pOriginalKingdomColor,
-            string pCoreType, string pProjectionKey = "")
-        {
-            if (!MandateAuthorityMutationRules.CanMutate(
-                    AW3MultiplayerReplicaScope.IsReplicaSession))
-                return false;
-            if (!Ready || pPeriodId < 0 || pCityId < 0) return false;
-            try
-            {
-                using (var existing = new SQLiteCommand(DB))
-                {
-                    existing.CommandText = "SELECT CORE_ID,PROJECTION_KEY FROM " +
-                        MandateCoreCityTableItem.GetTableName() +
-                        " WHERE PERIOD_ID=@period AND CITY_ID=@city " +
-                        "AND ACTIVE=1 LIMIT 1";
-                    existing.Parameters.AddWithValue("@period", pPeriodId);
-                    existing.Parameters.AddWithValue("@city", pCityId);
-                    using SQLiteDataReader reader = existing.ExecuteReader();
-                    if (reader.Read())
-                    {
-                        long coreId = Convert.ToInt64(reader.GetValue(0));
-                        string currentKey = Convert.ToString(
-                            reader.GetValue(1)) ?? "";
-                        reader.Close();
-                        if (!string.IsNullOrWhiteSpace(pProjectionKey) &&
-                            string.IsNullOrWhiteSpace(currentKey))
-                        {
-                            using var backfill = new SQLiteCommand(DB)
-                            {
-                                CommandText = "UPDATE " +
-                                    MandateCoreCityTableItem.GetTableName() +
-                                    " SET PROJECTION_KEY=@key " +
-                                    "WHERE CORE_ID=@id AND PROJECTION_KEY=''"
-                            };
-                            backfill.Parameters.AddWithValue("@key",
-                                pProjectionKey);
-                            backfill.Parameters.AddWithValue("@id", coreId);
-                            if (backfill.ExecuteNonQuery() != 1) return false;
-                        }
-                        return true;
-                    }
-                }
-                long coreId = TableIdAllocator.Next(DB, MandateCoreCityTableItem.GetTableName(), "CORE_ID");
-                double addedTime = LineageService.CurTime();
-                if (string.IsNullOrWhiteSpace(pProjectionKey))
-                    return InsertLegalCoreRow(null, coreId, pPeriodId,
-                        pCityId, pCityName, pOriginalKingdomId,
-                        pOriginalKingdomName, pOriginalKingdomColor,
-                        pCoreType, addedTime, "");
-                return MandateProjectionOutboxPersistence.
-                    TryApplyIdempotentRecord(DB,
-                        MandateCoreCityTableItem.GetTableName(),
-                        pProjectionKey,
-                        transaction => InsertLegalCoreRow(transaction,
-                            coreId, pPeriodId, pCityId, pCityName,
-                            pOriginalKingdomId, pOriginalKingdomName,
-                            pOriginalKingdomColor, pCoreType, addedTime,
-                            pProjectionKey), out _);
-            }
-            catch (Exception e)
-            {
-                ModClass.LogWarning("Mandate legal core insert failed: " + e.Message);
-                return false;
-            }
-        }
-
-        private static bool InsertLegalCoreRow(SQLiteTransaction pTransaction,
-            long pCoreId, long pPeriodId, long pCityId, string pCityName,
-            long pOriginalKingdomId, string pOriginalKingdomName,
-            string pOriginalKingdomColor, string pCoreType,
-            double pAddedTime, string pProjectionKey)
-        {
-            using var command = new SQLiteCommand(DB)
-            {
-                Transaction = pTransaction,
-                CommandText = "INSERT INTO " +
-                    MandateCoreCityTableItem.GetTableName() +
-                    "(CORE_ID,PERIOD_ID,CITY_ID,CITY_NAME," +
-                    "ORIGINAL_KINGDOM_ID,ORIGINAL_KINGDOM_NAME," +
-                    "ORIGINAL_KINGDOM_COLOR,CORE_TYPE,ADDED_TIME,ACTIVE," +
-                    "PROJECTION_KEY) VALUES(@id,@period,@city,@cityName," +
-                    "@kingdom,@kingdomName,@color,@type,@time,1,@key)"
-            };
-            command.Parameters.AddWithValue("@id", pCoreId);
-            command.Parameters.AddWithValue("@period", pPeriodId);
-            command.Parameters.AddWithValue("@city", pCityId);
-            command.Parameters.AddWithValue("@cityName", pCityName ?? "");
-            command.Parameters.AddWithValue("@kingdom", pOriginalKingdomId);
-            command.Parameters.AddWithValue("@kingdomName",
-                pOriginalKingdomName ?? "");
-            command.Parameters.AddWithValue("@color",
-                HistoryColors.Normalize(pOriginalKingdomColor));
-            command.Parameters.AddWithValue("@type",
-                string.IsNullOrEmpty(pCoreType) ? "founding" : pCoreType);
-            command.Parameters.AddWithValue("@time", pAddedTime);
-            command.Parameters.AddWithValue("@key", pProjectionKey ?? "");
-            return command.ExecuteNonQuery() == 1;
-        }
-
-        private static List<CoreCitySnapshot> ReadCoreCitySnapshots(long pPeriodId)
-        {
-            var result = new List<CoreCitySnapshot>();
-            if (!Ready || pPeriodId < 0) return result;
-            try
-            {
-                using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT CITY_ID, CITY_NAME, ORIGINAL_KINGDOM_ID, ORIGINAL_KINGDOM_NAME, " +
-                                  "ORIGINAL_KINGDOM_COLOR FROM " + MandateCoreCityTableItem.GetTableName() +
-                                  " WHERE PERIOD_ID=@p AND ACTIVE=1 ORDER BY CORE_ID ASC";
-                cmd.Parameters.AddWithValue("@p", pPeriodId);
-                using SQLiteDataReader reader = cmd.ExecuteReader();
-                while (reader.Read())
-                {
-                    result.Add(new CoreCitySnapshot
-                    {
-                        city_id = ToLong(reader, 0),
-                        city_name = ToString(reader, 1),
-                        original_kingdom_id = ToLong(reader, 2),
-                        original_kingdom_name = ToString(reader, 3),
-                        original_kingdom_color = ToString(reader, 4)
-                    });
-                }
-            }
-            catch { }
-            return result;
-        }
-
-        private struct CoreCitySnapshot
-        {
-            public long city_id;
-            public string city_name;
-            public long original_kingdom_id;
-            public string original_kingdom_name;
-            public string original_kingdom_color;
+            pSnapshots.Sort((left, right) =>
+                left.CityId.CompareTo(right.CityId));
+            return true;
         }
 
         private static void UpdateOriginalCoreCount(long pPeriodId)

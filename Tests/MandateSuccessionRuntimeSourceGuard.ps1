@@ -10,6 +10,8 @@ $declarationPersistence = Get-Content -Raw (Join-Path $root `
     'Code/core/lineage/MandateDeclarationPersistence.cs')
 $projectionOutbox = Get-Content -Raw (Join-Path $root `
     'Code/core/lineage/MandateProjectionOutboxPersistence.cs')
+$legalCoreProjection = Get-Content -Raw (Join-Path $root `
+    'Code/core/lineage/MandateLegalCoreProjectionPersistence.cs')
 $facts = Get-Content -Raw (Join-Path $root 'Code/core/lineage/RulerTitleFactService.cs')
 $posthumous = Get-Content -Raw (Join-Path $root 'Code/core/lineage/PosthumousTitleService.cs')
 $history = Get-Content -Raw (Join-Path $root 'Code/core/lineage/HistoryWriter.cs')
@@ -104,6 +106,14 @@ Require $projectionOutbox 'TryMigrateLegacyCoreSnapshots' `
     'legacy current-period outbox cannot be snapshotted exactly once'
 Require $projectionOutbox 'DELETE FROM " + CoreSnapshotTable' `
     'completed Mandate projection does not clean up its core snapshots'
+Require $projectionOutbox 'TryReadCoreSnapshotsByPeriod' `
+    'replacement cannot read unresolved previous-period core snapshots'
+Require $legalCoreProjection 'TryReadInheritedSnapshots' `
+    'legal-core inheritance has no durable persisted-and-pending merge'
+Require $legalCoreProjection 'TryProject' `
+    'legal-core replay does not use its tested transactional boundary'
+Require $legalCoreProjection 'requireCurrentStateUpdate' `
+    'historical core completion cannot avoid mutating current MandateState'
 Require $history 'public static bool TryRecordKingdom' `
     'Mandate kingdom history publication is not observable'
 Require $history 'public static bool TryRecordPerson' `
@@ -368,11 +378,13 @@ if ($declareStart -lt 0 -or $declareEnd -le $declareStart -or
     throw 'Mandate replacement clears the old holder before the new transaction commits'
 }
 $declare = $mandate.Substring($declareStart, $declareEnd - $declareStart)
-RequireOrder $declare 'CaptureLegalCoreSnapshots(' `
+RequireOrder $declare 'TryCaptureLegalCoreSnapshots(' `
     'MandateDeclarationPersistence.TryCommit' `
     'Mandate declaration does not capture legal-core cities before its transaction'
 Require $declare 'CoreSnapshotSource = "declaration"' `
     'fresh Mandate declaration does not mark its immutable core snapshot'
+Require $mandate 'MandateLegalCoreProjectionPersistence.' `
+    'replacement capture does not merge unresolved previous-period cores'
 
 $createCoresStart = $mandate.IndexOf('private static bool CreateLegalCores')
 $createCoresEnd = $mandate.IndexOf(
@@ -388,5 +400,10 @@ if ($createCores.Contains('getCities()')) {
 }
 Require $mandate 'TryMigrateLegacyCoreSnapshots(' `
     'current legacy Mandate outbox never receives a stable core snapshot'
+Require $mandate 'requireCurrentStateUpdate:' `
+    'legal-core replay does not distinguish current from historical state'
+Require $mandate `
+    'MandateProjectionDisposition.Current);' `
+    'historical legal-core completion can require or mutate current state'
 
 Write-Output 'Mandate succession runtime source guard passed.'

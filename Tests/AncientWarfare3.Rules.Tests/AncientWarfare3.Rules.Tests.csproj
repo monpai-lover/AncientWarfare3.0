@@ -272,6 +272,7 @@
     <Compile Include="..\..\Code\core\lineage\ReignMandateProjectionPersistence.cs" Link="Production\ReignMandateProjectionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateDeclarationPersistence.cs" Link="Production\MandateDeclarationPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateProjectionOutboxPersistence.cs" Link="Production\MandateProjectionOutboxPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateLegalCoreProjectionPersistence.cs" Link="Production\MandateLegalCoreProjectionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateProjectionResumeRules.cs" Link="Production\MandateProjectionResumeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynastyTransitionRules.cs" Link="Production\DynastyTransitionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynastyStateNamePersistence.cs" Link="Production\DynastyStateNamePersistence.cs" />

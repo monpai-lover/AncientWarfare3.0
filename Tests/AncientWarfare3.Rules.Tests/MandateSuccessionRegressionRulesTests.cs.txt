@@ -19,6 +19,7 @@ internal static class MandateSuccessionRegressionRulesTests
         DeclarationOutboxRetriesObservableHistoryAndCoreEffects();
         OutboxReplayAfterBusinessCommitDoesNotDuplicateEffects();
         DeclarationCoreSnapshotSurvivesLiveCityChangesAndCleansUp();
+        ReplacedPendingPeriodPersistsAndPassesOnLegalCores();
         LegacyOutboxReadUpgradesCoreSnapshotSchema();
         LegacyCoreSnapshotMigratesOnlyOnce();
         PendingProjectionResumeIsStableBoundedAndSnapshotBased();
@@ -1580,6 +1581,188 @@ internal static class MandateSuccessionRegressionRulesTests
     }
 
     private static void
+        ReplacedPendingPeriodPersistsAndPassesOnLegalCores()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        CreateMandateDeclarationSchema(db);
+        Execute(db,
+            "CREATE TABLE MandateCoreCity(" +
+            "CORE_ID INTEGER PRIMARY KEY,PERIOD_ID INTEGER," +
+            "CITY_ID INTEGER,CITY_NAME TEXT,ORIGINAL_KINGDOM_ID INTEGER," +
+            "ORIGINAL_KINGDOM_NAME TEXT,ORIGINAL_KINGDOM_COLOR TEXT," +
+            "CORE_TYPE TEXT,ADDED_TIME REAL,ACTIVE INTEGER," +
+            "PROJECTION_KEY TEXT UNIQUE);" +
+            "INSERT INTO KingdomReign VALUES" +
+            "(1,17,42,-1,2,'P91',10,-1)," +
+            "(2,18,43,-1,2,'P92',11,-1);");
+
+        MandateDeclarationPersistence.Request p91 = DeclarationRequest(
+            periodId: 91L, kingdomId: 17L, rulerActorId: 42L,
+            startTime: 12d);
+        p91.CoreCitySnapshots.Add(CoreSnapshot(1L, "First"));
+        p91.CoreCitySnapshots.Add(CoreSnapshot(2L, "Second"));
+        Equal(true, MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign", p91,
+                out string error),
+            "P91 declaration and its child core snapshot commit together");
+        Execute(db,
+            "CREATE TRIGGER fail_p91_legal_cores BEFORE INSERT ON " +
+            "MandateCoreCity BEGIN SELECT RAISE(ABORT," +
+            "'injected P91 legal-core failure'); END;");
+
+        bool Publish(MandateProjectionOutboxPersistence.PendingProjection
+            pending, string effect)
+        {
+            long currentPeriod = Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1");
+            var disposition = currentPeriod == pending.PeriodId
+                ? MandateProjectionDisposition.Current
+                : MandateProjectionDisposition.TerminalHistoryOnly;
+            if (!MandateProjectionResumeRules.ShouldPublishEffect(
+                    disposition, effect))
+                return true;
+            if (effect != "legal_cores") return true;
+            return MandateLegalCoreProjectionPersistence.TryProject(
+                db, stateId: 1L, pending.PeriodId,
+                pending.CoreCitySnapshots,
+                pending.OperationKey + ":legal_cores:",
+                addedTime: 20d,
+                requireCurrentStateUpdate:
+                    disposition == MandateProjectionDisposition.Current,
+                out _, out _);
+        }
+
+        Equal(false, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1, Publish,
+                    out int attempted, out int completed, out error),
+            "the injected P91 legal-core failure leaves projection pending");
+        Equal(1, attempted, "the failed resume attempts P91 once");
+        Equal(0, completed, "the failed P91 projection does not complete");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionOutbox " +
+                "WHERE PERIOD_ID=91"),
+            "failed P91 remains in the durable outbox");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionCoreSnapshot " +
+                "WHERE OPERATION_KEY='mandate-declare:91'"),
+            "failed P91 retains both durable child snapshots");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateCoreCity WHERE PERIOD_ID=91"),
+            "the failed transactional projection leaves no partial P91 core");
+        Execute(db, "DROP TRIGGER fail_p91_legal_cores;");
+
+        Equal(true, MandateLegalCoreProjectionPersistence.
+                TryReadInheritedSnapshots(db, previousPeriodId: 91L,
+                    out List<MandateProjectionOutboxPersistence.
+                        CoreCitySnapshot> inherited, out error),
+            "P92 capture can read P91 persisted and pending core sources");
+        Equal("1,2", string.Join(",", inherited.Select(
+                snapshot => snapshot.CityId)),
+            "P92 inherits P91's still-pending declaration snapshot");
+        MandateDeclarationPersistence.Request p92 = DeclarationRequest(
+            periodId: 92L, kingdomId: 18L, rulerActorId: 43L,
+            startTime: 13d);
+        p92.ExpectedPreviousActive = true;
+        p92.PreviousPeriodId = 91L;
+        p92.PreviousKingdomId = 17L;
+        p92.CoreCitySnapshots.AddRange(inherited);
+        p92.CoreCitySnapshots.Add(new MandateProjectionOutboxPersistence.
+            CoreCitySnapshot
+        {
+            CityId = 3L,
+            CityName = "Third",
+            OriginalKingdomId = 18L,
+            OriginalKingdomName = "Realm 92",
+            OriginalKingdomColor = "color-92",
+            CoreType = "founding",
+            SnapshotSource = "declaration"
+        });
+        Equal(true, MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign", p92,
+                out error),
+            "P92 replacement commits while P91 core publication is pending");
+        Equal(92L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"),
+            "replacement moves the active state to P92");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionCoreSnapshot " +
+                "WHERE OPERATION_KEY='mandate-declare:91'"),
+            "P92 commit cannot delete P91's unresolved snapshot");
+        Equal("1,2,3", ScalarText(db,
+                "SELECT GROUP_CONCAT(CITY_ID, ',') FROM " +
+                "(SELECT CITY_ID FROM MandateProjectionCoreSnapshot " +
+                "WHERE OPERATION_KEY='mandate-declare:92' " +
+                "ORDER BY CITY_ID)"),
+            "P92 durably snapshots inherited P91 cores before cleanup");
+
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1, Publish,
+                    out attempted, out completed, out error),
+            "the first resume drains historical P91 cores");
+        Equal(1, completed, "the first resume completes only P91");
+        Equal("1,2", ScalarText(db,
+                "SELECT GROUP_CONCAT(CITY_ID, ',') FROM " +
+                "(SELECT CITY_ID FROM MandateCoreCity WHERE PERIOD_ID=91 " +
+                "ORDER BY CITY_ID)"),
+            "historical P91 cores are written exactly once");
+        Equal(2L, Scalar(db,
+                "SELECT LEGAL_CORE_COUNT FROM MandatePeriod " +
+                "WHERE PERIOD_ID=91"),
+            "historical P91 period count is completed");
+        Equal(92L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"),
+            "historical P91 completion leaves the current period at P92");
+        Equal(0L, Scalar(db,
+                "SELECT ORIGINAL_CORE_COUNT FROM MandateState " +
+                "WHERE STATE_ID=1"),
+            "historical P91 completion does not mutate P92's state count");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionCoreSnapshot " +
+                "WHERE OPERATION_KEY='mandate-declare:91'"),
+            "P91 snapshot cleans up only after historical persistence succeeds");
+
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1, Publish,
+                    out attempted, out completed, out error),
+            "the next resume drains current P92 cores");
+        Equal(1, completed, "the next resume completes P92");
+        Equal("1,2,3", ScalarText(db,
+                "SELECT GROUP_CONCAT(CITY_ID, ',') FROM " +
+                "(SELECT CITY_ID FROM MandateCoreCity WHERE PERIOD_ID=92 " +
+                "ORDER BY CITY_ID)"),
+            "P92 persists inherited P91 cores and its founding core");
+        Equal(3L, Scalar(db,
+                "SELECT LEGAL_CORE_COUNT FROM MandatePeriod " +
+                "WHERE PERIOD_ID=92"),
+            "P92 period count includes inherited cores");
+        Equal("#color-92", ScalarText(db,
+                "SELECT ORIGINAL_KINGDOM_COLOR FROM MandateCoreCity " +
+                "WHERE PERIOD_ID=92 AND CITY_ID=3"),
+            "legal-core persistence retains normalized history colors");
+        Equal(92L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"),
+            "historical P91 completion does not replace the current P92 state");
+        Equal(3L, Scalar(db,
+                "SELECT ORIGINAL_CORE_COUNT FROM MandateState " +
+                "WHERE STATE_ID=1"),
+            "only current P92 completion updates the active state core count");
+
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 2, Publish,
+                    out attempted, out completed, out error),
+            "a second resume is an idempotent no-op");
+        Equal(0, attempted, "no completed projection is attempted twice");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateCoreCity WHERE PERIOD_ID=91"),
+            "P91 core rows remain duplicate-free after another resume");
+        Equal(3L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateCoreCity WHERE PERIOD_ID=92"),
+            "P92 core rows remain duplicate-free after another resume");
+    }
+
+    private static void
         LegacyCoreSnapshotMigratesOnlyOnce()
     {
         using var db = new SQLiteConnection(
@@ -1802,10 +1985,10 @@ internal static class MandateSuccessionRegressionRulesTests
                 MandateProjectionDisposition.TerminalHistoryOnly,
                 "new_runtime"),
             "stale work cannot mutate a newer runtime holder");
-        Equal(false, MandateProjectionResumeRules.ShouldPublishEffect(
+        Equal(true, MandateProjectionResumeRules.ShouldPublishEffect(
                 MandateProjectionDisposition.TerminalHistoryOnly,
                 "legal_cores"),
-            "stale work cannot create cores for a replaced period");
+            "stale work still persists its historical legal cores");
         Equal(false, MandateProjectionResumeRules.ShouldPublishEffect(
                 MandateProjectionDisposition.TerminalHistoryOnly,
                 "new_maps"),
@@ -1914,6 +2097,69 @@ internal static class MandateSuccessionRegressionRulesTests
             PreviousYearPrefixRich = "Year 100",
             CreatedTime = createdTime
         };
+    }
+
+    private static MandateDeclarationPersistence.Request DeclarationRequest(
+        long periodId, long kingdomId, long rulerActorId, double startTime)
+    {
+        return new MandateDeclarationPersistence.Request
+        {
+            StateId = 1L,
+            PeriodId = periodId,
+            OperationKey = "mandate-declare:" + periodId,
+            KingdomId = kingdomId,
+            KingdomName = "Realm " + periodId,
+            KingdomColor = "color-" + periodId,
+            DynastyName = "Dynasty " + periodId,
+            RulerActorId = rulerActorId,
+            RulerName = "Founder " + periodId,
+            StartTime = startTime,
+            CurrentYear = 101,
+            StartMandate = 30,
+            ImperialAuthority = 45,
+            DynastyPrestige = 0,
+            CoreControl = 1d,
+            VassalLoyalty = 1d,
+            CrisisLevel = "stable",
+            OriginType = "native",
+            RebelOriginKingdomId = -1L,
+            ClaimantKind = "orthodox",
+            MapMarkerKind = "moh",
+            EmperorTitle = 4,
+            CoreSnapshotSource = "declaration"
+        };
+    }
+
+    private static void CreateMandateDeclarationSchema(SQLiteConnection db)
+    {
+        Execute(db,
+            "CREATE TABLE MandatePeriod(" +
+            "PERIOD_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT,DYNASTY_NAME TEXT," +
+            "FOUNDER_ACTOR_ID INTEGER,FOUNDER_NAME TEXT,START_TIME REAL," +
+            "END_TIME REAL,END_REASON TEXT,START_MANDATE INTEGER," +
+            "END_MANDATE INTEGER,LEGAL_CORE_COUNT INTEGER," +
+            "ORIGIN_TYPE TEXT,REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT);" +
+            "CREATE TABLE MandateState(" +
+            "STATE_ID INTEGER PRIMARY KEY,ACTIVE INTEGER," +
+            "KINGDOM_ID INTEGER,KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT," +
+            "DYNASTY_NAME TEXT,EMPEROR_ACTOR_ID INTEGER," +
+            "EMPEROR_NAME TEXT,PERIOD_ID INTEGER,MANDATE_VALUE INTEGER," +
+            "IMPERIAL_AUTHORITY INTEGER,DYNASTY_PRESTIGE INTEGER," +
+            "CORE_CONTROL REAL,VASSAL_LOYALTY REAL,CRISIS_LEVEL TEXT," +
+            "START_TIME REAL,UPDATED_TIME REAL,LAST_YEAR INTEGER," +
+            "ORIGIN_TYPE TEXT,ORIGINAL_CORE_COUNT INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT," +
+            "MAP_MARKER_KIND TEXT);" +
+            "INSERT INTO MandateState(STATE_ID,ACTIVE,KINGDOM_ID," +
+            "PERIOD_ID) VALUES(1,0,-1,-1);" +
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "START_TIME REAL,END_TIME REAL);");
     }
 
     private static void EnqueuePending(SQLiteConnection db,
