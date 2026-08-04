@@ -221,6 +221,7 @@ namespace AncientWarfare3.core.lineage
         public long ShiId;
         public long ParentShiId = -1L;
         public long FounderActorId = -1L;
+        public string SourceType = string.Empty;
         public string Display = string.Empty;
         public string ParentDisplay = string.Empty;
         public string RootDisplay = string.Empty;
@@ -893,6 +894,14 @@ namespace AncientWarfare3.core.lineage
                     out LineageTreeShiSnapshot shi);
                 shiById.TryGetValue(actor.founded_branch_shi_id,
                     out LineageTreeShiSnapshot foundedBranch);
+                if (foundedBranch == null ||
+                    !LineageBranchRules.IsFoundedBranchForActor(
+                        foundedBranch.SourceType,
+                        foundedBranch.FounderActorId, actor.id))
+                {
+                    actor.founded_branch_shi_id = -1L;
+                    foundedBranch = null;
+                }
                 appellations.TryGetValue(actor.id, out string appellation);
                 retrospectiveRelations.TryGetValue(actor.id,
                     out string retrospectiveRelation);
@@ -1002,6 +1011,7 @@ namespace AncientWarfare3.core.lineage
                         ShiId = reader.GetInt64(0),
                         ParentShiId = reader.GetInt64(1),
                         FounderActorId = founderActorId,
+                        SourceType = sourceType,
                         Display = ShiBranchRules.BuildDisplayName(
                             originCityName, clanName, sourceType, stateName),
                         OriginCityName = originCityName,

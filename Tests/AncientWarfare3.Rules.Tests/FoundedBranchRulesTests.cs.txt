@@ -1,0 +1,47 @@
+using AncientWarfare3.core.lineage;
+
+internal static class FoundedBranchRulesTests
+{
+    public static void Run()
+    {
+        True(LineageBranchRules.IsFoundedBranchForActor(
+                ShiSourceType.KING_FOUNDED, 1113L, 1113L),
+            "the existing king-founded source remains valid for its founder");
+        True(LineageBranchRules.IsFoundedBranchForActor(
+                ShiSourceType.FEUDATORY, 1113L, 1113L),
+            "a feudatory branch is valid for the prince who founded it");
+        False(LineageBranchRules.IsFoundedBranchForActor(
+                ShiSourceType.FEUDATORY, 1113L, 2222L),
+            "a successor prince cannot claim the inherited feudatory branch");
+        False(LineageBranchRules.IsFoundedBranchForActor(
+                ShiSourceType.OFFICIAL_GRANT, 1113L, 1113L),
+            "unrelated branch sources are not projected as founded branches");
+
+        Equal(50L, LineageBranchRules.ResolveFoundedBranchOverlay(
+                50L, -1L, pendingBranchOwnedByActor: false),
+            "a pending -1 cannot erase a positive bulk recovery");
+        Equal(51L, LineageBranchRules.ResolveFoundedBranchOverlay(
+                50L, 51L, pendingBranchOwnedByActor: true),
+            "a positive pending founder marker remains authoritative");
+        Equal(50L, LineageBranchRules.ResolveFoundedBranchOverlay(
+                50L, 51L, pendingBranchOwnedByActor: false),
+            "a pending branch owned by another founder cannot override recovery");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal(long expected, long actual, string name)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

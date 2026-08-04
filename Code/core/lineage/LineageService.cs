@@ -1384,8 +1384,8 @@ namespace AncientWarfare3.core.lineage
                 (current.founder_actor_id == pPrince.data.id ||
                  pReuseInheritedFeudatoryBranch))
             {
-                pPrince.data.set(LineageKeys.FEUDATORY_BRANCH_SHI_ID,
-                    currentShiId);
+                ApplyFeudatoryBranchIdentity(pPrince, currentShiId,
+                    current.founder_actor_id);
                 return currentShiId;
             }
 
@@ -1401,6 +1401,8 @@ namespace AncientWarfare3.core.lineage
                 if (!string.IsNullOrWhiteSpace(recorded.clan_name))
                     pPrince.data.set(LineageKeys.CLAN_NAME,
                         recorded.clan_name);
+                ApplyFeudatoryBranchIdentity(pPrince, recordedShiId,
+                    recorded.founder_actor_id);
                 return recordedShiId;
             }
 
@@ -1417,7 +1419,8 @@ namespace AncientWarfare3.core.lineage
                 pOriginCityId: pSeat?.data?.id ?? -1L);
 
             pPrince.data.set(LineageKeys.SHI_ID, newShiId);
-            pPrince.data.set(LineageKeys.FEUDATORY_BRANCH_SHI_ID, newShiId);
+            ApplyFeudatoryBranchIdentity(pPrince, newShiId,
+                pPrince.data.id);
             pPrince.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pPrince.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pPrince.hasTrait(LineageKeys.TRAIT_GUIZU))
@@ -1432,6 +1435,25 @@ namespace AncientWarfare3.core.lineage
             FinalizeFounderArchive(pPrince,
                 moveWritesAccepted && syncWritesAccepted);
             return newShiId;
+        }
+
+        private static void ApplyFeudatoryBranchIdentity(Actor pPrince,
+            long pShiId, long pFounderActorId)
+        {
+            if (pPrince?.data == null || pShiId < 0L) return;
+            pPrince.data.set(LineageKeys.FEUDATORY_BRANCH_SHI_ID, pShiId);
+            bool ownsBranch = LineageBranchRules.IsFoundedBranchForActor(
+                ShiSourceType.FEUDATORY, pFounderActorId, pPrince.data.id);
+            if (ownsBranch)
+            {
+                pPrince.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, pShiId);
+                return;
+            }
+
+            pPrince.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID,
+                out long foundedShiId, -1L);
+            if (foundedShiId == pShiId)
+                pPrince.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, -1L);
         }
 
         /// <summary>

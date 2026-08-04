@@ -865,11 +865,11 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>
-        ///     兜底读取某 actor 作为始祖开创的称王分支。
-        ///     有些旧档/时序里 ActorArchive.founded_branch_shi_id 没写上,但 ShiBranch 已经有
-        ///     FOUNDER_ACTOR_ID + KING_FOUNDED 行;族谱显示"建支:X氏"必须以 ShiBranch 为最终事实。
+        ///     兜底读取某 actor 作为始祖开创的称王或藩王分支。
+        ///     旧档可能未写 ActorArchive.founded_branch_shi_id，但 ShiBranch
+        ///     已保留来源与创建者；族谱显示必须以该事实为准。
         /// </summary>
-        public static long GetKingFoundedBranchByFounder(long pActorId)
+        public static long GetFoundedBranchByFounder(long pActorId)
         {
             return TryResolveOwnedFoundedBranch(pActorId, -1L,
                 out long resolved) ? resolved : -1L;
@@ -1781,7 +1781,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (pNode == null || pNode.founded_branch_shi_id < 0) return;
             ShiBranchInfo info = GetShiBranchInfo(pNode.founded_branch_shi_id);
-            if (info == null || info.founder_actor_id != pNode.id || info.source_type != ShiSourceType.KING_FOUNDED)
+            if (info == null ||
+                !LineageBranchRules.IsFoundedBranchForActor(
+                    info.source_type, info.founder_actor_id, pNode.id))
             {
                 pNode.founded_branch_shi_id = -1;
                 if (pLive?.data != null)
