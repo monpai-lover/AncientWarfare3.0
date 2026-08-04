@@ -107,7 +107,7 @@ namespace AncientWarfare3.content
             return list.ToArray();
         }
 
-        private static void PreloadGameplaySprites(EquipmentAsset pItem)
+        private static void PreloadGameplaySprites(ItemAsset pItem)
         {
             if (pItem == null || string.IsNullOrEmpty(pItem.path_gameplay_sprite)) return;
             if (pItem.gameplay_sprites == null || pItem.gameplay_sprites.Length == 0)
@@ -124,7 +124,8 @@ namespace AncientWarfare3.content
             {
                 if (sprite == null) continue;
 
-                if (pItem.is_colored)
+                if (pItem is EquipmentAsset equipment &&
+                    equipment.is_colored)
                 {
                     foreach (ColorAsset color in ColorAsset.getAllColorsList())
                     {
