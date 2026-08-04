@@ -1,0 +1,63 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsWarLifecycleRulesTests
+{
+    public static void Run()
+    {
+        Assert(!ArmyRtsWarLifecycleRules.ShouldWithdraw(21, 100),
+            "an army above 20 percent must remain operational");
+        Assert(ArmyRtsWarLifecycleRules.ShouldWithdraw(20, 100),
+            "an army at 20 percent must withdraw");
+        Assert(ArmyRtsWarLifecycleRules.ShouldWithdraw(1, 5),
+            "withdrawal uses integer comparison without rounding");
+        Assert(!ArmyRtsWarLifecycleRules.ShouldWithdraw(0, 0),
+            "an invalid baseline must not trigger withdrawal");
+
+        Assert(!ArmyRtsWarLifecycleRules.ShouldResume(79, 100),
+            "an army below 80 percent must continue replenishing");
+        Assert(ArmyRtsWarLifecycleRules.ShouldResume(80, 100),
+            "an army at 80 percent must resume operations");
+        Assert(ArmyRtsWarLifecycleRules.ShouldResume(4, 5),
+            "resumption uses integer comparison without rounding");
+        Assert(!ArmyRtsWarLifecycleRules.ShouldResume(0, 0),
+            "an invalid baseline must not trigger resumption");
+
+        Assert(ArmyRtsWarLifecycleRules.CaptureBaseline(0, 73) == 73,
+            "first wartime observation captures living strength");
+        Assert(ArmyRtsWarLifecycleRules.CaptureBaseline(73, 41) == 73,
+            "later casualties must not mutate the fixed baseline");
+
+        Assert(ArmyRtsWarLifecycleRules.ShouldReleaseToVanilla(
+                insideTargetTerritory: true, hostileCombatUnitNearby: true),
+            "hostile contact in the target territory releases tactical control");
+        Assert(!ArmyRtsWarLifecycleRules.ShouldReleaseToVanilla(
+                insideTargetTerritory: false, hostileCombatUnitNearby: true),
+            "enemy contact while passing through another territory keeps RTS control");
+        Assert(!ArmyRtsWarLifecycleRules.ShouldReleaseToVanilla(
+                insideTargetTerritory: true, hostileCombatUnitNearby: false),
+            "arrival without defenders keeps strategic movement active");
+
+        Assert(ArmyRtsWarLifecycleRules.CanGenerateReplacements(
+                combatActive: false, transportActive: false,
+                movementActive: false),
+            "an idle army in a replenishment city may generate replacements");
+        Assert(!ArmyRtsWarLifecycleRules.CanGenerateReplacements(
+                combatActive: true, transportActive: false,
+                movementActive: false),
+            "combat blocks generated replacements");
+        Assert(!ArmyRtsWarLifecycleRules.CanGenerateReplacements(
+                combatActive: false, transportActive: true,
+                movementActive: false),
+            "transport blocks generated replacements");
+        Assert(!ArmyRtsWarLifecycleRules.CanGenerateReplacements(
+                combatActive: false, transportActive: false,
+                movementActive: true),
+            "movement blocks generated replacements");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}
