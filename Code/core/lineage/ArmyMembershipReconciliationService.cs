@@ -49,6 +49,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || pArmy?.data == null) return false;
             bool changed = false;
+            bool ownedByArmy = ReferenceEquals(pActor.army, pArmy);
             using (ArmyCaptainDisposalScope.Open(pArmy))
             {
                 try
@@ -61,7 +62,7 @@ namespace AncientWarfare3.core.lineage
                 }
                 catch { }
 
-                if (ReferenceEquals(pActor.army, pArmy))
+                if (ownedByArmy)
                 {
                     try { pActor.removeFromArmy(); }
                     catch
@@ -69,7 +70,7 @@ namespace AncientWarfare3.core.lineage
                         try { pActor.setArmy(null); }
                         catch { }
                     }
-                    changed = !ReferenceEquals(pActor.army, pArmy);
+                    changed |= !ReferenceEquals(pActor.army, pArmy);
                 }
                 try
                 {
@@ -78,6 +79,9 @@ namespace AncientWarfare3.core.lineage
                 catch { }
             }
 
+            // A stale one-sided old-roster entry must not clear RTS or
+            // deployment state owned by the actor's newer current army.
+            if (!ownedByArmy) return changed;
             ArmyRtsControllerService.ReleaseActor(pActor);
             ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
             TemporaryLevyService.OnActorInvalidated(pActor);

@@ -39,6 +39,7 @@ $requiredCleanup = @(
     'ArmyMembershipOwnershipRules.Decide',
     'removeFromArmy',
     'units.Remove',
+    'if (!ownedByArmy) return changed;',
     'ArmyCaptainDisposalScope.Open',
     'ArmyRtsControllerService.ReleaseActor',
     'ArmyDeploymentService.ReleaseActor',
