@@ -1996,6 +1996,21 @@ internal static class MandateSuccessionRegressionRulesTests
         Equal(true, MandateProjectionResumeRules.ShouldPublishEffect(
                 MandateProjectionDisposition.Current, "new_runtime"),
             "current work publishes all requested effects");
+        Equal(MandateLegalCoreReplayDisposition.Skip,
+            MandateProjectionResumeRules.ResolveLegalCoreReplay(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                coreSnapshotSource: ""),
+            "terminal legacy work skips live legal-core reconstruction");
+        Equal(MandateLegalCoreReplayDisposition.ProjectDurableSnapshot,
+            MandateProjectionResumeRules.ResolveLegalCoreReplay(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                coreSnapshotSource: "declaration"),
+            "terminal work still projects its durable legal-core snapshot");
+        Equal(MandateLegalCoreReplayDisposition.CaptureLegacySnapshot,
+            MandateProjectionResumeRules.ResolveLegalCoreReplay(
+                MandateProjectionDisposition.Current,
+                coreSnapshotSource: ""),
+            "current legacy work captures its live legal cores exactly once");
     }
 
     private static void SuppressedKeyedHistoryRemainsPendingUntilRetry()

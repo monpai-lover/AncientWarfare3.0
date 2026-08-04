@@ -687,7 +687,15 @@ namespace AncientWarfare3.core.lineage
                 case "new_person_history":
                     return TryPublishMandateStartPersonHistory(pPending);
                 case "legal_cores":
-                    if (!EnsurePendingCoreSnapshots(pKingdom, pPending))
+                    MandateLegalCoreReplayDisposition coreReplay =
+                        MandateProjectionResumeRules.ResolveLegalCoreReplay(
+                            pDisposition, pPending.CoreSnapshotSource);
+                    if (coreReplay ==
+                        MandateLegalCoreReplayDisposition.Skip)
+                        return true;
+                    if (coreReplay == MandateLegalCoreReplayDisposition.
+                            CaptureLegacySnapshot &&
+                        !EnsurePendingCoreSnapshots(pKingdom, pPending))
                         return false;
                     return CreateLegalCores(pPending.PeriodId,
                         pPending.CoreCitySnapshots,

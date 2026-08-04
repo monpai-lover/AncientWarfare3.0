@@ -10,6 +10,8 @@ $declarationPersistence = Get-Content -Raw (Join-Path $root `
     'Code/core/lineage/MandateDeclarationPersistence.cs')
 $projectionOutbox = Get-Content -Raw (Join-Path $root `
     'Code/core/lineage/MandateProjectionOutboxPersistence.cs')
+$projectionRules = Get-Content -Raw (Join-Path $root `
+    'Code/core/lineage/MandateProjectionResumeRules.cs')
 $legalCoreProjection = Get-Content -Raw (Join-Path $root `
     'Code/core/lineage/MandateLegalCoreProjectionPersistence.cs')
 $facts = Get-Content -Raw (Join-Path $root 'Code/core/lineage/RulerTitleFactService.cs')
@@ -405,5 +407,27 @@ Require $mandate 'requireCurrentStateUpdate:' `
 Require $mandate `
     'MandateProjectionDisposition.Current);' `
     'historical legal-core completion can require or mutate current state'
+Require $projectionRules 'ResolveLegalCoreReplay' `
+    'legacy legal-core replay has no explicit current-versus-terminal rule'
+Require $mandate 'MandateLegalCoreReplayDisposition.Skip' `
+    'terminal legacy legal-core replay cannot complete without live capture'
+Require $mandate 'CaptureLegacySnapshot &&' `
+    'current legacy legal-core replay does not retain one-time migration'
+
+$publishEffectStart = $mandate.IndexOf(
+    'private static bool PublishMandateProjectionEffect')
+$publishEffectEnd = $mandate.IndexOf(
+    'private static void TryResumePendingProjectionYear', $publishEffectStart)
+if ($publishEffectStart -lt 0 -or $publishEffectEnd -le $publishEffectStart) {
+    throw 'Mandate projection effect publisher cannot be inspected'
+}
+$publishEffect = $mandate.Substring($publishEffectStart,
+    $publishEffectEnd - $publishEffectStart)
+RequireOrder $publishEffect 'ResolveLegalCoreReplay(' `
+    'EnsurePendingCoreSnapshots(' `
+    'terminal legacy legal cores can enter live snapshot capture before gating'
+RequireOrder $publishEffect 'MandateLegalCoreReplayDisposition.Skip' `
+    'EnsurePendingCoreSnapshots(' `
+    'terminal legacy legal cores do not return before live snapshot capture'
 
 Write-Output 'Mandate succession runtime source guard passed.'

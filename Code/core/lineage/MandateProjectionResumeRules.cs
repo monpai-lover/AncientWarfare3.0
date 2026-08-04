@@ -6,6 +6,13 @@ namespace AncientWarfare3.core.lineage
         TerminalHistoryOnly
     }
 
+    public enum MandateLegalCoreReplayDisposition
+    {
+        Skip,
+        CaptureLegacySnapshot,
+        ProjectDurableSnapshot
+    }
+
     public static class MandateAuthorityMutationRules
     {
         public static bool CanMutate(bool replicaSession)
@@ -77,6 +84,18 @@ namespace AncientWarfare3.core.lineage
                 default:
                     return false;
             }
+        }
+
+        public static MandateLegalCoreReplayDisposition
+            ResolveLegalCoreReplay(MandateProjectionDisposition disposition,
+                string coreSnapshotSource)
+        {
+            if (!string.IsNullOrEmpty(coreSnapshotSource))
+                return MandateLegalCoreReplayDisposition.
+                    ProjectDurableSnapshot;
+            return disposition == MandateProjectionDisposition.Current
+                ? MandateLegalCoreReplayDisposition.CaptureLegacySnapshot
+                : MandateLegalCoreReplayDisposition.Skip;
         }
     }
 }
