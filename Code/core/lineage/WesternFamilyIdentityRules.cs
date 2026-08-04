@@ -48,8 +48,10 @@ namespace AncientWarfare3.core.lineage
                 persistedTradition =
                     AWCultureNamingTraditionRules.SerializeTradition(
                         tradition);
-                displayStem = AWWesternFamilyNameRules.BuildFamilyStem(
-                    tradition, origin);
+                displayStem = NormalizeWhitespace(rawDisplayStem);
+                if (string.IsNullOrWhiteSpace(displayStem))
+                    displayStem = AWWesternFamilyNameRules.BuildFamilyStem(
+                        tradition, origin);
                 if (string.IsNullOrWhiteSpace(displayStem))
                     displayStem = NormalizeWhitespace(rawDisplayStem);
             }
