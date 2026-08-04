@@ -8678,11 +8678,8 @@ VisibleClanRenameRulesTests.Run();
 VisibleSurnameRenameSqlRulesTests.Run();
 FeudatoryIdentityRulesTests.Run();
 FoundedBranchRulesTests.Run();
-<<<<<<< HEAD
 FoundedBranchWiringSourceGuardTests.Run();
 FoundedBranchRecoveryIntegrationTests.Run();
-=======
->>>>>>> 5f554c89 (fix(lineage): restore feudatory founder branch buttons)
 AW3RuntimeRestorePipelineTests.Run();
 LineageFamilyArchiveMigrationTests.Run();
 AW3MultiplayerStrategicStateRulesTests.Run();

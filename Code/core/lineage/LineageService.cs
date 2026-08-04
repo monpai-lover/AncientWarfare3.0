@@ -1384,7 +1384,7 @@ namespace AncientWarfare3.core.lineage
                 (current.founder_actor_id == pPrince.data.id ||
                  pReuseInheritedFeudatoryBranch))
             {
-                ApplyFeudatoryBranchIdentity(pPrince, currentShiId,
+                ApplyFeudatoryFoundedBranchIdentity(pPrince, currentShiId,
                     current.founder_actor_id);
                 return currentShiId;
             }
@@ -1401,7 +1401,7 @@ namespace AncientWarfare3.core.lineage
                 if (!string.IsNullOrWhiteSpace(recorded.clan_name))
                     pPrince.data.set(LineageKeys.CLAN_NAME,
                         recorded.clan_name);
-                ApplyFeudatoryBranchIdentity(pPrince, recordedShiId,
+                ApplyFeudatoryFoundedBranchIdentity(pPrince, recordedShiId,
                     recorded.founder_actor_id);
                 return recordedShiId;
             }
@@ -1419,7 +1419,7 @@ namespace AncientWarfare3.core.lineage
                 pOriginCityId: pSeat?.data?.id ?? -1L);
 
             pPrince.data.set(LineageKeys.SHI_ID, newShiId);
-            ApplyFeudatoryBranchIdentity(pPrince, newShiId,
+            ApplyFeudatoryFoundedBranchIdentity(pPrince, newShiId,
                 pPrince.data.id);
             pPrince.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pPrince.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
@@ -1437,7 +1437,7 @@ namespace AncientWarfare3.core.lineage
             return newShiId;
         }
 
-        private static void ApplyFeudatoryBranchIdentity(Actor pPrince,
+        private static void ApplyFeudatoryFoundedBranchIdentity(Actor pPrince,
             long pShiId, long pFounderActorId)
         {
             if (pPrince?.data == null || pShiId < 0L) return;
