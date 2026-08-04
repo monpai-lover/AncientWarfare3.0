@@ -49,14 +49,19 @@ internal static class IntegratedNamingRulesTests
             snapshotAccepted: false, windowActive: false),
             "a rejected async snapshot is never queued");
         Equal(true,
-            FamilyTreeMaterializationRules.AcceptCompletedSnapshotWithoutRevisionEquality(
+            FamilyTreeMaterializationRules.AcceptCompletedSnapshot(
                 sameGeneration: true, sameWorldGeneration: true,
-                sameSpec: true),
-            "an accepted family-tree snapshot survives unrelated projection changes");
+                sameSpec: true, sameProjectionRevision: true),
+            "an accepted family-tree snapshot matches the captured projection revision");
         Equal(false,
-            FamilyTreeMaterializationRules.AcceptCompletedSnapshotWithoutRevisionEquality(
+            FamilyTreeMaterializationRules.AcceptCompletedSnapshot(
+                sameGeneration: true, sameWorldGeneration: true,
+                sameSpec: true, sameProjectionRevision: false),
+            "a pre-death family-tree snapshot is rejected after the projection changes");
+        Equal(false,
+            FamilyTreeMaterializationRules.AcceptCompletedSnapshot(
                 sameGeneration: true, sameWorldGeneration: false,
-                sameSpec: true),
+                sameSpec: true, sameProjectionRevision: true),
             "a family-tree snapshot from another world is rejected");
         Equal(true,
             FamilyTreeMaterializationRules.AcceptRetryWithoutContentRevision(

@@ -11,10 +11,12 @@ namespace AncientWarfare3.core.uiquery
             return snapshotAccepted && !windowActive;
         }
 
-        public static bool AcceptCompletedSnapshotWithoutRevisionEquality(
-            bool sameGeneration, bool sameWorldGeneration, bool sameSpec)
+        public static bool AcceptCompletedSnapshot(
+            bool sameGeneration, bool sameWorldGeneration, bool sameSpec,
+            bool sameProjectionRevision)
         {
-            return sameGeneration && sameWorldGeneration && sameSpec;
+            return sameGeneration && sameWorldGeneration && sameSpec &&
+                   sameProjectionRevision;
         }
 
         public static bool AcceptRetryWithoutContentRevision(
