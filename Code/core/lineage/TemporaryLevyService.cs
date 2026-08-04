@@ -167,9 +167,21 @@ namespace AncientWarfare3.core.lineage
             CaptainRecoveryPlans = new Dictionary<long, CaptainRecoveryPlan>();
         private static readonly HashSet<long> ActiveActorIds = new HashSet<long>();
         private const int PreparationKingdomsPerAuthorityCycle = 2;
+        private const double DiagnosticSampleIntervalSeconds = 30d;
+        private const int MaximumDiagnosticOperations = 128;
         private static readonly MonthlyAuthorityWorkQueue<Kingdom>
             PreparationMonthlyWork =
                 new MonthlyAuthorityWorkQueue<Kingdom>();
+        private static readonly TemporaryLevyDiagnosticSampler
+            DiagnosticSampler = new TemporaryLevyDiagnosticSampler(
+                DiagnosticSampleIntervalSeconds,
+                MaximumDiagnosticOperations);
+
+        static TemporaryLevyService()
+        {
+            AWPerformanceSettings.ArmyRtsDiagnosticsDisabled +=
+                ClearDiagnosticSampling;
+        }
 
         internal static int PendingMonthlyWorkForDiagnostics =>
             PreparationMonthlyWork.PendingCount;
@@ -367,13 +379,21 @@ namespace AncientWarfare3.core.lineage
                     pKingdom);
             bool accepted = kingdomLive && emergencyActive &&
                             !restorationCampaign && pDemand > 0;
+            bool diagnosticsEnabled = AWPerformanceSettings.
+                ArmyRtsDiagnosticsEnabled;
+            string requestKey = "request|" + (pKingdom?.id ?? -1L) +
+                                "|" + (pTargetArmy?.id ?? -1L);
+            string requestSignature = Math.Max(0, pDemand) + "|" +
+                (pPreferredCity?.id ?? -1L) + "|" + emergencyActive + "|" +
+                restorationCampaign + "|" + accepted;
             if (TemporaryLevyDiagnosticRules.
-                    ShouldWriteRecoveryRequestDiagnostic(
-                        AWPerformanceSettings.ArmyRtsDiagnosticsEnabled,
-                        pDemand))
+                    ShouldWriteRecoveryRequestDiagnostic(diagnosticsEnabled,
+                        pDemand) &&
+                DiagnosticSampler.ShouldLog(diagnosticsEnabled, requestKey,
+                    requestSignature, CurrentRealtime()))
             {
                 AncientWarfare3.ModClass.LogInfo(
-                    "[AW3 RTS levy request] kingdom=" +
+                    "[AW3 RTS levy request sample] kingdom=" +
                     (pKingdom?.id ?? -1L) + " demand=" +
                     Math.Max(0, pDemand) + " target_army=" +
                     (pTargetArmy?.id ?? -1L) + " preferred_city=" +
@@ -699,6 +719,7 @@ namespace AncientWarfare3.core.lineage
             ActiveActorIds.Clear();
             LastPreparationMonthKey = int.MinValue;
             PreparationMonthlyWork.Clear();
+            ClearDiagnosticSampling();
             if (World.world?.units != null)
             {
                 foreach (Actor actor in World.world.units)
@@ -735,6 +756,7 @@ namespace AncientWarfare3.core.lineage
             ActiveActorIds.Clear();
             LastPreparationMonthKey = int.MinValue;
             PreparationMonthlyWork.Clear();
+            ClearDiagnosticSampling();
         }
 
         private static void ScheduleRecruitmentYear(Kingdom pKingdom, int pYear)
@@ -1878,9 +1900,14 @@ namespace AncientWarfare3.core.lineage
             bool pEstablishmentReady, RecruitmentScanSummary pScanSummary)
         {
             int pendingDemand = PendingDemand(pPlan);
+            bool diagnosticsEnabled = AWPerformanceSettings.
+                ArmyRtsDiagnosticsEnabled;
             if (!TemporaryLevyDiagnosticRules.ShouldWriteRecoveryDiagnostic(
-                    AWPerformanceSettings.ArmyRtsDiagnosticsEnabled,
-                    pendingDemand)) return;
+                    diagnosticsEnabled, pendingDemand))
+            {
+                if (!diagnosticsEnabled) ClearDiagnosticSampling();
+                return;
+            }
             int population = 0;
             int ordinaryMilitary = 0;
             int slots = 0;
@@ -1908,7 +1935,18 @@ namespace AncientWarfare3.core.lineage
             int targetUnits = 0;
             try { targetUnits = Math.Max(0, pTargetArmy?.countUnits() ?? 0); }
             catch { }
-            AncientWarfare3.ModClass.LogInfo("[AW3 RTS levy] kingdom=" +
+            string operationKey = "batch|" + (pKingdom?.id ?? -1L) +
+                                  "|" + (pTargetArmy?.id ?? -1L);
+            string signature = pendingDemand + "|" +
+                (pTargetArmy?.id ?? -1L) + "|" + (pCity?.id ?? -1L) + "|" +
+                supplyEligible + "|" + capacity + "|" +
+                pEstablishmentReady + "|" + (pRecruited > 0) + "|" +
+                (pScanSummary.Viable > 0) + "|" +
+                (pScanSummary.ProtectedIdentity > 0) + "|" +
+                (pScanSummary.Capacity > 0);
+            if (!DiagnosticSampler.ShouldLog(diagnosticsEnabled,
+                    operationKey, signature, CurrentRealtime())) return;
+            AncientWarfare3.ModClass.LogInfo("[AW3 RTS levy sample] kingdom=" +
                 (pKingdom?.id ?? -1L) + " demand=" + Math.Max(0, pDemand) +
                 " pending=" + pendingDemand + " target_army=" +
                 (pTargetArmy?.id ?? -1L) + " target_units=" + targetUnits +
@@ -1930,6 +1968,17 @@ namespace AncientWarfare3.core.lineage
                     pScanSummary.ProtectedIdentity,
                     pScanSummary.NativeEligibility, pScanSummary.AgeLimit,
                     pScanSummary.Capacity));
+        }
+
+        private static void ClearDiagnosticSampling()
+        {
+            DiagnosticSampler.Clear();
+        }
+
+        private static double CurrentRealtime()
+        {
+            try { return UnityEngine.Time.realtimeSinceStartupAsDouble; }
+            catch { return 0d; }
         }
 
         private static int PendingDemand(CasualtyReinforcementPlan pPlan)

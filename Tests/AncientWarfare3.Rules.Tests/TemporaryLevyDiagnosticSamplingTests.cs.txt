@@ -1,0 +1,41 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class TemporaryLevyDiagnosticSamplingTests
+{
+    public static void Run()
+    {
+        var sampler = new TemporaryLevyDiagnosticSampler(
+            sampleIntervalSeconds: 10d, maximumOperations: 2);
+        Assert(sampler.ShouldLog(true, "batch|1|10", "pending=20", 0d),
+            "the first operation observation is logged");
+        Assert(!sampler.ShouldLog(true, "batch|1|10", "pending=20", 5d),
+            "an identical signature is suppressed before its deadline");
+        Assert(sampler.ShouldLog(true, "batch|1|10", "pending=19", 6d),
+            "a material state change is logged immediately");
+        Assert(!sampler.ShouldLog(true, "batch|1|10", "pending=19", 15d),
+            "the changed signature starts a new sampling interval");
+        Assert(sampler.ShouldLog(true, "batch|1|10", "pending=19", 16d),
+            "an unchanged operation is periodically sampled at its deadline");
+
+        sampler.ShouldLog(true, "request|1|10", "demand=5", 16d);
+        sampler.ShouldLog(true, "request|2|20", "demand=5", 16d);
+        Assert(sampler.Count == 2,
+            "the sampler evicts old operations at its configured bound");
+
+        Assert(!sampler.ShouldLog(false, "request|2|20", "demand=5", 17d) &&
+               sampler.Count == 0,
+            "disabling diagnostics clears all sampling state");
+        Assert(sampler.ShouldLog(true, "request|2|20", "demand=5", 18d),
+            "an operation is a first observation after diagnostics resume");
+        sampler.Clear();
+        Assert(sampler.Count == 0 &&
+               sampler.ShouldLog(true, "request|2|20", "demand=5", 19d),
+            "runtime clearing resets diagnostic sampling");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

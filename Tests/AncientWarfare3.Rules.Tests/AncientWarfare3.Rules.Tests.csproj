@@ -158,6 +158,7 @@
     <Compile Include="ArmyRtsSyntheticRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAssignmentReconciliationRulesTests.cs.txt" />
     <Compile Include="ArmySharedPathRecoveryRulesTests.cs.txt" />
+    <Compile Include="TemporaryLevyDiagnosticSamplingTests.cs.txt" />
     <Compile Include="ArmyLogisticsSustainmentRulesTests.cs.txt" />
     <Compile Include="ArmyRtsRouteChoiceRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyRulesTests.cs.txt" />

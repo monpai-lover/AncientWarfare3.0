@@ -1,5 +1,101 @@
+using System;
+using System.Collections.Generic;
+
 namespace AncientWarfare3.core.lineage
 {
+    public sealed class TemporaryLevyDiagnosticSampler
+    {
+        private sealed class Entry
+        {
+            public string Signature = string.Empty;
+            public double NextSampleTime;
+            public long Sequence;
+        }
+
+        private readonly Dictionary<string, Entry> _entries =
+            new Dictionary<string, Entry>(StringComparer.Ordinal);
+        private readonly double _sampleIntervalSeconds;
+        private readonly int _maximumOperations;
+        private long _sequence;
+
+        public TemporaryLevyDiagnosticSampler(double sampleIntervalSeconds,
+            int maximumOperations)
+        {
+            _sampleIntervalSeconds = double.IsNaN(sampleIntervalSeconds) ||
+                                     double.IsInfinity(sampleIntervalSeconds)
+                ? 0d
+                : Math.Max(0d, sampleIntervalSeconds);
+            _maximumOperations = Math.Max(1, maximumOperations);
+        }
+
+        public int Count => _entries.Count;
+
+        public bool ShouldLog(bool diagnosticsEnabled, string operationKey,
+            string signature, double currentTime)
+        {
+            if (!diagnosticsEnabled)
+            {
+                Clear();
+                return false;
+            }
+            if (string.IsNullOrWhiteSpace(operationKey)) return false;
+            double now = double.IsNaN(currentTime) ||
+                         double.IsInfinity(currentTime)
+                ? 0d
+                : Math.Max(0d, currentTime);
+            string currentSignature = signature ?? string.Empty;
+            if (!_entries.TryGetValue(operationKey, out Entry entry))
+            {
+                EvictIfFull();
+                _entries[operationKey] = new Entry
+                {
+                    Signature = currentSignature,
+                    NextSampleTime = now + _sampleIntervalSeconds,
+                    Sequence = NextSequence()
+                };
+                return true;
+            }
+
+            entry.Sequence = NextSequence();
+            if (!string.Equals(entry.Signature, currentSignature,
+                    StringComparison.Ordinal))
+            {
+                entry.Signature = currentSignature;
+                entry.NextSampleTime = now + _sampleIntervalSeconds;
+                return true;
+            }
+            if (now < entry.NextSampleTime) return false;
+            entry.NextSampleTime = now + _sampleIntervalSeconds;
+            return true;
+        }
+
+        public void Clear()
+        {
+            _entries.Clear();
+            _sequence = 0L;
+        }
+
+        private void EvictIfFull()
+        {
+            if (_entries.Count < _maximumOperations) return;
+            string oldestKey = null;
+            long oldestSequence = long.MaxValue;
+            foreach (KeyValuePair<string, Entry> pair in _entries)
+            {
+                if (pair.Value.Sequence >= oldestSequence) continue;
+                oldestSequence = pair.Value.Sequence;
+                oldestKey = pair.Key;
+            }
+            if (oldestKey != null) _entries.Remove(oldestKey);
+        }
+
+        private long NextSequence()
+        {
+            if (_sequence < long.MaxValue) _sequence++;
+            return _sequence;
+        }
+    }
+
     public static class TemporaryLevyDiagnosticRules
     {
         public static bool ShouldWriteRecoveryDiagnostic(
