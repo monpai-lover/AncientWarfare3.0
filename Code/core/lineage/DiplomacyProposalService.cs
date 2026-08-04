@@ -818,12 +818,6 @@ namespace AncientWarfare3.core.lineage
                 result.UnavailableReason = "responder_subject";
                 return result;
             }
-            if (Math.Max(1f, pRequester.power) <
-                Math.Max(1f, pResponder.power) * 2f)
-            {
-                result.UnavailableReason = "insufficient_power";
-                return result;
-            }
             if (!VassalService.CanSetVassal(pResponder, pRequester,
                     out string subjectFailure))
             {
