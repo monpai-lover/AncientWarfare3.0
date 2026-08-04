@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.utils;
 using UnityEngine;
 
 namespace AncientWarfare3.core.policy
@@ -84,10 +85,16 @@ namespace AncientWarfare3.core.policy
             NativeCityPublishEntries = new List<NativeCityLabelEntry>();
         private static readonly HashSet<string> NativeActiveLabelKeys =
             new HashSet<string>();
+        private static readonly Dictionary<Type, SelectAndInspectInvoker>
+            SelectAndInspectByAssetType =
+                new Dictionary<Type, SelectAndInspectInvoker>();
         private static HierarchicalVassalHierarchyIndex _hierarchyIndex;
         private static bool _nativeDrawPassActive;
         private static HierarchicalVassalMapModeLayer _selectedLayer =
             HierarchicalVassalMapModeLayer.Countries;
+
+        private delegate bool SelectAndInspectInvoker(
+            object pAsset, object pObject);
 
         public static bool IsActive()
         {
@@ -1035,31 +1042,78 @@ namespace AncientWarfare3.core.policy
                 object asset = libraryType?.GetField(pAssetField,
                     System.Reflection.BindingFlags.Public |
                     System.Reflection.BindingFlags.Static)?.GetValue(null);
-                System.Reflection.MethodInfo select = asset?.GetType().
-                    GetMethod("selectAndInspect");
-                if (select == null) return false;
-                System.Reflection.ParameterInfo[] parameters =
-                    select.GetParameters();
-                if (parameters.Length == 4)
+                if (asset == null) return false;
+                Type assetType = asset.GetType();
+                if (!SelectAndInspectByAssetType.TryGetValue(assetType,
+                        out SelectAndInspectInvoker invoke))
                 {
-                    select.Invoke(asset, new object[]
-                    {
-                        pNanoObject, false, false, false
-                    });
-                    return true;
+                    invoke = ResolveSelectAndInspectInvoker(assetType);
+                    SelectAndInspectByAssetType[assetType] = invoke;
                 }
-                if (parameters.Length == 3)
-                {
-                    select.Invoke(asset, new object[]
-                    {
-                        pNanoObject, false, false
-                    });
-                    return true;
-                }
-                select.Invoke(asset, new[] { pNanoObject });
-                return true;
+                return invoke != null && invoke(asset, pNanoObject);
             }
             catch { return false; }
+        }
+
+        private static SelectAndInspectInvoker ResolveSelectAndInspectInvoker(
+            Type pAssetType)
+        {
+            System.Reflection.MethodInfo method = pAssetType?.GetMethod(
+                "selectAndInspect");
+            if (method == null) return null;
+            int count = method.GetParameters().Length;
+            if (count == 4)
+            {
+                var call = ReflectionDelegateFactory.TryCreate<
+                    Action<object, object, bool, bool, bool>>(method);
+                if (call != null)
+                    return (asset, value) =>
+                    {
+                        call(asset, value, false, false, false);
+                        return true;
+                    };
+                return (asset, value) =>
+                {
+                    method.Invoke(asset, new object[]
+                    {
+                        value, false, false, false
+                    });
+                    return true;
+                };
+            }
+            if (count == 3)
+            {
+                var call = ReflectionDelegateFactory.TryCreate<
+                    Action<object, object, bool, bool>>(method);
+                if (call != null)
+                    return (asset, value) =>
+                    {
+                        call(asset, value, false, false);
+                        return true;
+                    };
+                return (asset, value) =>
+                {
+                    method.Invoke(asset, new object[]
+                    {
+                        value, false, false
+                    });
+                    return true;
+                };
+            }
+            if (count != 1) return null;
+            var single = ReflectionDelegateFactory.TryCreate<
+                Action<object, object>>(method);
+            if (single != null)
+                return (asset, value) =>
+                {
+                    single(asset, value);
+                    return true;
+                };
+            return (asset, value) =>
+            {
+                method.Invoke(asset, new[] { value });
+                return true;
+            };
         }
 
         private static Kingdom GetKingdom(long pKingdomId)
