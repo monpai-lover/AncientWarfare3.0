@@ -2094,7 +2094,8 @@ namespace AncientWarfare3.core.lineage
             pToken = default;
             if (AW3MultiplayerReplicaScope.IsReplicaSession || !Ready ||
                 pKingdom?.data == null || pKingdom.isRekt() ||
-                pKingdom.isNeutral() || SafeYear() != pRequestedYear)
+                pKingdom.isNeutral() || SafeYear() != pRequestedYear ||
+                pExpectedResponderId < 0L)
                 return false;
             if (!GeneralAiProposalCooldownReady(pKingdom, pRequestedYear))
                 return false;
@@ -2102,8 +2103,7 @@ namespace AncientWarfare3.core.lineage
             long observedResponderId = contact?.data == null
                 ? -1L
                 : contact.id;
-            if (pExpectedResponderId >= 0L &&
-                observedResponderId != pExpectedResponderId) return false;
+            if (observedResponderId != pExpectedResponderId) return false;
             int cityCount = pKingdom.cities?.Count ?? 0;
             if (cityCount <= 0) return false;
             pKingdom.data.get(LineageKeys.DIPLOMACY_AI_CITY_CURSOR,

@@ -42,8 +42,8 @@ namespace AncientWarfare3.core.lineage
         {
             token = default;
             if (leaseId <= 0L || cursorCount <= 0 ||
-                (expectedResponderId >= 0L &&
-                 observedResponderId != expectedResponderId))
+                expectedResponderId < 0L ||
+                observedResponderId != expectedResponderId)
                 return false;
             int normalizedCursor = Math.Max(0, previousCursor) % cursorCount;
             token = new AsyncStrategyAdmissionToken(leaseId, previousMarker,

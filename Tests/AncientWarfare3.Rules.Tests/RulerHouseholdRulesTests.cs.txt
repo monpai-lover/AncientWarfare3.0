@@ -294,13 +294,16 @@ internal static class RulerHouseholdRulesTests
             "principal-wife SQL keeps a separate noble-only path");
         True(householdQuery.Contains("long pExcludedParentId,"),
             "candidate SQL receives the recipient ruler identity");
-        int firstParentExclusion = householdQuery.IndexOf(
+        string candidateSql = Between(householdQuery,
+            "public IReadOnlyList<long> ReadOfferCandidateIds(",
+            "private IReadOnlyList<RulerHouseholdRecord> ReadMany(");
+        int firstParentExclusion = candidateSql.IndexOf(
             "IFNULL(PARENT_ID_1,-1)<>@excluded_parent",
             StringComparison.Ordinal);
-        int secondParentExclusion = householdQuery.IndexOf(
+        int secondParentExclusion = candidateSql.IndexOf(
             "IFNULL(PARENT_ID_2,-1)<>@excluded_parent",
             StringComparison.Ordinal);
-        int candidateLimit = householdQuery.IndexOf("LIMIT @limit",
+        int candidateLimit = candidateSql.IndexOf("LIMIT @limit",
             StringComparison.Ordinal);
         True(firstParentExclusion >= 0 && secondParentExclusion >= 0 &&
              candidateLimit > firstParentExclusion &&
@@ -498,7 +501,7 @@ internal static class RulerHouseholdRulesTests
             "AsyncStrategyLifecycleRules.ShouldSchedule(",
             StringComparison.Ordinal);
         True(domesticOnlyIndex >= 0 && scheduleGateIndex > domesticOnlyIndex,
-             "empty foreign capture reaches domestic-only completion before the async schedule gate");
+            "empty foreign capture reaches domestic-only completion before the async schedule gate");
 
         string householdWindow = ReadSource("Code", "ui", "windows",
             "RulerHouseholdWindow.cs");
