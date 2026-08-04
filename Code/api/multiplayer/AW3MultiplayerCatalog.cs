@@ -238,6 +238,10 @@ namespace AncientWarfare3.api.multiplayer
                 Command(AW3CommandKind.GrantBanditAmnesty,
                     AW3WindowCategory.Domestic, Country() |
                     AW3WindowContextRequirement.TargetCountry)
+                ,
+                Command(AW3CommandKind.CommitDomesticHousehold,
+                    AW3WindowCategory.Domestic, Country() |
+                    AW3WindowContextRequirement.Actor)
             });
 
         public static IReadOnlyList<AW3WindowDescriptor> Windows =>

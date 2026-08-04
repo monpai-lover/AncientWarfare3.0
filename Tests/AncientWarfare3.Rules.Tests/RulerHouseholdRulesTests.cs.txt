@@ -129,6 +129,35 @@ internal static class RulerHouseholdRulesTests
             "the maximum household candidate age is thirty-three");
         Equal(false, RulerHouseholdRules.IsHouseholdCandidateAge(34),
             "a thirty-four-year-old cannot be offered to a ruler household");
+        True(RulerHouseholdRules.IsCandidateClassEligible(
+                RulerHouseholdCandidateClass.Noble,
+                RulerHouseholdKind.PrincipalWife),
+            "a noblewoman may become a principal wife");
+        True(RulerHouseholdRules.IsCandidateClassEligible(
+                RulerHouseholdCandidateClass.Noble,
+                RulerHouseholdKind.Consort),
+            "a noblewoman may become a consort");
+        Equal(false, RulerHouseholdRules.IsCandidateClassEligible(
+                RulerHouseholdCandidateClass.Slave,
+                RulerHouseholdKind.PrincipalWife),
+            "a slave cannot become a principal wife");
+        True(RulerHouseholdRules.IsCandidateClassEligible(
+                RulerHouseholdCandidateClass.Slave,
+                RulerHouseholdKind.Consort),
+            "a slave may become a consort");
+        Equal(false, RulerHouseholdRules.IsCandidateClassEligible(
+                RulerHouseholdCandidateClass.Slave,
+                RulerHouseholdKind.Consort,
+                allowSlaveConsort: false),
+            "foreign consort offering keeps its existing slave rejection");
+        Equal(false, RulerHouseholdRules.IsCandidateClassEligible(
+                RulerHouseholdCandidateClass.Commoner,
+                RulerHouseholdKind.PrincipalWife),
+            "a commoner cannot become a principal wife");
+        Equal(false, RulerHouseholdRules.IsCandidateClassEligible(
+                RulerHouseholdCandidateClass.Commoner,
+                RulerHouseholdKind.Consort),
+            "a commoner cannot become a consort");
         True(RulerHouseholdRules.HouseholdCandidatePriority(
                  memberOfRulingLineage: true) <
              RulerHouseholdRules.HouseholdCandidatePriority(
@@ -141,6 +170,21 @@ internal static class RulerHouseholdRulesTests
                  memberOfRulingLineage: true,
                  directChildOfRuler: false),
             "a ruler's daughter is preferred within the reigning lineage");
+        int rulingDaughter = RulerHouseholdRules.HouseholdCandidatePriority(
+            memberOfRulingLineage: true, directChildOfRuler: true,
+            RulerHouseholdCandidateClass.Noble);
+        int rulingMember = RulerHouseholdRules.HouseholdCandidatePriority(
+            memberOfRulingLineage: true, directChildOfRuler: false,
+            RulerHouseholdCandidateClass.Noble);
+        int otherNoble = RulerHouseholdRules.HouseholdCandidatePriority(
+            memberOfRulingLineage: false, directChildOfRuler: false,
+            RulerHouseholdCandidateClass.Noble);
+        int slave = RulerHouseholdRules.HouseholdCandidatePriority(
+            memberOfRulingLineage: false, directChildOfRuler: false,
+            RulerHouseholdCandidateClass.Slave);
+        True(rulingDaughter < rulingMember && rulingMember < otherNoble &&
+             otherNoble < slave,
+            "domestic candidates rank ruling daughters, ruling clan women, other nobles, then slaves");
 
         True(RulerHouseholdRules.CanOffer(new RulerHouseholdOfferFacts(
                     candidateEligible: true, rulerEligible: true,
@@ -233,6 +277,103 @@ internal static class RulerHouseholdRulesTests
         Equal(false, annualWork.Contains(
                 "RulerHouseholdPregnancyService.OnKingdomYear"),
             "annual court work no longer gives consorts one instant-only chance");
+
+        string householdQuery = ReadSource("Code", "core", "lineage",
+            "RulerHouseholdQuery.cs");
+        True(householdQuery.Contains("ReadOfferCandidateIds(") &&
+             householdQuery.Contains("RulerHouseholdKind pKind,"),
+            "household candidate SQL receives the requested relationship kind");
+        True(householdQuery.Contains("bool pIncludeSlaves"),
+            "candidate SQL distinguishes domestic slave candidates from foreign mode");
+        True(householdQuery.Contains("STATUS='slave_lineage'"),
+            "consort candidate SQL includes slave-lineage women");
+        True(householdQuery.Contains(
+                 "RulerHouseholdKind.PrincipalWife") &&
+             householdQuery.Contains(
+                 "? \"STATUS='noble' AND LINEAGE_ID>=0 AND SHI_ID>=0\""),
+            "principal-wife SQL keeps a separate noble-only path");
+        True(householdQuery.Contains("long pExcludedParentId,"),
+            "candidate SQL receives the recipient ruler identity");
+        int firstParentExclusion = householdQuery.IndexOf(
+            "IFNULL(PARENT_ID_1,-1)<>@excluded_parent",
+            StringComparison.Ordinal);
+        int secondParentExclusion = householdQuery.IndexOf(
+            "IFNULL(PARENT_ID_2,-1)<>@excluded_parent",
+            StringComparison.Ordinal);
+        int candidateLimit = householdQuery.IndexOf("LIMIT @limit",
+            StringComparison.Ordinal);
+        True(firstParentExclusion >= 0 && secondParentExclusion >= 0 &&
+             candidateLimit > firstParentExclusion &&
+             candidateLimit > secondParentExclusion,
+            "direct daughters are excluded in SQL before the candidate limit is applied");
+
+        string householdService = ReadSource("Code", "core", "lineage",
+            "RulerHouseholdService.cs");
+        True(householdService.Contains("BuildDomesticCandidatePool("),
+            "the household service exposes a domestic candidate pool");
+        True(householdService.Contains("TryCommitDomestic("),
+            "the household service exposes direct domestic placement");
+        string prepareCandidate = Between(householdService,
+            "private static RulerHouseholdOfferPreview PrepareCandidate(",
+            "public static RulerHouseholdConsortRequestPreview PrepareConsortRequest(");
+        True(prepareCandidate.Contains(
+                "IsEligibleCandidate(pCandidate, pSource, pKind,") &&
+             prepareCandidate.Contains("pDomestic,"),
+            "candidate eligibility is rechecked with the requested kind and domestic mode");
+        string candidateValidator = Between(householdService,
+            "private static bool IsEligibleCandidate(",
+            "private static RulerHouseholdCandidateClass ResolveCandidateClass(");
+        True(candidateValidator.Contains("bool pDomestic") &&
+             candidateValidator.Contains("allowSlaveConsort: pDomestic"),
+            "runtime candidate validation declares the domestic-mode input it consumes");
+        True(householdService.Contains(
+                "RulerHouseholdRules.IsCandidateClassEligible("),
+            "runtime validation uses the pure kind-aware class rule");
+        True(householdService.Contains(
+                "allowSlaveConsort: pDomestic"),
+            "runtime validation keeps foreign slave rejection while allowing domestic consorts");
+        string candidatePool = Between(householdService,
+            "private static RulerHouseholdOfferCandidatePool BuildCandidatePool(",
+            "private static bool TryPrepareAiOfferKind(");
+        True(candidatePool.Contains("pIncludeSlaves: pDomestic"),
+            "only the domestic candidate query may include slave consorts");
+        string aiOfferPool = Between(householdService,
+            "private static bool TryPrepareAiOfferKind(",
+            "public static bool TryCommit(");
+        True(aiOfferPool.Contains("pIncludeSlaves: false"),
+            "foreign AI candidate queries never admit slaves");
+        True(householdService.Contains("TryCommitCore("),
+            "foreign and domestic placement share one relationship core");
+        True(householdService.Contains("pApplyDiplomacyEffects: true"),
+            "foreign placement preserves its diplomacy effects");
+        True(householdService.Contains("pApplyDiplomacyEffects: false"),
+            "domestic placement explicitly disables diplomacy effects");
+        True(householdService.Contains("if (pApplyDiplomacyEffects)"),
+            "the shared core gates diplomacy modifier creation");
+        string domesticCommit = Between(householdService,
+            "public static bool TryCommitDomestic(",
+            "private static bool TryCommitCore(");
+        Equal(false, domesticCommit.Contains(
+                "DiplomaticRelationModifierService"),
+            "domestic placement does not directly create self-diplomacy");
+        string commitCore = Between(householdService,
+            "private static bool TryCommitCore(",
+            "public static void OnKingdomYear(");
+        True(commitCore.Contains("InsertRelationship("),
+            "the shared core writes the household relationship");
+        True(commitCore.Contains("ruler.becomeLoversWith(partner)"),
+            "principal wives retain real lover links");
+        True(commitCore.Contains(
+                "LineageKeys.RULER_HOUSEHOLD_RULER_ID"),
+            "consorts retain the metadata used by the pregnancy chain");
+        True(commitCore.Contains(
+                "partner.kingdom != pRecipient || partner.city != capital"),
+            "domestic candidates move to the capital only when necessary");
+        string historyWrite = Between(householdService,
+            "private static void RecordHouseholdHistory(",
+            "private static bool IsEligibleRuler(");
+        True(historyWrite.Contains("if (pSource != pRecipient)"),
+            "domestic placement writes one country history entry instead of duplicating source and recipient");
 
         var principalFacts = new DiplomacyProposalScoreFacts(
             opinion: 60, requesterPower: 100, responderPower: 100,
@@ -357,7 +498,7 @@ internal static class RulerHouseholdRulesTests
             "AsyncStrategyLifecycleRules.ShouldSchedule(",
             StringComparison.Ordinal);
         True(domesticOnlyIndex >= 0 && scheduleGateIndex > domesticOnlyIndex,
-            "empty foreign capture reaches domestic-only completion before the async schedule gate");
+             "empty foreign capture reaches domestic-only completion before the async schedule gate");
 
         string householdWindow = ReadSource("Code", "ui", "windows",
             "RulerHouseholdWindow.cs");
@@ -516,5 +657,24 @@ internal static class RulerHouseholdRulesTests
     {
         if (!value)
             throw new InvalidOperationException($"{name}: expected true");
+    }
+
+    private static string ReadSource(params string[] parts)
+    {
+        string path = Directory.GetCurrentDirectory();
+        for (int i = 0; i < parts.Length; i++)
+            path = Path.Combine(path, parts[i]);
+        return File.ReadAllText(path);
+    }
+
+    private static string Between(string source, string start, string end)
+    {
+        int startIndex = source.IndexOf(start, StringComparison.Ordinal);
+        if (startIndex < 0) return "";
+        int endIndex = source.IndexOf(end, startIndex,
+            StringComparison.Ordinal);
+        return endIndex < 0
+            ? source.Substring(startIndex)
+            : source.Substring(startIndex, endIndex - startIndex);
     }
 }

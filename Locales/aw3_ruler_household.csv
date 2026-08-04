@@ -1,17 +1,26 @@
 key,cz,en,ch
 aw_ruler_household,后宫,Ruler Household,後宮
 aw_ruler_household_offer,提供后妃,Offer Consort,提供後妃
+aw_ruler_household_domestic_select,册立后妃,Appoint Household Member,冊立後妃
 aw_household_button,后宫,Household,後宮
 aw_household_button_desc,查看君主的正妻、妾室及子女情况,View the ruler's principal wife consorts and children,查看君主的正妻、妾室及子女情況
+aw_household_action_appoint_principal,册立正妻,Appoint Principal Wife,冊立正妻
+aw_household_action_take_consort,纳妾,Take Consort,納妾
+aw_household_action_principal_exists,已有正妻,Wife Appointed,已有正妻
+aw_household_action_consort_full,妾室已满,Consorts Full,妾室已滿
 aw_diplomacy_action_household_offering,提供后妃,Offer Consort,提供後妃
 aw_household_kind_principal_wife,正妻,Principal Wife,正妻
 aw_household_kind_consort,妾室,Consort,妾室
 aw_household_offer_our_noblewomen,本国贵族宗族女子,Our Noblewomen,本國貴族宗族女子
+aw_household_domestic_candidates,本国后宫候选,Domestic Candidates,本國後宮候選
 aw_household_offer_recipient_ruler,受纳君主,Recipient Ruler,受納君主
 aw_household_offer_confirm,发出后妃提议,Send Household Proposal,發出後妃提議
 aw_household_offer_back_diplomacy,返回外交,Back to Diplomacy,返回外交
 aw_household_offer_no_candidate,无合适女子,No Eligible Candidate,無合適女子
 aw_household_offer_ready,选择一名贵族宗族女子并发出提议,Select a noblewoman and send the proposal,選擇一名貴族宗族女子並發出提議
+aw_household_domestic_select_ready,选择一名本国合适女子册立入宫,Select a domestic household candidate,選擇一名本國合適女子冊立入宮
+aw_household_domestic_confirm,确认册立,Confirm Appointment,確認冊立
+aw_household_domestic_back,返回后宫,Back to Household,返回後宮
 aw_household_consort_capacity,妾室,Consorts,妾室
 aw_household_section_principal_wife,正妻,Principal Wife,正妻
 aw_household_section_consorts,妾室,Consorts,妾室

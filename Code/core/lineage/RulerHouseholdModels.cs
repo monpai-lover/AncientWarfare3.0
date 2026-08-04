@@ -76,6 +76,8 @@ namespace AncientWarfare3.core.lineage
         public int Age = -1;
         public bool MemberOfRulingLineage;
         public bool DirectChildOfRuler;
+        public RulerHouseholdCandidateClass CandidateClass =
+            RulerHouseholdCandidateClass.Commoner;
     }
 
     internal sealed class RulerHouseholdConsortRequestPreview

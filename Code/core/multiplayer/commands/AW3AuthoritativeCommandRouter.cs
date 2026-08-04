@@ -70,6 +70,8 @@ namespace AncientWarfare3.core.multiplayer.commands
                 case AW3CommandKind.SetArmyPosture:
                 case AW3CommandKind.CancelArmyOrder:
                     return ArmyRtsCommandService.Dispatch(request);
+                case AW3CommandKind.CommitDomesticHousehold:
+                    return AW3HouseholdCommandHandler.Dispatch(request);
                 default:
                     return AW3CommandResult.Rejected(
                         AW3CommandError.InvalidRequest,

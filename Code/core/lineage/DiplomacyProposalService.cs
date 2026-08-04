@@ -2063,6 +2063,9 @@ namespace AncientWarfare3.core.lineage
                     "war_settlement");
             if (!GeneralAiProposalCooldownReady(pKingdom, year))
                 return AsyncStrategyAuthorityTrace.Skipped("cooldown");
+            if (RulerHouseholdService.TryFillOneDomesticVacancy(pKingdom))
+                return AsyncStrategyAuthorityTrace.Skipped(
+                    "domestic_household");
             if (!TryPrepareOrdinaryAiProposals(pKingdom, year,
                     out Kingdom contact,
                     out List<PreparedAiProposal> candidates))
@@ -2091,8 +2094,7 @@ namespace AncientWarfare3.core.lineage
             pToken = default;
             if (AW3MultiplayerReplicaScope.IsReplicaSession || !Ready ||
                 pKingdom?.data == null || pKingdom.isRekt() ||
-                pKingdom.isNeutral() || SafeYear() != pRequestedYear ||
-                pExpectedResponderId < 0L)
+                pKingdom.isNeutral() || SafeYear() != pRequestedYear)
                 return false;
             if (!GeneralAiProposalCooldownReady(pKingdom, pRequestedYear))
                 return false;
@@ -2100,7 +2102,8 @@ namespace AncientWarfare3.core.lineage
             long observedResponderId = contact?.data == null
                 ? -1L
                 : contact.id;
-            if (observedResponderId != pExpectedResponderId) return false;
+            if (pExpectedResponderId >= 0L &&
+                observedResponderId != pExpectedResponderId) return false;
             int cityCount = pKingdom.cities?.Count ?? 0;
             if (cityCount <= 0) return false;
             pKingdom.data.get(LineageKeys.DIPLOMACY_AI_CITY_CURSOR,
@@ -2159,7 +2162,10 @@ namespace AncientWarfare3.core.lineage
                 year != pRequestedYear)
                 return false;
             if (TryScheduleWarPeace(pKingdom)) return false;
-            return GeneralAiProposalCooldownReady(pKingdom, year);
+            if (!GeneralAiProposalCooldownReady(pKingdom, year))
+                return false;
+            return !RulerHouseholdService.TryFillOneDomesticVacancy(
+                pKingdom);
         }
 
         internal static bool TryCompleteDomesticOnlyProposalYear(

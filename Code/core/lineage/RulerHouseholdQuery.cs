@@ -125,23 +125,37 @@ namespace AncientWarfare3.core.lineage
         }
 
         public IReadOnlyList<long> ReadOfferCandidateIds(long pKingdomId,
-            long pRulingLineageId, int pRequestedLimit)
+            long pRulingLineageId, long pExcludedParentId,
+            RulerHouseholdKind pKind,
+            bool pIncludeSlaves, int pRequestedLimit)
         {
             int limit = Math.Min(MaximumOfferCandidates,
                 Math.Max(0, pRequestedLimit));
             var result = new List<long>(limit);
             if (pKingdomId < 0L || limit == 0) return result;
+            string candidateClassWhere = pKind ==
+                RulerHouseholdKind.PrincipalWife || !pIncludeSlaves
+                ? "STATUS='noble' AND LINEAGE_ID>=0 AND SHI_ID>=0"
+                : "((STATUS='noble' AND LINEAGE_ID>=0 AND SHI_ID>=0) " +
+                  "OR STATUS='slave_lineage')";
             using var command = new SQLiteCommand(
                 "SELECT ID FROM ActorArchive INDEXED BY " +
                 "idx_ActorArchive_kingdom_alive_birth WHERE " +
                 "KINGDOM_ID=@kingdom AND IS_ALIVE=1 AND SEX=1 AND " +
-                "STATUS='noble' AND LINEAGE_ID>=0 AND SHI_ID>=0 " +
+                candidateClassWhere + " " +
                 "AND BIRTH_TIME<=@youngest AND BIRTH_TIME>@oldest " +
-                "ORDER BY CASE WHEN LINEAGE_ID=@ruling_lineage THEN 0 ELSE 1 END," +
+                "AND (@excluded_parent<0 OR (" +
+                "IFNULL(PARENT_ID_1,-1)<>@excluded_parent AND " +
+                "IFNULL(PARENT_ID_2,-1)<>@excluded_parent)) " +
+                "ORDER BY CASE " +
+                "WHEN STATUS='noble' AND LINEAGE_ID=@ruling_lineage THEN 0 " +
+                "WHEN STATUS='noble' THEN 1 ELSE 2 END," +
                 "BIRTH_TIME DESC,ID LIMIT @limit",
                 _db);
             command.Parameters.AddWithValue("@kingdom", pKingdomId);
             command.Parameters.AddWithValue("@ruling_lineage", pRulingLineageId);
+            command.Parameters.AddWithValue("@excluded_parent",
+                pExcludedParentId);
             double now = LineageService.CurTime();
             command.Parameters.AddWithValue("@youngest", now -
                 RulerHouseholdRules.MinimumCandidateAge * WorldTimePerYear);

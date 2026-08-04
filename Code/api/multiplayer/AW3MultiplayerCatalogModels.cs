@@ -346,7 +346,8 @@ namespace AncientWarfare3.api.multiplayer
         DesignateMilitaryGovernorateSuccessor = 32,
         ReplaceMilitaryGovernorateGovernor = 33,
         ApplyCustomCourtTemplate = 34,
-        GrantBanditAmnesty = 35
+        GrantBanditAmnesty = 35,
+        CommitDomesticHousehold = 36
     }
 
     public enum AW3CommandStatus : byte
@@ -707,6 +708,15 @@ namespace AncientWarfare3.api.multiplayer
                 cityId: Optional(thirdCandidateId,
                     nameof(thirdCandidateId)),
                 secondaryId: Positive(sessionId, nameof(sessionId)));
+
+        public static AW3CommandRequest CommitDomesticHousehold(
+            long countryId, long actorId, long expectedRulerActorId,
+            string kindId) => Create(
+            AW3CommandKind.CommitDomesticHousehold, countryId,
+            actorId: Positive(actorId, nameof(actorId)),
+            targetActorId: Positive(expectedRulerActorId,
+                nameof(expectedRulerActorId)),
+            key: Token(kindId, nameof(kindId)));
 
         private static AW3CommandRequest Create(AW3CommandKind kind,
             long countryId, long targetCountryId = -1L,

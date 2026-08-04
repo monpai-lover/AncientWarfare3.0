@@ -34,6 +34,11 @@ namespace AncientWarfare3.ui.windows
         private RectTransform _listRoot;
         private RectTransform _listContent;
         private ScrollRect _listScroll;
+        private RectTransform _actionBar;
+        private Button _appointPrincipal;
+        private Text _appointPrincipalText;
+        private Button _takeConsort;
+        private Text _takeConsortText;
         private Text _principalLabel;
         private Text _consortLabel;
         private HouseholdRowView _principalRow;
@@ -104,6 +109,14 @@ namespace AncientWarfare3.ui.windows
 
             CreateScrollArea(_root, out _listRoot, out _listContent,
                 out _listScroll);
+            _actionBar = CreateActionBar(_listContent);
+            _appointPrincipal = CreateButton(_actionBar,
+                "AppointPrincipalWife", OpenDomesticPrincipal,
+                out _appointPrincipalText);
+            ConfigureActionButton(_appointPrincipal);
+            _takeConsort = CreateButton(_actionBar, "TakeConsort",
+                OpenDomesticConsort, out _takeConsortText);
+            ConfigureActionButton(_takeConsort);
             _principalLabel = CreateSectionLabel(_listContent,
                 "PrincipalWifeSection");
             _principalRow = CreateRow(_listContent, "PrincipalWifeRow");
@@ -132,6 +145,18 @@ namespace AncientWarfare3.ui.windows
                 AW_L10n.Text("aw_household_consort_capacity",
                     "Consorts") + " " + snapshot.Consorts.Count + " / " +
                 snapshot.ConsortCapacity;
+            _actionBar.gameObject.SetActive(!snapshot.RulerIsFemale);
+            _appointPrincipal.interactable = !snapshot.RulerIsFemale &&
+                                             snapshot.PrincipalWife == null;
+            _takeConsort.interactable = !snapshot.RulerIsFemale &&
+                                        snapshot.Consorts.Count <
+                                        snapshot.ConsortCapacity;
+            if (!_appointPrincipal.interactable && !snapshot.RulerIsFemale)
+                _appointPrincipalText.text = AW_L10n.Text(
+                    "aw_household_action_principal_exists", "Wife Appointed");
+            if (!_takeConsort.interactable && !snapshot.RulerIsFemale)
+                _takeConsortText.text = AW_L10n.Text(
+                    "aw_household_action_consort_full", "Consorts Full");
             string principalSectionKey = snapshot.RulerIsFemale
                 ? "aw_household_section_royal_husband"
                 : "aw_household_section_principal_wife";
@@ -178,6 +203,7 @@ namespace AncientWarfare3.ui.windows
                 pReason);
             _principalLabel.text = "";
             _consortLabel.text = "";
+            _actionBar.gameObject.SetActive(false);
             _principalRow.Root.SetActive(false);
             for (int i = 0; i < _consortRows.Count; i++)
                 _consortRows[i].Root.SetActive(false);
@@ -304,6 +330,23 @@ namespace AncientWarfare3.ui.windows
                 "Back to Court");
             _kingdomBackText.text = AW_L10n.Text("aw_back_to_kingdom",
                 "Back to Kingdom");
+            _appointPrincipalText.text = AW_L10n.Text(
+                "aw_household_action_appoint_principal",
+                "Appoint Principal Wife");
+            _takeConsortText.text = AW_L10n.Text(
+                "aw_household_action_take_consort", "Take Consort");
+        }
+
+        private void OpenDomesticPrincipal()
+        {
+            RulerHouseholdOfferWindow.OpenDomestic(_kingdomId,
+                RulerHouseholdKind.PrincipalWife);
+        }
+
+        private void OpenDomesticConsort()
+        {
+            RulerHouseholdOfferWindow.OpenDomestic(_kingdomId,
+                RulerHouseholdKind.Consort);
         }
 
         private void BackToCourt()
@@ -423,6 +466,35 @@ namespace AncientWarfare3.ui.windows
             element.preferredHeight = 24f;
             text.color = new Color(1f, .82f, .42f, 1f);
             return text;
+        }
+
+        private static RectTransform CreateActionBar(Transform pParent)
+        {
+            RectTransform bar = new GameObject("HouseholdActions",
+                typeof(RectTransform), typeof(HorizontalLayoutGroup),
+                typeof(LayoutElement)).GetComponent<RectTransform>();
+            bar.SetParent(pParent, false);
+            HorizontalLayoutGroup group =
+                bar.GetComponent<HorizontalLayoutGroup>();
+            group.padding = new RectOffset(4, 4, 3, 3);
+            group.spacing = 8f;
+            group.childControlHeight = true;
+            group.childControlWidth = true;
+            group.childForceExpandHeight = true;
+            group.childForceExpandWidth = true;
+            LayoutElement layout = bar.GetComponent<LayoutElement>();
+            layout.minHeight = 34f;
+            layout.preferredHeight = 34f;
+            return bar;
+        }
+
+        private static void ConfigureActionButton(Button pButton)
+        {
+            LayoutElement layout =
+                pButton.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = 110f;
+            layout.preferredHeight = 28f;
+            layout.flexibleWidth = 1f;
         }
 
         private static Text CreateText(Transform pParent, string pName,

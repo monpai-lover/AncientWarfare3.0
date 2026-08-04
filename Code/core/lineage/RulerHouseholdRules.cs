@@ -8,6 +8,13 @@ namespace AncientWarfare3.core.lineage
         Consort
     }
 
+    public enum RulerHouseholdCandidateClass
+    {
+        Commoner,
+        Noble,
+        Slave
+    }
+
     public enum RulerHouseholdRealmTier
     {
         Lower,
@@ -158,6 +165,24 @@ namespace AncientWarfare3.core.lineage
                    pAge <= MaximumCandidateAge;
         }
 
+        public static bool IsCandidateClassEligible(
+            RulerHouseholdCandidateClass pCandidateClass,
+            RulerHouseholdKind pKind)
+        {
+            return IsCandidateClassEligible(pCandidateClass, pKind,
+                allowSlaveConsort: true);
+        }
+
+        public static bool IsCandidateClassEligible(
+            RulerHouseholdCandidateClass pCandidateClass,
+            RulerHouseholdKind pKind, bool allowSlaveConsort)
+        {
+            return pCandidateClass == RulerHouseholdCandidateClass.Noble ||
+                   allowSlaveConsort &&
+                   pCandidateClass == RulerHouseholdCandidateClass.Slave &&
+                   pKind == RulerHouseholdKind.Consort;
+        }
+
         public static int HouseholdCandidatePriority(
             bool memberOfRulingLineage)
         {
@@ -168,6 +193,18 @@ namespace AncientWarfare3.core.lineage
         public static int HouseholdCandidatePriority(
             bool memberOfRulingLineage, bool directChildOfRuler)
         {
+            return HouseholdCandidatePriority(memberOfRulingLineage,
+                directChildOfRuler, RulerHouseholdCandidateClass.Noble);
+        }
+
+        public static int HouseholdCandidatePriority(
+            bool memberOfRulingLineage, bool directChildOfRuler,
+            RulerHouseholdCandidateClass pCandidateClass)
+        {
+            if (pCandidateClass == RulerHouseholdCandidateClass.Slave)
+                return 3;
+            if (pCandidateClass != RulerHouseholdCandidateClass.Noble)
+                return int.MaxValue;
             if (memberOfRulingLineage && directChildOfRuler) return 0;
             return memberOfRulingLineage ? 1 : 2;
         }
@@ -202,6 +239,27 @@ namespace AncientWarfare3.core.lineage
             }
             if (consortCapacity > 0 && activeConsorts >= 0 &&
                 activeConsorts < consortCapacity)
+            {
+                pKind = RulerHouseholdKind.Consort;
+                return true;
+            }
+            pKind = default;
+            return false;
+        }
+
+        public static bool TrySelectDomesticFillKind(bool hasPrincipalWife,
+            int activeConsorts, int consortCapacity,
+            bool principalCandidateAvailable,
+            bool consortCandidateAvailable,
+            out RulerHouseholdKind pKind)
+        {
+            if (!hasPrincipalWife && principalCandidateAvailable)
+            {
+                pKind = RulerHouseholdKind.PrincipalWife;
+                return true;
+            }
+            if (consortCandidateAvailable && consortCapacity > 0 &&
+                activeConsorts >= 0 && activeConsorts < consortCapacity)
             {
                 pKind = RulerHouseholdKind.Consort;
                 return true;

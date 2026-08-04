@@ -166,7 +166,9 @@ internal static class AW3MultiplayerCatalogRulesTests
                 "custom_court_7", 1,
                 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
                 1),
-            AW3CommandRequest.GrantBanditAmnesty(7, 8, "None", "", "", true)
+            AW3CommandRequest.GrantBanditAmnesty(7, 8, "None", "", "", true),
+            AW3CommandRequest.CommitDomesticHousehold(7, 31, 32,
+                "consort")
         };
 
         Equal(Enum.GetValues<AW3CommandKind>().Length, requests.Length,

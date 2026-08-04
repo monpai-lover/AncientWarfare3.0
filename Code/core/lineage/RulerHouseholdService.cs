@@ -23,13 +23,21 @@ namespace AncientWarfare3.core.lineage
             Kingdom pSource, Kingdom pRecipient, long pCandidateActorId,
             RulerHouseholdKind pKind)
         {
-            return PrepareOffer(pSource, pRecipient,
-                FindActor(pCandidateActorId), pKind);
+            return PrepareCandidate(pSource, pRecipient,
+                FindActor(pCandidateActorId), pKind, pDomestic: false);
         }
 
         internal static RulerHouseholdOfferPreview PrepareOffer(
             Kingdom pSource, Kingdom pRecipient, Actor pCandidate,
             RulerHouseholdKind pKind)
+        {
+            return PrepareCandidate(pSource, pRecipient, pCandidate, pKind,
+                pDomestic: false);
+        }
+
+        private static RulerHouseholdOfferPreview PrepareCandidate(
+            Kingdom pSource, Kingdom pRecipient, Actor pCandidate,
+            RulerHouseholdKind pKind, bool pDomestic)
         {
             var preview = new RulerHouseholdOfferPreview
             {
@@ -43,7 +51,7 @@ namespace AncientWarfare3.core.lineage
                 return preview;
             }
             if (!IsLiveRealm(pSource) || !IsLiveRealm(pRecipient) ||
-                pSource == pRecipient)
+                pDomestic != (pSource == pRecipient))
             {
                 preview.Reason = "invalid_household_realms";
                 return preview;
@@ -55,7 +63,8 @@ namespace AncientWarfare3.core.lineage
                 preview.Reason = "invalid_household_ruler";
                 return preview;
             }
-            if (!IsEligibleCandidate(pCandidate, pSource, out string reason))
+            if (!IsEligibleCandidate(pCandidate, pSource, pKind, pDomestic,
+                    out string reason))
             {
                 preview.Reason = reason;
                 return preview;
@@ -209,16 +218,36 @@ namespace AncientWarfare3.core.lineage
                 ResolveRealmTier(pRecipient));
             if (active >= capacity) return false;
             return query.ReadOfferCandidateIds(pSource.id,
-                ResolveRulingLineageId(pSource), pRequestedLimit: 1).Count > 0;
+                ResolveRulingLineageId(pSource),
+                pRecipient.king.data.id,
+                RulerHouseholdKind.Consort, pIncludeSlaves: false,
+                pRequestedLimit: 1).Count > 0;
         }
 
         internal static RulerHouseholdOfferCandidatePool
             BuildOfferCandidatePool(Kingdom pSource, Kingdom pRecipient,
                 RulerHouseholdKind pKind)
         {
+            return BuildCandidatePool(pSource, pRecipient, pKind,
+                pDomestic: false);
+        }
+
+        internal static RulerHouseholdOfferCandidatePool
+            BuildDomesticCandidatePool(Kingdom pKingdom,
+                RulerHouseholdKind pKind)
+        {
+            return BuildCandidatePool(pKingdom, pKingdom, pKind,
+                pDomestic: true);
+        }
+
+        private static RulerHouseholdOfferCandidatePool BuildCandidatePool(
+            Kingdom pSource, Kingdom pRecipient,
+            RulerHouseholdKind pKind, bool pDomestic)
+        {
             var pool = new RulerHouseholdOfferCandidatePool();
             if (!Ready || !IsLiveRealm(pSource) ||
-                !IsLiveRealm(pRecipient) || pSource == pRecipient)
+                !IsLiveRealm(pRecipient) ||
+                pDomestic != (pSource == pRecipient))
             {
                 pool.Reason = "invalid_household_realms";
                 return pool;
@@ -249,12 +278,14 @@ namespace AncientWarfare3.core.lineage
 
             long rulingLineageId = ResolveRulingLineageId(pSource);
             IReadOnlyList<long> ids = query.ReadOfferCandidateIds(
-                pSource.id, rulingLineageId, MaximumPlayerCandidateActors);
+                pSource.id, rulingLineageId, pRecipient.king.data.id, pKind,
+                pIncludeSlaves: pDomestic,
+                MaximumPlayerCandidateActors);
             for (int i = 0; i < ids.Count; i++)
             {
                 Actor candidate = FindActor(ids[i]);
-                RulerHouseholdOfferPreview preview = PrepareOffer(
-                    pSource, pRecipient, candidate, pKind);
+                RulerHouseholdOfferPreview preview = PrepareCandidate(
+                    pSource, pRecipient, candidate, pKind, pDomestic);
                 if (!preview.Available) continue;
                 ActorArchiveTableItem archive =
                     LineageArchiveReader.ReadRow(ids[i]);
@@ -269,6 +300,7 @@ namespace AncientWarfare3.core.lineage
                         archive?.lineage_id == rulingLineageId,
                     DirectChildOfRuler = IsDirectChildOfRuler(candidate,
                         pSource.king),
+                    CandidateClass = ResolveCandidateClass(candidate),
                     LineageLabel = AncestryDisplayRules.FormatLineageLabel(
                         archive?.city_name, archive?.clan_name)
                 });
@@ -277,10 +309,12 @@ namespace AncientWarfare3.core.lineage
             {
                 int priority = RulerHouseholdRules.HouseholdCandidatePriority(
                         left.MemberOfRulingLineage,
-                        left.DirectChildOfRuler).CompareTo(
+                        left.DirectChildOfRuler,
+                        left.CandidateClass).CompareTo(
                     RulerHouseholdRules.HouseholdCandidatePriority(
                             right.MemberOfRulingLineage,
-                            right.DirectChildOfRuler));
+                            right.DirectChildOfRuler,
+                            right.CandidateClass));
                 if (priority != 0) return priority;
                 int age = left.Age.CompareTo(right.Age);
                 return age != 0 ? age : left.ActorId.CompareTo(right.ActorId);
@@ -306,7 +340,9 @@ namespace AncientWarfare3.core.lineage
             long rulingLineageId = ResolveRulingLineageId(pSource);
             var query = new RulerHouseholdQuery(DB);
             IReadOnlyList<long> candidateIds = query.ReadOfferCandidateIds(
-                pSource.id, rulingLineageId, MaximumAiCandidateActors);
+                pSource.id, rulingLineageId, pRecipient.king.data.id, pKind,
+                pIncludeSlaves: false,
+                MaximumAiCandidateActors);
             var candidates = new List<RulerHouseholdOfferCandidate>(
                 candidateIds.Count);
             for (int index = 0; index < candidateIds.Count; index++)
@@ -323,17 +359,20 @@ namespace AncientWarfare3.core.lineage
                     MemberOfRulingLineage = rulingLineageId >= 0L &&
                                              actorLineageId == rulingLineageId,
                     DirectChildOfRuler = IsDirectChildOfRuler(actor,
-                        pSource.king)
+                        pSource.king),
+                    CandidateClass = ResolveCandidateClass(actor)
                 });
             }
             candidates.Sort((left, right) =>
             {
                 int priority = RulerHouseholdRules.HouseholdCandidatePriority(
                         left.MemberOfRulingLineage,
-                        left.DirectChildOfRuler).CompareTo(
+                        left.DirectChildOfRuler,
+                        left.CandidateClass).CompareTo(
                     RulerHouseholdRules.HouseholdCandidatePriority(
                         right.MemberOfRulingLineage,
-                        right.DirectChildOfRuler));
+                        right.DirectChildOfRuler,
+                        right.CandidateClass));
                 if (priority != 0) return priority;
                 int age = left.Age.CompareTo(right.Age);
                 return age != 0 ? age : left.ActorId.CompareTo(right.ActorId);
@@ -373,6 +412,80 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
+            return TryCommitCore(pSource, pRecipient, pCandidateActorId,
+                pKind, pSourceProposalId, pApplyDiplomacyEffects: true,
+                out pReason);
+        }
+
+        public static bool TryCommitDomestic(Kingdom pKingdom,
+            long pCandidateActorId, RulerHouseholdKind pKind,
+            out string pReason)
+        {
+            pReason = "household_commit_failed";
+            if (!IsAuthority() || !Ready) return false;
+            RulerHouseholdOfferPreview preview = PrepareCandidate(pKingdom,
+                pKingdom, FindActor(pCandidateActorId), pKind,
+                pDomestic: true);
+            if (!preview.Available)
+            {
+                pReason = preview.Reason;
+                return false;
+            }
+            return TryCommitCore(pKingdom, pKingdom, pCandidateActorId,
+                pKind, pSourceProposalId: -1L,
+                pApplyDiplomacyEffects: false, out pReason);
+        }
+
+        internal static bool TryFillOneDomesticVacancy(Kingdom pKingdom)
+        {
+            if (!IsAuthority() || !Ready || !IsLiveRealm(pKingdom) ||
+                !IsEligibleRuler(pKingdom.king, pKingdom)) return false;
+
+            Actor ruler = pKingdom.king;
+            var query = new RulerHouseholdQuery(DB);
+            bool hasPrincipal = query.HasActivePrincipal(ruler.data.id) ||
+                                HasLivingMutualSpouse(ruler);
+            int activeConsorts = query.CountActiveConsorts(ruler.data.id);
+            int capacity = RulerHouseholdRules.ConsortCapacity(
+                ResolveRealmTier(pKingdom));
+
+            RulerHouseholdOfferCandidatePool principalPool = null;
+            bool principalCandidateAvailable = false;
+            if (!hasPrincipal)
+            {
+                principalPool = BuildDomesticCandidatePool(pKingdom,
+                    RulerHouseholdKind.PrincipalWife);
+                principalCandidateAvailable =
+                    principalPool.Candidates.Count > 0;
+            }
+
+            RulerHouseholdOfferCandidatePool consortPool = null;
+            bool consortCandidateAvailable = false;
+            if (!principalCandidateAvailable && activeConsorts < capacity)
+            {
+                consortPool = BuildDomesticCandidatePool(pKingdom,
+                    RulerHouseholdKind.Consort);
+                consortCandidateAvailable = consortPool.Candidates.Count > 0;
+            }
+
+            if (!RulerHouseholdRules.TrySelectDomesticFillKind(hasPrincipal,
+                    activeConsorts, capacity, principalCandidateAvailable,
+                    consortCandidateAvailable,
+                    out RulerHouseholdKind kind)) return false;
+            RulerHouseholdOfferCandidatePool selectedPool = kind ==
+                RulerHouseholdKind.PrincipalWife ? principalPool : consortPool;
+            if (selectedPool == null || selectedPool.Candidates.Count == 0)
+                return false;
+            return TryCommitDomestic(pKingdom,
+                selectedPool.Candidates[0].ActorId, kind, out _);
+        }
+
+        private static bool TryCommitCore(Kingdom pSource,
+            Kingdom pRecipient, long pCandidateActorId,
+            RulerHouseholdKind pKind, long pSourceProposalId,
+            bool pApplyDiplomacyEffects, out string pReason)
+        {
+            pReason = "household_commit_failed";
             Actor partner = FindActor(pCandidateActorId);
             Actor ruler = pRecipient.king;
             City capital = pRecipient.capital;
@@ -391,24 +504,28 @@ namespace AncientWarfare3.core.lineage
                 long relationshipId = TableIdAllocator.Next(DB,
                     RulerHouseholdTableItem.GetTableName(),
                     "RELATIONSHIP_ID");
-                long modifierId = TableIdAllocator.Next(DB,
-                    DiplomaticRelationModifierTableItem.GetTableName(),
-                    "MODIFIER_ID");
                 int year = SafeYear();
                 using SQLiteTransaction transaction = DB.BeginTransaction();
                 InsertRelationship(transaction, relationshipId, ruler,
                     partner, pSource, pRecipient, pKind, year,
                     pSourceProposalId);
-                if (!DiplomaticRelationModifierService.Upsert(transaction,
-                        modifierId, pSource.id, pRecipient.id,
-                        "ruler_household", relationshipId,
-                        RulerHouseholdRules.RelationshipBonus(pKind), year,
-                        int.MaxValue))
-                    throw new InvalidOperationException(
-                        "household relation modifier write failed");
+                if (pApplyDiplomacyEffects)
+                {
+                    long modifierId = TableIdAllocator.Next(DB,
+                        DiplomaticRelationModifierTableItem.GetTableName(),
+                        "MODIFIER_ID");
+                    if (!DiplomaticRelationModifierService.Upsert(transaction,
+                            modifierId, pSource.id, pRecipient.id,
+                            "ruler_household", relationshipId,
+                            RulerHouseholdRules.RelationshipBonus(pKind), year,
+                            int.MaxValue))
+                        throw new InvalidOperationException(
+                            "household relation modifier write failed");
+                }
                 transaction.Commit();
 
-                if (!MovePartner(partner, pRecipient, capital))
+                if ((partner.kingdom != pRecipient || partner.city != capital) &&
+                    !MovePartner(partner, pRecipient, capital))
                 {
                     CloseRelationship(relationshipId, partner);
                     pReason = "household_migration_failed";
@@ -657,7 +774,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool IsEligibleCandidate(Actor pCandidate,
-            Kingdom pSource, out string pReason)
+            Kingdom pSource, RulerHouseholdKind pKind, bool pDomestic,
+            out string pReason)
         {
             pReason = "invalid_household_candidate";
             if (!IsLiveActor(pCandidate)) return false;
@@ -687,19 +805,21 @@ namespace AncientWarfare3.core.lineage
                 pReason = "candidate_not_household_age";
                 return false;
             }
-            if (SlaveService.IsSlave(pCandidate))
+            RulerHouseholdCandidateClass candidateClass =
+                ResolveCandidateClass(pCandidate);
+            if (!RulerHouseholdRules.IsCandidateClassEligible(
+                    candidateClass, pKind,
+                    allowSlaveConsort: pDomestic))
             {
-                pReason = "candidate_is_slave";
+                pReason = candidateClass == RulerHouseholdCandidateClass.Slave
+                    ? "candidate_is_slave"
+                    : "candidate_not_noble";
                 return false;
             }
-            if (!NobleHeirPregnancyService.IsEligibleNoble(pCandidate))
+            if (candidateClass == RulerHouseholdCandidateClass.Noble &&
+                !NobleHeirPregnancyService.IsEligibleNoble(pCandidate))
             {
                 pReason = "candidate_not_noble";
-                return false;
-            }
-            if (!HasNobleLineage(pCandidate))
-            {
-                pReason = "candidate_not_noble_lineage";
                 return false;
             }
             if (pCandidate.hasLover())
@@ -709,6 +829,16 @@ namespace AncientWarfare3.core.lineage
             }
             pReason = "";
             return true;
+        }
+
+        private static RulerHouseholdCandidateClass ResolveCandidateClass(
+            Actor pCandidate)
+        {
+            if (SlaveService.IsSlave(pCandidate))
+                return RulerHouseholdCandidateClass.Slave;
+            return HasNobleLineage(pCandidate)
+                ? RulerHouseholdCandidateClass.Noble
+                : RulerHouseholdCandidateClass.Commoner;
         }
 
         private static bool HasNobleLineage(Actor pCandidate)
@@ -765,9 +895,10 @@ namespace AncientWarfare3.core.lineage
             HistoryWriter.RecordKingdom(pSource,
                 KingdomEvent.ROYAL_MARRIAGE, text,
                 HistoryTarget.Kingdom(pRecipient));
-            HistoryWriter.RecordKingdom(pRecipient,
-                KingdomEvent.ROYAL_MARRIAGE, text,
-                HistoryTarget.Kingdom(pSource));
+            if (pSource != pRecipient)
+                HistoryWriter.RecordKingdom(pRecipient,
+                    KingdomEvent.ROYAL_MARRIAGE, text,
+                    HistoryTarget.Kingdom(pSource));
         }
 
         private static bool IsEligibleRuler(Actor pRuler, Kingdom pRealm)

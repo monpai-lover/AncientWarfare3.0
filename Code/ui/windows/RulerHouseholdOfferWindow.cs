@@ -19,6 +19,7 @@ namespace AncientWarfare3.ui.windows
         private static long _requesterKingdomId = -1L;
         private static long _recipientKingdomId = -1L;
         private static long _consortRequestProposalId = -1L;
+        private static bool _domesticMode;
 
         private readonly List<CandidateRow> _rows = new();
         private Vector2 _windowSize = DefaultSize;
@@ -70,6 +71,7 @@ namespace AncientWarfare3.ui.windows
             _requesterKingdomId = pRequesterKingdomId;
             _recipientKingdomId = pRecipientKingdomId;
             _consortRequestProposalId = -1L;
+            _domesticMode = false;
             if (Instance != null)
             {
                 Instance._kind = RulerHouseholdKind.PrincipalWife;
@@ -94,6 +96,7 @@ namespace AncientWarfare3.ui.windows
             _requesterKingdomId = proposal.ResponderKingdomId;
             _recipientKingdomId = proposal.RequesterKingdomId;
             _consortRequestProposalId = pProposalId;
+            _domesticMode = false;
             if (Instance != null)
             {
                 Instance._kind = RulerHouseholdKind.Consort;
@@ -106,6 +109,26 @@ namespace AncientWarfare3.ui.windows
                 AW_LineageWindowIds.HOUSEHOLD_OFFER,
                 () => Instance?.Refresh());
             return true;
+        }
+
+        public static void OpenDomestic(long pKingdomId,
+            RulerHouseholdKind pKind)
+        {
+            _requesterKingdomId = pKingdomId;
+            _recipientKingdomId = pKingdomId;
+            _consortRequestProposalId = -1L;
+            _domesticMode = true;
+            if (Instance == null)
+                CreateAndInit(AW_LineageWindowIds.HOUSEHOLD_OFFER);
+            if (Instance != null)
+            {
+                Instance._kind = pKind;
+                Instance._selectedActorId = -1L;
+                Instance._rebuildPool = true;
+            }
+            AW_LineageWindowIds.SafeShow(
+                AW_LineageWindowIds.HOUSEHOLD_OFFER,
+                () => Instance?.Refresh());
         }
 
         protected override void Init()
@@ -203,7 +226,8 @@ namespace AncientWarfare3.ui.windows
             EnsureUi();
             ApplyLayout();
             SetWindowText();
-            bool requestMode = _consortRequestProposalId >= 0L;
+            bool requestMode = !_domesticMode &&
+                               _consortRequestProposalId >= 0L;
             if (requestMode)
             {
                 DiplomacyProposal request = DiplomacyProposalService
@@ -232,8 +256,11 @@ namespace AncientWarfare3.ui.windows
             }
             if (_rebuildPool || _pool == null)
             {
-                _pool = RulerHouseholdService.BuildOfferCandidatePool(
-                    requester, recipient, _kind);
+                _pool = _domesticMode
+                    ? RulerHouseholdService.BuildDomesticCandidatePool(
+                        requester, _kind)
+                    : RulerHouseholdService.BuildOfferCandidatePool(
+                        requester, recipient, _kind);
                 _rebuildPool = false;
                 if (!Contains(_pool.Candidates, _selectedActorId))
                     _selectedActorId = _pool.Candidates.Count > 0
@@ -250,12 +277,16 @@ namespace AncientWarfare3.ui.windows
             _confirmButton.interactable = _selectedActorId >= 0L &&
                                           !_commandPending;
             _status.text = _pool.Candidates.Count > 0
-                ? AW_L10n.Text(requestMode
-                        ? "aw_household_request_select_ready"
-                        : "aw_household_offer_ready",
-                    requestMode
-                        ? "Select a noblewoman to answer the request"
-                        : "Select a noblewoman and send the proposal")
+                ? AW_L10n.Text(_domesticMode
+                        ? "aw_household_domestic_select_ready"
+                        : requestMode
+                            ? "aw_household_request_select_ready"
+                            : "aw_household_offer_ready",
+                    _domesticMode
+                        ? "Select a domestic household candidate"
+                        : requestMode
+                            ? "Select a noblewoman to answer the request"
+                            : "Select a noblewoman and send the proposal")
                 : DiplomacyConversationWindow.ProposalFailure(_pool.Reason);
             Canvas.ForceUpdateCanvases();
         }
@@ -284,7 +315,10 @@ namespace AncientWarfare3.ui.windows
         private void BindCandidatePool(Kingdom pRequester)
         {
             _candidateHeading.text = AW_L10n.Text(
-                "aw_household_offer_our_noblewomen", "Our noblewomen") +
+                _domesticMode
+                    ? "aw_household_domestic_candidates"
+                    : "aw_household_offer_our_noblewomen",
+                _domesticMode ? "Domestic candidates" : "Our noblewomen") +
                 " - " + RulerAppellationService.GetProjectedStateName(
                     pRequester);
             for (int i = 0; i < _pool.Candidates.Count; i++)
@@ -375,6 +409,35 @@ namespace AncientWarfare3.ui.windows
             Kingdom recipient = FindKingdom(_recipientKingdomId);
             if (requester?.data == null || recipient?.king?.data == null)
                 return;
+            if (_domesticMode)
+            {
+                AW3CommandResult domesticResult =
+                    AW3MultiplayerCommandFacade.DispatchFromUi(
+                        AW3CommandRequest.CommitDomesticHousehold(
+                            requester.id, _selectedActorId,
+                            recipient.king.data.id,
+                            RulerHouseholdRules.DetailId(_kind)));
+                _commandPending = domesticResult.Status ==
+                                  AW3CommandStatus.Pending;
+                if (_commandPending)
+                {
+                    Refresh();
+                    return;
+                }
+                if (!domesticResult.Accepted)
+                {
+                    WorldTip.showNow(DiplomacyConversationWindow
+                        .ProposalFailure(domesticResult.MessageKey), false,
+                        "top");
+                    _rebuildPool = true;
+                    Refresh();
+                    return;
+                }
+                long kingdomId = requester.id;
+                _domesticMode = false;
+                RulerHouseholdWindow.Open(kingdomId);
+                return;
+            }
             AW3CommandRequest command = _consortRequestProposalId >= 0L
                 ? AW3CommandRequest.RespondDiplomacyProposal(
                     requester.id, recipient.id,
@@ -407,6 +470,14 @@ namespace AncientWarfare3.ui.windows
 
         private void BackToDiplomacy()
         {
+            if (_domesticMode)
+            {
+                long kingdomId = _requesterKingdomId;
+                _domesticMode = false;
+                _consortRequestProposalId = -1L;
+                RulerHouseholdWindow.Open(kingdomId);
+                return;
+            }
             _consortRequestProposalId = -1L;
             DiplomacyConversationWindow.Open(_requesterKingdomId);
         }
@@ -435,10 +506,14 @@ namespace AncientWarfare3.ui.windows
             ScrollWindow window = GetComponent<ScrollWindow>();
             if (window?.titleText != null)
                 window.titleText.text = AW_L10n.Text(
-                    _consortRequestProposalId >= 0L
+                    _domesticMode
+                        ? "aw_ruler_household_domestic_select"
+                        : _consortRequestProposalId >= 0L
                         ? "aw_ruler_household_request_select"
                         : "aw_ruler_household_offer",
-                    _consortRequestProposalId >= 0L
+                    _domesticMode
+                        ? "Appoint Household Member"
+                        : _consortRequestProposalId >= 0L
                         ? "Select Requested Consort"
                         : "Offer Consort");
             _principalModeText.text = AW_L10n.Text(
@@ -446,13 +521,19 @@ namespace AncientWarfare3.ui.windows
             _consortModeText.text = AW_L10n.Text(
                 "aw_household_kind_consort", "Consort");
             _backText.text = AW_L10n.Text(
-                "aw_household_offer_back_diplomacy",
-                "Back to Diplomacy");
+                _domesticMode
+                    ? "aw_household_domestic_back"
+                    : "aw_household_offer_back_diplomacy",
+                _domesticMode ? "Back to Household" : "Back to Diplomacy");
             _confirmText.text = AW_L10n.Text(
-                _consortRequestProposalId >= 0L
+                _domesticMode
+                    ? "aw_household_domestic_confirm"
+                    : _consortRequestProposalId >= 0L
                     ? "aw_household_request_confirm"
                     : "aw_household_offer_confirm",
-                _consortRequestProposalId >= 0L
+                _domesticMode
+                    ? "Confirm Appointment"
+                    : _consortRequestProposalId >= 0L
                     ? "Provide Consort"
                     : "Send Proposal");
         }
