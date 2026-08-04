@@ -283,6 +283,9 @@ namespace AncientWarfare3.core.lineage
             City city = captor.city ?? captorKingdom.capital;
             if (city?.data == null) return false;
 
+            Army formerArmy = pTarget.army;
+            Kingdom formerMilitaryKingdom = pTarget.kingdom;
+
             bool nationalRecord = IsImportantCaptureTarget(pTarget);
             bool wasKingBeforeRelocation = SafeIsKing(pTarget);
             bool wasLeaderBeforeRelocation = SafeIsCityLeader(pTarget) || SafeIsArmyLeader(pTarget);
@@ -303,6 +306,8 @@ namespace AncientWarfare3.core.lineage
                 pFormerRulerKingdom: formerRulerKingdom,
                 pWasKingBeforeRelocation: wasKingBeforeRelocation,
                 pWasLeaderBeforeRelocation: wasLeaderBeforeRelocation);
+            ReleaseCapturedForeignMilitaryOwnership(pTarget, formerArmy,
+                formerMilitaryKingdom, captorKingdom, changed);
             if (!changed) return false;
 
             if (ShouldCountAsWarSlaveCapture(pTarget))
@@ -326,16 +331,68 @@ namespace AncientWarfare3.core.lineage
             Kingdom kingdom = pCatcher.kingdom ?? city?.kingdom;
             if (city?.data == null || kingdom?.data == null) return false;
 
+            Army formerArmy = pTarget.army;
+            Kingdom formerMilitaryKingdom = pTarget.kingdom;
+
             pTarget.joinCity(city);
             bool changed = Enslave(pTarget, "captured", pCatcher, city, kingdom, pForceRecord: true,
                 pForceNationalRecord: nationalRecord,
                 pFormerRulerKingdom: formerRulerKingdom,
                 pWasKingBeforeRelocation: wasKingBeforeRelocation,
                 pWasLeaderBeforeRelocation: wasLeaderBeforeRelocation);
+            ReleaseCapturedForeignMilitaryOwnership(pTarget, formerArmy,
+                formerMilitaryKingdom, kingdom, changed);
             if (changed && ShouldCountAsWarSlaveCapture(pTarget))
                 QueueWarSlaveCaptureSummary(kingdom, city, 1);
             CheckCitySlaveLabor(city);
             return changed;
+        }
+
+        private static void ReleaseCapturedForeignMilitaryOwnership(
+            Actor pActor, Army pFormerArmy, Kingdom pFormerKingdom,
+            Kingdom pCurrentKingdom, bool pCaptureSucceeded)
+        {
+            if (!CapturedMilitaryOwnershipRules.ShouldReleaseFormerArmy(
+                    pCaptureSucceeded, pFormerArmy?.data != null,
+                    pFormerKingdom?.id ?? -1L,
+                    pCurrentKingdom?.id ?? -1L)) return;
+
+            bool wasCaptain = false;
+            using (ArmyCaptainDisposalScope.Open(pFormerArmy))
+            {
+                try
+                {
+                    wasCaptain = ReferenceEquals(pFormerArmy.getCaptain(),
+                        pActor);
+                }
+                catch { }
+                try
+                {
+                    if (ReferenceEquals(pActor.army, pFormerArmy))
+                        pActor.removeFromArmy();
+                }
+                catch
+                {
+                    try
+                    {
+                        if (ReferenceEquals(pActor.army, pFormerArmy))
+                            pActor.setArmy(null);
+                    }
+                    catch { }
+                }
+                if (wasCaptain)
+                {
+                    try { pFormerArmy.setCaptain(null); }
+                    catch { }
+                }
+            }
+
+            ArmyRtsControllerService.ReleaseActor(pActor);
+            ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
+            TemporaryLevyService.OnActorInvalidated(pActor);
+            WartimeGarrisonService.OnActorInvalidated(pActor);
+            MandateMilitaryPhaseService.Clear(pActor);
+            ArmyStrategicIndexService.OnArmyRosterChanged(pFormerArmy);
         }
 
         public static bool Enslave(Actor pActor, string pReason, Actor pCaptor = null,

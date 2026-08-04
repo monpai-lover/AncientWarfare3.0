@@ -18,6 +18,7 @@
     <Compile Include="RuntimePerformanceDiagnosticRulesTests.cs.txt" />
     <Compile Include="ActorAgeWorkRulesTests.cs.txt" />
     <Compile Include="ActorDeathArchiveRulesTests.cs.txt" />
+    <Compile Include="CapturedMilitaryOwnershipRulesTests.cs.txt" />
     <Compile Include="ActorPresentationDirtyRulesTests.cs.txt" />
     <Compile Include="AWPathRequestReuseRulesTests.cs.txt" />
     <Compile Include="IdleBehaviourThrottleGateTests.cs.txt" />
@@ -595,6 +596,7 @@
     <Compile Include="..\..\Code\core\lineage\ActorAgeWorkRules.cs" Link="Production\ActorAgeWorkRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorDeathArchiveModels.cs" Link="Production\ActorDeathArchiveModels.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorDeathArchiveRules.cs" Link="Production\ActorDeathArchiveRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CapturedMilitaryOwnershipRules.cs" Link="Production\CapturedMilitaryOwnershipRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWActorPresentationDirtyRules.cs" Link="Production\AWActorPresentationDirtyRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWActorPresentationDirtyIndex.cs" Link="Production\AWActorPresentationDirtyIndex.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomFoodReliefRules.cs" Link="Production\KingdomFoodReliefRules.cs" />
@@ -672,6 +674,8 @@
   <Target Name="WartimeMilitaryTaskGatePerformanceSourceGuard"
       BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WartimeMilitaryTaskGatePerformanceSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\CapturedSlaveMilitaryOwnershipSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ActorDeathArchiveBacklogSourceGuard.ps1&quot;" />
   </Target>
   <Target Name="XiaItemDynamicAtlasSourceGuard"
       BeforeTargets="Build">

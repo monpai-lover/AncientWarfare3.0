@@ -349,6 +349,7 @@ if (args.Length == 1 && args[0] == "--actor-runtime")
     ActorDiagnosticSamplingRulesTests.Run();
     ActorAgeWorkRulesTests.Run();
     ActorDeathArchiveRulesTests.Run();
+    CapturedMilitaryOwnershipRulesTests.Run();
     ActorPresentationDirtyRulesTests.Run();
     AWPathRequestReuseRulesTests.Run();
     PathfindingPerformanceTests.Run();
@@ -7812,6 +7813,7 @@ TemporaryLevyDiagnosticSamplingTests.Run();
 ActorDiagnosticSamplingRulesTests.Run();
 ActorAgeWorkRulesTests.Run();
 ActorDeathArchiveRulesTests.Run();
+CapturedMilitaryOwnershipRulesTests.Run();
 ActorPresentationDirtyRulesTests.Run();
 AWPathRequestReuseRulesTests.Run();
 IdleBehaviourThrottleGateTests.Run();

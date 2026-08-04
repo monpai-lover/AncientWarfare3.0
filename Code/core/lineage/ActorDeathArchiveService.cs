@@ -53,7 +53,11 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
-            Process(pMilliseconds: 1.0, pMaxItems: 64,
+            Process(
+                pMilliseconds: ActorDeathArchiveRules.
+                    ResolveAuthorityMilliseconds(Pending.Count),
+                pMaxItems: ActorDeathArchiveRules.
+                    ResolveAuthorityItemLimit(Pending.Count),
                 pIgnoreBackoff: false);
         }
 

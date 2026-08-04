@@ -126,7 +126,9 @@ namespace AncientWarfare3.patch
                                 FlushForSave() && flushed;
                         },
                         () => ActorDeathArchiveService.FlushForSave(
-                            TimeSpan.FromSeconds(5),
+                            TimeSpan.FromSeconds(ActorDeathArchiveRules.
+                                ResolveSaveTimeoutSeconds(5,
+                                    ActorDeathArchiveService.PendingCount)),
                             out deathArchiveError),
                         () => HistoricalWriteService.FlushForSave(
                             TimeSpan.FromSeconds(5), out asyncWriteError),

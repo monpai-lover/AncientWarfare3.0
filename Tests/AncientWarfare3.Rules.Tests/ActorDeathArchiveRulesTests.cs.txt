@@ -40,6 +40,23 @@ internal static class ActorDeathArchiveRulesTests
         Equal(false, ActorDeathArchiveRules.ReadyForSave(
                 captured: 0, running: 1, retries: 0, completions: 0),
             "running death work blocks save");
+        Equal(64, ActorDeathArchiveRules.ResolveAuthorityItemLimit(32),
+            "small death backlogs keep the normal authority budget");
+        Equal(256, ActorDeathArchiveRules.ResolveAuthorityItemLimit(821),
+            "large death bursts receive a bounded catch-up budget");
+        Equal(1d, ActorDeathArchiveRules.ResolveAuthorityMilliseconds(32),
+            "small death backlogs keep the normal time slice");
+        Equal(4d, ActorDeathArchiveRules.ResolveAuthorityMilliseconds(821),
+            "large death bursts receive a bounded catch-up time slice");
+        Equal(5, ActorDeathArchiveRules.ResolveSaveTimeoutSeconds(
+                baseSeconds: 5, pendingCount: 0),
+            "an empty death queue keeps the base save timeout");
+        Equal(30, ActorDeathArchiveRules.ResolveSaveTimeoutSeconds(
+                baseSeconds: 5, pendingCount: 821),
+            "a mass-death save gets a bounded backlog-aware timeout");
+        Equal(60, ActorDeathArchiveRules.ResolveSaveTimeoutSeconds(
+                baseSeconds: 60, pendingCount: 821),
+            "backlog scaling never shortens a caller's base timeout");
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)
