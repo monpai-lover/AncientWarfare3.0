@@ -624,23 +624,50 @@ namespace AncientWarfare3.core.lineage
             bool hasInstalled = state.
                 SharedRouteRevisionByActor.TryGetValue(pActor.data.id,
                     out int installedRevision);
+            bool atInstalledEndpoint = hasInstalled &&
+                installedRevision == revision &&
+                state.SharedRouteEndTileByActor.TryGetValue(
+                    pActor.data.id, out int installedEndTileId) &&
+                pActor.current_tile.data.tile_id == installedEndTileId;
+            int localPathCount = SafeLocalPathCount(pActor);
+            bool followingLocalPath = localPathCount > 0 &&
+                                      pActor.isFollowingLocalPath();
             if (hasInstalled &&
                 ArmySharedPathRules.ShouldReuseInstalledSharedRoute(
-                    installedRevision, revision,
-                    pActor.isFollowingLocalPath()))
+                    installedRevision, revision, localPathCount,
+                    followingLocalPath, atInstalledEndpoint))
             {
+                if (atInstalledEndpoint)
+                {
+                    RecordInstallStatus(state, pActor,
+                        ArmySharedRouteInstallStatus.Arrived);
+                    return false;
+                }
                 RecordInstallStatus(state, pActor,
                     ArmySharedRouteInstallStatus.Following);
                 return true;
             }
-            if (hasInstalled && installedRevision == revision &&
-                state.SharedRouteEndTileByActor.TryGetValue(
-                    pActor.data.id, out int installedEndTileId) &&
-                    pActor.current_tile.data.tile_id == installedEndTileId)
+            if (hasInstalled && installedRevision == revision)
             {
-                RecordInstallStatus(state, pActor,
-                    ArmySharedRouteInstallStatus.Arrived);
-                return false;
+                ArmySharedRouteInstallStatus currentStatus =
+                    ArmySharedPathRules.ResolveCurrentInstallStatus(
+                        providerAvailable: true, transportActive: false,
+                        hasMatchingRevision: true,
+                        atInstalledEndpoint: false,
+                        localPathCount: localPathCount,
+                        actorFollowingLocalPath: followingLocalPath,
+                        recordedStatus:
+                            ArmySharedRouteInstallStatus.Installed);
+                bool combatActive = ArmyRtsControllerService.
+                    HasImmediateCombatPriority(pActor);
+                if (!ArmySharedPathRules.
+                        ShouldRecoverStaleInstalledRoute(currentStatus,
+                            combatActive, transportActive: false))
+                {
+                    RecordInstallStatus(state, pActor, currentStatus);
+                    return false;
+                }
+                ResetActorSharedRoute(pActor);
             }
             if (IsFollowingProviderDestination(pActor, state))
             {
@@ -683,6 +710,7 @@ namespace AncientWarfare3.core.lineage
                 AWPathMovementBridge.Cancel(pActor,
                     AWPathFailureReason.CancelledByNewRequest);
             pActor.stopMovement();
+            pActor.clearOldPath();
             pActor.beh_tile_target = routeEnd;
             pActor.setTileTarget(routeEnd);
             for (int i = 0; i < route.Count; i++)
@@ -727,7 +755,8 @@ namespace AncientWarfare3.core.lineage
                     pActor.data.id, out int endpointTileId) &&
                 pActor.current_tile.data.tile_id == endpointTileId;
             bool followingInstalledPath = hasMatchingRevision &&
-                                        pActor.isFollowingLocalPath();
+                SafeLocalPathCount(pActor) > 0 &&
+                pActor.isFollowingLocalPath();
             if (!ArmySharedPathRules.ShouldInstallCompleteRouteForActor(
                     providerReady, transportActive, hasMatchingRevision,
                     atInstalledEndpoint, followingInstalledPath)) return false;
@@ -745,6 +774,7 @@ namespace AncientWarfare3.core.lineage
                    state.SharedRouteRevisionByActor.TryGetValue(
                        pActor.data.id, out int installedRevision) &&
                    installedRevision == state.SharedRouteRevision &&
+                   SafeLocalPathCount(pActor) > 0 &&
                    pActor.isFollowingLocalPath();
         }
 
@@ -756,9 +786,34 @@ namespace AncientWarfare3.core.lineage
                 !States.TryGetValue(army.id, out MarchState state) ||
                 !state.UsesProvider)
                 return ArmySharedRouteInstallStatus.Unavailable;
-            if (state.InstallStatusByActor.TryGetValue(pActor.data.id,
-                    out ArmySharedRouteInstallStatus status)) return status;
-            return ArmySharedRouteInstallStatus.NotAttempted;
+            long actorId = pActor.data.id;
+            ArmySharedRouteInstallStatus recorded =
+                state.InstallStatusByActor.TryGetValue(actorId,
+                    out ArmySharedRouteInstallStatus status)
+                    ? status
+                    : ArmySharedRouteInstallStatus.NotAttempted;
+            bool transportActive = state.LandTrailPausedForTransport ||
+                                   ArmyRtsTransportService.HasActiveVoyage(
+                                       army);
+            bool matching = state.SharedRouteRevisionByActor.TryGetValue(
+                                actorId, out int installedRevision) &&
+                            installedRevision == state.SharedRouteRevision;
+            bool atEndpoint = matching &&
+                pActor.current_tile?.data != null &&
+                state.SharedRouteEndTileByActor.TryGetValue(actorId,
+                    out int endpointTileId) &&
+                pActor.current_tile.data.tile_id == endpointTileId;
+            int localPathCount = SafeLocalPathCount(pActor);
+            bool following = localPathCount > 0 &&
+                             pActor.isFollowingLocalPath();
+            return ArmySharedPathRules.ResolveCurrentInstallStatus(
+                providerAvailable: true,
+                transportActive: transportActive,
+                hasMatchingRevision: matching,
+                atInstalledEndpoint: atEndpoint,
+                localPathCount: localPathCount,
+                actorFollowingLocalPath: following,
+                recordedStatus: recorded);
         }
 
         public static bool ResetActorSharedRoute(Actor pActor)
@@ -836,6 +891,12 @@ namespace AncientWarfare3.core.lineage
         {
             if (pState == null || pActor?.data == null) return;
             pState.InstallStatusByActor[pActor.data.id] = pStatus;
+        }
+
+        private static int SafeLocalPathCount(Actor pActor)
+        {
+            try { return Math.Max(0, pActor?.current_path?.Count ?? 0); }
+            catch { return 0; }
         }
 
         private static bool IsFollowingProviderDestination(Actor pActor,

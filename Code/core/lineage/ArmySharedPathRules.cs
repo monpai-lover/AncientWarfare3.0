@@ -30,7 +30,8 @@ namespace AncientWarfare3.core.lineage
         Installed = 7,
         Following = 8,
         Arrived = 9,
-        ReconnectRequired = 10
+        ReconnectRequired = 10,
+        StaleInstalled = 11
     }
 
     public enum ArmyProviderRouteTargetSource
@@ -167,11 +168,40 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldReuseInstalledSharedRoute(
             int installedRevision, int availableRevision,
-            bool actorFollowingLocalPath)
+            int localPathCount, bool actorFollowingLocalPath,
+            bool atInstalledEndpoint)
         {
             return installedRevision >= 0 &&
                    installedRevision == availableRevision &&
-                   actorFollowingLocalPath;
+                   (atInstalledEndpoint ||
+                    localPathCount > 0 && actorFollowingLocalPath);
+        }
+
+        public static ArmySharedRouteInstallStatus
+            ResolveCurrentInstallStatus(bool providerAvailable,
+                bool transportActive, bool hasMatchingRevision,
+                bool atInstalledEndpoint, int localPathCount,
+                bool actorFollowingLocalPath,
+                ArmySharedRouteInstallStatus recordedStatus)
+        {
+            if (!providerAvailable)
+                return ArmySharedRouteInstallStatus.Unavailable;
+            if (transportActive)
+                return ArmySharedRouteInstallStatus.TransportOwned;
+            if (!hasMatchingRevision) return recordedStatus;
+            if (atInstalledEndpoint)
+                return ArmySharedRouteInstallStatus.Arrived;
+            return localPathCount > 0 && actorFollowingLocalPath
+                ? ArmySharedRouteInstallStatus.Following
+                : ArmySharedRouteInstallStatus.StaleInstalled;
+        }
+
+        public static bool ShouldRecoverStaleInstalledRoute(
+            ArmySharedRouteInstallStatus status, bool combatActive,
+            bool transportActive)
+        {
+            return status == ArmySharedRouteInstallStatus.StaleInstalled &&
+                   !combatActive && !transportActive;
         }
 
         public static bool ShouldInstallCompleteRouteForActor(

@@ -2213,6 +2213,31 @@ namespace AncientWarfare3.core.lineage
             Controllers.Requeue(pArmyId);
         }
 
+        internal static bool RecoverEmptySharedRoute(long pArmyId,
+            long pActorId)
+        {
+            if (!ArmyRtsRuntimeMode.ShouldCommit ||
+                !HasActiveMission(pArmyId)) return false;
+            Army army = FindArmy(pArmyId);
+            Actor actor = FindActor(pActorId);
+            if (actor?.army != army ||
+                HasImmediateCombatPriority(actor) ||
+                ArmyRtsTransportService.HasActiveVoyage(army)) return false;
+            try
+            {
+                if (actor.data.transportID >= 0L) return false;
+            }
+            catch { return false; }
+            ArmySharedRouteInstallStatus status = AWArmyMarchService.
+                GetSharedRouteInstallStatus(actor);
+            if (!ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(
+                    status, combatActive: false, transportActive: false) ||
+                !AWArmyMarchService.ResetActorSharedRoute(actor))
+                return false;
+            ReassertMissionCommand(pArmyId, pActorId);
+            return true;
+        }
+
         private static void TrySubmitIndependentFollowerRecoveryRoute(
             Actor pActor, Army pArmy)
         {
@@ -3559,7 +3584,7 @@ namespace AncientWarfare3.core.lineage
             catch { }
         }
 
-        private static bool HasImmediateCombatPriority(Actor pActor)
+        internal static bool HasImmediateCombatPriority(Actor pActor)
         {
             if (pActor?.data == null || !pActor.has_attack_target)
                 return false;

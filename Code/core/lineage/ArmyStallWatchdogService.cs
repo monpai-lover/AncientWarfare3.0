@@ -188,6 +188,18 @@ namespace AncientWarfare3.core.lineage
                 state.Flow.SuspendForExternalOwnership();
                 return;
             }
+            if (!sample.CombatActive && sample.PositionActorId >= 0L &&
+                Enum.TryParse(sample.LocalPathStatus,
+                    out ArmySharedRouteInstallStatus localPathStatus) &&
+                ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(
+                    localPathStatus, combatActive: false,
+                    transportActive: false) &&
+                ArmyRtsControllerService.RecoverEmptySharedRoute(pArmyId,
+                    sample.PositionActorId))
+            {
+                state.Flow.SuspendForExternalOwnership();
+                return;
+            }
             if (hadPosition &&
                 !sample.CombatActive &&
                 (sample.RouteReady || sample.RoutePending ||

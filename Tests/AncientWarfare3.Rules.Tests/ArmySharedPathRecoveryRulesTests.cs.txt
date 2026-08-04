@@ -1,0 +1,47 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmySharedPathRecoveryRulesTests
+{
+    public static void Run()
+    {
+        Assert(ArmySharedPathRules.ShouldReuseInstalledSharedRoute(
+                installedRevision: 4, availableRevision: 4,
+                localPathCount: 3, actorFollowingLocalPath: true,
+                atInstalledEndpoint: false),
+            "a matching non-empty followed path remains reusable");
+        Assert(ArmySharedPathRules.ShouldReuseInstalledSharedRoute(
+                installedRevision: 4, availableRevision: 4,
+                localPathCount: 0, actorFollowingLocalPath: false,
+                atInstalledEndpoint: true),
+            "a matching route at its endpoint remains complete");
+        Assert(!ArmySharedPathRules.ShouldReuseInstalledSharedRoute(
+                installedRevision: 4, availableRevision: 4,
+                localPathCount: 0, actorFollowingLocalPath: false,
+                atInstalledEndpoint: false),
+            "an empty non-following historical install is not reusable");
+
+        ArmySharedRouteInstallStatus stale = ArmySharedPathRules.
+            ResolveCurrentInstallStatus(providerAvailable: true,
+                transportActive: false, hasMatchingRevision: true,
+                atInstalledEndpoint: false, localPathCount: 0,
+                actorFollowingLocalPath: false,
+                recordedStatus: ArmySharedRouteInstallStatus.Installed);
+        Assert(stale == ArmySharedRouteInstallStatus.StaleInstalled,
+            "current empty path truth overrides the historical installed status");
+        Assert(ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(stale,
+                combatActive: false, transportActive: false),
+            "an idle stale install requests reset and reinstall");
+        Assert(!ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(stale,
+                combatActive: true, transportActive: false),
+            "combat blocks shared-route recovery");
+        Assert(!ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(stale,
+                combatActive: false, transportActive: true),
+            "transport blocks shared-route recovery");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}
