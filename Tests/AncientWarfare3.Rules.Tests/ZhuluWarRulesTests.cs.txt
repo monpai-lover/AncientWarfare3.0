@@ -50,10 +50,9 @@ internal static class ZhuluWarRulesTests
 
         True(ZhuluWarRules.BlocksOrdinarySettlement(
                 ZhuluWarRules.WarTypeId, active: true),
-            "zhulu blocks ordinary peace");
-        False(ZhuluWarRules.ShouldUseVanillaTotalWar(),
-            "zhulu keeps explicit attacker and defender rosters instead of " +
-            "using vanilla global total-war semantics");
+            "AW3 settlement entry points skip active zhulu wars");
+        True(ZhuluWarRules.ShouldUseVanillaTotalWar(),
+            "zhulu uses native WorldBox total-war semantics");
         False(ZhuluWarRules.BlocksOrdinarySettlement(
                 ZhuluWarRules.WarTypeId, active: false),
             "ended zhulu wars no longer block cleanup");
@@ -71,33 +70,29 @@ internal static class ZhuluWarRulesTests
             "renewal can resume after all claimants finish");
         Equal("zhulu_requires_total_annexation",
             ZhuluWarRules.SettlementBlockedReason,
-            "all peace paths return one stable reason");
+            "AW3 peace paths return one stable skip reason");
 
-        Equal(ZhuluWarOutcome.Attackers,
-            ZhuluWarRules.ResolveOutcome(attackerValid: true,
-                attackerCities: 3, defenderValid: false,
-                defenderCities: 0),
-            "the surviving principal wins");
-        Equal(ZhuluWarOutcome.Ambiguous,
-            ZhuluWarRules.ResolveOutcome(false, 0, false, 0),
-            "simultaneous extinction does not invent a winner");
-        Equal(ZhuluWarOutcome.None,
-            ZhuluWarRules.ResolveOutcome(true, 2, true, 3),
-            "two living principals keep fighting");
-        Equal(ZhuluWarOutcome.Defenders,
-            ZhuluWarRules.ResolveOutcome(false, 0, true, 1),
-            "the surviving defender wins");
-        False(ZhuluWarRules.CanQueueSettlement(warValid: true,
-                active: true, alreadyQueued: true),
-            "one war cannot enter the settlement queue twice");
-        Equal(10L, ZhuluWarRules.ResolveCaptureRecipient(
-                capturerOnAttackerSide: true, mainAttackerId: 10L,
-                mainDefenderId: 20L),
-            "an attacking ally awards the city to its principal");
-        Equal(20L, ZhuluWarRules.ResolveCaptureRecipient(
-                capturerOnAttackerSide: false, mainAttackerId: 10L,
-                mainDefenderId: 20L),
-            "a defending ally awards the city to its principal");
+        True(ZhuluWarRules.CanAiDeclare(ZhuluAgeRules.AgeId),
+            "AI may declare Zhulu during the Zhulu age");
+        False(ZhuluWarRules.CanAiDeclare("age_hope"),
+            "AI may not declare Zhulu during Hope");
+        False(ZhuluWarRules.CanAiDeclare("age_wonders"),
+            "AI may not declare Zhulu outside the Zhulu age");
+        False(ZhuluWarRules.CanAiDeclare(null),
+            "AI may not declare Zhulu without an active age");
+
+        Equal(ZhuluZeroForceFallback.None,
+            ZhuluWarRules.ResolveZeroForceFallback(1, 1),
+            "living forces leave native total war untouched");
+        Equal(ZhuluZeroForceFallback.Peace,
+            ZhuluWarRules.ResolveZeroForceFallback(0, 0),
+            "simultaneous zero forces end in peace without transfer");
+        Equal(ZhuluZeroForceFallback.DefendersWin,
+            ZhuluWarRules.ResolveZeroForceFallback(0, 1),
+            "attacker-only exhaustion awards all attacker land to defenders");
+        Equal(ZhuluZeroForceFallback.AttackersWin,
+            ZhuluWarRules.ResolveZeroForceFallback(1, 0),
+            "defender-only exhaustion awards all defender land to attackers");
 
         double adjacent = ZhuluWarRules.ScoreTarget(120f, 100f,
             directlyAdjacent: true, capitalDistance: 20f);
@@ -222,14 +217,12 @@ internal static class ZhuluWarRulesTests
         string root = Directory.GetCurrentDirectory();
         string lineage = Path.Combine(root, "Code", "core", "lineage");
         string servicePath = Path.Combine(lineage, "ZhuluWarService.cs");
-        string settlementPath = Path.Combine(lineage,
+        string obsoleteSettlementPath = Path.Combine(lineage,
             "ZhuluWarSettlementService.cs");
         string peaceGuardPath = Path.Combine(lineage,
             "ZhuluPeaceGuard.cs");
         string diplomacy = File.ReadAllText(Path.Combine(root, "Code",
             "content", "DiplomacyContent.cs"));
-        string goals = File.ReadAllText(Path.Combine(lineage,
-            "WarGoalSettlementRules.cs"));
         string decisions = File.ReadAllText(Path.Combine(lineage,
             "WarDecisionService.cs"));
         string territory = File.ReadAllText(Path.Combine(lineage,
@@ -246,6 +239,8 @@ internal static class ZhuluWarRulesTests
             "patch", "AW_WarPatch.cs"));
         string restore = File.ReadAllText(Path.Combine(root, "Code",
             "core", "multiplayer", "AW3RuntimeRestorePipeline.cs"));
+        string forceSpecial = File.ReadAllText(Path.Combine(lineage,
+            "WarForceSpecialSettlementService.cs"));
         string[] peaceEntrypoints =
         {
             "DiplomacyProposalService.cs",
@@ -263,28 +258,21 @@ internal static class ZhuluWarRulesTests
 
         True(File.Exists(servicePath),
             "the zhulu declaration service exists");
-        True(File.Exists(settlementPath),
-            "the dedicated zhulu settlement service exists");
         string service = File.ReadAllText(servicePath);
-        string settlement = File.ReadAllText(settlementPath);
-        True(service.Contains("CreateGoalForWar(war, goal)") &&
-             service.Contains("AbortFailedDeclaration(war)"),
-            "failed zhulu goal persistence uses the dedicated rollback bypass");
-        True(settlement.Contains("AbortFailedDeclaration(War war)"),
-            "zhulu exposes a bounded rollback path for incomplete declarations");
-        True(settlement.Contains("RebuildRuntime()") &&
-             restore.Contains("ZhuluWarSettlementService.RebuildRuntime"),
-            "save restore requeues unresolved zhulu extinction settlement");
+        False(service.Contains("CreateGoalForWar(war, goal)"),
+            "zhulu declaration does not create an AW3 war goal");
+        False(service.Contains("AbortFailedDeclaration(war)"),
+            "zhulu declaration has no dedicated settlement rollback");
+        False(File.Exists(obsoleteSettlementPath),
+            "the obsolete dedicated zhulu settlement service is removed");
+        False(restore.Contains("ZhuluWarSettlementService."),
+            "save restore does not rebuild or clear a zhulu settlement queue");
         True(File.Exists(peaceGuardPath),
             "the shared zhulu peace guard exists");
         True(diplomacy.Contains("ZhuluWarRules.WarTypeId") &&
              diplomacy.Contains(
                  "pTotalWar: ZhuluWarRules.ShouldUseVanillaTotalWar()"),
-            "diplomacy registers zhulu with explicit two-sided rosters");
-        True(goals.Contains("ZhuluAnnexation = \"zhulu_annexation\"") &&
-             goals.Contains("principal_extinction") &&
-             goals.Contains("WarGoalAutomaticSettlementEffect.ZhuluAnnexation"),
-            "zhulu has a persisted principal-extinction goal profile");
+            "diplomacy registers zhulu as native total war");
         True(decisions.Contains("WAR_ZHULU") &&
              decisions.Contains("ZhuluWarService.CanDeclare("),
             "war decisions recognize the intrinsic zhulu casus belli");
@@ -298,8 +286,8 @@ internal static class ZhuluWarRulesTests
         True(declaration.Contains("public static bool IssueZhulu(") &&
              declaration.Contains("ZhuluWarRules.GoalTypeId") &&
              declaration.Contains("ZhuluWarRules.WarTypeId") &&
-             declaration.Contains("ZhuluWarRules.CanCreateDeclaration("),
-            "the final Zhulu issue boundary enforces the age gate");
+             declaration.Contains("ZhuluWarRules.CanAiDeclare("),
+            "the final AI Zhulu issue boundary enforces the exact age gate");
         True(declaration.Contains("case ZhuluWarRules.GoalTypeId:"),
             "the locked declaration plan recognizes the Zhulu goal");
         False(declaration.Contains("ZhuluWarService.CanDeclare("),
@@ -317,15 +305,22 @@ internal static class ZhuluWarRulesTests
              warAi.Contains(
                  "DiplomaticWarDeclarationService.IssueZhulu("),
             "sync and async Zhulu decisions use the diplomatic pipeline");
+        True(warAi.Contains("ZhuluWarRules.CanAiDeclare("),
+            "war AI applies the exact Zhulu-age declaration gate");
         False(warAi.Contains("ZhuluWarService.TryDeclare("),
             "war AI never starts a Zhulu war directly");
-        True(occupation.Contains("TryResolveCaptureRecipient(") &&
-             occupation.Contains("pNewKingdom = principal") &&
-             occupation.Contains("pNewSetKingdom = principal"),
-            "all zhulu captures are credited to the side principal");
-        True(warPatch.Contains("ZhuluWarSettlementService.Queue(") &&
-             warPatch.Contains("__runOriginal"),
-            "ordinary endWar is deferred to dedicated zhulu settlement");
+        False(occupation.Contains("TryResolveCaptureRecipient("),
+            "AW3 does not rewrite the recipient of a native zhulu capture");
+        True(occupation.Contains("IsOpposingZhuluCapture(__instance,") &&
+             occupation.Contains("pNewKingdom)) return true;"),
+            "zhulu finishCapture bypasses the AW3 occupation pipeline");
+        False(warPatch.Contains("ZhuluWarSettlementService.Queue("),
+            "native zhulu endWar is never deferred");
+        True(warPatch.Contains(
+                 "if (pType?.id == ZhuluWarRules.WarTypeId) return true;") &&
+             warPatch.Contains("RecordNativeZhuluStart(__result);") &&
+             warPatch.Contains("RecordNativeZhuluEnd(pWar, pWinner);"),
+            "zhulu bypasses AW3 war preparation and retains history only");
         for (int index = 0; index < peaceEntrypoints.Length; index++)
         {
             string source = File.ReadAllText(Path.Combine(lineage,
@@ -337,16 +332,16 @@ internal static class ZhuluWarRulesTests
         True(negotiation.Contains(
                 "ZhuluPeaceGuard.BlocksOrdinarySettlement("),
             "the player peace window uses the shared peace guard");
-        True(warPatch.Contains(
-                 "ZhuluPeaceGuard.BlocksOrdinarySettlement(") &&
-             warPatch.Contains(
-                 "ZhuluWarSettlementService.IsDedicatedSettlementActive"),
-            "war participants cannot leave an active zhulu war");
+        False(warPatch.Contains(
+                "ZhuluPeaceGuard.BlocksOrdinarySettlement(__instance)"),
+            "native removeFromWar is never blocked for zhulu");
         True(mandatePhase.Contains("HasActivePrincipalWars()") &&
              mandate.Contains("zhulu_unresolved"),
             "active zhulu wars hold Chaos and block a new Mandate");
-        True(restore.Contains("ZhuluWarSettlementService.ClearRuntime"),
-            "world reset clears the zhulu settlement queue");
+        True(forceSpecial.Contains("TrySettleZhuluZeroForce(") &&
+             FalseText(forceSpecial,
+                 "ZhuluWarSettlementService.QueueForceElimination"),
+            "force exhaustion uses only the bounded zhulu zero-force fallback");
         True(locales.Contains("war_type_zhulu_war") &&
              locales.Contains("aw_war_goal_zhulu_annexation") &&
              locales.Contains(ZhuluWarRules.SettlementBlockedReason),
@@ -368,5 +363,10 @@ internal static class ZhuluWarRulesTests
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
             throw new InvalidOperationException(message +
                 ": expected=" + expected + " actual=" + actual);
+    }
+
+    private static bool FalseText(string source, string value)
+    {
+        return !source.Contains(value);
     }
 }

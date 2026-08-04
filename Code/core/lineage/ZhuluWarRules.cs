@@ -40,12 +40,12 @@ namespace AncientWarfare3.core.lineage
         public bool HasMandateHistory { get; }
     }
 
-    public enum ZhuluWarOutcome
+    public enum ZhuluZeroForceFallback
     {
-        None,
-        Attackers,
-        Defenders,
-        Ambiguous
+        None = 0,
+        Peace = 1,
+        AttackersWin = 2,
+        DefendersWin = 3
     }
 
     public static class ZhuluWarRules
@@ -91,30 +91,33 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldUseVanillaTotalWar()
         {
-            return false;
+            return true;
+        }
+
+        public static bool CanAiDeclare(string pCurrentAgeId)
+        {
+            return string.Equals(pCurrentAgeId, ZhuluAgeRules.AgeId,
+                StringComparison.Ordinal);
+        }
+
+        public static ZhuluZeroForceFallback ResolveZeroForceFallback(
+            int pAttackerWarriors, int pDefenderWarriors)
+        {
+            bool attackersEmpty = pAttackerWarriors <= 0;
+            bool defendersEmpty = pDefenderWarriors <= 0;
+            if (attackersEmpty && defendersEmpty)
+                return ZhuluZeroForceFallback.Peace;
+            if (attackersEmpty)
+                return ZhuluZeroForceFallback.DefendersWin;
+            if (defendersEmpty)
+                return ZhuluZeroForceFallback.AttackersWin;
+            return ZhuluZeroForceFallback.None;
         }
 
         public static bool HasActiveClaimants(bool activeRebels,
             bool activeZhulu)
         {
             return activeRebels || activeZhulu;
-        }
-
-        public static ZhuluWarOutcome ResolveOutcome(bool attackerValid,
-            int attackerCities, bool defenderValid, int defenderCities)
-        {
-            bool attackerAlive = attackerValid && attackerCities > 0;
-            bool defenderAlive = defenderValid && defenderCities > 0;
-            if (attackerAlive == defenderAlive)
-            {
-                return attackerAlive
-                    ? ZhuluWarOutcome.None
-                    : ZhuluWarOutcome.Ambiguous;
-            }
-
-            return attackerAlive
-                ? ZhuluWarOutcome.Attackers
-                : ZhuluWarOutcome.Defenders;
         }
 
         public static double ScoreTarget(float attackerPower,
@@ -147,19 +150,5 @@ namespace AncientWarfare3.core.lineage
                    ratio * 100d - distancePenalty;
         }
 
-        public static bool CanQueueSettlement(bool warValid, bool active,
-            bool alreadyQueued)
-        {
-            return warValid && active && !alreadyQueued;
-        }
-
-        public static long ResolveCaptureRecipient(
-            bool capturerOnAttackerSide, long mainAttackerId,
-            long mainDefenderId)
-        {
-            return capturerOnAttackerSide
-                ? mainAttackerId
-                : mainDefenderId;
-        }
     }
 }

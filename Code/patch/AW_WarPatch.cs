@@ -81,6 +81,7 @@ namespace AncientWarfare3.patch
                 __result = null;
                 return false;
             }
+            if (pType?.id == ZhuluWarRules.WarTypeId) return true;
             if (CityReservePoolService.PrepareWarEntry(pAttacker,
                     pDefender)) return true;
             __result = null;
@@ -92,8 +93,14 @@ namespace AncientWarfare3.patch
         public static void NewWar_Postfix(War __result)
         {
             if (__result?.data == null) return;
-            RecordMainBelligerents(__result);
             WarRecordWriter.OnWarStart(__result);
+            if (ZhuluWarService.IsZhuluWar(__result,
+                    requireActive: false))
+            {
+                RecordNativeZhuluStart(__result);
+                return;
+            }
+            RecordMainBelligerents(__result);
             WarScoreService.StartWar(__result);
             CityReservePoolService.OnWarStarted(__result);
             ArmyRtsWarLifecycleService.OnWarStarted(__result);
@@ -128,6 +135,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(War), nameof(War.increaseDeathsAttackers))]
         public static void IncreaseDeathsAttackers_Postfix(War __instance)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false)) return;
             WarScoreService.RecordDeath(__instance,
                 casualtyWasAttacker: true);
         }
@@ -136,6 +145,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(War), nameof(War.increaseDeathsDefenders))]
         public static void IncreaseDeathsDefenders_Postfix(War __instance)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false)) return;
             WarScoreService.RecordDeath(__instance,
                 casualtyWasAttacker: false);
         }
@@ -145,6 +156,12 @@ namespace AncientWarfare3.patch
         public static bool JoinAttackers_Prefix(War __instance,
             Kingdom pKingdom, out WarJoinState __state)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false))
+            {
+                __state = default;
+                return true;
+            }
             return CanJoin(__instance, pKingdom, pDefender: false,
                 out __state);
         }
@@ -154,6 +171,8 @@ namespace AncientWarfare3.patch
         public static void JoinAttackers_Postfix(War __instance,
             Kingdom pKingdom, WarJoinState __state)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false)) return;
             CompleteJoin(__instance, pKingdom, pDefender: false, __state);
         }
 
@@ -162,6 +181,12 @@ namespace AncientWarfare3.patch
         public static bool JoinDefenders_Prefix(War __instance,
             Kingdom pKingdom, out WarJoinState __state)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false))
+            {
+                __state = default;
+                return true;
+            }
             return CanJoin(__instance, pKingdom, pDefender: true,
                 out __state);
         }
@@ -171,6 +196,8 @@ namespace AncientWarfare3.patch
         public static void JoinDefenders_Postfix(War __instance,
             Kingdom pKingdom, WarJoinState __state)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false)) return;
             CompleteJoin(__instance, pKingdom, pDefender: true, __state);
         }
 
@@ -187,9 +214,7 @@ namespace AncientWarfare3.patch
                           __instance.hasKingdom(pKingdom);
             }
             catch { }
-            return !__state ||
-                   !ZhuluPeaceGuard.BlocksOrdinarySettlement(__instance) ||
-                   ZhuluWarSettlementService.IsDedicatedSettlementActive;
+            return true;
         }
 
         [HarmonyPostfix]
@@ -197,6 +222,8 @@ namespace AncientWarfare3.patch
         private static void RemoveFromWar_Postfix(War __instance,
             Kingdom pKingdom, bool __state)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false)) return;
             bool remainsOnSide;
             try
             {
@@ -217,12 +244,11 @@ namespace AncientWarfare3.patch
         private static bool EndWar_Prefix(War pWar,
             out WarEndParticipantSnapshot __state)
         {
-            __state = CaptureParticipants(pWar);
-            if (!ZhuluWarService.IsZhuluWar(pWar) ||
-                ZhuluWarSettlementService.IsDedicatedSettlementActive)
-                return true;
-            ZhuluWarSettlementService.Queue(pWar);
-            return false;
+            __state = ZhuluWarService.IsZhuluWar(pWar,
+                requireActive: false)
+                ? null
+                : CaptureParticipants(pWar);
+            return true;
         }
 
         [HarmonyPostfix]
@@ -232,6 +258,15 @@ namespace AncientWarfare3.patch
         {
             if (!__runOriginal) return;
             if (pWar?.data == null) return;
+            if (ZhuluWarService.IsZhuluWar(pWar,
+                    requireActive: false))
+            {
+                DiplomaticWarDeclarationService.OnWarEnded(pWar);
+                WarRecordWriter.OnWarEnd(pWar, pWinner);
+                DiplomacyConversationService.RecordWarEnded(pWar, pWinner);
+                RecordNativeZhuluEnd(pWar, pWinner);
+                return;
+            }
             WarParticipantEntrySourceService.Instance.
                 TryEndAllActiveSourcesForWar(pWar.data.id,
                     LineageService.CurTime());
@@ -299,6 +334,36 @@ namespace AncientWarfare3.patch
             WartimeGarrisonService.OnKingdomWarStateChanged(pKingdom);
             TemporarySlaveVanguardService.OnEmergencyChanged(pKingdom);
             VassalMapModeService.DirtyMapIfActive();
+        }
+
+        private static void RecordNativeZhuluStart(War pWar)
+        {
+            DiplomacyConversationService.RecordWarStarted(pWar);
+            Kingdom attacker = pWar.getMainAttacker();
+            Kingdom defender = pWar.getMainDefender();
+            string name = WarRuntimeDisplayService.Resolve(pWar);
+            if (attacker?.data != null)
+                ChronicleEvents.OnWarStart(attacker, defender,
+                    defender?.name ?? "未知", name);
+            if (defender?.data != null)
+                ChronicleEvents.OnWarStart(defender, attacker,
+                    attacker?.name ?? "未知", name);
+        }
+
+        private static void RecordNativeZhuluEnd(War pWar,
+            WarWinner pWinner)
+        {
+            Kingdom attacker = pWar.getMainAttacker();
+            Kingdom defender = pWar.getMainDefender();
+            var result = WarRecordWriter.WinnerLabelRich(pWinner,
+                attacker, defender);
+            string name = WarRuntimeDisplayService.Resolve(pWar);
+            if (attacker?.data != null)
+                ChronicleEvents.OnWarEnd(attacker, defender,
+                    defender?.name ?? "未知", name, result);
+            if (defender?.data != null)
+                ChronicleEvents.OnWarEnd(defender, attacker,
+                    attacker?.name ?? "未知", name, result);
         }
 
         private static void OnKingdomLeftWar(War pWar, Kingdom pKingdom)

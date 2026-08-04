@@ -60,7 +60,9 @@ namespace AncientWarfare3.core.lineage
                     : WarStrategyCandidateKind.None;
             bool shouldIssue = selectedKind ==
                                WarStrategyCandidateKind.Zhulu
-                ? ZhuluWarRules.ShouldIssueDiplomaticDeclaration(
+                ? ZhuluWarRules.CanAiDeclare(
+                      World.world?.map_stats?.world_age_id) &&
+                  ZhuluWarRules.ShouldIssueDiplomaticDeclaration(
                     Rng.NextDouble())
                 : Chance(0.28f * WarMultiplier(pKingdom, target, court));
             if (!shouldIssue)
@@ -265,7 +267,9 @@ namespace AncientWarfare3.core.lineage
             if (pShadowOnly) return false;
             bool shouldIssue = pPlan.WarKind ==
                                WarStrategyCandidateKind.Zhulu
-                ? ZhuluWarRules.ShouldIssueDiplomaticDeclaration(pPlan.Roll)
+                ? ZhuluWarRules.CanAiDeclare(
+                      World.world?.map_stats?.world_age_id) &&
+                  ZhuluWarRules.ShouldIssueDiplomaticDeclaration(pPlan.Roll)
                 : pPlan.Roll < Math.Max(0f, Math.Min(1f,
                     .28f * WarMultiplier(source, target, court)));
             if (!shouldIssue) return false;
@@ -426,8 +430,10 @@ namespace AncientWarfare3.core.lineage
             bool isZhuluAge = World.world?.map_stats?.world_age_id ==
                               ZhuluAgeRules.AgeId;
             bool targetIsMandate = pTarget == pMandate;
-            bool zhuluEligible = ZhuluWarService.CanDeclare(pSource,
-                pTarget, out _);
+            bool zhuluEligible = isZhuluAge &&
+                ZhuluWarRules.CanAiDeclare(
+                    World.world?.map_stats?.world_age_id) &&
+                ZhuluWarService.CanDeclare(pSource, pTarget, out _);
             WarStrategyCandidateKind preferredKind = zhuluEligible
                 ? WarStrategyCandidateKind.Zhulu
                 : targetIsMandate

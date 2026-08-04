@@ -150,7 +150,7 @@ namespace AncientWarfare3.core.lineage
         public static bool IssueZhulu(Kingdom pAttacker,
             Kingdom pDefender)
         {
-            if (!ZhuluWarRules.CanCreateDeclaration(
+            if (!ZhuluWarRules.CanAiDeclare(
                     World.world?.map_stats?.world_age_id)) return false;
             City target = FindDisplayCity(pAttacker, pDefender,
                 ZhuluWarRules.GoalTypeId);
@@ -521,6 +521,8 @@ namespace AncientWarfare3.core.lineage
                 pAttacker, pDefender, plan.WarType, plan.ReasonKey,
                 plan.NoCb, plan.SystemWar, out failure);
             if (war?.data == null) return Failed(failure);
+            if (plan.GoalType == ZhuluWarRules.GoalTypeId)
+                return Succeeded();
             WarGoalCreateResult goalResult =
                 WarTerritoryService.TryPersistGoalOrEndWar(war, plan.Goal);
             return goalResult.Success

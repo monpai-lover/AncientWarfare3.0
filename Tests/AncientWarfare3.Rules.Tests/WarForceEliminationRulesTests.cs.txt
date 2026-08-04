@@ -51,34 +51,32 @@ internal static class WarForceEliminationRulesTests
         DuplicateObservationsInOneMonthDoNotConfirmExhaustion();
         RuntimeWiresBoundedMonthlyObservationFirst();
         OrdinarySettlementUsesTheRequiredOfferMode();
-        SpecialWarsUseDedicatedSettlementAdapters();
+        SpecialWarsUseBoundedAdapters();
     }
 
-    private static void SpecialWarsUseDedicatedSettlementAdapters()
+    private static void SpecialWarsUseBoundedAdapters()
     {
-        Equal(WarForceSpecialSettlementKind.Zhulu,
-            WarForceEliminationRules.SpecialKind(true, false),
-            "Zhulu war selects its dedicated adapter");
         Equal(WarForceSpecialSettlementKind.Rebellion,
-            WarForceEliminationRules.SpecialKind(false, true),
+            WarForceEliminationRules.SpecialKind(true),
             "rebellion selects its dedicated adapter");
         Equal(WarForceSpecialSettlementKind.None,
-            WarForceEliminationRules.SpecialKind(false, false),
+            WarForceEliminationRules.SpecialKind(false),
             "ordinary war has no special adapter");
 
         string root = Directory.GetCurrentDirectory();
         string central = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "WarForceEliminationSettlementService.cs"));
-        string zhulu = File.ReadAllText(Path.Combine(root, "Code", "core",
-            "lineage", "ZhuluWarSettlementService.cs"));
+        string router = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "WarForceSpecialSettlementService.cs"));
         string rebellion = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "RebellionCollapseSettlementService.cs"));
         True(central.Contains(
                 "WarForceSpecialSettlementService.TrySettle"),
             "special router runs before ordinary settlement");
-        True(zhulu.Contains("QueueForceElimination") &&
-             zhulu.Contains("WarForceEliminationDecision"),
-            "Zhulu exposes a force-elimination adapter");
+        True(central.Contains("TrySettleZhuluZeroForce(pWar)") &&
+             router.Contains("ResolveZeroForceFallback(") &&
+             !router.Contains("ZhuluWarSettlementService"),
+            "Zhulu uses only its direct zero-force liveness fallback");
         True(rebellion.Contains("QueueForceElimination") &&
              rebellion.Contains("WarForceEliminationDecision"),
             "rebellion exposes a force-elimination adapter");

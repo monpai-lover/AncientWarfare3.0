@@ -78,21 +78,6 @@ namespace AncientWarfare3.core.lineage
                 World.world?.map_stats?.world_age_id);
             if (!CanDeclare(attacker, defender, ageOverride,
                     out reason)) return false;
-            City targetCity = defender.capital ??
-                              WarTerritoryService.FindFirstTargetCity(
-                                  defender);
-            if (targetCity?.data == null)
-            {
-                reason = "zhulu_target_city_unavailable";
-                return false;
-            }
-
-            var goal = new WarTerritoryService.WarGoalRequest
-            {
-                goal_type = ZhuluWarRules.GoalTypeId,
-                target_kingdom = defender,
-                target_city = targetCity
-            };
             War war = ageOverride
                 ? WarDecisionService.TryStartSystemWar(attacker, defender,
                     ZhuluWarRules.WarTypeId, ZhuluWarRules.GoalTypeId)
@@ -104,13 +89,8 @@ namespace AncientWarfare3.core.lineage
                 reason = "zhulu_war_start_failed";
                 return false;
             }
-
-            WarGoalCreateResult persisted =
-                WarTerritoryService.CreateGoalForWar(war, goal);
-            if (!persisted.Success)
-                ZhuluWarSettlementService.AbortFailedDeclaration(war);
-            reason = persisted.Success ? "" : persisted.Reason;
-            return persisted.Success;
+            reason = "";
+            return true;
         }
 
         public static bool IsZhuluWar(War war, bool requireActive = true)
@@ -123,40 +103,20 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
-        public static bool TryResolveCaptureRecipient(City city,
-            Kingdom capturer, out War zhuluWar, out Kingdom principal)
+        public static bool IsOpposingZhuluCapture(City city,
+            Kingdom capturer)
         {
-            zhuluWar = null;
-            principal = null;
             Kingdom oldOwner = city?.kingdom;
             if (city?.data == null || capturer?.data == null ||
                 oldOwner?.data == null || capturer == oldOwner)
                 return false;
             try
             {
-                foreach (War war in capturer.getWars())
+                if (World.world?.wars == null) return false;
+                foreach (War war in World.world.wars)
                 {
                     if (!IsZhuluWar(war)) continue;
-                    bool capturerAttacker = war.isAttacker(capturer);
-                    bool capturerDefender = war.isDefender(capturer);
-                    bool ownerAttacker = war.isAttacker(oldOwner);
-                    bool ownerDefender = war.isDefender(oldOwner);
-                    if (!(capturerAttacker && ownerDefender) &&
-                        !(capturerDefender && ownerAttacker)) continue;
-                    Kingdom mainAttacker = war.getMainAttacker();
-                    Kingdom mainDefender = war.getMainDefender();
-                    long recipientId = ZhuluWarRules.ResolveCaptureRecipient(
-                        capturerAttacker, mainAttacker?.id ?? -1L,
-                        mainDefender?.id ?? -1L);
-                    Kingdom recipient = recipientId == mainAttacker?.id
-                        ? mainAttacker
-                        : recipientId == mainDefender?.id
-                            ? mainDefender
-                            : null;
-                    if (!IsValidRealm(recipient)) continue;
-                    zhuluWar = war;
-                    principal = recipient;
-                    return true;
+                    if (war.isInWarWith(capturer, oldOwner)) return true;
                 }
             }
             catch { }

@@ -21,8 +21,7 @@ namespace AncientWarfare3.core.lineage
     public enum WarForceSpecialSettlementKind
     {
         None = 0,
-        Zhulu = 1,
-        Rebellion = 2
+        Rebellion = 1
     }
 
     public readonly struct WarForceEliminationDecision
@@ -96,9 +95,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static WarForceSpecialSettlementKind SpecialKind(
-            bool pIsZhulu, bool pIsRebellion)
+            bool pIsRebellion)
         {
-            if (pIsZhulu) return WarForceSpecialSettlementKind.Zhulu;
             if (pIsRebellion)
                 return WarForceSpecialSettlementKind.Rebellion;
             return WarForceSpecialSettlementKind.None;

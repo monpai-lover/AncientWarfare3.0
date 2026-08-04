@@ -54,6 +54,9 @@ namespace AncientWarfare3.patch
             long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
+                Kingdom capturer = __instance?.getCapturingKingdom();
+                if (ZhuluWarService.IsOpposingZhuluCapture(__instance,
+                        capturer)) return true;
                 if (WarScoreService.RetryPendingCityOccupation(__instance))
                     return false;
                 if (WarScoreService.ShouldHoldFrozenOccupation(__instance))
@@ -177,6 +180,8 @@ namespace AncientWarfare3.patch
             Kingdom oldOwner = __instance?.kingdom;
             __state = new RebellionDirectCaptureState(oldOwner,
                 pNewKingdom, -1L, pDirect: false);
+            if (ZhuluWarService.IsOpposingZhuluCapture(__instance,
+                    pNewKingdom)) return true;
             if (_captureResistanceCity == __instance &&
                 _captureResistance > 0f)
             {
@@ -191,15 +196,6 @@ namespace AncientWarfare3.patch
             }
             if (!CityOccupationAccelerationService.HasReachedNaturalCaptureLimit(__instance))
                 return false;
-            if (ZhuluWarService.TryResolveCaptureRecipient(__instance,
-                    pNewKingdom, out War zhuluWar,
-                    out Kingdom principal))
-            {
-                pNewKingdom = principal;
-                __state = new RebellionDirectCaptureState(oldOwner,
-                    principal, zhuluWar.data.id, pDirect: true);
-                return true;
-            }
             if (RebellionDirectTerritoryTransferService.TryResolve(
                     __instance, pNewKingdom, out War rebellionWar))
             {
@@ -280,12 +276,8 @@ namespace AncientWarfare3.patch
             ref Kingdom pNewSetKingdom, bool pCaptured)
         {
             if (!pCaptured) return;
-            if (ZhuluWarService.TryResolveCaptureRecipient(__instance,
-                    pNewSetKingdom, out _, out Kingdom principal))
-            {
-                pNewSetKingdom = principal;
-                return;
-            }
+            if (ZhuluWarService.IsOpposingZhuluCapture(__instance,
+                    pNewSetKingdom)) return;
             if (RebellionDirectTerritoryTransferService.TryResolve(
                     __instance, pNewSetKingdom, out _)) return;
             pNewSetKingdom = VassalCaptureService.ResolveCaptureRecipient(

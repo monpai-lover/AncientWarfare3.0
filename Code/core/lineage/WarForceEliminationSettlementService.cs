@@ -64,6 +64,10 @@ namespace AncientWarfare3.core.lineage
 
         private static bool ObserveAndQueue(War pWar, int pMonthKey)
         {
+            if (ZhuluWarService.IsZhuluWar(pWar))
+                return WarForceSpecialSettlementService.
+                           TrySettleZhuluZeroForce(pWar) ==
+                       WarForceSpecialSettlementResult.Handled;
             if (!ObserveWar(pWar, pMonthKey,
                     out WarForceEliminationDecision decision) ||
                 WarPeaceSettlementService.Instance.

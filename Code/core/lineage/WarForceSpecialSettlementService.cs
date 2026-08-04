@@ -14,15 +14,64 @@ namespace AncientWarfare3.core.lineage
     {
         public static void ClearRuntime()
         {
-            ZhuluWarSettlementService.ClearRuntime();
             RebellionCollapseSettlementService.ClearRuntime();
+        }
+
+        public static WarForceSpecialSettlementResult
+            TrySettleZhuluZeroForce(War pWar)
+        {
+            if (!ZhuluWarService.IsZhuluWar(pWar))
+                return WarForceSpecialSettlementResult.NotSpecial;
+            ZhuluZeroForceFallback fallback;
+            try
+            {
+                fallback = ZhuluWarRules.ResolveZeroForceFallback(
+                    pWar.countAttackersWarriors(),
+                    pWar.countDefendersWarriors());
+            }
+            catch
+            {
+                return WarForceSpecialSettlementResult.Failed;
+            }
+            if (fallback == ZhuluZeroForceFallback.None)
+                return WarForceSpecialSettlementResult.NotSpecial;
+
+            try
+            {
+                if (fallback == ZhuluZeroForceFallback.Peace)
+                {
+                    EndIfLive(pWar, WarWinner.Peace);
+                    return WarForceSpecialSettlementResult.Handled;
+                }
+
+                bool attackersWin = fallback ==
+                                    ZhuluZeroForceFallback.AttackersWin;
+                Kingdom winner = attackersWin
+                    ? pWar.getMainAttacker()
+                    : ResolveDefenderRecipient(pWar);
+                IEnumerable<Kingdom> losers = attackersWin
+                    ? pWar.getDefenders()
+                    : pWar.getAttackers();
+                if (winner?.data == null || winner.isRekt() ||
+                    !TransferAllCities(losers, winner))
+                    return WarForceSpecialSettlementResult.Failed;
+                EndIfLive(pWar, attackersWin
+                    ? WarWinner.Attackers
+                    : WarWinner.Defenders);
+                return WarForceSpecialSettlementResult.Handled;
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Zhulu zero-force fallback failed war=" +
+                                    (pWar?.data?.id ?? -1L) + ": " +
+                                    exception.Message);
+                return WarForceSpecialSettlementResult.Failed;
+            }
         }
 
         public static WarForceSpecialSettlementResult TrySettle(War pWar,
             WarForceEliminationDecision pDecision)
         {
-            bool zhulu = ZhuluWarService.IsZhuluWar(pWar,
-                requireActive: false);
             bool rebellion = false;
             try
             {
@@ -30,13 +79,8 @@ namespace AncientWarfare3.core.lineage
                             pWar.getAsset()?.rebellion == true;
             }
             catch { }
-            switch (WarForceEliminationRules.SpecialKind(zhulu, rebellion))
+            switch (WarForceEliminationRules.SpecialKind(rebellion))
             {
-                case WarForceSpecialSettlementKind.Zhulu:
-                    return ZhuluWarSettlementService.
-                        QueueForceElimination(pWar, pDecision)
-                            ? WarForceSpecialSettlementResult.Handled
-                            : WarForceSpecialSettlementResult.Failed;
                 case WarForceSpecialSettlementKind.Rebellion:
                     return RebellionCollapseSettlementService.
                         QueueForceElimination(pWar, pDecision)
@@ -54,6 +98,28 @@ namespace AncientWarfare3.core.lineage
                 pLoser == pWinner) return false;
             foreach (City city in SnapshotCities(pLoser))
             {
+                city.joinAnotherKingdom(pWinner, pCaptured: false,
+                    pRebellion: false);
+                if (city.kingdom != pWinner) return false;
+            }
+            return true;
+        }
+
+        internal static bool TransferAllCities(
+            IEnumerable<Kingdom> pLosers, Kingdom pWinner)
+        {
+            if (pLosers == null || pWinner?.data == null) return false;
+            var cities = new List<City>();
+            foreach (Kingdom loser in pLosers)
+            {
+                if (loser?.data == null || loser == pWinner) continue;
+                cities.AddRange(SnapshotCities(loser));
+            }
+            for (int i = 0; i < cities.Count; i++)
+            {
+                City city = cities[i];
+                if (city?.data == null || city.isRekt() ||
+                    city.kingdom == pWinner) continue;
                 city.joinAnotherKingdom(pWinner, pCaptured: false,
                     pRebellion: false);
                 if (city.kingdom != pWinner) return false;
@@ -120,6 +186,29 @@ namespace AncientWarfare3.core.lineage
         {
             try { return World.world?.cities?.get(pCityId); }
             catch { return null; }
+        }
+
+        private static Kingdom ResolveDefenderRecipient(War pWar)
+        {
+            Kingdom principal = pWar?.getMainDefender();
+            if (principal?.data != null && !principal.isRekt())
+                return principal;
+            try
+            {
+                foreach (Kingdom defender in pWar.getDefenders())
+                    if (defender?.data != null && !defender.isRekt())
+                        return defender;
+            }
+            catch { }
+            return null;
+        }
+
+        private static void EndIfLive(War pWar, WarWinner pWinner)
+        {
+            bool live;
+            try { live = pWar?.data != null && !pWar.hasEnded(); }
+            catch { live = false; }
+            if (live) World.world?.wars?.endWar(pWar, pWinner);
         }
     }
 }
