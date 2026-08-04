@@ -146,6 +146,10 @@ namespace AncientWarfare3.core.naming
                     out BaseSystemData data))
                 return;
 
+            if (pObject is Kingdom restoringKingdom)
+                StateNameService.ReconcileLocalizedIdentityBeforeRestore(
+                    restoringKingdom);
+
             AWLocalizedNameIdentitySnapshot savedIdentity =
                 AWLocalizedNamePersistence.Capture(data);
             string displayBefore = data.name ?? string.Empty;

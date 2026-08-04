@@ -21,6 +21,14 @@ internal static class KingdomRenamePersistenceRulesTests
         Equal("Chinese Realm", nativeEdit.ChineseName,
             "a non-Chinese edit preserves the Chinese identity slot");
 
+        AWLocalizedNameEditDecision canonicalStateName =
+            AWLocalizedKingdomRenameRules.ResolveCanonicalStateName(
+                " 周 ", "House", "房");
+        Equal("周", canonicalStateName.NativeName,
+            "a formal state name replaces the stale native slot across languages");
+        Equal("周", canonicalStateName.ChineseName,
+            "a formal state name replaces the stale Chinese slot before save");
+
         AWLocalizedNameEditDecision partnerChineseEdit =
             AWLocalizedKingdomRenameRules.ResolveEdit(
                 "ch", "Shared Chinese", "Partner Native",
@@ -274,6 +282,39 @@ internal static class KingdomRenamePersistenceRulesTests
         Equal(false, projectionService.Contains("ModeGeometry") ||
                      projectionService.Contains("Texture"),
             "rename projection does not rebuild map geometry or textures");
+
+        string stateNameService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "StateNameService.cs"));
+        Equal(true, stateNameService.Contains(
+                "AWLocalizedKingdomNameService.CommitCanonicalStateName"),
+            "formal state-name projection enters the localized persistence boundary");
+        int committedProjectionStart = stateNameService.IndexOf(
+            "private static void ApplyCommittedProjection",
+            StringComparison.Ordinal);
+        int nextMethodStart = stateNameService.IndexOf(
+            "private static bool TryReadBranchSeed", committedProjectionStart,
+            StringComparison.Ordinal);
+        string committedProjection = stateNameService.Substring(
+            committedProjectionStart, nextMethodStart - committedProjectionStart);
+        Equal(false, committedProjection.Contains("setName("),
+            "formal state-name projection cannot bypass localized persistence with setName");
+
+        string migrationService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "naming", "AWLocalizedNameMigrationService.cs"));
+        int migrateStart = migrationService.IndexOf(
+            "private static void Migrate", StringComparison.Ordinal);
+        int captureStart = migrationService.IndexOf(
+            "AWLocalizedNamePersistence.Capture", migrateStart,
+            StringComparison.Ordinal);
+        int reconcileStart = migrationService.IndexOf(
+            "StateNameService.ReconcileLocalizedIdentityBeforeRestore",
+            migrateStart, StringComparison.Ordinal);
+        Equal(true, reconcileStart >= migrateStart &&
+                    reconcileStart < captureStart,
+            "restore repairs an already projected formal state name before stale localized slots are captured");
+        Equal(true, stateNameService.Contains(
+                "string.Equals(pKingdom.name, committed"),
+            "old-save repair only trusts a branch state name already projected into the live save");
     }
 
     private static AWLocalizedNameIdentitySnapshot Snapshot(
