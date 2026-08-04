@@ -105,6 +105,8 @@ namespace AncientWarfare3.patch
                 IsReplicaSession;
             bool requestedAuthority = pActor != null &&
                                       IsCivilAuthority(pActor);
+            bool royalGuardHandoff =
+                RoyalGuardCaptainHandoffScope.IsActive(__instance);
             bool reject = ArmyCaptainContinuityRules.
                 ShouldRejectCaptainMutation(
                     ArmyRtsRuntimeMode.Current,
@@ -114,7 +116,8 @@ namespace AncientWarfare3.patch
                     currentAlive,
                     IsArmyMember(__instance, current),
                     ReferenceEquals(current, pActor),
-                    currentCaptainIsCivilAuthority: currentAuthority);
+                    currentCaptainIsCivilAuthority: currentAuthority,
+                    royalGuardRoleOwnsCaptain: royalGuardHandoff);
             bool mutationAllowed = !requestedAuthority && !reject;
             __state = new CaptainAssignmentDiagnosticState(
                 __instance?.id ?? -1L, ActorId(current), ActorId(pActor),
@@ -384,6 +387,8 @@ namespace AncientWarfare3.patch
                 return true;
             bool currentExists = pActor?.data != null;
             bool currentAlive = IsLiveCaptainActor(pActor);
+            bool royalGuardHandoff =
+                RoyalGuardCaptainHandoffScope.IsActive(__instance);
             return !ArmyCaptainContinuityRules.
                 ShouldRejectCaptainMutation(
                     ArmyRtsRuntimeMode.Current,
@@ -396,7 +401,8 @@ namespace AncientWarfare3.patch
                     IsArmyMember(__instance, pActor),
                     requestedSameCaptain: false,
                     currentCaptainIsCivilAuthority:
-                        IsCivilAuthority(pActor));
+                        IsCivilAuthority(pActor),
+                    royalGuardRoleOwnsCaptain: royalGuardHandoff);
         }
 
         [HarmonyPostfix]

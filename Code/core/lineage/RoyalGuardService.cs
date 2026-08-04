@@ -232,9 +232,12 @@ namespace AncientWarfare3.core.lineage
             {
                 Actor guard = active[i];
                 if (guard == captain) continue;
+                guard.data.get(LineageKeys.ROYAL_GUARD_CAPTAIN,
+                    out bool wasCaptain, false);
                 if (!RoyalGuardMaintenanceRules.ShouldRefreshGuardInMaintenancePass(
                         pIsCaptain: false,
                         pIsNewlyAppointed: ContainsActor(newlyAppointed, guard?.data?.id ?? -1L),
+                        pCaptainStateChanged: wasCaptain,
                         pActorIndex: i,
                         pCursor: refreshCursor,
                         pBatchLimit: RUNTIME_REFRESH_BATCH_LIMIT,
@@ -1171,7 +1174,12 @@ namespace AncientWarfare3.core.lineage
                 ? pActor.army != pGuardArmy
                 : pActor.hasArmy() && !IsRoyalGuardArmy(pActor.army);
             bool professionChanged = !pActor.isWarrior();
-            bool jobChanged = GuardContent.KingGuardJob != null && !IsKingGuardJob(pActor);
+            bool captainStateChanged = wasCaptain != pCaptain;
+            bool jobChanged = GuardContent.KingGuardJob != null &&
+                              RoyalGuardMaintenanceRules.ShouldRebindGuardJob(
+                                  pCitizenJobMatches: IsKingGuardJob(pActor),
+                                  pRuntimeJobMatches: IsKingGuardActorJob(pActor),
+                                  pCaptainStateChanged: captainStateChanged);
             bool persistRefresh = RoyalGuardMaintenanceRules.ShouldPersistGuardIdentityRefresh(
                 pWasGuard: wasGuard,
                 pWasCaptain: wasCaptain,
@@ -1215,8 +1223,8 @@ namespace AncientWarfare3.core.lineage
                 {
                     try { pActor.setProfession(UnitProfession.Warrior); } catch { }
                 }
-                if (jobChanged && GuardContent.KingGuardJob != null)
-                    pActor.setCitizenJob(GuardContent.KingGuardJob);
+                if (jobChanged)
+                    RebindGuardJob(pActor);
                 pRuntimeRefreshesApplied++;
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefreshRuntime,
                     CityMaintenanceBenchmarkRules.Group);
@@ -1434,6 +1442,23 @@ namespace AncientWarfare3.core.lineage
                    pActor.citizen_job.id == GuardContent.CITIZEN_JOB_KING_GUARD;
         }
 
+        private static bool IsKingGuardActorJob(Actor pActor)
+        {
+            return pActor?.ai != null &&
+                   pActor.ai.job?.id == GuardContent.ACTOR_JOB_KING_GUARD;
+        }
+
+        private static void RebindGuardJob(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.ai == null ||
+                GuardContent.KingGuardJob == null) return;
+            try { pActor.stopMovement(); } catch { }
+            try { pActor.cancelAllBeh(); } catch { }
+            try { pActor.beh_actor_target = null; } catch { }
+            try { pActor.setCitizenJob(GuardContent.KingGuardJob); } catch { }
+            try { pActor.ai.setJob(GuardContent.ACTOR_JOB_KING_GUARD); } catch { }
+        }
+
         private static bool HasGuardResidue(Kingdom pKingdom,
             Actor pActor)
         {
@@ -1531,7 +1556,7 @@ namespace AncientWarfare3.core.lineage
                     army.setName(pGuardName);
             }
             if (!pCaptain.isRekt())
-                AWArmyService.SetCaptainIfChanged(army, pCaptain);
+                AWArmyService.SetRoyalGuardCaptainIfChanged(army, pCaptain);
 
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_ARMY_ID, army.id);
             return army;

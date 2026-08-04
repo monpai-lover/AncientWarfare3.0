@@ -1,0 +1,110 @@
+using AncientWarfare3.core.lineage;
+
+internal static class RoyalGuardCaptainHandoffRulesTests
+{
+    public static void Run()
+    {
+        var failures = new List<string>();
+
+        Check(failures,
+            ArmyCaptainContinuityRules.ShouldRejectCaptainMutation(
+                ArmyRtsMode.On,
+                replicaApplying: false,
+                armyLive: true,
+                currentCaptainExists: true,
+                currentCaptainAlive: true,
+                currentCaptainIsMember: true,
+                requestedSameCaptain: false,
+                currentCaptainIsCivilAuthority: false),
+            "RTS keeps rejecting a live ordinary army captain mutation");
+
+        Check(failures,
+            !ArmyCaptainContinuityRules.ShouldRejectCaptainMutation(
+                ArmyRtsMode.On,
+                replicaApplying: false,
+                armyLive: true,
+                currentCaptainExists: true,
+                currentCaptainAlive: true,
+                currentCaptainIsMember: true,
+                requestedSameCaptain: false,
+                currentCaptainIsCivilAuthority: false,
+                royalGuardRoleOwnsCaptain: true),
+            "RTS permits the intended live Royal Guard captain handoff");
+
+        Check(failures, RoyalGuardMaintenanceRules.ShouldRebindGuardJob(
+                pCitizenJobMatches: true,
+                pRuntimeJobMatches: false,
+                pCaptainStateChanged: false),
+            "a correct citizen job with a stale actor AI job is runtime drift");
+        Check(failures, RoyalGuardMaintenanceRules.ShouldRebindGuardJob(
+                pCitizenJobMatches: true,
+                pRuntimeJobMatches: true,
+                pCaptainStateChanged: true),
+            "captain promotion or demotion immediately rebinds the guard job");
+        Check(failures, !RoyalGuardMaintenanceRules.ShouldRebindGuardJob(
+                pCitizenJobMatches: true,
+                pRuntimeJobMatches: true,
+                pCaptainStateChanged: false),
+            "a stable guard with both jobs bound is not force-reset");
+
+        Check(failures,
+            RoyalGuardMaintenanceRules.ShouldRefreshGuardInMaintenancePass(
+                pIsCaptain: false,
+                pIsNewlyAppointed: false,
+                pCaptainStateChanged: true,
+                pActorIndex: 7,
+                pCursor: 0,
+                pBatchLimit: 1,
+                pActiveCount: 10),
+            "a former captain refreshes immediately outside the member cursor");
+        Check(failures,
+            !RoyalGuardMaintenanceRules.ShouldRefreshGuardInMaintenancePass(
+                pIsCaptain: false,
+                pIsNewlyAppointed: false,
+                pCaptainStateChanged: false,
+                pActorIndex: 7,
+                pCursor: 0,
+                pBatchLimit: 1,
+                pActiveCount: 10),
+            "a stable member outside the cursor remains bounded");
+
+        string root = Directory.GetCurrentDirectory();
+        string armyService = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "AWArmyService.cs"));
+        string guardService = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "RoyalGuardService.cs"));
+        string armySafetyPatch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_ArmySafetyPatch.cs"));
+        Check(failures,
+            armyService.Contains("SetRoyalGuardCaptainIfChanged") &&
+            armyService.Contains("IsRoleArmy(pArmy, AWArmyRole.RoyalGuard)"),
+            "the captain bypass is restricted to an explicitly role-owned Royal Guard army");
+        Check(failures,
+            guardService.Contains("AWArmyService.SetRoyalGuardCaptainIfChanged(army, pCaptain)"),
+            "logical Royal Guard selection uses the role-owned actual-captain handoff");
+        int scopedPatchChecks = armySafetyPatch.Split(
+            "RoyalGuardCaptainHandoffScope.IsActive(__instance)").Length - 1;
+        Check(failures,
+            armyService.Contains("RoyalGuardCaptainHandoffScope.Open(pArmy)") &&
+            scopedPatchChecks >= 2 &&
+            armySafetyPatch.Contains(
+                "royalGuardRoleOwnsCaptain: royalGuardHandoff"),
+            "the Royal Guard handoff scope crosses both captain Harmony guards");
+        Check(failures,
+            guardService.Contains("pActor.ai.job?.id") &&
+            guardService.Contains("GuardContent.ACTOR_JOB_KING_GUARD") &&
+            guardService.Contains("pActor.stopMovement()") &&
+            guardService.Contains("pActor.cancelAllBeh()") &&
+            guardService.Contains("pActor.setCitizenJob(GuardContent.KingGuardJob)") &&
+            guardService.Contains("pActor.ai.setJob(GuardContent.ACTOR_JOB_KING_GUARD)"),
+            "job drift repair clears stale movement/tasks and rebinds citizen and actor jobs");
+
+        if (failures.Count > 0)
+            throw new InvalidOperationException(string.Join(Environment.NewLine, failures));
+    }
+
+    private static void Check(List<string> failures, bool condition, string name)
+    {
+        if (!condition) failures.Add(name);
+    }
+}

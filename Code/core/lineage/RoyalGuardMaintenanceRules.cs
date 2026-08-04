@@ -171,9 +171,9 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool ShouldRefreshGuardInMaintenancePass(bool pIsCaptain, bool pIsNewlyAppointed,
-            int pActorIndex, int pCursor, int pBatchLimit, int pActiveCount)
+            bool pCaptainStateChanged, int pActorIndex, int pCursor, int pBatchLimit, int pActiveCount)
         {
-            if (pIsCaptain || pIsNewlyAppointed) return true;
+            if (pIsCaptain || pIsNewlyAppointed || pCaptainStateChanged) return true;
             if (pActorIndex < 0 || pActiveCount <= 0) return false;
 
             int activeCount = Math.Max(1, pActiveCount);
@@ -256,6 +256,16 @@ namespace AncientWarfare3.core.lineage
             bool pJobChanged)
         {
             return pArmyChanged || pProfessionChanged || pJobChanged;
+        }
+
+        public static bool ShouldRebindGuardJob(
+            bool pCitizenJobMatches,
+            bool pRuntimeJobMatches,
+            bool pCaptainStateChanged)
+        {
+            return pCaptainStateChanged ||
+                   !pCitizenJobMatches ||
+                   !pRuntimeJobMatches;
         }
 
         // 每趟维护只重建有限个禁卫头像(clearGraphicsFully 极贵),其余标脏留到后续趟处理,

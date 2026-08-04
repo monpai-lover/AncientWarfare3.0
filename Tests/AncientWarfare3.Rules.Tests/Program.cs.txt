@@ -427,6 +427,13 @@ if (args.Length == 1 && args[0] == "--army-map-information-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--royal-guard-captain-slice")
+{
+    RoyalGuardCaptainHandoffRulesTests.Run();
+    Console.WriteLine("AW3 royal guard captain handoff rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--multiplayer-strategic-state-slice")
 {
     AW3MultiplayerStrategicStateRulesTests.Run();
@@ -7766,6 +7773,7 @@ WarForceEliminationRulesTests.Run();
 HistoricalFigureSpawnRulesTests.Run();
 Regression20260721Tests.Run();
 ArmyMapInformationRulesTests.Run();
+RoyalGuardCaptainHandoffRulesTests.Run();
 HierarchicalVassalMapActivationRulesTests.Run();
 HierarchicalVassalZoneLabelAccumulatorTests.Run();
 AW3MultiplayerWorldLoadRulesTests.Run();

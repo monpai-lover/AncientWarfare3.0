@@ -473,6 +473,22 @@ namespace AncientWarfare3.core.lineage
 
         public static void SetCaptainIfChanged(Army pArmy, Actor pCaptain)
         {
+            SetCaptainIfChangedCore(pArmy, pCaptain,
+                pRoyalGuardRoleOwnsCaptain: false);
+        }
+
+        public static void SetRoyalGuardCaptainIfChanged(Army pArmy,
+            Actor pCaptain)
+        {
+            if (!IsRoleArmy(pArmy, AWArmyRole.RoyalGuard)) return;
+            using (RoyalGuardCaptainHandoffScope.Open(pArmy))
+                SetCaptainIfChangedCore(pArmy, pCaptain,
+                    pRoyalGuardRoleOwnsCaptain: true);
+        }
+
+        private static void SetCaptainIfChangedCore(Army pArmy, Actor pCaptain,
+            bool pRoyalGuardRoleOwnsCaptain)
+        {
             if (pArmy?.data == null || pCaptain?.data == null || pCaptain.isRekt()) return;
             if (!IsCaptainLeaseEligible(pArmy, pCaptain,
                     requireMembership: false)) return;
@@ -512,7 +528,8 @@ namespace AncientWarfare3.core.lineage
                     currentAlive,
                     currentIsMember,
                     ReferenceEquals(current, pCaptain),
-                    currentCaptainIsCivilAuthority: currentAuthority))
+                    currentCaptainIsCivilAuthority: currentAuthority,
+                    royalGuardRoleOwnsCaptain: pRoyalGuardRoleOwnsCaptain))
                 return;
 
             if (!AWArmyRoleRules.ShouldSetCaptain(currentId, pCaptain.data.id))

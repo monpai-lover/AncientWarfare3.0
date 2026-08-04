@@ -32,12 +32,14 @@ namespace AncientWarfare3.core.lineage
             bool replicaApplying, bool armyLive,
             bool currentCaptainExists, bool currentCaptainAlive,
             bool currentCaptainIsMember, bool requestedSameCaptain,
-            bool currentCaptainIsCivilAuthority = false)
+            bool currentCaptainIsCivilAuthority = false,
+            bool royalGuardRoleOwnsCaptain = false)
         {
             return ShouldOwnMaintenance(pMode, replicaApplying, armyLive) &&
                    ShouldPreserveAssignedCaptain(currentCaptainExists,
                        currentCaptainAlive, currentCaptainIsMember) &&
-                   !requestedSameCaptain;
+                   !requestedSameCaptain &&
+                   !royalGuardRoleOwnsCaptain;
         }
 
         public static bool ShouldRejectCaptainDetachment(ArmyRtsMode pMode,

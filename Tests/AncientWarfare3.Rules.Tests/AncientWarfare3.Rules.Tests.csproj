@@ -190,6 +190,7 @@
     <Compile Include="MandateSuccessionRegressionRulesTests.cs.txt" />
     <Compile Include="Regression20260721Tests.cs.txt" />
     <Compile Include="ArmyMapInformationRulesTests.cs.txt" />
+    <Compile Include="RoyalGuardCaptainHandoffRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalMapActivationRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalLabelPrecomputeRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalZoneLabelAccumulatorTests.cs.txt" />
