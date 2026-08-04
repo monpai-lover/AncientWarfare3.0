@@ -313,7 +313,7 @@ namespace AncientWarfare3.core.lineage
 
         internal static void OnWarStarted(War war)
         {
-            if (war?.data == null || war.hasEnded()) return;
+            if (!ZhuluWarService.ShouldEnrollInAw3Systems(war)) return;
             foreach (Kingdom kingdom in war.getAttackers())
                 OpenWarEmergency(kingdom, war.data.id);
             foreach (Kingdom kingdom in war.getDefenders())
@@ -1375,7 +1375,7 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 foreach (War war in kingdom.getWars())
-                    if (war?.data != null && !war.hasEnded())
+                    if (ZhuluWarService.ShouldEnrollInAw3Systems(war))
                         return war.data.id;
             }
             catch { }
@@ -1389,7 +1389,8 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 foreach (War war in kingdom.getWars())
-                    if (war?.data != null && !war.hasEnded()) count++;
+                    if (ZhuluWarService.ShouldEnrollInAw3Systems(war))
+                        count++;
             }
             catch { }
             return count;

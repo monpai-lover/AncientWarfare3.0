@@ -198,6 +198,8 @@ namespace AncientWarfare3.core.multiplayer
                     CivilServiceExamService.RebuildRuntime),
                 new AW3RestoreStage("civil_service_qualifications",
                     CivilServiceQualificationService.RebuildRuntimeProjections),
+                new AW3RestoreStage("zhulu_native_war_migration",
+                    ZhuluWarMigrationService.RebuildRuntime),
                 new AW3RestoreStage("special_armies",
                     AWArmyService.RepairSpecialArmiesAfterLoad),
                 new AW3RestoreStage("army_strategic_index",

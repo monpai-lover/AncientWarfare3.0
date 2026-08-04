@@ -41,7 +41,7 @@ namespace AncientWarfare3.core.lineage
             if (pWar?.data == null || !Ready) return;
 
             Kingdom atk = pWar.getMainAttacker();
-            Kingdom def = pWar.getMainDefender();
+            Kingdom def = ZhuluWarService.ResolvePrincipalDefender(pWar);
             if (atk == null || def == null) return;
 
             long warId = pWar.data.id;
@@ -137,7 +137,10 @@ namespace AncientWarfare3.core.lineage
 
             string table = WarRecordTableItem.GetTableName();
             string winnerStr = WinnerToString(pWinner);
-            string winnerColor = WinnerColor(pWinner, pWar.getMainAttacker(), pWar.getMainDefender());
+            Kingdom attacker = pWar.getMainAttacker();
+            Kingdom defender =
+                ZhuluWarService.ResolvePrincipalDefender(pWar);
+            string winnerColor = WinnerColor(pWinner, attacker, defender);
             double now = World.world.getCurWorldTime();
 
             try
@@ -157,8 +160,8 @@ namespace AncientWarfare3.core.lineage
 
             Kingdom winner = pWinner switch
             {
-                WarWinner.Attackers => pWar.getMainAttacker(),
-                WarWinner.Defenders => pWar.getMainDefender(),
+                WarWinner.Attackers => attacker,
+                WarWinner.Defenders => defender,
                 _ => null
             };
             if (winner?.data != null && !winner.isRekt())
@@ -177,7 +180,8 @@ namespace AncientWarfare3.core.lineage
             {
                 if (war?.data == null) continue;
                 Kingdom atk = war.getMainAttacker();
-                Kingdom def = war.getMainDefender();
+                Kingdom def =
+                    ZhuluWarService.ResolvePrincipalDefender(war);
                 if (atk == null || def == null) continue;
                 _active[war] = new WarLive
                 {

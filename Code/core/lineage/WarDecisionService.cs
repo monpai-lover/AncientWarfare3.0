@@ -375,7 +375,12 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 _allowWarStartDepth++;
-                War war = World.world.diplomacy.startWar(pAttacker, pDefender, asset);
+                using IDisposable zhuluDeclaration =
+                    type == ZhuluWarRules.WarTypeId
+                        ? ZhuluWarDeclarationScope.Open(pDefender)
+                        : null;
+                War war = World.world.diplomacy.startWar(pAttacker,
+                    pDefender, asset);
                 if (war?.data == null)
                 {
                     pFailureReason = "engine_rejected_start";

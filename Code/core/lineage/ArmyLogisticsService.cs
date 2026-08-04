@@ -578,7 +578,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarStarted(War pWar)
         {
-            if (pWar?.data == null) return;
+            if (!ZhuluWarService.ShouldEnrollInAw3Systems(pWar)) return;
             ActivityIndex.RegisterWar(pWar.data.id,
                 KingdomIds(pWar.getAttackers()),
                 KingdomIds(pWar.getDefenders()));
@@ -652,8 +652,7 @@ namespace AncientWarfare3.core.lineage
             {
                 try
                 {
-                    if (war?.data != null && !war.hasEnded())
-                        OnWarStarted(war);
+                    OnWarStarted(war);
                 }
                 catch { }
             }

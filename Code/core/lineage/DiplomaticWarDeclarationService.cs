@@ -280,7 +280,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pWar?.data == null) return;
             Kingdom attacker = pWar.getMainAttacker();
-            Kingdom defender = pWar.getMainDefender();
+            Kingdom defender =
+                ZhuluWarService.ResolvePrincipalDefender(pWar);
             if (attacker?.data == null || defender?.data == null) return;
             List<DiplomaticWarDeclarationRecord> records =
                 DiplomaticWarDeclarationLedgerService.GetPending(attacker);
@@ -294,7 +295,18 @@ namespace AncientWarfare3.core.lineage
         {
             if (pWar?.data == null) return;
             Kingdom attacker = pWar.getMainAttacker();
-            Kingdom defender = pWar.getMainDefender();
+            Kingdom defender =
+                ZhuluWarService.ResolvePrincipalDefender(pWar);
+            if (ZhuluWarService.TryGetDeclaredDefenderId(pWar,
+                    out long declaredDefenderId))
+            {
+                ReconcileEndedWarPairById(attacker,
+                    declaredDefenderId);
+                if (defender?.data != null)
+                    ReconcileEndedWarPairById(defender,
+                        attacker?.id ?? -1L);
+                return;
+            }
             ReconcileEndedWarPair(attacker, defender);
             ReconcileEndedWarPair(defender, attacker);
         }
@@ -302,7 +314,14 @@ namespace AncientWarfare3.core.lineage
         private static void ReconcileEndedWarPair(Kingdom pOwner,
             Kingdom pOpponent)
         {
-            if (pOwner?.data == null || pOpponent?.data == null) return;
+            ReconcileEndedWarPairById(pOwner,
+                pOpponent?.data?.id ?? -1L);
+        }
+
+        private static void ReconcileEndedWarPairById(Kingdom pOwner,
+            long pOpponentId)
+        {
+            if (pOwner?.data == null || pOpponentId < 0L) return;
             List<DiplomaticWarDeclarationRecord> records =
                 DiplomaticWarDeclarationLedgerService.GetPending(pOwner);
             for (int i = 0; i < records.Count; i++)
@@ -311,7 +330,7 @@ namespace AncientWarfare3.core.lineage
                 if (!DiplomaticWarDeclarationLedgerRules.
                         MatchesDirectedWarPair(record?.AttackerId ?? -1L,
                             record?.DefenderId ?? -1L, pOwner.id,
-                            pOpponent.id)) continue;
+                            pOpponentId)) continue;
                 TerminateRecord(pOwner, record, "ended", "war_ended");
             }
             RefreshCompatibilityProjection(pOwner);

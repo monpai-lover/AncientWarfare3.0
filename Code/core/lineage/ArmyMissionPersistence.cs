@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using AncientWarfare3.api.multiplayer;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -173,6 +174,9 @@ namespace AncientWarfare3.core.lineage
             if (stored == null) return false;
             Kingdom kingdom = SafeKingdom(pArmy);
             War war = FindWar(stored.WarId);
+            if (ZhuluWarService.IsZhuluWar(war,
+                    requireActive: false))
+                return RejectRestore(pArmy);
             City target = FindCity(stored.TargetCityId);
             var facts = new ArmyMissionRestoreFacts
             {
@@ -188,10 +192,7 @@ namespace AncientWarfare3.core.lineage
             };
             if (!ArmyMissionPersistenceRules.TryRestore(stored, facts,
                     out pMission, out pInitialState))
-            {
-                Clear(pArmy);
-                return false;
-            }
+                return RejectRestore(pArmy);
             Restored[pArmy.id] = pMission;
             KingdomWarDirectorService.OnArmyChanged(kingdom);
             return true;
@@ -282,6 +283,13 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.removeBool(LineageKeys.AW_ARMY_RTS_PLAYER_ORDER);
             pArmy.data.removeString(LineageKeys.AW_ARMY_RTS_ISSUED_TIME);
             Restored.Remove(pArmy.id);
+        }
+
+        private static bool RejectRestore(Army pArmy)
+        {
+            if (!AW3MultiplayerReplicaScope.IsReplicaSession)
+                Clear(pArmy);
+            return false;
         }
 
         private static bool IsTargetInWar(War pWar, City pTarget,
