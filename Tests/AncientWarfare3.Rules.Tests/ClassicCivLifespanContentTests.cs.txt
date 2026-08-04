@@ -1,0 +1,130 @@
+using AncientWarfare3.content;
+
+internal static class ClassicCivLifespanContentTests
+{
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Same(object pExpected, object pActual, string pName)
+    {
+        if (!ReferenceEquals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": reference changed");
+    }
+
+    public static void Run()
+    {
+        NormalizesOnlyExactClassicTargets();
+        RepeatedInitializationKeepsOneLifespanPart();
+    }
+
+    private static void NormalizesOnlyExactClassicTargets()
+    {
+        AssetManager.actor_library = new TestActorAssetLibrary();
+
+        ActorAsset human = Actor("LIFESPAN", 91f, 4f);
+        ActorAsset elf = Actor("lifespan", 500f, 7f);
+        ActorAsset dwarf = Actor("lifespan", 220f, 11f);
+        ActorAsset xia = Actor("lifespan", 50f, 13f);
+        ActorAsset orc = Actor("lifespan", 50f, 17f);
+        ActorAsset monkey = Actor("lifespan", 50f, 19f);
+
+        Register("human", human);
+        Register("elf", elf);
+        Register("dwarf", dwarf);
+        Register("Xia", xia);
+        Register("orc", orc);
+        Register("civ_monkey", monkey);
+
+        TestBaseStats humanBaseStats = human.base_stats;
+        TestBaseStats elfBaseStats = elf.base_stats;
+        TestBaseStats dwarfBaseStats = dwarf.base_stats;
+
+        ClassicCivLifespanContent.Init();
+
+        Equal(70f, GenomeLifespan(human),
+            "human genome lifespan is normalized case-insensitively");
+        Equal(70f, GenomeLifespan(elf),
+            "elf genome lifespan is normalized");
+        Equal(70f, GenomeLifespan(dwarf),
+            "dwarf genome lifespan is normalized");
+        Equal(50f, GenomeLifespan(xia), "Xia lifespan remains unchanged");
+        Equal(50f, GenomeLifespan(orc), "orc lifespan remains unchanged");
+        Equal(50f, GenomeLifespan(monkey),
+            "civilized monkey lifespan remains unchanged");
+
+        Same(humanBaseStats, human.base_stats,
+            "human base stats container remains unchanged");
+        Same(elfBaseStats, elf.base_stats,
+            "elf base stats container remains unchanged");
+        Same(dwarfBaseStats, dwarf.base_stats,
+            "dwarf base stats container remains unchanged");
+        Equal(4f, human.base_stats["lifespan"],
+            "human ordinary lifespan bonus remains available");
+        Equal(7f, elf.base_stats["lifespan"],
+            "elf ordinary lifespan bonus remains available");
+        Equal(11f, dwarf.base_stats["lifespan"],
+            "dwarf ordinary lifespan bonus remains available");
+        Equal(74f, EffectiveLifespan(human),
+            "human effective lifespan still adds ordinary bonuses");
+        Equal(77f, EffectiveLifespan(elf),
+            "elf effective lifespan still adds ordinary bonuses");
+        Equal(81f, EffectiveLifespan(dwarf),
+            "dwarf effective lifespan still adds ordinary bonuses");
+
+        Equal("human,elf,dwarf",
+            string.Join(",", AssetManager.actor_library.requests),
+            "initializer requests only the exact lowercase whitelist");
+    }
+
+    private static void RepeatedInitializationKeepsOneLifespanPart()
+    {
+        AssetManager.actor_library = new TestActorAssetLibrary();
+        ActorAsset human = Actor("lifespan", 70f, 0f);
+        Register("human", human);
+        Register("elf", Actor("lifespan", 70f, 0f));
+        Register("dwarf", Actor("lifespan", 70f, 0f));
+
+        ClassicCivLifespanContent.Init();
+        ClassicCivLifespanContent.Init();
+
+        Equal(1, human.genome_parts.Count,
+            "repeated initialization keeps one human genome part");
+        Equal(70f, GenomeLifespan(human),
+            "repeated initialization preserves normalized lifespan");
+    }
+
+    private static ActorAsset Actor(string pLifespanId, float pGenomeLifespan,
+        float pOrdinaryBonus)
+    {
+        var actor = new ActorAsset();
+        actor.genome_parts.Add(new GenomePart(pLifespanId, pGenomeLifespan));
+        actor.base_stats["lifespan"] = pOrdinaryBonus;
+        return actor;
+    }
+
+    private static void Register(string pId, ActorAsset pActor)
+    {
+        AssetManager.actor_library.Add(pId, pActor);
+    }
+
+    private static float GenomeLifespan(ActorAsset pActor)
+    {
+        foreach (GenomePart part in pActor.genome_parts)
+        {
+            if (string.Equals(part.id, "lifespan",
+                    StringComparison.OrdinalIgnoreCase))
+                return part.value;
+        }
+
+        throw new InvalidOperationException("Missing lifespan genome part.");
+    }
+
+    private static float EffectiveLifespan(ActorAsset pActor)
+    {
+        return GenomeLifespan(pActor) + pActor.base_stats["lifespan"];
+    }
+}

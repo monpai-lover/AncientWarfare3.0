@@ -22,9 +22,9 @@ $expectedIds = @('human', 'elf', 'dwarf')
 if ($targetIds.Count -ne $expectedIds.Count) {
     throw 'Classic lifespan target list must contain exactly three races.'
 }
-foreach ($raceId in $expectedIds) {
-    if ($targetIds -notcontains $raceId) {
-        throw "Missing lifespan target: $raceId"
+for ($index = 0; $index -lt $expectedIds.Count; $index++) {
+    if ($targetIds[$index] -cne $expectedIds[$index]) {
+        throw 'Classic lifespan target list must exactly match human, elf, dwarf.'
     }
 }
 
@@ -34,6 +34,12 @@ if ($source -notmatch 'TargetLifespan\s*=\s*70f') {
 if ($source -notmatch 'genome_parts' -or
     $source -notmatch 'new\s+GenomePart\("lifespan",\s*TargetLifespan\)') {
     throw 'Lifespan normalization must replace the genome lifespan part.'
+}
+if ($source -notmatch 'SetGenomeLifespan\(actor\);') {
+    throw 'Classic lifespan initializer must apply normalization to each target.'
+}
+if ($source -notmatch 'StringComparison\.OrdinalIgnoreCase') {
+    throw 'Lifespan lookup must match GenomePart case-insensitive identity.'
 }
 if ($source -notmatch 'if\s*\(found\)\s*pActor\.genome_parts\.Remove\(existing\)' -or
     ([regex]::Matches($source,
@@ -45,7 +51,8 @@ if ($startup -notmatch 'XiaRace\.Init\(\);[\s\S]*ClassicCivLifespanContent\.Init
 }
 
 foreach ($forbidden in @('"orc"', '"Xia"', 'monkey', 'base_stats["lifespan"]')) {
-    if ($source.Contains($forbidden)) {
+    if ($source.IndexOf($forbidden,
+            [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
         throw "Classic lifespan initializer must not modify: $forbidden"
     }
 }

@@ -39,7 +39,7 @@ namespace AncientWarfare3.content
             foreach (GenomePart part in pActor.genome_parts)
             {
                 if (!string.Equals(part.id, "lifespan",
-                        StringComparison.Ordinal)) continue;
+                        StringComparison.OrdinalIgnoreCase)) continue;
                 existing = part;
                 found = true;
                 break;
