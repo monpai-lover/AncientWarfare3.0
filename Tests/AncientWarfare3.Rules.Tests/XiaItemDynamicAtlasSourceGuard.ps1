@@ -22,11 +22,14 @@ Require-SourceText `
     "PreloadGameplaySprites(ge);" `
     "ge must be loaded into the dynamic item atlas after late registration."
 Require-SourceText `
-    "PreloadGameplaySprites(ItemAsset pItem)" `
-    "late-registered ItemAsset clones must compile without an invalid EquipmentAsset conversion."
+    'EquipmentAsset ji = AssetManager.items.clone("ji", "$sword");' `
+    "ji must retain the EquipmentAsset type returned by the vanilla item library."
 Require-SourceText `
-    "pItem is EquipmentAsset equipment" `
-    "EquipmentAsset-only color metadata must be read through a safe runtime type check."
+    'EquipmentAsset ge = AssetManager.items.clone("ge", "$sword");' `
+    "ge must retain the EquipmentAsset type returned by the vanilla item library."
+Require-SourceText `
+    'EquipmentAsset binfa = AssetManager.items.clone("binfa", "$amulet");' `
+    "binfa must retain the EquipmentAsset type returned by the vanilla item library."
 Require-SourceText `
     "DynamicSprites.preloadItemSprite(sprite, color);" `
     "colored late-registered weapons must preload every kingdom-color atlas variant."
