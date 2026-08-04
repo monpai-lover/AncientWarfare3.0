@@ -93,8 +93,27 @@ namespace AncientWarfare3.core.lineage
             bool actorValid = pActor?.data != null;
             if (!actorValid)
             {
-                try { return pArmy.units.Remove(pActor); }
-                catch { return false; }
+                using (ArmyCaptainDisposalScope.Open(pArmy))
+                {
+                    if (pActor != null)
+                    {
+                        try
+                        {
+                            if (ReferenceEquals(pArmy.getCaptain(), pActor))
+                            {
+                                pArmy.setCaptain(null);
+                                changed = true;
+                            }
+                        }
+                        catch { }
+                    }
+                    try
+                    {
+                        if (pArmy.units.Remove(pActor)) changed = true;
+                    }
+                    catch { }
+                }
+                return changed;
             }
             Army currentArmy = pActor.army;
             bool ownedByArmy = ReferenceEquals(currentArmy, pArmy);

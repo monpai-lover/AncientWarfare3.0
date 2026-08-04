@@ -48,6 +48,7 @@ $requiredCleanup = @(
     'units.Remove',
     'if (ownedByNewArmy) return changed;',
     'ArmyCaptainDisposalScope.Open',
+    'if (!actorValid)',
     'ArmyRtsControllerService.ReleaseActor',
     'ArmyDeploymentService.ReleaseActor',
     'TemporaryLevyService.OnActorInvalidated',
