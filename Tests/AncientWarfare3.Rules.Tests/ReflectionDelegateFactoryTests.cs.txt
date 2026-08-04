@@ -1,0 +1,78 @@
+using System.Reflection;
+using AncientWarfare3.utils;
+
+internal static class ReflectionDelegateFactoryTests
+{
+    private delegate int ObjectAdd(object instance, object left, object right);
+    private delegate void ObjectSet(object instance, object value);
+
+    public static void Run()
+    {
+        InstanceArgumentsAreConverted();
+        StaticReturnValueIsPreserved();
+        VoidMethodIsSupported();
+        UnusedReturnValueCanBeDiscarded();
+        IncompatibleSignatureReturnsNull();
+    }
+
+    private static void InstanceArgumentsAreConverted()
+    {
+        MethodInfo method = typeof(Fixture).GetMethod("Add",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        ObjectAdd call = ReflectionDelegateFactory.TryCreate<ObjectAdd>(method);
+        Equal(7, call(new Fixture(), 3, 4), "instance delegate conversion");
+    }
+
+    private static void StaticReturnValueIsPreserved()
+    {
+        MethodInfo method = typeof(Fixture).GetMethod("Double",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Func<int, int> call =
+            ReflectionDelegateFactory.TryCreate<Func<int, int>>(method);
+        Equal(12, call(6), "static delegate return");
+    }
+
+    private static void VoidMethodIsSupported()
+    {
+        MethodInfo method = typeof(Fixture).GetMethod("Set",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        ObjectSet call = ReflectionDelegateFactory.TryCreate<ObjectSet>(method);
+        var fixture = new Fixture();
+        call(fixture, 9);
+        Equal(9, fixture.Value, "void delegate invocation");
+    }
+
+    private static void UnusedReturnValueCanBeDiscarded()
+    {
+        MethodInfo method = typeof(Fixture).GetMethod("Double",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Action<int> call =
+            ReflectionDelegateFactory.TryCreate<Action<int>>(method);
+        call(5);
+    }
+
+    private static void IncompatibleSignatureReturnsNull()
+    {
+        MethodInfo method = typeof(Fixture).GetMethod("Double",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Func<string, string> call =
+            ReflectionDelegateFactory.TryCreate<Func<string, string>>(method);
+        Equal<Func<string, string>>(null, call,
+            "incompatible delegate fallback");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+
+    private sealed class Fixture
+    {
+        internal int Value { get; private set; }
+        private int Add(int left, int right) => left + right;
+        private static int Double(int value) => value * 2;
+        private void Set(int value) => Value = value;
+    }
+}

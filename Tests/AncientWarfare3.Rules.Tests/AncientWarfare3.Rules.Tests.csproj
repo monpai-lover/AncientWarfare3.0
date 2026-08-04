@@ -9,6 +9,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="ReflectionDelegateFactoryTests.cs.txt" />
+    <Compile Include="..\..\Code\utils\ReflectionDelegateFactory.cs" Link="Production\ReflectionDelegateFactory.cs" />
     <Compile Include="LineageFamilyArchiveMigrationTests.cs.txt" />
     <Compile Include="LineageBirthArchivePersistenceSqlTests.cs.txt" />
     <Compile Include="HistoricalWriteRulesTests.cs.txt" />
