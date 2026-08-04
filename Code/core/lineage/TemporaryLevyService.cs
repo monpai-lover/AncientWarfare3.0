@@ -548,14 +548,13 @@ namespace AncientWarfare3.core.lineage
         public static void ProcessPreparationMonth()
         {
             if (World.world?.kingdoms == null) return;
-            int monthKey = TemporaryLevyRules.ToMonthKey(
-                Date.getCurrentYear(), Date.getCurrentMonth());
+            int monthKey = CurrentPreparationMonthKey();
             if (TemporaryLevyRules.ShouldProcessPreparationMonth(monthKey,
                     LastPreparationMonthKey))
             {
                 LastPreparationMonthKey = monthKey;
                 PreparationMonthlyWork.ScheduleMonth(monthKey,
-                    World.world.kingdoms);
+                    CollectPreparationKingdoms());
             }
             PreparationMonthlyWork.Drain(
                 PreparationKingdomsPerAuthorityCycle,
@@ -564,7 +563,10 @@ namespace AncientWarfare3.core.lineage
                     long benchmark = RecentFeatureBenchmark.Begin();
                     try
                     {
-                        ProcessPreparationMonth(kingdom, queuedMonthKey);
+                        int workMonthKey = TemporaryLevyRules.
+                            ResolvePreparationWorkMonth(queuedMonthKey,
+                                CurrentPreparationMonthKey());
+                        ProcessPreparationMonth(kingdom, workMonthKey);
                     }
                     finally
                     {
@@ -599,7 +601,9 @@ namespace AncientWarfare3.core.lineage
 
             if (PreparationRecruitmentPlans.TryGetValue(pKingdom.id,
                     out PreparationRecruitmentPlan activePlan) &&
-                activePlan.MonthKey != pMonthKey)
+                !TemporaryLevyRules.ShouldKeepPreparationPlan(
+                    emergencyActive, activeNotice, activePlan.MonthKey,
+                    pMonthKey))
             {
                 CancelPreparationRecruitment(pKingdom);
                 activePlan = null;
@@ -625,6 +629,7 @@ namespace AncientWarfare3.core.lineage
             if (!TemporaryLevyRules.ShouldStartPreparationMonth(
                     emergencyActive, activeNotice, pMonthKey,
                     lastMonthKey)) return;
+            if (!CityReservePoolService.PrepareWarEntry(pKingdom)) return;
 
             var plan = new PreparationRecruitmentPlan(pKingdom.id,
                 pMonthKey);
@@ -687,6 +692,7 @@ namespace AncientWarfare3.core.lineage
                 ScheduleDemobilization(pKingdom.id);
                 return;
             }
+            ScheduleCurrentPreparation(pKingdom);
             long kingdomId = pKingdom.id;
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 DeferredRuntimeWorkRules.CoalescingKey("levy_emergency", kingdomId),
@@ -706,6 +712,57 @@ namespace AncientWarfare3.core.lineage
                 RemoveCaptainRecoveryPlansForKingdom(pKingdomId);
                 ScheduleIfSafe(kingdom);
             }
+        }
+
+        private static void ScheduleCurrentPreparation(Kingdom pKingdom)
+        {
+            bool liveKingdom = pKingdom?.data != null &&
+                               !pKingdom.isRekt() &&
+                               !pKingdom.isNeutral();
+            bool activeNotice = liveKingdom &&
+                                CityReservePoolService.
+                                    ResolveMobilizationPhase(pKingdom) ==
+                                ArmyMobilizationPhase.Notice;
+            if (!TemporaryLevyRules.ShouldSchedulePreparationKingdom(
+                    liveKingdom, activeNotice)) return;
+            long kingdomId = pKingdom.id;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                DeferredRuntimeWorkRules.CoalescingKey(
+                    "levy_preparation_entry", kingdomId),
+                DeferredWorkClass.CriticalRuntime,
+                () =>
+                {
+                    Kingdom kingdom = ResolveKingdom(kingdomId);
+                    if (kingdom?.data == null) return;
+                    ProcessPreparationMonth(kingdom,
+                        CurrentPreparationMonthKey());
+                });
+        }
+
+        private static List<Kingdom> CollectPreparationKingdoms()
+        {
+            var result = new List<Kingdom>();
+            if (World.world?.kingdoms == null) return result;
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                bool liveKingdom = kingdom?.data != null &&
+                                   !kingdom.isRekt() &&
+                                   !kingdom.isNeutral();
+                bool activeNotice = liveKingdom &&
+                                    CityReservePoolService.
+                                        ResolveMobilizationPhase(kingdom) ==
+                                    ArmyMobilizationPhase.Notice;
+                if (TemporaryLevyRules.ShouldSchedulePreparationKingdom(
+                        liveKingdom, activeNotice))
+                    result.Add(kingdom);
+            }
+            return result;
+        }
+
+        private static int CurrentPreparationMonthKey()
+        {
+            return TemporaryLevyRules.ToMonthKey(Date.getCurrentYear(),
+                Date.getCurrentMonth());
         }
 
         public static void RebuildRuntime()
@@ -876,15 +933,14 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            int currentMonthKey = TemporaryLevyRules.ToMonthKey(
-                Date.getCurrentYear(), Date.getCurrentMonth());
-            if (currentMonthKey != pMonthKey)
-            {
-                CancelPreparationRecruitment(kingdom);
-                return;
-            }
-            if (CityReservePoolService.ResolveMobilizationPhase(kingdom) !=
-                ArmyMobilizationPhase.Notice)
+            bool emergencyActive = MilitaryEmergencyService.HasAny(kingdom);
+            bool activeNotice = CityReservePoolService.
+                ResolveMobilizationPhase(kingdom) ==
+                ArmyMobilizationPhase.Notice;
+            int currentMonthKey = CurrentPreparationMonthKey();
+            if (!TemporaryLevyRules.ShouldKeepPreparationPlan(
+                    emergencyActive, activeNotice,
+                    plan.MonthKey, currentMonthKey))
             {
                 CancelPreparationRecruitment(kingdom);
                 return;
@@ -1018,10 +1074,15 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_IN_PROGRESS,
                 out bool inProgress, false);
-            if (recordedMonthKey != pMonthKey || !inProgress) return null;
+            if (!inProgress || !TemporaryLevyRules.
+                    ShouldKeepPreparationPlan(
+                        MilitaryEmergencyService.HasAny(pKingdom),
+                        CityReservePoolService.ResolveMobilizationPhase(
+                            pKingdom) == ArmyMobilizationPhase.Notice,
+                        recordedMonthKey, pMonthKey)) return null;
 
             var plan = new PreparationRecruitmentPlan(pKingdom.id,
-                pMonthKey);
+                recordedMonthKey);
             pKingdom.data.get(
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_CURRENT_CITY,
                 out plan.CurrentCityId, -1L);

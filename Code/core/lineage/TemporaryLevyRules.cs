@@ -186,6 +186,28 @@ namespace AncientWarfare3.core.lineage
                    currentMonthKey != lastProcessedMonthKey;
         }
 
+        public static bool ShouldKeepPreparationPlan(bool emergencyActive,
+            bool activeNotice, int startMonthKey, int currentMonthKey)
+        {
+            return emergencyActive && activeNotice &&
+                   startMonthKey != int.MinValue &&
+                   currentMonthKey != int.MinValue;
+        }
+
+        public static int ResolvePreparationWorkMonth(int queuedMonthKey,
+            int currentMonthKey)
+        {
+            return currentMonthKey == int.MinValue
+                ? queuedMonthKey
+                : currentMonthKey;
+        }
+
+        public static bool ShouldSchedulePreparationKingdom(
+            bool liveKingdom, bool activeNotice)
+        {
+            return liveKingdom && activeNotice;
+        }
+
         public static bool ShouldContinuePreparationMonth(
             bool emergencyActive, bool activeNotice, int completedCities,
             int totalCities)

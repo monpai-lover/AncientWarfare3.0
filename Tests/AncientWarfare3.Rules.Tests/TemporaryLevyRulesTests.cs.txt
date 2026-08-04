@@ -6,6 +6,9 @@ internal static class TemporaryLevyRulesTests
     public static void Run()
     {
         AnnualRecruitmentStopsAfterWarStarts();
+        PreparationRecruitmentSurvivesMonthBoundaries();
+        PreparationRecruitmentStopsAtLegalBoundaries();
+        PreparationRuntimeUsesEventDrivenNoticeScheduling();
         RecoversEligibleOrphanWarriorsDuringWar();
         PreservesGarrisonAndAssignedSoldiers();
         NotifiesRtsForEveryRosterMembershipChange();
@@ -14,6 +17,75 @@ internal static class TemporaryLevyRulesTests
         DirectedReserveExhaustionIsArmyScoped();
         PreparationCreatesAndReplenishesCityArmy();
         SyntheticRecruitmentStartsOnlyAfterFormalWar();
+    }
+
+    private static void PreparationRecruitmentSurvivesMonthBoundaries()
+    {
+        Assert(TemporaryLevyRules.ShouldKeepPreparationPlan(
+                emergencyActive: true, activeNotice: true,
+                startMonthKey: 1200, currentMonthKey: 1201),
+            "ordinary month rollover must not cancel an active preparation plan");
+        Assert(TemporaryLevyRules.ShouldKeepPreparationPlan(
+                emergencyActive: true, activeNotice: true,
+                startMonthKey: 1200, currentMonthKey: 1204),
+            "large-step month skipping must not cancel an active preparation plan");
+        Assert(!TemporaryLevyRules.ShouldKeepPreparationPlan(
+                emergencyActive: false, activeNotice: false,
+                startMonthKey: 1200, currentMonthKey: 1204),
+            "closing the notice cancels preparation even after a scheduler jump");
+        Assert(TemporaryLevyRules.ResolvePreparationWorkMonth(
+                   queuedMonthKey: 1200, currentMonthKey: 1204) == 1204,
+            "stale large-step queue entries execute against the observed current month");
+        Assert(TemporaryLevyRules.ShouldSchedulePreparationKingdom(
+                liveKingdom: true, activeNotice: true),
+            "a live notice participant enters the preparation queue");
+        Assert(!TemporaryLevyRules.ShouldSchedulePreparationKingdom(
+                liveKingdom: true, activeNotice: false),
+            "peaceful kingdoms do not fill the preparation queue");
+    }
+
+    private static void PreparationRecruitmentStopsAtLegalBoundaries()
+    {
+        Assert(TemporaryLevyRules.PreparationRequest(
+                   establishmentAccepted: true, living: 0,
+                   target: 0, workItemLimit: 8) == 0,
+            "zero-capacity cities legally finish without conscription");
+        Assert(TemporaryLevyRules.PreparationRequest(
+                   establishmentAccepted: true, living: 20,
+                   target: 20, workItemLimit: 8) == 0,
+            "a filled establishment finishes before the three-month window");
+        Assert(!TemporaryLevyRules.ShouldContinuePreparationMonth(
+                emergencyActive: true, activeNotice: true,
+                completedCities: 2, totalCities: 2),
+            "preparation completes as soon as every city is filled or exhausted");
+    }
+
+    private static void PreparationRuntimeUsesEventDrivenNoticeScheduling()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "TemporaryLevyService.cs"));
+        Assert(source.Contains("ScheduleCurrentPreparation(pKingdom)",
+                StringComparison.Ordinal),
+            "notice invalidation must enqueue initial mobilization immediately");
+        int monthlyStart = source.IndexOf(
+            "private static void ProcessPreparationMonth(Kingdom pKingdom,",
+            StringComparison.Ordinal);
+        int warStarted = source.IndexOf("public static void OnWarStarted(",
+            monthlyStart, StringComparison.Ordinal);
+        string monthlyBody = monthlyStart < 0 || warStarted < 0
+            ? string.Empty
+            : source.Substring(monthlyStart, warStarted - monthlyStart);
+        Assert(monthlyBody.Contains(
+                "CityReservePoolService.PrepareWarEntry(pKingdom)",
+                StringComparison.Ordinal),
+            "a new notice plan must perform the law-capped final reserve fill before enlistment");
+        Assert(source.Contains("CollectPreparationKingdoms()",
+                StringComparison.Ordinal),
+            "monthly recovery queues only active notice participants");
+        Assert(!source.Contains("currentMonthKey != pMonthKey",
+                StringComparison.Ordinal),
+            "deferred preparation work cannot expire solely because large-step crossed a month");
     }
 
     private static void SyntheticRecruitmentStartsOnlyAfterFormalWar()
