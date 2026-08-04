@@ -41,13 +41,5 @@ namespace AncientWarfare3.core.lineage
                 : DynastyReignProjectionDisposition.Reconcile;
         }
 
-        public static bool ShouldProjectStateNameAsCreatedDynasty(
-            DynastyTransitionStatus pStatus,
-            DynastyReignProjectionDisposition pDisposition)
-        {
-            return pStatus != DynastyTransitionStatus.Failure &&
-                   pDisposition ==
-                   DynastyReignProjectionDisposition.Reconcile;
-        }
     }
 }

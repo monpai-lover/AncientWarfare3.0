@@ -306,8 +306,16 @@ Require $chronicleCode 'ReignRecordWriter.TryProjectCurrentReignDynasty(' `
     'Chronicle leaves a dynasty-changing reign attributed to the old dynasty'
 Require $chronicleCode 'ResolveReignProjection(' `
     'Chronicle still decides reign projection from transition status alone'
-Require $chronicleCode 'ShouldProjectStateNameAsCreatedDynasty(' `
-    'NoChange retry cannot restore new-dynasty state-name semantics'
+Require $dynastyWriter 'TryReadCurrentDynastyState' `
+    'state-name retry cannot observe the durable active dynasty marker'
+Require $chronicleCode 'StateNameRules.ShouldRetryDynasticStateName(' `
+    'state-name retry still depends only on transient created status'
+RequireOrder $chronicleCode 'StateNameService.ProjectExistingStateName(' `
+    'DynastyRecordWriter.UpdateCurrentStateName(' `
+    'dynasty marker advances before runtime state-name projection succeeds'
+if ($chronicleCode.Contains('ShouldProjectStateNameAsCreatedDynasty(')) {
+    throw 'Chronicle still uses transient created status as completion state'
+}
 if ($dynastyRules.Contains('ShouldProjectCreatedDynasty(')) {
     throw 'status-only dynasty projection rule can strand a partial retry'
 }
@@ -320,13 +328,15 @@ $transition = $chronicleCode.LastIndexOf(
 $dynasty = $chronicleCode.LastIndexOf(
     'DynastyRecordWriter.TryOnKingChanged(')
 $currentDynasty = $chronicleCode.LastIndexOf(
-    'DynastyRecordWriter.GetCurrentDynastyId(')
+    'DynastyRecordWriter.TryReadCurrentDynastyState(')
 $readReignDynasty = $chronicleCode.LastIndexOf(
     'ReignRecordWriter.TryReadCurrentReignDynasty(')
 $resolveDynasty = $chronicleCode.LastIndexOf(
     'DynastyTransitionRules.ResolveReignProjection(')
 $reignDynasty = $chronicleCode.LastIndexOf(
     'ReignRecordWriter.TryProjectCurrentReignDynasty(')
+$stateNamePending = $chronicleCode.LastIndexOf(
+    'StateNameRules.ShouldRetryDynasticStateName(')
 $stateName = $chronicleCode.LastIndexOf(
     'ProjectDynasticStateNameForRuler(')
 if ($transition -lt 0 -or $dynasty -le $transition -or
@@ -334,7 +344,8 @@ if ($transition -lt 0 -or $dynasty -le $transition -or
     $readReignDynasty -le $currentDynasty -or
     $resolveDynasty -le $readReignDynasty -or
     $reignDynasty -le $resolveDynasty -or
-    $stateName -le $reignDynasty) {
+    $stateNamePending -le $reignDynasty -or
+    $stateName -le $stateNamePending) {
     throw 'dynasty or state-name publication occurs before the reign DB gate'
 }
 

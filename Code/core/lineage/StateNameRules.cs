@@ -142,6 +142,19 @@ namespace AncientWarfare3.core.lineage
                    changedRulingShi && hasExistingBoundStateName;
         }
 
+        public static bool ShouldRetryDynasticStateName(
+            bool hasCurrentDynasty, long currentDynastyShiId,
+            long rulerShiId, string currentDynastyStateName,
+            string boundStateName, bool isEmpireRank,
+            bool isActiveMandate)
+        {
+            return hasCurrentDynasty && currentDynastyShiId >= 0L &&
+                   currentDynastyShiId == rulerShiId && isEmpireRank &&
+                   !isActiveMandate && IsValid(boundStateName) &&
+                   !string.Equals(currentDynastyStateName ?? "",
+                       boundStateName, StringComparison.Ordinal);
+        }
+
         private static bool LooksLikeLocalizationKey(string pValue)
         {
             if (pValue.StartsWith("aw_", StringComparison.OrdinalIgnoreCase) ||

@@ -10,6 +10,7 @@ internal static class MandateSuccessionRegressionRulesTests
         AccessionSettlementRequiresOpenReignAndInstalledKing();
         DynastyTransitionStatusSeparatesContinuityFromFailure();
         DynastyProjectionPartialSuccessRetriesToConvergence();
+        PersistentDynastyStateNameCompletionRetriesBothWindows();
         FailedReignTransitionRetriesBeforeProjectionAdvances();
         FailedPersistenceRetriesBeforeRuntimeProjection();
         MandateContextTargetsOnlyTheInstalledRulersLatestOpenReign();
@@ -285,7 +286,6 @@ internal static class MandateSuccessionRegressionRulesTests
         const long currentDynastyId = 2L;
         long lastKingId = 41L;
         int dynastyProjectionAttempts = 0;
-        int stateNameProjections = 0;
         string error = "";
 
         bool PublishDynasty(DynastyTransitionStatus status,
@@ -301,8 +301,6 @@ internal static class MandateSuccessionRegressionRulesTests
                     currentDynastyId, reignDynastyId);
             if (disposition == DynastyReignProjectionDisposition.Failure)
                 return false;
-            bool createdSemantic = DynastyTransitionRules.
-                ShouldProjectStateNameAsCreatedDynasty(status, disposition);
             if (disposition ==
                 DynastyReignProjectionDisposition.Reconcile)
             {
@@ -314,7 +312,6 @@ internal static class MandateSuccessionRegressionRulesTests
                         out error))
                     return false;
             }
-            if (createdSemantic) stateNameProjections++;
             return true;
         }
 
@@ -330,8 +327,6 @@ internal static class MandateSuccessionRegressionRulesTests
         Equal(1L, Scalar(db,
                 "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
             "failed projection leaves R2 on D1");
-        Equal(0, stateNameProjections,
-            "state-name projection waits for reign dynasty convergence");
         Equal(41L, lastKingId,
             "partial dynasty success cannot advance last king id");
 
@@ -349,8 +344,6 @@ internal static class MandateSuccessionRegressionRulesTests
             "retry converges R2 from D1 to D2");
         Equal(2, dynastyProjectionAttempts,
             "created failure and NoChange retry each attempt projection");
-        Equal(1, stateNameProjections,
-            "recovered new-dynasty state-name semantics publish once");
         Equal(42L, lastKingId,
             "last king id advances only after dynasty convergence");
 
@@ -359,8 +352,224 @@ internal static class MandateSuccessionRegressionRulesTests
             "matching NoChange retry is an idempotent success");
         Equal(2, dynastyProjectionAttempts,
             "matching dynasty ids do not issue another projection write");
-        Equal(1, stateNameProjections,
-            "matching dynasty ids do not repeat state-name projection");
+    }
+
+    private static void
+        PersistentDynastyStateNameCompletionRetriesBothWindows()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE DynastyPeriod(" +
+            "DYNASTY_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "SHI_ID INTEGER,STATE_NAME TEXT,START_TIME REAL," +
+            "END_TIME REAL);" +
+            "INSERT INTO DynastyPeriod VALUES(2,17,20,'OldState',12,-1);" +
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,DYNASTY_ID INTEGER," +
+            "START_TIME REAL,END_TIME REAL);" +
+            "INSERT INTO KingdomReign VALUES(2,17,42,1,11,-1);" +
+            "CREATE TABLE StateNameProjectionAudit(ID INTEGER);" +
+            "CREATE TRIGGER audit_dynasty_state_name AFTER UPDATE OF " +
+            "STATE_NAME ON DynastyPeriod BEGIN INSERT INTO " +
+            "StateNameProjectionAudit VALUES(1); END;");
+
+        const long newShiId = 20L;
+        const string boundStateName = "BoundState";
+        string error = "";
+
+        bool Publish(DynastyTransitionStatus status,
+            bool failReignProjection, bool failStateNameProjection)
+        {
+            if (!DynastyStateNamePersistence.TryReadCurrent(
+                    db, "DynastyPeriod", kingdomId: 17L,
+                    out DynastyStateNamePersistence.CurrentDynastyState
+                        dynasty, out error))
+                return false;
+            long currentDynastyId = dynasty.Exists
+                ? dynasty.DynastyId
+                : -1L;
+            long reignDynastyId = -1L;
+            if (currentDynastyId >= 0L &&
+                !ReignMandateProjectionPersistence.TryReadDynasty(
+                    db, "KingdomReign", kingdomId: 17L,
+                    rulerActorId: 42L, out reignDynastyId, out error))
+                return false;
+            DynastyReignProjectionDisposition disposition =
+                DynastyTransitionRules.ResolveReignProjection(status,
+                    currentDynastyId, reignDynastyId);
+            if (disposition == DynastyReignProjectionDisposition.Failure)
+                return false;
+            if (disposition ==
+                DynastyReignProjectionDisposition.Reconcile)
+            {
+                if (failReignProjection ||
+                    !ReignMandateProjectionPersistence.TryProjectDynasty(
+                        db, "KingdomReign", kingdomId: 17L,
+                        rulerActorId: 42L, dynastyId: currentDynastyId,
+                        out error))
+                    return false;
+            }
+            bool stateNamePending = StateNameRules.
+                ShouldRetryDynasticStateName(
+                    hasCurrentDynasty: dynasty.Exists,
+                    currentDynastyShiId: dynasty.ShiId,
+                    rulerShiId: newShiId,
+                    currentDynastyStateName: dynasty.StateName,
+                    boundStateName: boundStateName,
+                    isEmpireRank: true,
+                    isActiveMandate: false);
+            if (!stateNamePending) return true;
+            if (failStateNameProjection) return false;
+            return DynastyStateNamePersistence.TryUpdateCurrentStateName(
+                db, "DynastyPeriod", kingdomId: 17L,
+                dynastyId: dynasty.DynastyId, shiId: dynasty.ShiId,
+                stateName: boundStateName, out error);
+        }
+
+        long lastKingId = 41L;
+        bool windowAFirst = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () => Publish(DynastyTransitionStatus.Created,
+                failReignProjection: true,
+                failStateNameProjection: false),
+            () => true,
+            () => true,
+            () => lastKingId = 42L);
+        Equal(false, windowAFirst,
+            "window A stops after D2 creation when reign projection fails");
+        Equal("OldState", ScalarText(db,
+                "SELECT STATE_NAME FROM DynastyPeriod WHERE DYNASTY_ID=2"),
+            "window A keeps the persistent state-name marker pending");
+        Equal(41L, lastKingId,
+            "window A failure does not advance last king id");
+        Equal(true, MandateAccessionCoordinator.TrySettle(
+                () => true,
+                () => Publish(DynastyTransitionStatus.NoChange,
+                    failReignProjection: false,
+                    failStateNameProjection: false),
+                () => true,
+                () => true,
+                () => lastKingId = 42L),
+            "window A NoChange retry completes reign and state-name");
+        Equal(2L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "window A retry reconciles R2 to D2");
+        Equal(boundStateName, ScalarText(db,
+                "SELECT STATE_NAME FROM DynastyPeriod WHERE DYNASTY_ID=2"),
+            "window A retry persists state-name completion");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM StateNameProjectionAudit"),
+            "window A projects state-name once");
+        Equal(42L, lastKingId,
+            "window A advances last king only after marker completion");
+        Equal(true, Publish(DynastyTransitionStatus.NoChange,
+                failReignProjection: false,
+                failStateNameProjection: false),
+            "window A converged retry is idempotent");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM StateNameProjectionAudit"),
+            "window A third attempt does not repeat state-name");
+
+        Execute(db,
+            "UPDATE KingdomReign SET DYNASTY_ID=1 WHERE REIGN_ID=2;" +
+            "UPDATE DynastyPeriod SET STATE_NAME='OldState' " +
+            "WHERE DYNASTY_ID=2;" +
+            "DELETE FROM StateNameProjectionAudit;");
+        lastKingId = 41L;
+        bool windowBFirst = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () => Publish(DynastyTransitionStatus.Created,
+                failReignProjection: false,
+                failStateNameProjection: true),
+            () => true,
+            () => true,
+            () => lastKingId = 42L);
+        Equal(false, windowBFirst,
+            "window B stops after reign convergence when state-name fails");
+        Equal(2L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "window B leaves the reign already converged to D2");
+        Equal("OldState", ScalarText(db,
+                "SELECT STATE_NAME FROM DynastyPeriod WHERE DYNASTY_ID=2"),
+            "window B durable marker remains pending");
+        Equal(41L, lastKingId,
+            "window B failure does not advance last king id");
+        Equal(true, MandateAccessionCoordinator.TrySettle(
+                () => true,
+                () => Publish(DynastyTransitionStatus.NoChange,
+                    failReignProjection: false,
+                    failStateNameProjection: false),
+                () => true,
+                () => true,
+                () => lastKingId = 42L),
+            "window B Converged retry still completes state-name");
+        Equal(boundStateName, ScalarText(db,
+                "SELECT STATE_NAME FROM DynastyPeriod WHERE DYNASTY_ID=2"),
+            "window B retry persists completion despite Converged reign");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM StateNameProjectionAudit"),
+            "window B retry projects state-name once");
+        Equal(42L, lastKingId,
+            "window B advances last king only after marker completion");
+        Equal(true, Publish(DynastyTransitionStatus.NoChange,
+                failReignProjection: false,
+                failStateNameProjection: false),
+            "window B third attempt is idempotent");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM StateNameProjectionAudit"),
+            "persistent marker prevents a repeated state-name overwrite");
+
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: true, currentDynastyShiId: newShiId,
+                rulerShiId: newShiId,
+                currentDynastyStateName: boundStateName,
+                boundStateName: boundStateName, isEmpireRank: true,
+                isActiveMandate: false),
+            "manual later kingdom rename cannot reopen a completed marker");
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: false, currentDynastyShiId: -1L,
+                rulerShiId: -1L, currentDynastyStateName: "",
+                boundStateName: "", isEmpireRank: true,
+                isActiveMandate: false),
+            "legitimate no-dynasty NoChange remains skippable");
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: true, currentDynastyShiId: 19L,
+                rulerShiId: newShiId, currentDynastyStateName: "OldState",
+                boundStateName: boundStateName, isEmpireRank: true,
+                isActiveMandate: false),
+            "a different active dynasty Shi cannot consume the marker");
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: true,
+                currentDynastyShiId: newShiId, rulerShiId: newShiId,
+                currentDynastyStateName: "OldState",
+                boundStateName: boundStateName, isEmpireRank: false,
+                isActiveMandate: false),
+            "non-imperial realms do not retry dynastic state-name");
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: true,
+                currentDynastyShiId: newShiId, rulerShiId: newShiId,
+                currentDynastyStateName: "OldState",
+                boundStateName: boundStateName, isEmpireRank: true,
+                isActiveMandate: true),
+            "active Mandate realms do not retry branch state-name");
+
+        using var closed = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        long readFailureLastKingId = 41L;
+        Equal(false, MandateAccessionCoordinator.TrySettle(
+                () => true,
+                () => DynastyStateNamePersistence.TryReadCurrent(
+                    closed, "DynastyPeriod", kingdomId: 17L,
+                    out _, out _),
+                () => true,
+                () => true,
+                () => readFailureLastKingId = 42L),
+            "durable dynasty marker read failure short-circuits accession");
+        Equal(41L, readFailureLastKingId,
+            "marker read failure cannot advance last king id");
     }
 
     private static void

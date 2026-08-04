@@ -119,22 +119,39 @@ namespace AncientWarfare3.core.lineage
         {
             if (!Ready || pKingdomId < 0 ||
                 !StateNameRules.IsValid(pStateName)) return false;
-            try
+            if (!TryReadCurrentDynastyState(pKingdomId,
+                    out DynastyStateNamePersistence.CurrentDynastyState state,
+                    out string error) || !state.Exists)
             {
-                using var command = new SQLiteCommand(DB);
-                command.CommandText = "UPDATE " + TABLE +
-                                      " SET STATE_NAME=@name " +
-                                      "WHERE KINGDOM_ID=@kingdom AND END_TIME=-1";
-                command.Parameters.AddWithValue("@name", pStateName);
-                command.Parameters.AddWithValue("@kingdom", pKingdomId);
-                return command.ExecuteNonQuery() > 0;
-            }
-            catch (Exception e)
-            {
-                ModClass.LogWarning("Dynasty state-name sync failed: " +
-                                    e.Message);
+                if (!string.IsNullOrEmpty(error))
+                    ModClass.LogWarning("Dynasty state-name read failed: " +
+                                        error);
                 return false;
             }
+            bool updated = DynastyStateNamePersistence.
+                TryUpdateCurrentStateName(DB, TABLE, pKingdomId,
+                    state.DynastyId, state.ShiId, pStateName, out error);
+            if (!updated)
+            {
+                ModClass.LogWarning("Dynasty state-name sync failed: " +
+                                    error);
+            }
+            return updated;
+        }
+
+        public static bool TryReadCurrentDynastyState(long pKingdomId,
+            out DynastyStateNamePersistence.CurrentDynastyState pState,
+            out string pError)
+        {
+            pState = new DynastyStateNamePersistence.CurrentDynastyState();
+            pError = "";
+            if (!Ready || pKingdomId < 0L)
+            {
+                pError = "invalid current dynasty state-name read";
+                return false;
+            }
+            return DynastyStateNamePersistence.TryReadCurrent(
+                DB, TABLE, pKingdomId, out pState, out pError);
         }
 
         private static string ResolveDynastyClanName(Actor pKing, long pShiId)
