@@ -49,7 +49,10 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || pArmy?.data == null) return false;
             bool changed = false;
-            bool ownedByArmy = ReferenceEquals(pActor.army, pArmy);
+            Army currentArmy = pActor.army;
+            bool ownedByArmy = ReferenceEquals(currentArmy, pArmy);
+            bool ownedByNewArmy = currentArmy?.data != null &&
+                                  !ownedByArmy;
             using (ArmyCaptainDisposalScope.Open(pArmy))
             {
                 try
@@ -81,7 +84,7 @@ namespace AncientWarfare3.core.lineage
 
             // A stale one-sided old-roster entry must not clear RTS or
             // deployment state owned by the actor's newer current army.
-            if (!ownedByArmy) return changed;
+            if (ownedByNewArmy) return changed;
             ArmyRtsControllerService.ReleaseActor(pActor);
             ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
             TemporaryLevyService.OnActorInvalidated(pActor);
