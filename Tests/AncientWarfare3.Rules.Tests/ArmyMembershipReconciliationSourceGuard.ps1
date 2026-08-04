@@ -28,6 +28,9 @@ if ($cityPatch -notmatch 'ArmyMembershipReconciliationService\.Enqueue') {
 if ($deferredPatch -notmatch 'ArmyMembershipReconciliationService\.ProcessFrame') {
     throw 'The main-thread deferred runtime host must process army reconciliation.'
 }
+if ($service -notmatch 'public static void Enqueue\(Army pArmy\)\s*\{\s*if \(pArmy\?\.data == null\) return;') {
+    throw 'The public enqueue boundary must accept actors or cities without an army.'
+}
 if ($armyService -notmatch 'AddToArmy[\s\S]*ArmyMembershipOwnershipRules\.Decide') {
     throw 'AddToArmy must reject stable known foreign membership.'
 }

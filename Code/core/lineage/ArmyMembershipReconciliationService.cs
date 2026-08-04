@@ -32,6 +32,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void Enqueue(Army pArmy)
         {
+            if (pArmy?.data == null) return;
             UnknownOwnerAttempts.Remove(pArmy);
             DelayedArmies.Remove(pArmy);
             EnqueueCore(pArmy);
