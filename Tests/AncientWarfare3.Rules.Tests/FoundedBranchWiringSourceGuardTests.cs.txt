@@ -1,0 +1,83 @@
+internal static class FoundedBranchWiringSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string lineageRoot = Path.Combine(root, "Code", "core", "lineage");
+        string service = File.ReadAllText(Path.Combine(lineageRoot,
+            "LineageService.cs"));
+        string query = File.ReadAllText(Path.Combine(lineageRoot,
+            "LineageQuery.cs"));
+        string bulk = File.ReadAllText(Path.Combine(lineageRoot,
+            "LineageBulkQuery.cs"));
+        string overlay = File.ReadAllText(Path.Combine(lineageRoot,
+            "FamilyTreeSnapshotOverlayService.cs"));
+        string archiveWriter = File.ReadAllText(Path.Combine(lineageRoot,
+            "LineageArchiveWriter.cs"));
+        string nodeView = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "items", "FamilyTreeNodeView.cs"));
+
+        Contains(service, "ApplyFeudatoryFoundedBranchIdentity(",
+            "feudatory creation and reuse share an explicit founder-marker wiring point");
+        Contains(service,
+            "ApplyFeudatoryFoundedBranchIdentity(pPrince, currentShiId,",
+            "current feudatory branches pass through founder-marker wiring");
+        Contains(service,
+            "ApplyFeudatoryFoundedBranchIdentity(pPrince, recordedShiId,",
+            "recorded feudatory branches pass through founder-marker wiring");
+        Contains(service,
+            "ApplyFeudatoryFoundedBranchIdentity(pPrince, newShiId,",
+            "new feudatory branches pass through founder-marker wiring");
+        Contains(service, "LineageBranchRules.IsFoundedBranchForActor(",
+            "the feudatory marker is gated by the shared founder ownership rule");
+        Contains(service, "ShiSourceType.FEUDATORY, pFounderActorId, pPrince.data.id",
+            "the feudatory marker compares the stored founder with the current prince");
+        Contains(service, "pPrince.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, pShiId);",
+            "owned feudatory branches persist the generic founded-branch marker");
+
+        Contains(query,
+            "FoundedBranchRecoveryQuery.TryResolve(",
+            "synchronous recovery reuses the isolated lightweight query");
+        Contains(query, "if (!TryResolveOwnedFoundedBranch(",
+            "projection can distinguish a failed read from an authoritative missing branch");
+
+        Contains(bulk, "FoundedBranchRecoveryQuery.TryRead(",
+            "bulk recovery uses the tested SQLite recovery query");
+        Contains(bulk,
+            "actor.founded_branch_shi_id = recovery.Resolve(",
+            "bulk recovery repairs missing and invalid positive persisted values");
+
+        Contains(nodeView,
+            "long branchShi = pNode.founded_branch_shi_id;",
+            "the branch button reads the founded-branch projection");
+        Contains(nodeView, "FamilyTreeWindow.OpenBigTree(branchShi)",
+            "the branch button retains the existing big-tree navigation path");
+
+        Contains(overlay,
+            "LineageBranchRules.IsFoundedBranchForActor(",
+            "pending positive IDs are checked against founder ownership");
+        Contains(overlay,
+            "FoundedBranchOverlayProjection projection",
+            "pending archives merge ID and display through one projection");
+        Contains(overlay, "pNode.founded_branch_shi_id = projection.ShiId;",
+            "the overlay writes the projected button target");
+        Contains(overlay, "pNode.branch_display = projection.Display;",
+            "the overlay writes the matching button label");
+        NotContains(archiveWriter, "TryResolveOwnedFoundedBranch(",
+            "archive capture does not perform synchronous founded-branch recovery SQL");
+    }
+
+    private static void Contains(string source, string expected, string name)
+    {
+        if (!source.Contains(expected, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"{name}: missing `{expected}`");
+    }
+
+    private static void NotContains(string source, string rejected, string name)
+    {
+        if (source.Contains(rejected, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"{name}: unexpected `{rejected}`");
+    }
+}

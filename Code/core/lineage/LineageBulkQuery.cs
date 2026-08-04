@@ -1045,38 +1045,20 @@ namespace AncientWarfare3.core.lineage
 
             long[] founderIds = actors.Values
                 .Where(actor => actor != null &&
-                                actor.id >= 0L &&
-                                actor.founded_branch_shi_id < 0L)
+                                actor.id >= 0L)
                 .Select(actor => actor.id)
                 .Distinct()
                 .ToArray();
             if (founderIds.Length == 0) return;
 
-            try
+            if (!FoundedBranchRecoveryQuery.TryRead(connection, transaction,
+                    founderIds, out FoundedBranchRecoverySnapshot recovery))
+                return;
+            foreach (ActorArchiveTableItem actor in actors.Values)
             {
-                using var command = new SQLiteCommand(connection);
-                command.Transaction = transaction;
-                command.CommandText =
-                    "SELECT FOUNDER_ACTOR_ID,SHI_ID FROM ShiBranch " +
-                    "WHERE SOURCE_TYPE='king_founded' AND " +
-                    "FOUNDER_ACTOR_ID IN (" + string.Join(",", founderIds) +
-                    ") ORDER BY FOUNDER_ACTOR_ID,CREATED_TIME DESC,SHI_ID DESC";
-                var recovered = new HashSet<long>();
-                using SQLiteDataReader reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    long founderId = reader.GetInt64(0);
-                    if (!recovered.Add(founderId) ||
-                        !actors.TryGetValue(founderId,
-                            out ActorArchiveTableItem actor) ||
-                        actor.founded_branch_shi_id >= 0L) continue;
-                    actor.founded_branch_shi_id = reader.GetInt64(1);
-                }
-            }
-            catch (SQLiteException)
-            {
-                // Legacy saves without a compatible ShiBranch schema retain
-                // their archived value and remain readable.
+                if (actor == null || actor.id < 0L) continue;
+                actor.founded_branch_shi_id = recovery.Resolve(
+                    actor.id, actor.founded_branch_shi_id);
             }
         }
 

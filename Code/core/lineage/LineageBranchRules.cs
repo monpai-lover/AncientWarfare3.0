@@ -1,7 +1,47 @@
 namespace AncientWarfare3.core.lineage
 {
+    public readonly struct FoundedBranchOverlayProjection
+    {
+        public FoundedBranchOverlayProjection(long shiId, string display)
+        {
+            ShiId = shiId;
+            Display = display ?? string.Empty;
+        }
+
+        public long ShiId { get; }
+        public string Display { get; }
+    }
+
     public static class LineageBranchRules
     {
+        public static bool IsFoundedBranchForActor(string sourceType,
+            long founderActorId, long actorId)
+        {
+            if (actorId < 0L || founderActorId != actorId) return false;
+            return sourceType == ShiSourceType.KING_FOUNDED ||
+                   sourceType == ShiSourceType.FEUDATORY;
+        }
+
+        public static long ResolveFoundedBranchOverlay(
+            long recoveredBranchShiId, long pendingBranchShiId,
+            bool pendingBranchOwnedByActor)
+        {
+            return ResolveFoundedBranchOverlay(recoveredBranchShiId,
+                string.Empty, pendingBranchShiId, string.Empty,
+                pendingBranchOwnedByActor).ShiId;
+        }
+
+        public static FoundedBranchOverlayProjection
+            ResolveFoundedBranchOverlay(long recoveredBranchShiId,
+                string recoveredBranchDisplay, long pendingBranchShiId,
+                string pendingBranchDisplay, bool pendingBranchOwnedByActor)
+        {
+            return pendingBranchShiId >= 0L && pendingBranchOwnedByActor
+                ? new FoundedBranchOverlayProjection(pendingBranchShiId,
+                    pendingBranchDisplay)
+                : new FoundedBranchOverlayProjection(recoveredBranchShiId,
+                    recoveredBranchDisplay);
+        }
         public static bool IsDirectSuccessionFromKnownKing(long newKingParent1Id, long newKingParent2Id,
             long previousKingId, long recordedPreSuccessionKingId)
         {

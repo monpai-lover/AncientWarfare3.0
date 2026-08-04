@@ -77,7 +77,27 @@ namespace AncientWarfare3.core.lineage
             pNode.age_overgrowth = pArchive.age_overgrowth;
             pNode.phenotype_index = pArchive.phenotype_index;
             pNode.phenotype_shade = pArchive.phenotype_shade;
-            pNode.founded_branch_shi_id = pArchive.founded_branch_shi_id;
+            ShiBranchInfo foundedBranch = pArchive.founded_branch_shi_id >= 0L
+                ? LineageQuery.GetShiBranchInfo(
+                    pArchive.founded_branch_shi_id)
+                : null;
+            bool pendingBranchOwnedByActor = foundedBranch != null &&
+                LineageBranchRules.IsFoundedBranchForActor(
+                    foundedBranch.source_type,
+                    foundedBranch.founder_actor_id, pNode.id);
+            string pendingBranchDisplay = foundedBranch == null
+                ? string.Empty
+                : ShiBranchRules.BuildDisplayName(
+                    foundedBranch.origin_city_name ??
+                    foundedBranch.origin_city_chinese_name,
+                    foundedBranch.clan_name, foundedBranch.source_type,
+                    foundedBranch.state_name);
+            FoundedBranchOverlayProjection projection = LineageBranchRules.
+                ResolveFoundedBranchOverlay(pNode.founded_branch_shi_id,
+                    pNode.branch_display, pArchive.founded_branch_shi_id,
+                    pendingBranchDisplay, pendingBranchOwnedByActor);
+            pNode.founded_branch_shi_id = projection.ShiId;
+            pNode.branch_display = projection.Display;
             pNode.death_cause = pArchive.death_cause ?? string.Empty;
         }
     }

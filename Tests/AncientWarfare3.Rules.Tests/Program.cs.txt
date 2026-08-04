@@ -468,6 +468,27 @@ if (args.Length == 1 && args[0] == "--feudatory-identity")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--founded-branch")
+{
+    FoundedBranchRulesTests.Run();
+    Console.WriteLine("Founded branch rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--founded-branch-wiring")
+{
+    FoundedBranchWiringSourceGuardTests.Run();
+    Console.WriteLine("Founded branch wiring guard passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--founded-branch-recovery")
+{
+    FoundedBranchRecoveryIntegrationTests.Run();
+    Console.WriteLine("Founded branch recovery integration passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--inheritance-slice")
 {
     InheritanceLawRulesTests.Run();
@@ -8656,6 +8677,9 @@ VisibleSurnameRenameRulesTests.Run();
 VisibleClanRenameRulesTests.Run();
 VisibleSurnameRenameSqlRulesTests.Run();
 FeudatoryIdentityRulesTests.Run();
+FoundedBranchRulesTests.Run();
+FoundedBranchWiringSourceGuardTests.Run();
+FoundedBranchRecoveryIntegrationTests.Run();
 AW3RuntimeRestorePipelineTests.Run();
 LineageFamilyArchiveMigrationTests.Run();
 AW3MultiplayerStrategicStateRulesTests.Run();

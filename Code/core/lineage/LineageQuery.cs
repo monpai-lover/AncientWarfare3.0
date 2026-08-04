@@ -871,17 +871,18 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static long GetKingFoundedBranchByFounder(long pActorId)
         {
+            return TryResolveOwnedFoundedBranch(pActorId, -1L,
+                out long resolved) ? resolved : -1L;
+        }
+
+        internal static bool TryResolveOwnedFoundedBranch(long pActorId,
+            long pStoredShiId, out long pResolvedShiId)
+        {
+            pResolvedShiId = pStoredShiId;
             var db = DB;
-            if (db == null || pActorId < 0) return -1;
-            using var cmd = new SQLiteCommand(db);
-            cmd.CommandText =
-                $"SELECT SHI_ID FROM {ShiBranchTableItem.GetTableName()} " +
-                $"WHERE FOUNDER_ACTOR_ID=@actor AND SOURCE_TYPE=@source " +
-                $"ORDER BY CREATED_TIME DESC, SHI_ID DESC LIMIT 1";
-            cmd.Parameters.AddWithValue("@actor", pActorId);
-            cmd.Parameters.AddWithValue("@source", ShiSourceType.KING_FOUNDED);
-            object o = cmd.ExecuteScalar();
-            return o == null || o == System.DBNull.Value ? -1 : System.Convert.ToInt64(o);
+            return db != null && pActorId >= 0L &&
+                   FoundedBranchRecoveryQuery.TryResolve(db, null, pActorId,
+                       pStoredShiId, out pResolvedShiId);
         }
 
         private static void FillShiCounts(ShiBranchInfo pShi, long pCityId = -1)
@@ -1769,12 +1770,11 @@ namespace AncientWarfare3.core.lineage
 
         private static long ResolveFoundedBranch(Actor pLive, long pActorId, long pStoredShi)
         {
-            if (pStoredShi >= 0) return pStoredShi;
-
-            long fallback = GetKingFoundedBranchByFounder(pActorId);
-            if (fallback >= 0 && pLive?.data != null)
-                pLive.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, fallback);
-            return fallback;
+            if (!TryResolveOwnedFoundedBranch(pActorId, pStoredShi,
+                    out long resolved)) return -1L;
+            if (pLive?.data != null && resolved != pStoredShi)
+                pLive.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, resolved);
+            return resolved;
         }
 
         private static void ApplyFoundedBranchDisplay(FamilyTreeNode pNode, Actor pLive)

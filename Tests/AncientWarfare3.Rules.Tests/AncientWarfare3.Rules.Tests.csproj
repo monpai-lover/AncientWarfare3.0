@@ -399,6 +399,9 @@
     <Compile Include="VisibleClanRenameRulesTests.cs.txt" />
     <Compile Include="VisibleSurnameRenameSqlRulesTests.cs.txt" />
     <Compile Include="FeudatoryIdentityRulesTests.cs.txt" />
+    <Compile Include="FoundedBranchRulesTests.cs.txt" />
+    <Compile Include="FoundedBranchWiringSourceGuardTests.cs.txt" />
+    <Compile Include="FoundedBranchRecoveryIntegrationTests.cs.txt" />
     <Compile Include="ArmyRtsPlanPngTests.cs.txt" />
     <Compile Include="TestLocalizationStubs.cs.txt" />
     <Compile Include="TestModClassStub.cs.txt" />
@@ -445,6 +448,7 @@
     <Compile Include="..\..\Code\core\lineage\LineageGivenNameNormalizationRules.cs" Link="Production\LineageGivenNameNormalizationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ForeignPseudoLineageRules.cs" Link="Production\ForeignPseudoLineageRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageBranchRules.cs" Link="Production\LineageBranchRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FoundedBranchRecoveryQuery.cs" Link="Production\FoundedBranchRecoveryQuery.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirTitleSelectionRules.cs" Link="Production\HeirTitleSelectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FamilyTreeProjectionRevision.cs" Link="Production\FamilyTreeProjectionRevision.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoricalFigureNameRules.cs" Link="Production\HistoricalFigureNameRules.cs" />

@@ -1,0 +1,128 @@
+using AncientWarfare3.core.lineage;
+using System.Data.SQLite;
+
+internal static class FoundedBranchRecoveryIntegrationTests
+{
+    public static void Run()
+    {
+        RecoversNewestOwnedBranchAndRepairsInvalidStoredValues();
+        IsolatesLegacySchemaFailures();
+        KeepsPendingBranchButtonIdentityAndDisplayTogether();
+    }
+
+    private static void RecoversNewestOwnedBranchAndRepairsInvalidStoredValues()
+    {
+        using var db = OpenDatabase();
+        Execute(db, "CREATE TABLE ShiBranch (" +
+            "SHI_ID INTEGER PRIMARY KEY,FOUNDER_ACTOR_ID INTEGER," +
+            "SOURCE_TYPE TEXT,CREATED_TIME REAL)");
+        Execute(db,
+            "INSERT INTO ShiBranch VALUES " +
+            "(10,100,'king_founded',10)," +
+            "(11,100,'feudatory',20)," +
+            "(12,100,'official_grant',30)," +
+            "(20,200,'feudatory',40)," +
+            "(21,200,'feudatory',40)");
+
+        True(FoundedBranchRecoveryQuery.TryRead(db, null,
+                new[] { 100L, 200L, 300L },
+                out FoundedBranchRecoverySnapshot recovery),
+            "a compatible ShiBranch schema is readable");
+        Equal(11L, recovery.Resolve(100L, -1L),
+            "missing archives recover the newest allowed source by created time");
+        Equal(10L, recovery.Resolve(100L, 10L),
+            "an older positive branch owned by the actor remains authoritative");
+        Equal(11L, recovery.Resolve(100L, 20L),
+            "a positive branch owned by another actor falls back to the newest owned branch");
+        Equal(11L, recovery.Resolve(100L, 999L),
+            "a missing positive branch falls back to the newest owned branch");
+        Equal(21L, recovery.Resolve(200L, -1L),
+            "equal creation times use descending Shi id as the deterministic tie breaker");
+        Equal(-1L, recovery.Resolve(300L, 20L),
+            "an actor without an owned branch cannot claim another founder's branch");
+    }
+
+    private static void IsolatesLegacySchemaFailures()
+    {
+        using var db = OpenDatabase();
+        Execute(db, "CREATE TABLE ShiBranch (SHI_ID INTEGER PRIMARY KEY)");
+
+        False(FoundedBranchRecoveryQuery.TryRead(db, null,
+                new[] { 100L }, out FoundedBranchRecoverySnapshot recovery),
+            "legacy schemas are isolated instead of throwing through the read path");
+        Equal(-1L, recovery.Resolve(100L, -1L),
+            "a failed recovery returns an empty safe snapshot");
+        False(FoundedBranchRecoveryQuery.TryResolve(db, null, 100L, 20L,
+                out long unresolved),
+            "a failed single-actor recovery reports that no authoritative result exists");
+        Equal(20L, unresolved,
+            "a failed recovery preserves the caller's stored value for non-destructive handling");
+    }
+
+    private static void KeepsPendingBranchButtonIdentityAndDisplayTogether()
+    {
+        FoundedBranchOverlayProjection preserved = LineageBranchRules.
+            ResolveFoundedBranchOverlay(11L, "赵藩氏", -1L, "",
+                pendingBranchOwnedByActor: false);
+        Equal(11L, preserved.ShiId,
+            "pending -1 preserves the bulk recovered button target");
+        Equal("赵藩氏", preserved.Display,
+            "pending -1 preserves the bulk recovered button label");
+
+        FoundedBranchOverlayProjection rejected = LineageBranchRules.
+            ResolveFoundedBranchOverlay(11L, "赵藩氏", 20L, "韩藩氏",
+                pendingBranchOwnedByActor: false);
+        Equal(11L, rejected.ShiId,
+            "another founder's pending branch cannot replace the bulk target");
+        Equal("赵藩氏", rejected.Display,
+            "another founder's pending branch cannot replace the bulk label");
+
+        FoundedBranchOverlayProjection accepted = LineageBranchRules.
+            ResolveFoundedBranchOverlay(11L, "赵藩氏", 13L, "赵王氏",
+                pendingBranchOwnedByActor: true);
+        long branchShi = accepted.ShiId;
+        string buttonLabel = accepted.Display;
+        Equal(13L, branchShi,
+            "the UI button target follows an accepted pending owned branch");
+        Equal("赵王氏", buttonLabel,
+            "the UI button label follows the same accepted pending owned branch");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        return db;
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal(long expected, long actual, string name)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void Equal(string expected, string actual, string name)
+    {
+        if (!string.Equals(expected, actual, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"{name}: expected `{expected}`, got `{actual}`");
+    }
+}
