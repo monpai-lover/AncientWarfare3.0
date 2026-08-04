@@ -1,0 +1,33 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyMembershipOwnershipRulesTests
+{
+    public static void Run()
+    {
+        Equal(ArmyMembershipOwnershipDecision.Keep,
+            ArmyMembershipOwnershipRules.Decide(true, 12L, 12L),
+            "same-kingdom army membership is retained");
+        Equal(ArmyMembershipOwnershipDecision.Release,
+            ArmyMembershipOwnershipRules.Decide(true, 12L, 44L),
+            "stable foreign army membership is released");
+        Equal(ArmyMembershipOwnershipDecision.Defer,
+            ArmyMembershipOwnershipRules.Decide(true, -1L, 44L),
+            "unknown intended army ownership is deferred");
+        Equal(ArmyMembershipOwnershipDecision.Defer,
+            ArmyMembershipOwnershipRules.Decide(false, 12L, 44L),
+            "loading or replica application defers reconciliation");
+        Equal(ArmyMembershipOwnershipDecision.Release,
+            ArmyMembershipOwnershipRules.Decide(true, 12L, -1L),
+            "a stable actor without a kingdom leaves a kingdom army");
+        Equal(ArmyMembershipOwnershipDecision.Keep,
+            ArmyMembershipOwnershipRules.Decide(true, 44L, 44L),
+            "a completed whole-army transfer retains its transferred members");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

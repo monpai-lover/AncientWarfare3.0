@@ -7731,6 +7731,7 @@ OfficialCareerClosePersistenceSqlTests.Run();
 CourtDispositionSqlTests.Run();
 NameSystemRulesTests.Run();
 LineageGivenNameNormalizationRulesTests.Run();
+ArmyMembershipOwnershipRulesTests.Run();
 KingdomRenamePersistenceRulesTests.Run();
 XiaExpansionAndCivMonkeyNamingRulesTests.Run();
 IntegratedNamingRulesTests.Run();

@@ -71,6 +71,7 @@
     <Compile Include="CourtDispositionPerformanceTests.cs.txt" />
     <Compile Include="NameSystemRulesTests.cs.txt" />
     <Compile Include="LineageGivenNameNormalizationRulesTests.cs.txt" />
+    <Compile Include="ArmyMembershipOwnershipRulesTests.cs.txt" />
     <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
     <Compile Include="IntegratedNamingRulesTests.cs.txt" />
     <Compile Include="ActorLocalizedNameBoundaryRulesTests.cs.txt" />
@@ -601,6 +602,7 @@
     <Compile Include="..\..\Code\core\lineage\ActorDeathArchiveModels.cs" Link="Production\ActorDeathArchiveModels.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorDeathArchiveRules.cs" Link="Production\ActorDeathArchiveRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CapturedMilitaryOwnershipRules.cs" Link="Production\CapturedMilitaryOwnershipRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyMembershipOwnershipRules.cs" Link="Production\ArmyMembershipOwnershipRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWActorPresentationDirtyRules.cs" Link="Production\AWActorPresentationDirtyRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWActorPresentationDirtyIndex.cs" Link="Production\AWActorPresentationDirtyIndex.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomFoodReliefRules.cs" Link="Production\KingdomFoodReliefRules.cs" />
