@@ -51,6 +51,7 @@ namespace AncientWarfare3.core.lineage
             {
                 foreach (Army army in pManager)
                 {
+                    if (army?.data == null) continue;
                     if (UnknownOwnerAttempts.TryGetValue(army,
                             out int attempts) &&
                         attempts >= MaxUnknownOwnerRetries) continue;

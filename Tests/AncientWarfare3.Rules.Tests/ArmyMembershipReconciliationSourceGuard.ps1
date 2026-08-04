@@ -31,6 +31,9 @@ if ($deferredPatch -notmatch 'ArmyMembershipReconciliationService\.ProcessFrame'
 if ($service -notmatch 'public static void Enqueue\(Army pArmy\)\s*\{\s*if \(pArmy\?\.data == null\) return;') {
     throw 'The public enqueue boundary must accept actors or cities without an army.'
 }
+if ($service -notmatch 'foreach \(Army army in pManager\)\s*\{\s*if \(army\?\.data == null\) continue;') {
+    throw 'Dirty rebuild auditing must tolerate null or disposed army entries.'
+}
 if ($armyService -notmatch 'AddToArmy[\s\S]*ArmyMembershipOwnershipRules\.Decide') {
     throw 'AddToArmy must reject stable known foreign membership.'
 }
