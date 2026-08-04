@@ -96,6 +96,7 @@ namespace AncientWarfare3.patch
             WarRecordWriter.OnWarStart(__result);
             WarScoreService.StartWar(__result);
             CityReservePoolService.OnWarStarted(__result);
+            ArmyRtsWarLifecycleService.OnWarStarted(__result);
             KingdomWarDirectorService.OnWarStarted(__result);
             ArmyLogisticsService.OnWarStarted(__result);
             DiplomacyProposalService.RegisterWarSettlementBaseline(__result);
@@ -239,6 +240,7 @@ namespace AncientWarfare3.patch
             ArmyReplenishmentOperationService.OnWarEnded(pWar);
             DiplomaticWarDeclarationService.OnWarEnded(pWar);
             KingdomWarDirectorService.OnWarEnded(pWar);
+            ArmyRtsWarLifecycleService.OnWarEnded(pWar);
             CoalitionWarTaskService.OnWarEnded(pWar);
             WarMilitaryFactsService.OnWarEnded(pWar);
             ArmyLogisticsService.OnWarEnded(pWar);

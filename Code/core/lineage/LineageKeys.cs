@@ -192,6 +192,12 @@ namespace AncientWarfare3.core.lineage
             "aw_army_return_kingdom_id";
         public const string AW_ARMY_RETURN_TARGET_CITY_ID =
             "aw_army_return_target_city_id";
+        public const string AW_RTS_LIFECYCLE_WAR_ID =
+            "aw_rts_lifecycle_war_id";
+        public const string AW_RTS_LIFECYCLE_BASELINE =
+            "aw_rts_lifecycle_baseline";
+        public const string AW_RTS_LIFECYCLE_PHASE =
+            "aw_rts_lifecycle_phase";
         public const string AW_ARMY_PROJECTED_REPLENISHMENT_SHORTAGE =
             "aw_army_projected_replenishment_shortage";
         public const string AW_ARMY_PROJECTED_KINGDOM_RESERVE_AVAILABLE =

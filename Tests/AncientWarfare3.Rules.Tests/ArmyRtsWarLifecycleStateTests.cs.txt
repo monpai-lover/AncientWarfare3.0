@@ -1,0 +1,51 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsWarLifecycleStateTests
+{
+    public static void Run()
+    {
+        var store = new ArmyRtsWarLifecycleStateStore();
+        ArmyRtsWarLifecycleRecord first = store.Ensure(11, 101, 75,
+            ArmyRtsWarPhase.StrategicMovement);
+        Assert(first != null && first.BaselineStrength == 75,
+            "war start captures the existing living strength");
+
+        ArmyRtsWarLifecycleRecord afterCasualties = store.Ensure(11, 101,
+            19, ArmyRtsWarPhase.Withdrawal);
+        Assert(ReferenceEquals(first, afterCasualties) &&
+               afterCasualties.BaselineStrength == 75,
+            "later casualties and captain replacement preserve the fixed baseline");
+
+        ArmyRtsWarLifecycleRecord lateArmy = store.Ensure(11, 102, 48,
+            ArmyRtsWarPhase.StrategicMovement);
+        Assert(lateArmy != null && lateArmy.BaselineStrength == 48,
+            "an army created during war captures baseline on first assignment");
+
+        Assert(store.Ensure(11, 103, 0,
+                   ArmyRtsWarPhase.StrategicMovement) == null,
+            "an empty army does not create an unusable baseline");
+
+        Assert(store.TrySetPhase(11, 101, ArmyRtsWarPhase.VanillaCombat) &&
+               store.TryGet(11, 101, out ArmyRtsWarLifecycleRecord combat) &&
+               combat.Phase == ArmyRtsWarPhase.VanillaCombat,
+            "the lifecycle phase changes without replacing baseline state");
+
+        Assert(store.RemoveArmy(101) == 1 &&
+               !store.TryGet(11, 101, out _),
+            "destroying an army removes all of its lifecycle state");
+
+        store.Ensure(12, 102, 48, ArmyRtsWarPhase.StrategicMovement);
+        Assert(store.ClearWar(11) == 1 && store.Count == 1 &&
+               store.TryGet(12, 102, out _),
+            "war end clears only records belonging to the ended war");
+
+        store.Clear();
+        Assert(store.Count == 0, "runtime reset clears lifecycle state");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

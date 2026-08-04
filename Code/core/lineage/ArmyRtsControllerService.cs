@@ -914,6 +914,7 @@ namespace AncientWarfare3.core.lineage
                 out RuntimeState previousRuntime);
             bool changed = Controllers.AssignMission(pMission);
             MissionIndex.Upsert(pMission);
+            ArmyRtsWarLifecycleService.OnMissionAssigned(pArmy, pMission);
             bool controllerPublished = Controllers.TryGet(pArmy.id,
                     out ArmyRtsControllerRecord assignedRecord) &&
                 assignedRecord?.Mission != null &&
@@ -2266,6 +2267,7 @@ namespace AncientWarfare3.core.lineage
                         out ArmyRtsMission mission)) continue;
                 Controllers.AssignMission(mission);
                 MissionIndex.Upsert(mission);
+                ArmyRtsWarLifecycleService.OnMissionAssigned(army, mission);
                 RuntimeByArmy[army.id] = new RuntimeState
                 {
                     InitialRosterCount = SafeUnitCount(army)
@@ -2288,6 +2290,7 @@ namespace AncientWarfare3.core.lineage
             ArmyRtsTransportService.Clear();
             PendingReplenishmentArrivals.Clear();
             PendingReplenishmentArrivalQueue.Clear();
+            ArmyRtsWarLifecycleService.ClearRuntime();
         }
 
         private static void RemovePendingReplenishmentArrivals(long pArmyId)

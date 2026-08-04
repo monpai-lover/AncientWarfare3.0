@@ -854,6 +854,7 @@ namespace AncientWarfare3.patch
         {
             __state = ArmyCaptainDisposalScope.Open(__instance);
             WarArmyReturnService.OnArmyDisposed(__instance);
+            ArmyRtsWarLifecycleService.OnArmyDestroyed(__instance);
             ArmyRtsControllerService.Invalidate(__instance?.id ?? -1L);
             ArmyFormationService.RemoveArmy(__instance?.id ?? -1L);
             ArmyLogisticsService.OnArmyDisposed(__instance);
