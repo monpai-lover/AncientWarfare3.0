@@ -22,5 +22,6 @@ namespace AncientWarfare3.core.db
         public int mandate_value = 0;
         public int imperial_authority = 0;
         public string content = "";
+        public string projection_key = "";
     }
 }

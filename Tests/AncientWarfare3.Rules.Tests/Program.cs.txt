@@ -24,6 +24,13 @@ if (args.Length == 1 && args[0] == "--war-return-display-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--mandate-succession-slice")
+{
+    MandateSuccessionRegressionRulesTests.Run();
+    Console.WriteLine("Mandate succession regression rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--lineage-family-migration-slice")
 {
     LineageFamilyArchiveMigrationTests.Run();
@@ -7738,6 +7745,7 @@ InheritanceLawRulesTests.Run();
 SuccessionDisputeRulesTests.Run();
 SuccessionDisputeSqlTests.Run();
 ConsistencyRegressionRulesTests.Run();
+MandateSuccessionRegressionRulesTests.Run();
 CityArmyReinforcementRulesTests.Run();
 RebellionForceCollapseRulesTests.Run();
 WarForceEliminationRulesTests.Run();

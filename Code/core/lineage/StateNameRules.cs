@@ -128,8 +128,31 @@ namespace AncientWarfare3.core.lineage
             bool newDynastyCreated, bool isEmpireRank,
             bool changedRulingShi, bool hasExistingBoundStateName)
         {
-            return newDynastyCreated && isEmpireRank &&
+            return ShouldProjectDynasticStateName(newDynastyCreated,
+                isEmpireRank, changedRulingShi, hasExistingBoundStateName,
+                isActiveMandate: false);
+        }
+
+        public static bool ShouldProjectDynasticStateName(
+            bool newDynastyCreated, bool isEmpireRank,
+            bool changedRulingShi, bool hasExistingBoundStateName,
+            bool isActiveMandate)
+        {
+            return !isActiveMandate && newDynastyCreated && isEmpireRank &&
                    changedRulingShi && hasExistingBoundStateName;
+        }
+
+        public static bool ShouldRetryDynasticStateName(
+            bool hasCurrentDynasty, long currentDynastyShiId,
+            long rulerShiId, string currentDynastyStateName,
+            string boundStateName, bool isEmpireRank,
+            bool isActiveMandate)
+        {
+            return hasCurrentDynasty && currentDynastyShiId >= 0L &&
+                   currentDynastyShiId == rulerShiId && isEmpireRank &&
+                   !isActiveMandate && IsValid(boundStateName) &&
+                   !string.Equals(currentDynastyStateName ?? "",
+                       boundStateName, StringComparison.Ordinal);
         }
 
         private static bool LooksLikeLocalizationKey(string pValue)

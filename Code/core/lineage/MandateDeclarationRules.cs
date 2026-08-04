@@ -1,7 +1,26 @@
+using System;
+
 namespace AncientWarfare3.core.lineage
 {
     public static class MandateDeclarationRules
     {
+        public static bool TryCommitProjection(Func<bool> pPersist,
+            Action pPublishRuntime)
+        {
+            if (pPersist == null || !pPersist()) return false;
+            pPublishRuntime?.Invoke();
+            return true;
+        }
+
+        public static bool TryCommitReplacement(Func<bool> pPersist,
+            Action pPublishPreviousEnd, Action pPublishNewStart)
+        {
+            if (pPersist == null || !pPersist()) return false;
+            pPublishPreviousEnd?.Invoke();
+            pPublishNewStart?.Invoke();
+            return true;
+        }
+
         public static bool RequiresMandateRitesForOrigin(string pDeclarationReason,
             string pOriginType, string pClaimantKind)
         {

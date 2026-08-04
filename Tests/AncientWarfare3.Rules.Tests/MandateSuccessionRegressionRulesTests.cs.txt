@@ -1,0 +1,2257 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class MandateSuccessionRegressionRulesTests
+{
+    public static void Run()
+    {
+        ActiveMandateSuccessionRefreshesInstalledRuler();
+        MandateTraitMovesToTheInstalledRuler();
+        AccessionSettlementRequiresOpenReignAndInstalledKing();
+        DynastyTransitionStatusSeparatesContinuityFromFailure();
+        DynastyProjectionPartialSuccessRetriesToConvergence();
+        PersistentDynastyStateNameCompletionRetriesBothWindows();
+        FailedReignTransitionRetriesBeforeProjectionAdvances();
+        FailedPersistenceRetriesBeforeRuntimeProjection();
+        MandateContextTargetsOnlyTheInstalledRulersLatestOpenReign();
+        FailedMandateDeclarationRollsBackAndRetriesOnce();
+        ActiveMandateReplacementIsAtomicAndRetryable();
+        DeclarationOutboxRetriesObservableHistoryAndCoreEffects();
+        OutboxReplayAfterBusinessCommitDoesNotDuplicateEffects();
+        DeclarationCoreSnapshotSurvivesLiveCityChangesAndCleansUp();
+        ReplacedPendingPeriodPersistsAndPassesOnLegalCores();
+        LegacyOutboxReadUpgradesCoreSnapshotSchema();
+        LegacyCoreSnapshotMigratesOnlyOnce();
+        PendingProjectionResumeIsStableBoundedAndSnapshotBased();
+        ReplicaAuthorityGateRejectsEveryMandateMutationBoundary();
+        ProjectionResumeRulesSeparateRuntimeHistoryAndTerminalWork();
+        SuppressedKeyedHistoryRemainsPendingUntilRetry();
+        ClosedDeclarationConnectionReturnsFailure();
+        ActiveMandateKeepsItsImperialStateName();
+        SavedMandateReignUsesImperialPosthumousRank();
+    }
+
+    private static void ActiveMandateSuccessionRefreshesInstalledRuler()
+    {
+        Equal(true, MandateSuccessionRules.ShouldRefreshRulerProjection(
+                active: true, trackedKingdomId: 17L, installedKingdomId: 17L,
+                installedActorId: 42L, liveKingActorId: 42L),
+            "the installed ruler immediately refreshes the active Mandate state");
+        Equal(false, MandateSuccessionRules.ShouldRefreshRulerProjection(
+                active: true, trackedKingdomId: 17L, installedKingdomId: 18L,
+                installedActorId: 42L, liveKingActorId: 42L),
+            "a foreign accession cannot rewrite the active Mandate state");
+    }
+
+    private static void MandateTraitMovesToTheInstalledRuler()
+    {
+        Equal(true, MandateSuccessionRules.ShouldTransferRulerTrait(
+                projectionRefreshAccepted: true, previousActorId: 41L,
+                installedActorId: 42L),
+            "a real succession transfers the Mandate trait");
+        Equal(false, MandateSuccessionRules.ShouldTransferRulerTrait(
+                projectionRefreshAccepted: true, previousActorId: 42L,
+                installedActorId: 42L),
+            "an idempotent refresh does not transfer the trait from the ruler to itself");
+    }
+
+    private static void FailedPersistenceRetriesBeforeRuntimeProjection()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE MandateState(" +
+            "STATE_ID INTEGER PRIMARY KEY,ACTIVE INTEGER," +
+            "KINGDOM_ID INTEGER,PERIOD_ID INTEGER," +
+            "EMPEROR_ACTOR_ID INTEGER,EMPEROR_NAME TEXT," +
+            "DYNASTY_NAME TEXT," +
+            "UPDATED_TIME REAL);" +
+            "INSERT INTO MandateState VALUES" +
+            "(1,1,17,91,41,'Old','Old Dynasty',10);" +
+            "CREATE TRIGGER fail_mandate_succession BEFORE UPDATE ON " +
+            "MandateState BEGIN SELECT RAISE(ABORT," +
+            "'injected mandate succession failure'); END;");
+
+        var calls = new List<string>();
+        string error = "";
+        bool first = MandateSuccessionRules.TryCommitRulerProjection(
+            () =>
+            {
+                calls.Add("persist");
+                return MandateSuccessionPersistence.TryRefreshRuler(
+                    db, "MandateState", stateId: 1L, kingdomId: 17L,
+                    periodId: 91L, rulerActorId: 42L,
+                    rulerName: "New", dynastyName: "New Dynasty",
+                    updatedTime: 11d, pError: out error);
+            },
+            () => calls.Add("runtime"));
+        Equal(false, first,
+            "a failed MandateState refresh rejects runtime projection");
+        Equal(41L, Scalar(db,
+                "SELECT EMPEROR_ACTOR_ID FROM MandateState WHERE STATE_ID=1"),
+            "a failed refresh leaves the persisted emperor unchanged");
+        Equal("Old Dynasty", ScalarText(db,
+                "SELECT DYNASTY_NAME FROM MandateState WHERE STATE_ID=1"),
+            "a failed refresh leaves the persisted dynasty unchanged");
+        Equal("persist", string.Join(",", calls),
+            "failure stops before title trait and display projection");
+
+        Execute(db, "DROP TRIGGER fail_mandate_succession;");
+        bool second = MandateSuccessionRules.TryCommitRulerProjection(
+            () =>
+            {
+                calls.Add("persist");
+                return MandateSuccessionPersistence.TryRefreshRuler(
+                    db, "MandateState", stateId: 1L, kingdomId: 17L,
+                    periodId: 91L, rulerActorId: 42L,
+                    rulerName: "New", dynastyName: "New Dynasty",
+                    updatedTime: 12d, pError: out error);
+            },
+            () => calls.Add("runtime"));
+        Equal(true, second,
+            "the same installed ruler can retry after persistence recovers");
+        Equal(42L, Scalar(db,
+                "SELECT EMPEROR_ACTOR_ID FROM MandateState WHERE STATE_ID=1"),
+            "the successful retry persists the installed emperor");
+        Equal("New Dynasty", ScalarText(db,
+                "SELECT DYNASTY_NAME FROM MandateState WHERE STATE_ID=1"),
+            "the successful retry persists the installed dynasty");
+        Equal("persist,persist,runtime", string.Join(",", calls),
+            "runtime projection commits once and only after persistence");
+    }
+
+    private static void
+        AccessionSettlementRequiresOpenReignAndInstalledKing()
+    {
+        int phase = 0;
+        bool missingReign = MandateAccessionCoordinator.TrySettle(
+            () => false,
+            () => throw new InvalidOperationException(
+                "king identity checked before an open reign exists"),
+            () => throw new InvalidOperationException(
+                "Mandate committed without an open reign"));
+        Equal(false, missingReign,
+            "a missing open reign blocks Mandate succession");
+
+        bool wrongKing = MandateAccessionCoordinator.TrySettle(
+            () =>
+            {
+                Equal(0, phase, "open reign is ensured first");
+                phase = 1;
+                return true;
+            },
+            () =>
+            {
+                Equal(1, phase, "installed king is checked second");
+                phase = 2;
+                return false;
+            },
+            () => throw new InvalidOperationException(
+                "Mandate committed for a stale king"));
+        Equal(false, wrongKing,
+            "a stale king blocks Mandate succession after reign creation");
+        Equal(2, phase, "a rejected king never reaches Mandate commit");
+
+        phase = 0;
+        bool settled = MandateAccessionCoordinator.TrySettle(
+            () =>
+            {
+                Equal(0, phase, "open reign is ensured first on success");
+                phase = 1;
+                return true;
+            },
+            () =>
+            {
+                Equal(1, phase, "installed king is confirmed second");
+                phase = 2;
+                return true;
+            },
+            () =>
+            {
+                Equal(2, phase, "Mandate commits only after both gates");
+                phase = 3;
+                return true;
+            });
+        Equal(true, settled, "a valid accession settles successfully");
+        Equal(3, phase, "all accession phases execute in order");
+    }
+
+    private static void
+        DynastyTransitionStatusSeparatesContinuityFromFailure()
+    {
+        Equal(true, DynastyTransitionRules.TryResolve(
+                DynastyTransitionStatus.NoChange,
+                out bool continuityCreated),
+            "dynastic continuity is a successful no-change result");
+        Equal(false, continuityCreated,
+            "dynastic continuity does not claim a new dynasty");
+        Equal(true, DynastyTransitionRules.TryResolve(
+                DynastyTransitionStatus.Created,
+                out bool created),
+            "a created dynasty is a successful transition result");
+        Equal(true, created,
+            "a created transition reports the new dynasty");
+        long noChangeLastKingId = 41L;
+        bool noChangeSettled = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () =>
+            {
+                DynastyTransitionStatus status =
+                    DynastyTransitionStatus.NoChange;
+                Equal(true, DynastyTransitionRules.TryResolve(
+                        status,
+                        out bool noChangeCreated),
+                    "no-change dynasty status is successful");
+                Equal(false, noChangeCreated,
+                    "no-change status reports no created dynasty");
+                return true;
+            },
+            () => true,
+            () => true,
+            () => noChangeLastKingId = 42L);
+        Equal(true, noChangeSettled,
+            "no-change accession with dynasty id -1 still settles");
+        Equal(42L, noChangeLastKingId,
+            "no-change accession advances the last-king projection");
+
+        long lastKingId = 41L;
+        int downstreamCalls = 0;
+        bool settled = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () => DynastyTransitionRules.TryResolve(
+                DynastyTransitionStatus.Failure, out _),
+            () =>
+            {
+                downstreamCalls++;
+                return true;
+            },
+            () =>
+            {
+                downstreamCalls++;
+                return true;
+            },
+            () => lastKingId = 42L);
+        Equal(false, settled,
+            "a dynasty persistence failure blocks accession settlement");
+        Equal(0, downstreamCalls,
+            "dynasty failure stops before installed-king and Mandate work");
+        Equal(41L, lastKingId,
+            "dynasty failure cannot advance the last-king projection");
+    }
+
+    private static void
+        DynastyProjectionPartialSuccessRetriesToConvergence()
+    {
+        Equal(DynastyReignProjectionDisposition.Reconcile,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.Created, currentDynastyId: 2L,
+                openReignDynastyId: 1L),
+            "created D2 always reconciles the current reign");
+        Equal(DynastyReignProjectionDisposition.Reconcile,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.Created, currentDynastyId: 2L,
+                openReignDynastyId: 2L),
+            "created status preserves new-dynasty publication semantics");
+        Equal(DynastyReignProjectionDisposition.Reconcile,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.NoChange, currentDynastyId: 2L,
+                openReignDynastyId: 1L),
+            "NoChange retries a persisted D2 that has not reached R2");
+        Equal(DynastyReignProjectionDisposition.Converged,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.NoChange, currentDynastyId: 2L,
+                openReignDynastyId: 2L),
+            "NoChange with matching ids is already converged");
+        Equal(DynastyReignProjectionDisposition.SkipNoDynasty,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.NoChange, currentDynastyId: -1L,
+                openReignDynastyId: 1L),
+            "legitimate no-dynasty continuity skips reconciliation");
+        Equal(DynastyReignProjectionDisposition.Failure,
+            DynastyTransitionRules.ResolveReignProjection(
+                DynastyTransitionStatus.Failure, currentDynastyId: 2L,
+                openReignDynastyId: 1L),
+            "dynasty persistence failure short-circuits reconciliation");
+
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,DYNASTY_ID INTEGER," +
+            "START_TIME REAL,END_TIME REAL);" +
+            "INSERT INTO KingdomReign VALUES(2,17,42,1,11,-1);");
+
+        const long currentDynastyId = 2L;
+        long lastKingId = 41L;
+        int dynastyProjectionAttempts = 0;
+        string error = "";
+
+        bool PublishDynasty(DynastyTransitionStatus status,
+            bool failProjection)
+        {
+            if (!ReignMandateProjectionPersistence.TryReadDynasty(
+                    db, "KingdomReign", kingdomId: 17L,
+                    rulerActorId: 42L, out long reignDynastyId,
+                    out error))
+                return false;
+            DynastyReignProjectionDisposition disposition =
+                DynastyTransitionRules.ResolveReignProjection(status,
+                    currentDynastyId, reignDynastyId);
+            if (disposition == DynastyReignProjectionDisposition.Failure)
+                return false;
+            if (disposition ==
+                DynastyReignProjectionDisposition.Reconcile)
+            {
+                dynastyProjectionAttempts++;
+                if (failProjection ||
+                    !ReignMandateProjectionPersistence.TryProjectDynasty(
+                        db, "KingdomReign", kingdomId: 17L,
+                        rulerActorId: 42L, dynastyId: currentDynastyId,
+                        out error))
+                    return false;
+            }
+            return true;
+        }
+
+        bool first = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () => PublishDynasty(DynastyTransitionStatus.Created,
+                failProjection: true),
+            () => true,
+            () => true,
+            () => lastKingId = 42L);
+        Equal(false, first,
+            "first created-dynasty reign projection failure remains retryable");
+        Equal(1L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "failed projection leaves R2 on D1");
+        Equal(41L, lastKingId,
+            "partial dynasty success cannot advance last king id");
+
+        bool retry = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () => PublishDynasty(DynastyTransitionStatus.NoChange,
+                failProjection: false),
+            () => true,
+            () => true,
+            () => lastKingId = 42L);
+        Equal(true, retry,
+            "NoChange retry reconciles the previously created dynasty");
+        Equal(2L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "retry converges R2 from D1 to D2");
+        Equal(2, dynastyProjectionAttempts,
+            "created failure and NoChange retry each attempt projection");
+        Equal(42L, lastKingId,
+            "last king id advances only after dynasty convergence");
+
+        Equal(true, PublishDynasty(DynastyTransitionStatus.NoChange,
+                failProjection: false),
+            "matching NoChange retry is an idempotent success");
+        Equal(2, dynastyProjectionAttempts,
+            "matching dynasty ids do not issue another projection write");
+    }
+
+    private static void
+        PersistentDynastyStateNameCompletionRetriesBothWindows()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE DynastyPeriod(" +
+            "DYNASTY_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "SHI_ID INTEGER,STATE_NAME TEXT,START_TIME REAL," +
+            "END_TIME REAL);" +
+            "INSERT INTO DynastyPeriod VALUES(2,17,20,'OldState',12,-1);" +
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,DYNASTY_ID INTEGER," +
+            "START_TIME REAL,END_TIME REAL);" +
+            "INSERT INTO KingdomReign VALUES(2,17,42,1,11,-1);" +
+            "CREATE TABLE StateNameProjectionAudit(ID INTEGER);" +
+            "CREATE TRIGGER audit_dynasty_state_name AFTER UPDATE OF " +
+            "STATE_NAME ON DynastyPeriod BEGIN INSERT INTO " +
+            "StateNameProjectionAudit VALUES(1); END;");
+
+        const long newShiId = 20L;
+        const string boundStateName = "BoundState";
+        string error = "";
+
+        bool Publish(DynastyTransitionStatus status,
+            bool failReignProjection, bool failStateNameProjection)
+        {
+            if (!DynastyStateNamePersistence.TryReadCurrent(
+                    db, "DynastyPeriod", kingdomId: 17L,
+                    out DynastyStateNamePersistence.CurrentDynastyState
+                        dynasty, out error))
+                return false;
+            long currentDynastyId = dynasty.Exists
+                ? dynasty.DynastyId
+                : -1L;
+            long reignDynastyId = -1L;
+            if (currentDynastyId >= 0L &&
+                !ReignMandateProjectionPersistence.TryReadDynasty(
+                    db, "KingdomReign", kingdomId: 17L,
+                    rulerActorId: 42L, out reignDynastyId, out error))
+                return false;
+            DynastyReignProjectionDisposition disposition =
+                DynastyTransitionRules.ResolveReignProjection(status,
+                    currentDynastyId, reignDynastyId);
+            if (disposition == DynastyReignProjectionDisposition.Failure)
+                return false;
+            if (disposition ==
+                DynastyReignProjectionDisposition.Reconcile)
+            {
+                if (failReignProjection ||
+                    !ReignMandateProjectionPersistence.TryProjectDynasty(
+                        db, "KingdomReign", kingdomId: 17L,
+                        rulerActorId: 42L, dynastyId: currentDynastyId,
+                        out error))
+                    return false;
+            }
+            bool stateNamePending = StateNameRules.
+                ShouldRetryDynasticStateName(
+                    hasCurrentDynasty: dynasty.Exists,
+                    currentDynastyShiId: dynasty.ShiId,
+                    rulerShiId: newShiId,
+                    currentDynastyStateName: dynasty.StateName,
+                    boundStateName: boundStateName,
+                    isEmpireRank: true,
+                    isActiveMandate: false);
+            if (!stateNamePending) return true;
+            if (failStateNameProjection) return false;
+            return DynastyStateNamePersistence.TryUpdateCurrentStateName(
+                db, "DynastyPeriod", kingdomId: 17L,
+                dynastyId: dynasty.DynastyId, shiId: dynasty.ShiId,
+                stateName: boundStateName, out error);
+        }
+
+        long lastKingId = 41L;
+        bool windowAFirst = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () => Publish(DynastyTransitionStatus.Created,
+                failReignProjection: true,
+                failStateNameProjection: false),
+            () => true,
+            () => true,
+            () => lastKingId = 42L);
+        Equal(false, windowAFirst,
+            "window A stops after D2 creation when reign projection fails");
+        Equal("OldState", ScalarText(db,
+                "SELECT STATE_NAME FROM DynastyPeriod WHERE DYNASTY_ID=2"),
+            "window A keeps the persistent state-name marker pending");
+        Equal(41L, lastKingId,
+            "window A failure does not advance last king id");
+        Equal(true, MandateAccessionCoordinator.TrySettle(
+                () => true,
+                () => Publish(DynastyTransitionStatus.NoChange,
+                    failReignProjection: false,
+                    failStateNameProjection: false),
+                () => true,
+                () => true,
+                () => lastKingId = 42L),
+            "window A NoChange retry completes reign and state-name");
+        Equal(2L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "window A retry reconciles R2 to D2");
+        Equal(boundStateName, ScalarText(db,
+                "SELECT STATE_NAME FROM DynastyPeriod WHERE DYNASTY_ID=2"),
+            "window A retry persists state-name completion");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM StateNameProjectionAudit"),
+            "window A projects state-name once");
+        Equal(42L, lastKingId,
+            "window A advances last king only after marker completion");
+        Equal(true, Publish(DynastyTransitionStatus.NoChange,
+                failReignProjection: false,
+                failStateNameProjection: false),
+            "window A converged retry is idempotent");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM StateNameProjectionAudit"),
+            "window A third attempt does not repeat state-name");
+
+        Execute(db,
+            "UPDATE KingdomReign SET DYNASTY_ID=1 WHERE REIGN_ID=2;" +
+            "UPDATE DynastyPeriod SET STATE_NAME='OldState' " +
+            "WHERE DYNASTY_ID=2;" +
+            "DELETE FROM StateNameProjectionAudit;");
+        lastKingId = 41L;
+        bool windowBFirst = MandateAccessionCoordinator.TrySettle(
+            () => true,
+            () => Publish(DynastyTransitionStatus.Created,
+                failReignProjection: false,
+                failStateNameProjection: true),
+            () => true,
+            () => true,
+            () => lastKingId = 42L);
+        Equal(false, windowBFirst,
+            "window B stops after reign convergence when state-name fails");
+        Equal(2L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "window B leaves the reign already converged to D2");
+        Equal("OldState", ScalarText(db,
+                "SELECT STATE_NAME FROM DynastyPeriod WHERE DYNASTY_ID=2"),
+            "window B durable marker remains pending");
+        Equal(41L, lastKingId,
+            "window B failure does not advance last king id");
+        Equal(true, MandateAccessionCoordinator.TrySettle(
+                () => true,
+                () => Publish(DynastyTransitionStatus.NoChange,
+                    failReignProjection: false,
+                    failStateNameProjection: false),
+                () => true,
+                () => true,
+                () => lastKingId = 42L),
+            "window B Converged retry still completes state-name");
+        Equal(boundStateName, ScalarText(db,
+                "SELECT STATE_NAME FROM DynastyPeriod WHERE DYNASTY_ID=2"),
+            "window B retry persists completion despite Converged reign");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM StateNameProjectionAudit"),
+            "window B retry projects state-name once");
+        Equal(42L, lastKingId,
+            "window B advances last king only after marker completion");
+        Equal(true, Publish(DynastyTransitionStatus.NoChange,
+                failReignProjection: false,
+                failStateNameProjection: false),
+            "window B third attempt is idempotent");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM StateNameProjectionAudit"),
+            "persistent marker prevents a repeated state-name overwrite");
+
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: true, currentDynastyShiId: newShiId,
+                rulerShiId: newShiId,
+                currentDynastyStateName: boundStateName,
+                boundStateName: boundStateName, isEmpireRank: true,
+                isActiveMandate: false),
+            "manual later kingdom rename cannot reopen a completed marker");
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: false, currentDynastyShiId: -1L,
+                rulerShiId: -1L, currentDynastyStateName: "",
+                boundStateName: "", isEmpireRank: true,
+                isActiveMandate: false),
+            "legitimate no-dynasty NoChange remains skippable");
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: true, currentDynastyShiId: 19L,
+                rulerShiId: newShiId, currentDynastyStateName: "OldState",
+                boundStateName: boundStateName, isEmpireRank: true,
+                isActiveMandate: false),
+            "a different active dynasty Shi cannot consume the marker");
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: true,
+                currentDynastyShiId: newShiId, rulerShiId: newShiId,
+                currentDynastyStateName: "OldState",
+                boundStateName: boundStateName, isEmpireRank: false,
+                isActiveMandate: false),
+            "non-imperial realms do not retry dynastic state-name");
+        Equal(false, StateNameRules.ShouldRetryDynasticStateName(
+                hasCurrentDynasty: true,
+                currentDynastyShiId: newShiId, rulerShiId: newShiId,
+                currentDynastyStateName: "OldState",
+                boundStateName: boundStateName, isEmpireRank: true,
+                isActiveMandate: true),
+            "active Mandate realms do not retry branch state-name");
+
+        using var closed = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        long readFailureLastKingId = 41L;
+        Equal(false, MandateAccessionCoordinator.TrySettle(
+                () => true,
+                () => DynastyStateNamePersistence.TryReadCurrent(
+                    closed, "DynastyPeriod", kingdomId: 17L,
+                    out _, out _),
+                () => true,
+                () => true,
+                () => readFailureLastKingId = 42L),
+            "durable dynasty marker read failure short-circuits accession");
+        Equal(41L, readFailureLastKingId,
+            "marker read failure cannot advance last king id");
+    }
+
+    private static void
+        FailedReignTransitionRetriesBeforeProjectionAdvances()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KINGDOM_COLOR TEXT,KING_ACTOR_ID INTEGER,SHI_ID INTEGER," +
+            "DYNASTY_ID INTEGER,MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "KING_NAME TEXT,KING_COLOR TEXT,REIGN_INDEX INTEGER," +
+            "START_TIME REAL,END_TIME REAL,YEAR_NAME_STEM TEXT," +
+            "YEAR_NAME_COLOR TEXT,END_REASON TEXT," +
+            "START_POPULATION INTEGER,START_CITY_COUNT INTEGER," +
+            "START_ARMY_COUNT INTEGER,END_POPULATION INTEGER," +
+            "END_CITY_COUNT INTEGER,END_ARMY_COUNT INTEGER," +
+            "IS_FOUNDER INTEGER,WAR_WINS INTEGER,WAR_LOSSES INTEGER," +
+            "LOST_CAPITAL INTEGER,DEATH_CAUSE TEXT);" +
+            "INSERT INTO KingdomReign VALUES" +
+            "(1,17,'old',41,1,1,-1,2,'Old State','Old King','old',1," +
+            "10,-1,'','','',100,2,3,0,0,0,1,0,0,0,'');" +
+            "CREATE TRIGGER fail_old_reign_close BEFORE UPDATE ON " +
+            "KingdomReign WHEN OLD.REIGN_ID=1 BEGIN SELECT RAISE(ABORT," +
+            "'injected old reign close failure'); END;");
+
+        var request = new ReignAccessionPersistence.Request
+        {
+            KingdomId = 17L,
+            NewReignId = 2L,
+            NewRulerActorId = 42L,
+            NewKingdomColor = "new",
+            NewShiId = 2L,
+            NewDynastyId = 2L,
+            NewMandatePeriodId = -1L,
+            NewHighestTitle = 2,
+            NewStateName = "New State",
+            NewRulerName = "New King",
+            NewRulerColor = "new",
+            NewReignIndex = 2,
+            NewStartTime = 11d,
+            NewYearNameStem = "",
+            NewYearNameColor = "new",
+            NewStartPopulation = 110,
+            NewStartCityCount = 3,
+            NewStartArmyCount = 4,
+            NewIsFounder = 0,
+            OldEndTime = 11d,
+            OldEndReason = "replaced",
+            OldEndPopulation = 110,
+            OldEndCityCount = 3,
+            OldEndArmyCount = 4,
+            OldWarWins = 0,
+            OldWarLosses = 0,
+            OldLostCapital = 0,
+            OldHighestTitle = 2,
+            OldDeathCause = ""
+        };
+        long lastKingId = 41L;
+        long mandateActorId = 41L;
+        string error = "";
+        bool first = MandateAccessionCoordinator.TrySettle(
+            () => ReignAccessionPersistence.TryTransition(
+                db, "KingdomReign", request, out error),
+            () => true,
+            () =>
+            {
+                mandateActorId = 42L;
+                return true;
+            },
+            () => lastKingId = 42L);
+        Equal(false, first,
+            "a failed old-reign close aborts accession settlement");
+        Equal(41L, lastKingId,
+            "a failed reign transition does not advance last king id");
+        Equal(41L, mandateActorId,
+            "a failed reign transition does not commit Mandate succession");
+        Equal(-1L, Scalar(db,
+                "SELECT END_TIME FROM KingdomReign WHERE REIGN_ID=1"),
+            "the old reign remains open after rollback");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomReign WHERE REIGN_ID=2"),
+            "the new reign is not half-created after rollback");
+
+        Execute(db, "DROP TRIGGER fail_old_reign_close;");
+        bool second = MandateAccessionCoordinator.TrySettle(
+            () => ReignAccessionPersistence.TryTransition(
+                db, "KingdomReign", request, out error),
+            () => false,
+            () => true,
+            () =>
+            {
+                mandateActorId = 42L;
+                return true;
+            },
+            () => lastKingId = 42L);
+        Equal(false, second,
+            "a failed dynasty projection blocks the committed reign transition");
+        Equal(41L, lastKingId,
+            "a failed dynasty projection does not advance last king id");
+        Equal(41L, mandateActorId,
+            "a failed dynasty projection does not commit Mandate succession");
+
+        int dynastyPublishes = 0;
+        int stateNamePublishes = 0;
+        int historyPublishes = 0;
+        bool third = MandateAccessionCoordinator.TrySettle(
+            () => ReignAccessionPersistence.TryTransition(
+                db, "KingdomReign", request, out error),
+            () =>
+            {
+                dynastyPublishes++;
+                stateNamePublishes++;
+                historyPublishes++;
+                return true;
+            },
+            () => true,
+            () =>
+            {
+                mandateActorId = 42L;
+                return true;
+            },
+            () => lastKingId = 42L);
+        Equal(true, third,
+            "the same accession succeeds after dynasty projection recovers");
+        Equal(42L, lastKingId,
+            "last king id advances only after the full settlement");
+        Equal(42L, mandateActorId,
+            "Mandate succession commits to the installed new king");
+        Equal(11L, Scalar(db,
+                "SELECT END_TIME FROM KingdomReign WHERE REIGN_ID=1"),
+            "the successful retry closes the old reign");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomReign WHERE KINGDOM_ID=17 " +
+                "AND KING_ACTOR_ID=42 AND END_TIME=-1"),
+            "the successful retry creates one new-ruler open reign");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomReign WHERE KINGDOM_ID=17 " +
+                "AND END_TIME=-1"),
+            "the successful retry leaves a unique open reign");
+        Equal(1, dynastyPublishes,
+            "dynasty projection publishes exactly once after the DB gate");
+        Equal(1, stateNamePublishes,
+            "state-name projection publishes exactly once after the DB gate");
+        Equal(1, historyPublishes,
+            "accession history publishes exactly once after the DB gate");
+    }
+
+    private static void
+        MandateContextTargetsOnlyTheInstalledRulersLatestOpenReign()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,DYNASTY_ID INTEGER," +
+            "MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "START_TIME REAL,END_TIME REAL);" +
+            "INSERT INTO KingdomReign VALUES" +
+            "(1,17,41,7,-1,2,'Old ruler',10,-1)," +
+            "(2,17,42,7,-1,2,'Current ruler',11,-1)," +
+            "(3,17,42,7,-1,2,'Older duplicate',9,-1);");
+
+        bool projected = ReignMandateProjectionPersistence.TryProject(
+            db, "KingdomReign", kingdomId: 17L, rulerActorId: 42L,
+            mandatePeriodId: 91L, emperorTitle: 4,
+            stateName: "Imperial State", out string error);
+        Equal(true, projected,
+            "the installed ruler's deterministic open reign is projected");
+        Equal(91L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "the latest installed-ruler reign receives the Mandate period");
+        Equal(4L, Scalar(db,
+                "SELECT HIGHEST_TITLE FROM KingdomReign WHERE REIGN_ID=2"),
+            "the latest installed-ruler reign receives imperial rank");
+        Equal("Imperial State", ScalarText(db,
+                "SELECT STATE_NAME_SNAPSHOT FROM KingdomReign " +
+                "WHERE REIGN_ID=2"),
+            "the latest installed-ruler reign receives the state snapshot");
+        Equal(-1L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=1"),
+            "the previous ruler's ordinary open reign remains unchanged");
+        Equal(2L, Scalar(db,
+                "SELECT HIGHEST_TITLE FROM KingdomReign WHERE REIGN_ID=1"),
+            "the previous ruler keeps its ordinary historical rank");
+        Equal("Old ruler", ScalarText(db,
+                "SELECT STATE_NAME_SNAPSHOT FROM KingdomReign " +
+                "WHERE REIGN_ID=1"),
+            "the previous ruler keeps its historical state snapshot");
+        Equal(-1L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=3"),
+            "an older duplicate open reign remains unchanged");
+
+        Equal(true, ReignMandateProjectionPersistence.TryProjectDynasty(
+                db, "KingdomReign", kingdomId: 17L, rulerActorId: 42L,
+                dynastyId: 9L, out error),
+            "the installed ruler's reign accepts the created dynasty id");
+        Equal(9L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=2"),
+            "post-dynasty projection fixes the new reign attribution");
+        Equal(7L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=1"),
+            "post-dynasty projection leaves the prior ruler unchanged");
+        Equal(7L, Scalar(db,
+                "SELECT DYNASTY_ID FROM KingdomReign WHERE REIGN_ID=3"),
+            "post-dynasty projection leaves older duplicate rows unchanged");
+
+        bool missing = ReignMandateProjectionPersistence.TryProject(
+            db, "KingdomReign", kingdomId: 17L, rulerActorId: 99L,
+            mandatePeriodId: 91L, emperorTitle: 4,
+            stateName: "Imperial State", out error);
+        Equal(false, missing,
+            "a missing installed-ruler open reign reports failure");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomReign " +
+                "WHERE MANDATE_PERIOD_ID=91"),
+            "a failed projection changes no unrelated reign");
+    }
+
+    private static void FailedMandateDeclarationRollsBackAndRetriesOnce()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE MandatePeriod(" +
+            "PERIOD_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT,DYNASTY_NAME TEXT," +
+            "FOUNDER_ACTOR_ID INTEGER,FOUNDER_NAME TEXT,START_TIME REAL," +
+            "END_TIME REAL,END_REASON TEXT,START_MANDATE INTEGER," +
+            "END_MANDATE INTEGER,LEGAL_CORE_COUNT INTEGER," +
+            "ORIGIN_TYPE TEXT,REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT);" +
+            "CREATE TABLE MandateState(" +
+            "STATE_ID INTEGER PRIMARY KEY,ACTIVE INTEGER," +
+            "KINGDOM_ID INTEGER,KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT," +
+            "DYNASTY_NAME TEXT,EMPEROR_ACTOR_ID INTEGER," +
+            "EMPEROR_NAME TEXT,PERIOD_ID INTEGER,MANDATE_VALUE INTEGER," +
+            "IMPERIAL_AUTHORITY INTEGER,DYNASTY_PRESTIGE INTEGER," +
+            "CORE_CONTROL REAL,VASSAL_LOYALTY REAL,CRISIS_LEVEL TEXT," +
+            "START_TIME REAL,UPDATED_TIME REAL,LAST_YEAR INTEGER," +
+            "ORIGIN_TYPE TEXT,ORIGINAL_CORE_COUNT INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT," +
+            "MAP_MARKER_KIND TEXT);" +
+            "INSERT INTO MandateState(STATE_ID,ACTIVE,KINGDOM_ID," +
+            "PERIOD_ID) VALUES(1,0,-1,-1);" +
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "START_TIME REAL,END_TIME REAL);" +
+            "CREATE TRIGGER fail_declaration_reign BEFORE UPDATE ON " +
+            "KingdomReign BEGIN SELECT RAISE(ABORT," +
+            "'injected declaration reign failure'); END;");
+
+        var request = new MandateDeclarationPersistence.Request
+        {
+            StateId = 1L,
+            PeriodId = 91L,
+            OperationKey = "mandate-declare:91",
+            KingdomId = 17L,
+            KingdomName = "Imperial State",
+            KingdomColor = "#abcdef",
+            DynastyName = "New Dynasty",
+            RulerActorId = 42L,
+            RulerName = "New Emperor",
+            StartTime = 12d,
+            CurrentYear = 101,
+            StartMandate = 30,
+            ImperialAuthority = 45,
+            DynastyPrestige = 0,
+            CoreControl = 1d,
+            VassalLoyalty = 1d,
+            CrisisLevel = "stable",
+            OriginType = "native",
+            RebelOriginKingdomId = -1L,
+            RebelOriginKingdomName = "",
+            ClaimantKind = "orthodox",
+            MapMarkerKind = "moh",
+            EmperorTitle = 4
+        };
+        request.CoreSnapshotSource = "declaration";
+        request.CoreCitySnapshots.Add(
+            new MandateProjectionOutboxPersistence.CoreCitySnapshot
+            {
+                CityId = 1L,
+                CityName = "Founding City",
+                OriginalKingdomId = 17L,
+                OriginalKingdomName = "Imperial State",
+                OriginalKingdomColor = "#abcdef",
+                CoreType = "founding"
+            });
+        int historyPublishes = 0;
+        int traitPublishes = 0;
+        int runtimePublishes = 0;
+        string error = "";
+        bool first = MandateDeclarationRules.TryCommitProjection(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () =>
+            {
+                historyPublishes++;
+                traitPublishes++;
+                runtimePublishes++;
+            });
+        Equal(false, first,
+            "a failed reign projection rejects Mandate declaration");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM MandatePeriod"),
+            "failed declaration rolls back its period");
+        Equal(0L, Scalar(db,
+                "SELECT ACTIVE FROM MandateState WHERE STATE_ID=1"),
+            "failed declaration leaves no active Mandate state");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM KingdomReign"),
+            "zero-row failure does not invent a reign");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' " +
+                "AND name='MandateProjectionCoreSnapshot'"),
+            "failed declaration creates no core snapshot schema or rows");
+        Equal(0, historyPublishes,
+            "failed declaration publishes no history");
+        Equal(0, traitPublishes,
+            "failed declaration publishes no trait");
+        Equal(0, runtimePublishes,
+            "failed declaration publishes no runtime projection");
+
+        Execute(db,
+            "INSERT INTO KingdomReign VALUES" +
+            "(7,17,42,-1,2,'Ordinary State',11,-1);");
+        bool exceptionFailure =
+            MandateDeclarationRules.TryCommitProjection(
+                () => MandateDeclarationPersistence.TryCommit(
+                    db, "MandatePeriod", "MandateState", "KingdomReign",
+                    request, out error),
+                () =>
+                {
+                    historyPublishes++;
+                    traitPublishes++;
+                    runtimePublishes++;
+                });
+        Equal(false, exceptionFailure,
+            "a reign projection exception rejects Mandate declaration");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM MandatePeriod"),
+            "exceptional declaration rolls back its period");
+        Equal(0L, Scalar(db,
+                "SELECT ACTIVE FROM MandateState WHERE STATE_ID=1"),
+            "exceptional declaration leaves no active Mandate state");
+        Equal(-1L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
+            "exceptional declaration leaves the ordinary reign unchanged");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' " +
+                "AND name='MandateProjectionCoreSnapshot'"),
+            "exceptional declaration leaves no core snapshot rows");
+        Equal(0, historyPublishes,
+            "exceptional declaration publishes no history");
+        Equal(0, traitPublishes,
+            "exceptional declaration publishes no trait");
+        Equal(0, runtimePublishes,
+            "exceptional declaration publishes no runtime projection");
+
+        Execute(db, "DROP TRIGGER fail_declaration_reign;");
+        bool second = MandateDeclarationRules.TryCommitProjection(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () =>
+            {
+                historyPublishes++;
+                traitPublishes++;
+                runtimePublishes++;
+            });
+        Equal(true, second,
+            "the declaration safely retries after persistence recovers");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM MandatePeriod"),
+            "successful retry creates exactly one period");
+        Equal(1L, Scalar(db,
+                "SELECT ACTIVE FROM MandateState WHERE STATE_ID=1"),
+            "successful retry activates Mandate state");
+        Equal(91L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
+            "successful retry projects the ruler's reign");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionCoreSnapshot"),
+            "successful declaration commits its core snapshot once");
+        Equal(1, historyPublishes,
+            "successful retry publishes history once");
+        Equal(1, traitPublishes,
+            "successful retry publishes the trait once");
+        Equal(1, runtimePublishes,
+            "successful retry publishes runtime state once");
+
+        bool duplicate = MandateDeclarationRules.TryCommitProjection(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () =>
+            {
+                historyPublishes++;
+                traitPublishes++;
+                runtimePublishes++;
+            });
+        Equal(false, duplicate,
+            "the committed period cannot be published a second time");
+        Equal(1, historyPublishes,
+            "duplicate retry does not duplicate history");
+        Equal(1, traitPublishes,
+            "duplicate retry does not duplicate the trait projection");
+        Equal(1, runtimePublishes,
+            "duplicate retry does not duplicate runtime projection");
+    }
+
+    private static void ActiveMandateReplacementIsAtomicAndRetryable()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE MandatePeriod(" +
+            "PERIOD_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT,DYNASTY_NAME TEXT," +
+            "FOUNDER_ACTOR_ID INTEGER,FOUNDER_NAME TEXT,START_TIME REAL," +
+            "END_TIME REAL,END_REASON TEXT,START_MANDATE INTEGER," +
+            "END_MANDATE INTEGER,LEGAL_CORE_COUNT INTEGER," +
+            "ORIGIN_TYPE TEXT,REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT);" +
+            "INSERT INTO MandatePeriod VALUES" +
+            "(80,9,'Old Realm','old','Old Dynasty',31,'Old Emperor',1," +
+            "-1,'',30,44,0,'native',-1,'','orthodox');" +
+            "CREATE TABLE MandateState(" +
+            "STATE_ID INTEGER PRIMARY KEY,ACTIVE INTEGER," +
+            "KINGDOM_ID INTEGER,KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT," +
+            "DYNASTY_NAME TEXT,EMPEROR_ACTOR_ID INTEGER," +
+            "EMPEROR_NAME TEXT,PERIOD_ID INTEGER,MANDATE_VALUE INTEGER," +
+            "IMPERIAL_AUTHORITY INTEGER,DYNASTY_PRESTIGE INTEGER," +
+            "CORE_CONTROL REAL,VASSAL_LOYALTY REAL,CRISIS_LEVEL TEXT," +
+            "START_TIME REAL,UPDATED_TIME REAL,LAST_YEAR INTEGER," +
+            "ORIGIN_TYPE TEXT,ORIGINAL_CORE_COUNT INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT," +
+            "MAP_MARKER_KIND TEXT);" +
+            "INSERT INTO MandateState VALUES" +
+            "(1,1,9,'Old Realm','old','Old Dynasty',31,'Old Emperor',80," +
+            "44,40,2,1,1,'stable',1,2,100,'native',0,-1,''," +
+            "'orthodox','moh');" +
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "START_TIME REAL,END_TIME REAL);");
+
+        var request = new MandateDeclarationPersistence.Request
+        {
+            StateId = 1L,
+            PeriodId = 91L,
+            OperationKey = "mandate-replace:91",
+            KingdomId = 17L,
+            KingdomName = "New Realm",
+            KingdomColor = "new",
+            DynastyName = "New Dynasty",
+            RulerActorId = 42L,
+            RulerName = "New Emperor",
+            StartTime = 12d,
+            CurrentYear = 101,
+            StartMandate = 30,
+            ImperialAuthority = 45,
+            DynastyPrestige = 0,
+            CoreControl = 1d,
+            VassalLoyalty = 1d,
+            CrisisLevel = "stable",
+            OriginType = "native",
+            ClaimantKind = "orthodox",
+            MapMarkerKind = "moh",
+            EmperorTitle = 4,
+            ExpectedPreviousActive = true,
+            PreviousPeriodId = 80L,
+            PreviousKingdomId = 9L,
+            PreviousKingdomName = "Old Realm",
+            PreviousKingdomColor = "old",
+            PreviousRulerActorId = 31L,
+            PreviousRulerName = "Old Emperor",
+            PreviousMandateValue = 44,
+            PreviousEndReason = "replaced",
+            NewYearPrefix = "New Era Year 101",
+            NewYearPrefixRich = "<color=#new>New Era Year 101</color>",
+            PreviousYearPrefix = "Old Era Year 101",
+            PreviousYearPrefixRich =
+                "<color=#old>Old Era Year 101</color>"
+        };
+        int oldEndPublishes = 0;
+        int newStartPublishes = 0;
+        string error = "";
+        bool missingReign = MandateDeclarationRules.TryCommitReplacement(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () => oldEndPublishes++,
+            () => newStartPublishes++);
+        Equal(false, missingReign,
+            "replacement rejects a missing new-ruler open reign");
+        AssertOldMandateStillActive(db,
+            "zero-row replacement failure preserves the old Mandate");
+        Equal(0, oldEndPublishes,
+            "zero-row failure publishes no old-Mandate ending");
+        Equal(0, newStartPublishes,
+            "zero-row failure publishes no new-Mandate start");
+
+        Execute(db,
+            "INSERT INTO KingdomReign VALUES" +
+            "(7,17,42,-1,2,'New Realm',11,-1);" +
+            "CREATE TRIGGER fail_replacement_reign BEFORE UPDATE ON " +
+            "KingdomReign BEGIN SELECT RAISE(ABORT," +
+            "'injected replacement reign failure'); END;");
+        bool exceptionFailure =
+            MandateDeclarationRules.TryCommitReplacement(
+                () => MandateDeclarationPersistence.TryCommit(
+                    db, "MandatePeriod", "MandateState", "KingdomReign",
+                    request, out error),
+                () => oldEndPublishes++,
+                () => newStartPublishes++);
+        Equal(false, exceptionFailure,
+            "replacement rejects a reign projection exception");
+        AssertOldMandateStillActive(db,
+            "exceptional replacement preserves the old Mandate");
+        Equal(-1L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
+            "exceptional replacement preserves the new ruler's ordinary reign");
+        Equal(0, oldEndPublishes,
+            "exceptional failure publishes no old-Mandate ending");
+        Equal(0, newStartPublishes,
+            "exceptional failure publishes no new-Mandate start");
+
+        Execute(db, "DROP TRIGGER fail_replacement_reign;");
+        bool success = MandateDeclarationRules.TryCommitReplacement(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () => oldEndPublishes++,
+            () => newStartPublishes++);
+        Equal(true, success, "the replacement safely retries");
+        Equal(12L, Scalar(db,
+                "SELECT END_TIME FROM MandatePeriod WHERE PERIOD_ID=80"),
+            "successful replacement ends the old period atomically");
+        Equal("replaced", ScalarText(db,
+                "SELECT END_REASON FROM MandatePeriod WHERE PERIOD_ID=80"),
+            "successful replacement records the old end reason");
+        Equal(17L, Scalar(db,
+                "SELECT KINGDOM_ID FROM MandateState WHERE STATE_ID=1"),
+            "successful replacement activates the new realm");
+        Equal(91L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"),
+            "successful replacement activates the new period");
+        Equal(91L, Scalar(db,
+                "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
+            "successful replacement projects the new ruler's reign");
+        Equal(true, MandateProjectionOutboxPersistence.TryReadPending(
+                db, 91L,
+                out MandateProjectionOutboxPersistence.PendingProjection
+                    snapshot,
+                out error),
+            "replacement exposes its durable projection snapshot");
+        Equal("New Realm", snapshot.KingdomName,
+            "outbox captures the declaration kingdom name");
+        Equal("new", snapshot.KingdomColor,
+            "outbox captures the declaration kingdom color");
+        Equal("New Dynasty", snapshot.DynastyName,
+            "outbox captures the declaration dynasty name");
+        Equal("New Emperor", snapshot.RulerName,
+            "outbox captures the declaration ruler name");
+        Equal("Old Realm", snapshot.PreviousKingdomName,
+            "outbox captures the replaced kingdom name");
+        Equal("old", snapshot.PreviousKingdomColor,
+            "outbox captures the replaced kingdom color");
+        Equal(31L, snapshot.PreviousRulerActorId,
+            "outbox captures the replaced ruler identity");
+        Equal("Old Emperor", snapshot.PreviousRulerName,
+            "outbox captures the replaced ruler name");
+        Equal("native", snapshot.OriginType,
+            "outbox captures the declaration origin");
+        Equal("orthodox", snapshot.ClaimantKind,
+            "outbox captures the claimant classification");
+        Equal("moh", snapshot.MapMarkerKind,
+            "outbox captures the map marker kind");
+        Equal("New Era Year 101", snapshot.NewYearPrefix,
+            "outbox captures the declaration year prefix");
+        Equal("<color=#new>New Era Year 101</color>",
+            snapshot.NewYearPrefixRich,
+            "outbox captures the rich declaration year prefix");
+        Equal("Old Era Year 101", snapshot.PreviousYearPrefix,
+            "outbox captures the replaced realm year prefix");
+        Equal("<color=#old>Old Era Year 101</color>",
+            snapshot.PreviousYearPrefixRich,
+            "outbox captures the rich replaced realm year prefix");
+        Equal(1, oldEndPublishes,
+            "successful replacement publishes the old ending once");
+        Equal(1, newStartPublishes,
+            "successful replacement publishes the new start once");
+
+        bool duplicate = MandateDeclarationRules.TryCommitReplacement(
+            () => MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign",
+                request, out error),
+            () => oldEndPublishes++,
+            () => newStartPublishes++);
+        Equal(false, duplicate,
+            "a committed replacement cannot be published twice");
+        Equal(1, oldEndPublishes,
+            "duplicate replacement does not repeat old history");
+        Equal(1, newStartPublishes,
+            "duplicate replacement does not repeat new history");
+    }
+
+    private static void AssertOldMandateStillActive(SQLiteConnection db,
+        string name)
+    {
+        Equal(1L, Scalar(db,
+                "SELECT ACTIVE FROM MandateState WHERE STATE_ID=1"), name);
+        Equal(9L, Scalar(db,
+                "SELECT KINGDOM_ID FROM MandateState WHERE STATE_ID=1"), name);
+        Equal(80L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"), name);
+        Equal(-1L, Scalar(db,
+                "SELECT END_TIME FROM MandatePeriod WHERE PERIOD_ID=80"), name);
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandatePeriod WHERE PERIOD_ID=91"),
+            name);
+    }
+
+    private static void
+        DeclarationOutboxRetriesObservableHistoryAndCoreEffects()
+    {
+        VerifyOutboxRetry("old_kingdom_history");
+        VerifyOutboxRetry("new_kingdom_history");
+        VerifyOutboxRetry("legal_cores");
+    }
+
+    private static void VerifyOutboxRetry(string failedEffect)
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        var pending = new MandateProjectionOutboxPersistence.PendingProjection
+        {
+            OperationKey = "mandate-declare:91:" + failedEffect,
+            PeriodId = 91L,
+            KingdomId = 17L,
+            RulerActorId = 42L,
+            PreviousPeriodId = 80L,
+            PreviousKingdomId = 9L,
+            PreviousMandateValue = 44,
+            PreviousEndReason = "replaced",
+            OldEndRequired = true,
+            CurrentYear = 101,
+            WasAlreadyEmperor = false,
+            CreatedTime = 12d
+        };
+        using (SQLiteTransaction transaction = db.BeginTransaction())
+        {
+            bool enqueued = MandateProjectionOutboxPersistence.TryEnqueue(
+                db, transaction, pending, out string enqueueError);
+            Equal(true, enqueued, "declaration outbox is transactionally queued");
+            transaction.Commit();
+        }
+
+        var successes = new Dictionary<string, int>();
+        bool failedOnce = false;
+        bool first = MandateProjectionOutboxPersistence.TryDrain(
+            db, pending.OperationKey,
+            effect =>
+            {
+                if (effect == failedEffect && !failedOnce)
+                {
+                    failedOnce = true;
+                    return false;
+                }
+                successes[effect] = successes.TryGetValue(effect,
+                    out int count) ? count + 1 : 1;
+                return true;
+            }, out bool firstComplete, out string error);
+        Equal(false, first,
+            failedEffect + " failure remains retryable");
+        Equal(false, firstComplete,
+            failedEffect + " failure keeps the operation pending");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionOutbox " +
+                "WHERE OPERATION_KEY='" + pending.OperationKey + "'"),
+            failedEffect + " failure keeps its durable pending row");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionEffect " +
+                "WHERE OPERATION_KEY='" + pending.OperationKey +
+                "' AND EFFECT_KEY='" + failedEffect + "'"),
+            failedEffect + " failure does not mark history/core complete");
+
+        bool second = MandateProjectionOutboxPersistence.TryDrain(
+            db, pending.OperationKey,
+            effect =>
+            {
+                successes[effect] = successes.TryGetValue(effect,
+                    out int count) ? count + 1 : 1;
+                return true;
+            }, out bool secondComplete, out error);
+        Equal(true, second, failedEffect + " retry drains successfully");
+        Equal(true, secondComplete,
+            failedEffect + " retry clears the pending operation");
+        foreach (string effect in
+                 MandateProjectionOutboxPersistence.RequiredEffects(true))
+            Equal(1, successes.TryGetValue(effect, out int count) ? count : 0,
+                effect + " publishes exactly once");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionOutbox " +
+                "WHERE OPERATION_KEY='" + pending.OperationKey + "'"),
+            "completed outbox is no longer pending");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionEffect " +
+                "WHERE OPERATION_KEY='" + pending.OperationKey + "'"),
+            "completed outbox removes its effect ledger rows");
+
+        bool third = MandateProjectionOutboxPersistence.TryDrain(
+            db, pending.OperationKey,
+            effect => throw new InvalidOperationException(
+                "completed effect reran: " + effect),
+            out bool thirdComplete, out error);
+        Equal(true, third, "completed outbox drain is a no-op");
+        Equal(true, thirdComplete, "completed outbox remains complete");
+    }
+
+    private static void
+        OutboxReplayAfterBusinessCommitDoesNotDuplicateEffects()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE KingdomHistory(" +
+            "ID INTEGER PRIMARY KEY,PROJECTION_KEY TEXT UNIQUE);" +
+            "CREATE TABLE PersonBiography(" +
+            "ID INTEGER PRIMARY KEY,PROJECTION_KEY TEXT UNIQUE);" +
+            "CREATE TABLE MandateEvent(" +
+            "ID INTEGER PRIMARY KEY,PROJECTION_KEY TEXT UNIQUE);" +
+            "CREATE TABLE MandateCoreCity(" +
+            "ID INTEGER PRIMARY KEY,PROJECTION_KEY TEXT UNIQUE);");
+        var pending = new MandateProjectionOutboxPersistence.PendingProjection
+        {
+            OperationKey = "mandate-declare:91:crash-window",
+            PeriodId = 91L,
+            KingdomId = 17L,
+            RulerActorId = 42L,
+            PreviousPeriodId = 80L,
+            PreviousKingdomId = 9L,
+            OldEndRequired = true,
+            CurrentYear = 101,
+            CreatedTime = 12d
+        };
+        using (SQLiteTransaction transaction = db.BeginTransaction())
+        {
+            Equal(true, MandateProjectionOutboxPersistence.TryEnqueue(
+                    db, transaction, pending, out string enqueueError),
+                "crash-window outbox is queued");
+            transaction.Commit();
+        }
+
+        var tables = new Dictionary<string, string>
+        {
+            ["old_kingdom_history"] = "KingdomHistory",
+            ["old_mandate_event"] = "MandateEvent",
+            ["new_mandate_event"] = "MandateEvent",
+            ["new_kingdom_history"] = "KingdomHistory",
+            ["new_person_history"] = "PersonBiography",
+            ["legal_cores"] = "MandateCoreCity"
+        };
+        int businessWrites = 0;
+        foreach ((string effect, string table) in tables)
+            Equal(true, ApplyProjectionRecord(db, table,
+                    pending.OperationKey + ":" + effect,
+                    ref businessWrites),
+                effect + " business effect commits before its marker");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionEffect WHERE " +
+                "OPERATION_KEY='" + pending.OperationKey + "'"),
+            "simulated crash leaves every outbox marker missing");
+
+        bool drained = MandateProjectionOutboxPersistence.TryDrain(
+            db, pending.OperationKey,
+            effect => effect != "new_maps" &&
+                      (!tables.TryGetValue(effect, out string table) ||
+                      ApplyProjectionRecord(db, table,
+                          pending.OperationKey + ":" + effect,
+                          ref businessWrites)),
+            out bool complete, out string error);
+
+        Equal(false, drained,
+            "the injected final effect failure keeps repaired markers visible");
+        Equal(false, complete,
+            "the final effect failure keeps the outbox pending");
+        Equal(6, businessWrites,
+            "replay does not execute any durable business insert twice");
+        Equal(2L, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "kingdom history remains exactly once per effect");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM PersonBiography"),
+            "person history remains exactly once");
+        Equal(2L, Scalar(db, "SELECT COUNT(*) FROM MandateEvent"),
+            "Mandate events remain exactly once per effect");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM MandateCoreCity"),
+            "legal core remains exactly once");
+        foreach (string effect in tables.Keys)
+            Equal(1L, Scalar(db,
+                    "SELECT COUNT(*) FROM MandateProjectionEffect WHERE " +
+                    "OPERATION_KEY='" + pending.OperationKey +
+                    "' AND EFFECT_KEY='" + effect + "'"),
+                effect + " marker is repaired after idempotent replay");
+
+        bool finished = MandateProjectionOutboxPersistence.TryDrain(
+            db, pending.OperationKey, effect => effect == "new_maps",
+            out bool finishedComplete, out error);
+        Equal(true, finished,
+            "repaired durable effects let the final retry converge");
+        Equal(true, finishedComplete,
+            "the final retry completes the outbox");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionOutbox WHERE " +
+                "OPERATION_KEY='" + pending.OperationKey + "'"),
+            "converged crash-window outbox removes its pending row");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionEffect WHERE " +
+                "OPERATION_KEY='" + pending.OperationKey + "'"),
+            "converged crash-window outbox removes its marker rows");
+    }
+
+    private static bool ApplyProjectionRecord(SQLiteConnection db,
+        string table, string projectionKey, ref int businessWrites)
+    {
+        int writes = businessWrites;
+        bool applied = MandateProjectionOutboxPersistence.
+            TryApplyIdempotentRecord(db, table, projectionKey,
+                transaction =>
+                {
+                    writes++;
+                    using var command = new SQLiteCommand(db)
+                    {
+                        Transaction = transaction,
+                        CommandText = "INSERT INTO " + table +
+                                      "(PROJECTION_KEY) VALUES(@key)"
+                    };
+                    command.Parameters.AddWithValue("@key", projectionKey);
+                    return command.ExecuteNonQuery() == 1;
+                }, out string error);
+        businessWrites = writes;
+        return applied && string.IsNullOrEmpty(error);
+    }
+
+    private static bool ApplyCoreProjectionRecord(SQLiteConnection db,
+        long cityId, string projectionKey, ref int businessWrites)
+    {
+        int writes = businessWrites;
+        bool applied = MandateProjectionOutboxPersistence.
+            TryApplyIdempotentRecord(db, "MandateCoreCity", projectionKey,
+                transaction =>
+                {
+                    writes++;
+                    using var command = new SQLiteCommand(db)
+                    {
+                        Transaction = transaction,
+                        CommandText = "INSERT INTO MandateCoreCity" +
+                                      "(CITY_ID,PROJECTION_KEY) " +
+                                      "VALUES(@city,@key)"
+                    };
+                    command.Parameters.AddWithValue("@city", cityId);
+                    command.Parameters.AddWithValue("@key", projectionKey);
+                    return command.ExecuteNonQuery() == 1;
+                }, out string error);
+        businessWrites = writes;
+        return applied && string.IsNullOrEmpty(error);
+    }
+
+    private static void
+        DeclarationCoreSnapshotSurvivesLiveCityChangesAndCleansUp()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE MandateCoreCity(" +
+            "ID INTEGER PRIMARY KEY AUTOINCREMENT," +
+            "CITY_ID INTEGER NOT NULL,PROJECTION_KEY TEXT UNIQUE);");
+        var pending = Pending("mandate-declare:91:city-snapshot", 91L,
+            12d);
+        pending.OldEndRequired = false;
+        pending.CoreSnapshotSource = "declaration";
+        pending.CoreCitySnapshots.Add(
+            new MandateProjectionOutboxPersistence.CoreCitySnapshot
+            {
+                CityId = 1L,
+                CityName = "First",
+                OriginalKingdomId = 17L,
+                OriginalKingdomName = "Realm 91",
+                OriginalKingdomColor = "new-color",
+                CoreType = "founding"
+            });
+        pending.CoreCitySnapshots.Add(
+            new MandateProjectionOutboxPersistence.CoreCitySnapshot
+            {
+                CityId = 2L,
+                CityName = "Second",
+                OriginalKingdomId = 17L,
+                OriginalKingdomName = "Realm 91",
+                OriginalKingdomColor = "new-color",
+                CoreType = "founding"
+            });
+        EnqueuePending(db, pending);
+        Equal(2L, Scalar(db, "SELECT COUNT(*) FROM " +
+                MandateProjectionOutboxPersistence.CoreSnapshotTable),
+            "declaration transaction captures both legal-core cities");
+
+        long[] liveCityIds = { 2L, 3L };
+        int businessWrites = 0;
+        Equal(true, ApplyCoreProjectionRecord(db, 1L,
+                pending.OperationKey + ":legal_cores:1",
+                ref businessWrites),
+            "first core business row commits before its effect marker");
+
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1,
+                    (loaded, effect) =>
+                    {
+                        if (effect != "legal_cores") return true;
+                        Equal("2,3", string.Join(",", liveCityIds),
+                            "the live city set changed before replay");
+                        Equal("1,2", string.Join(",",
+                                loaded.CoreCitySnapshots.Select(
+                                    snapshot => snapshot.CityId)),
+                            "replay reads only declaration-time child rows");
+                        Equal("First", loaded.CoreCitySnapshots[0].CityName,
+                            "destroyed city history survives in the snapshot");
+                        foreach (MandateProjectionOutboxPersistence.
+                                     CoreCitySnapshot snapshot in
+                                 loaded.CoreCitySnapshots)
+                        {
+                            if (!ApplyCoreProjectionRecord(db,
+                                    snapshot.CityId,
+                                    loaded.OperationKey +
+                                    ":legal_cores:" + snapshot.CityId,
+                                    ref businessWrites))
+                                return false;
+                        }
+                        return true;
+                    }, out int attempted, out int completed,
+                    out string error),
+            "snapshot replay completes after live cities change");
+        Equal(1, attempted, "one snapshot operation is attempted");
+        Equal(1, completed, "one snapshot operation completes");
+        Equal(2, businessWrites,
+            "missing effect marker replay does not duplicate a core row");
+        Equal("1,2", ScalarText(db,
+                "SELECT GROUP_CONCAT(CITY_ID, ',') FROM " +
+                "(SELECT CITY_ID FROM MandateCoreCity ORDER BY CITY_ID)"),
+            "only declaration-time cities become legal cores");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM " +
+                MandateProjectionOutboxPersistence.CoreSnapshotTable),
+            "outbox completion atomically removes child snapshots");
+    }
+
+    private static void
+        LegacyOutboxReadUpgradesCoreSnapshotSchema()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        var pending = Pending("mandate-declare:91:old-schema", 91L, 12d);
+        pending.OldEndRequired = false;
+        EnqueuePending(db, pending);
+        Execute(db, "DROP TABLE MandateProjectionCoreSnapshot;" +
+                    "ALTER TABLE MandateProjectionOutbox RENAME TO " +
+                    "MandateProjectionOutboxNew;" +
+                    "CREATE TABLE MandateProjectionOutbox AS SELECT " +
+                    "OPERATION_KEY,PERIOD_ID,KINGDOM_ID,KINGDOM_NAME," +
+                    "KINGDOM_COLOR,DYNASTY_NAME,RULER_ACTOR_ID,RULER_NAME," +
+                    "PREVIOUS_PERIOD_ID,PREVIOUS_KINGDOM_ID," +
+                    "PREVIOUS_KINGDOM_NAME,PREVIOUS_KINGDOM_COLOR," +
+                    "PREVIOUS_RULER_ACTOR_ID,PREVIOUS_RULER_NAME," +
+                    "PREVIOUS_MANDATE_VALUE,PREVIOUS_END_REASON," +
+                    "OLD_END_REQUIRED,CURRENT_YEAR,WAS_ALREADY_EMPEROR," +
+                    "ORIGIN_TYPE,CLAIMANT_KIND,MAP_MARKER_KIND," +
+                    "NEW_YEAR_PREFIX,NEW_YEAR_PREFIX_RICH," +
+                    "PREVIOUS_YEAR_PREFIX,PREVIOUS_YEAR_PREFIX_RICH," +
+                    "CREATED_TIME FROM MandateProjectionOutboxNew;" +
+                    "DROP TABLE MandateProjectionOutboxNew;");
+
+        Equal(true, MandateProjectionOutboxPersistence.TryReadPending(
+                db, 91L,
+                out MandateProjectionOutboxPersistence.PendingProjection
+                    loaded, out string error),
+            "direct legacy pending read upgrades core snapshot schema");
+        Equal(true, loaded != null,
+            "legacy pending row survives its schema upgrade");
+        Equal("", loaded.CoreSnapshotSource,
+            "upgraded legacy pending remains eligible for one migration");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' " +
+                "AND name='MandateProjectionCoreSnapshot'"),
+            "legacy pending read creates the child snapshot table");
+    }
+
+    private static void
+        ReplacedPendingPeriodPersistsAndPassesOnLegalCores()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        CreateMandateDeclarationSchema(db);
+        Execute(db,
+            "CREATE TABLE MandateCoreCity(" +
+            "CORE_ID INTEGER PRIMARY KEY,PERIOD_ID INTEGER," +
+            "CITY_ID INTEGER,CITY_NAME TEXT,ORIGINAL_KINGDOM_ID INTEGER," +
+            "ORIGINAL_KINGDOM_NAME TEXT,ORIGINAL_KINGDOM_COLOR TEXT," +
+            "CORE_TYPE TEXT,ADDED_TIME REAL,ACTIVE INTEGER," +
+            "PROJECTION_KEY TEXT UNIQUE);" +
+            "INSERT INTO KingdomReign VALUES" +
+            "(1,17,42,-1,2,'P91',10,-1)," +
+            "(2,18,43,-1,2,'P92',11,-1);");
+
+        MandateDeclarationPersistence.Request p91 = DeclarationRequest(
+            periodId: 91L, kingdomId: 17L, rulerActorId: 42L,
+            startTime: 12d);
+        p91.CoreCitySnapshots.Add(CoreSnapshot(1L, "First"));
+        p91.CoreCitySnapshots.Add(CoreSnapshot(2L, "Second"));
+        Equal(true, MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign", p91,
+                out string error),
+            "P91 declaration and its child core snapshot commit together");
+        Execute(db,
+            "CREATE TRIGGER fail_p91_legal_cores BEFORE INSERT ON " +
+            "MandateCoreCity BEGIN SELECT RAISE(ABORT," +
+            "'injected P91 legal-core failure'); END;");
+
+        bool Publish(MandateProjectionOutboxPersistence.PendingProjection
+            pending, string effect)
+        {
+            long currentPeriod = Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1");
+            var disposition = currentPeriod == pending.PeriodId
+                ? MandateProjectionDisposition.Current
+                : MandateProjectionDisposition.TerminalHistoryOnly;
+            if (!MandateProjectionResumeRules.ShouldPublishEffect(
+                    disposition, effect))
+                return true;
+            if (effect != "legal_cores") return true;
+            return MandateLegalCoreProjectionPersistence.TryProject(
+                db, stateId: 1L, pending.PeriodId,
+                pending.CoreCitySnapshots,
+                pending.OperationKey + ":legal_cores:",
+                addedTime: 20d,
+                requireCurrentStateUpdate:
+                    disposition == MandateProjectionDisposition.Current,
+                out _, out _);
+        }
+
+        Equal(false, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1, Publish,
+                    out int attempted, out int completed, out error),
+            "the injected P91 legal-core failure leaves projection pending");
+        Equal(1, attempted, "the failed resume attempts P91 once");
+        Equal(0, completed, "the failed P91 projection does not complete");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionOutbox " +
+                "WHERE PERIOD_ID=91"),
+            "failed P91 remains in the durable outbox");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionCoreSnapshot " +
+                "WHERE OPERATION_KEY='mandate-declare:91'"),
+            "failed P91 retains both durable child snapshots");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateCoreCity WHERE PERIOD_ID=91"),
+            "the failed transactional projection leaves no partial P91 core");
+        Execute(db, "DROP TRIGGER fail_p91_legal_cores;");
+
+        Equal(true, MandateLegalCoreProjectionPersistence.
+                TryReadInheritedSnapshots(db, previousPeriodId: 91L,
+                    out List<MandateProjectionOutboxPersistence.
+                        CoreCitySnapshot> inherited, out error),
+            "P92 capture can read P91 persisted and pending core sources");
+        Equal("1,2", string.Join(",", inherited.Select(
+                snapshot => snapshot.CityId)),
+            "P92 inherits P91's still-pending declaration snapshot");
+        MandateDeclarationPersistence.Request p92 = DeclarationRequest(
+            periodId: 92L, kingdomId: 18L, rulerActorId: 43L,
+            startTime: 13d);
+        p92.ExpectedPreviousActive = true;
+        p92.PreviousPeriodId = 91L;
+        p92.PreviousKingdomId = 17L;
+        p92.CoreCitySnapshots.AddRange(inherited);
+        p92.CoreCitySnapshots.Add(new MandateProjectionOutboxPersistence.
+            CoreCitySnapshot
+        {
+            CityId = 3L,
+            CityName = "Third",
+            OriginalKingdomId = 18L,
+            OriginalKingdomName = "Realm 92",
+            OriginalKingdomColor = "color-92",
+            CoreType = "founding",
+            SnapshotSource = "declaration"
+        });
+        Equal(true, MandateDeclarationPersistence.TryCommit(
+                db, "MandatePeriod", "MandateState", "KingdomReign", p92,
+                out error),
+            "P92 replacement commits while P91 core publication is pending");
+        Equal(92L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"),
+            "replacement moves the active state to P92");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionCoreSnapshot " +
+                "WHERE OPERATION_KEY='mandate-declare:91'"),
+            "P92 commit cannot delete P91's unresolved snapshot");
+        Equal("1,2,3", ScalarText(db,
+                "SELECT GROUP_CONCAT(CITY_ID, ',') FROM " +
+                "(SELECT CITY_ID FROM MandateProjectionCoreSnapshot " +
+                "WHERE OPERATION_KEY='mandate-declare:92' " +
+                "ORDER BY CITY_ID)"),
+            "P92 durably snapshots inherited P91 cores before cleanup");
+
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1, Publish,
+                    out attempted, out completed, out error),
+            "the first resume drains historical P91 cores");
+        Equal(1, completed, "the first resume completes only P91");
+        Equal("1,2", ScalarText(db,
+                "SELECT GROUP_CONCAT(CITY_ID, ',') FROM " +
+                "(SELECT CITY_ID FROM MandateCoreCity WHERE PERIOD_ID=91 " +
+                "ORDER BY CITY_ID)"),
+            "historical P91 cores are written exactly once");
+        Equal(2L, Scalar(db,
+                "SELECT LEGAL_CORE_COUNT FROM MandatePeriod " +
+                "WHERE PERIOD_ID=91"),
+            "historical P91 period count is completed");
+        Equal(92L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"),
+            "historical P91 completion leaves the current period at P92");
+        Equal(0L, Scalar(db,
+                "SELECT ORIGINAL_CORE_COUNT FROM MandateState " +
+                "WHERE STATE_ID=1"),
+            "historical P91 completion does not mutate P92's state count");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionCoreSnapshot " +
+                "WHERE OPERATION_KEY='mandate-declare:91'"),
+            "P91 snapshot cleans up only after historical persistence succeeds");
+
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1, Publish,
+                    out attempted, out completed, out error),
+            "the next resume drains current P92 cores");
+        Equal(1, completed, "the next resume completes P92");
+        Equal("1,2,3", ScalarText(db,
+                "SELECT GROUP_CONCAT(CITY_ID, ',') FROM " +
+                "(SELECT CITY_ID FROM MandateCoreCity WHERE PERIOD_ID=92 " +
+                "ORDER BY CITY_ID)"),
+            "P92 persists inherited P91 cores and its founding core");
+        Equal(3L, Scalar(db,
+                "SELECT LEGAL_CORE_COUNT FROM MandatePeriod " +
+                "WHERE PERIOD_ID=92"),
+            "P92 period count includes inherited cores");
+        Equal("#color-92", ScalarText(db,
+                "SELECT ORIGINAL_KINGDOM_COLOR FROM MandateCoreCity " +
+                "WHERE PERIOD_ID=92 AND CITY_ID=3"),
+            "legal-core persistence retains normalized history colors");
+        Equal(92L, Scalar(db,
+                "SELECT PERIOD_ID FROM MandateState WHERE STATE_ID=1"),
+            "historical P91 completion does not replace the current P92 state");
+        Equal(3L, Scalar(db,
+                "SELECT ORIGINAL_CORE_COUNT FROM MandateState " +
+                "WHERE STATE_ID=1"),
+            "only current P92 completion updates the active state core count");
+
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 2, Publish,
+                    out attempted, out completed, out error),
+            "a second resume is an idempotent no-op");
+        Equal(0, attempted, "no completed projection is attempted twice");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateCoreCity WHERE PERIOD_ID=91"),
+            "P91 core rows remain duplicate-free after another resume");
+        Equal(3L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateCoreCity WHERE PERIOD_ID=92"),
+            "P92 core rows remain duplicate-free after another resume");
+    }
+
+    private static void
+        LegacyCoreSnapshotMigratesOnlyOnce()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        var pending = Pending("mandate-declare:91:legacy", 91L, 12d);
+        pending.OldEndRequired = false;
+        pending.CoreSnapshotSource = "";
+        EnqueuePending(db, pending);
+
+        var firstLiveSnapshot = new List<MandateProjectionOutboxPersistence.
+            CoreCitySnapshot>
+        {
+            CoreSnapshot(1L, "First"),
+            CoreSnapshot(2L, "Second")
+        };
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryMigrateLegacyCoreSnapshots(db, pending.OperationKey,
+                    firstLiveSnapshot, out bool migrated,
+                    out string error),
+            "current legacy outbox performs its explicit core migration");
+        Equal(true, migrated,
+            "first legacy migration records that it captured live cities");
+        Equal("legacy", ScalarText(db,
+                "SELECT DISTINCT SNAPSHOT_SOURCE FROM " +
+                "MandateProjectionCoreSnapshot"),
+            "legacy migration marks every child row as legacy source");
+
+        var changedLiveSnapshot = new List<
+            MandateProjectionOutboxPersistence.CoreCitySnapshot>
+        {
+            CoreSnapshot(2L, "Second"),
+            CoreSnapshot(3L, "Third")
+        };
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryMigrateLegacyCoreSnapshots(db, pending.OperationKey,
+                    changedLiveSnapshot, out migrated, out error),
+            "legacy snapshot migration is safely retryable");
+        Equal(false, migrated,
+            "marked legacy source prevents rebuilding from changing cities");
+        Equal(true, MandateProjectionOutboxPersistence.TryReadPending(
+                db, pending.PeriodId,
+                out MandateProjectionOutboxPersistence.PendingProjection
+                    loaded, out error),
+            "migrated legacy outbox remains readable");
+        Equal("legacy", loaded.CoreSnapshotSource,
+            "legacy migration is durably marked");
+        Equal("1,2", string.Join(",", loaded.CoreCitySnapshots.Select(
+                snapshot => snapshot.CityId)),
+            "legacy retry preserves its first stable city snapshot");
+    }
+
+    private static MandateProjectionOutboxPersistence.CoreCitySnapshot
+        CoreSnapshot(long cityId, string cityName)
+    {
+        return new MandateProjectionOutboxPersistence.CoreCitySnapshot
+        {
+            CityId = cityId,
+            CityName = cityName,
+            OriginalKingdomId = 17L,
+            OriginalKingdomName = "Realm 91",
+            OriginalKingdomColor = "new-color",
+            CoreType = "founding"
+        };
+    }
+
+    private static void
+        PendingProjectionResumeIsStableBoundedAndSnapshotBased()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        EnqueuePending(db, Pending("resume-c", 93L, 2d));
+        EnqueuePending(db, Pending("resume-b", 92L, 1d));
+        EnqueuePending(db, Pending("resume-a", 91L, 1d));
+
+        Equal(true, MandateProjectionOutboxPersistence.TryReadPendingBatch(
+                db, 2, out List<MandateProjectionOutboxPersistence.
+                    PendingProjection> firstBatch, out string error),
+            "pending projection batch can be read");
+        Equal(2, firstBatch.Count,
+            "pending projection batch obeys its hard limit");
+        Equal("resume-a", firstBatch[0].OperationKey,
+            "pending projections sort equal times by period");
+        Equal("resume-b", firstBatch[1].OperationKey,
+            "pending projections use a stable period order");
+        Equal("Founder 91", firstBatch[0].RulerName,
+            "declaration ruler name survives in the outbox");
+        Equal("Realm 91", firstBatch[0].KingdomName,
+            "declaration kingdom name survives in the outbox");
+        Equal("Dynasty 91", firstBatch[0].DynastyName,
+            "declaration dynasty name survives in the outbox");
+        Equal("Old Realm 91", firstBatch[0].PreviousKingdomName,
+            "replaced kingdom snapshot survives in the outbox");
+        Equal("native", firstBatch[0].OriginType,
+            "declaration origin survives in the outbox");
+
+        var resumed = new List<string>();
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 2,
+                    (pending, effect) =>
+                    {
+                        if (!resumed.Contains(pending.OperationKey))
+                            resumed.Add(pending.OperationKey);
+                        return true;
+                    }, out int attempted, out int completed, out error),
+            "load-style resume completes its bounded batch");
+        Equal(2, attempted,
+            "one resume cycle attempts no more than two operations");
+        Equal(2, completed,
+            "one resume cycle completes its first two operations");
+        Equal("resume-a", resumed[0],
+            "resume starts with the oldest stable operation");
+        Equal("resume-b", resumed[1],
+            "resume preserves stable operation order");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionOutbox"),
+            "bounded resume leaves later work for another cycle");
+        Equal("resume-c", ScalarText(db,
+                "SELECT OPERATION_KEY FROM MandateProjectionOutbox"),
+            "bounded resume leaves the newest operation pending");
+    }
+
+    private static void
+        ReplicaAuthorityGateRejectsEveryMandateMutationBoundary()
+    {
+        Equal(false, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: true),
+            "replicas reject fresh Mandate declaration writes");
+        Equal(false, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: true),
+            "replicas reject Mandate succession writes");
+        Equal(false, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: true),
+            "replicas reject Mandate clear writes");
+        Equal(false, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: true),
+            "replicas reject direct Mandate state and decline writes");
+        Equal(true, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: false),
+            "solo and server sessions retain Mandate mutation authority");
+    }
+
+    private static void
+        ProjectionResumeRulesSeparateRuntimeHistoryAndTerminalWork()
+    {
+        Equal(false, MandateProjectionResumeRules.ShouldRun(
+                databaseReady: true, worldReady: true,
+                replicaSession: true, batchLimit: 2),
+            "replica sessions defer projection resume without DB writes");
+        Equal(false, MandateProjectionResumeRules.CanMutateOutbox(
+                replicaSession: true),
+            "same-holder TryDeclare retry defers before direct outbox drain");
+        Equal(true, MandateProjectionResumeRules.CanMutateOutbox(
+                replicaSession: false),
+            "authority may drain a same-holder pending declaration");
+        Equal(false, MandateProjectionResumeRules.ShouldRun(
+                databaseReady: true, worldReady: false,
+                replicaSession: false, batchLimit: 2),
+            "projection resume waits for world indexes");
+        Equal(true, MandateProjectionResumeRules.ShouldRun(
+                databaseReady: true, worldReady: true,
+                replicaSession: false, batchLimit: 2),
+            "authority resumes projections after DB and world are ready");
+        Equal(false, MandateProjectionResumeRules.ShouldStartAnnualCycle(
+                lastCycleYear: 101, currentYear: 101,
+                replicaSession: false),
+            "all kingdoms share one annual projection-resume gate");
+        Equal(true, MandateProjectionResumeRules.ShouldStartAnnualCycle(
+                lastCycleYear: 100, currentYear: 101,
+                replicaSession: false),
+            "a new authority year opens one lazy retry cycle");
+        Equal(false, MandateProjectionResumeRules.ShouldStartAnnualCycle(
+                lastCycleYear: 100, currentYear: 101,
+                replicaSession: true),
+            "replica years never open a projection retry cycle");
+
+        Equal(MandateProjectionDisposition.Current,
+            MandateProjectionResumeRules.ResolveDisposition(
+                reportActive: true, reportPeriodId: 91L,
+                reportKingdomId: 17L, pendingPeriodId: 91L,
+                pendingKingdomId: 17L, kingdomAlive: true),
+            "matching live period resumes current runtime work");
+        Equal(MandateProjectionDisposition.TerminalHistoryOnly,
+            MandateProjectionResumeRules.ResolveDisposition(
+                reportActive: true, reportPeriodId: 92L,
+                reportKingdomId: 18L, pendingPeriodId: 91L,
+                pendingKingdomId: 17L, kingdomAlive: true),
+            "superseded period drains only its durable history");
+        Equal(MandateProjectionDisposition.TerminalHistoryOnly,
+            MandateProjectionResumeRules.ResolveDisposition(
+                reportActive: true, reportPeriodId: 91L,
+                reportKingdomId: 17L, pendingPeriodId: 91L,
+                pendingKingdomId: 17L, kingdomAlive: false),
+            "destroyed kingdom cannot strand its historical outbox");
+        Equal(84L, MandateProjectionResumeRules.ResolveRuntimeActorId(
+                MandateProjectionDisposition.Current,
+                installedActorId: 84L, declarationActorId: 42L),
+            "runtime projection follows the currently installed king");
+        Equal(-1L, MandateProjectionResumeRules.ResolveRuntimeActorId(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                installedActorId: 84L, declarationActorId: 42L),
+            "stale work cannot mutate a later installed king");
+        Equal(42L, MandateProjectionResumeRules.ResolveHistoryActorId(
+                declarationActorId: 42L),
+            "history remains bound to the declaration ruler snapshot");
+        Equal(true, MandateProjectionResumeRules.ShouldPublishEffect(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                "new_kingdom_history"),
+            "stale work still publishes durable kingdom history");
+        Equal(true, MandateProjectionResumeRules.ShouldPublishEffect(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                "new_person_history"),
+            "stale work still publishes declaration-ruler history");
+        Equal(true, MandateProjectionResumeRules.ShouldPublishEffect(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                "old_mandate_event"),
+            "stale replacement work still publishes its durable event");
+        Equal(false, MandateProjectionResumeRules.ShouldPublishEffect(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                "new_runtime"),
+            "stale work cannot mutate a newer runtime holder");
+        Equal(true, MandateProjectionResumeRules.ShouldPublishEffect(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                "legal_cores"),
+            "stale work still persists its historical legal cores");
+        Equal(false, MandateProjectionResumeRules.ShouldPublishEffect(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                "new_maps"),
+            "stale work converges without dirtying current maps");
+        Equal(true, MandateProjectionResumeRules.ShouldPublishEffect(
+                MandateProjectionDisposition.Current, "new_runtime"),
+            "current work publishes all requested effects");
+        Equal(MandateLegalCoreReplayDisposition.Skip,
+            MandateProjectionResumeRules.ResolveLegalCoreReplay(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                coreSnapshotSource: ""),
+            "terminal legacy work skips live legal-core reconstruction");
+        Equal(MandateLegalCoreReplayDisposition.ProjectDurableSnapshot,
+            MandateProjectionResumeRules.ResolveLegalCoreReplay(
+                MandateProjectionDisposition.TerminalHistoryOnly,
+                coreSnapshotSource: "declaration"),
+            "terminal work still projects its durable legal-core snapshot");
+        Equal(MandateLegalCoreReplayDisposition.CaptureLegacySnapshot,
+            MandateProjectionResumeRules.ResolveLegalCoreReplay(
+                MandateProjectionDisposition.Current,
+                coreSnapshotSource: ""),
+            "current legacy work captures its live legal cores exactly once");
+    }
+
+    private static void SuppressedKeyedHistoryRemainsPendingUntilRetry()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE KingdomHistory(" +
+                    "ID INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "PROJECTION_KEY TEXT UNIQUE);");
+        EnqueuePending(db, Pending("suppressed-history", 91L, 1d));
+
+        bool timingAllowsRecord = false;
+        int historyWrites = 0;
+        bool Publish(MandateProjectionOutboxPersistence.PendingProjection
+            pending, string effect)
+        {
+            if (effect != "new_kingdom_history") return true;
+            string key = pending.OperationKey + ":new_kingdom_history";
+            if (!timingAllowsRecord)
+                return HistoryWriteTimingRules.
+                    ResolveSuppressedWriteResult(key);
+            return ApplyProjectionRecord(db, "KingdomHistory", key,
+                ref historyWrites);
+        }
+
+        Equal(false, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1, Publish,
+                    out int attempted, out int completed,
+                    out string error),
+            "suppressed keyed history defers its outbox operation");
+        Equal(1, attempted,
+            "the suppressed operation is attempted once");
+        Equal(0, completed,
+            "suppression cannot complete the pending operation");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomHistory"),
+            "suppression writes no history business row");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionEffect " +
+                "WHERE OPERATION_KEY='suppressed-history' " +
+                "AND EFFECT_KEY='new_kingdom_history'"),
+            "suppression writes no history effect marker");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionOutbox"),
+            "suppression retains the pending operation");
+        Equal(true, !string.IsNullOrEmpty(error),
+            "suppression remains an observable deferred result");
+
+        timingAllowsRecord = true;
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1, Publish,
+                    out attempted, out completed, out error),
+            "keyed history resumes after suppression ends");
+        Equal(1, completed,
+            "the resumed operation completes exactly once");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM KingdomHistory"),
+            "the resumed history writes one business row");
+        Equal(1, historyWrites,
+            "the resumed history publisher executes once");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionOutbox"),
+            "the resumed operation clears its pending row");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionEffect"),
+            "completed operation cleanup removes its effect markers");
+    }
+
+    private static MandateProjectionOutboxPersistence.PendingProjection
+        Pending(string operationKey, long periodId, double createdTime)
+    {
+        return new MandateProjectionOutboxPersistence.PendingProjection
+        {
+            OperationKey = operationKey,
+            PeriodId = periodId,
+            KingdomId = 17L,
+            KingdomName = "Realm " + periodId,
+            KingdomColor = "new-color",
+            DynastyName = "Dynasty " + periodId,
+            RulerActorId = 42L,
+            RulerName = "Founder " + periodId,
+            PreviousPeriodId = 80L,
+            PreviousKingdomId = 9L,
+            PreviousKingdomName = "Old Realm " + periodId,
+            PreviousKingdomColor = "old-color",
+            PreviousRulerActorId = 31L,
+            PreviousRulerName = "Old Founder",
+            PreviousMandateValue = 44,
+            PreviousEndReason = "replaced",
+            OldEndRequired = true,
+            CurrentYear = 101,
+            OriginType = "native",
+            ClaimantKind = "orthodox",
+            MapMarkerKind = "moh",
+            NewYearPrefix = "Year 101",
+            NewYearPrefixRich = "Year 101",
+            PreviousYearPrefix = "Year 100",
+            PreviousYearPrefixRich = "Year 100",
+            CreatedTime = createdTime
+        };
+    }
+
+    private static MandateDeclarationPersistence.Request DeclarationRequest(
+        long periodId, long kingdomId, long rulerActorId, double startTime)
+    {
+        return new MandateDeclarationPersistence.Request
+        {
+            StateId = 1L,
+            PeriodId = periodId,
+            OperationKey = "mandate-declare:" + periodId,
+            KingdomId = kingdomId,
+            KingdomName = "Realm " + periodId,
+            KingdomColor = "color-" + periodId,
+            DynastyName = "Dynasty " + periodId,
+            RulerActorId = rulerActorId,
+            RulerName = "Founder " + periodId,
+            StartTime = startTime,
+            CurrentYear = 101,
+            StartMandate = 30,
+            ImperialAuthority = 45,
+            DynastyPrestige = 0,
+            CoreControl = 1d,
+            VassalLoyalty = 1d,
+            CrisisLevel = "stable",
+            OriginType = "native",
+            RebelOriginKingdomId = -1L,
+            ClaimantKind = "orthodox",
+            MapMarkerKind = "moh",
+            EmperorTitle = 4,
+            CoreSnapshotSource = "declaration"
+        };
+    }
+
+    private static void CreateMandateDeclarationSchema(SQLiteConnection db)
+    {
+        Execute(db,
+            "CREATE TABLE MandatePeriod(" +
+            "PERIOD_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT,DYNASTY_NAME TEXT," +
+            "FOUNDER_ACTOR_ID INTEGER,FOUNDER_NAME TEXT,START_TIME REAL," +
+            "END_TIME REAL,END_REASON TEXT,START_MANDATE INTEGER," +
+            "END_MANDATE INTEGER,LEGAL_CORE_COUNT INTEGER," +
+            "ORIGIN_TYPE TEXT,REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT);" +
+            "CREATE TABLE MandateState(" +
+            "STATE_ID INTEGER PRIMARY KEY,ACTIVE INTEGER," +
+            "KINGDOM_ID INTEGER,KINGDOM_NAME TEXT,KINGDOM_COLOR TEXT," +
+            "DYNASTY_NAME TEXT,EMPEROR_ACTOR_ID INTEGER," +
+            "EMPEROR_NAME TEXT,PERIOD_ID INTEGER,MANDATE_VALUE INTEGER," +
+            "IMPERIAL_AUTHORITY INTEGER,DYNASTY_PRESTIGE INTEGER," +
+            "CORE_CONTROL REAL,VASSAL_LOYALTY REAL,CRISIS_LEVEL TEXT," +
+            "START_TIME REAL,UPDATED_TIME REAL,LAST_YEAR INTEGER," +
+            "ORIGIN_TYPE TEXT,ORIGINAL_CORE_COUNT INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_ID INTEGER," +
+            "REBEL_ORIGIN_KINGDOM_NAME TEXT,CLAIMANT_KIND TEXT," +
+            "MAP_MARKER_KIND TEXT);" +
+            "INSERT INTO MandateState(STATE_ID,ACTIVE,KINGDOM_ID," +
+            "PERIOD_ID) VALUES(1,0,-1,-1);" +
+            "CREATE TABLE KingdomReign(" +
+            "REIGN_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "KING_ACTOR_ID INTEGER,MANDATE_PERIOD_ID INTEGER," +
+            "HIGHEST_TITLE INTEGER,STATE_NAME_SNAPSHOT TEXT," +
+            "START_TIME REAL,END_TIME REAL);");
+    }
+
+    private static void EnqueuePending(SQLiteConnection db,
+        MandateProjectionOutboxPersistence.PendingProjection pending)
+    {
+        using SQLiteTransaction transaction = db.BeginTransaction();
+        Equal(true, MandateProjectionOutboxPersistence.TryEnqueue(
+                db, transaction, pending, out string error),
+            pending.OperationKey + " can be queued");
+        transaction.Commit();
+    }
+
+    private static void ClosedDeclarationConnectionReturnsFailure()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        var request = new MandateDeclarationPersistence.Request
+        {
+            StateId = 1L,
+            PeriodId = 91L,
+            OperationKey = "mandate-closed:91",
+            KingdomId = 17L,
+            RulerActorId = 42L,
+            StartTime = 12d,
+            StartMandate = 30,
+            EmperorTitle = 4
+        };
+        bool committed = MandateDeclarationPersistence.TryCommit(
+            db, "MandatePeriod", "MandateState", "KingdomReign",
+            request, out string error);
+        Equal(false, committed,
+            "a closed declaration connection returns failure");
+        Equal(true, !string.IsNullOrEmpty(error),
+            "a closed declaration connection returns an explicit error");
+    }
+
+    private static void ActiveMandateKeepsItsImperialStateName()
+    {
+        Equal(false, StateNameRules.ShouldProjectDynasticStateName(
+                newDynastyCreated: true, isEmpireRank: true,
+                changedRulingShi: true, hasExistingBoundStateName: true,
+                isActiveMandate: true),
+            "a Mandate succession cannot replace the imperial state name with a branch state");
+    }
+
+    private static void SavedMandateReignUsesImperialPosthumousRank()
+    {
+        Equal(4, RulerTitleFactRules.ResolveSavedHighestTitle(
+                savedHighestTitle: 2, savedMandatePeriodId: 91L),
+            "a saved Mandate reign remains imperial after the live realm is downgraded");
+        Equal(2, RulerTitleFactRules.ResolveSavedHighestTitle(
+                savedHighestTitle: 2, savedMandatePeriodId: -1L),
+            "an ordinary saved ducal reign remains ducal");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static string ScalarText(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToString(command.ExecuteScalar()) ?? "";
+    }
+}

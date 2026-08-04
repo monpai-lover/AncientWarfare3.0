@@ -155,6 +155,23 @@ namespace AncientWarfare3.core.lineage
         public static void RecordPerson(long pActorId, Kingdom pContextKingdom,
             string pSubjectName, string pEventType, HistoryText pContent, string pCategory, HistoryTarget pTarget)
         {
+            TryRecordPerson(pActorId, pContextKingdom, pSubjectName,
+                pEventType, pContent, pCategory, pTarget);
+        }
+
+        public static bool TryRecordPerson(long pActorId,
+            Kingdom pContextKingdom, string pSubjectName, string pEventType,
+            HistoryText pContent, string pCategory, HistoryTarget pTarget)
+        {
+            return TryRecordPerson(pActorId, pContextKingdom, pSubjectName,
+                pEventType, pContent, pCategory, pTarget, "");
+        }
+
+        public static bool TryRecordPerson(long pActorId,
+            Kingdom pContextKingdom, string pSubjectName, string pEventType,
+            HistoryText pContent, string pCategory, HistoryTarget pTarget,
+            string pProjectionKey)
+        {
             var extra = new System.Collections.Generic.List<ColumnVal>
             {
                 ColumnVal.Create("ACTOR_ID", pActorId),
@@ -162,9 +179,32 @@ namespace AncientWarfare3.core.lineage
             };
             extra.AddRange(BuildPersonSnapshotColumns(pActorId));
 
-            Insert(PersonBiographyTableItem.GetTableName(), pContextKingdom, pEventType, pContent, pSubjectName,
+            return InsertProjection(PersonBiographyTableItem.GetTableName(),
+                pContextKingdom, pEventType, pContent, pSubjectName,
                 pTarget.IsValid ? pTarget : HistoryTarget.Actor(pActorId),
+                pProjectionKey,
                 extra.ToArray());
+        }
+
+        internal static bool TryRecordPersonSnapshot(double pWorldTime,
+            string pYearPrefix, string pYearPrefixRich,
+            long pKingdomId, string pKingdomName, string pKingdomColor,
+            long pActorId, string pActorName, string pEventType,
+            HistoryText pContent, string pCategory, HistoryTarget pTarget,
+            string pProjectionKey)
+        {
+            var context = new DeferredContext(pWorldTime, pYearPrefix,
+                pYearPrefixRich, pKingdomId, pKingdomName, pKingdomColor);
+            return InsertSnapshot(PersonBiographyTableItem.GetTableName(),
+                context, pEventType, pContent, pActorName,
+                pTarget.IsValid ? pTarget : HistoryTarget.Actor(pActorId),
+                pProjectionKey,
+                ColumnVal.Create("ACTOR_ID", pActorId),
+                ColumnVal.Create("CATEGORY", pCategory ?? ""),
+                ColumnVal.Create("AGE_AT_EVENT", -1),
+                ColumnVal.Create("IS_KING_AT_EVENT", 1),
+                ColumnVal.Create("ROLE_SNAPSHOT", "king"),
+                ColumnVal.Create("ROLE_LABEL", RoleLabel("king")));
         }
 
         private static ColumnVal[] BuildPersonSnapshotColumns(long pActorId)
@@ -291,10 +331,44 @@ namespace AncientWarfare3.core.lineage
 
         public static void RecordKingdom(Kingdom pKingdom, string pEventType, HistoryText pContent, HistoryTarget pTarget)
         {
-            if (pKingdom?.data == null) return;
-            Insert(KingdomHistoryTableItem.GetTableName(), pKingdom, pEventType, pContent, pKingdom.name,
+            TryRecordKingdom(pKingdom, pEventType, pContent, pTarget);
+        }
+
+        public static bool TryRecordKingdom(Kingdom pKingdom,
+            string pEventType, HistoryText pContent, HistoryTarget pTarget)
+        {
+            return TryRecordKingdom(pKingdom, pEventType, pContent, pTarget,
+                "");
+        }
+
+        public static bool TryRecordKingdom(Kingdom pKingdom,
+            string pEventType, HistoryText pContent, HistoryTarget pTarget,
+            string pProjectionKey)
+        {
+            if (pKingdom?.data == null) return false;
+            return InsertProjection(KingdomHistoryTableItem.GetTableName(),
+                pKingdom,
+                pEventType, pContent, pKingdom.name,
                 pTarget.IsValid ? pTarget : HistoryTarget.Kingdom(pKingdom),
+                pProjectionKey,
                 ColumnVal.Create("KINGDOM_ID", pKingdom.data.id));
+        }
+
+        internal static bool TryRecordKingdomSnapshot(double pWorldTime,
+            string pYearPrefix, string pYearPrefixRich,
+            long pKingdomId, string pKingdomName, string pKingdomColor,
+            string pEventType, HistoryText pContent, HistoryTarget pTarget,
+            string pProjectionKey)
+        {
+            var context = new DeferredContext(pWorldTime, pYearPrefix,
+                pYearPrefixRich, pKingdomId, pKingdomName, pKingdomColor);
+            return InsertSnapshot(KingdomHistoryTableItem.GetTableName(),
+                context, pEventType, pContent, pKingdomName,
+                pTarget.IsValid
+                    ? pTarget
+                    : HistoryTarget.From("kingdom", pKingdomId),
+                pProjectionKey,
+                ColumnVal.Create("KINGDOM_ID", pKingdomId));
         }
 
         public static void RecordCity(City pCity, Kingdom pContextKingdom, string pEventType, string pContent)
@@ -368,18 +442,37 @@ namespace AncientWarfare3.core.lineage
             return GanzhiChronologyRules.FormatPrefix(trimmed, date, raw[2]);
         }
 
-        private static void Insert(string pTable, Kingdom pContextKingdom,
+        private static bool Insert(string pTable, Kingdom pContextKingdom,
             string pEventType, HistoryText pContent, string pSubjectName, HistoryTarget pTarget,
             params ColumnVal[] pExtraCols)
         {
+            return InsertCore(pTable, pContextKingdom, pEventType, pContent,
+                pSubjectName, pTarget, "", pExtraCols);
+        }
+
+        private static bool InsertProjection(string pTable,
+            Kingdom pContextKingdom, string pEventType, HistoryText pContent,
+            string pSubjectName, HistoryTarget pTarget,
+            string pProjectionKey, params ColumnVal[] pExtraCols)
+        {
+            return InsertCore(pTable, pContextKingdom, pEventType, pContent,
+                pSubjectName, pTarget, pProjectionKey, pExtraCols);
+        }
+
+        private static bool InsertCore(string pTable,
+            Kingdom pContextKingdom, string pEventType, HistoryText pContent,
+            string pSubjectName, HistoryTarget pTarget,
+            string pProjectionKey, params ColumnVal[] pExtraCols)
+        {
             if (!HistoryWriteTimingRules.ShouldRecord(Config.game_loaded,
                     SmoothLoader.isLoading()))
-                return;
+                return HistoryWriteTimingRules.ResolveSuppressedWriteResult(
+                    pProjectionKey);
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null)
             {
                 ModClass.LogWarning("HistoryWriter: DB unavailable; event skipped (" + pTable + "/" + pEventType + ")");
-                return;
+                return false;
             }
 
             double t = World.world.getCurWorldTime();
@@ -408,11 +501,17 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("TARGET_ID", target.IsValid ? target.id : -1L)
                 };
                 if (pExtraCols != null) cols.AddRange(pExtraCols);
-                InsertCaptured(pTable, db, cols, pThrowOnFailure: false);
+                if (!string.IsNullOrWhiteSpace(pProjectionKey))
+                    cols.Add(ColumnVal.Create("PROJECTION_KEY",
+                        pProjectionKey));
+                return InsertCaptured(pTable, db, cols,
+                    pThrowOnFailure: false,
+                    pProjectionKey: pProjectionKey);
             }
             catch (Exception e)
             {
                 ModClass.LogWarning("HistoryWriter.Insert failed (" + pTable + "): " + e.Message);
+                return false;
             }
         }
 
@@ -447,13 +546,59 @@ namespace AncientWarfare3.core.lineage
             InsertCaptured(pTable, db, cols, pThrowOnFailure: true);
         }
 
-        private static void InsertCaptured(string pTable,
+        private static bool InsertSnapshot(string pTable,
+            DeferredContext pContext, string pEventType,
+            HistoryText pContent, string pSubjectName,
+            HistoryTarget pTarget, string pProjectionKey,
+            params ColumnVal[] pExtraCols)
+        {
+            if (!HistoryWriteTimingRules.ShouldRecord(Config.game_loaded,
+                    SmoothLoader.isLoading()))
+                return HistoryWriteTimingRules.ResolveSuppressedWriteResult(
+                    pProjectionKey);
+            var db = LineageArchiveManager.Instance.OperatingDB;
+            if (db == null) return false;
+
+            HistoryTarget target = ResolveTarget(pTarget, pContent);
+            var cols = new List<ColumnVal>
+            {
+                ColumnVal.Create("WORLD_TIME", pContext.world_time),
+                ColumnVal.Create("YEAR_PREFIX", pContext.year_prefix),
+                ColumnVal.Create("YEAR_PREFIX_RICH",
+                    pContext.year_prefix_rich),
+                ColumnVal.Create("SUBJECT_NAME", pSubjectName ?? ""),
+                ColumnVal.Create("SUBJECT_COLOR", pContext.kingdom_color),
+                ColumnVal.Create("CONTENT", pContent.Plain ?? ""),
+                ColumnVal.Create("CONTENT_RICH", pContent.Rich ?? ""),
+                ColumnVal.Create("EVENT_TYPE", pEventType ?? ""),
+                ColumnVal.Create("CONTEXT_KINGDOM_ID", pContext.kingdom_id),
+                ColumnVal.Create("CONTEXT_KINGDOM_NAME",
+                    pContext.kingdom_name),
+                ColumnVal.Create("CONTEXT_KINGDOM_COLOR",
+                    pContext.kingdom_color),
+                ColumnVal.Create("TARGET_TYPE",
+                    target.IsValid ? target.type : ""),
+                ColumnVal.Create("TARGET_ID",
+                    target.IsValid ? target.id : -1L),
+                ColumnVal.Create("PROJECTION_KEY", pProjectionKey ?? "")
+            };
+            if (pExtraCols != null) cols.AddRange(pExtraCols);
+            return InsertCaptured(pTable, db, cols,
+                pThrowOnFailure: false,
+                pProjectionKey: pProjectionKey);
+        }
+
+        private static bool InsertCaptured(string pTable,
             System.Data.SQLite.SQLiteConnection pDatabase,
-            List<ColumnVal> pColumns, bool pThrowOnFailure)
+            List<ColumnVal> pColumns, bool pThrowOnFailure,
+            string pProjectionKey = "")
         {
             long eventId = 0L;
             try
             {
+                if (!string.IsNullOrWhiteSpace(pProjectionKey))
+                    return InsertCapturedIdempotent(pTable, pDatabase,
+                        pColumns, pProjectionKey, out eventId);
                 var captured = new HistoricalSqlColumn[pColumns.Count];
                 for (int index = 0; index < pColumns.Count; index++)
                 {
@@ -478,13 +623,67 @@ namespace AncientWarfare3.core.lineage
                             pDatabase.Insert(pTable, synchronous.ToArray());
                         }, out eventId, out string writeError))
                     throw new InvalidOperationException(writeError);
+                return true;
             }
             catch (Exception error)
             {
                 if (pThrowOnFailure) throw;
                 ModClass.LogWarning("HistoryWriter.Insert failed (" + pTable +
                                     "/" + eventId + "): " + error.Message);
+                return false;
             }
+        }
+
+        private static bool InsertCapturedIdempotent(string pTable,
+            System.Data.SQLite.SQLiteConnection pDatabase,
+            List<ColumnVal> pColumns, string pProjectionKey,
+            out long pEventId)
+        {
+            pEventId = 0L;
+            if (!HistoricalWriteService.FlushForSynchronousFallback(
+                    TimeSpan.FromSeconds(5), out string flushError))
+                throw new InvalidOperationException(flushError);
+            if (!HistoricalWriteService.TryReserveEventId(pTable,
+                    out pEventId, out string reserveError))
+                throw new InvalidOperationException(reserveError);
+
+            long eventId = pEventId;
+            bool applied = MandateProjectionOutboxPersistence.
+                TryApplyIdempotentRecord(pDatabase, pTable, pProjectionKey,
+                    transaction =>
+                    {
+                        var columns = new List<ColumnVal>(
+                            pColumns.Count + 1)
+                        {
+                            ColumnVal.Create("EVENT_ID", eventId)
+                        };
+                        columns.AddRange(pColumns);
+                        var names = new System.Text.StringBuilder();
+                        var values = new System.Text.StringBuilder();
+                        using var command = new System.Data.SQLite.
+                            SQLiteCommand(pDatabase)
+                        {
+                            Transaction = transaction
+                        };
+                        for (int index = 0; index < columns.Count; index++)
+                        {
+                            if (index > 0)
+                            {
+                                names.Append(',');
+                                values.Append(',');
+                            }
+                            names.Append(columns[index].Name);
+                            string parameter = "@value" + index;
+                            values.Append(parameter);
+                            command.Parameters.AddWithValue(parameter,
+                                columns[index].Value ?? DBNull.Value);
+                        }
+                        command.CommandText = "INSERT INTO " + pTable +
+                            "(" + names + ") VALUES(" + values + ")";
+                        return command.ExecuteNonQuery() == 1;
+                    }, out string writeError);
+            if (!applied) throw new InvalidOperationException(writeError);
+            return true;
         }
 
         private static HistoryTarget ResolveTarget(HistoryTarget pExplicit, HistoryText pContent)

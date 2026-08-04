@@ -18,6 +18,15 @@ namespace AncientWarfare3.core.lineage
             return pReignId >= 0 || pKingdomId >= 0;
         }
 
+        public static int ResolveSavedHighestTitle(int savedHighestTitle,
+            long savedMandatePeriodId)
+        {
+            const int emperorTitle = 4;
+            return savedMandatePeriodId >= 0L
+                ? Math.Max(savedHighestTitle, emperorTitle)
+                : savedHighestTitle;
+        }
+
         public static RulerTitleDerivedFacts Derive(RulerTitleFacts pFacts)
         {
             if (pFacts == null) return new RulerTitleDerivedFacts();

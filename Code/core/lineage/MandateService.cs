@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
@@ -16,7 +17,9 @@ namespace AncientWarfare3.core.lineage
         public long kingdom_id = -1;
         public long period_id = -1;
         public string kingdom_name = "";
+        public string kingdom_color = "";
         public string dynasty_name = "";
+        public long emperor_actor_id = -1;
         public string emperor_name = "";
         public int mandate_value;
         public int imperial_authority;
@@ -63,6 +66,7 @@ namespace AncientWarfare3.core.lineage
         private static long _autoCandidateKingdomId = -1L;
         private static long _pendingFallenMandateKingdomId = -1L;
         private static long _pendingMandateConquerorKingdomId = -1L;
+        private static int _lastProjectionResumeYear = int.MinValue;
 
         public static bool Exists => GetCurrentMandateKingdom() != null;
 
@@ -106,13 +110,57 @@ namespace AncientWarfare3.core.lineage
             _autoCandidateKingdomId = -1L;
             _pendingFallenMandateKingdomId = -1L;
             _pendingMandateConquerorKingdomId = -1L;
+            _lastProjectionResumeYear = int.MinValue;
             MandateRebelService.ClearRuntime();
             _cacheDirty = true;
             ReadReport();
         }
 
+        public static int ResumePendingProjections(int pMax = 2)
+        {
+            int limit = Math.Min(2, Math.Max(0, pMax));
+            bool worldReady = World.world?.kingdoms != null;
+            bool replicaSession =
+                AW3MultiplayerReplicaScope.IsReplicaSession;
+            if (!MandateProjectionResumeRules.ShouldRun(Ready, worldReady,
+                    replicaSession, limit))
+                return 0;
+
+            MandateReport report = ReadReport();
+            bool resumed = MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(DB, limit,
+                    (pending, effect) =>
+                    {
+                        Kingdom kingdom = FindKingdom(pending.KingdomId);
+                        bool alive = kingdom?.data != null &&
+                                     !kingdom.isRekt();
+                        MandateProjectionDisposition disposition =
+                            MandateProjectionResumeRules.ResolveDisposition(
+                                report.active, report.period_id,
+                                report.kingdom_id, pending.PeriodId,
+                                pending.KingdomId, alive);
+                        long installedActorId =
+                            kingdom?.king?.data?.id ?? -1L;
+                        long runtimeActorId = MandateProjectionResumeRules.
+                            ResolveRuntimeActorId(disposition,
+                                installedActorId, pending.RulerActorId);
+                        Actor installedKing = runtimeActorId >= 0L
+                            ? kingdom?.king
+                            : null;
+                        return PublishMandateProjectionEffect(effect,
+                            kingdom, installedKing, pending, disposition);
+                    }, out _, out int completed, out string error);
+            if (!resumed && !string.IsNullOrEmpty(error))
+                ModClass.LogWarning("Mandate projection resume deferred: " +
+                                    error);
+            return completed;
+        }
+
         public static void RefreshKingdomNameProjection(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (!Ready || pKingdom?.data == null || pKingdom.isRekt()) return;
             MandateReport report = ReadReport();
             string kingdomName = pKingdom.name?.Trim() ?? "";
@@ -222,8 +270,83 @@ namespace AncientWarfare3.core.lineage
             return ReadReportFromDb();
         }
 
+        public static bool OnRulerSucceeded(Kingdom pKingdom,
+            Actor pNewKing)
+        {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
+            if (!Ready || pKingdom?.data == null || pNewKing?.data == null)
+                return false;
+            MandateReport report = ReadReport();
+            long liveKingActorId = pKingdom.king?.data?.id ?? -1L;
+            bool refresh = MandateSuccessionRules.ShouldRefreshRulerProjection(
+                report.active, report.kingdom_id, pKingdom.id,
+                pNewKing.data.id, liveKingActorId);
+            if (!refresh) return true;
+
+            long previousActorId = report.emperor_actor_id;
+            string persistenceError = "";
+            try
+            {
+                bool committed = MandateSuccessionRules.
+                    TryCommitRulerProjection(
+                        () => report.emperor_actor_id == pNewKing.data.id ||
+                              MandateSuccessionPersistence.TryRefreshRuler(
+                                  DB,
+                                  MandateStateTableItem.GetTableName(),
+                                  STATE_ID, pKingdom.id, report.period_id,
+                                  pNewKing.data.id, pNewKing.getName(),
+                                  MakeDynastyName(pKingdom),
+                                  LineageService.CurTime(),
+                                  out persistenceError),
+                        () =>
+                        {
+                            MarkDirty();
+                            CommitRulerProjection(pKingdom, pNewKing,
+                                previousActorId, refresh);
+                        });
+                if (!committed)
+                    ModClass.LogWarning(
+                        "Mandate succession persistence failed: " +
+                        persistenceError);
+                return committed;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Mandate succession commit failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        private static void CommitRulerProjection(Kingdom pKingdom,
+            Actor pNewKing, long pPreviousActorId, bool pRefresh)
+        {
+            KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
+            if (MandateSuccessionRules.ShouldTransferRulerTrait(
+                    pRefresh, pPreviousActorId, pNewKing.data.id))
+            {
+                Actor previousRuler = FindActor(pPreviousActorId);
+                if (previousRuler?.data != null &&
+                    previousRuler.hasTrait(TRAIT_TIANMING))
+                    previousRuler.removeTrait(TRAIT_TIANMING);
+            }
+            if (!pNewKing.hasTrait(TRAIT_TIANMING))
+                pNewKing.addTrait(TRAIT_TIANMING);
+
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.RankOrMandate);
+            DirtyAllMaps();
+        }
+
         public static void OnKingdomYear(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
+            TryResumePendingProjectionYear();
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral()) return;
 
             if (!Exists)
@@ -295,6 +418,12 @@ namespace AncientWarfare3.core.lineage
             Kingdom pTarget, out string pReason)
         {
             pReason = "";
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+            {
+                pReason = "replica_read_only";
+                return false;
+            }
             if (!Ready)
             {
                 pReason = "database_not_ready";
@@ -327,6 +456,9 @@ namespace AncientWarfare3.core.lineage
             string pReason, string pOriginType, string pClaimantKind,
             Kingdom pRebelOrigin, bool pForceZhuluAge)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
             if (!pForceZhuluAge &&
                 ZhuluWarService.HasActivePrincipalWars()) return false;
             if (pKingdom?.data != null)
@@ -344,11 +476,29 @@ namespace AncientWarfare3.core.lineage
                 !pKingdom.isCiv() || pKingdom.isNeutral() ||
                 !pKingdom.hasKing() || pKingdom.king?.data == null)
                 return false;
+            MandateReport previousReport = ReadReport();
+            string pendingReadError = "";
+            MandateProjectionOutboxPersistence.PendingProjection
+                existingPending = null;
+            bool pendingRead = previousReport.active &&
+                               previousReport.kingdom_id == pKingdom.id &&
+                               MandateProjectionOutboxPersistence.
+                                   TryReadPending(DB,
+                                       previousReport.period_id,
+                                       out existingPending,
+                                       out pendingReadError);
+            if (pendingRead && existingPending != null)
+            {
+                MarkDirty();
+                return DrainMandateProjection(
+                    pKingdom, existingPending);
+            }
+            if (!string.IsNullOrEmpty(pendingReadError))
+                ModClass.LogWarning("Read pending Mandate projection failed: " +
+                                    pendingReadError);
             if (!pForceZhuluAge &&
                 !CanDeclareMandateForOrigin(pKingdom, pReason,
                     pOriginType, pClaimantKind, out _)) return false;
-
-            MandateReport previousReport = ReadReport();
             bool hadPreviousMandate = previousReport.period_id >= 0;
             if (!MandateDeclarationRules.CanCreateNewPeriod(
                     previousReport.active, previousReport.kingdom_id, pKingdom.id))
@@ -359,90 +509,343 @@ namespace AncientWarfare3.core.lineage
                                             hadPreviousMandate, pOriginType)
                 ? previousReport.period_id
                 : -1L;
-            if (previousReport.active && previousReport.kingdom_id != pKingdom.id)
-                ClearMandate(pReason == "player_grant"
-                    ? "player_grant_replaced"
-                    : "replaced");
+            bool replacingActiveMandate = previousReport.active &&
+                                           previousReport.kingdom_id !=
+                                           pKingdom.id;
+            Kingdom previousKingdom = replacingActiveMandate
+                ? FindKingdom(previousReport.kingdom_id)
+                : null;
+            string replacementReason = pReason == "player_grant"
+                ? "player_grant_replaced"
+                : "replaced";
 
             long periodId = TableIdAllocator.Next(DB, MandatePeriodTableItem.GetTableName(), "PERIOD_ID");
             double now = LineageService.CurTime();
             Actor king = pKingdom.king;
             HeirService.EnsureLegitimateLine(pKingdom, king);
             string dynastyName = MakeDynastyName(pKingdom);
+            bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
+            int currentYear = Date.getCurrentYear();
+            string markerKind = MarkerKind(pOriginType, pClaimantKind);
+            if (!TryCaptureLegalCoreSnapshots(pKingdom, previousPeriodId,
+                    "declaration",
+                    out List<MandateProjectionOutboxPersistence.
+                        CoreCitySnapshot> coreCitySnapshots))
+                return false;
+            var request = new MandateDeclarationPersistence.Request
+            {
+                StateId = STATE_ID,
+                PeriodId = periodId,
+                KingdomId = pKingdom.id,
+                KingdomName = pKingdom.name ?? "",
+                KingdomColor = HistoryColors.FromKingdom(pKingdom),
+                DynastyName = dynastyName,
+                RulerActorId = king?.data?.id ?? -1L,
+                RulerName = king?.getName() ?? "",
+                StartTime = now,
+                CurrentYear = currentYear,
+                StartMandate = START_VALUE,
+                ImperialAuthority = 45,
+                DynastyPrestige = 0,
+                CoreControl = 1d,
+                VassalLoyalty = 1d,
+                CrisisLevel = "stable",
+                OriginType = pOriginType ?? "native",
+                RebelOriginKingdomId = pRebelOrigin?.id ?? -1L,
+                RebelOriginKingdomName = pRebelOrigin?.name ?? "",
+                ClaimantKind = pClaimantKind ?? "orthodox",
+                MapMarkerKind = markerKind,
+                EmperorTitle = (int)KingdomTitle.Emperor,
+                ExpectedPreviousActive = replacingActiveMandate,
+                PreviousPeriodId = previousPeriodId,
+                PreviousKingdomId = replacingActiveMandate
+                    ? previousReport.kingdom_id
+                    : -1L,
+                PreviousKingdomName = replacingActiveMandate
+                    ? previousReport.kingdom_name ?? ""
+                    : "",
+                PreviousKingdomColor = replacingActiveMandate
+                    ? previousReport.kingdom_color ?? ""
+                    : "",
+                PreviousRulerActorId = replacingActiveMandate
+                    ? previousReport.emperor_actor_id
+                    : -1L,
+                PreviousRulerName = replacingActiveMandate
+                    ? previousReport.emperor_name ?? ""
+                    : "",
+                PreviousMandateValue = previousReport.mandate_value,
+                PreviousEndReason = replacementReason,
+                NewYearPrefix = HistoryWriter.BuildYearPrefix(now,
+                    pKingdom),
+                NewYearPrefixRich = HistoryWriter.BuildYearPrefixRich(now,
+                    pKingdom),
+                PreviousYearPrefix = HistoryWriter.BuildYearPrefix(now,
+                    previousKingdom),
+                PreviousYearPrefixRich = HistoryWriter.BuildYearPrefixRich(
+                    now, previousKingdom),
+                OperationKey = "mandate-declare:" + periodId,
+                WasAlreadyEmperor = wasAlreadyEmperor,
+                CoreSnapshotSource = "declaration",
+                CoreCitySnapshots = coreCitySnapshots
+            };
+            string persistenceError = "";
+            bool committed = MandateDeclarationPersistence.TryCommit(
+                DB, MandatePeriodTableItem.GetTableName(),
+                MandateStateTableItem.GetTableName(),
+                KingdomReignTableItem.GetTableName(), request,
+                out persistenceError);
+            if (!committed)
+            {
+                ModClass.LogWarning("Mandate declaration persistence failed: " +
+                                    persistenceError);
+                return false;
+            }
+            MarkDirty();
+            if (!MandateProjectionOutboxPersistence.TryReadPending(
+                    DB, periodId,
+                    out MandateProjectionOutboxPersistence.PendingProjection
+                        pending,
+                    out persistenceError) || pending == null)
+            {
+                ModClass.LogWarning("Mandate projection outbox missing: " +
+                                    persistenceError);
+                return false;
+            }
+            return DrainMandateProjection(pKingdom, pending);
+        }
 
-            DB.Insert(MandatePeriodTableItem.GetTableName(),
-                ColumnVal.Create("PERIOD_ID", periodId),
-                ColumnVal.Create("KINGDOM_ID", pKingdom.id),
-                ColumnVal.Create("KINGDOM_NAME", pKingdom.name ?? ""),
-                ColumnVal.Create("KINGDOM_COLOR", HistoryColors.FromKingdom(pKingdom)),
-                ColumnVal.Create("DYNASTY_NAME", dynastyName),
-                ColumnVal.Create("FOUNDER_ACTOR_ID", king?.data?.id ?? -1L),
-                ColumnVal.Create("FOUNDER_NAME", king?.getName() ?? ""),
-                ColumnVal.Create("START_TIME", now),
-                ColumnVal.Create("END_TIME", -1.0),
-                ColumnVal.Create("END_REASON", ""),
-                ColumnVal.Create("START_MANDATE", START_VALUE),
-                ColumnVal.Create("END_MANDATE", START_VALUE),
-                ColumnVal.Create("LEGAL_CORE_COUNT", 0),
-                ColumnVal.Create("ORIGIN_TYPE", pOriginType ?? "native"),
-                ColumnVal.Create("REBEL_ORIGIN_KINGDOM_ID", pRebelOrigin?.id ?? -1L),
-                ColumnVal.Create("REBEL_ORIGIN_KINGDOM_NAME", pRebelOrigin?.name ?? ""),
-                ColumnVal.Create("CLAIMANT_KIND", pClaimantKind ?? "orthodox"));
+        private static bool DrainMandateProjection(Kingdom pKingdom,
+            MandateProjectionOutboxPersistence.PendingProjection pPending)
+        {
+            if (!MandateProjectionResumeRules.CanMutateOutbox(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
+            if (pPending == null) return false;
+            MandateReport report = ReadReport();
+            bool alive = pKingdom?.data != null && !pKingdom.isRekt() &&
+                         pKingdom.id == pPending.KingdomId;
+            MandateProjectionDisposition disposition =
+                MandateProjectionResumeRules.ResolveDisposition(
+                    report.active, report.period_id, report.kingdom_id,
+                    pPending.PeriodId, pPending.KingdomId, alive);
+            long installedActorId = pKingdom?.king?.data?.id ?? -1L;
+            long runtimeActorId = MandateProjectionResumeRules.
+                ResolveRuntimeActorId(disposition, installedActorId,
+                    pPending.RulerActorId);
+            Actor installedKing = runtimeActorId >= 0L
+                ? pKingdom?.king
+                : null;
+            bool drained = MandateProjectionOutboxPersistence.TryDrain(
+                DB, pPending.OperationKey,
+                pEffect => PublishMandateProjectionEffect(
+                    pEffect, pKingdom, installedKing, pPending,
+                    disposition),
+                out bool complete, out string error);
+            if (!drained)
+                ModClass.LogWarning("Mandate projection drain failed: " +
+                                    error);
+            return drained && complete;
+        }
 
-            UpsertState(pKingdom, periodId, START_VALUE, 45, 0, 1f, 1f, "stable", Date.getCurrentYear(), now,
-                pOriginType, pClaimantKind, pRebelOrigin, MarkerKind(pOriginType, pClaimantKind));
-            pKingdom.data.set(LineageKeys.MANDATE_PERIOD_ID, periodId);
+        private static bool PublishMandateProjectionEffect(string pEffect,
+            Kingdom pKingdom, Actor pKing,
+            MandateProjectionOutboxPersistence.PendingProjection pPending,
+            MandateProjectionDisposition pDisposition)
+        {
+            if (!MandateProjectionResumeRules.ShouldPublishEffect(
+                    pDisposition, pEffect))
+                return true;
+            Kingdom previous = pPending.OldEndRequired
+                ? FindKingdom(pPending.PreviousKingdomId)
+                : null;
+            switch (pEffect)
+            {
+                case "old_runtime":
+                    PublishMandateEndedRuntime(previous);
+                    return true;
+                case "old_revision":
+                    FamilyTreeProjectionRevision.Advance(
+                        FamilyTreeProjectionChange.RankOrMandate);
+                    return true;
+                case "old_kingdom_history":
+                    return TryPublishMandateEndHistorySnapshot(pPending);
+                case "old_mandate_event":
+                    return TryPublishMandateEndEvent(pPending);
+                case "new_runtime":
+                    if (pKing?.data == null) return false;
+                    PublishDeclaredMandateRuntime(
+                        pKingdom, pKing, pPending);
+                    return true;
+                case "new_revision":
+                    FamilyTreeProjectionRevision.Advance(
+                        FamilyTreeProjectionChange.RankOrMandate);
+                    return true;
+                case "new_mandate_event":
+                    return TryPublishMandateStartEvent(pPending);
+                case "new_kingdom_history":
+                    return TryPublishMandateStartKingdomHistory(pPending);
+                case "new_person_history":
+                    return TryPublishMandateStartPersonHistory(pPending);
+                case "legal_cores":
+                    MandateLegalCoreReplayDisposition coreReplay =
+                        MandateProjectionResumeRules.ResolveLegalCoreReplay(
+                            pDisposition, pPending.CoreSnapshotSource);
+                    if (coreReplay ==
+                        MandateLegalCoreReplayDisposition.Skip)
+                        return true;
+                    if (coreReplay == MandateLegalCoreReplayDisposition.
+                            CaptureLegacySnapshot &&
+                        !EnsurePendingCoreSnapshots(pKingdom, pPending))
+                        return false;
+                    return CreateLegalCores(pPending.PeriodId,
+                        pPending.CoreCitySnapshots,
+                        pPending.OperationKey + ":legal_cores:",
+                        requireCurrentStateUpdate:
+                            pDisposition ==
+                            MandateProjectionDisposition.Current);
+                case "new_maps":
+                    DirtyAllMaps();
+                    ClearPendingMandateConqueror();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static void TryResumePendingProjectionYear()
+        {
+            bool replicaSession =
+                AW3MultiplayerReplicaScope.IsReplicaSession;
+            if (!Ready || World.world?.kingdoms == null || replicaSession)
+                return;
+            int currentYear = Date.getCurrentYear();
+            if (!MandateProjectionResumeRules.ShouldStartAnnualCycle(
+                    _lastProjectionResumeYear, currentYear,
+                    replicaSession))
+                return;
+            _lastProjectionResumeYear = currentYear;
+            ResumePendingProjections(2);
+        }
+
+        private static void PublishDeclaredMandateRuntime(Kingdom pKingdom,
+            Actor pKing,
+            MandateProjectionOutboxPersistence.PendingProjection pPending)
+        {
+            string originType = pPending.OriginType ?? "native";
+            string claimantKind = pPending.ClaimantKind ?? "orthodox";
+            string markerKind = pPending.MapMarkerKind ??
+                                MarkerKind(originType, claimantKind);
+            pKingdom.data.set(LineageKeys.MANDATE_PERIOD_ID,
+                pPending.PeriodId);
             pKingdom.data.set(LineageKeys.MANDATE_VALUE, START_VALUE);
             pKingdom.data.set(LineageKeys.MANDATE_AUTHORITY, 45);
-            pKingdom.data.set(LineageKeys.MANDATE_ORIGIN_TYPE, pOriginType ?? "native");
-            pKingdom.data.set(LineageKeys.MANDATE_CLAIMANT_KIND, pClaimantKind ?? "orthodox");
-            pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, MarkerKind(pOriginType, pClaimantKind));
+            pKingdom.data.set(LineageKeys.MANDATE_ORIGIN_TYPE,
+                originType);
+            pKingdom.data.set(LineageKeys.MANDATE_CLAIMANT_KIND,
+                claimantKind);
+            pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND,
+                markerKind);
+            PublishRuntimeMarkerProjection(true, pKingdom.id, markerKind);
+            MarkDirty();
             MandatePhaseService.OnMandateEstablished(
-                hadPreviousMandate, Date.getCurrentYear());
-            if (pOriginType == "self_restoration" ||
-                pOriginType == MandateFeudatoryCompletionRules.RestorationOrigin)
+                pPending.PreviousPeriodId >= 0L, pPending.CurrentYear);
+            if (originType == "self_restoration" ||
+                originType == MandateFeudatoryCompletionRules.
+                    RestorationOrigin)
             {
-                pKingdom.data.set(LineageKeys.RESTORATION_REFUNDER_ELIGIBLE, false);
-                RulerTitleRestorationStateService.MarkMandateRegained(pKingdom);
+                pKingdom.data.set(
+                    LineageKeys.RESTORATION_REFUNDER_ELIGIBLE, false);
+                RulerTitleRestorationStateService.MarkMandateRegained(
+                    pKingdom);
             }
-            if (pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo")
+            if (originType == "pseudo_foreign" ||
+                claimantKind == "foreign_pseudo")
                 XiaizationService.OnPseudoMandateDeclared(pKingdom);
-            bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
-            FamilyTreeProjectionRevision.Advance(
-                FamilyTreeProjectionChange.RankOrMandate);
-            if (king != null && !king.hasTrait(TRAIT_TIANMING)) king.addTrait(TRAIT_TIANMING);
-            if (wasAlreadyEmperor &&
-                (hadPreviousMandate || pOriginType == "self_restoration" ||
-                 pOriginType == MandateFeudatoryCompletionRules.RestorationOrigin))
+            if (pKing != null && !pKing.hasTrait(TRAIT_TIANMING))
+                pKing.addTrait(TRAIT_TIANMING);
+            if (pPending.WasAlreadyEmperor &&
+                (pPending.PreviousPeriodId >= 0L ||
+                 originType == "self_restoration" ||
+                 originType == MandateFeudatoryCompletionRules.
+                     RestorationOrigin))
                 EraChangeTriggerService.Mark(pKingdom,
-                    EraChangeReason.RestoredMandate, "mandate:" + periodId);
-            CreateLegalCores(pKingdom, periodId, previousPeriodId);
-            UpdateOriginalCoreCount(periodId);
+                    EraChangeReason.RestoredMandate,
+                    "mandate:" + pPending.PeriodId);
+        }
 
-            string startEventType = MandateStartRecordRules.EventType(pOriginType, pClaimantKind);
-            RecordEvent(startEventType, pKingdom, king, null, 0, START_VALUE,
-                pKingdom.name + T("aw_hist_edict_mandate_claimed_mid") + dynastyName +
-                T("aw_hist_edict_mandate_claimed_suffix"));
-            HistoryWriter.RecordKingdom(pKingdom, startEventType,
-                HistoryText.Kingdom(pKingdom) + H("aw_hist_edict_mandate_claimed_mid") +
-                HistoryText.PlainText(dynastyName) +
+        private static bool TryPublishMandateStartEvent(
+            MandateProjectionOutboxPersistence.PendingProjection pPending)
+        {
+            string startEventType = MandateStartRecordRules.EventType(
+                pPending.OriginType, pPending.ClaimantKind);
+            return RecordSnapshotEvent(startEventType, pPending.PeriodId,
+                pPending.KingdomId, pPending.KingdomName,
+                pPending.KingdomColor, pPending.RulerActorId,
+                pPending.RulerName, pPending.CreatedTime,
+                pPending.NewYearPrefix, 0, START_VALUE, 45,
+                pPending.KingdomName +
+                T("aw_hist_edict_mandate_claimed_mid") +
+                pPending.DynastyName +
+                T("aw_hist_edict_mandate_claimed_suffix"),
+                pPending.OperationKey + ":new_mandate_event");
+        }
+
+        private static bool TryPublishMandateStartKingdomHistory(
+            MandateProjectionOutboxPersistence.PendingProjection pPending)
+        {
+            string startEventType = MandateStartRecordRules.EventType(
+                pPending.OriginType, pPending.ClaimantKind);
+            return HistoryWriter.TryRecordKingdomSnapshot(
+                pPending.CreatedTime, pPending.NewYearPrefix,
+                pPending.NewYearPrefixRich, pPending.KingdomId,
+                pPending.KingdomName, pPending.KingdomColor,
+                startEventType,
+                SnapshotReference(pPending.KingdomName,
+                    pPending.KingdomColor, "kingdom", pPending.KingdomId) +
+                H("aw_hist_edict_mandate_claimed_mid") +
+                HistoryText.PlainText(pPending.DynastyName) +
                 H("aw_hist_edict_mandate_claimed_suffix"),
-                HistoryTarget.Kingdom(pKingdom));
-            if (king?.data != null)
-                HistoryWriter.RecordPerson(king.data.id, pKingdom, king.getName(), startEventType,
-                    HistoryText.Actor(king) + H("aw_hist_edict_actor_claimed_mandate"), ChronicleCategory.HONOR,
-                    HistoryTarget.Kingdom(pKingdom));
+                HistoryTarget.From("kingdom", pPending.KingdomId),
+                pPending.OperationKey + ":new_kingdom_history");
+        }
 
-            DirtyAllMaps();
-            ClearPendingMandateConqueror();
-            return true;
+        private static bool TryPublishMandateStartPersonHistory(
+            MandateProjectionOutboxPersistence.PendingProjection pPending)
+        {
+            string startEventType = MandateStartRecordRules.EventType(
+                pPending.OriginType, pPending.ClaimantKind);
+            return HistoryWriter.TryRecordPersonSnapshot(
+                pPending.CreatedTime, pPending.NewYearPrefix,
+                pPending.NewYearPrefixRich, pPending.KingdomId,
+                pPending.KingdomName, pPending.KingdomColor,
+                pPending.RulerActorId, pPending.RulerName, startEventType,
+                SnapshotReference(pPending.RulerName,
+                    pPending.KingdomColor, "actor",
+                    pPending.RulerActorId) +
+                H("aw_hist_edict_actor_claimed_mandate"),
+                ChronicleCategory.HONOR,
+                HistoryTarget.From("kingdom", pPending.KingdomId),
+                pPending.OperationKey + ":new_person_history");
+        }
+
+        private static HistoryText SnapshotReference(string pName,
+            string pColor, string pTargetType, long pTargetId)
+        {
+            return HistoryText.Reference(pName ?? "", pColor,
+                pTargetType, pTargetId);
         }
 
         public static bool TryGrantMandateByPlayer(Kingdom pTarget, out string pReason)
         {
             pReason = "";
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+            {
+                pReason = "replica_read_only";
+                return false;
+            }
             if (ZhuluWarService.HasActivePrincipalWars())
             {
                 pReason = "zhulu_unresolved";
@@ -662,12 +1065,18 @@ namespace AncientWarfare3.core.lineage
         public static bool ApplySacrificeOutcome(Kingdom pKingdom,
             MandateSacrificeEffects pEffects, string pReason)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
             return ApplySacrificeOutcome(pKingdom, pEffects, pReason, null);
         }
 
         internal static bool ApplySacrificeOutcome(Kingdom pKingdom,
             MandateSacrificeEffects pEffects, string pReason, string pContent)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
             if (!CanStabilizeMandate(pKingdom)) return false;
             string eventType = pReason ?? "mandate_sacrifice";
             ChangeMandate(pKingdom, pEffects.MandateDelta,
@@ -712,6 +1121,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnPeacefulFellApartBlocked(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pKingdom?.data == null || !IsMandateKingdom(pKingdom)) return;
             int year = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.MANDATE_SUCCESSION_CRISIS_YEAR, out int lastYear, int.MinValue);
@@ -740,6 +1152,9 @@ namespace AncientWarfare3.core.lineage
         public static void OnCityTransferred(City pCity, Kingdom pOldKingdom,
             Kingdom pNewKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pCity?.data == null || pCity.isRekt()) return;
             if (_cacheDirty || _cachedReport == null) return;
             if (!MandateCoreTransferRules.ShouldInvalidate(
@@ -752,6 +1167,9 @@ namespace AncientWarfare3.core.lineage
         public static void OnCityTransferStarting(City pCity,
             Kingdom pOldKingdom, Kingdom pNewKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pCity?.data == null || pCity.kingdom != pOldKingdom) return;
             TrackHostileMandateFinalCityConqueror(pOldKingdom,
                 pNewKingdom);
@@ -793,6 +1211,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomCoreCreated(Kingdom pKingdom, City pCity, string pSourceType)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (!Ready || pKingdom?.data == null || pCity?.data == null) return;
             MandateReport report = ReadReport();
             bool isActiveMandateKingdom = report.active && report.kingdom_id == pKingdom.id && report.period_id >= 0;
@@ -841,11 +1262,12 @@ namespace AncientWarfare3.core.lineage
 
         public static void ClearMandate(string pReason)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             Kingdom current = GetCurrentMandateKingdom();
             MandateReport report = ReadReport();
             if (!Ready || !report.active) return;
-
-            RulerTitleRestorationStateService.MarkMandateLost(current);
 
             double now = LineageService.CurTime();
             DB.UpdateValue(MandatePeriodTableItem.GetTableName(),
@@ -860,35 +1282,97 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("UPDATED_TIME", now),
                 ColumnVal.Create("CRISIS_LEVEL", "ended"));
 
-            PublishRuntimeMarkerProjection(false, -1L, "");
-            MandateMilitaryPhaseService.OnMandateEnded(current);
+            PublishMandateEnded(current, report, pReason);
+        }
 
-            if (current?.king != null && current.king.hasTrait(TRAIT_TIANMING))
-                current.king.removeTrait(TRAIT_TIANMING);
-
-            if (current?.data != null)
-            {
-                HistoryWriter.RecordKingdom(current, "mandate_end",
-                    HistoryText.Kingdom(current) + H("aw_hist_edict_mandate_lost_prefix") +
-                    HistoryText.PlainText(EndReasonLabel(pReason)) +
-                    H("aw_hist_edict_mandate_lost_suffix"),
-                    HistoryTarget.Kingdom(current));
-                RecordEvent("mandate_end", current, current.king, null, 0, report.mandate_value,
-                    current.name + T("aw_hist_edict_mandate_lost_prefix") +
-                    EndReasonLabel(pReason) + T("aw_hist_edict_mandate_lost_suffix"));
-            }
-
-            RulerAppellationService.RefreshLivingProjection(current);
+        private static void PublishMandateEnded(Kingdom pCurrent,
+            MandateReport pReport, string pReason)
+        {
+            PublishMandateEndedRuntime(pCurrent);
             FamilyTreeProjectionRevision.Advance(
                 FamilyTreeProjectionChange.RankOrMandate);
-
+            TryPublishMandateEndHistory(pCurrent, pReason);
+            RecordEvent("mandate_end", pCurrent, pCurrent?.king, null, 0,
+                pReport.mandate_value,
+                (pCurrent?.name ?? "") +
+                T("aw_hist_edict_mandate_lost_prefix") +
+                EndReasonLabel(pReason) +
+                T("aw_hist_edict_mandate_lost_suffix"),
+                pReport.period_id);
             MarkDirty();
             DirtyAllMaps();
             ClearPendingMandateConqueror();
         }
 
+        private static void PublishMandateEndedRuntime(Kingdom pCurrent)
+        {
+            RulerTitleRestorationStateService.MarkMandateLost(pCurrent);
+            PublishRuntimeMarkerProjection(false, -1L, "");
+            MandateMilitaryPhaseService.OnMandateEnded(pCurrent);
+
+            if (pCurrent?.king != null &&
+                pCurrent.king.hasTrait(TRAIT_TIANMING))
+                pCurrent.king.removeTrait(TRAIT_TIANMING);
+
+            RulerAppellationService.RefreshLivingProjection(pCurrent);
+        }
+
+        private static bool TryPublishMandateEndHistory(Kingdom pCurrent,
+            string pReason, string pProjectionKey = "")
+        {
+            if (pCurrent?.data == null) return true;
+            return HistoryWriter.TryRecordKingdom(pCurrent, "mandate_end",
+                HistoryText.Kingdom(pCurrent) +
+                H("aw_hist_edict_mandate_lost_prefix") +
+                HistoryText.PlainText(EndReasonLabel(pReason)) +
+                H("aw_hist_edict_mandate_lost_suffix"),
+                HistoryTarget.Kingdom(pCurrent), pProjectionKey);
+        }
+
+        private static bool TryPublishMandateEndHistorySnapshot(
+            MandateProjectionOutboxPersistence.PendingProjection pPending)
+        {
+            return HistoryWriter.TryRecordKingdomSnapshot(
+                pPending.CreatedTime, pPending.PreviousYearPrefix,
+                pPending.PreviousYearPrefixRich,
+                pPending.PreviousKingdomId,
+                pPending.PreviousKingdomName,
+                pPending.PreviousKingdomColor, "mandate_end",
+                SnapshotReference(pPending.PreviousKingdomName,
+                    pPending.PreviousKingdomColor, "kingdom",
+                    pPending.PreviousKingdomId) +
+                H("aw_hist_edict_mandate_lost_prefix") +
+                HistoryText.PlainText(
+                    EndReasonLabel(pPending.PreviousEndReason)) +
+                H("aw_hist_edict_mandate_lost_suffix"),
+                HistoryTarget.From("kingdom",
+                    pPending.PreviousKingdomId),
+                pPending.OperationKey + ":old_kingdom_history");
+        }
+
+        private static bool TryPublishMandateEndEvent(
+            MandateProjectionOutboxPersistence.PendingProjection pPending)
+        {
+            return RecordSnapshotEvent("mandate_end",
+                pPending.PreviousPeriodId, pPending.PreviousKingdomId,
+                pPending.PreviousKingdomName,
+                pPending.PreviousKingdomColor,
+                pPending.PreviousRulerActorId,
+                pPending.PreviousRulerName, pPending.CreatedTime,
+                pPending.PreviousYearPrefix, 0,
+                pPending.PreviousMandateValue, 0,
+                pPending.PreviousKingdomName +
+                T("aw_hist_edict_mandate_lost_prefix") +
+                EndReasonLabel(pPending.PreviousEndReason) +
+                T("aw_hist_edict_mandate_lost_suffix"),
+                pPending.OperationKey + ":old_mandate_event");
+        }
+
         public static void CollapseMandate(Kingdom pKingdom, string pReason)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pKingdom?.data == null) return;
             MandatePhaseService.ForceChaos("mandate_collapse");
             HistoryWriter.RecordKingdom(pKingdom, "mandate_collapse",
@@ -901,6 +1385,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarStarted(War pWar)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pWar?.data == null) return;
             MandateBorderDefenseService.OnMandateWarStarted(pWar);
             string type = GetWarType(pWar);
@@ -917,6 +1404,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarEnded(War pWar, WarWinner pWinner)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pWar?.data == null) return;
             string type = GetWarType(pWar);
             if (type != WAR_TIANMING && type != WAR_TIANMING_REBEL) return;
@@ -946,6 +1436,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomDestroyed(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pKingdom?.data == null) return;
             MandateReport report = ReadReport();
             if (MandateDeclarationRules.ShouldEndDestroyedMandate(
@@ -995,6 +1488,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void NormalizeMapMarkerAfterRebelSettlement(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pKingdom?.data == null) return;
             pKingdom.data.get(LineageKeys.MANDATE_MAP_MARKER_KIND, out string marker, "");
             if (marker == "rebel_claimant") pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, "moh");
@@ -1296,6 +1792,9 @@ namespace AncientWarfare3.core.lineage
         public static void RecordMandateEvent(string pType, Kingdom pKingdom, Actor pActor, City pCity, int pDelta,
             int pMandate, string pContent)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             RecordEvent(pType, pKingdom, pActor, pCity, pDelta, pMandate, pContent);
         }
 
@@ -1414,6 +1913,9 @@ namespace AncientWarfare3.core.lineage
         private static void ChangeMandate(Kingdom pKingdom, int pDelta,
             string pEventType, string pContent = null, bool pRecordEvent = true)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             MandateReport r = ReadReport();
             if (!r.active || pKingdom?.data == null || pKingdom.id != r.kingdom_id) return;
             MandatePhaseService.AdjustCatalyst(
@@ -1439,9 +1941,9 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT ACTIVE,KINGDOM_ID,KINGDOM_NAME,DYNASTY_NAME,EMPEROR_NAME,PERIOD_ID," +
-                                  "MANDATE_VALUE,IMPERIAL_AUTHORITY,DYNASTY_PRESTIGE,CORE_CONTROL,VASSAL_LOYALTY,CRISIS_LEVEL," +
-                                  "ORIGIN_TYPE,ORIGINAL_CORE_COUNT,REBEL_ORIGIN_KINGDOM_ID,REBEL_ORIGIN_KINGDOM_NAME,CLAIMANT_KIND,MAP_MARKER_KIND " +
+                cmd.CommandText = "SELECT ACTIVE,KINGDOM_ID,KINGDOM_NAME,KINGDOM_COLOR,DYNASTY_NAME,EMPEROR_ACTOR_ID,EMPEROR_NAME,PERIOD_ID," +
+                                   "MANDATE_VALUE,IMPERIAL_AUTHORITY,DYNASTY_PRESTIGE,CORE_CONTROL,VASSAL_LOYALTY,CRISIS_LEVEL," +
+                                   "ORIGIN_TYPE,ORIGINAL_CORE_COUNT,REBEL_ORIGIN_KINGDOM_ID,REBEL_ORIGIN_KINGDOM_NAME,CLAIMANT_KIND,MAP_MARKER_KIND " +
                                   "FROM " + MandateStateTableItem.GetTableName() + " WHERE STATE_ID=@id LIMIT 1";
                 cmd.Parameters.AddWithValue("@id", STATE_ID);
                 using SQLiteDataReader reader = cmd.ExecuteReader();
@@ -1449,21 +1951,23 @@ namespace AncientWarfare3.core.lineage
                 report.active = ToInt(reader, 0) == 1;
                 report.kingdom_id = ToLong(reader, 1);
                 report.kingdom_name = ToString(reader, 2);
-                report.dynasty_name = ToString(reader, 3);
-                report.emperor_name = ToString(reader, 4);
-                report.period_id = ToLong(reader, 5);
-                report.mandate_value = ToInt(reader, 6);
-                report.imperial_authority = ToInt(reader, 7);
-                report.dynasty_prestige = ToInt(reader, 8);
-                report.core_control = (float)ToDouble(reader, 9);
-                report.vassal_loyalty = (float)ToDouble(reader, 10);
-                report.crisis_level = ToString(reader, 11);
-                report.origin_type = ToString(reader, 12);
-                report.original_core_count = ToInt(reader, 13);
-                report.rebel_origin_kingdom_id = ToLong(reader, 14);
-                report.rebel_origin_kingdom_name = ToString(reader, 15);
-                report.claimant_kind = ToString(reader, 16);
-                report.map_marker_kind = ToString(reader, 17);
+                report.kingdom_color = ToString(reader, 3);
+                report.dynasty_name = ToString(reader, 4);
+                report.emperor_actor_id = ToLong(reader, 5);
+                report.emperor_name = ToString(reader, 6);
+                report.period_id = ToLong(reader, 7);
+                report.mandate_value = ToInt(reader, 8);
+                report.imperial_authority = ToInt(reader, 9);
+                report.dynasty_prestige = ToInt(reader, 10);
+                report.core_control = (float)ToDouble(reader, 11);
+                report.vassal_loyalty = (float)ToDouble(reader, 12);
+                report.crisis_level = ToString(reader, 13);
+                report.origin_type = ToString(reader, 14);
+                report.original_core_count = ToInt(reader, 15);
+                report.rebel_origin_kingdom_id = ToLong(reader, 16);
+                report.rebel_origin_kingdom_name = ToString(reader, 17);
+                report.claimant_kind = ToString(reader, 18);
+                report.map_marker_kind = ToString(reader, 19);
             }
             catch { }
 
@@ -1492,6 +1996,9 @@ namespace AncientWarfare3.core.lineage
             string pOriginType = null, string pClaimantKind = null, Kingdom pRebelOrigin = null,
             string pMapMarkerKind = null)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (!Ready || pKingdom?.data == null) return;
             Actor king = pKingdom.king;
             string table = MandateStateTableItem.GetTableName();
@@ -1553,6 +2060,9 @@ namespace AncientWarfare3.core.lineage
         private static void UpdateState(Kingdom pKingdom, long pPeriodId, int pMandate, int pAuthority, int pPrestige,
             float pCoreControl, float pVassalLoyalty, string pCrisis, int pYear)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             UpsertState(pKingdom, pPeriodId, pMandate, pAuthority, pPrestige, pCoreControl, pVassalLoyalty, pCrisis,
                 pYear, ReadReport().period_id == pPeriodId ? ReadStartTime() : LineageService.CurTime(),
                 ReadReport().origin_type, ReadReport().claimant_kind, null, ReadReport().map_marker_kind);
@@ -1574,108 +2084,129 @@ namespace AncientWarfare3.core.lineage
             catch { return LineageService.CurTime(); }
         }
 
-        private static void CreateLegalCores(Kingdom pKingdom, long pPeriodId, long pPreviousPeriodId)
+        private static bool CreateLegalCores(long pPeriodId,
+            IReadOnlyList<MandateProjectionOutboxPersistence.
+                CoreCitySnapshot> pSnapshots,
+            string pProjectionKeyPrefix, bool requireCurrentStateUpdate)
         {
-            if (!Ready || pKingdom?.data == null) return;
-            int count = 0;
-            var inserted = new HashSet<long>();
-
-            foreach (CoreCitySnapshot core in ReadCoreCitySnapshots(pPreviousPeriodId))
-            {
-                if (!MandateLegalCoreInheritanceRules.ShouldInheritPreviousCore(
-                        pPreviousPeriodId, core.city_id, inserted.Contains(core.city_id)))
-                    continue;
-                if (!InsertLegalCore(pPeriodId, core.city_id, core.city_name, core.original_kingdom_id,
-                        core.original_kingdom_name, core.original_kingdom_color, "inherited"))
-                    continue;
-                inserted.Add(core.city_id);
-                count++;
-            }
-
-            foreach (City city in pKingdom.getCities())
-            {
-                if (city?.data == null || city.isRekt()) continue;
-                if (!MandateLegalCoreInheritanceRules.ShouldAddFoundingCore(city.id, inserted.Contains(city.id)))
-                    continue;
-                if (!InsertLegalCore(pPeriodId, city.id, city.data.name ?? "", pKingdom.id, pKingdom.name ?? "",
-                        HistoryColors.FromKingdom(pKingdom), "founding"))
-                    continue;
-                inserted.Add(city.id);
-                count++;
-            }
-
-            DB.UpdateValue(MandatePeriodTableItem.GetTableName(),
-                new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("PERIOD_ID", pPeriodId) },
-                ColumnVal.Create("LEGAL_CORE_COUNT", count));
-            MarkDirty();
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                !Ready || pSnapshots == null)
+                return false;
+            bool projected = MandateLegalCoreProjectionPersistence.TryProject(
+                DB, STATE_ID, pPeriodId, pSnapshots, pProjectionKeyPrefix,
+                LineageService.CurTime(), requireCurrentStateUpdate,
+                out _, out string error);
+            if (!projected)
+                ModClass.LogWarning("Mandate legal core completion failed: " +
+                                    error);
+            else
+                MarkDirty();
+            return projected;
         }
 
-        private static bool InsertLegalCore(long pPeriodId, long pCityId, string pCityName, long pOriginalKingdomId,
-            string pOriginalKingdomName, string pOriginalKingdomColor, string pCoreType)
+        private static bool EnsurePendingCoreSnapshots(Kingdom pKingdom,
+            MandateProjectionOutboxPersistence.PendingProjection pPending)
         {
-            if (!Ready || pPeriodId < 0 || pCityId < 0) return false;
-            try
-            {
-                long coreId = TableIdAllocator.Next(DB, MandateCoreCityTableItem.GetTableName(), "CORE_ID");
-                DB.Insert(MandateCoreCityTableItem.GetTableName(),
-                    ColumnVal.Create("CORE_ID", coreId),
-                    ColumnVal.Create("PERIOD_ID", pPeriodId),
-                    ColumnVal.Create("CITY_ID", pCityId),
-                    ColumnVal.Create("CITY_NAME", pCityName ?? ""),
-                    ColumnVal.Create("ORIGINAL_KINGDOM_ID", pOriginalKingdomId),
-                    ColumnVal.Create("ORIGINAL_KINGDOM_NAME", pOriginalKingdomName ?? ""),
-                    ColumnVal.Create("ORIGINAL_KINGDOM_COLOR", HistoryColors.Normalize(pOriginalKingdomColor)),
-                    ColumnVal.Create("CORE_TYPE", string.IsNullOrEmpty(pCoreType) ? "founding" : pCoreType),
-                    ColumnVal.Create("ADDED_TIME", LineageService.CurTime()),
-                    ColumnVal.Create("ACTIVE", 1));
+            if (!string.IsNullOrEmpty(pPending.CoreSnapshotSource))
                 return true;
-            }
-            catch (Exception e)
+            if (!TryCaptureLegalCoreSnapshots(pKingdom,
+                    pPending.PreviousPeriodId, "legacy",
+                    out List<MandateProjectionOutboxPersistence.
+                        CoreCitySnapshot> snapshots))
+                return false;
+            if (!MandateProjectionOutboxPersistence.
+                    TryMigrateLegacyCoreSnapshots(DB,
+                        pPending.OperationKey, snapshots,
+                        out _, out string error))
             {
-                ModClass.LogWarning("Mandate legal core insert failed: " + e.Message);
+                ModClass.LogWarning(
+                    "Legacy Mandate core snapshot migration failed: " +
+                    error);
                 return false;
             }
+            if (!MandateProjectionOutboxPersistence.TryReadPending(
+                    DB, pPending.PeriodId,
+                    out MandateProjectionOutboxPersistence.PendingProjection
+                        migrated, out error) || migrated == null)
+            {
+                ModClass.LogWarning(
+                    "Legacy Mandate core snapshot reload failed: " + error);
+                return false;
+            }
+            pPending.CoreSnapshotSource = migrated.CoreSnapshotSource;
+            pPending.CoreCitySnapshots = migrated.CoreCitySnapshots;
+            return true;
         }
 
-        private static List<CoreCitySnapshot> ReadCoreCitySnapshots(long pPeriodId)
+        private static bool TryCaptureLegalCoreSnapshots(Kingdom pKingdom,
+            long pPreviousPeriodId, string pSnapshotSource,
+            out List<MandateProjectionOutboxPersistence.CoreCitySnapshot>
+                pSnapshots)
         {
-            var result = new List<CoreCitySnapshot>();
-            if (!Ready || pPeriodId < 0) return result;
-            try
+            pSnapshots = new List<MandateProjectionOutboxPersistence.
+                CoreCitySnapshot>();
+            var captured = new HashSet<long>();
+            if (pPreviousPeriodId >= 0L)
             {
-                using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT CITY_ID, CITY_NAME, ORIGINAL_KINGDOM_ID, ORIGINAL_KINGDOM_NAME, " +
-                                  "ORIGINAL_KINGDOM_COLOR FROM " + MandateCoreCityTableItem.GetTableName() +
-                                  " WHERE PERIOD_ID=@p AND ACTIVE=1 ORDER BY CORE_ID ASC";
-                cmd.Parameters.AddWithValue("@p", pPeriodId);
-                using SQLiteDataReader reader = cmd.ExecuteReader();
-                while (reader.Read())
+                if (!MandateLegalCoreProjectionPersistence.
+                        TryReadInheritedSnapshots(DB, pPreviousPeriodId,
+                            out List<MandateProjectionOutboxPersistence.
+                                CoreCitySnapshot> inherited,
+                            out string error))
                 {
-                    result.Add(new CoreCitySnapshot
-                    {
-                        city_id = ToLong(reader, 0),
-                        city_name = ToString(reader, 1),
-                        original_kingdom_id = ToLong(reader, 2),
-                        original_kingdom_name = ToString(reader, 3),
-                        original_kingdom_color = ToString(reader, 4)
-                    });
+                    ModClass.LogWarning(
+                        "Mandate inherited core snapshot failed: " + error);
+                    return false;
+                }
+                foreach (MandateProjectionOutboxPersistence.CoreCitySnapshot
+                         core in inherited)
+                {
+                    if (!MandateLegalCoreInheritanceRules.
+                            ShouldInheritPreviousCore(pPreviousPeriodId,
+                                core.CityId,
+                                captured.Contains(core.CityId)))
+                        continue;
+                    core.SnapshotSource = pSnapshotSource ?? "";
+                    pSnapshots.Add(core);
+                    captured.Add(core.CityId);
                 }
             }
-            catch { }
-            return result;
-        }
-
-        private struct CoreCitySnapshot
-        {
-            public long city_id;
-            public string city_name;
-            public long original_kingdom_id;
-            public string original_kingdom_name;
-            public string original_kingdom_color;
+            if (pKingdom?.data != null)
+            {
+                string kingdomName = pKingdom.name ?? "";
+                string kingdomColor = HistoryColors.FromKingdom(pKingdom);
+                foreach (City city in pKingdom.getCities())
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    if (!MandateLegalCoreInheritanceRules.
+                            ShouldAddFoundingCore(city.id,
+                                captured.Contains(city.id)))
+                        continue;
+                    pSnapshots.Add(new MandateProjectionOutboxPersistence.
+                        CoreCitySnapshot
+                    {
+                        CityId = city.id,
+                        CityName = city.data.name ?? "",
+                        OriginalKingdomId = pKingdom.id,
+                        OriginalKingdomName = kingdomName,
+                        OriginalKingdomColor = kingdomColor,
+                        CoreType = "founding",
+                        SnapshotSource = pSnapshotSource ?? ""
+                    });
+                    captured.Add(city.id);
+                }
+            }
+            pSnapshots.Sort((left, right) =>
+                left.CityId.CompareTo(right.CityId));
+            return true;
         }
 
         private static void UpdateOriginalCoreCount(long pPeriodId)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (!Ready || pPeriodId < 0) return;
             int count = CountCoreCities(pPeriodId);
             try
@@ -1692,18 +2223,111 @@ namespace AncientWarfare3.core.lineage
             MarkDirty();
         }
 
-        private static void RecordEvent(string pType, Kingdom pKingdom, Actor pActor, City pCity, int pDelta,
-            int pMandate, string pContent)
+        private static bool RecordSnapshotEvent(string pType,
+            long pPeriodId, long pKingdomId, string pKingdomName,
+            string pKingdomColor, long pActorId, string pActorName,
+            double pWorldTime, string pYearPrefix, int pDelta,
+            int pMandate, int pImperialAuthority, string pContent,
+            string pProjectionKey)
         {
-            if (!Ready) return;
+            if (!Ready || string.IsNullOrWhiteSpace(pProjectionKey))
+                return false;
+            try
+            {
+                long eventId = TableIdAllocator.Next(DB,
+                    MandateEventTableItem.GetTableName(), "EVENT_ID");
+                return MandateProjectionOutboxPersistence.
+                    TryApplyIdempotentRecord(DB,
+                        MandateEventTableItem.GetTableName(),
+                        pProjectionKey,
+                        transaction => InsertMandateEventSnapshotRow(
+                            transaction, eventId, pPeriodId, pType,
+                            pKingdomId, pKingdomName, pKingdomColor,
+                            pActorId, pActorName, pWorldTime, pYearPrefix,
+                            pDelta, pMandate, pImperialAuthority, pContent,
+                            pProjectionKey), out _);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Mandate snapshot event failed: " +
+                                    e.Message);
+                return false;
+            }
+        }
+
+        private static bool InsertMandateEventSnapshotRow(
+            SQLiteTransaction pTransaction, long pEventId, long pPeriodId,
+            string pType, long pKingdomId, string pKingdomName,
+            string pKingdomColor, long pActorId, string pActorName,
+            double pWorldTime, string pYearPrefix, int pDelta,
+            int pMandate, int pImperialAuthority, string pContent,
+            string pProjectionKey)
+        {
+            using var command = new SQLiteCommand(DB)
+            {
+                Transaction = pTransaction,
+                CommandText = "INSERT INTO " +
+                    MandateEventTableItem.GetTableName() +
+                    "(EVENT_ID,PERIOD_ID,EVENT_TYPE,KINGDOM_ID," +
+                    "KINGDOM_NAME,KINGDOM_COLOR,ACTOR_ID,ACTOR_NAME," +
+                    "CITY_ID,CITY_NAME,WORLD_TIME,YEAR_PREFIX,VALUE_DELTA," +
+                    "MANDATE_VALUE,IMPERIAL_AUTHORITY,CONTENT," +
+                    "PROJECTION_KEY) VALUES(@id,@period,@type,@kingdom," +
+                    "@kingdomName,@color,@actor,@actorName,-1,'',@time," +
+                    "@year,@delta,@mandate,@authority,@content,@key)"
+            };
+            command.Parameters.AddWithValue("@id", pEventId);
+            command.Parameters.AddWithValue("@period", pPeriodId);
+            command.Parameters.AddWithValue("@type", pType ?? "");
+            command.Parameters.AddWithValue("@kingdom", pKingdomId);
+            command.Parameters.AddWithValue("@kingdomName",
+                pKingdomName ?? "");
+            command.Parameters.AddWithValue("@color",
+                HistoryColors.Normalize(pKingdomColor));
+            command.Parameters.AddWithValue("@actor", pActorId);
+            command.Parameters.AddWithValue("@actorName", pActorName ?? "");
+            command.Parameters.AddWithValue("@time", pWorldTime);
+            command.Parameters.AddWithValue("@year", pYearPrefix ?? "");
+            command.Parameters.AddWithValue("@delta", pDelta);
+            command.Parameters.AddWithValue("@mandate", pMandate);
+            command.Parameters.AddWithValue("@authority",
+                pImperialAuthority);
+            command.Parameters.AddWithValue("@content", pContent ?? "");
+            command.Parameters.AddWithValue("@key", pProjectionKey);
+            return command.ExecuteNonQuery() == 1;
+        }
+
+        private static bool RecordEvent(string pType, Kingdom pKingdom, Actor pActor, City pCity, int pDelta,
+            int pMandate, string pContent, long pPeriodId = -1L,
+            string pProjectionKey = "")
+        {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
+            if (!Ready) return false;
             MandateReport report = ReadReport();
             try
             {
                 long eventId = TableIdAllocator.Next(DB, MandateEventTableItem.GetTableName(), "EVENT_ID");
                 double now = LineageService.CurTime();
+                long periodId = pPeriodId >= 0L
+                    ? pPeriodId
+                    : report.period_id;
+                string yearPrefix = HistoryWriter.BuildYearPrefix(now,
+                    pKingdom);
+                if (!string.IsNullOrWhiteSpace(pProjectionKey))
+                    return MandateProjectionOutboxPersistence.
+                        TryApplyIdempotentRecord(DB,
+                            MandateEventTableItem.GetTableName(),
+                            pProjectionKey,
+                            transaction => InsertMandateEventRow(transaction,
+                                eventId, periodId, pType, pKingdom, pActor,
+                                pCity, now, yearPrefix, pDelta, pMandate,
+                                report.imperial_authority, pContent,
+                                pProjectionKey), out _);
                 DB.Insert(MandateEventTableItem.GetTableName(),
                     ColumnVal.Create("EVENT_ID", eventId),
-                    ColumnVal.Create("PERIOD_ID", report.period_id),
+                    ColumnVal.Create("PERIOD_ID", periodId),
                     ColumnVal.Create("EVENT_TYPE", pType ?? ""),
                     ColumnVal.Create("KINGDOM_ID", pKingdom?.id ?? -1L),
                     ColumnVal.Create("KINGDOM_NAME", pKingdom?.name ?? ""),
@@ -1713,16 +2337,65 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("CITY_ID", pCity?.id ?? -1L),
                     ColumnVal.Create("CITY_NAME", pCity?.data?.name ?? ""),
                     ColumnVal.Create("WORLD_TIME", now),
-                    ColumnVal.Create("YEAR_PREFIX", HistoryWriter.BuildYearPrefix(now, pKingdom)),
+                    ColumnVal.Create("YEAR_PREFIX", yearPrefix),
                     ColumnVal.Create("VALUE_DELTA", pDelta),
                     ColumnVal.Create("MANDATE_VALUE", pMandate),
                     ColumnVal.Create("IMPERIAL_AUTHORITY", report.imperial_authority),
                     ColumnVal.Create("CONTENT", pContent ?? ""));
+                return true;
             }
             catch (Exception e)
             {
                 ModClass.LogWarning("Mandate event failed: " + e.Message);
+                return false;
             }
+        }
+
+        private static bool InsertMandateEventRow(
+            SQLiteTransaction pTransaction, long pEventId, long pPeriodId,
+            string pType, Kingdom pKingdom, Actor pActor, City pCity,
+            double pWorldTime, string pYearPrefix, int pDelta,
+            int pMandate, int pImperialAuthority, string pContent,
+            string pProjectionKey)
+        {
+            using var command = new SQLiteCommand(DB)
+            {
+                Transaction = pTransaction,
+                CommandText = "INSERT INTO " +
+                    MandateEventTableItem.GetTableName() +
+                    "(EVENT_ID,PERIOD_ID,EVENT_TYPE,KINGDOM_ID," +
+                    "KINGDOM_NAME,KINGDOM_COLOR,ACTOR_ID,ACTOR_NAME," +
+                    "CITY_ID,CITY_NAME,WORLD_TIME,YEAR_PREFIX,VALUE_DELTA," +
+                    "MANDATE_VALUE,IMPERIAL_AUTHORITY,CONTENT," +
+                    "PROJECTION_KEY) VALUES(@id,@period,@type,@kingdom," +
+                    "@kingdomName,@color,@actor,@actorName,@city,@cityName," +
+                    "@time,@year,@delta,@mandate,@authority,@content,@key)"
+            };
+            command.Parameters.AddWithValue("@id", pEventId);
+            command.Parameters.AddWithValue("@period", pPeriodId);
+            command.Parameters.AddWithValue("@type", pType ?? "");
+            command.Parameters.AddWithValue("@kingdom",
+                pKingdom?.id ?? -1L);
+            command.Parameters.AddWithValue("@kingdomName",
+                pKingdom?.name ?? "");
+            command.Parameters.AddWithValue("@color",
+                HistoryColors.FromKingdom(pKingdom));
+            command.Parameters.AddWithValue("@actor",
+                pActor?.data?.id ?? -1L);
+            command.Parameters.AddWithValue("@actorName",
+                pActor?.getName() ?? "");
+            command.Parameters.AddWithValue("@city", pCity?.id ?? -1L);
+            command.Parameters.AddWithValue("@cityName",
+                pCity?.data?.name ?? "");
+            command.Parameters.AddWithValue("@time", pWorldTime);
+            command.Parameters.AddWithValue("@year", pYearPrefix ?? "");
+            command.Parameters.AddWithValue("@delta", pDelta);
+            command.Parameters.AddWithValue("@mandate", pMandate);
+            command.Parameters.AddWithValue("@authority",
+                pImperialAuthority);
+            command.Parameters.AddWithValue("@content", pContent ?? "");
+            command.Parameters.AddWithValue("@key", pProjectionKey ?? "");
+            return command.ExecuteNonQuery() == 1;
         }
 
         private static void RebuildCoreCache(long pPeriodId)
@@ -1916,6 +2589,20 @@ namespace AncientWarfare3.core.lineage
             catch { }
             foreach (Kingdom kingdom in World.world.kingdoms)
                 if (kingdom?.data != null && kingdom.id == pId) return kingdom;
+            return null;
+        }
+
+        private static Actor FindActor(long pId)
+        {
+            if (pId < 0L || World.world?.units == null) return null;
+            try
+            {
+                Actor actor = World.world.units.get(pId);
+                if (actor?.data != null) return actor;
+            }
+            catch { }
+            foreach (Actor actor in World.world.units)
+                if (actor?.data != null && actor.data.id == pId) return actor;
             return null;
         }
 

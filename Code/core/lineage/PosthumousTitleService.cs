@@ -45,7 +45,10 @@ namespace AncientWarfare3.core.lineage
             if (string.IsNullOrEmpty(facts.StateName)) facts.StateName = pContext.KingdomName ?? "";
             if (string.IsNullOrEmpty(facts.KingdomColor))
                 facts.KingdomColor = HistoryColors.Normalize(pContext.KingdomColor);
-            facts.HighestTitle = Math.Max(facts.HighestTitle, (int)pContext.Title);
+            facts.HighestTitle = pReign.IsValid
+                ? RulerTitleFactRules.ResolveSavedHighestTitle(
+                    facts.HighestTitle, facts.MandatePeriodId)
+                : Math.Max(facts.HighestTitle, (int)pContext.Title);
             facts.EndReason = pEndReason ?? facts.EndReason ?? "";
             bool mandateKingdom = facts.IsMandate || pContext.IsMandate ||
                                   HasFormerMandateSnapshot(pKing, pContext.KingdomId);

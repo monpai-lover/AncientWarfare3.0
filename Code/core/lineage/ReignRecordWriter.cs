@@ -55,10 +55,13 @@ namespace AncientWarfare3.core.lineage
 
         // ── 外部接口 ──
 
-        public static void OpenReign(Kingdom pKingdom, Actor pNewKing)
+        public static bool OpenReign(Kingdom pKingdom, Actor pNewKing)
         {
-            if (!Ready || pKingdom?.data == null || pNewKing?.data == null) return;
-            if (!LineageService.IsXiaKingdom(pKingdom) || !LineageService.IsXia(pNewKing)) return;
+            if (!Ready || pKingdom?.data == null || pNewKing?.data == null)
+                return false;
+            if (!LineageService.IsXiaKingdom(pKingdom) ||
+                !LineageService.IsXia(pNewKing))
+                return false;
             long reignId = TableIdAllocator.Next(DB, TABLE, "REIGN_ID");
             int idx = CountReigns(pKingdom.id) + 1;
             double now = World.world.getCurWorldTime();
@@ -107,8 +110,95 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("DEATH_CAUSE",        ""));
                 pKingdom.data.set(LineageKeys.KINGDOM_REIGN_START,
                     (float)now);
+                return true;
             }
-            catch (Exception e) { ModClass.LogWarning("ReignRecordWriter.OpenReign: " + e.Message); }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("ReignRecordWriter.OpenReign: " +
+                                    e.Message);
+                return false;
+            }
+        }
+
+        public static bool EnsureOpenReign(Kingdom pKingdom, Actor pKing)
+        {
+            if (!Ready || pKingdom?.data == null || pKing?.data == null)
+                return false;
+            if (!TryReadUniqueOpenRuler(pKingdom.id, out long rulerActorId))
+                return false;
+            if (rulerActorId == pKing.data.id) return true;
+            if (rulerActorId >= 0L || !OpenReign(pKingdom, pKing))
+                return false;
+            return TryReadUniqueOpenRuler(pKingdom.id, out rulerActorId) &&
+                   rulerActorId == pKing.data.id;
+        }
+
+        public static bool TryTransitionReign(Kingdom pKingdom,
+            Actor pNewKing, double pStartTime,
+            out double pPersistedStartTime, out string pError)
+        {
+            pPersistedStartTime = -1d;
+            pError = "";
+            if (!Ready || pKingdom?.data == null || pNewKing?.data == null ||
+                pStartTime < 0d || !LineageService.IsXiaKingdom(pKingdom) ||
+                !LineageService.IsXia(pNewKing))
+                return false;
+
+            ReignInfo open = ReadOpenReignInfo(pKingdom.id);
+            int endPop = SafePopulation(pKingdom);
+            int endCities = SafeCityCount(pKingdom);
+            int endArmies = SafeArmyCount(pKingdom);
+            var (wins, losses) = open.IsValid
+                ? WarRecordWriter.GetWarRecord(
+                    pKingdom.id, open.StartTime, pStartTime)
+                : (0, 0);
+            pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME,
+                out string stem, "");
+            pNewKing.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            pKingdom.data.get(LineageKeys.MANDATE_PERIOD_ID,
+                out long mandatePeriodId, -1L);
+            int reignIndex = CountReigns(pKingdom.id) + 1;
+            string kingdomColor = HistoryColors.FromKingdom(pKingdom);
+            string rulerColor = HistoryColors.FromActor(pNewKing);
+            int highestTitle = (int)KingdomTitleService.GetTitle(pKingdom);
+            var request = new ReignAccessionPersistence.Request
+            {
+                KingdomId = pKingdom.id,
+                NewReignId = TableIdAllocator.Next(DB, TABLE, "REIGN_ID"),
+                NewRulerActorId = pNewKing.data.id,
+                NewKingdomColor = kingdomColor,
+                NewShiId = shiId,
+                NewDynastyId = DynastyRecordWriter.GetCurrentDynastyId(
+                    pKingdom.id),
+                NewMandatePeriodId = mandatePeriodId,
+                NewHighestTitle = highestTitle,
+                NewStateName = StateNameService.GetBoundOrCurrentName(
+                    pKingdom, shiId),
+                NewRulerName = pNewKing.getName(),
+                NewRulerColor = string.IsNullOrEmpty(rulerColor)
+                    ? kingdomColor
+                    : rulerColor,
+                NewReignIndex = reignIndex,
+                NewStartTime = pStartTime,
+                NewYearNameStem = stem ?? "",
+                NewYearNameColor = kingdomColor,
+                NewStartPopulation = endPop,
+                NewStartCityCount = endCities,
+                NewStartArmyCount = endArmies,
+                NewIsFounder = reignIndex == 1 ? 1 : 0,
+                OldEndTime = pStartTime,
+                OldEndReason = "replaced",
+                OldEndPopulation = endPop,
+                OldEndCityCount = endCities,
+                OldEndArmyCount = endArmies,
+                OldWarWins = wins,
+                OldWarLosses = losses,
+                OldLostCapital = 0,
+                OldHighestTitle = Math.Max(open.HighestTitle, highestTitle),
+                OldDeathCause = ""
+            };
+            return ReignAccessionPersistence.TryTransition(DB, TABLE,
+                request, out pPersistedStartTime, out pError);
         }
 
         public static void ProjectCurrentReignStart(Kingdom pKingdom,
@@ -120,6 +210,50 @@ namespace AncientWarfare3.core.lineage
                 pKing.data.id);
             pKingdom.data.set(LineageKeys.KINGDOM_REIGN_START,
                 (float)pStartTime);
+        }
+
+        public static bool TryProjectCurrentReignDynasty(Kingdom pKingdom,
+            Actor pKing, out string pError)
+        {
+            pError = "";
+            if (!Ready || pKingdom?.data == null || pKing?.data == null)
+            {
+                pError = "invalid current reign dynasty projection";
+                return false;
+            }
+            long dynastyId = DynastyRecordWriter.GetCurrentDynastyId(
+                pKingdom.id);
+            return TryProjectCurrentReignDynasty(pKingdom, pKing,
+                dynastyId, out pError);
+        }
+
+        public static bool TryProjectCurrentReignDynasty(Kingdom pKingdom,
+            Actor pKing, long pDynastyId, out string pError)
+        {
+            pError = "";
+            if (!Ready || pKingdom?.data == null || pKing?.data == null)
+            {
+                pError = "invalid current reign dynasty projection";
+                return false;
+            }
+            return ReignMandateProjectionPersistence.TryProjectDynasty(
+                DB, TABLE, pKingdom.id, pKing.data.id, pDynastyId,
+                out pError);
+        }
+
+        public static bool TryReadCurrentReignDynasty(Kingdom pKingdom,
+            Actor pKing, out long pDynastyId, out string pError)
+        {
+            pDynastyId = -1L;
+            pError = "";
+            if (!Ready || pKingdom?.data == null || pKing?.data == null)
+            {
+                pError = "invalid current reign dynasty read";
+                return false;
+            }
+            return ReignMandateProjectionPersistence.TryReadDynasty(
+                DB, TABLE, pKingdom.id, pKing.data.id, out pDynastyId,
+                out pError);
         }
 
         public static bool TryRecoverCurrentProjection(Kingdom pKingdom,
@@ -168,6 +302,33 @@ namespace AncientWarfare3.core.lineage
             catch (Exception error)
             {
                 ModClass.LogWarning("Reign projection recovery failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        private static bool TryReadUniqueOpenRuler(long pKingdomId,
+            out long pRulerActorId)
+        {
+            pRulerActorId = -1L;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText =
+                    "SELECT COUNT(*),COALESCE(MAX(KING_ACTOR_ID),-1) FROM " +
+                    TABLE + " WHERE KINGDOM_ID=@kingdom AND END_TIME=-1";
+                command.Parameters.AddWithValue("@kingdom", pKingdomId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                if (!reader.Read()) return false;
+                int count = Convert.ToInt32(reader.GetValue(0));
+                if (count == 0) return true;
+                if (count != 1) return false;
+                pRulerActorId = Convert.ToInt64(reader.GetValue(1));
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Read open reign identity failed: " +
                                     error.Message);
                 return false;
             }

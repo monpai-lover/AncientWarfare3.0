@@ -177,6 +177,7 @@
     <Compile Include="OccupiedCityCivilianProtectionRulesTests.cs.txt" />
     <Compile Include="HistoryLocalizationRulesTests.cs.txt" />
     <Compile Include="ConsistencyRegressionRulesTests.cs.txt" />
+    <Compile Include="MandateSuccessionRegressionRulesTests.cs.txt" />
     <Compile Include="Regression20260721Tests.cs.txt" />
     <Compile Include="ArmyMapInformationRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalMapActivationRulesTests.cs.txt" />
@@ -269,6 +270,17 @@
     <Compile Include="..\..\Code\core\lineage\RestorationUprisingRules.cs" Link="Production\RestorationUprisingRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateStartRecordRules.cs" Link="Production\MandateStartRecordRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateNameProjectionRules.cs" Link="Production\MandateNameProjectionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateSuccessionRules.cs" Link="Production\MandateSuccessionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateAccessionCoordinator.cs" Link="Production\MandateAccessionCoordinator.cs" />
+    <Compile Include="..\..\Code\core\lineage\ReignAccessionPersistence.cs" Link="Production\ReignAccessionPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateSuccessionPersistence.cs" Link="Production\MandateSuccessionPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\ReignMandateProjectionPersistence.cs" Link="Production\ReignMandateProjectionPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateDeclarationPersistence.cs" Link="Production\MandateDeclarationPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateProjectionOutboxPersistence.cs" Link="Production\MandateProjectionOutboxPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateLegalCoreProjectionPersistence.cs" Link="Production\MandateLegalCoreProjectionPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateProjectionResumeRules.cs" Link="Production\MandateProjectionResumeRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DynastyTransitionRules.cs" Link="Production\DynastyTransitionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DynastyStateNamePersistence.cs" Link="Production\DynastyStateNamePersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\MandatePhaseRules.cs" Link="Production\MandatePhaseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateDeclineRebellionRules.cs" Link="Production\MandateDeclineRebellionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateFeudatoryCompletionRules.cs" Link="Production\MandateFeudatoryCompletionRules.cs" />
