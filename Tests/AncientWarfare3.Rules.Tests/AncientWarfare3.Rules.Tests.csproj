@@ -9,6 +9,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="ClassicCivLifespanContentTests.cs.txt" />
+    <Compile Include="TestClassicCivLifespanStubs.cs.txt" />
+    <Compile Include="..\..\Code\content\ClassicCivLifespanContent.cs" Link="Production\ClassicCivLifespanContent.cs" />
     <Compile Include="ReflectionDelegateFactoryTests.cs.txt" />
     <Compile Include="..\..\Code\utils\ReflectionDelegateFactory.cs" Link="Production\ReflectionDelegateFactory.cs" />
     <Compile Include="LineageFamilyArchiveMigrationTests.cs.txt" />
@@ -689,5 +692,6 @@
   <Target Name="XiaItemDynamicAtlasSourceGuard"
       BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\XiaItemDynamicAtlasSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ClassicCivLifespanSourceGuard.ps1&quot;" />
   </Target>
 </Project>

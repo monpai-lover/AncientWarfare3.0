@@ -8,6 +8,13 @@ using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--classic-civ-lifespan")
+{
+    ClassicCivLifespanContentTests.Run();
+    Console.WriteLine("Classic civilization lifespan behavior tests passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
 {
     ArmyRtsWarLifecycleRulesTests.Run();
@@ -7733,6 +7740,7 @@ NameSystemRulesTests.Run();
 LineageGivenNameNormalizationRulesTests.Run();
 ArmyMembershipOwnershipRulesTests.Run();
 KingdomRenamePersistenceRulesTests.Run();
+ClassicCivLifespanContentTests.Run();
 XiaExpansionAndCivMonkeyNamingRulesTests.Run();
 IntegratedNamingRulesTests.Run();
 WesternLineageNamingRulesTests.Run();

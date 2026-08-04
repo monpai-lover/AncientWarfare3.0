@@ -1,0 +1,76 @@
+using System;
+using System.Collections.Generic;
+
+public readonly struct GenomePart : IEquatable<GenomePart>
+{
+    public readonly string id;
+    public readonly float value;
+
+    public GenomePart(string pId, float pValue)
+    {
+        if (string.IsNullOrEmpty(pId))
+            throw new ArgumentNullException(nameof(pId));
+        id = pId;
+        value = pValue;
+    }
+
+    public bool Equals(GenomePart pOther)
+    {
+        return string.Equals(id, pOther.id,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    public override bool Equals(object pObject)
+    {
+        return pObject is GenomePart other && Equals(other);
+    }
+
+    public override int GetHashCode()
+    {
+        return StringComparer.OrdinalIgnoreCase.GetHashCode(id);
+    }
+}
+
+public sealed class TestBaseStats
+{
+    private readonly Dictionary<string, float> _values =
+        new Dictionary<string, float>(StringComparer.Ordinal);
+
+    public float this[string pId]
+    {
+        get => _values.TryGetValue(pId, out float value) ? value : 0f;
+        set => _values[pId] = value;
+    }
+}
+
+public sealed class ActorAsset
+{
+    public readonly HashSet<GenomePart> genome_parts =
+        new HashSet<GenomePart>();
+    public TestBaseStats base_stats = new TestBaseStats();
+}
+
+public sealed class TestActorAssetLibrary
+{
+    private readonly Dictionary<string, ActorAsset> _assets =
+        new Dictionary<string, ActorAsset>(StringComparer.Ordinal);
+
+    public readonly List<string> requests = new List<string>();
+
+    public void Add(string pId, ActorAsset pActor)
+    {
+        _assets.Add(pId, pActor);
+    }
+
+    public ActorAsset get(string pId)
+    {
+        requests.Add(pId);
+        return _assets.TryGetValue(pId, out ActorAsset actor) ? actor : null;
+    }
+}
+
+public static class AssetManager
+{
+    public static TestActorAssetLibrary actor_library =
+        new TestActorAssetLibrary();
+}
