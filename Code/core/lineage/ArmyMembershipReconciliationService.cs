@@ -15,6 +15,17 @@ namespace AncientWarfare3.core.lineage
             Pending.Enqueue(pArmy);
         }
 
+        public static void EnqueueAll(ArmyManager pManager)
+        {
+            if (pManager == null) return;
+            try
+            {
+                foreach (Army army in pManager)
+                    Enqueue(army);
+            }
+            catch { }
+        }
+
         public static void ProcessFrame()
         {
             if (!RuntimeStable()) return;

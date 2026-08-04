@@ -14,6 +14,10 @@ $cityPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
     'Code/patch/AW_ArmySafetyPatch.cs')
 $deferredPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
     'Code/patch/AW_DeferredRuntimeWorkPatch.cs')
+$armyService = Get-Content -Raw -LiteralPath (Join-Path $repo `
+    'Code/core/lineage/AWArmyService.cs')
+$dirtyPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
+    'Code/patch/AW_DirtyMetaActorIndexPatch.cs')
 
 if ($actorPatch -notmatch 'ArmyMembershipReconciliationService\.Enqueue') {
     throw 'Actor.setKingdom must enqueue its affected army.'
@@ -23,6 +27,12 @@ if ($cityPatch -notmatch 'ArmyMembershipReconciliationService\.Enqueue') {
 }
 if ($deferredPatch -notmatch 'ArmyMembershipReconciliationService\.ProcessFrame') {
     throw 'The main-thread deferred runtime host must process army reconciliation.'
+}
+if ($armyService -notmatch 'AddToArmy[\s\S]*ArmyMembershipOwnershipRules\.Decide') {
+    throw 'AddToArmy must reject stable known foreign membership.'
+}
+if ($dirtyPatch -notmatch 'HarmonyPostfix[\s\S]*ArmyManager[\s\S]*ArmyMembershipReconciliationService\.EnqueueAll') {
+    throw 'ArmyManager dirty rebuilds in Native and Large modes must enqueue reconciliation.'
 }
 
 $requiredCleanup = @(
