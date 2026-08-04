@@ -316,7 +316,8 @@ namespace AncientWarfare3.core.lineage
         internal static bool WriteCapturedDeathSynchronously(
             ActorArchiveTableItem pSnapshot,
             FamilyTreeProjectionChange pProjectionChange,
-            bool pFinalizeProjection)
+            bool pFinalizeProjection,
+            System.TimeSpan? pOrderingTimeout = null)
         {
             if (pSnapshot == null) return false;
             var db = LineageArchiveManager.Instance.OperatingDB;
@@ -324,7 +325,8 @@ namespace AncientWarfare3.core.lineage
                 !LineageArchiveManager.Instance.InitializeSuccessful)
                 return false;
             if (!HistoricalWriteService.FlushForSynchronousFallback(
-                    System.TimeSpan.FromSeconds(5), out _)) return false;
+                    pOrderingTimeout ?? System.TimeSpan.FromSeconds(5),
+                    out _)) return false;
 
             string table = ActorArchiveTableItem.GetTableName();
             bool exists = db.CheckKeyExist(table,

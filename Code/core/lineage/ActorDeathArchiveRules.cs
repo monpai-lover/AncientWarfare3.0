@@ -39,6 +39,11 @@ namespace AncientWarfare3.core.lineage
             return !writerReady || !queueAccepted;
         }
 
+        public static bool ShouldAttemptSynchronousWrite(bool queueAccepted)
+        {
+            return !queueAccepted;
+        }
+
         public static bool ReadyForSave(int captured, int running,
             int retries, int completions)
         {
