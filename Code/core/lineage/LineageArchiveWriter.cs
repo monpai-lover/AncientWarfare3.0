@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 using AncientWarfare3.utils;
@@ -188,9 +189,23 @@ namespace AncientWarfare3.core.lineage
             var nobleBlood = ResolveNobleBloodSnapshot(pActor, pPrevious,
                 nobleDist);
 
-            string name = pActor.getName();
+            string name = pActor.data.name ?? pActor.getName();
             if (string.IsNullOrEmpty(given)) given = name;
             if (string.IsNullOrEmpty(display)) display = name;
+            NamingProfileId namingProfile = NamingProfileId.None;
+            try
+            {
+                namingProfile = AWCultureNamingTraditionService
+                    .ResolveForActorReadOnly(pActor).Profile;
+            }
+            catch { }
+            if (namingProfile != NamingProfileId.Western &&
+                namingProfile != NamingProfileId.OrcNomadic)
+            {
+                given = LineageGivenNameNormalizationRules.Normalize(given,
+                    family, clan, status == LineageStatus.NOBLE,
+                    pActor.isSexMale(), integrated);
+            }
             var kingdom = ResolveActorKingdomSnapshot(pActor, pPrevious);
             var city = ResolveActorCitySnapshot(pActor, pPrevious);
             var social = ResolveSocialTitleSnapshot(pActor,

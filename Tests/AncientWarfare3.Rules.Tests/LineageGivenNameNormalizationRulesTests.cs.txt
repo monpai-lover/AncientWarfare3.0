@@ -38,6 +38,17 @@ internal static class LineageGivenNameNormalizationRulesTests
         Equal("强姜", LineageDisplayNameRules.Build(
                 "强姜", "姜", "姬", true, false, false),
             "female display composition does not duplicate a dirty family suffix");
+
+        ForeignPseudoNameParts dirtyForeign =
+            ForeignPseudoLineageRules.ResolveNameParts(
+                "房雨立", "房氏", "房雨立", "房", "", "房", "房国");
+        Equal("雨立", dirtyForeign.GivenName,
+            "foreign capture normalizes an existing dirty given name");
+        ForeignPseudoNameParts cleanForeign =
+            ForeignPseudoLineageRules.ResolveNameParts(
+                "房雨立", "房氏", "雨立", "房", "", "房", "房国");
+        Equal("雨立", cleanForeign.GivenName,
+            "foreign capture preserves an existing clean given name");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

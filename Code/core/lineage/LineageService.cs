@@ -167,7 +167,9 @@ namespace AncientWarfare3.core.lineage
 
             ArchiveTraceableActor(pParent1, pAlive: true);
             ArchiveTraceableActor(pParent2, pAlive: true);
-            string originalForeignName = IsXia(pBaby) ? null : pBaby.getName();
+            string originalForeignName = IsXia(pBaby)
+                ? null
+                : pBaby.data.name ?? pBaby.getName();
             if (IsXia(pBaby)) EnsureGivenName(pBaby);
             InheritFromParents(pBaby, pParent1, pParent2);
             if (!IsXia(pBaby)) EnsureGivenName(pBaby, originalForeignName);
@@ -306,7 +308,8 @@ namespace AncientWarfare3.core.lineage
                 pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out string chineseFamily, "");
                 pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
                 ForeignPseudoNameParts parts = ForeignPseudoLineageRules.ResolveNameParts(
-                    pOriginalName ?? pActor.getName(), pActor.clan?.data?.name, "", family, chineseFamily,
+                    pOriginalName ?? pActor.data.name ?? pActor.getName(),
+                    pActor.clan?.data?.name, "", family, chineseFamily,
                     clan, pActor.kingdom?.name);
                 pActor.data.set(LineageKeys.GIVEN_NAME, parts.GivenName);
                 return;
@@ -935,7 +938,7 @@ namespace AncientWarfare3.core.lineage
             if (!CanUseXiaizedLineageGovernment(pActor)) return;
             if (pSeen != null && !pSeen.Add(pActor.data.id)) return;
 
-            string rawName = pActor.getName() ?? "";
+            string rawName = pActor.data.name ?? pActor.getName() ?? "";
             pActor.data.get(LineageKeys.GIVEN_NAME, out string existingGiven, "");
             pActor.data.get(LineageKeys.FAMILY_NAME, out string existingFamily, "");
             pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out string chineseFamily, "");
@@ -1561,7 +1564,9 @@ namespace AncientWarfare3.core.lineage
             bool changed = childLineage != parentLineage || oldShi != parentShi ||
                            oldClan != clan || visibleClanChanged;
 
-            string originalForeignName = IsXia(pChild) ? null : pChild.getName();
+            string originalForeignName = IsXia(pChild)
+                ? null
+                : pChild.data.name ?? pChild.getName();
             pChild.data.set(LineageKeys.LINEAGE_ID, parentLineage);
             pChild.data.set(LineageKeys.SHI_ID, parentShi);
             if (!string.IsNullOrEmpty(family))
@@ -2109,9 +2114,29 @@ namespace AncientWarfare3.core.lineage
 
             if (string.IsNullOrEmpty(given)) given = pActor.getName();
 
+            bool noble = status == LineageStatus.NOBLE;
+            bool male = pActor.isSexMale();
+            bool integratedName = integrated ||
+                                  IsKingdomIntegrated(pActor.kingdom);
+            string dirtyGiven = given;
+            string normalizedGiven =
+                LineageGivenNameNormalizationRules.Normalize(dirtyGiven,
+                    family, clan, noble, male, integratedName);
+            if (!string.Equals(normalizedGiven, dirtyGiven,
+                    StringComparison.Ordinal))
+            {
+                pActor.data.set(LineageKeys.GIVEN_NAME, normalizedGiven);
+                pActor.data.get(AWNameDataKeys.GivenName,
+                    out string localizedGiven, string.Empty);
+                if (string.Equals(localizedGiven, dirtyGiven,
+                        StringComparison.Ordinal))
+                    pActor.data.set(AWNameDataKeys.GivenName,
+                        normalizedGiven);
+                given = normalizedGiven;
+            }
+
             string display = LineageDisplayNameRules.Build(given, family,
-                clan, status == LineageStatus.NOBLE, pActor.isSexMale(),
-                integrated || IsKingdomIntegrated(pActor.kingdom));
+                clan, noble, male, integratedName);
 
             pActor.data.set("display_name", display);
 

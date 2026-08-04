@@ -251,6 +251,7 @@
     <Compile Include="..\..\Code\core\lineage\ShiBranchRules.cs" Link="Production\ShiBranchRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageDisplayNameRules.cs" Link="Production\LineageDisplayNameRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageGivenNameNormalizationRules.cs" Link="Production\LineageGivenNameNormalizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ForeignPseudoLineageRules.cs" Link="Production\ForeignPseudoLineageRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageBranchRules.cs" Link="Production\LineageBranchRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirTitleSelectionRules.cs" Link="Production\HeirTitleSelectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FamilyTreeProjectionRevision.cs" Link="Production\FamilyTreeProjectionRevision.cs" />
@@ -679,6 +680,7 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WartimeMilitaryTaskGatePerformanceSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\CapturedSlaveMilitaryOwnershipSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ActorDeathArchiveBacklogSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\LineageGivenNameNormalizationSourceGuard.ps1&quot;" />
   </Target>
   <Target Name="XiaItemDynamicAtlasSourceGuard"
       BeforeTargets="Build">

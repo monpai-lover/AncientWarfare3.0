@@ -3,8 +3,13 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $rulePath = Join-Path $repo `
     'Code/core/lineage/LineageDisplayNameRules.cs'
+$normalizationRulePath = Join-Path $repo `
+    'Code/core/lineage/LineageGivenNameNormalizationRules.cs'
 if (-not [IO.File]::Exists($rulePath)) {
     throw 'LineageDisplayNameRules.cs is missing.'
+}
+if (-not [IO.File]::Exists($normalizationRulePath)) {
+    throw 'LineageGivenNameNormalizationRules.cs is missing.'
 }
 
 $compileSupport = @'
@@ -73,7 +78,7 @@ $supportPath = Join-Path ([IO.Path]::GetTempPath()) `
 try {
     [IO.File]::WriteAllText($supportPath, $compileSupport,
         [Text.UTF8Encoding]::new($false))
-    Add-Type -Path $supportPath, $rulePath
+    Add-Type -Path $supportPath, $normalizationRulePath, $rulePath
 } finally {
     Remove-Item -LiteralPath $supportPath -Force -ErrorAction SilentlyContinue
 }
@@ -101,5 +106,7 @@ Assert-Equal 'structured lineage identity replaces a stale special name' `
     ($rules::ProjectStored($specialName, $given, '', $clan, $true, $false, $false))
 Assert-Equal 'post-integration name uses Shi before given name' ($clan + $given) `
     ($rules::Build($given, $family, $clan, $true, $false, $true))
+Assert-Equal 'dirty structured given does not duplicate Shi' ($clan + $given) `
+    ($rules::Build(($clan + $given), $family, $clan, $true, $true, $false))
 
 Write-Output 'Lineage display-name rule tests passed.'
