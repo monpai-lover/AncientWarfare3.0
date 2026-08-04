@@ -1,0 +1,48 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsSyntheticRecoveryRulesTests
+{
+    public static void Run()
+    {
+        Assert(ArmyRtsWarLifecycleRules.RecoveryTargetStrength(100) == 80,
+            "recovery target is 80 percent of baseline");
+        Assert(ArmyRtsWarLifecycleRules.RecoveryTargetStrength(7) == 6,
+            "recovery target rounds upward to satisfy the integer threshold");
+        Assert(ArmyRtsWarLifecycleRules.RecoveryTargetStrength(0) == 0,
+            "invalid baseline has no recovery target");
+
+        Assert(ArmyRtsWarLifecycleRules.RecoveryShortage(19, 100) == 61,
+            "generated demand stops exactly at the 80 percent target");
+        Assert(ArmyRtsWarLifecycleRules.RecoveryShortage(80, 100) == 0,
+            "no replacements are generated after recovery");
+        Assert(ArmyRtsWarLifecycleRules.RecoveryShortage(95, 100) == 0,
+            "recovery never generates beyond its target");
+
+        Assert(ArmyRtsWarLifecycleRules.CanReplenishInCurrentCity(
+                controlledByArmySide: true,
+                hostileCombatUnitNearby: false),
+            "a friendly controlled occupied city without enemies is a recovery source");
+        Assert(!ArmyRtsWarLifecycleRules.CanReplenishInCurrentCity(
+                controlledByArmySide: false,
+                hostileCombatUnitNearby: false),
+            "an uncontrolled city cannot generate replacements");
+        Assert(!ArmyRtsWarLifecycleRules.CanReplenishInCurrentCity(
+                controlledByArmySide: true,
+                hostileCombatUnitNearby: true),
+            "an occupied city under combat cannot generate replacements");
+
+        int request = ArmyRtsWarLifecycleRules.ReplacementBatchRequest(
+            living: 58, baseline: 73, maximumBatch: 32);
+        Assert(request == 1,
+            "the final batch is capped at the exact rounded recovery target");
+        Assert(ArmyRtsWarLifecycleRules.ReplacementBatchRequest(
+                   living: 10, baseline: 100, maximumBatch: 32) == 32,
+            "large shortages remain bounded per work item");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

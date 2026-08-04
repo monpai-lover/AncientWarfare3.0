@@ -1227,7 +1227,78 @@ namespace AncientWarfare3.core.lineage
             runtime.ReplenishmentRequested = false;
             runtime.ReplenishmentRetryDue = false;
             runtime.ReplenishmentProgress.Reset();
+            if (Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) &&
+                ArmyRtsWarLifecycleService.TryGet(
+                    record?.Mission?.WarId ?? -1L, pArmy.id,
+                    out ArmyRtsWarLifecycleRecord lifecycle) &&
+                lifecycle.Phase == ArmyRtsWarPhase.Replenishing &&
+                ArmyRtsWarLifecycleRules.ShouldResume(SafeUnitCount(pArmy),
+                    lifecycle.BaselineStrength))
+            {
+                ArmyRtsMission previous = lifecycle.PreviousOffensiveMission;
+                lifecycle.ReplenishmentCityId = -1L;
+                ArmyRtsWarLifecycleService.TrySetPhase(
+                    lifecycle.WarId, pArmy.id,
+                    ArmyRtsWarPhase.StrategicMovement);
+                if (previous != null && IsMissionValid(pArmy, previous))
+                {
+                    previous.IssuedTime = CurrentWorldTime();
+                    AssignMission(pArmy, previous);
+                    return;
+                }
+                Kingdom kingdom = SafeKingdom(pArmy);
+                Invalidate(pArmy.id);
+                KingdomWarDirectorService.QueueArmyChanged(kingdom);
+                return;
+            }
             Controllers.Requeue(pArmy.id);
+        }
+
+        internal static bool TryGetWartimeRecovery(Army pArmy,
+            out int pBaseline, out long pWarId)
+        {
+            pBaseline = 0;
+            pWarId = -1L;
+            if (pArmy?.data == null || !Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) ||
+                !ArmyRtsWarLifecycleService.TryGet(
+                    record?.Mission?.WarId ?? -1L, pArmy.id,
+                    out ArmyRtsWarLifecycleRecord lifecycle) ||
+                lifecycle.Phase != ArmyRtsWarPhase.Replenishing)
+                return false;
+            pBaseline = lifecycle.BaselineStrength;
+            pWarId = lifecycle.WarId;
+            return pBaseline > 0 && pWarId >= 0L;
+        }
+
+        internal static bool CanGenerateWartimeReplacements(Army pArmy,
+            City pSourceCity, long pWarId)
+        {
+            if (pArmy?.data == null || pSourceCity?.data == null) return false;
+            Actor captain = SafeCaptain(pArmy);
+            City currentCity = null;
+            try { currentCity = captain?.current_tile?.zone?.city; }
+            catch { }
+            Kingdom kingdom = SafeKingdom(pArmy);
+            War war = FindWar(pWarId);
+            bool controlled = currentCity == pSourceCity &&
+                (pSourceCity.kingdom == kingdom ||
+                 CityAttackZoneService.IsControlledBySide(war,
+                     pSourceCity, kingdom));
+            bool hostile = controlled && CityAttackZoneService.
+                HasHostileMilitaryInside(war, pSourceCity, kingdom);
+            bool combat = hostile || HasImmediateCombatPriority(captain);
+            bool transport = ArmyRtsTransportService.HasActiveVoyage(pArmy) ||
+                             captain?.is_inside_boat == true ||
+                             ArmyRtsTransportService.OwnsActorTask(captain);
+            bool movement = captain?.is_moving == true ||
+                            AWPathMovementBridge.HasOwnership(captain) ||
+                            AWArmyMarchService.HasActiveMarch(captain);
+            return ArmyRtsWarLifecycleRules.CanReplenishInCurrentCity(
+                       controlled, hostile) &&
+                   ArmyRtsWarLifecycleRules.CanGenerateReplacements(
+                       combat, transport, movement);
         }
 
         private static void ClearIneligibleReplenishmentState(Army pArmy,
@@ -2408,6 +2479,9 @@ namespace AncientWarfare3.core.lineage
             ArmyRtsState next = Controllers.ResolveAndSet(pArmyId, facts);
             ArmyLogisticsService.OnArmyStateChanged(army, next);
             UpdatePursuitRuntime(army, current, next, runtime);
+            if (commit && current == ArmyRtsState.Retreat &&
+                next == ArmyRtsState.Regroup)
+                TryBeginReplenishingAtCurrentCity(army, record);
             UpdateReplenishmentRequest(army, runtime, next, commit);
             if (commit)
             {
@@ -2555,6 +2629,9 @@ namespace AncientWarfare3.core.lineage
             bool hostileInside = insideTarget &&
                 CityAttackZoneService.HasHostileMilitaryInside(war,
                     target, kingdom);
+            bool hostileInCurrentCity = currentCity?.data != null &&
+                CityAttackZoneService.HasHostileMilitaryInside(war,
+                    currentCity, kingdom);
             bool objectiveOpen = target?.data != null &&
                 !TargetComplete(pArmy, pRecord.Mission, target, kingdom);
             bool withdrawalRequired = ArmyRtsWarLifecycleRules.
@@ -2577,6 +2654,21 @@ namespace AncientWarfare3.core.lineage
                         ArmyRtsWarPhase.StrategicMovement);
                     return false;
                 case ArmyRtsCombatControlDecision.ReacquireForWithdrawal:
+                    if (ArmyRtsWarLifecycleRules.
+                            CanReplenishInCurrentCity(
+                                currentCity?.kingdom == kingdom ||
+                                CityAttackZoneService.IsControlledBySide(war,
+                                    currentCity, kingdom),
+                                hostileInCurrentCity))
+                    {
+                        ReacquireFromVanillaCombat(pArmy, pRecord, pRuntime,
+                            ArmyRtsWarPhase.Replenishing);
+                        ArmyRtsWarLifecycleService.BeginReplenishing(
+                            pRecord.Mission.WarId, pArmy, currentCity);
+                        Controllers.SetState(pArmy.id,
+                            ArmyRtsState.Regroup);
+                        return false;
+                    }
                     ReacquireFromVanillaCombat(pArmy, pRecord, pRuntime,
                         ArmyRtsWarPhase.Withdrawal);
                     Controllers.SetState(pArmy.id, ArmyRtsState.Retreat);
@@ -2657,6 +2749,18 @@ namespace AncientWarfare3.core.lineage
             catch { }
         }
 
+        private static void TryBeginReplenishingAtCurrentCity(Army pArmy,
+            ArmyRtsControllerRecord pRecord)
+        {
+            Actor captain = SafeCaptain(pArmy);
+            City city = null;
+            try { city = captain?.current_tile?.zone?.city; }
+            catch { }
+            if (city?.data == null || pRecord?.Mission == null) return;
+            ArmyRtsWarLifecycleService.BeginReplenishing(
+                pRecord.Mission.WarId, pArmy, city);
+        }
+
         private static ArmyRtsTransitionFacts BuildFacts(Army pArmy,
             ArmyRtsControllerRecord pRecord, RuntimeState pRuntime,
             bool pCommit, bool pPreservePlayerOrder)
@@ -2705,11 +2809,23 @@ namespace AncientWarfare3.core.lineage
                 ArmyRtsRules.SupportsReplenishment(pRecord.State);
             int targetStrength = ResolveMissionTargetStrength(pArmy,
                 kingdom, pRecord.Mission);
+            bool wartimeRecovery = ArmyRtsWarLifecycleService.TryGet(
+                    pRecord.Mission.WarId, pArmy.id,
+                    out ArmyRtsWarLifecycleRecord lifecycle) &&
+                lifecycle.Phase == ArmyRtsWarPhase.Replenishing;
+            if (wartimeRecovery)
+                targetStrength = ArmyRtsWarLifecycleRules.
+                    RecoveryTargetStrength(lifecycle.BaselineStrength);
             pRuntime.ObservedLiving = rosterLiving;
             pRuntime.TargetStrength = targetStrength;
             bool sourceReserveKnown = !replenishWindow;
             bool sourceReserveAvailable = false;
-            if (replenishWindow)
+            if (wartimeRecovery)
+            {
+                sourceReserveKnown = true;
+                sourceReserveAvailable = true;
+            }
+            else if (replenishWindow)
                 sourceReserveKnown = ArmyReplenishmentOperationService.
                     TryGetSourceReserveAvailability(pArmy,
                         out sourceReserveAvailable);
@@ -2871,13 +2987,23 @@ namespace AncientWarfare3.core.lineage
             }
             int missingStrength = Math.Max(0,
                 pRuntime.TargetStrength - pRuntime.ObservedLiving);
-            TryApplyReserveExhaustion(pArmy, pRuntime, missingStrength,
-                pCommit);
+            bool wartimeRecovery = TryGetWartimeRecovery(pArmy, out _,
+                out _);
+            if (!wartimeRecovery)
+                TryApplyReserveExhaustion(pArmy, pRuntime, missingStrength,
+                    pCommit);
             if (!ArmyRtsRules.ShouldRequestReplenishment(
                     pCommit, pNext, pRuntime.ReplenishmentRequested,
                     missingStrength)) return;
             Kingdom kingdom = SafeKingdom(pArmy);
             City preferredCity = AWArmyService.FindAnchorCity(pArmy);
+            if (Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) &&
+                ArmyRtsWarLifecycleService.TryGet(
+                    record?.Mission?.WarId ?? -1L, pArmy.id,
+                    out ArmyRtsWarLifecycleRecord lifecycle) &&
+                lifecycle.ReplenishmentCityId >= 0L)
+                preferredCity = FindCity(lifecycle.ReplenishmentCityId);
             ArmyReplenishmentOperationState operation =
                 ArmyReplenishmentOperationService.Ensure(pArmy, kingdom,
                     preferredCity, missingStrength, CurrentWorldTime());

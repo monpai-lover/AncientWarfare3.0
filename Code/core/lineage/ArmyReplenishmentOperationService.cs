@@ -299,6 +299,9 @@ namespace AncientWarfare3.core.lineage
             bool confirmedExhausted = false;
             Kingdom kingdom = SafeKingdom(army);
             City preferredCity = FindCity(state.SourceCityId);
+            long missionWarId = ResolveMissionWarId(army, kingdom);
+            if (!ArmyRtsControllerService.CanGenerateWartimeReplacements(
+                    army, preferredCity, missionWarId)) return;
             if (requested > 0)
             {
                 int enlisted = RecruitFormalWarShortage(army, kingdom,
@@ -353,6 +356,11 @@ namespace AncientWarfare3.core.lineage
                 return 0;
 
             long emergencyId = war.data.id;
+            if (ArmyRtsControllerService.TryGetWartimeRecovery(army,
+                    out _, out long recoveryWarId) &&
+                recoveryWarId == emergencyId)
+                return SyntheticLevyService.CreateBatch(sourceCity,
+                    kingdom, army, requested, emergencyId, recruits);
             int available = CityReservePoolService.OpenOrReadWarReserve(
                 sourceCity, emergencyId);
             int syntheticRequest = TemporaryLevyRules.SyntheticFallbackRequest(
@@ -411,6 +419,13 @@ namespace AncientWarfare3.core.lineage
             int living;
             try { living = Math.Max(0, pArmy.countUnits()); }
             catch { return false; }
+            if (ArmyRtsControllerService.TryGetWartimeRecovery(pArmy,
+                    out int baseline, out _))
+            {
+                pShortage = ArmyRtsWarLifecycleRules.RecoveryShortage(
+                    living, baseline);
+                return true;
+            }
             pShortage = Math.Max(0, mission.TargetStrength - living);
             return true;
         }

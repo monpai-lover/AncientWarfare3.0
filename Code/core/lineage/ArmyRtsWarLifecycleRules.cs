@@ -88,5 +88,31 @@ namespace AncientWarfare3.core.lineage
         {
             return phase != ArmyRtsWarPhase.VanillaCombat;
         }
+
+        public static int RecoveryTargetStrength(int baseline)
+        {
+            if (baseline <= 0) return 0;
+            long target = ((long)baseline * ResumePercent + 99L) / 100L;
+            return target >= int.MaxValue ? int.MaxValue : (int)target;
+        }
+
+        public static int RecoveryShortage(int living, int baseline)
+        {
+            return Math.Max(0, RecoveryTargetStrength(baseline) -
+                               Math.Max(0, living));
+        }
+
+        public static int ReplacementBatchRequest(int living, int baseline,
+            int maximumBatch)
+        {
+            return Math.Min(Math.Max(0, maximumBatch),
+                RecoveryShortage(living, baseline));
+        }
+
+        public static bool CanReplenishInCurrentCity(
+            bool controlledByArmySide, bool hostileCombatUnitNearby)
+        {
+            return controlledByArmySide && !hostileCombatUnitNearby;
+        }
     }
 }

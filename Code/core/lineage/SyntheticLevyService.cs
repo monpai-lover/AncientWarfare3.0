@@ -33,7 +33,7 @@ namespace AncientWarfare3.core.lineage
             if (city?.data == null || kingdom?.data == null ||
                 army?.data == null || template?.asset == null ||
                 World.world?.units == null || city.kingdom != kingdom ||
-                AWArmyService.FindAnchorCity(army) != city)
+                AWArmyService.GetIntendedKingdom(army) != kingdom)
                 return null;
 
             Actor actor = null;

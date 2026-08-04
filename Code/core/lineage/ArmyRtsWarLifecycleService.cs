@@ -144,6 +144,18 @@ namespace AncientWarfare3.core.lineage
             return changed;
         }
 
+        public static bool BeginReplenishing(long pWarId, Army pArmy,
+            City pCity)
+        {
+            if (pArmy?.data == null || pCity?.data == null ||
+                !Store.TryGet(pWarId, pArmy.id,
+                    out ArmyRtsWarLifecycleRecord record)) return false;
+            record.Phase = ArmyRtsWarPhase.Replenishing;
+            record.ReplenishmentCityId = pCity.id;
+            Persist(pArmy, pWarId, record);
+            return true;
+        }
+
         public static void OnArmyDestroyed(Army pArmy)
         {
             if (pArmy == null) return;
@@ -183,6 +195,8 @@ namespace AncientWarfare3.core.lineage
                 out int persistedBaseline, 0);
             pArmy.data.get(LineageKeys.AW_RTS_LIFECYCLE_PHASE,
                 out int persistedPhase, (int)pPhase);
+            pArmy.data.get(LineageKeys.AW_RTS_REPLENISHMENT_CITY_ID,
+                out long persistedCityId, -1L);
             int living = persistedWarId == pWarId && persistedBaseline > 0
                 ? persistedBaseline
                 : SafeUnitCount(pArmy);
@@ -194,6 +208,8 @@ namespace AncientWarfare3.core.lineage
                 : pPhase;
             ArmyRtsWarLifecycleRecord record = Store.Ensure(pWarId,
                 pArmy.id, living, phase);
+            if (record != null && persistedWarId == pWarId)
+                record.ReplenishmentCityId = persistedCityId;
             Persist(pArmy, pWarId, record);
             return record;
         }
@@ -207,6 +223,8 @@ namespace AncientWarfare3.core.lineage
                 pRecord.BaselineStrength);
             pArmy.data.set(LineageKeys.AW_RTS_LIFECYCLE_PHASE,
                 (int)pRecord.Phase);
+            pArmy.data.set(LineageKeys.AW_RTS_REPLENISHMENT_CITY_ID,
+                pRecord.ReplenishmentCityId);
         }
 
         private static void ClearPersisted(Army pArmy)
@@ -215,6 +233,7 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.removeLong(LineageKeys.AW_RTS_LIFECYCLE_WAR_ID);
             pArmy.data.removeInt(LineageKeys.AW_RTS_LIFECYCLE_BASELINE);
             pArmy.data.removeInt(LineageKeys.AW_RTS_LIFECYCLE_PHASE);
+            pArmy.data.removeLong(LineageKeys.AW_RTS_REPLENISHMENT_CITY_ID);
         }
 
         private static int SafeUnitCount(Army pArmy)
