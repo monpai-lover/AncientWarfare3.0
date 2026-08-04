@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data.SQLite;
 
 namespace AncientWarfare3.core.lineage
@@ -44,6 +45,9 @@ namespace AncientWarfare3.core.lineage
             public string PreviousYearPrefixRich = "";
             public string OperationKey = "";
             public bool WasAlreadyEmperor;
+            public string CoreSnapshotSource = "declaration";
+            public List<MandateProjectionOutboxPersistence.CoreCitySnapshot>
+                CoreCitySnapshots = new();
         }
 
         public static bool TryCommit(SQLiteConnection pDb,
@@ -106,7 +110,9 @@ namespace AncientWarfare3.core.lineage
                     PreviousYearPrefix = pRequest.PreviousYearPrefix,
                     PreviousYearPrefixRich =
                         pRequest.PreviousYearPrefixRich,
-                    CreatedTime = pRequest.StartTime
+                    CreatedTime = pRequest.StartTime,
+                    CoreSnapshotSource = pRequest.CoreSnapshotSource,
+                    CoreCitySnapshots = pRequest.CoreCitySnapshots
                 };
                 if (!MandateProjectionOutboxPersistence.TryEnqueue(
                         pDb, transaction, pending, out pError))

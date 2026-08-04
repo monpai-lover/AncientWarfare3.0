@@ -8,6 +8,8 @@ $reignAccession = Get-Content -Raw (Join-Path $root `
     'Code/core/lineage/ReignAccessionPersistence.cs')
 $declarationPersistence = Get-Content -Raw (Join-Path $root `
     'Code/core/lineage/MandateDeclarationPersistence.cs')
+$projectionOutbox = Get-Content -Raw (Join-Path $root `
+    'Code/core/lineage/MandateProjectionOutboxPersistence.cs')
 $facts = Get-Content -Raw (Join-Path $root 'Code/core/lineage/RulerTitleFactService.cs')
 $posthumous = Get-Content -Raw (Join-Path $root 'Code/core/lineage/PosthumousTitleService.cs')
 $history = Get-Content -Raw (Join-Path $root 'Code/core/lineage/HistoryWriter.cs')
@@ -45,6 +47,17 @@ function RequireOrder([string]$content, [string]$first, [string]$second,
     }
 }
 
+function RequireMethodGate([string]$content, [string]$signature,
+    [string]$nextSignature, [string]$firstMutation,
+    [string]$message) {
+    $start = $content.IndexOf($signature)
+    $end = $content.IndexOf($nextSignature, $start + $signature.Length)
+    if ($start -lt 0 -or $end -le $start) { throw $message }
+    $method = $content.Substring($start, $end - $start)
+    RequireOrder $method 'MandateAuthorityMutationRules.CanMutate' `
+        $firstMutation $message
+}
+
 Require $chronicleCode 'MandateService.OnRulerSucceeded(' `
     'normal accession does not settle the active Mandate ruler projection'
 Require $chronicle 'isActiveMandate: MandateService.IsMandateKingdom(pKingdom)' `
@@ -80,6 +93,15 @@ Require $declarationPersistence 'transaction.Rollback()' `
     'Mandate declaration cannot roll back a failed reign projection'
 Require $declarationPersistence 'MandateProjectionOutboxPersistence.TryEnqueue' `
     'Mandate declaration does not enqueue projection work in its transaction'
+Require $declarationPersistence `
+    'CoreCitySnapshots = pRequest.CoreCitySnapshots' `
+    'Mandate declaration transaction omits its legal-core child snapshot'
+Require $projectionOutbox 'MandateProjectionCoreSnapshot' `
+    'Mandate projection outbox has no legal-core child table'
+Require $projectionOutbox 'TryMigrateLegacyCoreSnapshots' `
+    'legacy current-period outbox cannot be snapshotted exactly once'
+Require $projectionOutbox 'DELETE FROM " + CoreSnapshotTable' `
+    'completed Mandate projection does not clean up its core snapshots'
 Require $history 'public static bool TryRecordKingdom' `
     'Mandate kingdom history publication is not observable'
 Require $history 'public static bool TryRecordPerson' `
@@ -194,6 +216,56 @@ Require $mandate 'MandateProjectionResumeRules.ShouldPublishEffect' `
     'stale Mandate recovery can mutate a newer active period'
 Require $mandate 'AW3MultiplayerReplicaScope.IsReplicaSession' `
     'replica sessions can mutate the Mandate projection outbox'
+RequireMethodGate $mandate 'private static bool TryDeclareMandateCore' `
+    'private static void PublishDeclaredMandate' 'ReadReport()' `
+    'fresh Mandate declaration reads or mutates state before its authority gate'
+RequireMethodGate $mandate `
+    'public static bool TryForceGrantMandateForZhuluAge' `
+    'private static bool TryDeclareMandateCore' 'IsMandateKingdom' `
+    'forced Mandate grant reads cached state before its authority gate'
+RequireMethodGate $mandate 'public static bool TryGrantMandateByPlayer' `
+    'public static bool CanDeclareMandate' 'ZhuluWarService' `
+    'player Mandate grant reads world state before its authority gate'
+RequireMethodGate $mandate 'public static bool OnRulerSucceeded' `
+    'private static void CommitRulerProjection' 'ReadReport()' `
+    'Mandate succession reads or mutates state before its authority gate'
+RequireMethodGate $mandate 'public static void ClearMandate' `
+    'public static void CollapseMandate' 'ReadReport()' `
+    'Mandate clear reads or mutates state before its authority gate'
+RequireMethodGate $mandate 'private static void ChangeMandate' `
+    'private static MandateReport ReadReportFromDb' 'ReadReport()' `
+    'direct Mandate decline reads or mutates state before its authority gate'
+RequireMethodGate $mandate 'private static void UpsertState' `
+    'private static void PublishRuntimeMarkerProjection' 'DB.CheckKeyExist' `
+    'direct Mandate state update writes before its authority gate'
+RequireMethodGate $mandate 'public static void OnKingdomYear' `
+    'public static bool TryDeclareMandate' 'TryResumePendingProjectionYear' `
+    'replica annual Mandate work starts before its authority gate'
+RequireMethodGate $mandate 'public static bool ApplySacrificeOutcome' `
+    'public static bool HasMandateProtection' 'ReadReport()' `
+    'replica sacrifice outcome reads or mutates before its authority gate'
+RequireMethodGate $mandate 'public static void OnKingdomCoreCreated' `
+    'public static float GetCoreControlRatioFor' 'ReadReport()' `
+    'replica legal-core callback reads or mutates before its authority gate'
+RequireMethodGate $mandate 'public static void CollapseMandate' `
+    'public static void OnWarStarted' 'MandatePhaseService.ForceChaos' `
+    'replica collapse publishes history before its authority gate'
+RequireMethodGate $mandate 'public static void OnWarStarted' `
+    'public static void OnWarEnded' 'MandateBorderDefenseService' `
+    'replica war start mutates Mandate services before its authority gate'
+RequireMethodGate $mandate 'public static void OnWarEnded' `
+    'public static void OnKingdomDestroyed' 'GetWarType' `
+    'replica war end processing starts before its authority gate'
+RequireMethodGate $mandate 'public static void OnKingdomDestroyed' `
+    'private static void TryDeclareMandateAfterVictory' 'ReadReport()' `
+    'replica destruction processing reads or mutates before its authority gate'
+RequireMethodGate $mandate `
+    'public static void NormalizeMapMarkerAfterRebelSettlement' `
+    'public static ColorAsset GetDynastyMapColor' 'pKingdom.data.get' `
+    'replica marker normalization mutates before its authority gate'
+RequireMethodGate $mandate 'public static void RecordMandateEvent' `
+    'public static void MarkDirty' 'RecordEvent' `
+    'replica public Mandate event write starts before its authority gate'
 Require $restore 'new AW3RestoreStage("mandate_projection_resume"' `
     'load restore does not automatically resume pending Mandate projections'
 RequireOrder $restore 'new AW3RestoreStage("mandate_projection"' `
@@ -265,5 +337,26 @@ if ($declareStart -lt 0 -or $declareEnd -le $declareStart -or
         'ClearMandate(')) {
     throw 'Mandate replacement clears the old holder before the new transaction commits'
 }
+$declare = $mandate.Substring($declareStart, $declareEnd - $declareStart)
+RequireOrder $declare 'CaptureLegalCoreSnapshots(' `
+    'MandateDeclarationPersistence.TryCommit' `
+    'Mandate declaration does not capture legal-core cities before its transaction'
+Require $declare 'CoreSnapshotSource = "declaration"' `
+    'fresh Mandate declaration does not mark its immutable core snapshot'
+
+$createCoresStart = $mandate.IndexOf('private static bool CreateLegalCores')
+$createCoresEnd = $mandate.IndexOf(
+    'private static bool EnsurePendingCoreSnapshots',
+    $createCoresStart)
+if ($createCoresStart -lt 0 -or $createCoresEnd -le $createCoresStart) {
+    throw 'Mandate legal-core replay method cannot be inspected'
+}
+$createCores = $mandate.Substring($createCoresStart,
+    $createCoresEnd - $createCoresStart)
+if ($createCores.Contains('getCities()')) {
+    throw 'Mandate legal-core replay still reads changing live cities'
+}
+Require $mandate 'TryMigrateLegacyCoreSnapshots(' `
+    'current legacy Mandate outbox never receives a stable core snapshot'
 
 Write-Output 'Mandate succession runtime source guard passed.'

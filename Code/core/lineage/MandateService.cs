@@ -158,6 +158,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void RefreshKingdomNameProjection(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (!Ready || pKingdom?.data == null || pKingdom.isRekt()) return;
             MandateReport report = ReadReport();
             string kingdomName = pKingdom.name?.Trim() ?? "";
@@ -270,6 +273,9 @@ namespace AncientWarfare3.core.lineage
         public static bool OnRulerSucceeded(Kingdom pKingdom,
             Actor pNewKing)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
             if (!Ready || pKingdom?.data == null || pNewKing?.data == null)
                 return false;
             MandateReport report = ReadReport();
@@ -337,6 +343,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             TryResumePendingProjectionYear();
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral()) return;
 
@@ -409,6 +418,12 @@ namespace AncientWarfare3.core.lineage
             Kingdom pTarget, out string pReason)
         {
             pReason = "";
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+            {
+                pReason = "replica_read_only";
+                return false;
+            }
             if (!Ready)
             {
                 pReason = "database_not_ready";
@@ -441,6 +456,9 @@ namespace AncientWarfare3.core.lineage
             string pReason, string pOriginType, string pClaimantKind,
             Kingdom pRebelOrigin, bool pForceZhuluAge)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
             if (!pForceZhuluAge &&
                 ZhuluWarService.HasActivePrincipalWars()) return false;
             if (pKingdom?.data != null)
@@ -509,6 +527,9 @@ namespace AncientWarfare3.core.lineage
             bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
             int currentYear = Date.getCurrentYear();
             string markerKind = MarkerKind(pOriginType, pClaimantKind);
+            List<MandateProjectionOutboxPersistence.CoreCitySnapshot>
+                coreCitySnapshots = CaptureLegalCoreSnapshots(
+                    pKingdom, previousPeriodId, "declaration");
             var request = new MandateDeclarationPersistence.Request
             {
                 StateId = STATE_ID,
@@ -561,7 +582,9 @@ namespace AncientWarfare3.core.lineage
                 PreviousYearPrefixRich = HistoryWriter.BuildYearPrefixRich(
                     now, previousKingdom),
                 OperationKey = "mandate-declare:" + periodId,
-                WasAlreadyEmperor = wasAlreadyEmperor
+                WasAlreadyEmperor = wasAlreadyEmperor,
+                CoreSnapshotSource = "declaration",
+                CoreCitySnapshots = coreCitySnapshots
             };
             string persistenceError = "";
             bool committed = MandateDeclarationPersistence.TryCommit(
@@ -662,8 +685,10 @@ namespace AncientWarfare3.core.lineage
                 case "new_person_history":
                     return TryPublishMandateStartPersonHistory(pPending);
                 case "legal_cores":
-                    return CreateLegalCores(pKingdom, pPending.PeriodId,
-                        pPending.PreviousPeriodId,
+                    if (!EnsurePendingCoreSnapshots(pKingdom, pPending))
+                        return false;
+                    return CreateLegalCores(pPending.PeriodId,
+                        pPending.CoreCitySnapshots,
                         pPending.OperationKey + ":legal_cores:");
                 case "new_maps":
                     DirtyAllMaps();
@@ -802,6 +827,12 @@ namespace AncientWarfare3.core.lineage
         public static bool TryGrantMandateByPlayer(Kingdom pTarget, out string pReason)
         {
             pReason = "";
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+            {
+                pReason = "replica_read_only";
+                return false;
+            }
             if (ZhuluWarService.HasActivePrincipalWars())
             {
                 pReason = "zhulu_unresolved";
@@ -1021,12 +1052,18 @@ namespace AncientWarfare3.core.lineage
         public static bool ApplySacrificeOutcome(Kingdom pKingdom,
             MandateSacrificeEffects pEffects, string pReason)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
             return ApplySacrificeOutcome(pKingdom, pEffects, pReason, null);
         }
 
         internal static bool ApplySacrificeOutcome(Kingdom pKingdom,
             MandateSacrificeEffects pEffects, string pReason, string pContent)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
             if (!CanStabilizeMandate(pKingdom)) return false;
             string eventType = pReason ?? "mandate_sacrifice";
             ChangeMandate(pKingdom, pEffects.MandateDelta,
@@ -1071,6 +1108,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnPeacefulFellApartBlocked(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pKingdom?.data == null || !IsMandateKingdom(pKingdom)) return;
             int year = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.MANDATE_SUCCESSION_CRISIS_YEAR, out int lastYear, int.MinValue);
@@ -1099,6 +1139,9 @@ namespace AncientWarfare3.core.lineage
         public static void OnCityTransferred(City pCity, Kingdom pOldKingdom,
             Kingdom pNewKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pCity?.data == null || pCity.isRekt()) return;
             if (_cacheDirty || _cachedReport == null) return;
             if (!MandateCoreTransferRules.ShouldInvalidate(
@@ -1111,6 +1154,9 @@ namespace AncientWarfare3.core.lineage
         public static void OnCityTransferStarting(City pCity,
             Kingdom pOldKingdom, Kingdom pNewKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pCity?.data == null || pCity.kingdom != pOldKingdom) return;
             TrackHostileMandateFinalCityConqueror(pOldKingdom,
                 pNewKingdom);
@@ -1152,6 +1198,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomCoreCreated(Kingdom pKingdom, City pCity, string pSourceType)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (!Ready || pKingdom?.data == null || pCity?.data == null) return;
             MandateReport report = ReadReport();
             bool isActiveMandateKingdom = report.active && report.kingdom_id == pKingdom.id && report.period_id >= 0;
@@ -1200,6 +1249,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void ClearMandate(string pReason)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             Kingdom current = GetCurrentMandateKingdom();
             MandateReport report = ReadReport();
             if (!Ready || !report.active) return;
@@ -1305,6 +1357,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void CollapseMandate(Kingdom pKingdom, string pReason)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pKingdom?.data == null) return;
             MandatePhaseService.ForceChaos("mandate_collapse");
             HistoryWriter.RecordKingdom(pKingdom, "mandate_collapse",
@@ -1317,6 +1372,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarStarted(War pWar)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pWar?.data == null) return;
             MandateBorderDefenseService.OnMandateWarStarted(pWar);
             string type = GetWarType(pWar);
@@ -1333,6 +1391,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarEnded(War pWar, WarWinner pWinner)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pWar?.data == null) return;
             string type = GetWarType(pWar);
             if (type != WAR_TIANMING && type != WAR_TIANMING_REBEL) return;
@@ -1362,6 +1423,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomDestroyed(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pKingdom?.data == null) return;
             MandateReport report = ReadReport();
             if (MandateDeclarationRules.ShouldEndDestroyedMandate(
@@ -1411,6 +1475,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void NormalizeMapMarkerAfterRebelSettlement(Kingdom pKingdom)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (pKingdom?.data == null) return;
             pKingdom.data.get(LineageKeys.MANDATE_MAP_MARKER_KIND, out string marker, "");
             if (marker == "rebel_claimant") pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, "moh");
@@ -1712,6 +1779,9 @@ namespace AncientWarfare3.core.lineage
         public static void RecordMandateEvent(string pType, Kingdom pKingdom, Actor pActor, City pCity, int pDelta,
             int pMandate, string pContent)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             RecordEvent(pType, pKingdom, pActor, pCity, pDelta, pMandate, pContent);
         }
 
@@ -1830,6 +1900,9 @@ namespace AncientWarfare3.core.lineage
         private static void ChangeMandate(Kingdom pKingdom, int pDelta,
             string pEventType, string pContent = null, bool pRecordEvent = true)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             MandateReport r = ReadReport();
             if (!r.active || pKingdom?.data == null || pKingdom.id != r.kingdom_id) return;
             MandatePhaseService.AdjustCatalyst(
@@ -1910,6 +1983,9 @@ namespace AncientWarfare3.core.lineage
             string pOriginType = null, string pClaimantKind = null, Kingdom pRebelOrigin = null,
             string pMapMarkerKind = null)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (!Ready || pKingdom?.data == null) return;
             Actor king = pKingdom.king;
             string table = MandateStateTableItem.GetTableName();
@@ -1971,6 +2047,9 @@ namespace AncientWarfare3.core.lineage
         private static void UpdateState(Kingdom pKingdom, long pPeriodId, int pMandate, int pAuthority, int pPrestige,
             float pCoreControl, float pVassalLoyalty, string pCrisis, int pYear)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             UpsertState(pKingdom, pPeriodId, pMandate, pAuthority, pPrestige, pCoreControl, pVassalLoyalty, pCrisis,
                 pYear, ReadReport().period_id == pPeriodId ? ReadStartTime() : LineageService.CurTime(),
                 ReadReport().origin_type, ReadReport().claimant_kind, null, ReadReport().map_marker_kind);
@@ -1992,42 +2071,32 @@ namespace AncientWarfare3.core.lineage
             catch { return LineageService.CurTime(); }
         }
 
-        private static bool CreateLegalCores(Kingdom pKingdom,
-            long pPeriodId, long pPreviousPeriodId,
+        private static bool CreateLegalCores(long pPeriodId,
+            IReadOnlyList<MandateProjectionOutboxPersistence.
+                CoreCitySnapshot> pSnapshots,
             string pProjectionKeyPrefix)
         {
-            if (!Ready || pKingdom?.data == null) return false;
+            if (!Ready || pSnapshots == null) return false;
             bool complete = true;
             var inserted = new HashSet<long>();
 
-            foreach (CoreCitySnapshot core in ReadCoreCitySnapshots(pPreviousPeriodId))
+            foreach (MandateProjectionOutboxPersistence.CoreCitySnapshot
+                     snapshot in pSnapshots)
             {
-                if (!MandateLegalCoreInheritanceRules.ShouldInheritPreviousCore(
-                        pPreviousPeriodId, core.city_id, inserted.Contains(core.city_id)))
+                if (snapshot == null || snapshot.CityId < 0L ||
+                    inserted.Contains(snapshot.CityId))
                     continue;
-                if (!InsertLegalCore(pPeriodId, core.city_id, core.city_name, core.original_kingdom_id,
-                        core.original_kingdom_name, core.original_kingdom_color,
-                        "inherited", pProjectionKeyPrefix + core.city_id))
+                if (!InsertLegalCore(pPeriodId, snapshot.CityId,
+                        snapshot.CityName, snapshot.OriginalKingdomId,
+                        snapshot.OriginalKingdomName,
+                        snapshot.OriginalKingdomColor,
+                        snapshot.CoreType,
+                        pProjectionKeyPrefix + snapshot.CityId))
                 {
                     complete = false;
                     continue;
                 }
-                inserted.Add(core.city_id);
-            }
-
-            foreach (City city in pKingdom.getCities())
-            {
-                if (city?.data == null || city.isRekt()) continue;
-                if (!MandateLegalCoreInheritanceRules.ShouldAddFoundingCore(city.id, inserted.Contains(city.id)))
-                    continue;
-                if (!InsertLegalCore(pPeriodId, city.id, city.data.name ?? "", pKingdom.id, pKingdom.name ?? "",
-                        HistoryColors.FromKingdom(pKingdom), "founding",
-                        pProjectionKeyPrefix + city.id))
-                {
-                    complete = false;
-                    continue;
-                }
-                inserted.Add(city.id);
+                inserted.Add(snapshot.CityId);
             }
 
             if (!complete) return false;
@@ -2062,10 +2131,101 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        private static bool EnsurePendingCoreSnapshots(Kingdom pKingdom,
+            MandateProjectionOutboxPersistence.PendingProjection pPending)
+        {
+            if (!string.IsNullOrEmpty(pPending.CoreSnapshotSource))
+                return true;
+            List<MandateProjectionOutboxPersistence.CoreCitySnapshot>
+                snapshots = CaptureLegalCoreSnapshots(pKingdom,
+                    pPending.PreviousPeriodId, "legacy");
+            if (!MandateProjectionOutboxPersistence.
+                    TryMigrateLegacyCoreSnapshots(DB,
+                        pPending.OperationKey, snapshots,
+                        out _, out string error))
+            {
+                ModClass.LogWarning(
+                    "Legacy Mandate core snapshot migration failed: " +
+                    error);
+                return false;
+            }
+            if (!MandateProjectionOutboxPersistence.TryReadPending(
+                    DB, pPending.PeriodId,
+                    out MandateProjectionOutboxPersistence.PendingProjection
+                        migrated, out error) || migrated == null)
+            {
+                ModClass.LogWarning(
+                    "Legacy Mandate core snapshot reload failed: " + error);
+                return false;
+            }
+            pPending.CoreSnapshotSource = migrated.CoreSnapshotSource;
+            pPending.CoreCitySnapshots = migrated.CoreCitySnapshots;
+            return true;
+        }
+
+        private static List<MandateProjectionOutboxPersistence.
+            CoreCitySnapshot> CaptureLegalCoreSnapshots(Kingdom pKingdom,
+            long pPreviousPeriodId, string pSnapshotSource)
+        {
+            var result = new List<MandateProjectionOutboxPersistence.
+                CoreCitySnapshot>();
+            var captured = new HashSet<long>();
+            foreach (CoreCitySnapshot core in
+                     ReadCoreCitySnapshots(pPreviousPeriodId))
+            {
+                if (!MandateLegalCoreInheritanceRules.
+                        ShouldInheritPreviousCore(pPreviousPeriodId,
+                            core.city_id, captured.Contains(core.city_id)))
+                    continue;
+                result.Add(new MandateProjectionOutboxPersistence.
+                    CoreCitySnapshot
+                {
+                    CityId = core.city_id,
+                    CityName = core.city_name,
+                    OriginalKingdomId = core.original_kingdom_id,
+                    OriginalKingdomName = core.original_kingdom_name,
+                    OriginalKingdomColor = core.original_kingdom_color,
+                    CoreType = "inherited",
+                    SnapshotSource = pSnapshotSource ?? ""
+                });
+                captured.Add(core.city_id);
+            }
+            if (pKingdom?.data != null)
+            {
+                string kingdomName = pKingdom.name ?? "";
+                string kingdomColor = HistoryColors.FromKingdom(pKingdom);
+                foreach (City city in pKingdom.getCities())
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    if (!MandateLegalCoreInheritanceRules.
+                            ShouldAddFoundingCore(city.id,
+                                captured.Contains(city.id)))
+                        continue;
+                    result.Add(new MandateProjectionOutboxPersistence.
+                        CoreCitySnapshot
+                    {
+                        CityId = city.id,
+                        CityName = city.data.name ?? "",
+                        OriginalKingdomId = pKingdom.id,
+                        OriginalKingdomName = kingdomName,
+                        OriginalKingdomColor = kingdomColor,
+                        CoreType = "founding",
+                        SnapshotSource = pSnapshotSource ?? ""
+                    });
+                    captured.Add(city.id);
+                }
+            }
+            result.Sort((left, right) => left.CityId.CompareTo(right.CityId));
+            return result;
+        }
+
         private static bool InsertLegalCore(long pPeriodId, long pCityId, string pCityName, long pOriginalKingdomId,
             string pOriginalKingdomName, string pOriginalKingdomColor,
             string pCoreType, string pProjectionKey = "")
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
             if (!Ready || pPeriodId < 0 || pCityId < 0) return false;
             try
             {
@@ -2198,6 +2358,9 @@ namespace AncientWarfare3.core.lineage
 
         private static void UpdateOriginalCoreCount(long pPeriodId)
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
             if (!Ready || pPeriodId < 0) return;
             int count = CountCoreCities(pPeriodId);
             try
@@ -2292,6 +2455,9 @@ namespace AncientWarfare3.core.lineage
             int pMandate, string pContent, long pPeriodId = -1L,
             string pProjectionKey = "")
         {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return false;
             if (!Ready) return false;
             MandateReport report = ReadReport();
             try

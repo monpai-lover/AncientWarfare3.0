@@ -16,7 +16,11 @@ internal static class MandateSuccessionRegressionRulesTests
         ActiveMandateReplacementIsAtomicAndRetryable();
         DeclarationOutboxRetriesObservableHistoryAndCoreEffects();
         OutboxReplayAfterBusinessCommitDoesNotDuplicateEffects();
+        DeclarationCoreSnapshotSurvivesLiveCityChangesAndCleansUp();
+        LegacyOutboxReadUpgradesCoreSnapshotSchema();
+        LegacyCoreSnapshotMigratesOnlyOnce();
         PendingProjectionResumeIsStableBoundedAndSnapshotBased();
+        ReplicaAuthorityGateRejectsEveryMandateMutationBoundary();
         ProjectionResumeRulesSeparateRuntimeHistoryAndTerminalWork();
         SuppressedKeyedHistoryRemainsPendingUntilRetry();
         ClosedDeclarationConnectionReturnsFailure();
@@ -527,6 +531,17 @@ internal static class MandateSuccessionRegressionRulesTests
             MapMarkerKind = "moh",
             EmperorTitle = 4
         };
+        request.CoreSnapshotSource = "declaration";
+        request.CoreCitySnapshots.Add(
+            new MandateProjectionOutboxPersistence.CoreCitySnapshot
+            {
+                CityId = 1L,
+                CityName = "Founding City",
+                OriginalKingdomId = 17L,
+                OriginalKingdomName = "Imperial State",
+                OriginalKingdomColor = "#abcdef",
+                CoreType = "founding"
+            });
         int historyPublishes = 0;
         int traitPublishes = 0;
         int runtimePublishes = 0;
@@ -550,6 +565,10 @@ internal static class MandateSuccessionRegressionRulesTests
             "failed declaration leaves no active Mandate state");
         Equal(0L, Scalar(db, "SELECT COUNT(*) FROM KingdomReign"),
             "zero-row failure does not invent a reign");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' " +
+                "AND name='MandateProjectionCoreSnapshot'"),
+            "failed declaration creates no core snapshot schema or rows");
         Equal(0, historyPublishes,
             "failed declaration publishes no history");
         Equal(0, traitPublishes,
@@ -581,6 +600,10 @@ internal static class MandateSuccessionRegressionRulesTests
         Equal(-1L, Scalar(db,
                 "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
             "exceptional declaration leaves the ordinary reign unchanged");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' " +
+                "AND name='MandateProjectionCoreSnapshot'"),
+            "exceptional declaration leaves no core snapshot rows");
         Equal(0, historyPublishes,
             "exceptional declaration publishes no history");
         Equal(0, traitPublishes,
@@ -609,6 +632,9 @@ internal static class MandateSuccessionRegressionRulesTests
         Equal(91L, Scalar(db,
                 "SELECT MANDATE_PERIOD_ID FROM KingdomReign WHERE REIGN_ID=7"),
             "successful retry projects the ruler's reign");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM MandateProjectionCoreSnapshot"),
+            "successful declaration commits its core snapshot once");
         Equal(1, historyPublishes,
             "successful retry publishes history once");
         Equal(1, traitPublishes,
@@ -1074,6 +1100,225 @@ internal static class MandateSuccessionRegressionRulesTests
         return applied && string.IsNullOrEmpty(error);
     }
 
+    private static bool ApplyCoreProjectionRecord(SQLiteConnection db,
+        long cityId, string projectionKey, ref int businessWrites)
+    {
+        int writes = businessWrites;
+        bool applied = MandateProjectionOutboxPersistence.
+            TryApplyIdempotentRecord(db, "MandateCoreCity", projectionKey,
+                transaction =>
+                {
+                    writes++;
+                    using var command = new SQLiteCommand(db)
+                    {
+                        Transaction = transaction,
+                        CommandText = "INSERT INTO MandateCoreCity" +
+                                      "(CITY_ID,PROJECTION_KEY) " +
+                                      "VALUES(@city,@key)"
+                    };
+                    command.Parameters.AddWithValue("@city", cityId);
+                    command.Parameters.AddWithValue("@key", projectionKey);
+                    return command.ExecuteNonQuery() == 1;
+                }, out string error);
+        businessWrites = writes;
+        return applied && string.IsNullOrEmpty(error);
+    }
+
+    private static void
+        DeclarationCoreSnapshotSurvivesLiveCityChangesAndCleansUp()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE MandateCoreCity(" +
+            "ID INTEGER PRIMARY KEY AUTOINCREMENT," +
+            "CITY_ID INTEGER NOT NULL,PROJECTION_KEY TEXT UNIQUE);");
+        var pending = Pending("mandate-declare:91:city-snapshot", 91L,
+            12d);
+        pending.OldEndRequired = false;
+        pending.CoreSnapshotSource = "declaration";
+        pending.CoreCitySnapshots.Add(
+            new MandateProjectionOutboxPersistence.CoreCitySnapshot
+            {
+                CityId = 1L,
+                CityName = "First",
+                OriginalKingdomId = 17L,
+                OriginalKingdomName = "Realm 91",
+                OriginalKingdomColor = "new-color",
+                CoreType = "founding"
+            });
+        pending.CoreCitySnapshots.Add(
+            new MandateProjectionOutboxPersistence.CoreCitySnapshot
+            {
+                CityId = 2L,
+                CityName = "Second",
+                OriginalKingdomId = 17L,
+                OriginalKingdomName = "Realm 91",
+                OriginalKingdomColor = "new-color",
+                CoreType = "founding"
+            });
+        EnqueuePending(db, pending);
+        Equal(2L, Scalar(db, "SELECT COUNT(*) FROM " +
+                MandateProjectionOutboxPersistence.CoreSnapshotTable),
+            "declaration transaction captures both legal-core cities");
+
+        long[] liveCityIds = { 2L, 3L };
+        int businessWrites = 0;
+        Equal(true, ApplyCoreProjectionRecord(db, 1L,
+                pending.OperationKey + ":legal_cores:1",
+                ref businessWrites),
+            "first core business row commits before its effect marker");
+
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryResumePendingBatch(db, 1,
+                    (loaded, effect) =>
+                    {
+                        if (effect != "legal_cores") return true;
+                        Equal("2,3", string.Join(",", liveCityIds),
+                            "the live city set changed before replay");
+                        Equal("1,2", string.Join(",",
+                                loaded.CoreCitySnapshots.Select(
+                                    snapshot => snapshot.CityId)),
+                            "replay reads only declaration-time child rows");
+                        Equal("First", loaded.CoreCitySnapshots[0].CityName,
+                            "destroyed city history survives in the snapshot");
+                        foreach (MandateProjectionOutboxPersistence.
+                                     CoreCitySnapshot snapshot in
+                                 loaded.CoreCitySnapshots)
+                        {
+                            if (!ApplyCoreProjectionRecord(db,
+                                    snapshot.CityId,
+                                    loaded.OperationKey +
+                                    ":legal_cores:" + snapshot.CityId,
+                                    ref businessWrites))
+                                return false;
+                        }
+                        return true;
+                    }, out int attempted, out int completed,
+                    out string error),
+            "snapshot replay completes after live cities change");
+        Equal(1, attempted, "one snapshot operation is attempted");
+        Equal(1, completed, "one snapshot operation completes");
+        Equal(2, businessWrites,
+            "missing effect marker replay does not duplicate a core row");
+        Equal("1,2", ScalarText(db,
+                "SELECT GROUP_CONCAT(CITY_ID, ',') FROM " +
+                "(SELECT CITY_ID FROM MandateCoreCity ORDER BY CITY_ID)"),
+            "only declaration-time cities become legal cores");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM " +
+                MandateProjectionOutboxPersistence.CoreSnapshotTable),
+            "outbox completion atomically removes child snapshots");
+    }
+
+    private static void
+        LegacyOutboxReadUpgradesCoreSnapshotSchema()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        var pending = Pending("mandate-declare:91:old-schema", 91L, 12d);
+        pending.OldEndRequired = false;
+        EnqueuePending(db, pending);
+        Execute(db, "DROP TABLE MandateProjectionCoreSnapshot;" +
+                    "ALTER TABLE MandateProjectionOutbox RENAME TO " +
+                    "MandateProjectionOutboxNew;" +
+                    "CREATE TABLE MandateProjectionOutbox AS SELECT " +
+                    "OPERATION_KEY,PERIOD_ID,KINGDOM_ID,KINGDOM_NAME," +
+                    "KINGDOM_COLOR,DYNASTY_NAME,RULER_ACTOR_ID,RULER_NAME," +
+                    "PREVIOUS_PERIOD_ID,PREVIOUS_KINGDOM_ID," +
+                    "PREVIOUS_KINGDOM_NAME,PREVIOUS_KINGDOM_COLOR," +
+                    "PREVIOUS_RULER_ACTOR_ID,PREVIOUS_RULER_NAME," +
+                    "PREVIOUS_MANDATE_VALUE,PREVIOUS_END_REASON," +
+                    "OLD_END_REQUIRED,CURRENT_YEAR,WAS_ALREADY_EMPEROR," +
+                    "ORIGIN_TYPE,CLAIMANT_KIND,MAP_MARKER_KIND," +
+                    "NEW_YEAR_PREFIX,NEW_YEAR_PREFIX_RICH," +
+                    "PREVIOUS_YEAR_PREFIX,PREVIOUS_YEAR_PREFIX_RICH," +
+                    "CREATED_TIME FROM MandateProjectionOutboxNew;" +
+                    "DROP TABLE MandateProjectionOutboxNew;");
+
+        Equal(true, MandateProjectionOutboxPersistence.TryReadPending(
+                db, 91L,
+                out MandateProjectionOutboxPersistence.PendingProjection
+                    loaded, out string error),
+            "direct legacy pending read upgrades core snapshot schema");
+        Equal(true, loaded != null,
+            "legacy pending row survives its schema upgrade");
+        Equal("", loaded.CoreSnapshotSource,
+            "upgraded legacy pending remains eligible for one migration");
+        Equal(1L, Scalar(db,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' " +
+                "AND name='MandateProjectionCoreSnapshot'"),
+            "legacy pending read creates the child snapshot table");
+    }
+
+    private static void
+        LegacyCoreSnapshotMigratesOnlyOnce()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        var pending = Pending("mandate-declare:91:legacy", 91L, 12d);
+        pending.OldEndRequired = false;
+        pending.CoreSnapshotSource = "";
+        EnqueuePending(db, pending);
+
+        var firstLiveSnapshot = new List<MandateProjectionOutboxPersistence.
+            CoreCitySnapshot>
+        {
+            CoreSnapshot(1L, "First"),
+            CoreSnapshot(2L, "Second")
+        };
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryMigrateLegacyCoreSnapshots(db, pending.OperationKey,
+                    firstLiveSnapshot, out bool migrated,
+                    out string error),
+            "current legacy outbox performs its explicit core migration");
+        Equal(true, migrated,
+            "first legacy migration records that it captured live cities");
+        Equal("legacy", ScalarText(db,
+                "SELECT DISTINCT SNAPSHOT_SOURCE FROM " +
+                "MandateProjectionCoreSnapshot"),
+            "legacy migration marks every child row as legacy source");
+
+        var changedLiveSnapshot = new List<
+            MandateProjectionOutboxPersistence.CoreCitySnapshot>
+        {
+            CoreSnapshot(2L, "Second"),
+            CoreSnapshot(3L, "Third")
+        };
+        Equal(true, MandateProjectionOutboxPersistence.
+                TryMigrateLegacyCoreSnapshots(db, pending.OperationKey,
+                    changedLiveSnapshot, out migrated, out error),
+            "legacy snapshot migration is safely retryable");
+        Equal(false, migrated,
+            "marked legacy source prevents rebuilding from changing cities");
+        Equal(true, MandateProjectionOutboxPersistence.TryReadPending(
+                db, pending.PeriodId,
+                out MandateProjectionOutboxPersistence.PendingProjection
+                    loaded, out error),
+            "migrated legacy outbox remains readable");
+        Equal("legacy", loaded.CoreSnapshotSource,
+            "legacy migration is durably marked");
+        Equal("1,2", string.Join(",", loaded.CoreCitySnapshots.Select(
+                snapshot => snapshot.CityId)),
+            "legacy retry preserves its first stable city snapshot");
+    }
+
+    private static MandateProjectionOutboxPersistence.CoreCitySnapshot
+        CoreSnapshot(long cityId, string cityName)
+    {
+        return new MandateProjectionOutboxPersistence.CoreCitySnapshot
+        {
+            CityId = cityId,
+            CityName = cityName,
+            OriginalKingdomId = 17L,
+            OriginalKingdomName = "Realm 91",
+            OriginalKingdomColor = "new-color",
+            CoreType = "founding"
+        };
+    }
+
     private static void
         PendingProjectionResumeIsStableBoundedAndSnapshotBased()
     {
@@ -1129,6 +1374,26 @@ internal static class MandateSuccessionRegressionRulesTests
         Equal("resume-c", ScalarText(db,
                 "SELECT OPERATION_KEY FROM MandateProjectionOutbox"),
             "bounded resume leaves the newest operation pending");
+    }
+
+    private static void
+        ReplicaAuthorityGateRejectsEveryMandateMutationBoundary()
+    {
+        Equal(false, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: true),
+            "replicas reject fresh Mandate declaration writes");
+        Equal(false, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: true),
+            "replicas reject Mandate succession writes");
+        Equal(false, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: true),
+            "replicas reject Mandate clear writes");
+        Equal(false, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: true),
+            "replicas reject direct Mandate state and decline writes");
+        Equal(true, MandateAuthorityMutationRules.CanMutate(
+                replicaSession: false),
+            "solo and server sessions retain Mandate mutation authority");
     }
 
     private static void

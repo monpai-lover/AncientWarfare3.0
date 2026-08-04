@@ -8,6 +8,19 @@ namespace AncientWarfare3.core.lineage
     {
         public const string Table = "MandateProjectionOutbox";
         public const string EffectTable = "MandateProjectionEffect";
+        public const string CoreSnapshotTable =
+            "MandateProjectionCoreSnapshot";
+
+        public sealed class CoreCitySnapshot
+        {
+            public long CityId;
+            public string CityName = "";
+            public long OriginalKingdomId;
+            public string OriginalKingdomName = "";
+            public string OriginalKingdomColor = "";
+            public string CoreType = "founding";
+            public string SnapshotSource = "declaration";
+        }
 
         public sealed class PendingProjection
         {
@@ -38,6 +51,8 @@ namespace AncientWarfare3.core.lineage
             public string PreviousYearPrefix = "";
             public string PreviousYearPrefixRich = "";
             public double CreatedTime;
+            public string CoreSnapshotSource = "";
+            public List<CoreCitySnapshot> CoreCitySnapshots = new();
         }
 
         private const string PendingColumns =
@@ -50,7 +65,8 @@ namespace AncientWarfare3.core.lineage
             "OLD_END_REQUIRED,CURRENT_YEAR,WAS_ALREADY_EMPEROR," +
             "ORIGIN_TYPE,CLAIMANT_KIND,MAP_MARKER_KIND," +
             "NEW_YEAR_PREFIX,NEW_YEAR_PREFIX_RICH," +
-            "PREVIOUS_YEAR_PREFIX,PREVIOUS_YEAR_PREFIX_RICH,CREATED_TIME";
+            "PREVIOUS_YEAR_PREFIX,PREVIOUS_YEAR_PREFIX_RICH,CREATED_TIME," +
+            "CORE_SNAPSHOT_SOURCE";
 
         public static IReadOnlyList<string> RequiredEffects(
             bool pOldEndRequired)
@@ -101,12 +117,20 @@ namespace AncientWarfare3.core.lineage
                         "@previousMandate,@previousReason,@oldRequired," +
                         "@year,@wasEmperor,@origin,@claimant,@marker," +
                         "@newYear,@newYearRich,@previousYear," +
-                        "@previousYearRich,@time)"
+                        "@previousYearRich,@time,@coreSnapshotSource)"
                 };
                 AddPendingParameters(command, pPending);
-                if (command.ExecuteNonQuery() == 1) return true;
-                pError = "mandate projection outbox expected one row";
-                return false;
+                if (command.ExecuteNonQuery() != 1)
+                {
+                    pError = "mandate projection outbox expected one row";
+                    return false;
+                }
+                foreach (CoreCitySnapshot snapshot in
+                         pPending.CoreCitySnapshots)
+                    InsertCoreSnapshot(pDb, pTransaction,
+                        pPending.OperationKey, pPending.CoreSnapshotSource,
+                        snapshot);
+                return true;
             }
             catch (Exception error)
             {
@@ -128,15 +152,23 @@ namespace AncientWarfare3.core.lineage
             }
             try
             {
+                using (SQLiteTransaction transaction = pDb.BeginTransaction())
+                {
+                    EnsureSchema(pDb, transaction);
+                    transaction.Commit();
+                }
                 using var command = new SQLiteCommand(pDb)
                 {
                     CommandText = "SELECT " + PendingColumns + " FROM " + Table +
                         " WHERE PERIOD_ID=@period LIMIT 1"
                 };
                 command.Parameters.AddWithValue("@period", pPeriodId);
-                using SQLiteDataReader reader = command.ExecuteReader();
-                if (!reader.Read()) return true;
-                pPending = ReadPending(reader);
+                using (SQLiteDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read()) return true;
+                    pPending = ReadPending(reader);
+                }
+                ReadCoreSnapshots(pDb, pPending);
                 return true;
             }
             catch (Exception error)
@@ -171,8 +203,12 @@ namespace AncientWarfare3.core.lineage
                         "OPERATION_KEY LIMIT @limit"
                 };
                 command.Parameters.AddWithValue("@limit", pLimit);
-                using SQLiteDataReader reader = command.ExecuteReader();
-                while (reader.Read()) pPending.Add(ReadPending(reader));
+                using (SQLiteDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read()) pPending.Add(ReadPending(reader));
+                }
+                foreach (PendingProjection item in pPending)
+                    ReadCoreSnapshots(pDb, item);
                 return true;
             }
             catch (Exception error)
@@ -287,6 +323,17 @@ namespace AncientWarfare3.core.lineage
                         pOperationKey);
                     deleteEffects.ExecuteNonQuery();
                 }
+                using (var deleteCoreSnapshots = new SQLiteCommand(pDb)
+                {
+                    Transaction = cleanup,
+                    CommandText = "DELETE FROM " + CoreSnapshotTable +
+                                  " WHERE OPERATION_KEY=@operation"
+                })
+                {
+                    deleteCoreSnapshots.Parameters.AddWithValue("@operation",
+                        pOperationKey);
+                    deleteCoreSnapshots.ExecuteNonQuery();
+                }
                 cleanup.Commit();
                 pComplete = true;
                 return true;
@@ -295,6 +342,82 @@ namespace AncientWarfare3.core.lineage
             {
                 pError = error.Message;
                 return false;
+            }
+        }
+
+        public static bool TryMigrateLegacyCoreSnapshots(
+            SQLiteConnection pDb, string pOperationKey,
+            IReadOnlyList<CoreCitySnapshot> pSnapshots,
+            out bool pMigrated, out string pError)
+        {
+            pMigrated = false;
+            pError = "";
+            if (pDb == null || string.IsNullOrWhiteSpace(pOperationKey) ||
+                pSnapshots == null)
+            {
+                pError = "invalid legacy mandate core snapshot migration";
+                return false;
+            }
+            SQLiteTransaction transaction = null;
+            try
+            {
+                transaction = pDb.BeginTransaction();
+                EnsureSchema(pDb, transaction);
+                string source;
+                using (var read = new SQLiteCommand(pDb)
+                {
+                    Transaction = transaction,
+                    CommandText = "SELECT CORE_SNAPSHOT_SOURCE FROM " +
+                                  Table +
+                                  " WHERE OPERATION_KEY=@operation LIMIT 1"
+                })
+                {
+                    read.Parameters.AddWithValue("@operation", pOperationKey);
+                    object value = read.ExecuteScalar();
+                    if (value == null || value == DBNull.Value)
+                    {
+                        transaction.Rollback();
+                        pError = "legacy mandate projection is missing";
+                        return false;
+                    }
+                    source = Convert.ToString(value) ?? "";
+                }
+                if (!string.IsNullOrEmpty(source))
+                {
+                    transaction.Commit();
+                    return true;
+                }
+                foreach (CoreCitySnapshot snapshot in pSnapshots)
+                    InsertCoreSnapshot(pDb, transaction, pOperationKey,
+                        "legacy", snapshot);
+                using (var mark = new SQLiteCommand(pDb)
+                {
+                    Transaction = transaction,
+                    CommandText = "UPDATE " + Table +
+                                  " SET CORE_SNAPSHOT_SOURCE='legacy' " +
+                                  "WHERE OPERATION_KEY=@operation AND " +
+                                  "CORE_SNAPSHOT_SOURCE=''"
+                })
+                {
+                    mark.Parameters.AddWithValue("@operation", pOperationKey);
+                    if (mark.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException(
+                            "legacy mandate core snapshot marker changed");
+                }
+                transaction.Commit();
+                pMigrated = true;
+                return true;
+            }
+            catch (Exception error)
+            {
+                try { transaction?.Rollback(); }
+                catch { }
+                pError = error.Message;
+                return false;
+            }
+            finally
+            {
+                transaction?.Dispose();
             }
         }
 
@@ -377,7 +500,16 @@ namespace AncientWarfare3.core.lineage
                     "CREATE TABLE IF NOT EXISTS " + EffectTable + "(" +
                     "OPERATION_KEY TEXT NOT NULL,EFFECT_KEY TEXT NOT NULL," +
                     "COMPLETED_TIME REAL NOT NULL DEFAULT 0," +
-                    "PRIMARY KEY(OPERATION_KEY,EFFECT_KEY));"
+                    "PRIMARY KEY(OPERATION_KEY,EFFECT_KEY));" +
+                    "CREATE TABLE IF NOT EXISTS " + CoreSnapshotTable + "(" +
+                    "OPERATION_KEY TEXT NOT NULL,CITY_ID INTEGER NOT NULL," +
+                    "CITY_NAME TEXT NOT NULL DEFAULT ''," +
+                    "ORIGINAL_KINGDOM_ID INTEGER NOT NULL," +
+                    "ORIGINAL_KINGDOM_NAME TEXT NOT NULL DEFAULT ''," +
+                    "ORIGINAL_KINGDOM_COLOR TEXT NOT NULL DEFAULT ''," +
+                    "CORE_TYPE TEXT NOT NULL DEFAULT 'founding'," +
+                    "SNAPSHOT_SOURCE TEXT NOT NULL DEFAULT 'declaration'," +
+                    "PRIMARY KEY(OPERATION_KEY,CITY_ID));"
             };
             command.ExecuteNonQuery();
             EnsureColumn(pDb, pTransaction, "KINGDOM_NAME",
@@ -409,6 +541,8 @@ namespace AncientWarfare3.core.lineage
             EnsureColumn(pDb, pTransaction, "PREVIOUS_YEAR_PREFIX",
                 "TEXT NOT NULL DEFAULT ''");
             EnsureColumn(pDb, pTransaction, "PREVIOUS_YEAR_PREFIX_RICH",
+                "TEXT NOT NULL DEFAULT ''");
+            EnsureColumn(pDb, pTransaction, "CORE_SNAPSHOT_SOURCE",
                 "TEXT NOT NULL DEFAULT ''");
         }
 
@@ -452,8 +586,11 @@ namespace AncientWarfare3.core.lineage
                     " WHERE OPERATION_KEY=@operation LIMIT 1"
             };
             command.Parameters.AddWithValue("@operation", pOperationKey);
-            using SQLiteDataReader reader = command.ExecuteReader();
-            return reader.Read() ? ReadPending(reader) : null;
+            PendingProjection pending;
+            using (SQLiteDataReader reader = command.ExecuteReader())
+                pending = reader.Read() ? ReadPending(reader) : null;
+            if (pending != null) ReadCoreSnapshots(pDb, pending);
+            return pending;
         }
 
         private static PendingProjection ReadPending(SQLiteDataReader pReader)
@@ -496,8 +633,82 @@ namespace AncientWarfare3.core.lineage
                     pReader.GetValue(24)) ?? "",
                 PreviousYearPrefixRich = Convert.ToString(
                     pReader.GetValue(25)) ?? "",
-                CreatedTime = Convert.ToDouble(pReader.GetValue(26))
+                CreatedTime = Convert.ToDouble(pReader.GetValue(26)),
+                CoreSnapshotSource = Convert.ToString(
+                    pReader.GetValue(27)) ?? ""
             };
+        }
+
+        private static void InsertCoreSnapshot(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, string pOperationKey,
+            string pSnapshotSource, CoreCitySnapshot pSnapshot)
+        {
+            if (pSnapshot == null || pSnapshot.CityId < 0L)
+                throw new InvalidOperationException(
+                    "invalid mandate core snapshot");
+            using var command = new SQLiteCommand(pDb)
+            {
+                Transaction = pTransaction,
+                CommandText = "INSERT INTO " + CoreSnapshotTable +
+                    "(OPERATION_KEY,CITY_ID,CITY_NAME," +
+                    "ORIGINAL_KINGDOM_ID,ORIGINAL_KINGDOM_NAME," +
+                    "ORIGINAL_KINGDOM_COLOR,CORE_TYPE,SNAPSHOT_SOURCE) " +
+                    "VALUES(@operation,@city,@cityName,@kingdom," +
+                    "@kingdomName,@kingdomColor,@coreType,@source)"
+            };
+            command.Parameters.AddWithValue("@operation", pOperationKey);
+            command.Parameters.AddWithValue("@city", pSnapshot.CityId);
+            command.Parameters.AddWithValue("@cityName",
+                pSnapshot.CityName ?? "");
+            command.Parameters.AddWithValue("@kingdom",
+                pSnapshot.OriginalKingdomId);
+            command.Parameters.AddWithValue("@kingdomName",
+                pSnapshot.OriginalKingdomName ?? "");
+            command.Parameters.AddWithValue("@kingdomColor",
+                pSnapshot.OriginalKingdomColor ?? "");
+            command.Parameters.AddWithValue("@coreType",
+                pSnapshot.CoreType ?? "founding");
+            command.Parameters.AddWithValue("@source",
+                string.IsNullOrEmpty(pSnapshotSource)
+                    ? pSnapshot.SnapshotSource ?? ""
+                    : pSnapshotSource);
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException(
+                    "mandate core snapshot expected one row");
+        }
+
+        private static void ReadCoreSnapshots(SQLiteConnection pDb,
+            PendingProjection pPending)
+        {
+            pPending.CoreCitySnapshots.Clear();
+            using var command = new SQLiteCommand(pDb)
+            {
+                CommandText = "SELECT CITY_ID,CITY_NAME," +
+                    "ORIGINAL_KINGDOM_ID,ORIGINAL_KINGDOM_NAME," +
+                    "ORIGINAL_KINGDOM_COLOR,CORE_TYPE,SNAPSHOT_SOURCE FROM " +
+                    CoreSnapshotTable + " WHERE OPERATION_KEY=@operation " +
+                    "ORDER BY CITY_ID"
+            };
+            command.Parameters.AddWithValue("@operation",
+                pPending.OperationKey);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                pPending.CoreCitySnapshots.Add(new CoreCitySnapshot
+                {
+                    CityId = Convert.ToInt64(reader.GetValue(0)),
+                    CityName = Convert.ToString(reader.GetValue(1)) ?? "",
+                    OriginalKingdomId = Convert.ToInt64(reader.GetValue(2)),
+                    OriginalKingdomName = Convert.ToString(
+                        reader.GetValue(3)) ?? "",
+                    OriginalKingdomColor = Convert.ToString(
+                        reader.GetValue(4)) ?? "",
+                    CoreType = Convert.ToString(reader.GetValue(5)) ??
+                               "founding",
+                    SnapshotSource = Convert.ToString(reader.GetValue(6)) ??
+                                     ""
+                });
+            }
         }
 
         private static bool EffectCompleted(SQLiteConnection pDb,
@@ -615,6 +826,8 @@ namespace AncientWarfare3.core.lineage
             pCommand.Parameters.AddWithValue("@previousYearRich",
                 pPending.PreviousYearPrefixRich ?? "");
             pCommand.Parameters.AddWithValue("@time", pPending.CreatedTime);
+            pCommand.Parameters.AddWithValue("@coreSnapshotSource",
+                pPending.CoreSnapshotSource ?? "");
         }
     }
 }

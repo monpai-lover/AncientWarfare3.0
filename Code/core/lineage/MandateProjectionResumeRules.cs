@@ -6,6 +6,14 @@ namespace AncientWarfare3.core.lineage
         TerminalHistoryOnly
     }
 
+    public static class MandateAuthorityMutationRules
+    {
+        public static bool CanMutate(bool replicaSession)
+        {
+            return !replicaSession;
+        }
+    }
+
     public static class MandateProjectionResumeRules
     {
         public static bool ShouldRun(bool databaseReady, bool worldReady,
@@ -17,7 +25,7 @@ namespace AncientWarfare3.core.lineage
 
         public static bool CanMutateOutbox(bool replicaSession)
         {
-            return !replicaSession;
+            return MandateAuthorityMutationRules.CanMutate(replicaSession);
         }
 
         public static bool ShouldStartAnnualCycle(int lastCycleYear,
