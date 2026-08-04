@@ -1,0 +1,496 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarArmyReturnRulesTests
+{
+    internal static void Run()
+    {
+        Equal(true, WarArmyReturnRules.ShouldBeginReturn(
+                armyAlive: true, currentMissionWarId: 17L,
+                endedWarId: 17L),
+            "the ended war returns its explicitly bound army");
+        Equal(false, WarArmyReturnRules.ShouldBeginReturn(
+                armyAlive: true, currentMissionWarId: 16L,
+                endedWarId: 17L),
+            "a replacement mission for another war is preserved");
+        Equal(false, WarArmyReturnRules.ShouldBeginReturn(
+                armyAlive: false, currentMissionWarId: 17L,
+                endedWarId: 17L),
+            "a dead army cannot enter the return queue");
+        Equal(true, WarArmyReturnRules.HasArrived(
+                armyAlive: true, insideFriendlySafeCity: true),
+            "a friendly safe city completes return intent");
+        Equal(false, WarArmyReturnRules.HasArrived(
+                armyAlive: true, insideFriendlySafeCity: false),
+            "an army abroad retains return intent");
+
+        ReopenedOrderKeepsOneBoundedWorkItem();
+        DisposedOrdersArePhysicallyRemovedAtScale();
+        StaleCleanupConsumesOneBoundedToken();
+        StaleTokensDoNotConsumeActiveFrameBudget();
+        BatchRequeueWaitsForNextFrame();
+        ReturnIntentRestoresAfterRuntimeReset();
+        InvalidRestoreFactsClearIntent();
+        DisposedArmyClearsRuntimeAndCannotRestore();
+        PublishedMissionCancellationRules();
+        ConsumerDropsReturnWhenActiveMissionAppears();
+
+        string root = Directory.GetCurrentDirectory();
+        string servicePath = Path.Combine(root, "Code", "core", "lineage",
+            "WarArmyReturnService.cs");
+        True(File.Exists(servicePath),
+            "the ended-war army return queue exists");
+        string service = File.ReadAllText(servicePath);
+        True(service.Contains("MaximumArmiesPerFrame") &&
+             service.Contains(
+                 "private const int MaximumQueueScansPerFrame = 64;") &&
+             service.Contains("ArmyRtsTransportService.TryHandleActor"),
+            "the bounded queue uses a fixed scan ceiling and existing transport");
+        False(service.Contains("RestoreCivilian(") ||
+              service.Contains("removeFromArmy("),
+            "army return intent never demobilizes standing or special armies");
+        string queueAdmission = Section(service,
+            "public static bool TryBegin(",
+            "public static void ProcessFrame(");
+        False(queueAdmission.Contains("IssueMovement("),
+            "queue admission does not bypass the per-frame movement bound");
+        string queueProcessing = Section(service,
+            "public static void ProcessFrame(",
+            "public static void ClearRuntime(");
+        True(queueProcessing.Contains(
+                 "MaximumQueueScansPerFrame") &&
+             queueProcessing.Contains("Queue.TakeFrame(") &&
+             queueProcessing.Contains("MaximumQueueScansPerFrame)"),
+            "service uses a fixed defensive queue scan ceiling");
+        False(queueProcessing.Contains(
+                "Queue.WorkCount"),
+            "queue length never becomes an unbounded per-frame scan ceiling");
+        int targetRecovery = queueProcessing.IndexOf(
+            "if (!IsFriendlySafeCity(target, kingdom))",
+            StringComparison.Ordinal);
+        int recoveredMovement = queueProcessing.IndexOf(
+            "IssueMovement(captain, target)", targetRecovery,
+            StringComparison.Ordinal);
+        True(targetRecovery >= 0 && recoveredMovement > targetRecovery &&
+             queueProcessing.Substring(targetRecovery,
+                 recoveredMovement - targetRecovery).Contains(
+                  "Finish(armyId, army)"),
+            "an order is removed when no friendly safe city remains");
+
+        string runtimeRebuild = Section(service,
+            "public static void RebuildRuntime()",
+            "private static void TryRestore(");
+        int replicaGuard = runtimeRebuild.IndexOf(
+            "AW3MultiplayerReplicaScope.IsReplicaSession",
+            StringComparison.Ordinal);
+        int armyScan = runtimeRebuild.IndexOf("foreach (Army army",
+            StringComparison.Ordinal);
+        True(replicaGuard >= 0 && armyScan > replicaGuard,
+            "replica rebuild defers before scanning or rewriting army return intent");
+        string runtimeClear = Section(service,
+            "public static void ClearRuntime()",
+            "public static void RebuildRuntime()");
+        False(runtimeClear.Contains("ClearPersisted(") ||
+              runtimeClear.Contains("AW_ARMY_RETURN_"),
+            "runtime reset preserves persisted return intent");
+        string disposal = Section(service,
+            "public static void OnArmyDisposed(",
+            "public static void ClearRuntime()");
+        True(disposal.Contains("Queue.RemoveDisposed(pArmy.id)") &&
+             disposal.Contains("ClearPersisted(pArmy)"),
+            "army disposal directly clears runtime and persisted return state");
+        False(disposal.Contains("ResolveArmy(") ||
+              disposal.Contains("Cancel("),
+            "army disposal does not depend on the world index or recurse through cancel");
+
+        string armySafetyPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ArmySafetyPatch.cs"));
+        string disposePrefix = Section(armySafetyPatch,
+            "public static void ArmyDispose_Prefix(",
+            "[HarmonyPostfix]");
+        True(disposePrefix.Contains(
+                "WarArmyReturnService.OnArmyDisposed(__instance)"),
+            "Army.Dispose prefix clears return state while ArmyData is available");
+
+        string restorePipeline = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "multiplayer", "AW3RuntimeRestorePipeline.cs"));
+        int stageSearch = 0;
+        for (int stagePair = 0; stagePair < 3; stagePair++)
+        {
+            int controllerStage = restorePipeline.IndexOf(
+                "new AW3RestoreStage(\"army_rts_controllers\"",
+                stageSearch, StringComparison.Ordinal);
+            int returnStage = restorePipeline.IndexOf(
+                "new AW3RestoreStage(\"army_war_return\"",
+                controllerStage, StringComparison.Ordinal);
+            True(controllerStage >= stageSearch &&
+                 returnStage > controllerStage,
+                "return restore or clear stage follows RTS controllers");
+            stageSearch = returnStage + 1;
+        }
+
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        string invalidate = Section(controller,
+            "public static int InvalidateWar(",
+            "public static void RebuildRuntime(");
+        int exactMissionMatch = invalidate.IndexOf(
+            "ShouldInvalidateMissionForEndedWar(",
+            StringComparison.Ordinal);
+        int missionMatch = invalidate.IndexOf(
+            "ShouldBeginReturn(", StringComparison.Ordinal);
+        int invalidation = invalidate.IndexOf("Invalidate(armyId)",
+            missionMatch, StringComparison.Ordinal);
+        int queue = invalidate.IndexOf("WarArmyReturnService.TryBegin(",
+            invalidation, StringComparison.Ordinal);
+        True(exactMissionMatch >= 0 && missionMatch > exactMissionMatch &&
+             invalidation > missionMatch &&
+             queue > invalidation,
+            "matching ended-war missions invalidate before live armies enter return handling");
+
+        int missingControllerStart = invalidate.IndexOf(
+            "if (!Controllers.TryGet(", StringComparison.Ordinal);
+        int liveArmyLookup = invalidate.IndexOf("Army army = FindArmy(",
+            missingControllerStart, StringComparison.Ordinal);
+        True(missingControllerStart >= 0 &&
+             liveArmyLookup > missingControllerStart,
+            "the missing-controller cleanup branch is identifiable");
+        string missingControllerBranch = invalidate.Substring(
+            missingControllerStart, liveArmyLookup - missingControllerStart);
+        True(missingControllerBranch.Contains("Invalidate(armyId)") &&
+             missingControllerBranch.Contains("invalidated++") &&
+             !missingControllerBranch.Contains(
+                 "WarArmyReturnService.TryBegin("),
+            "a stale mission index is cleaned without queueing return");
+
+        string assignment = Section(controller,
+            "private static void AssignMission(Army pArmy,",
+            "public static bool TryGetMission(");
+        True(assignment.Contains("IsMissionPublishable(") &&
+             assignment.Contains("MissionIndex.Matches(pMission)") &&
+             assignment.Contains("ShouldCancelForPublishedMission("),
+            "return cancellation follows validated controller and index publication");
+
+        int missionDefense = queueProcessing.IndexOf("ResolveOrder(",
+            StringComparison.Ordinal);
+        int activeMissionCheck = queueProcessing.IndexOf(
+            "HasValidMission(army)", missionDefense,
+            StringComparison.Ordinal);
+        int movement = queueProcessing.IndexOf(
+            "IssueMovement(captain, target)", StringComparison.Ordinal);
+        int requeue = queueProcessing.IndexOf("Queue.Requeue(armyId)",
+            movement, StringComparison.Ordinal);
+        True(missionDefense >= 0 && activeMissionCheck > missionDefense &&
+             movement > activeMissionCheck &&
+              requeue > movement &&
+              queueProcessing.Substring(missionDefense,
+                  movement - missionDefense).Contains(
+                  "Finish(armyId, army)"),
+            "consumer drops a return order before movement and requeue when a mission is active");
+
+        string temporaryReturn = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "TemporaryMilitaryReturnService.cs"));
+        True(temporaryReturn.Contains(
+                 "ActiveMilitaryLifecycleRules.CanDemobilizeAtLocation(") &&
+             temporaryReturn.Contains("IsInsideFriendlySafeCity(") &&
+             temporaryReturn.Contains(
+                 "TemporaryMilitaryDemobilizationService."),
+            "temporary levies retain arrival-only demobilization");
+    }
+
+    private static void ReopenedOrderKeepsOneBoundedWorkItem()
+    {
+        var queue = new WarArmyReturnQueueCore();
+        Equal(true, queue.Begin(7L, 1L, 10L), "first return begins");
+        Equal(true, queue.Cancel(7L), "return can be cancelled");
+        Equal(0, queue.WorkCount,
+            "cancel physically removes its queued node");
+        Equal(0, queue.QueuedCount,
+            "cancel clears its node index entry");
+        Equal(true, queue.Begin(7L, 1L, 11L),
+            "same army can reopen before its old token drains");
+
+        for (int i = 0; i < 32; i++)
+        {
+            Equal(true, queue.Cancel(7L), "reopened return cancels");
+            Equal(true, queue.Begin(7L, 1L, 11L + i),
+                "reopened return begins");
+            Equal(1, queue.WorkCount,
+                "repeated cancel and reopen keeps one work token");
+            Equal(1, queue.OrderCount,
+                "repeated cancel and reopen keeps one active order");
+        }
+
+        Equal(true, queue.TryTake(out WarArmyReturnQueueOrder order),
+            "the single token resolves the current order");
+        Equal(42L, order.TargetCityId,
+            "the current target replaces the cancelled target");
+        Equal(0, queue.WorkCount, "taking removes the sole work token");
+        Equal(true, queue.Requeue(order.ArmyId),
+            "continuing work requeues exactly once");
+        Equal(false, queue.Requeue(order.ArmyId),
+            "a second requeue cannot duplicate active work");
+        Equal(1, queue.WorkCount, "only one continuation token exists");
+        Equal(true, queue.TryTake(out order), "continuation can be taken");
+        Equal(true, queue.Complete(order.ArmyId), "arrival completes order");
+        Equal(0, queue.OrderCount, "completion clears active order");
+        Equal(0, queue.WorkCount, "completion leaves no queued work");
+    }
+
+    private static void DisposedOrdersArePhysicallyRemovedAtScale()
+    {
+        var queue = new WarArmyReturnQueueCore();
+        for (long armyId = 1L; armyId <= 10000L; armyId++)
+        {
+            Equal(true, queue.Begin(armyId, 1L, 10L),
+                "return begins before disposal");
+            Equal(true, queue.RemoveDisposed(armyId),
+                "dispose removes the active return");
+        }
+
+        Equal(0, queue.OrderCount,
+            "bulk disposal leaves no active return orders");
+        Equal(0, queue.QueuedCount,
+            "bulk disposal leaves no node index entries");
+        Equal(0, queue.WorkCount,
+            "bulk disposal physically removes every queued node");
+        Equal(0, queue.TakeFrame(maximumActive: 4,
+                maximumScans: 64).Count,
+            "the next frame has no stale disposal work to scan");
+        Equal(0, queue.LastFrameScanCount,
+            "the next frame performs zero queue scans");
+    }
+
+    private static void ReturnIntentRestoresAfterRuntimeReset()
+    {
+        WarArmyReturnStoredIntent stored = WarArmyReturnPersistenceRules.Encode(
+            armyId: 9L, kingdomId: 3L, targetCityId: 20L);
+        var queue = new WarArmyReturnQueueCore();
+        queue.Begin(stored.ArmyId, stored.KingdomId, stored.TargetCityId);
+        queue.Clear();
+
+        var facts = new WarArmyReturnRestoreFacts
+        {
+            ArmyAlive = true,
+            ArmyKingdomMatches = true,
+            InsideFriendlySafeCity = false,
+            HasValidMission = false,
+            StoredTargetFriendlySafe = false,
+            ReplacementTargetCityId = 21L
+        };
+        Equal(true, WarArmyReturnPersistenceRules.TryRestore(stored, facts,
+                out WarArmyReturnStoredIntent restored),
+            "a live unassigned overseas army restores return intent");
+        Equal(21L, restored.TargetCityId,
+            "restore replaces a captured or missing target");
+        Equal(true, queue.Begin(restored.ArmyId, restored.KingdomId,
+                restored.TargetCityId),
+            "restored intent re-enters the production queue core");
+        Equal(1, queue.OrderCount, "restored return is active");
+        Equal(1, queue.WorkCount, "restored return has one work token");
+    }
+
+    private static void StaleCleanupConsumesOneBoundedToken()
+    {
+        var queue = new WarArmyReturnQueueCore();
+        for (long armyId = 1L; armyId <= 8L; armyId++)
+            queue.RestoreLegacyToken(armyId);
+        queue.Begin(9L, 1L, 11L);
+
+        Equal(false, queue.TryTake(out _),
+            "one take only discards the next stale token");
+        Equal(8, queue.WorkCount,
+            "one take cannot drain an unbounded stale backlog");
+    }
+
+    private static void StaleTokensDoNotConsumeActiveFrameBudget()
+    {
+        var queue = new WarArmyReturnQueueCore();
+        for (long armyId = 1L; armyId <= 8L; armyId++)
+            queue.RestoreLegacyToken(armyId);
+        for (long armyId = 9L; armyId <= 12L; armyId++)
+            queue.Begin(armyId, 1L, 11L);
+
+        IReadOnlyList<WarArmyReturnQueueOrder> frame = queue.TakeFrame(
+            maximumActive: 4, maximumScans: 64);
+
+        Equal(4, frame.Count,
+            "stale tokens do not consume the four active-order budget");
+        Equal(9L, frame[0].ArmyId, "first active order is preserved");
+        Equal(12L, frame[3].ArmyId, "fourth active order is preserved");
+        Equal(0, queue.WorkCount,
+            "fixed scan budget drains the examined compatibility tokens");
+        Equal(12, queue.LastFrameScanCount,
+            "compatibility cleanup scans each stale and active node once");
+
+        for (long armyId = 20L; armyId <= 27L; armyId++)
+            queue.RestoreLegacyToken(armyId);
+        Equal(0, queue.TakeFrame(maximumActive: 4, maximumScans: 3).Count,
+            "a finite scan ceiling may stop before an active order");
+        Equal(5, queue.WorkCount,
+            "the frame drain examines no more than its explicit scan ceiling");
+    }
+
+    private static void BatchRequeueWaitsForNextFrame()
+    {
+        var queue = new WarArmyReturnQueueCore();
+        for (long armyId = 1L; armyId <= 4L; armyId++)
+            queue.Begin(armyId, 1L, 10L);
+
+        IReadOnlyList<WarArmyReturnQueueOrder> frame = queue.TakeFrame(
+            maximumActive: 4, maximumScans: 64);
+        Equal(4, frame.Count, "first frame takes each active order once");
+        Equal(0, queue.WorkCount,
+            "taken batch is detached from the work queue");
+        for (int i = 0; i < frame.Count; i++)
+            Equal(true, queue.Requeue(frame[i].ArmyId),
+                "continued active order requeues once");
+        Equal(4, queue.WorkCount,
+            "requeued orders wait in the next frame queue");
+        Equal(4, frame.Count,
+            "requeue does not mutate the current frame batch");
+    }
+
+    private static void InvalidRestoreFactsClearIntent()
+    {
+        WarArmyReturnStoredIntent stored = WarArmyReturnPersistenceRules.Encode(
+            armyId: 12L, kingdomId: 4L, targetCityId: 30L);
+        foreach (WarArmyReturnRestoreFacts facts in new[]
+                 {
+                     RestoreFacts(armyAlive: false),
+                     RestoreFacts(insideFriendlySafeCity: true),
+                     RestoreFacts(hasValidMission: true)
+                 })
+            Equal(false, WarArmyReturnPersistenceRules.TryRestore(stored,
+                    facts, out _),
+                "death, arrival, or a valid mission clears persisted return");
+    }
+
+    private static void DisposedArmyClearsRuntimeAndCannotRestore()
+    {
+        WarArmyReturnStoredIntent stored = WarArmyReturnPersistenceRules.Encode(
+            armyId: 31L, kingdomId: 4L, targetCityId: 30L);
+        var queue = new WarArmyReturnQueueCore();
+        Equal(true, queue.Begin(stored.ArmyId, stored.KingdomId,
+                stored.TargetCityId),
+            "active return exists before disposal");
+        Equal(1, queue.QueuedCount,
+            "active return owns one queue membership before disposal");
+
+        Equal(true, queue.RemoveDisposed(stored.ArmyId),
+            "disposal removes active return runtime state");
+        Equal(0, queue.OrderCount,
+            "disposed army has no active return order");
+        Equal(0, queue.QueuedCount,
+            "disposed army has no queue membership");
+        Equal(false, WarArmyReturnPersistenceRules.TryRestore(stored,
+                RestoreFacts(armyAlive: false), out _),
+            "a disposed army cannot restore its former return intent");
+    }
+
+    private static WarArmyReturnRestoreFacts RestoreFacts(
+        bool armyAlive = true, bool insideFriendlySafeCity = false,
+        bool hasValidMission = false)
+    {
+        return new WarArmyReturnRestoreFacts
+        {
+            ArmyAlive = armyAlive,
+            ArmyKingdomMatches = true,
+            InsideFriendlySafeCity = insideFriendlySafeCity,
+            HasValidMission = hasValidMission,
+            StoredTargetFriendlySafe = true,
+            ReplacementTargetCityId = -1L
+        };
+    }
+
+    private static void PublishedMissionCancellationRules()
+    {
+        Equal(false, WarArmyReturnRules.IsMissionPublishable(
+                armyAlive: true, armyId: 5L, missionArmyId: 5L,
+                kingdomMatches: true, warId: -1L, targetCityId: 8L,
+                runtimeMissionValid: false),
+            "a rejected invalid mission cannot take over return");
+        Equal(false, WarArmyReturnRules.ShouldCancelForPublishedMission(
+                missionPublishable: false, controllerPublished: false,
+                indexPublished: false),
+            "rejected publication preserves return intent");
+        Equal(true, WarArmyReturnRules.ShouldCancelForPublishedMission(
+                missionPublishable: true, controllerPublished: true,
+                indexPublished: true),
+            "accepted valid publication cancels return intent");
+
+        var controllers = new ArmyRtsControllerWorkIndex();
+        var index = new ArmyRtsMissionIndex();
+        var original = new ArmyRtsMission
+        {
+            ArmyId = 5L,
+            KingdomId = 2L,
+            WarId = 9L,
+            FrontId = 3L,
+            TargetCityId = 8L,
+            TargetStrength = 20,
+            IssuedTime = 1d
+        };
+        Equal(true, controllers.AssignMission(original),
+            "first controller publication changes state");
+        Equal(true, index.Upsert(original),
+            "first mission index publication changes state");
+        ArmyRtsMission repeated = ArmyRtsControllerRules.CopyMission(original);
+        repeated.TargetStrength = 40;
+        repeated.IssuedTime = 2d;
+        Equal(false, controllers.AssignMission(repeated),
+            "same strategic intent is an unchanged controller publication");
+        Equal(false, index.Upsert(repeated),
+            "same indexed identity is an unchanged index publication");
+        Equal(true, controllers.TryGet(repeated.ArmyId,
+                out ArmyRtsControllerRecord assigned) &&
+            ArmyRtsControllerRules.SameStrategicIntent(
+                assigned.Mission, repeated),
+            "unchanged controller still publishes the requested intent");
+        Equal(true, index.Matches(repeated),
+            "unchanged mission index still publishes the requested identity");
+        Equal(true, WarArmyReturnRules.ShouldCancelForPublishedMission(
+                missionPublishable: true,
+                controllerPublished: ArmyRtsControllerRules.
+                    SameStrategicIntent(assigned.Mission, repeated),
+                indexPublished: index.Matches(repeated)),
+            "unchanged valid publication still owns and cancels return");
+    }
+
+    private static void ConsumerDropsReturnWhenActiveMissionAppears()
+    {
+        WarArmyReturnOrderDecision decision =
+            WarArmyReturnRules.ResolveOrder(
+                armyAlive: true, insideFriendlySafeCity: false,
+                hasValidMission: true);
+
+        Equal(WarArmyReturnOrderDecision.CancelForMission, decision,
+            "consumer defense cancels return when active assignment appears");
+    }
+
+    private static string Section(string source, string start, string end)
+    {
+        int startIndex = source.IndexOf(start, StringComparison.Ordinal);
+        int endIndex = source.IndexOf(end, startIndex + start.Length,
+            StringComparison.Ordinal);
+        if (startIndex < 0 || endIndex < 0)
+            throw new InvalidOperationException("source section not found");
+        return source.Substring(startIndex, endIndex - startIndex);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

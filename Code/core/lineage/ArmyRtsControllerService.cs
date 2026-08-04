@@ -355,6 +355,19 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public bool Matches(ArmyRtsMission pMission)
+        {
+            if (pMission == null || pMission.ArmyId < 0L ||
+                pMission.KingdomId < 0L || pMission.WarId < 0L ||
+                pMission.TargetCityId < 0L ||
+                !_missionByArmy.TryGetValue(pMission.ArmyId,
+                    out (long KingdomId, long WarId,
+                        long TargetCityId) current)) return false;
+            return current.KingdomId == pMission.KingdomId &&
+                   current.WarId == pMission.WarId &&
+                   current.TargetCityId == pMission.TargetCityId;
+        }
+
         public bool Remove(long pArmyId)
         {
             if (!_missionByArmy.TryGetValue(pArmyId,
@@ -867,6 +880,15 @@ namespace AncientWarfare3.core.lineage
             bool pInCorridor, int pDirectorGeneration = -1)
         {
             if (pArmy?.data == null || pMission == null) return;
+            Kingdom missionKingdom = SafeKingdom(pArmy);
+            bool missionPublishable = WarArmyReturnRules.
+                IsMissionPublishable(IsLiveArmy(pArmy), pArmy.id,
+                    pMission.ArmyId,
+                    missionKingdom?.data != null &&
+                    missionKingdom.id == pMission.KingdomId,
+                    pMission.WarId, pMission.TargetCityId,
+                    IsMissionValid(pArmy, pMission));
+            if (!missionPublishable) return;
             AWArmyService.EnsureOrdinaryNativeName(pArmy);
             if (pMission.IssuedTime < 0d ||
                 double.IsNaN(pMission.IssuedTime) ||
@@ -892,6 +914,15 @@ namespace AncientWarfare3.core.lineage
                 out RuntimeState previousRuntime);
             bool changed = Controllers.AssignMission(pMission);
             MissionIndex.Upsert(pMission);
+            bool controllerPublished = Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord assignedRecord) &&
+                assignedRecord?.Mission != null &&
+                ArmyRtsControllerRules.SameStrategicIntent(
+                    assignedRecord.Mission, pMission);
+            bool indexPublished = MissionIndex.Matches(pMission);
+            if (WarArmyReturnRules.ShouldCancelForPublishedMission(
+                    missionPublishable, controllerPublished, indexPublished))
+                WarArmyReturnService.Cancel(pArmy.id);
             bool clearSharedRoute = ArmyRtsControllerRules.
                 ShouldClearSharedRoute(resetOperationalProgress,
                     runtimeExists,
@@ -2201,14 +2232,24 @@ namespace AncientWarfare3.core.lineage
             {
                 long armyId = armyIds[i];
                 if (!Controllers.TryGet(armyId,
-                        out ArmyRtsControllerRecord record) ||
-                    ActiveMilitaryLifecycleRules.
-                        ShouldInvalidateMissionForEndedWar(
-                            record?.Mission?.WarId ?? -1L, pWarId))
+                        out ArmyRtsControllerRecord record))
                 {
                     Invalidate(armyId);
                     invalidated++;
+                    continue;
                 }
+                long missionWarId = record?.Mission?.WarId ?? -1L;
+                if (!ActiveMilitaryLifecycleRules.
+                        ShouldInvalidateMissionForEndedWar(
+                            missionWarId, pWarId)) continue;
+                Army army = FindArmy(armyId);
+                bool shouldBeginReturn = WarArmyReturnRules.
+                    ShouldBeginReturn(IsLiveArmy(army), missionWarId,
+                        pWarId);
+                Invalidate(armyId);
+                if (shouldBeginReturn)
+                    WarArmyReturnService.TryBegin(army);
+                invalidated++;
             }
             return invalidated;
         }

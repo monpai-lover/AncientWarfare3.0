@@ -1,0 +1,130 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarRuntimeDisplayRulesTests
+{
+    internal static void Run()
+    {
+        Equal("Battle of Red Cliffs", WarRuntimeDisplayRules.ResolveName(
+                "Battle of Red Cliffs", "Localized war", "War"),
+            "the live War.name is authoritative");
+        Equal("Localized war", WarRuntimeDisplayRules.ResolveName(
+                "war_name_reclaim", "Localized war", "War"),
+            "an unresolved war-name key uses localized text");
+        Equal("Localized war", WarRuntimeDisplayRules.ResolveName(
+                "", "Localized war", "War"),
+            "a missing live name uses localized text");
+        Equal("War", WarRuntimeDisplayRules.ResolveName(
+                "war_type_reclaim", "war_name_reclaim", "War"),
+            "unresolved live and localized keys use the generic localization");
+        Equal("War", WarRuntimeDisplayRules.ResolveName(
+                "$kingdom$ {0}", "", "War"),
+            "format tokens never become visible war names");
+        Equal(false, WarRuntimeDisplayRules.IsDisplayName("name"),
+            "the name placeholder is not display data");
+        Equal(true, WarRuntimeDisplayRules.IsDisplayName("Reclaim of Linzi"),
+            "a generated war name is display data");
+        Equal(false, WarRuntimeDisplayRules.HasNamedWinner(-1L),
+            "white peace has no winning kingdom");
+        Equal(true, WarRuntimeDisplayRules.HasNamedWinner(17L),
+            "a persisted speaker kingdom identifies the real winner");
+        Equal(" began (", HistoryLocalizationRules.Text(
+                "aw_hist_war_started_named_open", "en"),
+            "English chronicle war names use an English opening parenthesis");
+        Equal(")", HistoryLocalizationRules.Text(
+                "aw_hist_war_started_named_close", "en"),
+            "English chronicle war names use an English closing parenthesis");
+
+        string root = Directory.GetCurrentDirectory();
+        string lineage = Path.Combine(root, "Code", "core", "lineage");
+        string typeRules = File.ReadAllText(Path.Combine(lineage,
+            "WarTypeAssetRules.cs"));
+        True(typeRules.Contains("case \"war_tributary\":"),
+            "the registered tributary name generator is not downgraded");
+
+        string patch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_WarPatch.cs"));
+        True(patch.Contains("WarRuntimeDisplayService.Resolve(__result)") &&
+             patch.Contains("WarRuntimeDisplayService.Resolve(pWar)"),
+            "chronicle start and end obtain the live resolved war name");
+        False(patch.Contains("GetWarTypeName(__result)"),
+            "chronicles no longer display a war-type id as the war name");
+
+        string chronicle = File.ReadAllText(Path.Combine(lineage,
+            "ChronicleEvents.cs"));
+        True(chronicle.Contains("string pWarName") &&
+             chronicle.Contains("HistoryText.PlainText(pWarName)"),
+            "chronicle text receives and displays the resolved war name");
+        False(chronicle.Contains("HistoryText.PlainText(\"\uFF08\")") ||
+              chronicle.Contains("HistoryText.PlainText(\"\uFF09\")"),
+            "chronicle source does not hard-code Chinese parentheses");
+
+        string conversation = File.ReadAllText(Path.Combine(lineage,
+            "DiplomacyConversationService.cs"));
+        True(conversation.Contains("\"war_ended_named\"") &&
+             conversation.Contains("WarRuntimeDisplayService.Resolve(pWar)") &&
+             conversation.Contains("HasNamedWinner(") &&
+             conversation.Contains("pEvent.SpeakerKingdomId"),
+            "new war-end rows use the real name and winner identity");
+        True(conversation.Contains(
+                 "WarRuntimeDisplayRules.IsDisplayName(pProposal.DetailId)") &&
+             conversation.Contains(
+                 "aw_diplomacy_truce_named_settlement_summary") &&
+             conversation.Contains("aw_diplomacy_truce_settlement_summary"),
+            "named settlements coexist with the legacy empty-detail summary");
+        True(conversation.Contains("ReadExecutedTerms(") &&
+             conversation.Contains("pProposal.WarId"),
+            "settlement terms still come from persisted data for the real war id");
+
+        string proposals = File.ReadAllText(Path.Combine(lineage,
+            "DiplomacyProposalService.cs"));
+        True(proposals.Contains("ColumnVal.Create(\"DETAIL_ID\",") &&
+             proposals.Contains("WarRuntimeDisplayService.Resolve("),
+            "automatic truce rows persist the resolved live war name");
+
+        string locales = File.ReadAllText(Path.Combine(root, "locales",
+            "aw3_diplomacy.csv"));
+        True(locales.Contains("aw_diplomacy_unnamed_war,") &&
+             locales.Contains("aw_diplomacy_named_war_ended,") &&
+             locales.Contains(
+                 "aw_diplomacy_truce_named_settlement_summary,"),
+            "all new war display fallbacks have localization rows");
+
+        ManualDeclarationStillIssuesNotice(root, lineage);
+    }
+
+    private static void ManualDeclarationStillIssuesNotice(string root,
+        string lineage)
+    {
+        string window = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "WarDecisionTargetWindow.cs"));
+        string handler = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "commands", "AW3DiplomacyCommandHandler.cs"));
+        string declaration = File.ReadAllText(Path.Combine(lineage,
+            "DiplomaticWarDeclarationService.cs"));
+        string notice = File.ReadAllText(Path.Combine(lineage,
+            "WarNoticeService.cs"));
+        True(window.Contains("AW3CommandRequest.DeclareWar(") &&
+             handler.Contains("DiplomaticWarDeclarationService.TryIssue(") &&
+             declaration.Contains("WarNoticeService.EnsureCurrentNotice(") &&
+             notice.Contains(
+                 "DiplomacyConversationService.RecordWarNotice("),
+            "manual declarations already traverse the authoritative war-notice chain");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

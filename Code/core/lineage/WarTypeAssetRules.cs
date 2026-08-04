@@ -37,6 +37,7 @@ namespace AncientWarfare3.core.lineage
             {
                 case "war_reclaim":
                 case "war_restoration":
+                case "war_tributary":
                 case "war_jingnan":
                 case "war_succession_dispute":
                 case "war_coup_restoration":

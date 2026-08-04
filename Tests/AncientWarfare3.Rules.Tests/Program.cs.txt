@@ -15,6 +15,15 @@ if (args.Length == 1 && args[0] == "--runtime-diagnostic-rules")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--war-return-display-slice")
+{
+    WarArmyReturnRulesTests.Run();
+    WarRuntimeDisplayRulesTests.Run();
+    HistoryLocalizationRulesTests.Run();
+    Console.WriteLine("War return and display rule tests passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--lineage-family-migration-slice")
 {
     LineageFamilyArchiveMigrationTests.Run();
@@ -7757,6 +7766,8 @@ ChronicleTextExportRulesTests.Run();
 HistoryLocalizationRulesTests.Run();
 ActiveMilitaryLifecycleRulesTests.Run();
 WartimeMilitaryTaskRulesTests.Run();
+WarArmyReturnRulesTests.Run();
+WarRuntimeDisplayRulesTests.Run();
 ArmyLogisticsSustainmentRulesTests.Run();
 ArmyRtsRouteChoiceRulesTests.Run();
 ArmyRtsReplenishmentArrivalRulesTests.Run();

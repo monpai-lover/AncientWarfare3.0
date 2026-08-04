@@ -75,6 +75,8 @@ aw_diplomacy_war_declared_suffix,宣战,,宣戰
 aw_diplomacy_war_notice_mid,向其递交宣战书：, delivered a declaration of war to ,向其遞交宣戰書：
 aw_diplomacy_war_notice_years_mid,；预计开战年份：,; hostilities will begin between years ,；預計開戰年份：
 aw_diplomacy_war_ended,战争结束,War ended,戰爭結束
+aw_diplomacy_unnamed_war,战争,War,戰爭
+aw_diplomacy_named_war_ended,{0}结束,{0} ended,{0}結束
 aw_diplomacy_white_peace_suffix,：议和收兵,: white peace,：議和收兵
 aw_diplomacy_winner_mid,：胜者为,: victor ,：勝者為
 aw_diplomacy_vassal_set_mid,臣服于, became a vassal of ,臣服於
@@ -248,6 +250,7 @@ aw_diplomacy_reply_tone_neutral,此为本国廷议之答,This is our court's con
 aw_diplomacy_reply_tone_cold,此答既定 无须再议,Let this answer settle the matter.,此答既定 無須再議
 aw_diplomacy_reply_tone_hostile,毋再以此事相逼,Do not press this matter further.,毋再以此事相逼
 aw_diplomacy_truce_settlement_summary,{0}与{1}战事既止 双方缔结停战协议 约期{2}年 至第{3}年止,{0} and {1} ended the war and concluded a {2}-year truce through year {3},{0}與{1}戰事既止 雙方締結停戰協議 約期{2}年 至第{3}年止
+aw_diplomacy_truce_named_settlement_summary,{0}战事既止 {1}与{2}缔结停战协议 约期{3}年 至第{4}年止,{0} ended; {1} and {2} concluded a {3}-year truce through year {4},{0}戰事既止 {1}與{2}締結停戰協議 約期{3}年 至第{4}年止
 aw_diplomacy_truce_settlement_terms,战争结算条款：,Executed settlement terms:,戰爭結算條款：
 aw_diplomacy_truce_settlement_no_extra_terms,本次结算无额外割地或物资条款,No additional territorial or material terms were included in this settlement.,本次結算無額外割地或物資條款
 aw_diplomacy_sender_title,发信君主,Sender,發信君主

@@ -48,6 +48,7 @@ namespace AncientWarfare3.core.performance
             CivilServiceExamService.ClearRuntime();
             WesternCourtElectionService.Reset();
             TemporaryMilitaryReturnService.ClearRuntime();
+            WarArmyReturnService.ClearRuntime();
             CityReservePoolService.ClearRuntime();
             WarForceEliminationSettlementService.ClearRuntime();
             ArmyReplenishmentOperationService.ClearRuntime();
@@ -76,6 +77,7 @@ namespace AncientWarfare3.core.performance
             EnclosedUnownedZoneRepairService.ProcessAuthorityCycle();
             EmptyCityResettlementService.ProcessAuthorityCycle();
             TemporaryMilitaryReturnService.ProcessFrame();
+            WarArmyReturnService.ProcessFrame();
             Measure(RecentFeatureBenchmarkRules.PathfindingIndex,
                 AWPathfindingBootstrap.ProcessFrame);
             ArmyRtsSchedulingService.ProcessAw3Authority(pCycleToken, pPaused);
