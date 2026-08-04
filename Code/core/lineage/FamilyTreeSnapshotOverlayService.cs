@@ -1,4 +1,5 @@
 using AncientWarfare3.core.db;
+using AncientWarfare3.api.multiplayer;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -18,12 +19,17 @@ namespace AncientWarfare3.core.lineage
             Actor live = World.world?.units?.get(pNode.id);
             bool liveKnownDead = live?.data != null &&
                                  (!live.isAlive() || live.isRekt());
+            bool runtimeAuthorityReady = Config.game_loaded &&
+                                         !SmoothLoader.isLoading() &&
+                                         !AW3MultiplayerReplicaScope.IsApplying &&
+                                         !AW3MultiplayerReplicaScope.IsReplicaSession;
             bool pendingArchiveAlive = pendingArchive != null &&
                                        pendingArchive.is_alive != 0 &&
                                        pendingArchive.death_time <= 0d;
             pNode.is_alive = FamilyTreeSnapshotOverlayRules.ResolveAlive(
                 pSnapshot.IsAlive, hasPendingArchive,
-                pendingArchiveAlive, liveKnownDead);
+                pendingArchiveAlive, liveKnownDead,
+                runtimeAuthorityReady, live == null);
             RulerAppellationService.ProjectFamilyTreeRitualAppellation(pNode);
         }
 

@@ -61,15 +61,33 @@ internal static class FamilyTreeLabelLayoutRulesTests
 
         Equal(false, FamilyTreeSnapshotOverlayRules.ResolveAlive(
                 snapshotAlive: true, hasPendingArchive: true,
-                pendingArchiveAlive: false, liveKnownDead: false),
+                pendingArchiveAlive: false, liveKnownDead: false,
+                runtimeAuthorityReady: true,
+                runtimeActorMissing: false),
             "pending death wins over an older committed async snapshot");
         Equal(false, FamilyTreeSnapshotOverlayRules.ResolveAlive(
                 snapshotAlive: true, hasPendingArchive: false,
-                pendingArchiveAlive: true, liveKnownDead: true),
+                pendingArchiveAlive: true, liveKnownDead: true,
+                runtimeAuthorityReady: true,
+                runtimeActorMissing: false),
             "a dead live actor wins over an older committed async snapshot");
         Equal(true, FamilyTreeSnapshotOverlayRules.ResolveAlive(
                 snapshotAlive: true, hasPendingArchive: false,
-                pendingArchiveAlive: false, liveKnownDead: false),
+                pendingArchiveAlive: false, liveKnownDead: false,
+                runtimeAuthorityReady: true,
+                runtimeActorMissing: false),
             "a current living snapshot remains alive without an override");
+        Equal(false, FamilyTreeSnapshotOverlayRules.ResolveAlive(
+                snapshotAlive: true, hasPendingArchive: false,
+                pendingArchiveAlive: false, liveKnownDead: false,
+                runtimeAuthorityReady: true,
+                runtimeActorMissing: true),
+            "a missing actor is dead after runtime authority is ready");
+        Equal(true, FamilyTreeSnapshotOverlayRules.ResolveAlive(
+                snapshotAlive: true, hasPendingArchive: false,
+                pendingArchiveAlive: false, liveKnownDead: false,
+                runtimeAuthorityReady: false,
+                runtimeActorMissing: true),
+            "loading-time absence does not override the archive");
     }
 }
