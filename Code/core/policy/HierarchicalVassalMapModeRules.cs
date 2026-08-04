@@ -91,6 +91,7 @@ namespace AncientWarfare3.core.policy
             return pAssetId == "armies" ||
                    pAssetId == "boats_big" ||
                    pAssetId == "boats_small" ||
+                   pAssetId == "capturing_zones" ||
                    pAssetId == "highlight_cursor_zones" ||
                    pAssetId == "selected_kingdom";
         }
