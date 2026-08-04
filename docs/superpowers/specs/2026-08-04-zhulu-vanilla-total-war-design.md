@@ -35,4 +35,3 @@ AI may select or issue a Zhulu declaration only while the current world age is e
 - Pure rules test all zero-force outcomes and the AI age gate.
 - Source guards prove the old Zhulu goal, capture redirect, peace guard, `removeFromWar` interception, `endWar` deferral, and restore registrations have no production entry.
 - Focused Zhulu tests and the complete rules suite must pass.
-
