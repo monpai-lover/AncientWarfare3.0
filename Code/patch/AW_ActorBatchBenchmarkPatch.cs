@@ -84,5 +84,33 @@ namespace AncientWarfare3.patch
             RuntimePerformanceDiagnostic.EndActorBatch(__state.Stage,
                 __state.Started);
         }
+
+        [HarmonyPatch]
+        private static class ActorParallelStageWallPatch
+        {
+            private static MethodBase TargetMethod()
+            {
+                return AccessTools.Method(
+                    typeof(JobManagerBase<BatchActors, Actor>),
+                    "updateBaseJobsParallel");
+            }
+
+            [HarmonyPrefix]
+            private static void Prefix(object __instance, out long __state)
+            {
+                if (!(__instance is JobManagerActors))
+                {
+                    __state = 0L;
+                    return;
+                }
+                __state = RuntimePerformanceDiagnostic.BeginActorParallelWall();
+            }
+
+            [HarmonyPostfix]
+            private static void Postfix(long __state)
+            {
+                RuntimePerformanceDiagnostic.EndActorParallelWall(__state);
+            }
+        }
     }
 }

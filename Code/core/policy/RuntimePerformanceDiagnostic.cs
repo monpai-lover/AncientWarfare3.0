@@ -28,6 +28,8 @@ namespace AncientWarfare3.core.policy
             new long[ActorBatchPerformanceRules.StageCount];
         private static readonly int[] ActorBatchCounts =
             new int[ActorBatchTicks.Length];
+        private static readonly long[] ActorBatchMaxTicks =
+            new long[ActorBatchTicks.Length];
         private static readonly long[] ArmyRtsControllerTicks =
             new long[ArmyRtsControllerPerformanceRules.StageCount];
         private static readonly int[] ArmyRtsControllerCounts =
@@ -46,6 +48,7 @@ namespace AncientWarfare3.core.policy
             ActorDiagnosticSamplingRules.MaximumDetailSamplesPerFrame;
         private static long _sampleFrameStarted;
         private static long _actorWallTicks;
+        private static long _actorParallelWallTicks;
         private static long _actorAiTicks;
         private static int _actorAiCalls;
         private static readonly Dictionary<string, ActorTaskSample>
@@ -204,8 +207,19 @@ namespace AncientWarfare3.core.policy
             if (elapsed < 0L || !ActorBatchPerformanceRules.IsValid(pStage))
                 return;
             int index = (int)pStage;
-            ActorBatchTicks[index] += elapsed;
-            ActorBatchCounts[index]++;
+            Interlocked.Add(ref ActorBatchTicks[index], elapsed);
+            Interlocked.Increment(ref ActorBatchCounts[index]);
+            UpdateMaximum(ref ActorBatchMaxTicks[index], elapsed);
+        }
+
+        public static long BeginActorParallelWall()
+        {
+            return BeginScope();
+        }
+
+        public static void EndActorParallelWall(long pStarted)
+        {
+            AddElapsed(ref _actorParallelWallTicks, pStarted);
         }
 
         public static long BeginArmyRtsControllerStage(
@@ -468,6 +482,7 @@ namespace AncientWarfare3.core.policy
                 " army_count=" + armyCount +
                 " frame_ms=" + Milliseconds(frameTicks) +
                 " actor_ms=" + Milliseconds(_actorWallTicks) +
+                ActorParallelFields() +
                 " actor_ai_ms=" + Milliseconds(_actorAiTicks) +
                 " actor_ai_calls=" + _actorAiCalls +
                 " actor_task=" + actorTaskId +
@@ -676,8 +691,8 @@ namespace AncientWarfare3.core.policy
             var details = new StringBuilder();
             for (int i = 0; i < ActorBatchTicks.Length; i++)
             {
-                long ticks = ActorBatchTicks[i];
-                int count = ActorBatchCounts[i];
+                long ticks = Interlocked.Read(ref ActorBatchTicks[i]);
+                int count = Volatile.Read(ref ActorBatchCounts[i]);
                 if (ticks > slowestTicks)
                 {
                     slowestTicks = ticks;
@@ -700,9 +715,25 @@ namespace AncientWarfare3.core.policy
             return " actor_batch_slowest=" + slowest +
                    " actor_batch_slowest_ms=" + Milliseconds(slowestTicks) +
                    " actor_batch_slowest_calls=" +
-                   (slowestIndex < 0 ? 0 : ActorBatchCounts[slowestIndex]) +
+                   (slowestIndex < 0
+                       ? 0
+                       : Volatile.Read(ref ActorBatchCounts[slowestIndex])) +
                    " actor_batch_stages=" +
                    (details.Length == 0 ? "none" : details.ToString());
+        }
+
+        private static string ActorParallelFields()
+        {
+            int index = (int)ActorBatchPerformanceStage.ParallelChecks;
+            return " actor_parallel_stage_wall_ms=" +
+                   Milliseconds(_actorParallelWallTicks) +
+                   " actor_parallel_checks_worker_sum_ms=" +
+                   Milliseconds(Interlocked.Read(ref ActorBatchTicks[index])) +
+                   " actor_parallel_checks_worker_max_ms=" +
+                   Milliseconds(Interlocked.Read(
+                       ref ActorBatchMaxTicks[index])) +
+                   " actor_parallel_checks_worker_calls=" +
+                   Volatile.Read(ref ActorBatchCounts[index]);
         }
 
         private static string ArmyRtsControllerFields()
@@ -799,6 +830,18 @@ namespace AncientWarfare3.core.policy
             return true;
         }
 
+        private static void UpdateMaximum(ref long pTarget, long pCandidate)
+        {
+            long current = Interlocked.Read(ref pTarget);
+            while (pCandidate > current)
+            {
+                long observed = Interlocked.CompareExchange(ref pTarget,
+                    pCandidate, current);
+                if (observed == current) return;
+                current = observed;
+            }
+        }
+
         private static long Elapsed(long started)
         {
             if (started == 0L) return -1L;
@@ -863,6 +906,7 @@ namespace AncientWarfare3.core.policy
         private static void ResetSample()
         {
             _actorWallTicks = 0L;
+            _actorParallelWallTicks = 0L;
             _actorAiTicks = 0L;
             _actorAiCalls = 0;
             ActorTaskSamples.Clear();
@@ -892,6 +936,7 @@ namespace AncientWarfare3.core.policy
             Array.Clear(ActorRaceCounts, 0, ActorRaceCounts.Length);
             Array.Clear(ActorBatchTicks, 0, ActorBatchTicks.Length);
             Array.Clear(ActorBatchCounts, 0, ActorBatchCounts.Length);
+            Array.Clear(ActorBatchMaxTicks, 0, ActorBatchMaxTicks.Length);
             Array.Clear(ArmyRtsControllerTicks, 0,
                 ArmyRtsControllerTicks.Length);
             Array.Clear(ArmyRtsControllerCounts, 0,
