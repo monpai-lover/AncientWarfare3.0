@@ -29,6 +29,7 @@ namespace AncientWarfare3.content
             XiaArchitecture.Init();
             XiaNameSets.Init();
             XiaRace.Init();
+            ClassicCivLifespanContent.Init();
             SlaveryContent.Init();
             GuardContent.Init();
             BorderGuardContent.Init();
