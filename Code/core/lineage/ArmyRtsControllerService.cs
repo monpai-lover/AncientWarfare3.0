@@ -3007,7 +3007,9 @@ namespace AncientWarfare3.core.lineage
             facts.PursuitComplete = pRecord.State == ArmyRtsState.Pursue &&
                 pursuitState != ArmyRtsState.Pursue;
             facts.PursuitRequiresRegroup = pursuitState ==
-                ArmyRtsState.Regroup;
+                ArmyRtsState.Regroup ||
+                pRecord.State == ArmyRtsState.Regroup &&
+                pRuntime.PursuitCompleted;
             facts.OpenObjective = targetValid && !frontHold && !complete;
             facts.LocalForceAdvantage = facts.OpenObjective &&
                 ArmyRtsRules.HasLocalForceAdvantage(

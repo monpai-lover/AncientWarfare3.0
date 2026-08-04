@@ -54,6 +54,75 @@ internal static class ArmyRtsWarLifecycleRulesTests
                 combatActive: false, transportActive: false,
                 movementActive: true),
             "movement blocks generated replacements");
+
+        Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+            {
+                CurrentState = ArmyRtsState.Regroup,
+                HasMission = true,
+                TargetValid = true,
+                TargetComplete = true,
+                MinimumForceReady = false,
+                RegroupReady = false,
+                Organization = 20,
+                Supply = 20
+            }) == ArmyRtsState.Idle,
+            "a regrouping attack releases a city as soon as ownership closes the objective");
+
+        Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+            {
+                CurrentState = ArmyRtsState.Regroup,
+                HasMission = true,
+                TargetValid = true,
+                TargetComplete = true,
+                PursuitRequiresRegroup = true,
+                MinimumForceReady = false,
+                RegroupReady = false,
+                Organization = 20,
+                Supply = 20
+            }) == ArmyRtsState.Regroup,
+            "a completed pursuit keeps its required recovery window");
+
+        Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+            {
+                CurrentState = ArmyRtsState.Regroup,
+                HasMission = true,
+                TargetValid = true,
+                TargetComplete = true,
+                PursuitRequiresRegroup = true,
+                MinimumForceReady = true,
+                RegroupReady = true,
+                Organization = 100,
+                Supply = 100
+            }) == ArmyRtsState.Rally,
+            "a completed pursuit leaves recovery only after readiness returns");
+
+        Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+            {
+                CurrentState = ArmyRtsState.Regroup,
+                HasMission = true,
+                FrontHold = true,
+                TargetValid = true,
+                TargetComplete = false,
+                MinimumForceReady = false,
+                RegroupReady = false,
+                Organization = 20,
+                Supply = 20
+            }) == ArmyRtsState.Regroup,
+            "a front-hold mission is not released as a completed attack");
+
+        Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+            {
+                CurrentState = ArmyRtsState.Regroup,
+                HasMission = true,
+                Role = ArmyRtsRole.Defense,
+                TargetValid = true,
+                TargetComplete = false,
+                MinimumForceReady = false,
+                RegroupReady = false,
+                Organization = 20,
+                Supply = 20
+            }) == ArmyRtsState.Regroup,
+            "an active friendly defense keeps regrouping against its open objective");
     }
 
     private static void Assert(bool condition, string message)

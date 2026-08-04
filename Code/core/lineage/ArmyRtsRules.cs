@@ -508,6 +508,11 @@ namespace AncientWarfare3.core.lineage
                     ? ArmyRtsState.Regroup
                     : ArmyRtsState.Retreat;
 
+            if (pFacts.CurrentState == ArmyRtsState.Regroup &&
+                pFacts.TargetComplete &&
+                !pFacts.PursuitRequiresRegroup)
+                return ArmyRtsState.Idle;
+
             if (pFacts.CurrentState == ArmyRtsState.Regroup)
             {
                 bool holdAdvantage = ShouldRegroupInsteadOfRetreat(
