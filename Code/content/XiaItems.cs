@@ -67,8 +67,8 @@ namespace AncientWarfare3.content
             ge.base_stats["knockback"] = 0.1f;
             ge.base_stats["targets"] = 1f;
             ge.path_slash_animation = "qing";
-            EnsureGameplaySprites(ji);
-            EnsureGameplaySprites(ge);
+            PreloadGameplaySprites(ji);
+            PreloadGameplaySprites(ge);
 
             // ===== 兵法 binfa(传奇护符)=====
             // 新版护符基础模板是 "$amulet"(带 $ 前缀,旧版 "_accessory" 已变)
@@ -107,13 +107,39 @@ namespace AncientWarfare3.content
             return list.ToArray();
         }
 
-        private static void EnsureGameplaySprites(ItemAsset pItem)
+        private static void PreloadGameplaySprites(EquipmentAsset pItem)
         {
             if (pItem == null || string.IsNullOrEmpty(pItem.path_gameplay_sprite)) return;
-            if (pItem.gameplay_sprites != null && pItem.gameplay_sprites.Length > 0) return;
+            if (pItem.gameplay_sprites == null || pItem.gameplay_sprites.Length == 0)
+            {
+                Sprite[] loaded = SpriteTextureLoader.getSpriteList(
+                    pItem.path_gameplay_sprite);
+                pItem.gameplay_sprites = loaded ?? Array.Empty<Sprite>();
+            }
 
-            Sprite[] sprites = SpriteTextureLoader.getSpriteList(pItem.path_gameplay_sprite);
-            pItem.gameplay_sprites = sprites ?? Array.Empty<Sprite>();
+            DynamicSpritesAsset atlas = DynamicSpritesLibrary.items;
+            if (atlas == null) return;
+
+            foreach (Sprite sprite in pItem.gameplay_sprites)
+            {
+                if (sprite == null) continue;
+
+                if (pItem.is_colored)
+                {
+                    foreach (ColorAsset color in ColorAsset.getAllColorsList())
+                    {
+                        long spriteId = DynamicSprites.getItemSpriteID(sprite, color);
+                        if (atlas.hasSprite(spriteId)) continue;
+                        DynamicSprites.preloadItemSprite(sprite, color);
+                    }
+                }
+                else
+                {
+                    long spriteId = DynamicSprites.getItemSpriteID(sprite);
+                    if (atlas.hasSprite(spriteId)) continue;
+                    DynamicSprites.preloadItemSprite(sprite);
+                }
+            }
         }
 
         /// <summary>兼容旧委托入口;默认不再施加 qing status,只用武器 slash 动画。</summary>

@@ -672,4 +672,8 @@
       BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WartimeMilitaryTaskGatePerformanceSourceGuard.ps1&quot;" />
   </Target>
+  <Target Name="XiaItemDynamicAtlasSourceGuard"
+      BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\XiaItemDynamicAtlasSourceGuard.ps1&quot;" />
+  </Target>
 </Project>
