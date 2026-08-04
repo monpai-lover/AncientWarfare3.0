@@ -51,8 +51,15 @@ internal static class ZhuluWarRulesTests
         True(ZhuluWarRules.BlocksOrdinarySettlement(
                 ZhuluWarRules.WarTypeId, active: true),
             "AW3 settlement entry points skip active zhulu wars");
-        True(ZhuluWarRules.ShouldUseVanillaTotalWar(),
-            "zhulu uses native WorldBox total-war semantics");
+        False(ZhuluWarRules.ShouldUseVanillaTotalWar(),
+            "zhulu uses native WorldBox war flow without global total-war rosters");
+        var allianceJoinRule = typeof(ZhuluWarRules).GetMethod(
+            "ShouldAllowAllianceJoin");
+        True(allianceJoinRule != null,
+            "zhulu exposes an explicit one-to-one alliance-join rule");
+        if (allianceJoinRule != null)
+            False((bool)allianceJoinRule.Invoke(null, null),
+                "zhulu does not admit allied kingdoms into the war");
         False(ZhuluWarRules.BlocksOrdinarySettlement(
                 ZhuluWarRules.WarTypeId, active: false),
             "ended zhulu wars no longer block cleanup");
@@ -321,8 +328,10 @@ internal static class ZhuluWarRulesTests
             "the shared zhulu peace guard exists");
         True(diplomacy.Contains("ZhuluWarRules.WarTypeId") &&
              diplomacy.Contains(
+                 "pAllianceJoin: ZhuluWarRules.ShouldAllowAllianceJoin()") &&
+             diplomacy.Contains(
                  "pTotalWar: ZhuluWarRules.ShouldUseVanillaTotalWar()"),
-            "diplomacy registers zhulu as native total war");
+            "diplomacy registers zhulu as a one-to-one native-flow war");
         True(decisions.Contains("WAR_ZHULU") &&
              decisions.Contains("ZhuluWarService.CanDeclare("),
             "war decisions recognize the intrinsic zhulu casus belli");
@@ -388,6 +397,20 @@ internal static class ZhuluWarRulesTests
         True(mandatePhase.Contains("HasActivePrincipalWars()") &&
              mandate.Contains("zhulu_unresolved"),
             "active zhulu wars hold Chaos and block a new Mandate");
+        int playerGrantStart = mandate.IndexOf(
+            "public static bool TryGrantMandateByPlayer(",
+            StringComparison.Ordinal);
+        int playerGrantEnd = mandate.IndexOf(
+            "public static bool CanDeclareMandate(", playerGrantStart,
+            StringComparison.Ordinal);
+        string playerGrant = playerGrantStart >= 0 &&
+                             playerGrantEnd > playerGrantStart
+            ? mandate.Substring(playerGrantStart,
+                playerGrantEnd - playerGrantStart)
+            : "";
+        True(playerGrant.Contains(
+                "MandatePhaseService.OnMandateEstablished("),
+            "a successful player grant synchronizes the dynastic-cycle phase immediately");
         True(forceSpecial.Contains("TrySettleZhuluZeroForce(") &&
              FalseText(forceSpecial,
                  "ZhuluWarSettlementService.QueueForceElimination"),

@@ -860,6 +860,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             Kingdom current = GetCurrentMandateKingdom();
+            bool hadPreviousMandate = ReadReport()?.period_id >= 0L;
             if (!MandateDeclarationRules.CanPlayerGrant(
                     validTarget,
                     pTarget?.king?.data != null && pTarget.hasKing(),
@@ -868,7 +869,11 @@ namespace AncientWarfare3.core.lineage
                 return false;
 
             if (TryDeclareMandate(pTarget, "player_grant", "player_grant", "player_grant"))
+            {
+                MandatePhaseService.OnMandateEstablished(
+                    hadPreviousMandate, Date.getCurrentYear());
                 return true;
+            }
 
             pReason = "grant_failed";
             return false;

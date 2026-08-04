@@ -41,7 +41,8 @@ namespace AncientWarfare3.content
                 "ui/wars/war_rebellion", false, pRebellion: true);
             AddWarType(ZhuluWarRules.WarTypeId, "war_zhulu",
                 "war_type_zhulu_war", "ui/Icons/traits/iconTianming",
-                pAllianceJoin: true, pRebellion: false,
+                pAllianceJoin: ZhuluWarRules.ShouldAllowAllianceJoin(),
+                pRebellion: false,
                 pTotalWar: ZhuluWarRules.ShouldUseVanillaTotalWar());
         }
 

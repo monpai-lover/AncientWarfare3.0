@@ -91,7 +91,12 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldUseVanillaTotalWar()
         {
-            return true;
+            return false;
+        }
+
+        public static bool ShouldAllowAllianceJoin()
+        {
+            return false;
         }
 
         public static bool CanAiDeclare(string pCurrentAgeId)
