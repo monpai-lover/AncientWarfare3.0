@@ -683,6 +683,7 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\CapturedSlaveMilitaryOwnershipSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ActorDeathArchiveBacklogSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\LineageGivenNameNormalizationSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ArmyMembershipReconciliationSourceGuard.ps1&quot;" />
   </Target>
   <Target Name="XiaItemDynamicAtlasSourceGuard"
       BeforeTargets="Build">

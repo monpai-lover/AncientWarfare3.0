@@ -8,6 +8,18 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_SlaveryPatch
     {
+        public readonly struct ActorKingdomArmyState
+        {
+            public readonly Kingdom Kingdom;
+            public readonly Army Army;
+
+            public ActorKingdomArmyState(Actor pActor)
+            {
+                Kingdom = pActor?.kingdom;
+                Army = pActor?.army;
+            }
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(City), nameof(City.makeWarrior))]
         public static void MakeWarrior_Postfix(City __instance, Actor pActor)
@@ -30,21 +42,28 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
-        public static void SetKingdom_Prefix(Actor __instance, out Kingdom __state)
+        public static void SetKingdom_Prefix(Actor __instance,
+            out ActorKingdomArmyState __state)
         {
-            __state = __instance?.kingdom;
+            __state = new ActorKingdomArmyState(__instance);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
-        public static void SetKingdom_Postfix(Actor __instance, Kingdom __state)
+        public static void SetKingdom_Postfix(Actor __instance,
+            ActorKingdomArmyState __state)
         {
+            if (__instance?.kingdom == __state.Kingdom) return;
+            ArmyMembershipReconciliationService.Enqueue(__state.Army);
+            ArmyMembershipReconciliationService.Enqueue(__instance?.army);
             if (AW3MultiplayerReplicaScope.IsApplying) return;
-            if (__instance?.kingdom == __state) return;
-            CityReservePoolService.OnActorKingdomChanged(__instance, __state);
-            WarNoticeService.QueueArmyChanged(__state, __instance.army);
+            CityReservePoolService.OnActorKingdomChanged(__instance,
+                __state.Kingdom);
+            WarNoticeService.QueueArmyChanged(__state.Kingdom,
+                __instance.army);
             ArmyDeploymentService.ReleaseActor(__instance, restoreJob: true);
-            TemporarySlaveVanguardService.OnActorKingdomChanged(__instance, __state);
+            TemporarySlaveVanguardService.OnActorKingdomChanged(__instance,
+                __state.Kingdom);
             TemporaryLevyService.OnActorInvalidated(__instance);
         }
 

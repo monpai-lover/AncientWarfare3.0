@@ -1,0 +1,46 @@
+$ErrorActionPreference = 'Stop'
+
+$repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$servicePath = Join-Path $repo `
+    'Code/core/lineage/ArmyMembershipReconciliationService.cs'
+if (-not [IO.File]::Exists($servicePath)) {
+    throw 'ArmyMembershipReconciliationService.cs is missing.'
+}
+
+$service = Get-Content -Raw -LiteralPath $servicePath
+$actorPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
+    'Code/patch/AW_SlaveryPatch.cs')
+$cityPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
+    'Code/patch/AW_ArmySafetyPatch.cs')
+$deferredPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
+    'Code/patch/AW_DeferredRuntimeWorkPatch.cs')
+
+if ($actorPatch -notmatch 'ArmyMembershipReconciliationService\.Enqueue') {
+    throw 'Actor.setKingdom must enqueue its affected army.'
+}
+if ($cityPatch -notmatch 'ArmyMembershipReconciliationService\.Enqueue') {
+    throw 'City.setKingdom must enqueue its anchor army after transfer.'
+}
+if ($deferredPatch -notmatch 'ArmyMembershipReconciliationService\.ProcessFrame') {
+    throw 'The main-thread deferred runtime host must process army reconciliation.'
+}
+
+$requiredCleanup = @(
+    'ArmyMembershipOwnershipRules.Decide',
+    'removeFromArmy',
+    'units.Remove',
+    'ArmyCaptainDisposalScope.Open',
+    'ArmyRtsControllerService.ReleaseActor',
+    'ArmyDeploymentService.ReleaseActor',
+    'TemporaryLevyService.OnActorInvalidated',
+    'WartimeGarrisonService.OnActorInvalidated',
+    'MandateMilitaryPhaseService.Clear',
+    'ArmyStrategicIndexService.OnArmyRosterChanged'
+)
+foreach ($token in $requiredCleanup) {
+    if (-not $service.Contains($token)) {
+        throw "Army reconciliation is missing required cleanup: $token"
+    }
+}
+
+Write-Output 'Army membership reconciliation source guard passed.'

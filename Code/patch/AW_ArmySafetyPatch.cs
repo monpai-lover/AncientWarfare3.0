@@ -766,11 +766,12 @@ namespace AncientWarfare3.patch
         [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(City), "setKingdom")]
         private static void CitySetKingdomArmyBacklink_Prefix(
-            City __instance)
+            City __instance, out Army __state)
         {
             Army army = null;
             try { army = __instance?.getArmy(); }
             catch { }
+            __state = army;
             if (army?.data == null) return;
 
             City armyCity = ReadField<City>(ArmyCityField, army);
@@ -792,6 +793,19 @@ namespace AncientWarfare3.patch
             catch { }
             if (__instance?.data != null)
                 army.data.id_city = __instance.id;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(City), "setKingdom")]
+        private static void CitySetKingdomArmyBacklink_Postfix(
+            City __instance, Army __state)
+        {
+            ArmyMembershipReconciliationService.Enqueue(__state);
+            Army currentArmy = null;
+            try { currentArmy = __instance?.getArmy(); }
+            catch { }
+            ArmyMembershipReconciliationService.Enqueue(currentArmy);
         }
 
         [HarmonyPrefix]
