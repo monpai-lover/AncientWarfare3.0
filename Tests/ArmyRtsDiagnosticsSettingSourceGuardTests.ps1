@@ -188,7 +188,7 @@ try {
         $failures.Add('the RTS diagnostics label localization is missing')
     }
     else {
-        if ($labelCz -ne $simplifiedLabel) {
+        if ($labelCz -cne $simplifiedLabel) {
             $failures.Add('the Simplified Chinese RTS diagnostics label is incorrect')
         }
         if ([string]::IsNullOrWhiteSpace($labelEn)) {
@@ -198,11 +198,11 @@ try {
             $failures.Add('the Traditional Chinese RTS diagnostics label is missing')
         }
     }
-    if ($localeCz.'AW3_ENABLE_SCHEDULER_DIAGNOSTICS' -ne
+    if ($localeCz.'AW3_ENABLE_SCHEDULER_DIAGNOSTICS' -cne
         $simplifiedSchedulerLabel) {
         $failures.Add('the Simplified Chinese scheduler diagnostics label is incorrect')
     }
-    if ($localeCz.'AW3_ENABLE_PERFORMANCE_DIAGNOSTICS' -ne
+    if ($localeCz.'AW3_ENABLE_PERFORMANCE_DIAGNOSTICS' -cne
         $simplifiedPerformanceLabel) {
         $failures.Add('the Simplified Chinese performance diagnostics label is incorrect')
     }
