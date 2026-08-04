@@ -87,6 +87,14 @@ namespace AncientWarfare3.core.lineage
             ClearPersisted(ResolveArmy(pArmyId));
         }
 
+        public static bool IsActive(Army pArmy)
+        {
+            if (pArmy?.data == null) return false;
+            pArmy.data.get(LineageKeys.AW_ARMY_RETURN_ACTIVE,
+                out bool active, false);
+            return active;
+        }
+
         public static void OnArmyDisposed(Army pArmy)
         {
             if (pArmy == null) return;

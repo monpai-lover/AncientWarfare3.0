@@ -888,7 +888,17 @@ namespace AncientWarfare3.core.lineage
                     missionKingdom.id == pMission.KingdomId,
                     pMission.WarId, pMission.TargetCityId,
                     IsMissionValid(pArmy, pMission));
-            if (!missionPublishable) return;
+            if (!missionPublishable)
+            {
+                if (!HasActiveMission(pArmy.id))
+                    ArmyRtsWarLifecycleService.MarkWaiting(pMission.WarId,
+                        pArmy, "mission_rejected_invalid",
+                        CurrentWorldTime() +
+                        ArmyRtsAssignmentReconciliationRules.
+                            AssignmentRetryWorldSeconds);
+                KingdomWarDirectorService.QueueArmyChanged(missionKingdom);
+                return;
+            }
             AWArmyService.EnsureOrdinaryNativeName(pArmy);
             if (pMission.IssuedTime < 0d ||
                 double.IsNaN(pMission.IssuedTime) ||
@@ -1931,6 +1941,23 @@ namespace AncientWarfare3.core.lineage
                 !RuntimeByArmy.ContainsKey(pArmyId)) return false;
             Army army = FindArmy(pArmyId);
             return IsLiveArmy(army) && IsMissionValid(army, record.Mission);
+        }
+
+        internal static bool HasExpectedCaptainTask(Army pArmy)
+        {
+            if (pArmy?.data == null ||
+                !Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null) return false;
+            Actor captain = SafeCaptain(pArmy);
+            if (!IsLiveActor(captain)) return false;
+            string expected = ArmyRtsControllerRules.ShouldUseFrontHoldJob(
+                    record.Mission.ProposalKind, record.State)
+                ? ArmyRtsContent.HoldTaskId
+                : ArmyRtsContent.ResolveCaptainTaskId(record.State,
+                    ArmyRtsTransportService.GetPhase(pArmy));
+            try { return captain.isTask(expected); }
+            catch { return false; }
         }
 
         public static bool TryGetLogisticsSample(long pArmyId,

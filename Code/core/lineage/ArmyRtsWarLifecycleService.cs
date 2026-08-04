@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -56,6 +57,20 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRtsWarLifecycleRecord record)) return false;
             record.Phase = phase;
             return true;
+        }
+
+        public IReadOnlyList<ArmyRtsWarLifecycleRecord> Snapshot()
+        {
+            var snapshot = new List<ArmyRtsWarLifecycleRecord>(
+                _records.Values);
+            snapshot.Sort((left, right) =>
+            {
+                int war = left.WarId.CompareTo(right.WarId);
+                return war != 0
+                    ? war
+                    : left.ArmyId.CompareTo(right.ArmyId);
+            });
+            return snapshot;
         }
 
         public int RemoveArmy(long armyId)
@@ -123,7 +138,33 @@ namespace AncientWarfare3.core.lineage
                 pMission.ProposalKind != ArmyRtsProposalKind.Retreat)
                 record.PreviousOffensiveMission =
                     ArmyRtsControllerRules.CopyMission(pMission);
+            if (record != null)
+            {
+                record.WaitReason = string.Empty;
+                record.WaitDeadline = double.NaN;
+                Persist(pArmy, pMission.WarId, record);
+            }
             return record;
+        }
+
+        public static bool MarkWaiting(long pWarId, Army pArmy,
+            string pReason, double pDeadline)
+        {
+            if (string.IsNullOrWhiteSpace(pReason) ||
+                double.IsNaN(pDeadline) || double.IsInfinity(pDeadline))
+                return false;
+            ArmyRtsWarLifecycleRecord record = EnsureForArmy(pWarId,
+                pArmy, ArmyRtsWarPhase.StrategicMovement);
+            if (record == null) return false;
+            record.WaitReason = pReason;
+            record.WaitDeadline = pDeadline;
+            Persist(pArmy, pWarId, record);
+            return true;
+        }
+
+        public static IReadOnlyList<ArmyRtsWarLifecycleRecord> Snapshot()
+        {
+            return Store.Snapshot();
         }
 
         public static bool TryGet(long pWarId, long pArmyId,
@@ -197,6 +238,12 @@ namespace AncientWarfare3.core.lineage
                 out int persistedPhase, (int)pPhase);
             pArmy.data.get(LineageKeys.AW_RTS_REPLENISHMENT_CITY_ID,
                 out long persistedCityId, -1L);
+            pArmy.data.get(LineageKeys.AW_RTS_WAIT_REASON,
+                out string persistedWaitReason, string.Empty);
+            pArmy.data.get(LineageKeys.AW_RTS_WAIT_DEADLINE,
+                out string persistedWaitDeadline, string.Empty);
+            double.TryParse(persistedWaitDeadline, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double waitDeadline);
             int living = persistedWarId == pWarId && persistedBaseline > 0
                 ? persistedBaseline
                 : SafeUnitCount(pArmy);
@@ -209,7 +256,14 @@ namespace AncientWarfare3.core.lineage
             ArmyRtsWarLifecycleRecord record = Store.Ensure(pWarId,
                 pArmy.id, living, phase);
             if (record != null && persistedWarId == pWarId)
+            {
                 record.ReplenishmentCityId = persistedCityId;
+                record.WaitReason = persistedWaitReason ?? string.Empty;
+                record.WaitDeadline = string.IsNullOrWhiteSpace(
+                    persistedWaitDeadline)
+                    ? double.NaN
+                    : waitDeadline;
+            }
             Persist(pArmy, pWarId, record);
             return record;
         }
@@ -225,6 +279,11 @@ namespace AncientWarfare3.core.lineage
                 (int)pRecord.Phase);
             pArmy.data.set(LineageKeys.AW_RTS_REPLENISHMENT_CITY_ID,
                 pRecord.ReplenishmentCityId);
+            pArmy.data.set(LineageKeys.AW_RTS_WAIT_REASON,
+                pRecord.WaitReason ?? string.Empty);
+            pArmy.data.set(LineageKeys.AW_RTS_WAIT_DEADLINE,
+                pRecord.WaitDeadline.ToString("R",
+                    CultureInfo.InvariantCulture));
         }
 
         private static void ClearPersisted(Army pArmy)
@@ -234,6 +293,8 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.removeInt(LineageKeys.AW_RTS_LIFECYCLE_BASELINE);
             pArmy.data.removeInt(LineageKeys.AW_RTS_LIFECYCLE_PHASE);
             pArmy.data.removeLong(LineageKeys.AW_RTS_REPLENISHMENT_CITY_ID);
+            pArmy.data.removeString(LineageKeys.AW_RTS_WAIT_REASON);
+            pArmy.data.removeString(LineageKeys.AW_RTS_WAIT_DEADLINE);
         }
 
         private static int SafeUnitCount(Army pArmy)

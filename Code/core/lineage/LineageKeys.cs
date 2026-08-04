@@ -200,6 +200,10 @@ namespace AncientWarfare3.core.lineage
             "aw_rts_lifecycle_phase";
         public const string AW_RTS_REPLENISHMENT_CITY_ID =
             "aw_rts_replenishment_city_id";
+        public const string AW_RTS_WAIT_REASON =
+            "aw_rts_wait_reason";
+        public const string AW_RTS_WAIT_DEADLINE =
+            "aw_rts_wait_deadline";
         public const string AW_ARMY_PROJECTED_REPLENISHMENT_SHORTAGE =
             "aw_army_projected_replenishment_shortage";
         public const string AW_ARMY_PROJECTED_KINGDOM_RESERVE_AVAILABLE =

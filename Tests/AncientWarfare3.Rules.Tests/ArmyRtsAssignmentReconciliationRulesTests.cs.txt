@@ -1,0 +1,52 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsAssignmentReconciliationRulesTests
+{
+    public static void Run()
+    {
+        Assert(Resolve(hasMission: false) ==
+               ArmyRtsAssignmentReconciliationAction.QueueAssignment,
+            "an eligible wartime army without a mission is queued");
+        Assert(Resolve(hasMission: false, waitReason: "no_objective",
+                   waitDeadline: 120d, now: 60d) ==
+               ArmyRtsAssignmentReconciliationAction.None,
+            "a reasoned unexpired wait remains valid");
+        Assert(Resolve(hasMission: false, waitReason: "no_objective",
+                   waitDeadline: 60d, now: 60d) ==
+               ArmyRtsAssignmentReconciliationAction.QueueAssignment,
+            "an expired wait returns to director assignment");
+        Assert(Resolve(hasMission: false, waitReason: "",
+                   waitDeadline: 120d, now: 60d) ==
+               ArmyRtsAssignmentReconciliationAction.QueueAssignment,
+            "a deadline without a reason is not a valid wait");
+        Assert(Resolve(hasMission: true, expectedCaptainTask: false) ==
+               ArmyRtsAssignmentReconciliationAction.RepairCaptainTask,
+            "a controller mission repairs a missing captain task");
+        Assert(Resolve(hasMission: true, expectedCaptainTask: true) ==
+               ArmyRtsAssignmentReconciliationAction.None,
+            "an intact active mission needs no reconciliation");
+        Assert(Resolve(hasMission: false, warReturnActive: true) ==
+               ArmyRtsAssignmentReconciliationAction.None,
+            "post-war return ownership excludes an army from wartime assignment");
+        Assert(Resolve(hasMission: false, eligible: false) ==
+               ArmyRtsAssignmentReconciliationAction.None,
+            "an ineligible army is not assigned");
+    }
+
+    private static ArmyRtsAssignmentReconciliationAction Resolve(
+        bool eligible = true, bool warReturnActive = false,
+        bool hasMission = false, bool ownsTacticalActors = true,
+        bool expectedCaptainTask = true, string waitReason = "",
+        double waitDeadline = double.NaN, double now = 0d)
+    {
+        return ArmyRtsAssignmentReconciliationRules.Resolve(eligible,
+            warReturnActive, hasMission, ownsTacticalActors,
+            expectedCaptainTask, waitReason, waitDeadline, now);
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

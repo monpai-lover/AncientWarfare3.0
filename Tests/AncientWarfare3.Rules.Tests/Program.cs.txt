@@ -15,6 +15,7 @@ if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
     ArmyRtsWarLifecycleStateTests.Run();
     ArmyRtsCombatHandoffRulesTests.Run();
     ArmyRtsSyntheticRecoveryRulesTests.Run();
+    ArmyRtsAssignmentReconciliationRulesTests.Run();
     Console.WriteLine("RTS war lifecycle rules passed.");
     return;
 }
@@ -7795,6 +7796,7 @@ PreparationRecruitmentProtectionRulesTests.Run();
 ArmyRtsWarLifecycleStateTests.Run();
 ArmyRtsCombatHandoffRulesTests.Run();
 ArmyRtsSyntheticRecoveryRulesTests.Run();
+ArmyRtsAssignmentReconciliationRulesTests.Run();
 ActorDiagnosticSamplingRulesTests.Run();
 ActorAgeWorkRulesTests.Run();
 ActorDeathArchiveRulesTests.Run();

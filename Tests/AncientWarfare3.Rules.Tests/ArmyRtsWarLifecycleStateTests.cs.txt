@@ -22,6 +22,19 @@ internal static class ArmyRtsWarLifecycleStateTests
         Assert(lateArmy != null && lateArmy.BaselineStrength == 48,
             "an army created during war captures baseline on first assignment");
 
+        var unordered = new ArmyRtsWarLifecycleStateStore();
+        unordered.Ensure(12, 9, 20, ArmyRtsWarPhase.StrategicMovement);
+        unordered.Ensure(11, 8, 20, ArmyRtsWarPhase.StrategicMovement);
+        unordered.Ensure(11, 7, 20, ArmyRtsWarPhase.StrategicMovement);
+        var snapshot = unordered.Snapshot();
+        Assert(snapshot.Count == 3 && snapshot[0].WarId == 11 &&
+               snapshot[0].ArmyId == 7 && snapshot[1].WarId == 11 &&
+               snapshot[1].ArmyId == 8 && snapshot[2].WarId == 12,
+            "reconciliation receives a stable war and army ordered snapshot");
+        unordered.RemoveArmy(7);
+        Assert(snapshot.Count == 3,
+            "a reconciliation snapshot is isolated from later store changes");
+
         Assert(store.Ensure(11, 103, 0,
                    ArmyRtsWarPhase.StrategicMovement) == null,
             "an empty army does not create an unusable baseline");
