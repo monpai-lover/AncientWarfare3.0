@@ -2162,6 +2162,26 @@ namespace AncientWarfare3.core.lineage
             return GeneralAiProposalCooldownReady(pKingdom, year);
         }
 
+        internal static bool TryCompleteDomesticOnlyProposalYear(
+            Kingdom pKingdom, int pRequestedYear,
+            bool pForeignCaptureAvailable)
+        {
+            long kingdomId = pKingdom?.data == null ? -1L : pKingdom.id;
+            return DomesticHouseholdAnnualCompletion.TryRun(
+                ProposalRuntime, kingdomId, pRequestedYear,
+                pForeignCaptureAvailable,
+                resolveCurrentYear: () =>
+                    TryPrepareAnnualProposal(pKingdom, out int year)
+                        ? (int?)year
+                        : null,
+                tryScheduleWarPeace: () => TryScheduleWarPeace(pKingdom),
+                cooldownReady: year =>
+                    GeneralAiProposalCooldownReady(pKingdom, year),
+                tryFillOneDomesticVacancy: () =>
+                    RulerHouseholdService.TryFillOneDomesticVacancy(
+                        pKingdom));
+        }
+
         private static long NextAsyncAdmissionLeaseId()
         {
             _nextAsyncAdmissionLeaseId = _nextAsyncAdmissionLeaseId ==

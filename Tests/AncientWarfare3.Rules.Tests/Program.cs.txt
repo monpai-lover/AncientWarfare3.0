@@ -431,6 +431,15 @@ if (args.Length == 1 && args[0] == "--multiplayer-catalog")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--ruler-household")
+{
+    DomesticHouseholdAnnualCompletionTests.Run();
+    RulerHouseholdRulesTests.Run();
+    AW3MultiplayerCatalogRulesTests.Run();
+    Console.WriteLine("Ruler household rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--visible-surname-rename")
 {
     VisibleSurnameRenameRulesTests.Run();
@@ -7123,6 +7132,7 @@ DiplomacyProposalOpportunityRulesTests.Run();
 AsyncDiplomacyProposalIdentityTests.Run();
 VassalRelationConversionPersistenceTests.Run();
 RulerHouseholdRulesTests.Run();
+DomesticHouseholdAnnualCompletionTests.Run();
 WarPeaceSettlementScopeRulesTests.Run();
 SeparatePeaceRuntimeFactsRulesTests.Run();
 WarParticipantRosterRulesTests.Run();

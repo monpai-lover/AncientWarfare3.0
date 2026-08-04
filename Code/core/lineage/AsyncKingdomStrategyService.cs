@@ -163,6 +163,14 @@ namespace AncientWarfare3.core.lineage
                 : AsyncStrategyAuthorityTrace.Skipped("live_async");
             bool authorityReady = !shadow ||
                                   authorityTrace.OrdinaryPlanningReached;
+            if (!captured)
+            {
+                if (!shadow)
+                    DiplomacyProposalService
+                        .TryCompleteDomesticOnlyProposalYear(pKingdom,
+                            pYear, pForeignCaptureAvailable: false);
+                return;
+            }
             if (!AsyncStrategyLifecycleRules.ShouldSchedule(captured,
                     authorityReady)) return;
 

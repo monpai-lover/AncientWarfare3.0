@@ -279,6 +279,7 @@
     <Compile Include="VassalRelationConversionPersistenceTests.cs.txt" />
     <Compile Include="VassalRuntimeProjectionRulesTests.cs.txt" />
     <Compile Include="RulerHouseholdRulesTests.cs.txt" />
+    <Compile Include="DomesticHouseholdAnnualCompletionTests.cs.txt" />
     <Compile Include="WarPeaceSettlementScopeRulesTests.cs.txt" />
     <Compile Include="SeparatePeaceRuntimeFactsRulesTests.cs.txt" />
     <Compile Include="WarParticipantRosterRulesTests.cs.txt" />
@@ -892,6 +893,8 @@
     <Compile Include="..\..\Code\core\lineage\DiplomaticWarAvailabilityRules.cs" Link="Production\DiplomaticWarAvailabilityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyActionExpansionRules.cs" Link="Production\DiplomacyActionExpansionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerHouseholdRules.cs" Link="Production\RulerHouseholdRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyProposalRuntimeState.cs" Link="Production\DiplomacyProposalRuntimeState.cs" />
+    <Compile Include="..\..\Code\core\lineage\AsyncStrategyAdmissionModels.cs" Link="Production\AsyncStrategyAdmissionModels.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerHouseholdPregnancyRules.cs" Link="Production\RulerHouseholdPregnancyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarPeaceSettlementScopeRules.cs" Link="Production\WarPeaceSettlementScopeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SeparatePeaceRuntimeFactsRules.cs" Link="Production\SeparatePeaceRuntimeFactsRules.cs" />

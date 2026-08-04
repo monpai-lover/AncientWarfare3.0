@@ -171,4 +171,33 @@ namespace AncientWarfare3.core.lineage
             public bool CanPlan { get; }
         }
     }
+
+    internal static class DomesticHouseholdAnnualCompletion
+    {
+        public static bool TryRun<TCursor>(
+            DiplomacyProposalRuntimeState<TCursor> pRuntime,
+            long kingdomId, int requestedYear,
+            bool foreignCaptureAvailable,
+            Func<int?> resolveCurrentYear,
+            Func<bool> tryScheduleWarPeace,
+            Func<int, bool> cooldownReady,
+            Func<bool> tryFillOneDomesticVacancy)
+            where TCursor : class, IDisposable
+        {
+            if (foreignCaptureAvailable || pRuntime == null ||
+                kingdomId <= 0L || requestedYear < 0 ||
+                resolveCurrentYear == null || tryScheduleWarPeace == null ||
+                cooldownReady == null ||
+                tryFillOneDomesticVacancy == null)
+                return false;
+            int? currentYear = resolveCurrentYear();
+            if (!currentYear.HasValue || currentYear.Value != requestedYear)
+                return false;
+            if (!pRuntime.TryBeginAnnualDecision(kingdomId, requestedYear))
+                return false;
+            if (tryScheduleWarPeace() || !cooldownReady(currentYear.Value))
+                return false;
+            return tryFillOneDomesticVacancy();
+        }
+    }
 }

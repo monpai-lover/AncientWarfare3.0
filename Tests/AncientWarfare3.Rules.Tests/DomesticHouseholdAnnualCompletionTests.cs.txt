@@ -1,0 +1,128 @@
+using AncientWarfare3.core.lineage;
+
+internal static class DomesticHouseholdAnnualCompletionTests
+{
+    public static void Run()
+    {
+        ExecutesOnceWhenForeignCaptureIsEmpty();
+        WarAndInvalidStateDoNotExecute();
+        ForeignCaptureAndCooldownKeepFallbackIdle();
+    }
+
+    private static void ExecutesOnceWhenForeignCaptureIsEmpty()
+    {
+        var state = new DiplomacyProposalRuntimeState<TestCursor>();
+        int fills = 0;
+
+        bool first = DomesticHouseholdAnnualCompletion.TryRun(state,
+            kingdomId: 7L, requestedYear: 2026,
+            foreignCaptureAvailable: false,
+            resolveCurrentYear: () => 2026,
+            tryScheduleWarPeace: () => false,
+            cooldownReady: _ => true,
+            tryFillOneDomesticVacancy: () =>
+            {
+                fills++;
+                return true;
+            });
+        bool duplicate = DomesticHouseholdAnnualCompletion.TryRun(state,
+            kingdomId: 7L, requestedYear: 2026,
+            foreignCaptureAvailable: false,
+            resolveCurrentYear: () => 2026,
+            tryScheduleWarPeace: () => false,
+            cooldownReady: _ => true,
+            tryFillOneDomesticVacancy: () =>
+            {
+                fills++;
+                return true;
+            });
+
+        Equal(true, first,
+            "an empty foreign capture executes the domestic candidate");
+        Equal(false, duplicate,
+            "the same kingdom-year cannot complete domestic work twice");
+        Equal(1, fills,
+            "one annual decision invokes at most one domestic placement");
+    }
+
+    private static void WarAndInvalidStateDoNotExecute()
+    {
+        var state = new DiplomacyProposalRuntimeState<TestCursor>();
+        int fills = 0;
+        bool war = DomesticHouseholdAnnualCompletion.TryRun(state,
+            kingdomId: 8L, requestedYear: 2026,
+            foreignCaptureAvailable: false,
+            resolveCurrentYear: () => 2026,
+            tryScheduleWarPeace: () => true,
+            cooldownReady: _ => true,
+            tryFillOneDomesticVacancy: () =>
+            {
+                fills++;
+                return true;
+            });
+        bool invalid = DomesticHouseholdAnnualCompletion.TryRun(state,
+            kingdomId: -1L, requestedYear: 2026,
+            foreignCaptureAvailable: false,
+            resolveCurrentYear: () => null,
+            tryScheduleWarPeace: () => false,
+            cooldownReady: _ => true,
+            tryFillOneDomesticVacancy: () =>
+            {
+                fills++;
+                return true;
+            });
+
+        Equal(false, war, "war handling prevents domestic completion");
+        Equal(false, invalid,
+            "an invalid kingdom state prevents domestic completion");
+        Equal(0, fills,
+            "war and invalid states never invoke domestic placement");
+    }
+
+    private static void ForeignCaptureAndCooldownKeepFallbackIdle()
+    {
+        var state = new DiplomacyProposalRuntimeState<TestCursor>();
+        int fills = 0;
+        bool captured = DomesticHouseholdAnnualCompletion.TryRun(state,
+            kingdomId: 9L, requestedYear: 2026,
+            foreignCaptureAvailable: true,
+            resolveCurrentYear: () => 2026,
+            tryScheduleWarPeace: () => false,
+            cooldownReady: _ => true,
+            tryFillOneDomesticVacancy: () =>
+            {
+                fills++;
+                return true;
+            });
+        bool cooldown = DomesticHouseholdAnnualCompletion.TryRun(state,
+            kingdomId: 10L, requestedYear: 2026,
+            foreignCaptureAvailable: false,
+            resolveCurrentYear: () => 2026,
+            tryScheduleWarPeace: () => false,
+            cooldownReady: _ => false,
+            tryFillOneDomesticVacancy: () =>
+            {
+                fills++;
+                return true;
+            });
+
+        Equal(false, captured,
+            "a foreign capture stays on the asynchronous diplomacy path");
+        Equal(false, cooldown,
+            "proposal cooldown prevents domestic completion");
+        Equal(0, fills,
+            "foreign capture and cooldown do not invoke domestic placement");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $": expected={expected}, actual={actual}");
+    }
+
+    private sealed class TestCursor : IDisposable
+    {
+        public void Dispose() { }
+    }
+}

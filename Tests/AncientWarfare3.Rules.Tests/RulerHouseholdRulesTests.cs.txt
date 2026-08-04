@@ -285,6 +285,142 @@ internal static class RulerHouseholdRulesTests
                 consortCapacity: 4, out _),
             "AI does not propose to a full ruler household");
 
+        True(RulerHouseholdRules.TrySelectDomesticFillKind(
+                hasPrincipalWife: false, activeConsorts: 0,
+                consortCapacity: 4, principalCandidateAvailable: true,
+                consortCandidateAvailable: true,
+                out RulerHouseholdKind domesticPrincipal),
+            "AI finds a domestic vacancy action when both positions can be filled");
+        Equal(RulerHouseholdKind.PrincipalWife, domesticPrincipal,
+            "AI fills the domestic principal-wife slot before adding a consort");
+        True(RulerHouseholdRules.TrySelectDomesticFillKind(
+                hasPrincipalWife: false, activeConsorts: 0,
+                consortCapacity: 4, principalCandidateAvailable: false,
+                consortCandidateAvailable: true,
+                out RulerHouseholdKind domesticConsort),
+            "AI may add a consort when no noble principal-wife candidate exists");
+        Equal(RulerHouseholdKind.Consort, domesticConsort,
+            "a slave-only domestic pool leaves the principal slot empty but may fill a consort slot");
+        Equal(false, RulerHouseholdRules.TrySelectDomesticFillKind(
+                hasPrincipalWife: true, activeConsorts: 4,
+                consortCapacity: 4, principalCandidateAvailable: false,
+                consortCandidateAvailable: true, out _),
+            "AI stops domestic filling when the consort capacity is full");
+
+        True(householdService.Contains("TryFillOneDomesticVacancy("),
+            "the household service exposes one bounded domestic AI action");
+        True(householdService.Contains("TrySelectDomesticFillKind("),
+            "the domestic AI path uses the pure vacancy-selection rule");
+        True(householdService.Contains("TryCommitDomestic("),
+            "the domestic AI action commits through the direct domestic path");
+        string diplomacyService = ReadSource("Code", "core", "lineage",
+            "DiplomacyProposalService.cs");
+        string authoritativeYear = Between(diplomacyService,
+            "internal static AsyncStrategyAuthorityTrace RunAuthoritativeYear(",
+            "internal static bool TryPrepareAsyncProposalYear(");
+        int domesticFillIndex = authoritativeYear.IndexOf(
+            "RulerHouseholdService.TryFillOneDomesticVacancy(pKingdom)",
+            StringComparison.Ordinal);
+        int ordinaryProposalIndex = authoritativeYear.IndexOf(
+            "TryPrepareOrdinaryAiProposals(pKingdom", StringComparison.Ordinal);
+        True(domesticFillIndex >= 0 && ordinaryProposalIndex >= 0 &&
+             domesticFillIndex < ordinaryProposalIndex,
+            "synchronous AI tries one domestic fill before foreign proposal generation");
+        string asyncCompletion = Between(diplomacyService,
+            "internal static bool TryCompleteAsyncProposalYear(",
+            "private static bool TryPrepareAnnualProposal(");
+        True(asyncCompletion.Contains(
+                "RulerHouseholdService.TryFillOneDomesticVacancy("),
+            "asynchronous AI suppresses the prepared foreign proposal when a domestic fill succeeds");
+        Equal(false, AsyncStrategyAdmissionToken.TryCreateDiplomacy(
+                leaseId: 1L, previousMarker: -1, reservedMarker: 2026,
+                previousCursor: 0, cursorCount: 1,
+                expectedResponderId: -1L, observedResponderId: 77L,
+                out _),
+            "foreign diplomacy admission rejects a missing responder identity");
+        string asyncAdmission = Between(diplomacyService,
+            "internal static bool TryBeginAsyncProposalYear(",
+            "internal static bool TryRollbackAsyncProposalYear(");
+        True(asyncAdmission.Contains("pExpectedResponderId < 0L") &&
+             asyncAdmission.Contains(
+                 "observedResponderId != pExpectedResponderId"),
+            "foreign diplomacy admission requires a concrete matching responder");
+        string asyncStrategy = ReadSource("Code", "core", "lineage",
+            "AsyncKingdomStrategyService.cs");
+        string diplomacySchedule = Between(asyncStrategy,
+            "public static void ScheduleDiplomacy(",
+            "private static void CompleteWar(");
+        int domesticOnlyIndex = diplomacySchedule.IndexOf(
+            "TryCompleteDomesticOnlyProposalYear(",
+            StringComparison.Ordinal);
+        int scheduleGateIndex = diplomacySchedule.IndexOf(
+            "AsyncStrategyLifecycleRules.ShouldSchedule(",
+            StringComparison.Ordinal);
+        True(domesticOnlyIndex >= 0 && scheduleGateIndex > domesticOnlyIndex,
+            "empty foreign capture reaches domestic-only completion before the async schedule gate");
+
+        string householdWindow = ReadSource("Code", "ui", "windows",
+            "RulerHouseholdWindow.cs");
+        True(householdWindow.Contains("OpenDomesticPrincipal("),
+            "the household window exposes a principal-wife appointment action");
+        True(householdWindow.Contains("OpenDomesticConsort("),
+            "the household window exposes a consort appointment action");
+        True(householdWindow.Contains(
+                "RulerHouseholdOfferWindow.OpenDomestic("),
+            "household actions reuse the candidate window in domestic mode");
+
+        string offerWindow = ReadSource("Code", "ui", "windows",
+            "RulerHouseholdOfferWindow.cs");
+        True(offerWindow.Contains("private static bool _domesticMode"),
+            "the candidate window tracks domestic mode separately");
+        True(offerWindow.Contains("public static void OpenDomestic("),
+            "the candidate window has a domestic entry point");
+        True(offerWindow.Contains("BuildDomesticCandidatePool("),
+            "domestic mode reads the domestic candidate pool");
+        True(offerWindow.Contains("RulerHouseholdWindow.Open("),
+            "domestic confirmation and back navigation return to the household");
+        True(offerWindow.Contains("CreateDiplomacyProposal("),
+            "foreign offering mode still creates its diplomacy proposal");
+        True(offerWindow.Contains("RespondDiplomacyProposal("),
+            "foreign request mode still responds through diplomacy");
+        string domesticOpen = Between(offerWindow,
+            "public static void OpenDomestic(", "protected override void Init(");
+        int createWindowIndex = domesticOpen.IndexOf("CreateAndInit(",
+            StringComparison.Ordinal);
+        int assignKindAfterCreate = createWindowIndex < 0
+            ? -1
+            : domesticOpen.IndexOf("Instance._kind = pKind", createWindowIndex,
+                StringComparison.Ordinal);
+        True(createWindowIndex >= 0 && assignKindAfterCreate > createWindowIndex,
+            "first-time domestic opening applies the requested relationship kind after window creation");
+        string confirmSource = Between(offerWindow,
+            "private void Confirm()", "private void BackToDiplomacy()");
+        True(confirmSource.Contains(
+                "AW3CommandRequest.CommitDomesticHousehold("),
+            "domestic confirmation uses the typed non-diplomacy command facade");
+        Equal(false, confirmSource.Contains(
+                "RulerHouseholdService.TryCommitDomestic("),
+            "player-facing domestic writes do not bypass multiplayer dispatch");
+        string householdHandler = ReadSource("Code", "core", "multiplayer",
+            "commands", "AW3HouseholdCommandHandler.cs");
+        True(householdHandler.Contains(
+                "RulerHouseholdService.TryCommitDomestic("),
+            "the authoritative domestic command handler calls the direct commit service");
+        string multiplayerRules = ReadSource("Tests",
+            "AncientWarfare3.Rules.Tests",
+            "AW3MultiplayerCatalogRulesTests.cs.txt");
+        Equal(false, multiplayerRules.Contains(
+                "\"RulerHouseholdService.TryCommitDomestic\""),
+            "the global UI write guard has no domestic-commit exception");
+
+        string householdLocale = ReadSource("Locales",
+            "aw3_ruler_household.csv");
+        True(householdLocale.Contains("aw_household_action_appoint_principal"),
+            "principal appointment has localized text");
+        True(householdLocale.Contains("aw_household_action_take_consort"),
+            "consort appointment has localized text");
+        True(householdLocale.Contains("aw_ruler_household_domestic_select"),
+            "domestic candidate mode has a localized title");
         True(RulerHouseholdRules.CanUpperRealmOfferToSubject(
                 requesterSuzerainOfResponder: true,
                 candidateAvailable: true,
