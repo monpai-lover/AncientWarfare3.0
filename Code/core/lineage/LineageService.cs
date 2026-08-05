@@ -684,6 +684,8 @@ namespace AncientWarfare3.core.lineage
             if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
 
             ApplyDisplayName(pActor);
+            if (IsKingdomIntegrated(pActor.kingdom))
+                ApplyNameIntegrationToActor(pActor, kingdomIntegrated: true);
             FamilyTreeProjectionPendingStore.IncludePrerequisite(
                 pActor.data.id,
                 FamilyTreeProjectionChange.FamilyStructure);
