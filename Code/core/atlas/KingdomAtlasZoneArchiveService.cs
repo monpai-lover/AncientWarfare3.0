@@ -11,12 +11,22 @@ namespace AncientWarfare3.core.atlas
     {
         private static readonly object Gate = new object();
 
+        internal static void CaptureCityGeometry(City pCity,
+            string pEventType, double pWorldTime)
+        {
+            Kingdom kingdom = pCity?.kingdom;
+            if (kingdom?.data == null || string.IsNullOrEmpty(pEventType))
+                return;
+            CaptureCityEvent(pCity, kingdom, kingdom, pEventType, pWorldTime);
+        }
+
         internal static void CaptureCityEvent(City pCity, Kingdom pOldKingdom,
             Kingdom pNewKingdom, string pEventType, double pWorldTime)
         {
             if (pCity?.data == null || pCity.zones == null ||
                 pCity.zones.Count == 0 || string.IsNullOrEmpty(pEventType)) return;
-            SQLiteConnection db = LineageArchiveManager.Instance.OperatingDB;
+            LineageArchiveManager manager = LineageArchiveManager.Instance;
+            SQLiteConnection db = manager?.OperatingDB;
             if (db == null) return;
             long cityId = pCity.data.id;
             long kingdomId = pNewKingdom?.data?.id ?? pOldKingdom?.data?.id ?? -1L;
@@ -32,8 +42,9 @@ namespace AncientWarfare3.core.atlas
                     {
                         exists.CommandText = "SELECT COUNT(1) FROM " +
                             KingdomAtlasZoneArchiveTableItem.GetTableName() +
-                            " WHERE SNAPSHOT_KEY LIKE @key";
-                        exists.Parameters.AddWithValue("@key", key + ":%");
+                            " WHERE substr(SNAPSHOT_KEY,1,@length)=@key";
+                        exists.Parameters.AddWithValue("@key", key + ":");
+                        exists.Parameters.AddWithValue("@length", key.Length + 1);
                         if (Convert.ToInt32(exists.ExecuteScalar(), CultureInfo.InvariantCulture) > 0)
                             return;
                     }
@@ -71,7 +82,10 @@ namespace AncientWarfare3.core.atlas
                                     cmd.Parameters.AddWithValue("@y", tile.y);
                                     cmd.Parameters.AddWithValue("@water", water ? 1 : 0);
                                     cmd.Parameters.AddWithValue("@mask", neighborMask);
-                                    cmd.Parameters.AddWithValue("@key", key + ":" + tileIndex.ToString(CultureInfo.InvariantCulture));
+                                    cmd.Parameters.AddWithValue("@key",
+                                        KingdomAtlasRules.BuildSnapshotTileKey(
+                                            cityId, pEventType, pWorldTime,
+                                            zone.id, tile.x, tile.y));
                                     cmd.ExecuteNonQuery();
                                 }
                             }
@@ -91,7 +105,8 @@ namespace AncientWarfare3.core.atlas
             long pCityId = -1L)
         {
             var result = new List<KingdomAtlasZoneSnapshot>();
-            SQLiteConnection db = LineageArchiveManager.Instance.OperatingDB;
+            LineageArchiveManager manager = LineageArchiveManager.Instance;
+            SQLiteConnection db = manager?.OperatingDB;
             if (db == null) return result;
             using (var cmd = new SQLiteCommand(db))
             {

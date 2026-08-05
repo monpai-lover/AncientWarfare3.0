@@ -68,10 +68,182 @@ namespace AncientWarfare3.core.atlas
 
         public static bool IsVisibleOwner(long pOwnerId, long pOldId, long pNewId) => pOwnerId >= 0L && (pOwnerId == pOldId || pOwnerId == pNewId);
 
+        internal static long ResolveDisplayOwner(long pOwnerId,
+            IReadOnlyList<KingdomAtlasVassalRelationSnapshot> pRelations,
+            double pWorldTime)
+        {
+            if (pOwnerId < 0L || pRelations == null || pRelations.Count == 0)
+                return pOwnerId;
+            long original = pOwnerId;
+            long current = pOwnerId;
+            var visited = new HashSet<long>();
+            for (int depth = 0; depth < 32; depth++)
+            {
+                if (!visited.Add(current)) return original;
+                KingdomAtlasVassalRelationSnapshot relation = FindRelation(
+                    current, pRelations, pWorldTime);
+                if (relation == null || relation.SuzerainId < 0L ||
+                    relation.SuzerainId == current) return current;
+                current = relation.SuzerainId;
+            }
+            return original;
+        }
+
+        internal static Dictionary<long, KingdomAtlasColor> BuildDisplayColors(
+            IReadOnlyDictionary<long, string> pHistoricalColors,
+            IReadOnlyList<KingdomAtlasVassalRelationSnapshot> pRelations,
+            double pWorldTime)
+        {
+            var source = new Dictionary<long, KingdomAtlasColor>();
+            if (pHistoricalColors != null)
+                foreach (KeyValuePair<long, string> pair in pHistoricalColors)
+                    if (TryParseColor(pair.Value, out KingdomAtlasColor color))
+                        source[pair.Key] = color;
+            if (pRelations != null)
+                for (int index = 0; index < pRelations.Count; index++)
+                {
+                    KingdomAtlasVassalRelationSnapshot relation = pRelations[index];
+                    if (relation == null || relation.StartTime > pWorldTime) continue;
+                    if (!source.ContainsKey(relation.VassalId) &&
+                        TryParseColor(relation.VassalColor, out KingdomAtlasColor vassalColor))
+                        source[relation.VassalId] = vassalColor;
+                    if (!source.ContainsKey(relation.SuzerainId) &&
+                        TryParseColor(relation.SuzerainColor, out KingdomAtlasColor suzerainColor))
+                        source[relation.SuzerainId] = suzerainColor;
+                }
+            var result = new Dictionary<long, KingdomAtlasColor>();
+            var owners = new HashSet<long>(source.Keys);
+            if (pRelations != null)
+                for (int index = 0; index < pRelations.Count; index++)
+                {
+                    KingdomAtlasVassalRelationSnapshot relation = pRelations[index];
+                    if (relation == null || relation.StartTime > pWorldTime) continue;
+                    owners.Add(relation.VassalId);
+                    owners.Add(relation.SuzerainId);
+                }
+            foreach (long owner in owners)
+            {
+                long displayOwner = ResolveDisplayOwner(owner, pRelations, pWorldTime);
+                if (source.TryGetValue(displayOwner, out KingdomAtlasColor displayColor))
+                    result[owner] = displayColor;
+                else if (source.TryGetValue(owner, out KingdomAtlasColor ownColor))
+                    result[owner] = ownColor;
+            }
+            return result;
+        }
+
+        internal static HashSet<long> BuildVisibleOwnerIds(
+            IEnumerable<long> pParticipants,
+            IReadOnlyList<KingdomAtlasVassalRelationSnapshot> pRelations,
+            double pWorldTime)
+        {
+            var result = new HashSet<long>();
+            if (pParticipants != null)
+                foreach (long participant in pParticipants)
+                    if (participant >= 0L) result.Add(participant);
+            bool changed;
+            do
+            {
+                changed = false;
+                if (pRelations == null) break;
+                for (int index = 0; index < pRelations.Count; index++)
+                {
+                    KingdomAtlasVassalRelationSnapshot relation = pRelations[index];
+                    if (relation == null || !IsRelationAt(relation, pWorldTime) ||
+                        !result.Contains(relation.SuzerainId) || relation.VassalId < 0L)
+                        continue;
+                    if (result.Add(relation.VassalId)) changed = true;
+                }
+            } while (changed);
+            return result;
+        }
+
+        internal static bool IsRelationAt(KingdomAtlasVassalRelationSnapshot pRelation,
+            double pWorldTime)
+        {
+            if (pRelation == null || pRelation.VassalId < 0L ||
+                pRelation.SuzerainId < 0L || pRelation.VassalId == pRelation.SuzerainId)
+                return false;
+            const double epsilon = 0.000000001d;
+            return pRelation.StartTime <= pWorldTime + epsilon &&
+                (pRelation.EndTime < 0d || pRelation.EndTime + epsilon >= pWorldTime);
+        }
+
+        private static KingdomAtlasVassalRelationSnapshot FindRelation(long pVassalId,
+            IReadOnlyList<KingdomAtlasVassalRelationSnapshot> pRelations,
+            double pWorldTime)
+        {
+            KingdomAtlasVassalRelationSnapshot selected = null;
+            for (int index = 0; index < pRelations.Count; index++)
+            {
+                KingdomAtlasVassalRelationSnapshot relation = pRelations[index];
+                if (relation == null || relation.VassalId != pVassalId ||
+                    !IsRelationAt(relation, pWorldTime)) continue;
+                if (selected == null || ShouldReplaceSnapshot(relation.StartTime,
+                        relation.RelationId, selected.StartTime, selected.RelationId))
+                    selected = relation;
+            }
+            return selected;
+        }
+
+        public static bool IsCompleteTransfer(long pOldKingdomId,
+            long pNewKingdomId)
+        {
+            return pOldKingdomId >= 0L && pNewKingdomId >= 0L &&
+                pOldKingdomId != pNewKingdomId;
+        }
+
         public static int Percent(int pCompleted, int pTotal)
         {
             if (pTotal <= 0) return 0;
             return Math.Max(0, Math.Min(100, (int)Math.Round(Math.Max(0, pCompleted) * 100d / pTotal)));
+        }
+
+        public static bool ShouldReplaceSnapshot(double pCandidateTime,
+            long pCandidateId, double pCurrentTime, long pCurrentId)
+        {
+            const double epsilon = 0.000000001d;
+            if (pCandidateTime > pCurrentTime + epsilon) return true;
+            return Math.Abs(pCandidateTime - pCurrentTime) <= epsilon &&
+                pCandidateId > pCurrentId;
+        }
+
+        public static bool IsSameSnapshotGroup(long pCandidateCityId,
+            string pCandidateEventType, double pCandidateTime,
+            long pCurrentCityId, string pCurrentEventType,
+            double pCurrentTime)
+        {
+            const double epsilon = 0.000000001d;
+            return pCandidateCityId == pCurrentCityId &&
+                string.Equals(pCandidateEventType ?? "",
+                    pCurrentEventType ?? "", StringComparison.Ordinal) &&
+                Math.Abs(pCandidateTime - pCurrentTime) <= epsilon;
+        }
+
+        public static bool IsEventAtOrBeforeNode(double pEventTime,
+            long pEventId, double pNodeTime, long pNodeId)
+        {
+            const double epsilon = 0.000000001d;
+            if (pEventTime < pNodeTime - epsilon) return true;
+            return Math.Abs(pEventTime - pNodeTime) <= epsilon &&
+                pEventId <= pNodeId;
+        }
+
+        public static string BuildSnapshotTileKey(long pCityId,
+            string pEventType, double pWorldTime, int pZoneId, int pX,
+            int pY)
+        {
+            return pCityId.ToString(CultureInfo.InvariantCulture) + ":" +
+                (pEventType ?? "") + ":" +
+                pWorldTime.ToString("R", CultureInfo.InvariantCulture) + ":" +
+                pZoneId.ToString(CultureInfo.InvariantCulture) + ":" +
+                pX.ToString(CultureInfo.InvariantCulture) + ":" +
+                pY.ToString(CultureInfo.InvariantCulture);
+        }
+
+        public static bool IsEventInYear(int pEventYear, int pNodeYear)
+        {
+            return pNodeYear <= 0 || pEventYear == pNodeYear;
         }
 
         public static bool TryParseColor(string pValue, out KingdomAtlasColor pColor)

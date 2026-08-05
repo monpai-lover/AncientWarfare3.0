@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.core.atlas;
 using AncientWarfare3.ui.components;
 using UnityEngine;
@@ -32,12 +34,15 @@ namespace AncientWarfare3.ui.windows
         private Button _next;
         private Button _png;
         private Button _gif;
+        private Button _cancel;
         private Button _resolutionButton;
         private int _resolution = 768;
         private List<KingdomAtlasNode> _nodes = new List<KingdomAtlasNode>();
         private int _nodeIndex;
         private Texture2D _texture;
         private readonly List<GameObject> _labelObjects = new List<GameObject>();
+        private Coroutine _generationCoroutine;
+        private bool _cancelGeneration;
 
         internal static void Open(long pKingdomId)
         {
@@ -67,14 +72,15 @@ namespace AncientWarfare3.ui.windows
             _texture = null;
         }
 
-        private void ApplyRequest()
+        private void ApplyRequest(bool pUpdateStatus = true)
         {
             _kingdomId = _requestedKingdomId;
             _nodes = KingdomAtlasHistoryService.BuildNodes(_kingdomId);
             _nodeIndex = Math.Max(0, _nodes.Count - 1);
             RenderNode();
-            SetStatus(_nodes.Count == 0 ? "No archived territorial events." :
-                "Ready: " + _nodes.Count + " nodes");
+            if (pUpdateStatus)
+                SetStatus(_nodes.Count == 0 ? "No archived territorial events." :
+                    "Ready: " + _nodes.Count + " nodes");
         }
 
         private void EnsureUi()
@@ -131,10 +137,13 @@ namespace AncientWarfare3.ui.windows
 
             _png = Button(_root, "GeneratePng", "PNG", () => Generate(false));
             _gif = Button(_root, "GenerateGif", "GIF", () => Generate(true));
+            _cancel = Button(_root, "CancelGeneration", "Cancel", CancelGeneration);
             _resolutionButton = Button(_root, "Resolution", "768", CycleResolution);
             PositionButton(_png, 0.66f, 0f, -110f, 22f);
             PositionButton(_gif, 0.66f, 0f, -55f, 22f);
+            PositionButton(_cancel, 0.66f, 0f, -220f, 22f);
             PositionButton(_resolutionButton, 0.66f, 0f, -165f, 22f);
+            _cancel.gameObject.SetActive(false);
         }
 
         private void ApplyLayout()
@@ -151,14 +160,213 @@ namespace AncientWarfare3.ui.windows
 
         private void Generate(bool pGif)
         {
+            if (_generationCoroutine != null) return;
+            _cancelGeneration = false;
             SetStatus("Generating 0%");
-            KingdomAtlasGenerationResult result = KingdomAtlasArtifactWriter.Generate(
-                _kingdomId, _resolution, pGif,
-                pProgress => SetStatus("Generating " + pProgress.Percent + "%"),
-                () => !isActiveAndEnabled);
-            SetStatus(result.Success ? "Generated " + result.NodesGenerated +
-                " PNG node(s)" : result.Error);
-            ApplyRequest();
+            SetGenerationButtons(false);
+            _generationCoroutine = StartCoroutine(GenerateRoutine(pGif));
+        }
+
+        private IEnumerator GenerateRoutine(bool pGif)
+        {
+            KingdomAtlasGenerationResult result = null;
+            Func<KingdomAtlasNode, KingdomAtlasRaster, KingdomAtlasRaster>
+                previousRenderer = KingdomAtlasRasterizer.ExternalLabelRenderer;
+            KingdomAtlasRasterizer.ExternalLabelRenderer = RenderBitmapLabels;
+            try
+            {
+                KingdomAtlasGenerationSession session =
+                    KingdomAtlasArtifactWriter.Begin(_kingdomId, _resolution,
+                        pGif);
+                while (!session.IsComplete)
+                {
+                    KingdomAtlasProgress progress;
+                    bool advanced = session.MoveNext(
+                        () => _cancelGeneration, out progress);
+                    if (advanced)
+                        SetStatus("Generating " + progress.Percent + "%");
+                    if (!session.IsComplete) yield return null;
+                }
+                result = session.Result;
+            }
+            catch (Exception error)
+            {
+                result = new KingdomAtlasGenerationResult
+                {
+                    Error = error.Message
+                };
+            }
+            finally
+            {
+                KingdomAtlasRasterizer.ExternalLabelRenderer = previousRenderer;
+            }
+            _generationCoroutine = null;
+            SetGenerationButtons(true);
+            SetStatus(result != null && result.Success
+                ? "Generated " + result.NodesGenerated + " PNG node(s)"
+                : result?.Error ?? "Atlas generation failed.");
+            ApplyRequest(false);
+        }
+
+        private static KingdomAtlasRaster RenderBitmapLabels(
+            KingdomAtlasNode pNode, KingdomAtlasRaster pRaster)
+        {
+            Font font = ResolveMapFont();
+            if (font == null || pNode?.VisibleZones == null ||
+                pNode.VisibleZones.Count == 0) return null;
+
+            IReadOnlyList<KingdomAtlasLabel> labels =
+                KingdomAtlasRasterizer.BuildLabels(pNode, pRaster.Width);
+            ApplyMapModeLabelPlacement(labels, pNode);
+            int minX = int.MaxValue, maxX = int.MinValue;
+            int minY = int.MaxValue, maxY = int.MinValue;
+            for (int index = 0; index < pNode.VisibleZones.Count; index++)
+            {
+                KingdomAtlasZoneCell cell = pNode.VisibleZones[index];
+                minX = Math.Min(minX, cell.X); maxX = Math.Max(maxX, cell.X);
+                minY = Math.Min(minY, cell.Y); maxY = Math.Max(maxY, cell.Y);
+            }
+
+            Texture2D baseTexture = null;
+            RenderTexture target = null;
+            GameObject canvasObject = null;
+            GameObject cameraObject = null;
+            RenderTexture previousTarget = RenderTexture.active;
+            try
+            {
+                baseTexture = new Texture2D(pRaster.Width, pRaster.Height,
+                    TextureFormat.RGBA32, false);
+                baseTexture.LoadRawTextureData(pRaster.Rgba);
+                baseTexture.Apply(false, false);
+
+                target = new RenderTexture(pRaster.Width, pRaster.Height, 24,
+                    RenderTextureFormat.ARGB32);
+                target.Create();
+                cameraObject = new GameObject("KingdomAtlasExportCamera");
+                Camera camera = cameraObject.AddComponent<Camera>();
+                camera.orthographic = true;
+                camera.orthographicSize = pRaster.Height * 0.5f;
+                camera.aspect = pRaster.Width / (float)pRaster.Height;
+                camera.transform.position = new Vector3(
+                    pRaster.Width * 0.5f, pRaster.Height * 0.5f, -10f);
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = Color.black;
+                camera.targetTexture = target;
+
+                canvasObject = new GameObject("KingdomAtlasExportCanvas",
+                    typeof(RectTransform), typeof(Canvas));
+                Canvas canvas = canvasObject.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.WorldSpace;
+                canvas.worldCamera = camera;
+                canvas.sortingOrder = 32767;
+                RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+                canvasRect.sizeDelta = new Vector2(pRaster.Width,
+                    pRaster.Height);
+                canvasRect.position = new Vector3(pRaster.Width * 0.5f,
+                    pRaster.Height * 0.5f, 0f);
+
+                RawImage image = canvasObject.AddComponent<RawImage>();
+                image.texture = baseTexture;
+                image.color = Color.white;
+                image.rectTransform.anchorMin = Vector2.zero;
+                image.rectTransform.anchorMax = Vector2.one;
+                image.rectTransform.offsetMin = Vector2.zero;
+                image.rectTransform.offsetMax = Vector2.zero;
+
+                for (int index = 0; index < labels.Count; index++)
+                {
+                    KingdomAtlasLabel atlasLabel = labels[index];
+                    var labelObject = new GameObject("KingdomAtlasExportLabel",
+                        typeof(RectTransform), typeof(Text), typeof(Outline));
+                    labelObject.transform.SetParent(canvasObject.transform,
+                        false);
+                    Text text = labelObject.GetComponent<Text>();
+                    text.font = font;
+                    text.fontSize = Mathf.Max(8,
+                        Mathf.RoundToInt(atlasLabel.Size));
+                    text.text = atlasLabel.Text;
+                    text.alignment = TextAnchor.MiddleCenter;
+                    text.horizontalOverflow = HorizontalWrapMode.Overflow;
+                    text.verticalOverflow = VerticalWrapMode.Overflow;
+                    text.color = new Color(atlasLabel.Color.Red / 255f,
+                        atlasLabel.Color.Green / 255f,
+                        atlasLabel.Color.Blue / 255f, 1f);
+                    Outline outline = labelObject.GetComponent<Outline>();
+                    outline.effectColor = Color.black;
+                    outline.effectDistance = new Vector2(1f, -1f);
+                    RectTransform rect = labelObject.GetComponent<RectTransform>();
+                    rect.sizeDelta = new Vector2(Mathf.Max(32f,
+                        text.preferredWidth + 12f), Mathf.Max(24f,
+                        text.preferredHeight + 8f));
+                    float x = (atlasLabel.X - minX + 0.5f) /
+                        Math.Max(1f, maxX - minX + 1f) - 0.5f;
+                    float y = 0.5f - (atlasLabel.Y - minY + 0.5f) /
+                        Math.Max(1f, maxY - minY + 1f);
+                    rect.anchoredPosition = new Vector2(
+                        x * pRaster.Width, y * pRaster.Height);
+                    rect.localRotation = Quaternion.Euler(0f, 0f,
+                        atlasLabel.Angle);
+                }
+
+                Canvas.ForceUpdateCanvases();
+                camera.Render();
+                RenderTexture.active = target;
+                var output = new Texture2D(pRaster.Width, pRaster.Height,
+                    TextureFormat.RGBA32, false);
+                output.ReadPixels(new Rect(0f, 0f, pRaster.Width,
+                    pRaster.Height), 0, 0);
+                output.Apply(false, false);
+                Color32[] pixels = output.GetPixels32();
+                byte[] rgba = new byte[pixels.Length * 4];
+                for (int y = 0; y < pRaster.Height; y++)
+                    for (int x = 0; x < pRaster.Width; x++)
+                    {
+                        Color32 pixel = pixels[y * pRaster.Width + x];
+                        int destination = ((pRaster.Height - 1 - y) *
+                            pRaster.Width + x) * 4;
+                        rgba[destination] = pixel.r;
+                        rgba[destination + 1] = pixel.g;
+                        rgba[destination + 2] = pixel.b;
+                        rgba[destination + 3] = pixel.a;
+                    }
+                UnityEngine.Object.Destroy(output);
+                return new KingdomAtlasRaster(pRaster.Width,
+                    pRaster.Height, rgba);
+            }
+            finally
+            {
+                RenderTexture.active = previousTarget;
+                if (baseTexture != null) UnityEngine.Object.Destroy(baseTexture);
+                if (target != null)
+                {
+                    target.Release();
+                    UnityEngine.Object.Destroy(target);
+                }
+                if (canvasObject != null)
+                    UnityEngine.Object.Destroy(canvasObject);
+                if (cameraObject != null)
+                    UnityEngine.Object.Destroy(cameraObject);
+            }
+        }
+
+        private void CancelGeneration()
+        {
+            if (_generationCoroutine == null) return;
+            _cancelGeneration = true;
+            SetStatus("Cancelling atlas generation...");
+        }
+
+        private void SetGenerationButtons(bool pEnabled)
+        {
+            if (_png != null) _png.interactable = pEnabled;
+            if (_gif != null) _gif.interactable = pEnabled;
+            if (_resolutionButton != null)
+                _resolutionButton.interactable = pEnabled;
+            if (_cancel != null)
+            {
+                _cancel.interactable = !pEnabled;
+                _cancel.gameObject.SetActive(!pEnabled);
+            }
         }
 
         private void CycleResolution()
@@ -193,6 +401,7 @@ namespace AncientWarfare3.ui.windows
             _mapImage.texture = _texture;
             ClearLabels();
             IReadOnlyList<KingdomAtlasLabel> labels = KingdomAtlasRasterizer.BuildLabels(node, _resolution);
+            ApplyMapModeLabelPlacement(labels, node);
             for (int i = 0; i < labels.Count; i++) AddMapLabel(labels[i], node);
             _nodeText.text = "Node " + (_nodeIndex + 1) + "/" + _nodes.Count +
                 "  " + node.Event.YearText + "  " + node.Event.CityName;
@@ -233,7 +442,7 @@ namespace AncientWarfare3.ui.windows
             }
             var label = new GameObject("AtlasLabel", typeof(RectTransform), typeof(Text), typeof(Outline));
             label.transform.SetParent(_mapContent, false);
-            Text text = label.GetComponent<Text>(); text.font = LocalizedTextManager.current_font;
+            Text text = label.GetComponent<Text>(); text.font = ResolveMapFont();
             text.fontSize = Mathf.RoundToInt(pLabel.Size); text.text = pLabel.Text;
             text.alignment = TextAnchor.MiddleCenter; text.color = new Color(pLabel.Color.Red / 255f,
                 pLabel.Color.Green / 255f, pLabel.Color.Blue / 255f, 1f);
@@ -243,7 +452,36 @@ namespace AncientWarfare3.ui.windows
             float x = (pLabel.X - minX + 0.5f) / Math.Max(1f, maxX - minX + 1f) - 0.5f;
             float y = 0.5f - (pLabel.Y - minY + 0.5f) / Math.Max(1f, maxY - minY + 1f);
             rect.anchoredPosition = new Vector2(x * _resolution, y * _resolution);
+            rect.localRotation = Quaternion.Euler(0f, 0f, pLabel.Angle);
             _labelObjects.Add(label);
+        }
+
+        private static void ApplyMapModeLabelPlacement(
+            IReadOnlyList<KingdomAtlasLabel> pLabels, KingdomAtlasNode pNode)
+        {
+            if (pLabels == null || pNode?.VisibleZones == null) return;
+            for (int labelIndex = 0; labelIndex < pLabels.Count; labelIndex++)
+            {
+                KingdomAtlasLabel label = pLabels[labelIndex];
+                var tiles = new List<Vector2Int>();
+                for (int cellIndex = 0; cellIndex < pNode.VisibleZones.Count;
+                     cellIndex++)
+                {
+                    KingdomAtlasZoneCell cell = pNode.VisibleZones[cellIndex];
+                    if (cell.Water || !pNode.CityOwners.TryGetValue(
+                            cell.CityId, out long owner) ||
+                        owner != label.KingdomId) continue;
+                    tiles.Add(new Vector2Int(cell.X, cell.Y));
+                }
+                if (tiles.Count == 0) continue;
+                HierarchicalVassalMapModeLabelPlacement placement =
+                    HierarchicalVassalMapModeGeometry.CalculateLabelPlacement(
+                        tiles, label.Text);
+                label.X = Mathf.RoundToInt(placement.Centroid.x);
+                label.Y = Mathf.RoundToInt(placement.Centroid.y);
+                label.Angle = placement.Angle;
+                label.Size = Mathf.Max(8f, placement.Size * 12f);
+            }
         }
 
         private void ClearLabels()
@@ -266,9 +504,20 @@ namespace AncientWarfare3.ui.windows
             var obj = new GameObject(pName, typeof(RectTransform), typeof(Text));
             obj.transform.SetParent(pParent, false);
             Text text = obj.GetComponent<Text>();
-            text.font = LocalizedTextManager.current_font; text.fontSize = pSize;
+            text.font = ResolveMapFont(); text.fontSize = pSize;
             text.color = Color.white; text.alignment = pAnchor; text.text = pText;
             return text;
+        }
+
+        private static Font ResolveMapFont()
+        {
+            try
+            {
+                Font mapFont = HierarchicalVassalMapFontLoader.TryLoad(16);
+                if (mapFont != null) return mapFont;
+            }
+            catch { }
+            return LocalizedTextManager.current_font;
         }
 
         private static Button Button(Transform pParent, string pName, string pText,

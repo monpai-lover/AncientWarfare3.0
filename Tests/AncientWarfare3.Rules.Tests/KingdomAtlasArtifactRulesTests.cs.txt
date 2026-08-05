@@ -27,6 +27,66 @@ internal static class KingdomAtlasArtifactRulesTests
         byte[] gif = KingdomAtlasGifEncoder.Encode(new[] { raster });
         Equal((byte)'G', gif[0], "GIF header");
         Equal((byte)'F', gif[2], "GIF header");
+        int boundaryOffset = (32 * raster.Width + 0) * 4;
+        Equal((byte)245, raster.Rgba[boundaryOffset], "coastline boundary red");
+        Equal((byte)245, raster.Rgba[boundaryOffset + 1], "coastline boundary green");
+        Equal((byte)225, raster.Rgba[boundaryOffset + 2], "coastline boundary blue");
+        var diagonal = new KingdomAtlasNode
+        {
+            Event = node.Event,
+            CityOwners = new Dictionary<long, long> { [5] = 2 },
+            VisibleZones = new[]
+            {
+                new KingdomAtlasZoneCell(5, 0, 0, false, 0),
+                new KingdomAtlasZoneCell(5, 1, 1, false, 0),
+                new KingdomAtlasZoneCell(5, 2, 2, false, 0)
+            }
+        };
+        var labels = KingdomAtlasRasterizer.BuildLabels(diagonal, 64);
+        if (labels.Count != 1 || Math.Abs(labels[0].Angle) <= 20f)
+            throw new InvalidOperationException(
+                "atlas labels follow territory orientation");
+
+        var subjectNode = new KingdomAtlasNode
+        {
+            Event = node.Event,
+            CityOwners = new Dictionary<long, long> { [5] = 11, [6] = 12 },
+            VisibleZones = new[]
+            {
+                new KingdomAtlasZoneCell(5, 0, 0, false, 0),
+                new KingdomAtlasZoneCell(6, 1, 0, false, 0)
+            },
+            Kingdoms = new Dictionary<long, KingdomAtlasKingdomSnapshot>
+            {
+                [11] = new KingdomAtlasKingdomSnapshot { KingdomId = 11, Name = "Subject A" },
+                [12] = new KingdomAtlasKingdomSnapshot { KingdomId = 12, Name = "Subject B" }
+            },
+            DisplayColors = new Dictionary<long, KingdomAtlasColor>
+            {
+                [11] = new KingdomAtlasColor(17, 34, 51, 255),
+                [12] = new KingdomAtlasColor(17, 34, 51, 255)
+            }
+        };
+        KingdomAtlasRaster subjectRaster = KingdomAtlasRasterizer.Render(subjectNode, 64);
+        Equal(new KingdomAtlasColor(17, 34, 51, 255),
+            ReadColor(subjectRaster, 15, 32),
+            "first subject inherits suzerain color");
+        Equal(new KingdomAtlasColor(17, 34, 51, 255),
+            ReadColor(subjectRaster, 48, 32),
+            "second subject inherits same suzerain color");
+        var subjectLabels = KingdomAtlasRasterizer.BuildLabels(subjectNode, 64);
+        Equal(2, subjectLabels.Count, "subjects retain independent labels");
+        Equal("Subject A", subjectLabels[0].Text, "first subject label is independent");
+        Equal("Subject B", subjectLabels[1].Text, "second subject label is independent");
+    }
+
+    private static KingdomAtlasColor ReadColor(KingdomAtlasRaster pRaster,
+        int pX, int pY)
+    {
+        int offset = (pY * pRaster.Width + pX) * 4;
+        return new KingdomAtlasColor(pRaster.Rgba[offset],
+            pRaster.Rgba[offset + 1], pRaster.Rgba[offset + 2],
+            pRaster.Rgba[offset + 3]);
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pName)

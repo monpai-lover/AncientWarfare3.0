@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
-using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.atlas
 {
@@ -18,99 +17,91 @@ namespace AncientWarfare3.core.atlas
 
     internal static class KingdomAtlasArtifactWriter
     {
+        internal const string GeometryVersion = "zones-v2";
+
         internal static KingdomAtlasGenerationResult Generate(long pKingdomId,
             int pResolution, bool pGif, Action<KingdomAtlasProgress> pProgress = null,
             Func<bool> pCancellationRequested = null)
         {
-            var result = new KingdomAtlasGenerationResult();
-            if (!KingdomAtlasRules.IsReliableResolution(pResolution, pResolution))
+            KingdomAtlasGenerationSession session = Begin(pKingdomId,
+                pResolution, pGif);
+            KingdomAtlasProgress progress;
+            while (session.MoveNext(pCancellationRequested, out progress))
+                pProgress?.Invoke(progress);
+            return session.Result;
+        }
+
+        internal static KingdomAtlasGenerationSession Begin(long pKingdomId,
+            int pResolution, bool pGif)
+        {
+            return KingdomAtlasGenerationSession.Create(pKingdomId,
+                pResolution, pGif);
+        }
+
+        internal static HashSet<long> ReadCompletedEvents(string pPath,
+            string pSaveDirectory, int pResolution)
+        {
+            var result = new HashSet<long>();
+            try
             {
-                result.Error = "Unsupported atlas resolution.";
-                return result;
-            }
-            if (!AW3SaveDirectoryRegistry.TryGet(out string saveDirectory))
-            {
-                result.Error = "Save the world before generating a kingdom atlas.";
-                return result;
-            }
-            List<KingdomAtlasNode> nodes;
-            try { nodes = KingdomAtlasHistoryService.BuildNodes(pKingdomId); }
-            catch (Exception error) { result.Error = error.Message; return result; }
-            if (!KingdomAtlasHistoryService.HasReliableColours(nodes))
-            {
-                result.Error = "Historical kingdom colours are incomplete; atlas generation was refused.";
-                return result;
-            }
-            string output = Path.Combine(saveDirectory, "aw3_kingdom_atlas");
-            Directory.CreateDirectory(output);
-            string manifestPath = Path.Combine(output, "kingdom_" +
-                pKingdomId.ToString(CultureInfo.InvariantCulture) + "_" +
-                pResolution.ToString(CultureInfo.InvariantCulture) + ".manifest");
-            long cursor = ReadCursor(manifestPath);
-            var gifFrames = new List<KingdomAtlasRaster>();
-            int total = nodes.Count;
-            for (int index = 0; index < nodes.Count; index++)
-            {
-                if (pCancellationRequested != null && pCancellationRequested())
+                if (!File.Exists(pPath)) return result;
+                string[] lines = File.ReadAllLines(pPath);
+                bool metadataMatches = false;
+                for (int index = 0; index < lines.Length; index++)
                 {
-                    result.Error = "Atlas generation cancelled.";
-                    return result;
+                    string line = lines[index]?.Trim() ?? "";
+                    if (line.StartsWith("save_identity=", StringComparison.Ordinal))
+                        metadataMatches = string.Equals(line.Substring(14),
+                            Path.GetFullPath(pSaveDirectory),
+                            StringComparison.OrdinalIgnoreCase);
                 }
-                KingdomAtlasNode node = nodes[index];
-                if (node.Event.EventId <= cursor)
+                if (!metadataMatches) return result;
+                for (int index = 0; index < lines.Length; index++)
                 {
-                    result.NodesSkipped++;
-                    if (pGif) gifFrames.Add(KingdomAtlasRasterizer.Render(node, pResolution));
-                    pProgress?.Invoke(new KingdomAtlasProgress(index + 1, total,
-                        "skipped", node.Event.EventId));
-                    continue;
+                    string line = lines[index]?.Trim() ?? "";
+                    if (line.StartsWith("completed_key=", StringComparison.Ordinal))
+                    {
+                        string key = line.Substring(14);
+                        string[] parts = key.Split(':');
+                        if (parts.Length == 3 && parts[1] ==
+                            pResolution.ToString(CultureInfo.InvariantCulture) &&
+                            parts[2] == GeometryVersion &&
+                            long.TryParse(parts[0], NumberStyles.Integer,
+                                CultureInfo.InvariantCulture, out long eventId))
+                            result.Add(eventId);
+                    }
                 }
-                KingdomAtlasRaster raster = KingdomAtlasRasterizer.Render(node, pResolution);
-                byte[] png = KingdomAtlasPngEncoder.Encode(raster);
-                string stem = KingdomAtlasRules.BuildOutputStem(pKingdomId,
-                    pResolution, index, node.Event.EventId);
-                string pngPath = Path.Combine(output, stem + ".png");
-                WriteAtomically(pngPath, png);
-                if (pGif)
-                    gifFrames.Add(raster);
-                WriteCursor(manifestPath, node.Event.EventId);
-                result.NodesGenerated++;
-                pProgress?.Invoke(new KingdomAtlasProgress(index + 1, total,
-                    "png", node.Event.EventId));
             }
-            if (pGif && gifFrames.Count > 0)
-            {
-                byte[] gif = KingdomAtlasGifEncoder.Encode(gifFrames);
-                WriteAtomically(Path.Combine(output, "kingdom_" +
-                    pKingdomId.ToString(CultureInfo.InvariantCulture) + "_" +
-                    pResolution.ToString(CultureInfo.InvariantCulture) + ".gif"), gif);
-            }
-            result.OutputDirectory = output;
+            catch { }
             return result;
         }
 
-        private static long ReadCursor(string pPath)
-        {
-            try
-            {
-                if (!File.Exists(pPath)) return -1L;
-                string line = File.ReadAllText(pPath).Trim();
-                return long.TryParse(line, NumberStyles.Integer,
-                    CultureInfo.InvariantCulture, out long value) ? value : -1L;
-            }
-            catch { return -1L; }
-        }
-
-        private static void WriteCursor(string pPath, long pEventId)
+        internal static void WriteManifest(string pPath, string pSaveDirectory,
+            int pResolution, HashSet<long> pCompleted, int pTotal)
         {
             string temp = pPath + ".tmp." + Guid.NewGuid().ToString("N");
-            File.WriteAllText(temp, pEventId.ToString(CultureInfo.InvariantCulture),
-                new UTF8Encoding(false));
+            var text = new StringBuilder(256 + pCompleted.Count * 32);
+            text.AppendLine("format=aw3_kingdom_atlas_manifest_v2");
+            text.AppendLine("save_identity=" + Path.GetFullPath(pSaveDirectory));
+            text.AppendLine("resolution=" + pResolution.ToString(
+                CultureInfo.InvariantCulture));
+            text.AppendLine("geometry_version=" + GeometryVersion);
+            text.AppendLine("total_nodes=" + pTotal.ToString(
+                CultureInfo.InvariantCulture));
+            text.AppendLine("completed_nodes=" + pCompleted.Count.ToString(
+                CultureInfo.InvariantCulture));
+            var ordered = new List<long>(pCompleted);
+            ordered.Sort();
+            for (int index = 0; index < ordered.Count; index++)
+                text.AppendLine("completed_key=" +
+                    KingdomAtlasRules.BuildGenerationKey(ordered[index],
+                        pResolution, GeometryVersion));
+            File.WriteAllText(temp, text.ToString(), new UTF8Encoding(false));
             if (File.Exists(pPath)) File.Replace(temp, pPath, null);
             else File.Move(temp, pPath);
         }
 
-        private static void WriteAtomically(string pPath, byte[] pBytes)
+        internal static void WriteAtomically(string pPath, byte[] pBytes)
         {
             string temp = pPath + ".tmp." + Guid.NewGuid().ToString("N");
             File.WriteAllBytes(temp, pBytes);

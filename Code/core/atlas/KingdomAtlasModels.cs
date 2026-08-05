@@ -90,6 +90,27 @@ namespace AncientWarfare3.core.atlas
         public string EventType { get; set; } = "";
     }
 
+    internal sealed class KingdomAtlasKingdomSnapshot
+    {
+        public long KingdomId { get; set; } = -1L;
+        public string Name { get; set; } = "";
+        public string Color { get; set; } = "";
+    }
+
+    internal sealed class KingdomAtlasVassalRelationSnapshot
+    {
+        public long RelationId { get; set; } = -1L;
+        public long VassalId { get; set; } = -1L;
+        public string VassalName { get; set; } = "";
+        public string VassalColor { get; set; } = "";
+        public long SuzerainId { get; set; } = -1L;
+        public string SuzerainName { get; set; } = "";
+        public string SuzerainColor { get; set; } = "";
+        public int ContractTier { get; set; }
+        public double StartTime { get; set; }
+        public double EndTime { get; set; } = -1d;
+    }
+
     internal sealed class KingdomAtlasNode
     {
         public KingdomAtlasHistoryEvent Event { get; set; }
@@ -98,6 +119,9 @@ namespace AncientWarfare3.core.atlas
         public IReadOnlyList<KingdomAtlasZoneCell> VisibleZones { get; set; } = Array.Empty<KingdomAtlasZoneCell>();
         public IReadOnlyList<KingdomAtlasChronicleRow> OldChronicle { get; set; } = Array.Empty<KingdomAtlasChronicleRow>();
         public IReadOnlyList<KingdomAtlasChronicleRow> NewChronicle { get; set; } = Array.Empty<KingdomAtlasChronicleRow>();
+        public IReadOnlyList<KingdomAtlasVassalRelationSnapshot> VassalRelations { get; set; } = Array.Empty<KingdomAtlasVassalRelationSnapshot>();
+        public IReadOnlyDictionary<long, KingdomAtlasKingdomSnapshot> Kingdoms { get; set; } = new Dictionary<long, KingdomAtlasKingdomSnapshot>();
+        public IReadOnlyDictionary<long, KingdomAtlasColor> DisplayColors { get; set; } = new Dictionary<long, KingdomAtlasColor>();
     }
 
     internal sealed class KingdomAtlasRaster
