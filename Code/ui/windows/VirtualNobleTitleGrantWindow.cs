@@ -2,6 +2,7 @@ using System;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.components;
+using NeoModLoader.api;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,7 +10,7 @@ namespace AncientWarfare3.ui.windows
 {
     internal sealed class VirtualNobleTitleGrantWindow : AbstractWindow<VirtualNobleTitleGrantWindow>
     {
-        private const string WindowId = "aw_virtual_title_grant";
+        private const string GrantWindowId = "aw_virtual_title_grant";
         private static long _actorId = -1L;
         private RectTransform _root;
         private InputField _input;
@@ -22,8 +23,8 @@ namespace AncientWarfare3.ui.windows
         internal static void Open(long pActorId)
         {
             _actorId = pActorId;
-            if (Instance == null) CreateAndInit(WindowId);
-            AW_LineageWindowIds.SafeShow(WindowId,
+            if (Instance == null) CreateAndInit(GrantWindowId);
+            AW_LineageWindowIds.SafeShow(GrantWindowId,
                 () => Instance?.Refresh());
         }
 
