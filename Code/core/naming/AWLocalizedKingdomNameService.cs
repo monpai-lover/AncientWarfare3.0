@@ -73,6 +73,63 @@ namespace AncientWarfare3.core.naming
             ProjectStored(pKingdom, _displayBefore);
         }
 
+        internal static bool CommitCanonicalStateName(Kingdom pKingdom,
+            string pStateName)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                string.IsNullOrWhiteSpace(pStateName)) return false;
+            string canonical = pStateName.Trim();
+            Kingdom[] members =
+                SuccessionDisputeService.GetSharedNameMembers(pKingdom);
+            var changedIds = new HashSet<long>();
+            for (int i = 0; i < members.Length; i++)
+            {
+                Kingdom member = members[i];
+                if (member?.data == null || member.isRekt()) continue;
+                member.data.get(AWNameDataKeys.NativeName,
+                    out string nativeName, string.Empty);
+                member.data.get(AWNameDataKeys.ChineseName,
+                    out string chineseName, string.Empty);
+                member.data.get(AWNameDataKeys.NamingSchemaVersion,
+                    out int schemaVersion, 0);
+                AWLocalizedNameEditDecision identity =
+                    AWLocalizedKingdomRenameRules.ResolveCanonicalStateName(
+                        canonical, nativeName, chineseName);
+                bool identityChanged =
+                    !string.Equals(nativeName, identity.NativeName,
+                        StringComparison.Ordinal) ||
+                    !string.Equals(chineseName, identity.ChineseName,
+                        StringComparison.Ordinal) ||
+                    schemaVersion != AWLocalizedNameService.SchemaVersion ||
+                    !member.data.custom_name;
+                bool displayChanged = !string.Equals(member.data.name,
+                    canonical, StringComparison.Ordinal);
+                if (!identityChanged && !displayChanged) continue;
+                member.data.set(AWNameDataKeys.NativeName,
+                    identity.NativeName);
+                member.data.set(AWNameDataKeys.ChineseName,
+                    identity.ChineseName);
+                member.data.set(AWNameDataKeys.NamingSchemaVersion,
+                    AWLocalizedNameService.SchemaVersion);
+                member.data.custom_name = true;
+                AWLocalizedNameMigrationService.Enqueue("Kingdom",
+                    member.getID(), member.data);
+                changedIds.Add(member.getID());
+            }
+
+            string projected = ProjectStored(pKingdom, pRefresh: false);
+            if (!string.Equals(projected, canonical,
+                    StringComparison.Ordinal)) return false;
+            for (int i = 0; i < members.Length; i++)
+            {
+                Kingdom member = members[i];
+                if (member?.data == null || member.isRekt() ||
+                    !changedIds.Contains(member.getID())) continue;
+                KingdomRenameProjectionService.Refresh(member);
+            }
+            return true;
+        }
+
         internal static string ProjectStored(Kingdom pKingdom,
             string pObservedNameBefore = null, bool pRefresh = true)
         {

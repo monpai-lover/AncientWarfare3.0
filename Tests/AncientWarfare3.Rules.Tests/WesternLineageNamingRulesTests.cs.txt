@@ -323,14 +323,31 @@ internal static class WesternLineageNamingRulesTests
             AWWesternFamilyNameRules.BuildActor("路易", "德·巴黎",
                 noble: true),
             "a western noble displays given name and family stem");
-        Equal("路易",
+        Equal("路易 德·巴黎",
             AWWesternFamilyNameRules.BuildActor("  路易  ", " 德·巴黎 ",
                 noble: false),
-            "a commoner does not acquire a supplied family stem");
+            "a commoner displays a supplied family stem");
         Equal("路易 德·巴黎",
             AWWesternFamilyNameRules.BuildActor("  路易  ", " 德·巴黎 ",
                 noble: true),
             "actor components normalize surrounding whitespace");
+
+        Equal("Alden de Rive",
+            AWWesternFamilyNameRules.BuildActor("Alden", "de Rive",
+                noble: false),
+            "a western commoner displays a persisted family stem");
+        Equal("Alden de Rive",
+            AWWesternFamilyNameRules.BuildActor("Alden de Rive", "de Rive",
+                noble: false),
+            "a precomposed actor name removes one complete trailing stem before joining");
+        Equal("婷婷 de Rive",
+            AWWesternFamilyNameRules.BuildActor("婷婷", "de Rive",
+                noble: false),
+            "actor normalization never deduplicates individual characters");
+        Equal("Alden",
+            AWWesternFamilyNameRules.BuildActor("  Alden  ", "   ",
+                noble: false),
+            "an empty family stem leaves only the normalized given name");
 
         Equal("冯·维也纳家族",
             AWWesternFamilyNameRules.BuildFamilyTitle(

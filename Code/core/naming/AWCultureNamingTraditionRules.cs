@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.naming
 {
@@ -49,12 +50,23 @@ namespace AncientWarfare3.core.naming
             NamingProfileId pNaturalProfile,
             NamingProfileId pPersistedProfile, bool fullyXiaized)
         {
+            return ResolveEffectiveProfile(pNaturalProfile,
+                pPersistedProfile, integrated: false, fullyXiaized);
+        }
+
+        public static NamingProfileId ResolveEffectiveProfile(
+            NamingProfileId pNaturalProfile,
+            NamingProfileId pPersistedProfile, bool integrated,
+            bool fullyXiaized)
+        {
             if (pNaturalProfile == NamingProfileId.None)
                 return NamingProfileId.None;
             if (pNaturalProfile == NamingProfileId.Xia ||
                 pNaturalProfile == NamingProfileId.Monkey)
                 return pNaturalProfile;
-            if (fullyXiaized || pPersistedProfile == NamingProfileId.Xia)
+            if (IntegratedCultureNamingMigrationRules
+                    .ShouldUseXiaPersonalNaming(integrated, fullyXiaized) ||
+                pPersistedProfile == NamingProfileId.Xia)
                 return NamingProfileId.Xia;
             if (pNaturalProfile == NamingProfileId.OrcNomadic)
                 return NamingProfileId.OrcNomadic;
@@ -67,12 +79,23 @@ namespace AncientWarfare3.core.naming
             NamingProfileId pChildNaturalProfile,
             NamingProfileId pParentProfile, bool fullyXiaized)
         {
+            return ResolveInheritedProfile(pChildNaturalProfile,
+                pParentProfile, integrated: false, fullyXiaized);
+        }
+
+        public static NamingProfileId ResolveInheritedProfile(
+            NamingProfileId pChildNaturalProfile,
+            NamingProfileId pParentProfile, bool integrated,
+            bool fullyXiaized)
+        {
             if (pChildNaturalProfile == NamingProfileId.None)
                 return NamingProfileId.None;
             if (pChildNaturalProfile == NamingProfileId.Xia ||
                 pChildNaturalProfile == NamingProfileId.Monkey)
                 return pChildNaturalProfile;
-            if (fullyXiaized || pParentProfile == NamingProfileId.Xia)
+            if (IntegratedCultureNamingMigrationRules
+                    .ShouldUseXiaPersonalNaming(integrated, fullyXiaized) ||
+                pParentProfile == NamingProfileId.Xia)
                 return NamingProfileId.Xia;
             if (pChildNaturalProfile == NamingProfileId.OrcNomadic)
                 return NamingProfileId.OrcNomadic;

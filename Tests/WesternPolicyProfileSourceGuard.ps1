@@ -69,8 +69,8 @@ Require-Match $serviceText `
     'CivMonkeyPolicyRules\.IsNativePolicySpecies\(' `
     'Monkey policy routing must reuse CivMonkeyPolicyRules.'
 Require-Match $serviceText `
-    'XiaCultureIntegrationService\.IsFullyIntegrated\(\s*pKingdom\.culture\)' `
-    'Full Xia entry must use the independent persisted culture marker.'
+    'KingdomInstitutionalXiaizationRules\.ShouldUseXiaInstitutions\(' `
+    'Institutional Xia entry must use the independent level-five kingdom authority.'
 Require-Match $serviceText 'resolvedActorAsset\.civ' `
     'Civilization eligibility must use only ActorAsset.civ.'
 Require-Match $serviceText `

@@ -1,0 +1,36 @@
+using AncientWarfare3.core.policy;
+
+internal static class XiaizationAuthoritySeparationRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, KingdomInstitutionalXiaizationRules.ShouldUseXiaPersonalNaming(
+            integrated: true, fullyIntegrated: false),
+            "an integrated culture uses Xia personal naming");
+        Equal(true, KingdomInstitutionalXiaizationRules.ShouldUseXiaPersonalNaming(
+            integrated: false, fullyIntegrated: true),
+            "a fully integrated culture uses Xia personal naming");
+        Equal(false, KingdomInstitutionalXiaizationRules.ShouldUseXiaPersonalNaming(
+            integrated: false, fullyIntegrated: false),
+            "a non-integrated culture keeps its native personal naming");
+        Equal(false, KingdomInstitutionalXiaizationRules.ShouldUseXiaInstitutions(4),
+            "institutional Xiaization starts above level four");
+        Equal(true, KingdomInstitutionalXiaizationRules.ShouldUseXiaInstitutions(5),
+            "level five enables Xia institutions");
+        Equal(true, KingdomInstitutionalXiaizationRules.ShouldUseXiaInstitutions(6),
+            "levels above five retain Xia institutions");
+        Equal(false, KingdomInstitutionalXiaizationRules.ShouldUseIntegratedSurname(
+            kingdomIntegrated: false),
+            "culture integration does not enable surname integration");
+        Equal(true, KingdomInstitutionalXiaizationRules.ShouldUseIntegratedSurname(
+            kingdomIntegrated: true),
+            "the kingdom authority enables surname integration");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

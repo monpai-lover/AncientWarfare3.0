@@ -34,6 +34,7 @@ namespace AncientWarfare3.core.naming
                     naturalProfile,
                     AWCultureNamingTraditionRules.ParseProfile(
                         persistedProfileId),
+                    XiaCultureIntegrationService.IsIntegrated(pCulture),
                     XiaCultureIntegrationService.IsFullyIntegrated(pCulture));
             return Persist(pCulture, profile, null);
         }
@@ -53,6 +54,7 @@ namespace AncientWarfare3.core.naming
             NamingProfileId profile =
                 AWCultureNamingTraditionRules.ResolveInheritedProfile(
                     childNaturalProfile, parent.Profile,
+                    XiaCultureIntegrationService.IsIntegrated(pChild),
                     XiaCultureIntegrationService.IsFullyIntegrated(pChild));
             pChild.data.set(LineageKeys.CULTURE_PARENT_ID, pParent.getID());
             WesternNamingTradition? inherited = profile ==
@@ -161,6 +163,7 @@ namespace AncientWarfare3.core.naming
                     naturalProfile,
                     AWCultureNamingTraditionRules.ParseProfile(
                         persistedProfileId),
+                    XiaCultureIntegrationService.IsIntegrated(pCulture),
                     XiaCultureIntegrationService.IsFullyIntegrated(pCulture));
             if (profile == NamingProfileId.None)
                 return Empty;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.content;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -239,11 +240,25 @@ namespace AncientWarfare3.core.lineage
 
         private static void ApplyCommittedProjection(Kingdom pKingdom, string pStateName)
         {
-            bool changed = !string.Equals(pKingdom.data.name, pStateName,
-                StringComparison.Ordinal);
-            if (changed)
-                pKingdom.setName(pStateName, pTrack: false);
-            if (!changed) KingdomRenameProjectionService.Refresh(pKingdom);
+            if (!AWLocalizedKingdomNameService.CommitCanonicalStateName(
+                    pKingdom, pStateName))
+                throw new InvalidOperationException(
+                    "Canonical state-name projection was rejected");
+        }
+
+        internal static bool ReconcileLocalizedIdentityBeforeRestore(
+            Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                pKingdom.king?.data == null) return false;
+            pKingdom.king.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            if (shiId < 0) return false;
+            string committed = ReadBoundName(shiId);
+            if (!StateNameRules.IsValid(committed) ||
+                !string.Equals(pKingdom.name, committed,
+                    StringComparison.Ordinal)) return false;
+            return AWLocalizedKingdomNameService.CommitCanonicalStateName(
+                pKingdom, committed);
         }
 
         private static bool TryReadBranchSeed(long pShiId, out BranchSeed pSeed)

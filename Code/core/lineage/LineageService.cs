@@ -149,10 +149,18 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnActorBorn(Actor pActor)
         {
-            if (!IsNativeXiaCultureActor(pActor)) return;
+            bool cultureIntegrated = UsesXiaPersonalNaming(pActor);
+            if (!IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
+                    nativeXia: IsNativeXiaCultureActor(pActor),
+                    usesLineage: UsesAwLineageSystem(pActor),
+                    foreignPseudoDynasty: XiaizationService
+                        .IsForeignPseudoDynasty(pActor?.kingdom),
+                    cultureIntegrated)) return;
 
             EnsureGivenName(pActor);
             ApplyDisplayName(pActor);
+            if (IsKingdomIntegrated(pActor.kingdom))
+                ApplyNameIntegrationToActor(pActor, kingdomIntegrated: true);
         }
 
         /// <summary>
@@ -163,23 +171,125 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorBornWithParents(Actor pBaby, Actor pParent1,
             Actor pParent2, bool pUseFullPath)
         {
-            if (!pUseFullPath) return;
+            if (!pUseFullPath)
+            {
+                TryInheritLightweightWesternSurname(pBaby, pParent1, pParent2);
+                return;
+            }
 
             ArchiveTraceableActor(pParent1, pAlive: true);
             ArchiveTraceableActor(pParent2, pAlive: true);
-            string originalForeignName = IsXia(pBaby)
+            bool babyUsesXiaNaming = UsesXiaPersonalNaming(pBaby);
+            string originalForeignName = babyUsesXiaNaming
                 ? null
                 : pBaby.data.name ?? pBaby.getName();
-            if (IsXia(pBaby)) EnsureGivenName(pBaby);
+            if (babyUsesXiaNaming) EnsureGivenName(pBaby);
             InheritFromParents(pBaby, pParent1, pParent2);
-            if (!IsXia(pBaby)) EnsureGivenName(pBaby, originalForeignName);
+            if (!babyUsesXiaNaming) EnsureGivenName(pBaby, originalForeignName);
             SlaveService.EnsureSlaveChild(pBaby, pParent1, pParent2);
             PropagateNobleBloodFromParents(pBaby, pParent1, pParent2);
             ApplyDisplayName(pBaby);
+            if (IsKingdomIntegrated(pBaby.kingdom))
+                ApplyNameIntegrationToActor(pBaby, kingdomIntegrated: true);
             LineageBirthArchiveService.TryRecord(pBaby, pParent1, pParent2);
 
             // 编年史:仅入谱贵族(有 lineage_id)记出生事件。
             RecordBirthEvent(pBaby);
+        }
+
+        /// <summary>
+        ///     Lightweight Western births still carry family identity. This
+        ///     deliberately copies surname fields only; it must not admit a
+        ///     commoner into the full noble lineage model.
+        /// </summary>
+        private static bool TryInheritLightweightWesternSurname(Actor pBaby,
+            Actor pParent1, Actor pParent2)
+        {
+            if (pBaby?.data == null || pBaby.hasTrait("figure") ||
+                pBaby.hasTrait("first")) return false;
+
+            NamingProfileId profile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pBaby).Profile;
+            if (profile != NamingProfileId.Western &&
+                profile != NamingProfileId.OrcNomadic) return false;
+
+            pBaby.data.get(LineageKeys.FAMILY_NAME, out string childFamily,
+                string.Empty);
+            pBaby.data.get(LineageKeys.CHINESE_FAMILY_NAME,
+                out string childChineseFamily, string.Empty);
+            pBaby.data.get(AWNameDataKeys.FamilyComponent,
+                out string childFamilyComponent, string.Empty);
+            if (WesternSurnameInheritanceRules.ResolveSurname(childFamily,
+                    childChineseFamily).Length > 0 ||
+                !string.IsNullOrWhiteSpace(childFamilyComponent)) return false;
+
+            string originalForeignName = pBaby.data.name ?? pBaby.getName();
+            string parent1Surname = ResolveWesternParentSurname(pParent1,
+                profile);
+            string parent2Surname = ResolveWesternParentSurname(pParent2,
+                profile);
+            int sourceSlot = WesternSurnameInheritanceRules.SelectSourceSlot(
+                pParent1?.isSexMale() == true, parent1Surname,
+                pParent2?.isSexMale() == true, parent2Surname);
+            if (sourceSlot < 0) return false;
+
+            string surname = sourceSlot == 1 ? parent1Surname : parent2Surname;
+            if (string.IsNullOrWhiteSpace(surname)) return false;
+            pBaby.data.set(LineageKeys.FAMILY_NAME, surname);
+            pBaby.data.set(LineageKeys.CHINESE_FAMILY_NAME, surname);
+            pBaby.data.set(AWNameDataKeys.FamilyComponent, surname);
+            EnsureGivenName(pBaby, originalForeignName);
+            ApplyLightweightWesternSurnameDisplay(pBaby, profile, surname);
+
+            // The lightweight parent-edge write may already have created the
+            // row. Trace-only upsert handles both that case and a missing row.
+            ArchiveTraceableActor(pBaby, pAlive: true);
+            return true;
+        }
+
+        private static string ResolveWesternParentSurname(Actor pParent,
+            NamingProfileId pChildProfile)
+        {
+            if (pParent?.data == null) return string.Empty;
+            NamingProfileId parentProfile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pParent).Profile;
+            if (parentProfile != pChildProfile) return string.Empty;
+            pParent.data.get(LineageKeys.FAMILY_NAME, out string family,
+                string.Empty);
+            pParent.data.get(LineageKeys.CHINESE_FAMILY_NAME,
+                out string chineseFamily, string.Empty);
+            string surname = WesternSurnameInheritanceRules.ResolveSurname(
+                family, chineseFamily);
+            if (surname.Length > 0) return surname;
+            pParent.data.get(AWNameDataKeys.FamilyComponent,
+                out string familyComponent, string.Empty);
+            return (familyComponent ?? string.Empty).Trim();
+        }
+
+        private static void ApplyLightweightWesternSurnameDisplay(
+            Actor pActor, NamingProfileId pProfile, string pSurname)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.get(LineageKeys.GIVEN_NAME, out string given,
+                string.Empty);
+            if (string.IsNullOrWhiteSpace(given))
+                given = pActor.data.name ?? pActor.getName();
+
+            FamilyBranchIdentityProjection identity =
+                new FamilyBranchIdentityProjection(pProfile, string.Empty,
+                    string.Empty, -1L, string.Empty, pSurname);
+            string display = WesternFamilyIdentityRules.BuildActor(identity,
+                given, noble: false);
+            if (string.IsNullOrWhiteSpace(display)) return;
+            pActor.data.set("display_name", display);
+            pActor.data.get(AWNameDataKeys.ChineseName,
+                out string currentChineseName, string.Empty);
+            if (!string.Equals(currentChineseName, display,
+                    StringComparison.Ordinal))
+                AWLocalizedNameService.CommitChineseName(pActor.data, display,
+                    "Unit", pActor.data.id);
+            else
+                AWLocalizedNameService.ProjectStored(pActor.data);
         }
 
         public static void OnMixedAncestryBorn(Actor pBaby, Actor pParent1,
@@ -302,7 +412,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             if (!string.IsNullOrEmpty(given)) return;
 
-            if (!IsXia(pActor))
+            if (!UsesXiaPersonalNaming(pActor))
             {
                 pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
                 pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out string chineseFamily, "");
@@ -331,9 +441,16 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
+        private static bool UsesXiaPersonalNaming(Actor pActor)
+        {
+            if (IsXia(pActor)) return true;
+            return AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pActor).Profile == NamingProfileId.Xia;
+        }
+
         private static void NormalizeXiaGivenNameForClan(Actor pActor)
         {
-            if (!IsXia(pActor) || pActor?.data == null) return;
+            if (!UsesXiaPersonalNaming(pActor) || pActor?.data == null) return;
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             string normalized = XiaGivenNameRules.NormalizeGenerated(given, HasXiaClanIdentity(pActor));
             if (!string.IsNullOrEmpty(normalized) && normalized != given)
@@ -666,6 +783,8 @@ namespace AncientWarfare3.core.lineage
             if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
 
             ApplyDisplayName(pActor);
+            if (IsKingdomIntegrated(pActor.kingdom))
+                ApplyNameIntegrationToActor(pActor, kingdomIntegrated: true);
             FamilyTreeProjectionPendingStore.IncludePrerequisite(
                 pActor.data.id,
                 FamilyTreeProjectionChange.FamilyStructure);
@@ -1564,7 +1683,7 @@ namespace AncientWarfare3.core.lineage
             bool changed = childLineage != parentLineage || oldShi != parentShi ||
                            oldClan != clan || visibleClanChanged;
 
-            string originalForeignName = IsXia(pChild)
+            string originalForeignName = UsesXiaPersonalNaming(pChild)
                 ? null
                 : pChild.data.name ?? pChild.getName();
             pChild.data.set(LineageKeys.LINEAGE_ID, parentLineage);
@@ -2040,8 +2159,13 @@ namespace AncientWarfare3.core.lineage
                 }
                 return;
             }
-            if (!IsXia(pActor) && !UsesAwLineageSystem(pActor) &&
-                !XiaizationService.IsForeignPseudoDynasty(pActor?.kingdom)) return;
+            bool cultureIntegrated = UsesXiaPersonalNaming(pActor);
+            if (!IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
+                    nativeXia: IsXia(pActor),
+                    usesLineage: UsesAwLineageSystem(pActor),
+                    foreignPseudoDynasty: XiaizationService
+                        .IsForeignPseudoDynasty(pActor?.kingdom),
+                    cultureIntegrated)) return;
 
             NamingProfileId namingProfile = AWCultureNamingTraditionService
                 .ResolveForActorReadOnly(pActor).Profile;
@@ -2192,24 +2316,64 @@ namespace AncientWarfare3.core.lineage
 
             pKingdom.data.set(LineageKeys.KINGDOM_INTEGRATED, true);
             UpsertKingdomState(pKingdom, pIntegrated: true);
+            NameIntegrationMaterializationService.Request(pKingdom);
+        }
 
-            foreach (var actor in new List<Actor>(pKingdom.getUnits()))
+        internal static bool ApplyNameIntegrationToActor(Actor pActor,
+            bool kingdomIntegrated)
+        {
+            if (pActor?.data == null || pActor.isRekt()) return false;
+
+            NamingProfileId profile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pActor).Profile;
+            if (profile == NamingProfileId.None && IsXia(pActor))
+                profile = NamingProfileId.Xia;
+            pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            bool actorIntegrated = profile == NamingProfileId.Xia;
+            NameIntegrationAction action =
+                NameIntegrationMaterializationRules.Decide(
+                    kingdomIntegrated, profile, shiId,
+                    HasProtectedAuthoredName(pActor), actorIntegrated);
+            if (action == NameIntegrationAction.Skip) return false;
+
+            if (action == NameIntegrationAction.RecordProfileOnly)
             {
-                bool pseudoActor = XiaizationService.UsesXiaizedInstitutionSystem(pKingdom) &&
-                                   UsesAwLineageSystem(actor);
-                if (!IsXia(actor) && !pseudoActor) continue;
-
-                actor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
-                if (string.IsNullOrEmpty(clan))
-                {
-                    clan = LineageNamePool.RandomShi();
-                    actor.data.set(LineageKeys.CLAN_NAME, clan);
-                }
-
-                actor.data.set(LineageKeys.NAME_INTEGRATED, true);
-                ApplyDisplayName(actor);
-                ArchiveActor(actor, pAlive: true);
+                // Protected identities receive the integration marker for
+                // future readiness checks, but their authored display/name
+                // slots remain untouched.
+                pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
+                ArchiveActor(pActor, pAlive: true);
+                return true;
             }
+
+            pActor.data.get(LineageKeys.CLAN_NAME, out string clan,
+                string.Empty);
+            if (string.IsNullOrWhiteSpace(clan) && shiId >= 0L)
+            {
+                clan = LineageQuery.GetShiBranchInfo(shiId)?.clan_name ??
+                       string.Empty;
+            }
+            if (string.IsNullOrWhiteSpace(clan) &&
+                action == NameIntegrationAction.MaterializePersonalClan)
+            {
+                long cultureId = pActor.culture?.getID() ?? -1L;
+                clan = NameIntegrationMaterializationRules.ResolvePersonalClan(
+                    pActor.data.id, cultureId);
+            }
+            if (string.IsNullOrWhiteSpace(clan)) return false;
+
+            pActor.data.set(LineageKeys.CLAN_NAME, clan.Trim());
+            pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
+            ApplyDisplayName(pActor);
+            ArchiveActor(pActor, pAlive: true);
+            return true;
+        }
+
+        internal static bool HasProtectedAuthoredName(Actor pActor)
+        {
+            if (pActor?.data == null) return true;
+            return pActor.data.custom_name || IsHistoricalFigure(pActor) ||
+                   HistoricalSchoolDescentService.IsCanonicalMaster(pActor);
         }
 
         // ──────────────────────────── 同姓不婚 ────────────────────────────

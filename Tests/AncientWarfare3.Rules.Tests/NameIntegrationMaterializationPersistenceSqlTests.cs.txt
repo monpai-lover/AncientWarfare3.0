@@ -1,0 +1,72 @@
+using System;
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class NameIntegrationMaterializationPersistenceSqlTests
+{
+    public static void Run()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        NameIntegrationMaterializationStatePersistence.Request(
+            db, kingdomId: 7L, now: 10d);
+
+        NameIntegrationMaterializationState state =
+            NameIntegrationMaterializationStatePersistence.Load(db, 7L);
+        Equal("pending", state.Phase,
+            "a kingdom request starts in the pending phase");
+        Equal(-1L, state.CursorActorId,
+            "a new integration starts before the first actor id");
+
+        NameIntegrationMaterializationStatePersistence.AdvanceCursor(
+            db, 7L, actorId: 20L, now: 11d);
+        NameIntegrationMaterializationStatePersistence.AdvanceCursor(
+            db, 7L, actorId: 19L, now: 12d);
+        state = NameIntegrationMaterializationStatePersistence.Load(db, 7L);
+        Equal(20L, state.CursorActorId,
+            "a retry cannot move the actor cursor backwards");
+
+        NameIntegrationMaterializationStatePersistence.RecordFailure(
+            db, 7L, "temporary_failure", now: 13d);
+        state = NameIntegrationMaterializationStatePersistence.Load(db, 7L);
+        Equal("pending", state.Phase,
+            "a failed integration remains resumable");
+        Equal(1, state.FailureCount,
+            "a failed integration increments its retry count");
+
+        NameIntegrationMaterializationStatePersistence.MarkComplete(
+            db, 7L, now: 14d);
+        state = NameIntegrationMaterializationStatePersistence.Load(db, 7L);
+        Equal("complete", state.Phase,
+            "a drained integration becomes complete");
+
+        NameIntegrationMaterializationStatePersistence.Request(
+            db, kingdomId: 7L, now: 15d);
+        state = NameIntegrationMaterializationStatePersistence.Load(db, 7L);
+        Equal("pending", state.Phase,
+            "a repeated policy request reopens the integration");
+        Equal(20L, state.CursorActorId,
+            "a repeated request resumes after the committed cursor");
+        Equal(0, state.FailureCount,
+            "a repeated request clears stale failures");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection("Data Source=:memory:");
+        db.Open();
+        using var command = new SQLiteCommand(
+            "CREATE TABLE KingdomNameIntegrationMigrationState (" +
+            "KINGDOM_ID INTEGER PRIMARY KEY,VERSION INTEGER,PHASE TEXT," +
+            "CURSOR_ACTOR_ID INTEGER,FAILURE_COUNT INTEGER," +
+            "LAST_ERROR TEXT,REQUESTED_TIME REAL,UPDATED_TIME REAL)", db);
+        command.ExecuteNonQuery();
+        return db;
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

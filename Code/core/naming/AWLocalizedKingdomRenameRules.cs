@@ -27,6 +27,17 @@ namespace AncientWarfare3.core.naming
                 : new AWLocalizedNameEditDecision(edited, chinese);
         }
 
+        internal static AWLocalizedNameEditDecision ResolveCanonicalStateName(
+            string pStateName, string pNativeName, string pChineseName)
+        {
+            string canonical = (pStateName ?? string.Empty).Trim();
+            if (canonical.Length == 0)
+                return new AWLocalizedNameEditDecision(
+                    (pNativeName ?? string.Empty).Trim(),
+                    (pChineseName ?? string.Empty).Trim());
+            return new AWLocalizedNameEditDecision(canonical, canonical);
+        }
+
         internal static string ResolveSharedProjection(string pLanguage,
             string pAuthorityNativeName, string pAuthorityChineseName,
             string pLegacyFallback)

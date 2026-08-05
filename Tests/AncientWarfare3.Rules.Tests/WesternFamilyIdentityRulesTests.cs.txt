@@ -13,10 +13,10 @@ internal static class WesternFamilyIdentityRulesTests
             "a western branch persists its naming profile");
         Equal("de", western.PersistedWesternNamingTradition,
             "a western branch persists its selected tradition");
-        Equal("路易",
+        Equal("路易 德·巴黎",
             WesternFamilyIdentityRules.BuildActor(western, "路易",
                 noble: false),
-            "a western commoner displays only the given name");
+            "a western commoner displays given name and family stem");
         Equal("路易 德·巴黎",
             WesternFamilyIdentityRules.BuildActor(western, "路易",
                 noble: true),
@@ -25,6 +25,39 @@ internal static class WesternFamilyIdentityRulesTests
             WesternFamilyIdentityRules.BuildActor(western, "路易",
                 noble: true).Contains("家族"),
             "a western actor name never contains the family-title suffix");
+
+        FamilyBranchIdentityProjection persistedWestern =
+            WesternFamilyIdentityRules.ProjectBranch(
+                NamingProfileId.Western, "de", parentShiId: 7L,
+                originCityChineseName: "Changed",
+                rawDisplayStem: "  de   Saved  ");
+        Equal("de Saved", persistedWestern.DisplayStem,
+            "a normalized persisted western stem overrides the current origin city");
+        Equal("Alden de Saved",
+            WesternFamilyIdentityRules.BuildActor(persistedWestern, "Alden",
+                noble: false),
+            "a live commoner keeps the projected western family stem");
+        Equal("Alden de Saved",
+            WesternFamilyIdentityRules.BuildActor(persistedWestern, "Alden",
+                noble: true),
+            "a live noble keeps the projected western family stem");
+
+        FamilyBranchIdentityProjection restoredWestern =
+            WesternFamilyIdentityRules.ProjectBranch(
+                NamingProfileId.Western, "de", parentShiId: 7L,
+                originCityChineseName: "Saved", rawDisplayStem: "   ");
+        Equal(AWWesternFamilyNameRules.BuildFamilyStem(
+                WesternNamingTradition.De, "Saved"),
+            restoredWestern.DisplayStem,
+            "an archive without a persisted stem recovers it from tradition and city");
+        Equal("Alden " + restoredWestern.DisplayStem,
+            WesternFamilyIdentityRules.BuildActor(restoredWestern, "Alden",
+                noble: false),
+            "an archive commoner keeps the recovered western family stem");
+        Equal("Alden " + restoredWestern.DisplayStem,
+            WesternFamilyIdentityRules.BuildActor(restoredWestern, "Alden",
+                noble: true),
+            "an archive noble keeps the recovered western family stem");
 
         Equal("冯·维也纳家族",
             WesternFamilyIdentityRules.BuildHeading(

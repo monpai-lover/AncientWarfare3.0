@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.lineage
         internal string OldNamingProfile = string.Empty;
         internal string FamilyName = string.Empty;
         internal string ClanName = string.Empty;
+        internal string DisplayStem = string.Empty;
         internal long OriginKingdomId = -1L;
         internal long OriginCityId = -1L;
         internal string OriginCityChineseName = string.Empty;
@@ -172,7 +173,10 @@ namespace AncientWarfare3.core.lineage
             command.Parameters.AddWithValue("@parent", pRequest.OldShiId);
             command.Parameters.AddWithValue("@origin",
                 pRequest.OriginCityChineseName ?? string.Empty);
-            command.Parameters.AddWithValue("@stem", pRequest.ClanName);
+            command.Parameters.AddWithValue("@stem",
+                string.IsNullOrWhiteSpace(pRequest.DisplayStem)
+                    ? pRequest.ClanName
+                    : pRequest.DisplayStem.Trim());
             command.Parameters.AddWithValue("@founder",
                 pRequest.FounderActorId);
             command.Parameters.AddWithValue("@source", TransitionSource);

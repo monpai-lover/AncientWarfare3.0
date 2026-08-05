@@ -48,10 +48,10 @@ namespace AncientWarfare3.core.lineage
                 persistedTradition =
                     AWCultureNamingTraditionRules.SerializeTradition(
                         tradition);
-                displayStem = AWWesternFamilyNameRules.BuildFamilyStem(
-                    tradition, origin);
+                displayStem = NormalizeWhitespace(rawDisplayStem);
                 if (string.IsNullOrWhiteSpace(displayStem))
-                    displayStem = NormalizeWhitespace(rawDisplayStem);
+                    displayStem = AWWesternFamilyNameRules.BuildFamilyStem(
+                        tradition, origin);
             }
             else if (pProfile == NamingProfileId.OrcNomadic)
             {

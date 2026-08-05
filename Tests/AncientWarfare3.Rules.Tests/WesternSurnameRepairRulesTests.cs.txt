@@ -1,0 +1,42 @@
+using System;
+using System.IO;
+
+public static class WesternSurnameRepairRulesTests
+{
+    public static void Run()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageService.cs"));
+        int lightweightStart = source.IndexOf("if (!pUseFullPath)",
+            StringComparison.Ordinal);
+        int fullPathStart = source.IndexOf(
+            "ArchiveTraceableActor(pParent1", lightweightStart,
+            StringComparison.Ordinal);
+        if (lightweightStart < 0 || fullPathStart <= lightweightStart)
+            throw new InvalidOperationException(
+                "lightweight birth boundary is missing");
+
+        string lightweightBlock = source.Substring(lightweightStart,
+            fullPathStart - lightweightStart);
+        True(lightweightBlock.Contains(
+                "TryInheritLightweightWesternSurname(pBaby, pParent1, pParent2)"),
+            "lightweight births invoke surname inheritance");
+        True(lightweightBlock.Contains("return;"),
+            "lightweight births stop before the full noble path");
+        Equal(false, lightweightBlock.Contains("InheritFromParents"),
+            "lightweight births do not promote commoners into full lineage");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

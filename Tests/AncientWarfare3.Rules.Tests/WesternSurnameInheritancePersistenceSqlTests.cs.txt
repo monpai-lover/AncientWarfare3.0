@@ -1,0 +1,6 @@
+public static class WesternSurnameInheritancePersistenceSqlTests
+{
+    public static void Run()
+    {
+    }
+}

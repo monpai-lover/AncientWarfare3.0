@@ -7,6 +7,7 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
     {
         CreatesChildAndMovesOnlyLivingMembers();
         ReplayReusesTheSameChild();
+        DistinctSourceBranchesRemainDistinct();
         FailureRollsBackEveryWrite();
     }
 
@@ -23,7 +24,7 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
         Equal("western|德·巴黎", ScalarText(db,
             "SELECT NAMING_PROFILE||'|'||DISPLAY_STEM FROM ShiBranch " +
             "WHERE SHI_ID=10"), "the historical western branch is unchanged");
-        Equal("10|xia||洛", ScalarText(db,
+        Equal("10|xia||de Paris", ScalarText(db,
             "SELECT PARENT_SHI_ID||'|'||NAMING_PROFILE||'|'||" +
             "WESTERN_NAMING_TRADITION||'|'||DISPLAY_STEM FROM ShiBranch " +
             "WHERE SHI_ID=11"), "the new Xia branch points to its parent");
@@ -68,6 +69,32 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
             "failed transition leaves the living actor on the old branch");
     }
 
+    private static void DistinctSourceBranchesRemainDistinct()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        SeedWesternBranch(db);
+        Execute(db, "INSERT INTO ShiBranch VALUES " +
+            "(20,5,'德·巴黎',-1,'western','de','原城','德·巴黎'," +
+            "201,'western_admission',9,10,-1,1,0)");
+        Execute(db, "INSERT INTO ActorArchive VALUES " +
+            "(201,20,5,'德·巴黎','德·巴黎','Alex','Alex 德·巴黎',0,1)");
+
+        XiaizedFamilyBranchTransitionPersistence.TryCommit(db, Request());
+        XiaizedFamilyBranchTransitionRequest second = Request();
+        second.FounderActorId = 201L;
+        second.OldShiId = 20L;
+        second.DisplayStem = "德·巴黎";
+        XiaizedFamilyBranchTransitionResult result =
+            XiaizedFamilyBranchTransitionPersistence.TryCommit(db, second);
+
+        Equal(true, result.Success,
+            "a second source branch with the same visible stem also migrates");
+        Equal(true, result.NewShiId != 11L,
+            "same visible surname does not reuse the first source branch");
+        Equal(4L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "each source branch owns its own Xia child");
+    }
+
     private static XiaizedFamilyBranchTransitionRequest Request()
     {
         return new XiaizedFamilyBranchTransitionRequest
@@ -78,6 +105,7 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
             OldNamingProfile = "western",
             FamilyName = "姬",
             ClanName = "洛",
+            DisplayStem = "de Paris",
             OriginKingdomId = 7L,
             OriginCityId = 8L,
             OriginCityChineseName = "洛阳",

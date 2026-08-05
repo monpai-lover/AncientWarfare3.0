@@ -17,6 +17,93 @@ namespace AncientWarfare3.core.lineage
 
     internal static class XiaizedFamilyBranchTransitionService
     {
+        internal static bool TryPrepareForActor(Actor pActor,
+            out XiaizedFamilyBranchTransitionPrepared pPrepared)
+        {
+            pPrepared = new XiaizedFamilyBranchTransitionPrepared();
+            if (pActor?.data == null || pActor.asset == null ||
+                pActor.isRekt()) return false;
+
+            Kingdom kingdom = pActor.kingdom;
+            bool monkey = CivMonkeyPolicyRules.IsNativePolicySpecies(
+                kingdom?.data?.original_actor_asset, kingdom?.asset?.id,
+                pActor.asset.id);
+            bool biologicalXia = LineageService.IsXia(pActor);
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
+            pActor.data.get(LineageKeys.SHI_ID, out long oldShiId, -1L);
+            if (lineageId < 0L || oldShiId < 0L) return true;
+
+            ShiBranchInfo oldBranch = LineageQuery.GetShiBranchInfo(oldShiId);
+            NamingProfileId oldProfile =
+                AWCultureNamingTraditionRules.ParseProfile(
+                    oldBranch?.naming_profile);
+            if (!XiaizedFamilyBranchTransitionRules.CanTransition(oldProfile,
+                    monkey, biologicalXia, oldBranch != null))
+                return true;
+
+            pActor.data.get(AWNameDataKeys.FamilyComponent,
+                out string localizedFamily, string.Empty);
+            pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME,
+                out string chineseFamily, string.Empty);
+            pActor.data.get(LineageKeys.FAMILY_NAME,
+                out string familyName, string.Empty);
+            string rawWesternStem = !string.IsNullOrWhiteSpace(
+                    oldBranch.display_stem)
+                ? oldBranch.display_stem
+                : (!string.IsNullOrWhiteSpace(localizedFamily)
+                    ? localizedFamily
+                    : (!string.IsNullOrWhiteSpace(familyName)
+                        ? familyName
+                        : chineseFamily));
+            string family = WesternStemConversionRules.ResolveSurname(
+                oldShiId, rawWesternStem);
+            string shi = WesternStemConversionRules.ResolveShi(oldShiId,
+                rawWesternStem, family);
+            string cityName = ResolveCityChineseName(kingdom, pActor);
+            string clan = XiaizedFamilyBranchTransitionRules.ResolveClan(
+                cityName, family, shi);
+            if (family.Length == 0 || clan.Length == 0) return false;
+
+            var request = new XiaizedFamilyBranchTransitionRequest
+            {
+                FounderActorId = pActor.data.id,
+                LineageId = lineageId,
+                OldShiId = oldShiId,
+                OldNamingProfile =
+                    AWCultureNamingTraditionRules.SerializeProfile(oldProfile),
+                FamilyName = family,
+                ClanName = clan,
+                DisplayStem = rawWesternStem,
+                OriginKingdomId = kingdom?.id ?? -1L,
+                OriginCityId = pActor.city?.data?.id ??
+                               kingdom?.capital?.data?.id ?? -1L,
+                OriginCityChineseName = cityName,
+                CreatedTime = World.world?.getCurWorldTime() ?? 0d
+            };
+            XiaizedFamilyBranchTransitionResult result =
+                XiaizedFamilyBranchTransitionPersistence.TryCommit(
+                    LineageArchiveManager.Instance?.OperatingDB, request);
+            if (!result.Success)
+            {
+                ModClass.LogWarning(
+                    "Integrated culture family branch transition failed: " +
+                    result.Failure);
+                return false;
+            }
+
+            var actorIds = new List<long>(result.MovedActorIds);
+            if (!actorIds.Contains(pActor.data.id))
+                actorIds.Add(pActor.data.id);
+            pPrepared = new XiaizedFamilyBranchTransitionPrepared
+            {
+                NewShiId = result.NewShiId,
+                FamilyName = family,
+                ClanName = clan,
+                ActorIds = actorIds
+            };
+            return true;
+        }
+
         internal static bool TryPrepare(Kingdom pKingdom,
             out XiaizedFamilyBranchTransitionPrepared pPrepared)
         {
@@ -65,9 +152,16 @@ namespace AncientWarfare3.core.lineage
                 out string chineseFamily, string.Empty);
             king.data.get(AWNameDataKeys.FamilyComponent,
                 out string localizedFamily, string.Empty);
-            string family = XiaizedFamilyBranchTransitionRules.ResolveFamily(
-                chineseFamily, localizedFamily,
-                LineageNamePool.RandomSurname());
+            string rawWesternStem = !string.IsNullOrWhiteSpace(
+                    oldBranch?.display_stem)
+                ? oldBranch.display_stem
+                : (!string.IsNullOrWhiteSpace(localizedFamily)
+                    ? localizedFamily
+                    : chineseFamily);
+            string family = rawWesternStem.Length > 0
+                ? WesternStemConversionRules.ResolveSurname(oldShiId,
+                    rawWesternStem)
+                : LineageNamePool.RandomSurname();
             string cityName = ResolveCityChineseName(pKingdom, king);
             string clan = XiaizedFamilyBranchTransitionRules.ResolveClan(
                 cityName, family, RandomShiDifferentFrom(family));
@@ -82,6 +176,7 @@ namespace AncientWarfare3.core.lineage
                     AWCultureNamingTraditionRules.SerializeProfile(oldProfile),
                 FamilyName = family,
                 ClanName = clan,
+                DisplayStem = rawWesternStem,
                 OriginKingdomId = pKingdom.id,
                 OriginCityId = pKingdom.capital?.data?.id ??
                                king.city?.data?.id ?? -1L,
@@ -126,9 +221,12 @@ namespace AncientWarfare3.core.lineage
                 actor.data.set(LineageKeys.WESTERN_NAMING_TRADITION,
                     string.Empty);
                 actor.data.set(LineageKeys.NAME_INTEGRATED, true);
-                LineageService.ApplyDisplayName(actor);
-                AWLocalizedNameService.CommitChineseName(actor.data,
-                    actor.data.name, "Unit", actor.data.id);
+                if (!LineageService.HasProtectedAuthoredName(actor))
+                {
+                    LineageService.ApplyDisplayName(actor);
+                    AWLocalizedNameService.CommitChineseName(actor.data,
+                        actor.data.name, "Unit", actor.data.id);
+                }
                 LineageService.ArchiveActor(actor, pAlive: true);
                 FamilyTreeProjectionPendingStore.IncludePrerequisite(
                     actor.data.id,

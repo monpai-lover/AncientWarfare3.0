@@ -32,12 +32,13 @@ namespace AncientWarfare3.core.policy
         public const string WesternGeneralPersistedId = "western_general";
 
         public static KingdomPolicyProfileId Resolve(bool valid,
-            bool civilized, bool nativeXia, bool monkey, bool enteredXia)
+            bool civilized, bool nativeXia, bool monkey,
+            bool institutionallyXiaized)
         {
             if (!valid || !civilized)
                 return KingdomPolicyProfileId.None;
 
-            if (nativeXia || monkey || enteredXia)
+            if (nativeXia || monkey || institutionallyXiaized)
                 return KingdomPolicyProfileId.Xia;
 
             return KingdomPolicyProfileId.WesternGeneral;

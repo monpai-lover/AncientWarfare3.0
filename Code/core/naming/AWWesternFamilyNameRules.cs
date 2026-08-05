@@ -17,8 +17,9 @@ namespace AncientWarfare3.core.naming
         {
             string normalizedGiven = NormalizeWhitespace(given);
             string family = NormalizeWhitespace(familyStem);
-            if (!noble || family.Length == 0)
+            if (family.Length == 0)
                 return normalizedGiven;
+            normalizedGiven = NormalizeGivenForFamily(normalizedGiven, family);
             if (normalizedGiven.Length == 0)
                 return family;
             return normalizedGiven + " " + family;
@@ -87,6 +88,19 @@ namespace AncientWarfare3.core.naming
             }
 
             return builder.ToString();
+        }
+
+        private static string NormalizeGivenForFamily(string pGiven,
+            string pFamily)
+        {
+            if (pGiven == pFamily)
+                return string.Empty;
+
+            string suffix = " " + pFamily;
+            return pGiven.EndsWith(suffix,
+                    System.StringComparison.Ordinal)
+                ? pGiven.Substring(0, pGiven.Length - suffix.Length)
+                : pGiven;
         }
     }
 }

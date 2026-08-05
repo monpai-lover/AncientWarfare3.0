@@ -77,11 +77,21 @@
     <Compile Include="ArmyMembershipOwnershipRulesTests.cs.txt" />
     <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
     <Compile Include="IntegratedNamingRulesTests.cs.txt" />
+    <Compile Include="NameIntegrationMaterializationRulesTests.cs.txt" />
+    <Compile Include="IntegratedCultureNamingMigrationPersistenceSqlTests.cs.txt" />
+    <Compile Include="NameIntegrationMaterializationPersistenceSqlTests.cs.txt" />
+    <Compile Include="KingdomInstitutionalXiaizationPersistenceSqlTests.cs.txt" />
+    <Compile Include="XiaizationAuthoritySeparationRulesTests.cs.txt" />
     <Compile Include="ActorLocalizedNameBoundaryRulesTests.cs.txt" />
     <Compile Include="LocalizedNameMigrationRulesTests.cs.txt" />
     <Compile Include="KingdomRenamePersistenceRulesTests.cs.txt" />
     <Compile Include="LocalizedNameProfileReadinessRulesTests.cs.txt" />
     <Compile Include="WesternLineageNamingRulesTests.cs.txt" />
+    <Compile Include="WesternSurnameInheritanceRulesTests.cs.txt" />
+    <Compile Include="WesternSurnameInheritancePersistenceSqlTests.cs.txt" />
+    <Compile Include="WesternSurnameRepairRulesTests.cs.txt" />
+    <Compile Include="SkeletonSpawnRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\SkeletonSpawnRules.cs" Link="Production\SkeletonSpawnRules.cs" />
     <Compile Include="WesternFamilyIdentityRulesTests.cs.txt" />
     <Compile Include="WesternLineageEligibilityRulesTests.cs.txt" />
     <Compile Include="WesternBilateralFamilyTreeRulesTests.cs.txt" />
@@ -91,6 +101,7 @@
     <Compile Include="WesternGoalRegressionRulesTests.cs.txt" />
     <Compile Include="WesternLineageAdmissionPersistenceSqlTests.cs.txt" />
     <Compile Include="XiaizedFamilyBranchTransitionRulesTests.cs.txt" />
+    <Compile Include="WesternStemConversionRulesTests.cs.txt" />
     <Compile Include="XiaizedFamilyBranchTransitionPersistenceSqlTests.cs.txt" />
     <Compile Include="WesternPolicyProfileRulesTests.cs.txt" />
     <Compile Include="WesternPolicyProfileMigrationRulesTests.cs.txt" />
@@ -470,15 +481,26 @@
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameProjectionChangeRules.cs" Link="Production\AWLocalizedNameProjectionChangeRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWNamingProfileRules.cs" Link="Production\AWNamingProfileRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageEligibilityRules.cs" Link="Production\WesternLineageEligibilityRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WesternSurnameInheritanceRules.cs" Link="Production\WesternSurnameInheritanceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionRules.cs" Link="Production\WesternLineageAdmissionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionPersistence.cs" Link="Production\WesternLineageAdmissionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionRules.cs" Link="Production\XiaizedFamilyBranchTransitionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\IntegratedCultureNamingMigrationRules.cs" Link="Production\IntegratedCultureNamingMigrationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\NameIntegrationMaterializationRules.cs" Link="Production\NameIntegrationMaterializationRules.cs" />
+    <Compile Include="..\..\Code\core\db\CultureNamingMigrationStateTableItem.cs" Link="Production\CultureNamingMigrationStateTableItem.cs" />
+    <Compile Include="..\..\Code\core\db\KingdomNameIntegrationMigrationStateTableItem.cs" Link="Production\KingdomNameIntegrationMigrationStateTableItem.cs" />
+    <Compile Include="..\..\Code\core\db\KingdomInstitutionalXiaizationStateTableItem.cs" Link="Production\KingdomInstitutionalXiaizationStateTableItem.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomInstitutionalXiaizationPersistence.cs" Link="Production\KingdomInstitutionalXiaizationPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\IntegratedCultureNamingMigrationPersistence.cs" Link="Production\IntegratedCultureNamingMigrationPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\NameIntegrationMaterializationPersistence.cs" Link="Production\NameIntegrationMaterializationPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\WesternStemConversionRules.cs" Link="Production\WesternStemConversionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionPersistence.cs" Link="Production\XiaizedFamilyBranchTransitionPersistence.cs" />
     <Compile Include="..\..\Code\core\naming\AWCultureNamingTraditionRules.cs" Link="Production\AWCultureNamingTraditionRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWWesternFamilyNameRules.cs" Link="Production\AWWesternFamilyNameRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWOrcNomadicNamingRules.cs" Link="Production\AWOrcNomadicNamingRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternFamilyIdentityRules.cs" Link="Production\WesternFamilyIdentityRules.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomPolicyProfileRules.cs" Link="Production\KingdomPolicyProfileRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomInstitutionalXiaizationRules.cs" Link="Production\KingdomInstitutionalXiaizationRules.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomPolicyProfileMigrationRules.cs" Link="Production\KingdomPolicyProfileMigrationRules.cs" />
     <Compile Include="..\..\Code\core\policy\WesternRoyalAuthorityRules.cs" Link="Production\WesternRoyalAuthorityRules.cs" />
     <Compile Include="..\..\Code\core\policy\CivMonkeyPolicyRules.cs" Link="Production\CivMonkeyPolicyRules.cs" />

@@ -1,0 +1,53 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
+
+internal static class NameIntegrationMaterializationRulesTests
+{
+    public static void Run()
+    {
+        Equal(NameIntegrationAction.Skip,
+            NameIntegrationMaterializationRules.Decide(
+                kingdomIntegrated: false, profile: NamingProfileId.Xia,
+                shiId: 7L, protectedName: false, actorIntegrated: true),
+            "culture or actor integration cannot satisfy the kingdom surname gate");
+        Equal(NameIntegrationAction.MaterializeBranchClan,
+            NameIntegrationMaterializationRules.Decide(
+                kingdomIntegrated: true, profile: NamingProfileId.Xia,
+                shiId: 7L, protectedName: false, actorIntegrated: true),
+            "an integrated Xia actor with a Shi uses one branch clan");
+        Equal(NameIntegrationAction.MaterializePersonalClan,
+            NameIntegrationMaterializationRules.Decide(
+                kingdomIntegrated: true, profile: NamingProfileId.Xia,
+                shiId: -1L, protectedName: false, actorIntegrated: true),
+            "an integrated Xia actor without a Shi gets a stable personal clan");
+        Equal(NameIntegrationAction.RecordProfileOnly,
+            NameIntegrationMaterializationRules.Decide(
+                kingdomIntegrated: true, profile: NamingProfileId.Xia,
+                shiId: 7L, protectedName: true, actorIntegrated: true),
+            "protected names record integration without replacing display text");
+        Equal(NameIntegrationAction.Skip,
+            NameIntegrationMaterializationRules.Decide(
+                kingdomIntegrated: true, profile: NamingProfileId.Western,
+                shiId: 7L, protectedName: false, actorIntegrated: true),
+            "a non-Xia profile is not materialized by surname integration");
+        Equal(NameIntegrationAction.Skip,
+            NameIntegrationMaterializationRules.Decide(
+                kingdomIntegrated: true, profile: NamingProfileId.Xia,
+                shiId: 7L, protectedName: false, actorIntegrated: false),
+            "culture integration alone does not satisfy actor migration admission");
+        string personalClan =
+            NameIntegrationMaterializationRules.ResolvePersonalClan(42L, 9L);
+        Equal(personalClan,
+            NameIntegrationMaterializationRules.ResolvePersonalClan(42L, 9L),
+            "personal clan materialization is deterministic across retries");
+        Equal(true, personalClan.Length > 0,
+            "personal clan materialization never invents an empty clan");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}
