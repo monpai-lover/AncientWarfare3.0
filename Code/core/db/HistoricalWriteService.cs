@@ -119,16 +119,15 @@ namespace AncientWarfare3.core.db
                 }
 
                 bool shadow = AWAsyncRuntime.ShadowEnabled;
+                pEventId = _eventIds.Next(pTable);
                 if (!HistoricalWriteModeRules.ShouldAttemptAsyncWrite(
                         AWAsyncRuntime.DatabaseEnabled, _worker != null))
                 {
-                    pEventId = 0L;
                     pError = AWAsyncRuntime.DatabaseEnabled
                         ? "historical async writer is unavailable"
                         : "historical async writer is disabled";
                     return false;
                 }
-                pEventId = _eventIds.Next(pTable);
                 var columns = new List<HistoricalSqlColumn>(
                     (pColumns?.Count ?? 0) + 1)
                 {

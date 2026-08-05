@@ -114,6 +114,18 @@ internal static class HistoricalWriteRulesTests
             "accepted writes still run shadow comparison");
         Contains(source, "HistoricalWriteModeRules.ShouldAttemptAsyncWrite(",
             "async writes require the real worker");
+        int appendStart = source.IndexOf(
+            "public static bool TryAppendHistory",
+            StringComparison.Ordinal);
+        int appendEventId = source.IndexOf(
+            "pEventId = _eventIds.Next(pTable);", appendStart,
+            StringComparison.Ordinal);
+        int appendWorkerCheck = source.IndexOf(
+            "HistoricalWriteModeRules.ShouldAttemptAsyncWrite(",
+            appendStart, StringComparison.Ordinal);
+        True(appendStart >= 0 && appendEventId >= appendStart &&
+             appendWorkerCheck > appendEventId,
+            "append allocates an event id before unavailable-worker fallback");
         Contains(source, "worker.PendingCount",
             "flush failures report the remaining worker queue");
         Contains(source, "elapsed_ms=",
