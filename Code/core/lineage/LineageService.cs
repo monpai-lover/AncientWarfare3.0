@@ -149,9 +149,7 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnActorBorn(Actor pActor)
         {
-            bool cultureIntegrated = XiaCultureIntegrationService.IsIntegrated(
-                pActor?.culture) || XiaCultureIntegrationService
-                .IsFullyIntegrated(pActor?.culture);
+            bool cultureIntegrated = UsesXiaPersonalNaming(pActor);
             if (!IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
                     nativeXia: IsNativeXiaCultureActor(pActor),
                     usesLineage: UsesAwLineageSystem(pActor),
@@ -175,12 +173,13 @@ namespace AncientWarfare3.core.lineage
 
             ArchiveTraceableActor(pParent1, pAlive: true);
             ArchiveTraceableActor(pParent2, pAlive: true);
-            string originalForeignName = IsXia(pBaby)
+            bool babyUsesXiaNaming = UsesXiaPersonalNaming(pBaby);
+            string originalForeignName = babyUsesXiaNaming
                 ? null
                 : pBaby.data.name ?? pBaby.getName();
-            if (IsXia(pBaby)) EnsureGivenName(pBaby);
+            if (babyUsesXiaNaming) EnsureGivenName(pBaby);
             InheritFromParents(pBaby, pParent1, pParent2);
-            if (!IsXia(pBaby)) EnsureGivenName(pBaby, originalForeignName);
+            if (!babyUsesXiaNaming) EnsureGivenName(pBaby, originalForeignName);
             SlaveService.EnsureSlaveChild(pBaby, pParent1, pParent2);
             PropagateNobleBloodFromParents(pBaby, pParent1, pParent2);
             ApplyDisplayName(pBaby);
@@ -310,7 +309,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             if (!string.IsNullOrEmpty(given)) return;
 
-            if (!IsXia(pActor))
+            if (!UsesXiaPersonalNaming(pActor))
             {
                 pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
                 pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out string chineseFamily, "");
@@ -339,9 +338,16 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
+        private static bool UsesXiaPersonalNaming(Actor pActor)
+        {
+            if (IsXia(pActor)) return true;
+            return AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pActor).Profile == NamingProfileId.Xia;
+        }
+
         private static void NormalizeXiaGivenNameForClan(Actor pActor)
         {
-            if (!IsXia(pActor) || pActor?.data == null) return;
+            if (!UsesXiaPersonalNaming(pActor) || pActor?.data == null) return;
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             string normalized = XiaGivenNameRules.NormalizeGenerated(given, HasXiaClanIdentity(pActor));
             if (!string.IsNullOrEmpty(normalized) && normalized != given)
@@ -1572,7 +1578,7 @@ namespace AncientWarfare3.core.lineage
             bool changed = childLineage != parentLineage || oldShi != parentShi ||
                            oldClan != clan || visibleClanChanged;
 
-            string originalForeignName = IsXia(pChild)
+            string originalForeignName = UsesXiaPersonalNaming(pChild)
                 ? null
                 : pChild.data.name ?? pChild.getName();
             pChild.data.set(LineageKeys.LINEAGE_ID, parentLineage);
@@ -2048,9 +2054,7 @@ namespace AncientWarfare3.core.lineage
                 }
                 return;
             }
-            bool cultureIntegrated = XiaCultureIntegrationService.IsIntegrated(
-                pActor?.culture) || XiaCultureIntegrationService
-                .IsFullyIntegrated(pActor?.culture);
+            bool cultureIntegrated = UsesXiaPersonalNaming(pActor);
             if (!IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
                     nativeXia: IsXia(pActor),
                     usesLineage: UsesAwLineageSystem(pActor),
