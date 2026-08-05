@@ -171,7 +171,11 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorBornWithParents(Actor pBaby, Actor pParent1,
             Actor pParent2, bool pUseFullPath)
         {
-            if (!pUseFullPath) return;
+            if (!pUseFullPath)
+            {
+                TryInheritLightweightWesternSurname(pBaby, pParent1, pParent2);
+                return;
+            }
 
             ArchiveTraceableActor(pParent1, pAlive: true);
             ArchiveTraceableActor(pParent2, pAlive: true);
@@ -191,6 +195,101 @@ namespace AncientWarfare3.core.lineage
 
             // 编年史:仅入谱贵族(有 lineage_id)记出生事件。
             RecordBirthEvent(pBaby);
+        }
+
+        /// <summary>
+        ///     Lightweight Western births still carry family identity. This
+        ///     deliberately copies surname fields only; it must not admit a
+        ///     commoner into the full noble lineage model.
+        /// </summary>
+        private static bool TryInheritLightweightWesternSurname(Actor pBaby,
+            Actor pParent1, Actor pParent2)
+        {
+            if (pBaby?.data == null || pBaby.hasTrait("figure") ||
+                pBaby.hasTrait("first")) return false;
+
+            NamingProfileId profile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pBaby).Profile;
+            if (profile != NamingProfileId.Western &&
+                profile != NamingProfileId.OrcNomadic) return false;
+
+            pBaby.data.get(LineageKeys.FAMILY_NAME, out string childFamily,
+                string.Empty);
+            pBaby.data.get(LineageKeys.CHINESE_FAMILY_NAME,
+                out string childChineseFamily, string.Empty);
+            pBaby.data.get(AWNameDataKeys.FamilyComponent,
+                out string childFamilyComponent, string.Empty);
+            if (WesternSurnameInheritanceRules.ResolveSurname(childFamily,
+                    childChineseFamily).Length > 0 ||
+                !string.IsNullOrWhiteSpace(childFamilyComponent)) return false;
+
+            string originalForeignName = pBaby.data.name ?? pBaby.getName();
+            string parent1Surname = ResolveWesternParentSurname(pParent1,
+                profile);
+            string parent2Surname = ResolveWesternParentSurname(pParent2,
+                profile);
+            int sourceSlot = WesternSurnameInheritanceRules.SelectSourceSlot(
+                pParent1?.isSexMale() == true, parent1Surname,
+                pParent2?.isSexMale() == true, parent2Surname);
+            if (sourceSlot < 0) return false;
+
+            string surname = sourceSlot == 1 ? parent1Surname : parent2Surname;
+            if (string.IsNullOrWhiteSpace(surname)) return false;
+            pBaby.data.set(LineageKeys.FAMILY_NAME, surname);
+            pBaby.data.set(LineageKeys.CHINESE_FAMILY_NAME, surname);
+            pBaby.data.set(AWNameDataKeys.FamilyComponent, surname);
+            EnsureGivenName(pBaby, originalForeignName);
+            ApplyLightweightWesternSurnameDisplay(pBaby, profile, surname);
+
+            // The lightweight parent-edge write may already have created the
+            // row. Trace-only upsert handles both that case and a missing row.
+            ArchiveTraceableActor(pBaby, pAlive: true);
+            return true;
+        }
+
+        private static string ResolveWesternParentSurname(Actor pParent,
+            NamingProfileId pChildProfile)
+        {
+            if (pParent?.data == null) return string.Empty;
+            NamingProfileId parentProfile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pParent).Profile;
+            if (parentProfile != pChildProfile) return string.Empty;
+            pParent.data.get(LineageKeys.FAMILY_NAME, out string family,
+                string.Empty);
+            pParent.data.get(LineageKeys.CHINESE_FAMILY_NAME,
+                out string chineseFamily, string.Empty);
+            string surname = WesternSurnameInheritanceRules.ResolveSurname(
+                family, chineseFamily);
+            if (surname.Length > 0) return surname;
+            pParent.data.get(AWNameDataKeys.FamilyComponent,
+                out string familyComponent, string.Empty);
+            return (familyComponent ?? string.Empty).Trim();
+        }
+
+        private static void ApplyLightweightWesternSurnameDisplay(
+            Actor pActor, NamingProfileId pProfile, string pSurname)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.get(LineageKeys.GIVEN_NAME, out string given,
+                string.Empty);
+            if (string.IsNullOrWhiteSpace(given))
+                given = pActor.data.name ?? pActor.getName();
+
+            FamilyBranchIdentityProjection identity =
+                new FamilyBranchIdentityProjection(pProfile, string.Empty,
+                    string.Empty, -1L, string.Empty, pSurname);
+            string display = WesternFamilyIdentityRules.BuildActor(identity,
+                given, noble: false);
+            if (string.IsNullOrWhiteSpace(display)) return;
+            pActor.data.set("display_name", display);
+            pActor.data.get(AWNameDataKeys.ChineseName,
+                out string currentChineseName, string.Empty);
+            if (!string.Equals(currentChineseName, display,
+                    StringComparison.Ordinal))
+                AWLocalizedNameService.CommitChineseName(pActor.data, display,
+                    "Unit", pActor.data.id);
+            else
+                AWLocalizedNameService.ProjectStored(pActor.data);
         }
 
         public static void OnMixedAncestryBorn(Actor pBaby, Actor pParent1,

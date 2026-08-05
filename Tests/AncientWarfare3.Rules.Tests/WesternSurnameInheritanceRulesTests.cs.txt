@@ -1,6 +1,44 @@
+using System;
+using AncientWarfare3.core.lineage;
+
 public static class WesternSurnameInheritanceRulesTests
 {
     public static void Run()
     {
+        Equal(1,
+            WesternSurnameInheritanceRules.SelectSourceSlot(
+                parent1Male: true, parent1Surname: "de Rive",
+                parent2Male: false, parent2Surname: "von Alder"),
+            "a valid paternal surname wins over a maternal surname");
+        Equal(2,
+            WesternSurnameInheritanceRules.SelectSourceSlot(
+                parent1Male: true, parent1Surname: "",
+                parent2Male: false, parent2Surname: "von Alder"),
+            "a valid maternal surname fills a missing paternal surname");
+        Equal(2,
+            WesternSurnameInheritanceRules.SelectSourceSlot(
+                parent1Male: false, parent1Surname: "de Rive",
+                parent2Male: true, parent2Surname: "von Alder"),
+            "the paternal slot wins even when it is the second parent");
+        Equal(-1,
+            WesternSurnameInheritanceRules.SelectSourceSlot(
+                parent1Male: true, parent1Surname: " ",
+                parent2Male: false, parent2Surname: null),
+            "missing parent surnames do not invent an identity");
+        Equal("de Rive",
+            WesternSurnameInheritanceRules.ResolveSurname(
+                " de Rive ", "von Alder"),
+            "the lineage surname is preferred when both surname slots exist");
+        Equal("von Alder",
+            WesternSurnameInheritanceRules.ResolveSurname(
+                "", " von Alder "),
+            "the localized surname slot is a valid fallback");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
     }
 }

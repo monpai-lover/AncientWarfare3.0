@@ -1,0 +1,36 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class SkeletonSpawnRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, SkeletonSpawnRules.ShouldBlockNewSpawn(),
+            "new skeleton creation is disabled by policy");
+
+        string patchSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_SkeletonSpawnPatch.cs"));
+        True(patchSource.Contains(
+                "HarmonyPatch(typeof(ActionLibrary), \"spawnSkeleton\")"),
+            "the patch targets vanilla ActionLibrary.spawnSkeleton");
+        True(patchSource.Contains(
+                "return !SkeletonSpawnRules.ShouldBlockNewSpawn();"),
+            "the Prefix skips the vanilla body while the policy is enabled");
+        Equal(false, patchSource.Contains("removeObject"),
+            "the spawn guard does not delete existing actors");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

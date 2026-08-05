@@ -87,6 +87,8 @@
     <Compile Include="WesternSurnameInheritanceRulesTests.cs.txt" />
     <Compile Include="WesternSurnameInheritancePersistenceSqlTests.cs.txt" />
     <Compile Include="WesternSurnameRepairRulesTests.cs.txt" />
+    <Compile Include="SkeletonSpawnRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\SkeletonSpawnRules.cs" Link="Production\SkeletonSpawnRules.cs" />
     <Compile Include="WesternFamilyIdentityRulesTests.cs.txt" />
     <Compile Include="WesternLineageEligibilityRulesTests.cs.txt" />
     <Compile Include="WesternBilateralFamilyTreeRulesTests.cs.txt" />
@@ -476,6 +478,7 @@
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameProjectionChangeRules.cs" Link="Production\AWLocalizedNameProjectionChangeRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWNamingProfileRules.cs" Link="Production\AWNamingProfileRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageEligibilityRules.cs" Link="Production\WesternLineageEligibilityRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WesternSurnameInheritanceRules.cs" Link="Production\WesternSurnameInheritanceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionRules.cs" Link="Production\WesternLineageAdmissionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionPersistence.cs" Link="Production\WesternLineageAdmissionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionRules.cs" Link="Production\XiaizedFamilyBranchTransitionRules.cs" />
