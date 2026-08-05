@@ -1,5 +1,6 @@
 using AncientWarfare3.ui;
 using NeoModLoader.api;
+using System.Globalization;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,11 +23,30 @@ namespace AncientWarfare3.ui.items
 
             string rank = pObject.Rank.ToString();
             string name = string.IsNullOrEmpty(pObject.Name) ? "Justin" : pObject.Name;
-            string amount = string.IsNullOrEmpty(pObject.Amount) ? "-" : pObject.Amount;
-            string date = string.IsNullOrEmpty(pObject.Date) ? "-" : pObject.Date;
+            string description = pObject.Description ?? "";
+            string detail;
+            if (!string.IsNullOrEmpty(description))
+            {
+                detail = description;
+            }
+            else
+            {
+                string amount = string.IsNullOrEmpty(pObject.Amount) ? "-" : pObject.Amount;
+                // Monetary entries receive the localized currency prefix.
+                string amountPrefix = decimal.TryParse(
+                        amount,
+                        NumberStyles.Number,
+                        CultureInfo.InvariantCulture,
+                        out _)
+                    ? AW_L10n.Text("aw_supporter_amount_prefix", "¥")
+                    : "";
+                detail = amountPrefix + amount;
+            }
+            string date = pObject.Date ?? "";
+            string dateSuffix = string.IsNullOrEmpty(date) || string.Equals(date, "-",
+                System.StringComparison.Ordinal) ? "" : "   " + date;
             _label.text = rank + "   " + name + "   " +
-                          AW_L10n.Text("aw_supporter_amount_prefix", "¥") +
-                          amount + "   " + date;
+                          detail + dateSuffix;
         }
 
         private void EnsureUi()

@@ -13,6 +13,7 @@ namespace AncientWarfare3.ui
         public string Name { get; set; } = "";
         public string Amount { get; set; } = "";
         public string Date { get; set; } = "";
+        public string Description { get; set; } = "";
     }
 
     /// <summary>
@@ -30,76 +31,84 @@ namespace AncientWarfare3.ui
                 new SupporterLeaderboardEntry
                 {
                     Rank = 1,
+                    Name = "一米",
+                    Amount = "",
+                    Date = "",
+                    Description = "提供了技术支持和帮助:寻路/大步长调度器"
+                },
+                new SupporterLeaderboardEntry
+                {
+                    Rank = 2,
                     Name = "Justin",
                     Amount = "40",
                     Date = "2026-08-05"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 2,
+                    Rank = 3,
                     Name = "Jake",
                     Amount = "20",
                     Date = "2026-08-02"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 3,
+                    Rank = 4,
                     Name = "Au",
                     Amount = "10",
                     Date = "2026-08-01"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 4,
+                    Rank = 5,
                     Name = "贰肆",
                     Amount = "15",
                     Date = "2026-08-02"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 5,
+                    Rank = 6,
                     Name = "米鸡林",
                     Amount = "10",
                     Date = "2026-07-31"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 6,
+                    Rank = 7,
                     Name = "Beluga",
                     Amount = "15",
                     Date = "2026-08-02"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 7,
+                    Rank = 8,
                     Name = "妖妖凛",
                     Amount = "25",
                     Date = "2026-07-31"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 8,
+                    Rank = 9,
                     Name = "Coherence",
                     Amount = "22.90",
                     Date = "2026-08-02"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 9,
+                    Rank = 10,
                     Name = "未明天逍遥行",
                     Amount = "20.00",
                     Date = "2026-08-02"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 10,
+                    Rank = 11,
                     Name = "阿良",
                     Amount = "50",
                     Date = "2026-08-04"
                 },
                 new SupporterLeaderboardEntry
                 {
-                    Rank = 11,
+                    Rank = 12,
                     Name = "MO",
                     Amount = "10",
                     Date = "2026-08-04"
@@ -166,16 +175,20 @@ namespace AncientWarfare3.ui
                 string name = Clean(fields.Count > 1 ? fields[1] : "");
                 string amount = Clean(fields.Count > 2 ? fields[2] : "");
                 string date = Clean(fields.Count > 3 ? fields[3] : "");
+                string description = Clean(fields.Count > 4 ? fields[4] : "");
                 if (string.IsNullOrEmpty(name)) name = "Justin";
-                if (string.IsNullOrEmpty(amount)) amount = "-";
-                if (string.IsNullOrEmpty(date)) date = "-";
+                if (string.IsNullOrEmpty(amount) && string.IsNullOrEmpty(description))
+                    amount = "-";
+                if (string.IsNullOrEmpty(date) && string.IsNullOrEmpty(description))
+                    date = "-";
 
                 result.Add(new SupporterLeaderboardEntry
                 {
                     Rank = rank,
                     Name = name,
                     Amount = amount,
-                    Date = date
+                    Date = date,
+                    Description = description
                 });
             }
 
