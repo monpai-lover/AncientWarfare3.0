@@ -159,6 +159,13 @@ namespace AncientWarfare3.patch
                     return false;
                 }
 
+                if (!core.atlas.KingdomAtlasZoneArchiveService.FlushForSave(
+                        out string atlasError))
+                {
+                    pError = "kingdom atlas archive flush failed: " + atlasError;
+                    return false;
+                }
+
                 if (!LineageArchivePragmaService.CheckpointForSave(
                         LineageArchiveManager.Instance.OperatingDB))
                 {

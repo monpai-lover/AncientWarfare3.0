@@ -1,6 +1,7 @@
 using System;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.atlas;
 using AncientWarfare3.content.figures;
 using AncientWarfare3.ui;
 
@@ -1411,6 +1412,16 @@ namespace AncientWarfare3.core.lineage
             HistoryWriter.RecordCity(pCity, kingdom, CityEvent.CITY_FOUND,
                 HistoryText.City(pCity, kingdom, cityName) + H("aw_hist_city_founded_prefix") +
                 kingdomPart + H("aw_hist_city_founded_suffix"));
+            try
+            {
+                KingdomAtlasZoneArchiveService.CaptureCityEvent(pCity, null,
+                    kingdom, CityEvent.CITY_FOUND,
+                    World.world?.getCurWorldTime() ?? 0d);
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning("Kingdom atlas city-found archive failed: " + error.Message);
+            }
             KingdomArchiveWriter.Upsert(kingdom);
             WarTerritoryService.EnsureCore(kingdom, pCity, "founded", "自建城市");
         }
@@ -1424,6 +1435,16 @@ namespace AncientWarfare3.core.lineage
             if (pNewKingdom == null) return;
             if (pOldKingdom == pNewKingdom) return;                 // 无变化不记
 
+            try
+            {
+                KingdomAtlasZoneArchiveService.CaptureCityEvent(pCity,
+                    pOldKingdom, pNewKingdom, CityEvent.CITY_TRANSFER,
+                    World.world?.getCurWorldTime() ?? 0d);
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning("Kingdom atlas city-transfer archive failed: " + error.Message);
+            }
             bool oldArchivable = KingdomArchiveWriter.IsArchivable(pOldKingdom);
             bool newArchivable = KingdomArchiveWriter.IsArchivable(pNewKingdom);
             if (!oldArchivable && !newArchivable) return;

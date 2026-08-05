@@ -1,0 +1,116 @@
+using AncientWarfare3.core.atlas;
+
+internal static class KingdomAtlasRulesTests
+{
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual)) throw new InvalidOperationException(pName + ": expected " + pExpected + ", got " + pActual);
+    }
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue) throw new InvalidOperationException(pName);
+    }
+    public static void Run()
+    {
+        var later = new KingdomAtlasHistoryEvent { EventId = 2, WorldTime = 3d, OldKingdomId = 10, NewKingdomId = 20 };
+        var early = new KingdomAtlasHistoryEvent { EventId = 1, WorldTime = 1d, OldKingdomId = 10, NewKingdomId = 20 };
+        var duplicate = new KingdomAtlasHistoryEvent { EventId = 1, WorldTime = 9d, OldKingdomId = 99, NewKingdomId = 100 };
+        var rows = KingdomAtlasRules.OrderAndDeduplicate(new[] { later, duplicate, early });
+        Equal(2, rows.Count, "event deduplication");
+        Equal(1L, rows[0].EventId, "event ordering");
+        Equal(2L, rows[1].EventId, "event ordering second");
+        True(KingdomAtlasRules.IsVisibleOwner(10, 10, 20), "old participant visible");
+        True(KingdomAtlasRules.IsVisibleOwner(20, 10, 20), "new participant visible");
+        Equal(false, KingdomAtlasRules.IsVisibleOwner(30, 10, 20), "unrelated participant hidden");
+        True(KingdomAtlasRules.TryResolveHistoricalColor("", "#112233", "#fff"), "historical color fallback");
+        Equal(50, KingdomAtlasRules.Percent(1, 2), "progress percentage");
+        Equal("42:768:v3", KingdomAtlasRules.BuildGenerationKey(42, 768, "v3"), "generation key");
+        Equal("kingdom_7_1024_node_0003_event_42", KingdomAtlasRules.BuildOutputStem(7, 1024, 3, 42), "output stem");
+        True(KingdomAtlasRules.ShouldReplaceSnapshot(12d, 11L, 12d, 10L), "same-time snapshot uses newest id");
+        Equal(false, KingdomAtlasRules.ShouldReplaceSnapshot(12d, 9L, 12d, 10L), "same-time snapshot keeps newest id");
+        True(KingdomAtlasRules.ShouldReplaceSnapshot(13d, 1L, 12d, 10L), "later snapshot wins");
+        True(KingdomAtlasRules.IsEventAtOrBeforeNode(12d, 10L, 12d, 10L), "node includes its own event");
+        Equal(false, KingdomAtlasRules.IsEventAtOrBeforeNode(12d, 11L, 12d, 10L), "node excludes later same-time event");
+        True(KingdomAtlasRules.IsEventAtOrBeforeNode(11d, 99L, 12d, 10L), "node includes earlier event");
+        string firstTile = KingdomAtlasRules.BuildSnapshotTileKey(7L, "city_transfer", 12d, 3, 10, 20);
+        string secondTile = KingdomAtlasRules.BuildSnapshotTileKey(7L, "city_transfer", 12d, 4, 10, 20);
+        Equal(false, firstTile == secondTile, "zone identity prevents snapshot key collision");
+        True(KingdomAtlasRules.IsEventInYear(12, 12), "chronicle keeps node year");
+        Equal(false, KingdomAtlasRules.IsEventInYear(11, 12), "chronicle filters earlier year");
+        Equal(false, KingdomAtlasRules.IsEventInYear(0, 12), "chronicle rejects unknown year");
+        True(KingdomAtlasRules.IsSameSnapshotGroup(7, "city_transfer", 12d,
+            7, "city_transfer", 12d), "snapshot group identity");
+        Equal(false, KingdomAtlasRules.IsSameSnapshotGroup(7, "city_transfer", 12d,
+            7, "city_transfer", 13d), "snapshot group time identity");
+        Equal(false, KingdomAtlasRules.IsSameSnapshotGroup(7, "city_transfer", 12d,
+            8, "city_transfer", 12d), "snapshot group city identity");
+        True(KingdomAtlasRules.IsCompleteTransfer(10, 20),
+            "complete transfer requires both kingdoms");
+        Equal(false, KingdomAtlasRules.IsCompleteTransfer(-1, 20),
+            "transfer rejects missing old kingdom");
+        Equal(false, KingdomAtlasRules.IsCompleteTransfer(10, 10),
+            "transfer rejects unchanged kingdom");
+
+        var directRelation = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 1,
+            VassalId = 20,
+            SuzerainId = 10,
+            StartTime = 5d,
+            EndTime = -1d
+        };
+        var nestedRelation = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 2,
+            VassalId = 30,
+            SuzerainId = 20,
+            StartTime = 6d,
+            EndTime = -1d
+        };
+        Equal(10L, KingdomAtlasRules.ResolveDisplayOwner(30,
+            new[] { directRelation, nestedRelation }, 7d),
+            "nested vassal inherits root suzerain");
+        Equal(30L, KingdomAtlasRules.ResolveDisplayOwner(30,
+            new[] { directRelation, nestedRelation }, 5d),
+            "future relation does not affect historical color");
+        Equal(30L, KingdomAtlasRules.ResolveDisplayOwner(30,
+            new[]
+            {
+                directRelation,
+                new KingdomAtlasVassalRelationSnapshot
+                {
+                    RelationId = 3, VassalId = 30, SuzerainId = 10,
+                    StartTime = 1d, EndTime = 4d
+                }
+            }, 7d),
+            "ended relation falls back to subject");
+        Equal(30L, KingdomAtlasRules.ResolveDisplayOwner(30,
+            new[]
+            {
+                new KingdomAtlasVassalRelationSnapshot
+                {
+                    RelationId = 4, VassalId = 30, SuzerainId = 40,
+                    StartTime = 1d, EndTime = -1d
+                },
+                new KingdomAtlasVassalRelationSnapshot
+                {
+                    RelationId = 5, VassalId = 40, SuzerainId = 30,
+                    StartTime = 1d, EndTime = -1d
+                }
+            }, 7d),
+            "cyclic relations terminate at original subject");
+        var displayColors = KingdomAtlasRules.BuildDisplayColors(
+            new Dictionary<long, string>
+            {
+                [10] = "#112233", [20] = "#445566", [30] = "#778899"
+            }, new[] { directRelation, nestedRelation }, 7d);
+        Equal(new KingdomAtlasColor(17, 34, 51, 255), displayColors[20],
+            "direct vassal uses suzerain color");
+        Equal(new KingdomAtlasColor(17, 34, 51, 255), displayColors[30],
+            "nested vassal uses root suzerain color");
+        var visible = KingdomAtlasRules.BuildVisibleOwnerIds(
+            new[] { 10L }, new[] { directRelation, nestedRelation }, 7d);
+        True(visible.Contains(10L) && visible.Contains(20L) && visible.Contains(30L),
+            "historical vassals remain independently visible");
+    }
+}

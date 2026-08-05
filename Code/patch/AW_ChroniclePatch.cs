@@ -181,6 +181,25 @@ namespace AncientWarfare3.patch
             CoupRestorationService.OnCityTransferCompleted(__instance);
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(City), nameof(City.destroyCity))]
+        public static void DestroyCity_Prefix(City __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying ||
+                __instance?.data == null) return;
+            try
+            {
+                core.atlas.KingdomAtlasZoneArchiveService.CaptureCityGeometry(
+                    __instance, "city_destroyed_" + __instance.data.id,
+                    World.world?.getCurWorldTime() ?? 0d);
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning("Kingdom atlas city-destroy archive failed: " +
+                    error.Message);
+            }
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(City), nameof(City.destroyCity))]
         public static void DestroyCity_Postfix(City __instance)
@@ -192,6 +211,26 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.addZone))]
         public static void CityAddZone_Postfix(City __instance)
         {
+            if (!AW3MultiplayerReplicaScope.IsApplying &&
+                __instance?.data != null)
+            {
+                try
+                {
+                    int zoneId = __instance.zones != null &&
+                        __instance.zones.Count > 0 &&
+                        __instance.zones[__instance.zones.Count - 1] != null
+                        ? __instance.zones[__instance.zones.Count - 1].id
+                        : __instance.zones?.Count ?? 0;
+                    core.atlas.KingdomAtlasZoneArchiveService.CaptureCityGeometry(
+                        __instance, "city_zone_added_" + zoneId,
+                        World.world?.getCurWorldTime() ?? 0d);
+                }
+                catch (System.Exception error)
+                {
+                    ModClass.LogWarning("Kingdom atlas zone archive failed: " +
+                        error.Message);
+                }
+            }
             HierarchicalVassalMapModeService.MarkCityGeometryDirty(__instance);
         }
 

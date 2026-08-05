@@ -12,6 +12,14 @@ HistoricalWriteModeRulesTests.Run();
 KingdomPolicyInheritanceDiagnosticRulesTests.Run();
 VirtualNobleTitleRulesTests.Run();
 
+if (args.Length == 1 && args[0] == "--kingdom-atlas")
+{
+    KingdomAtlasRulesTests.Run();
+    KingdomAtlasArtifactRulesTests.Run();
+    Console.WriteLine("Kingdom atlas rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--classic-civ-lifespan")
 {
     ClassicCivLifespanContentTests.Run();
