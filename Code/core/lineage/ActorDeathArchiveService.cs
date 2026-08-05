@@ -79,8 +79,7 @@ namespace AncientWarfare3.core.lineage
             }
             bool ready = ActorDeathArchiveRules.ReadyForSave(Pending.Count,
                 running: 0, retries: 0, completions: 0);
-            pError = ready ? string.Empty :
-                "pending actor death archives=" + Pending.Count;
+            pError = ready ? string.Empty : DescribePendingForSave();
             return ready;
         }
 
@@ -165,6 +164,22 @@ namespace AncientWarfare3.core.lineage
                 return true;
             }
             return Pending.Count == 0;
+        }
+
+        private static string DescribePendingForSave()
+        {
+            long firstActorId = -1L;
+            int firstAttempts = 0;
+            foreach (long actorId in Order)
+            {
+                if (!Pending.TryGetValue(actorId,
+                        out PendingLineageDeath item)) continue;
+                firstActorId = actorId;
+                firstAttempts = item.Attempts;
+                break;
+            }
+            return ActorDeathArchiveRules.DescribePendingForSave(
+                Pending.Count, firstActorId, firstAttempts);
         }
     }
 }

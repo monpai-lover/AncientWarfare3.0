@@ -17,6 +17,8 @@
     <Compile Include="LineageFamilyArchiveMigrationTests.cs.txt" />
     <Compile Include="LineageBirthArchivePersistenceSqlTests.cs.txt" />
     <Compile Include="HistoricalWriteRulesTests.cs.txt" />
+    <Compile Include="HistoricalWriteModeRulesTests.cs.txt" />
+    <Compile Include="KingdomPolicyInheritanceDiagnosticRulesTests.cs.txt" />
     <Compile Include="ActorDiagnosticSamplingRulesTests.cs.txt" />
     <Compile Include="RuntimePerformanceDiagnosticRulesTests.cs.txt" />
     <Compile Include="ActorAgeWorkRulesTests.cs.txt" />
@@ -61,6 +63,8 @@
     <Compile Include="..\..\Code\core\court\CivilServiceForeignResidentQualificationQuery.cs" Link="Production\CivilServiceForeignResidentQualificationQuery.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceFormalCandidateQuery.cs" Link="Production\CivilServiceFormalCandidateQuery.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageKeys.cs" Link="Production\LineageKeys.cs" />
+    <Compile Include="..\..\Code\core\db\HistoricalWriteModeRules.cs" Link="Production\HistoricalWriteModeRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomPolicyInheritanceDiagnosticRules.cs" Link="Production\KingdomPolicyInheritanceDiagnosticRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyAiRules.cs" Link="Production\DiplomacyAiRules.cs" />
     <Compile Include="..\..\Code\core\naming\ActorLocalizedNameBoundaryRules.cs" Link="Production\ActorLocalizedNameBoundaryRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameProfileReadinessRules.cs" Link="Production\AWLocalizedNameProfileReadinessRules.cs" />
@@ -708,6 +712,7 @@
   </ItemGroup>
   <Target Name="WartimeMilitaryTaskGatePerformanceSourceGuard"
       BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ShadowSettingsSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ActorBirthAffiliationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WartimeMilitaryTaskGatePerformanceSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\CapturedSlaveMilitaryOwnershipSourceGuard.ps1&quot;" />

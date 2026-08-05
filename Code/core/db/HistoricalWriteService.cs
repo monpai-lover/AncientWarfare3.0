@@ -75,8 +75,8 @@ namespace AncientWarfare3.core.db
                     _worldGeneration = pWorldGeneration;
                     _nextSequence = 0L;
                 }
-                if (!AWAsyncRuntime.DatabaseEnabled ||
-                    AWAsyncRuntime.ShadowEnabled) return;
+                if (!HistoricalWriteModeRules.ShouldStartWorker(
+                        AWAsyncRuntime.DatabaseEnabled)) return;
 
                 long epoch = LineageArchiveManager.RuntimeDatabaseEpoch;
                 var sink = new HistoricalSqliteBatchSink(
@@ -109,6 +109,7 @@ namespace AncientWarfare3.core.db
             string shadowExpected = null;
             string shadowActual = null;
             string operationKey = null;
+            bool accepted = false;
             lock (Gate)
             {
                 if (!_eventIdsReady && !TrySeedAllocatorLocked(out pError))
@@ -117,13 +118,17 @@ namespace AncientWarfare3.core.db
                     return false;
                 }
 
-                pEventId = _eventIds.Next(pTable);
                 bool shadow = AWAsyncRuntime.ShadowEnabled;
-                if (_worker == null && !shadow)
+                if (!HistoricalWriteModeRules.ShouldAttemptAsyncWrite(
+                        AWAsyncRuntime.DatabaseEnabled, _worker != null))
                 {
-                    pError = "historical async writer is disabled";
+                    pEventId = 0L;
+                    pError = AWAsyncRuntime.DatabaseEnabled
+                        ? "historical async writer is unavailable"
+                        : "historical async writer is disabled";
                     return false;
                 }
+                pEventId = _eventIds.Next(pTable);
                 var columns = new List<HistoricalSqlColumn>(
                     (pColumns?.Count ?? 0) + 1)
                 {
@@ -147,21 +152,18 @@ namespace AncientWarfare3.core.db
                         .SummarizeInsert(pTable, operationKey, sequence,
                             columns, pGeneratedEventId: false);
                     shadowActual = envelope.ShadowSummary;
-                    pError = "historical async writer is shadow-only";
                 }
-                else
+                if (_worker.TryEnqueue(envelope, out _))
                 {
-                    if (_worker.TryEnqueue(envelope, out _))
-                    {
-                        pError = string.Empty;
-                        return true;
-                    }
-                    pError = "historical async writer queue is full";
-                    return false;
+                    accepted = true;
+                    pError = string.Empty;
                 }
+                else pError = "historical async writer queue is full";
             }
-            CompareShadow(operationKey, shadowExpected, shadowActual);
-            return false;
+            if (HistoricalWriteModeRules.ShouldCompareShadow(
+                    AWAsyncRuntime.ShadowEnabled, accepted))
+                CompareShadow(operationKey, shadowExpected, shadowActual);
+            return accepted;
         }
 
         public static bool TryReserveEventId(string pTable,
@@ -198,8 +200,21 @@ namespace AncientWarfare3.core.db
                 pError = string.Empty;
                 return true;
             }
-            return worker.Flush(pTimeout,
+            long started = Stopwatch.GetTimestamp();
+            bool flushed = worker.Flush(pTimeout,
                 () => DrainCompletions(64), out pError);
+            if (!flushed)
+            {
+                long elapsedMilliseconds = Math.Max(0L,
+                    (Stopwatch.GetTimestamp() - started) * 1000L /
+                    Stopwatch.Frequency);
+                pError = (pError ?? "historical write flush failed") +
+                    "; pending=" + worker.PendingCount +
+                    "; earliest_uncommitted=" +
+                    worker.EarliestUncommittedSequence +
+                    "; elapsed_ms=" + elapsedMilliseconds;
+            }
+            return flushed;
         }
 
         public static bool TryUpsertState(string pOperationKey,
@@ -253,13 +268,17 @@ namespace AncientWarfare3.core.db
         {
             string shadowExpected = null;
             string shadowActual = null;
+            bool accepted = false;
             lock (Gate)
             {
                 bool shadow = AWAsyncRuntime.ShadowEnabled;
-                if (_worker == null && !shadow)
+                if (!HistoricalWriteModeRules.ShouldAttemptAsyncWrite(
+                        AWAsyncRuntime.DatabaseEnabled, _worker != null))
                 {
                     pSequence = 0L;
-                    pError = "historical async writer is disabled";
+                    pError = AWAsyncRuntime.DatabaseEnabled
+                        ? "historical async writer is unavailable"
+                        : "historical async writer is disabled";
                     return false;
                 }
                 pSequence = ++_nextSequence;
@@ -274,25 +293,25 @@ namespace AncientWarfare3.core.db
                         .SummarizeState(pTable, pOperationKey, pSequence,
                             pKeys, pUpdates, pInserts);
                     shadowActual = envelope.ShadowSummary;
-                    pError = "historical async writer is shadow-only";
+                }
+                Action<long, object> committed = pOnCommitted == null
+                    ? null
+                    : (sequence, outcome) => pOnCommitted(sequence);
+                if (!Callbacks.TryEnqueue(_worker, envelope,
+                        pOnAccepted, committed, pOnFailed, out _))
+                {
+                    pError = "historical async state queue is full";
                 }
                 else
                 {
-                    Action<long, object> committed = pOnCommitted == null
-                        ? null
-                        : (sequence, outcome) => pOnCommitted(sequence);
-                    if (!Callbacks.TryEnqueue(_worker, envelope,
-                            pOnAccepted, committed, pOnFailed, out _))
-                    {
-                        pError = "historical async state queue is full";
-                        return false;
-                    }
+                    accepted = true;
                     pError = string.Empty;
-                    return true;
                 }
             }
-            CompareShadow(pOperationKey, shadowExpected, shadowActual);
-            return false;
+            if (HistoricalWriteModeRules.ShouldCompareShadow(
+                    AWAsyncRuntime.ShadowEnabled, accepted))
+                CompareShadow(pOperationKey, shadowExpected, shadowActual);
+            return accepted;
         }
 
         private static void CompareShadow(string operationKey,

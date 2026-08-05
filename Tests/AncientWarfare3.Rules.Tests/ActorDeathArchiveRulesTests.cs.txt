@@ -75,6 +75,18 @@ internal static class ActorDeathArchiveRulesTests
         Equal(60, ActorDeathArchiveRules.ResolveSaveTimeoutSeconds(
                 baseSeconds: 60, pendingCount: 821),
             "backlog scaling never shortens a caller's base timeout");
+        string pendingDiagnostic = ActorDeathArchiveRules.
+            DescribePendingForSave(92, 734L, 3);
+        Equal(true, pendingDiagnostic.Contains(
+                "pending actor death archives=92",
+                StringComparison.Ordinal),
+            "save diagnostics include the pending death count");
+        Equal(true, pendingDiagnostic.Contains("first_actor_id=734",
+                StringComparison.Ordinal),
+            "save diagnostics identify the first pending actor");
+        Equal(true, pendingDiagnostic.Contains("first_attempts=3",
+                StringComparison.Ordinal),
+            "save diagnostics include the first retry count");
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

@@ -1,0 +1,38 @@
+using AncientWarfare3.core.db;
+
+internal static class HistoricalWriteModeRulesTests
+{
+    public static void Run()
+    {
+        True(HistoricalWriteModeRules.ShouldStartWorker(
+                pDatabaseEnabled: true),
+            "database writes start the worker");
+        False(HistoricalWriteModeRules.ShouldStartWorker(
+                pDatabaseEnabled: false),
+            "disabled database writes do not start the worker");
+        True(HistoricalWriteModeRules.ShouldAttemptAsyncWrite(
+                pDatabaseEnabled: true, pWorkerAvailable: true),
+            "available database worker accepts async writes");
+        False(HistoricalWriteModeRules.ShouldAttemptAsyncWrite(
+                pDatabaseEnabled: false, pWorkerAvailable: true),
+            "shadow cannot create a worker when database writes are disabled");
+        True(HistoricalWriteModeRules.ShouldCompareShadow(
+                pShadowEnabled: true, pWriteAccepted: true),
+            "accepted writes can be shadow-compared");
+        False(HistoricalWriteModeRules.ShouldCompareShadow(
+                pShadowEnabled: true, pWriteAccepted: false),
+            "rejected writes are not shadow-compared");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(
+            pMessage + ": expected true");
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(
+            pMessage + ": expected false");
+    }
+}

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.lineage;
 using UnityEngine;
 
@@ -14,11 +15,14 @@ namespace AncientWarfare3.core.policy
 
         private static readonly Dictionary<long, long> PendingSourceByActor = new Dictionary<long, long>();
         private static readonly HashSet<long> InheritedKingdoms = new HashSet<long>();
+        private static readonly HashSet<string> InheritanceDiagnosticKeys =
+            new HashSet<string>();
 
         public static void ClearRuntime()
         {
             PendingSourceByActor.Clear();
             InheritedKingdoms.Clear();
+            InheritanceDiagnosticKeys.Clear();
         }
 
         public static void RememberSplitSource(Actor pFounder,
@@ -111,7 +115,14 @@ namespace AncientWarfare3.core.policy
                 PolicyNodeKind.Tech);
             KingdomPolicyService.ApplySnapshot(pNewKingdom, dst, pIncludeDecision: false);
             SynchronizeInheritedNameIntegration(pNewKingdom, dst);
-            ModClass.LogInfo("[policy inheritance] " + pNewKingdom.name + " inherited policy state from " + source.name);
+            string diagnosticKey =
+                KingdomPolicyInheritanceDiagnosticRules.BuildKey(
+                    AWAsyncRuntime.WorldGeneration, pNewKingdom.id, source.id,
+                    childProfileId + "|" + sourceProfileId);
+            if (KingdomPolicyInheritanceDiagnosticRules.ShouldLog(
+                    InheritanceDiagnosticKeys, diagnosticKey))
+                ModClass.LogInfo("[policy inheritance] " + pNewKingdom.name +
+                    " inherited policy state from " + source.name);
         }
 
         public static void PrepareForIdentityRestoration(long pKingdomId, long pFounderActorId)

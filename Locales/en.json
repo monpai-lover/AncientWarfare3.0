@@ -37,5 +37,5 @@
   "AW3_ENABLE_ASYNC_UI_QUERIES": "Enable asynchronous UI candidate queries",
   "AW3_ENABLE_ASYNC_UI_QUERIES Description": "Prepare large interface candidate lists in the background; takes effect after restart",
   "AW3_ENABLE_ASYNC_SHADOW_CHECKS": "Enable asynchronous shadow checks",
-  "AW3_ENABLE_ASYNC_SHADOW_CHECKS Description": "Check strategy shadow state in the background; takes effect after restart"
+  "AW3_ENABLE_ASYNC_SHADOW_CHECKS Description": "Shadow diagnostics: for development and reproducing async differences only. Adds validation, log output, and a small amount of overhead; it does not replace database writes. Keep it off for normal play."
 }

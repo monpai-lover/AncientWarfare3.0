@@ -37,5 +37,5 @@
   "AW3_ENABLE_ASYNC_UI_QUERIES": "啟用非同步介面候選計算",
   "AW3_ENABLE_ASYNC_UI_QUERIES Description": "在背景準備大型介面的候選清單；重新啟動遊戲後生效",
   "AW3_ENABLE_ASYNC_SHADOW_CHECKS": "啟用非同步影子校驗",
-  "AW3_ENABLE_ASYNC_SHADOW_CHECKS Description": "在背景檢查策略影子狀態；重新啟動遊戲後生效"
+  "AW3_ENABLE_ASYNC_SHADOW_CHECKS Description": "Shadow 診斷：僅用於開發/重現非同步差異。開啟後會額外校驗非同步結果，可能增加日誌和少量開銷；不會取代資料庫寫入。正常遊玩請關閉。"
 }
