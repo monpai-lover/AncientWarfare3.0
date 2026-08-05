@@ -24,6 +24,23 @@ internal static class KingdomPolicyInheritanceDiagnosticRulesTests
             "first inheritance state is logged");
         False(KingdomPolicyInheritanceDiagnosticRules.ShouldLog(emitted, key),
             "duplicate inheritance state is suppressed");
+
+        string source = System.IO.File.ReadAllText(System.IO.Path.Combine(
+            System.IO.Directory.GetCurrentDirectory(), "Code", "core",
+            "policy", "KingdomPolicyInheritanceService.cs"));
+        Contains(source, "InheritanceDiagnosticKeys.Clear();",
+            "runtime reset clears inheritance diagnostic state");
+        Contains(source,
+            "KingdomPolicyInheritanceDiagnosticRules.ShouldLog(",
+            "policy inheritance logging uses the de-duplication rule");
+        int applyIndex = source.IndexOf(
+            "KingdomPolicyService.ApplySnapshot",
+            System.StringComparison.Ordinal);
+        int logIndex = source.IndexOf(
+            "ModClass.LogInfo(\"[policy inheritance]",
+            System.StringComparison.Ordinal);
+        True(applyIndex >= 0 && logIndex > applyIndex,
+            "policy inheritance is logged only after applying the snapshot");
     }
 
     private static void True(bool pValue, string pMessage)
@@ -53,5 +70,13 @@ internal static class KingdomPolicyInheritanceDiagnosticRulesTests
         if (string.Equals(pExpected, pActual,
                 System.StringComparison.Ordinal))
             throw new InvalidOperationException(pMessage + ": values matched");
+    }
+
+    private static void Contains(string pSource, string pExpected,
+        string pMessage)
+    {
+        if (!pSource.Contains(pExpected, System.StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage + ": missing=" +
+                pExpected);
     }
 }
