@@ -296,6 +296,9 @@ namespace AncientWarfare3.core.lineage
                     XiaizedFamilyBranchTransitionService.Publish(
                         familyTransition);
                 }
+                if (KingdomInstitutionalXiaizationRules
+                        .ShouldUseXiaInstitutions(level))
+                    KingdomInstitutionalXiaizationService.Request(pKingdom);
                 return true;
             }
             catch (Exception e)
@@ -509,6 +512,9 @@ namespace AncientWarfare3.core.lineage
             XiaizedFamilyBranchTransitionService.Publish(familyTransition);
             UpsertKingdomState(pKingdom, pLevel, pLegitimacy, HasAdoptedRites(pKingdom), HasAdoptedLaw(pKingdom),
                 ReadStableYears(pKingdom));
+            if (KingdomInstitutionalXiaizationRules
+                    .ShouldUseXiaInstitutions(pLevel))
+                KingdomInstitutionalXiaizationService.Request(pKingdom);
             if (pLevel >= LevelXiaizedDynasty)
                 XiaNamingRepair.TryApplyFullyXiaizedKingdomName(pKingdom);
             RulerAppellationService.RefreshLivingProjection(pKingdom);

@@ -1,0 +1,63 @@
+using System;
+using System.Data.SQLite;
+using AncientWarfare3.core.policy;
+
+internal static class KingdomInstitutionalXiaizationPersistenceSqlTests
+{
+    public static void Run()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        KingdomInstitutionalXiaizationStatePersistence.Request(
+            db, kingdomId: 3L, now: 10d);
+        KingdomInstitutionalXiaizationState state =
+            KingdomInstitutionalXiaizationStatePersistence.Load(db, 3L);
+        Equal("prepared", state.Phase,
+            "a level-five transition starts in the prepared phase");
+        Equal(-1L, state.CursorActorId,
+            "a transition starts before its first actor cursor");
+
+        KingdomInstitutionalXiaizationStatePersistence.AdvanceCursor(
+            db, 3L, actorId: 44L, now: 11d);
+        KingdomInstitutionalXiaizationStatePersistence.AdvancePhase(
+            db, 3L, "policy_migrated", now: 12d);
+        state = KingdomInstitutionalXiaizationStatePersistence.Load(db, 3L);
+        Equal("policy_migrated", state.Phase,
+            "policy migration is persisted before court refresh");
+        Equal(44L, state.CursorActorId,
+            "the transition cursor survives phase changes");
+
+        KingdomInstitutionalXiaizationStatePersistence.RecordFailure(
+            db, 3L, "court_refresh_failed", now: 13d);
+        state = KingdomInstitutionalXiaizationStatePersistence.Load(db, 3L);
+        Equal(1, state.FailureCount,
+            "transition failures remain diagnosable");
+        Equal("prepared", state.Phase,
+            "a failed transition returns to a resumable phase");
+
+        KingdomInstitutionalXiaizationStatePersistence.MarkComplete(
+            db, 3L, now: 14d);
+        state = KingdomInstitutionalXiaizationStatePersistence.Load(db, 3L);
+        Equal("complete", state.Phase,
+            "the transition publishes completion explicitly");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection("Data Source=:memory:");
+        db.Open();
+        using var command = new SQLiteCommand(
+            "CREATE TABLE KingdomInstitutionalXiaizationState (" +
+            "KINGDOM_ID INTEGER PRIMARY KEY,VERSION INTEGER,PHASE TEXT," +
+            "CURSOR_ACTOR_ID INTEGER,FAILURE_COUNT INTEGER," +
+            "LAST_ERROR TEXT,REQUESTED_TIME REAL,UPDATED_TIME REAL)", db);
+        command.ExecuteNonQuery();
+        return db;
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

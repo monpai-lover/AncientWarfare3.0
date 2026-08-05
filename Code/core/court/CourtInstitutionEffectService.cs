@@ -23,8 +23,8 @@ namespace AncientWarfare3.core.court
             {
                 pKingdom.data.get(LineageKeys.XIAIZATION_LEVEL,
                     out int xiaizationLevel, 0);
-                eligible = xiaizationLevel >=
-                           XiaizationService.LevelXiaInstitutions;
+                eligible = KingdomInstitutionalXiaizationRules
+                    .ShouldUseXiaInstitutions(xiaizationLevel);
             }
 
             pKingdom.data.get(LineageKeys.COURT_INSTITUTION,

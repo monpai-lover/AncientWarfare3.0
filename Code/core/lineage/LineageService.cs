@@ -2217,12 +2217,10 @@ namespace AncientWarfare3.core.lineage
 
             pKingdom.data.set(LineageKeys.KINGDOM_INTEGRATED, true);
             UpsertKingdomState(pKingdom, pIntegrated: true);
-
-            foreach (var actor in new List<Actor>(pKingdom.getUnits()))
-                ApplyNameIntegrationToActor(actor, kingdomIntegrated: true);
+            NameIntegrationMaterializationService.Request(pKingdom);
         }
 
-        private static bool ApplyNameIntegrationToActor(Actor pActor,
+        internal static bool ApplyNameIntegrationToActor(Actor pActor,
             bool kingdomIntegrated)
         {
             if (pActor?.data == null || pActor.isRekt()) return false;

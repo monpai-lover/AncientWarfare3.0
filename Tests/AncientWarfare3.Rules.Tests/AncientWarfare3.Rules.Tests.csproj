@@ -76,6 +76,8 @@
     <Compile Include="IntegratedNamingRulesTests.cs.txt" />
     <Compile Include="NameIntegrationMaterializationRulesTests.cs.txt" />
     <Compile Include="IntegratedCultureNamingMigrationPersistenceSqlTests.cs.txt" />
+    <Compile Include="NameIntegrationMaterializationPersistenceSqlTests.cs.txt" />
+    <Compile Include="KingdomInstitutionalXiaizationPersistenceSqlTests.cs.txt" />
     <Compile Include="XiaizationAuthoritySeparationRulesTests.cs.txt" />
     <Compile Include="ActorLocalizedNameBoundaryRulesTests.cs.txt" />
     <Compile Include="LocalizedNameMigrationRulesTests.cs.txt" />
@@ -480,7 +482,11 @@
     <Compile Include="..\..\Code\core\lineage\IntegratedCultureNamingMigrationRules.cs" Link="Production\IntegratedCultureNamingMigrationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NameIntegrationMaterializationRules.cs" Link="Production\NameIntegrationMaterializationRules.cs" />
     <Compile Include="..\..\Code\core\db\CultureNamingMigrationStateTableItem.cs" Link="Production\CultureNamingMigrationStateTableItem.cs" />
+    <Compile Include="..\..\Code\core\db\KingdomNameIntegrationMigrationStateTableItem.cs" Link="Production\KingdomNameIntegrationMigrationStateTableItem.cs" />
+    <Compile Include="..\..\Code\core\db\KingdomInstitutionalXiaizationStateTableItem.cs" Link="Production\KingdomInstitutionalXiaizationStateTableItem.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomInstitutionalXiaizationPersistence.cs" Link="Production\KingdomInstitutionalXiaizationPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\IntegratedCultureNamingMigrationPersistence.cs" Link="Production\IntegratedCultureNamingMigrationPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\NameIntegrationMaterializationPersistence.cs" Link="Production\NameIntegrationMaterializationPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternStemConversionRules.cs" Link="Production\WesternStemConversionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionPersistence.cs" Link="Production\XiaizedFamilyBranchTransitionPersistence.cs" />
     <Compile Include="..\..\Code\core\naming\AWCultureNamingTraditionRules.cs" Link="Production\AWCultureNamingTraditionRules.cs" />
