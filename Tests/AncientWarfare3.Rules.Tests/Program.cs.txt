@@ -222,6 +222,13 @@ if (args.Length == 1 && args[0] == "--western-lineage-admission-rules-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--western-stem-conversion-slice")
+{
+    WesternStemConversionRulesTests.Run();
+    Console.WriteLine("AW3 western stem conversion rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--western-policy-profile-slice")
 {
     WesternPolicyProfileRulesTests.Run();

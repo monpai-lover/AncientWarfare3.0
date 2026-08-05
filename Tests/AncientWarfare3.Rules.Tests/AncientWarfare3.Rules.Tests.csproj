@@ -92,6 +92,7 @@
     <Compile Include="WesternGoalRegressionRulesTests.cs.txt" />
     <Compile Include="WesternLineageAdmissionPersistenceSqlTests.cs.txt" />
     <Compile Include="XiaizedFamilyBranchTransitionRulesTests.cs.txt" />
+    <Compile Include="WesternStemConversionRulesTests.cs.txt" />
     <Compile Include="XiaizedFamilyBranchTransitionPersistenceSqlTests.cs.txt" />
     <Compile Include="WesternPolicyProfileRulesTests.cs.txt" />
     <Compile Include="WesternPolicyProfileMigrationRulesTests.cs.txt" />
@@ -474,6 +475,7 @@
     <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionRules.cs" Link="Production\WesternLineageAdmissionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionPersistence.cs" Link="Production\WesternLineageAdmissionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionRules.cs" Link="Production\XiaizedFamilyBranchTransitionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WesternStemConversionRules.cs" Link="Production\WesternStemConversionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionPersistence.cs" Link="Production\XiaizedFamilyBranchTransitionPersistence.cs" />
     <Compile Include="..\..\Code\core\naming\AWCultureNamingTraditionRules.cs" Link="Production\AWCultureNamingTraditionRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWWesternFamilyNameRules.cs" Link="Production\AWWesternFamilyNameRules.cs" />

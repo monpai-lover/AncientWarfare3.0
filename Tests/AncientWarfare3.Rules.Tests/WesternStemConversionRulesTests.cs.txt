@@ -1,0 +1,23 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WesternStemConversionRulesTests
+{
+    public static void Run()
+    {
+        Equal("贾", WesternStemConversionRules.ResolveSurname(7L, "德·贾阿拉"), "de particle extracts first Han character");
+        Equal("巴", WesternStemConversionRules.ResolveSurname(8L, "冯 巴黎"), "feng particle is recognized with a space");
+        Equal("赵", WesternStemConversionRules.ResolveSurname(9L, "迪・赵明"), "di particle is recognized with a middle dot");
+        Equal(true, WesternStemConversionRules.ResolveSurname(10L, "范Paris") != "范", "fan particle is recognized without a separator");
+        Equal("贾", WesternStemConversionRules.ResolveSurname(11L, "  德  贾阿拉  "), "whitespace is normalized");
+        string fallback = WesternStemConversionRules.ResolveSurname(12L, "von Paris");
+        Equal(true, fallback.Length == 1, "non-Han stem uses one stable Han surname");
+        Equal(fallback, WesternStemConversionRules.ResolveSurname(12L, "von Paris"), "fallback is deterministic");
+        Equal(true, WesternStemConversionRules.ResolveShi(13L, "德·贾阿拉", "贾").Length > 0, "Shi conversion is non-empty");
+        Equal(false, WesternStemConversionRules.ResolveShi(13L, "德·贾阿拉", "贾") == "贾", "Shi remains distinct from surname");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual)) throw new InvalidOperationException($"{message}: expected {expected}, got {actual}");
+    }
+}

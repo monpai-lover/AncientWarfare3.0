@@ -65,9 +65,13 @@ namespace AncientWarfare3.core.lineage
                 out string chineseFamily, string.Empty);
             king.data.get(AWNameDataKeys.FamilyComponent,
                 out string localizedFamily, string.Empty);
-            string family = XiaizedFamilyBranchTransitionRules.ResolveFamily(
-                chineseFamily, localizedFamily,
-                LineageNamePool.RandomSurname());
+            string rawWesternStem = !string.IsNullOrWhiteSpace(localizedFamily)
+                ? localizedFamily
+                : chineseFamily;
+            string family = rawWesternStem.Length > 0
+                ? WesternStemConversionRules.ResolveSurname(oldShiId,
+                    rawWesternStem)
+                : LineageNamePool.RandomSurname();
             string cityName = ResolveCityChineseName(pKingdom, king);
             string clan = XiaizedFamilyBranchTransitionRules.ResolveClan(
                 cityName, family, RandomShiDifferentFrom(family));
