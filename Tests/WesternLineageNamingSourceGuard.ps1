@@ -40,10 +40,15 @@ Require-Match $service 'AWCultureNamingTraditionRules\.' `
     'The culture tradition service does not use the pure persistence rules.'
 Require-Match $service `
     'XiaCultureIntegrationService\.IsFullyIntegrated\s*\(' `
-    'Naming must switch to Xia only from the persisted full-entry marker.'
-if ($service -match 'XiaCultureIntegrationService\.IsIntegrated\s*\(') {
-    throw 'Level-four integration must not switch a culture naming profile.'
-}
+    'Naming must retain the persisted full-entry marker as a personal-name input.'
+Require-Match $service `
+    'XiaCultureIntegrationService\.IsIntegrated\s*\(' `
+    'Integrated cultures must switch personal naming before full institutional entry.'
+$migrationRules = Read-Source `
+    'Code/core/lineage/IntegratedCultureNamingMigrationRules.cs'
+Require-Match $migrationRules `
+    'ShouldUseXiaPersonalNaming\s*\(' `
+    'Personal naming authority must be centralized in the culture migration rules.'
 Require-Match $service 'ResolveForActor\s*\(\s*Actor' `
     'The culture tradition service is missing ResolveForActor(Actor).'
 Require-Match $localized 'AWCultureNamingTraditionService\.ResolveForActor\s*\(' `

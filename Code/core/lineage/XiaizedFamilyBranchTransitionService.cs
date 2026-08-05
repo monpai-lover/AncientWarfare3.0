@@ -65,9 +65,12 @@ namespace AncientWarfare3.core.lineage
                 out string chineseFamily, string.Empty);
             king.data.get(AWNameDataKeys.FamilyComponent,
                 out string localizedFamily, string.Empty);
-            string rawWesternStem = !string.IsNullOrWhiteSpace(localizedFamily)
-                ? localizedFamily
-                : chineseFamily;
+            string rawWesternStem = !string.IsNullOrWhiteSpace(
+                    oldBranch?.display_stem)
+                ? oldBranch.display_stem
+                : (!string.IsNullOrWhiteSpace(localizedFamily)
+                    ? localizedFamily
+                    : chineseFamily);
             string family = rawWesternStem.Length > 0
                 ? WesternStemConversionRules.ResolveSurname(oldShiId,
                     rawWesternStem)
@@ -86,6 +89,7 @@ namespace AncientWarfare3.core.lineage
                     AWCultureNamingTraditionRules.SerializeProfile(oldProfile),
                 FamilyName = family,
                 ClanName = clan,
+                DisplayStem = rawWesternStem,
                 OriginKingdomId = pKingdom.id,
                 OriginCityId = pKingdom.capital?.data?.id ??
                                king.city?.data?.id ?? -1L,

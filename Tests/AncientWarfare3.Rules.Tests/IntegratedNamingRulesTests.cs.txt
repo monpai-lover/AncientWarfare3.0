@@ -6,6 +6,58 @@ internal static class IntegratedNamingRulesTests
 {
     public static void Run()
     {
+        Equal(true,
+            IntegratedCultureNamingMigrationRules.ShouldUseXiaPersonalNaming(
+                integrated: true, fullyIntegrated: false),
+            "an integrated culture uses Xia personal naming before full integration");
+        Equal(true,
+            IntegratedCultureNamingMigrationRules.ShouldUseXiaPersonalNaming(
+                integrated: false, fullyIntegrated: true),
+            "a fully integrated culture also uses Xia personal naming");
+        Equal(false,
+            IntegratedCultureNamingMigrationRules.ShouldUseXiaPersonalNaming(
+                integrated: false, fullyIntegrated: false),
+            "an ordinary foreign culture keeps its natural naming authority");
+        Equal(true,
+            IntegratedCultureNamingMigrationRules.ShouldStartNewXiaBranch(
+                NamingProfileId.Western, NamingProfileId.Xia,
+                surnameChanged: true),
+            "a Western family that adopts a Han surname becomes a new Xia branch");
+        Equal(false,
+            IntegratedCultureNamingMigrationRules.ShouldStartNewXiaBranch(
+                NamingProfileId.Western, NamingProfileId.Xia,
+                surnameChanged: false),
+            "an unchanged surname does not create a duplicate Xia branch");
+        Equal(false,
+            IntegratedCultureNamingMigrationRules.ShouldStartNewXiaBranch(
+                NamingProfileId.Xia, NamingProfileId.Xia,
+                surnameChanged: true),
+            "an existing Xia family does not create a redundant branch");
+        Equal(IntegratedCultureNamingMigrationAction.RecordProfileOnly,
+            IntegratedCultureNamingMigrationRules.Decide(
+                alive: true, sameCulture: true, xiaProfile: true,
+                alreadyXia: false, customName: true,
+                authoredHistorical: false),
+            "a custom name records Xia readiness without overwriting the name");
+        Equal(IntegratedCultureNamingMigrationAction.Skip,
+            IntegratedCultureNamingMigrationRules.Decide(
+                alive: false, sameCulture: true, xiaProfile: true,
+                alreadyXia: false, customName: false,
+                authoredHistorical: false),
+            "dead archives are skipped by live-name migration");
+        Equal(IntegratedCultureNamingMigrationAction.RecordProfileOnly,
+            IntegratedCultureNamingMigrationRules.Decide(
+                alive: true, sameCulture: true, xiaProfile: true,
+                alreadyXia: false, customName: false,
+                authoredHistorical: true),
+            "historical figures and masters keep authored names");
+        Equal(IntegratedCultureNamingMigrationAction.Skip,
+            IntegratedCultureNamingMigrationRules.Decide(
+                alive: true, sameCulture: false, xiaProfile: true,
+                alreadyXia: false, customName: false,
+                authoredHistorical: false),
+            "late arrivals from another culture are revalidated before migration");
+
         Equal(15, FamilyTreeMaterializationRules.ReaderStartupFallbackFrames,
             "family-tree reader startup fallback stays below a visible delay");
         Equal(60, FamilyTreeMaterializationRules.RequestTimeoutFrames,

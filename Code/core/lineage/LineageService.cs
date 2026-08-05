@@ -2195,21 +2195,57 @@ namespace AncientWarfare3.core.lineage
 
             foreach (var actor in new List<Actor>(pKingdom.getUnits()))
             {
-                bool pseudoActor = XiaizationService.UsesXiaizedInstitutionSystem(pKingdom) &&
-                                   UsesAwLineageSystem(actor);
-                if (!IsXia(actor) && !pseudoActor) continue;
+                if (actor?.data == null || actor.isRekt()) continue;
 
-                actor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
-                if (string.IsNullOrEmpty(clan))
+                NamingProfileId profile = AWCultureNamingTraditionService
+                    .ResolveForActorReadOnly(actor).Profile;
+                actor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+                bool actorIntegrated = profile == NamingProfileId.Xia;
+                NameIntegrationAction action =
+                    NameIntegrationMaterializationRules.Decide(
+                        kingdomIntegrated: true, profile, shiId,
+                        protectedName: HasProtectedAuthoredName(actor),
+                        actorIntegrated);
+                if (action == NameIntegrationAction.Skip) continue;
+
+                if (action == NameIntegrationAction.RecordProfileOnly)
                 {
-                    clan = LineageNamePool.RandomShi();
-                    actor.data.set(LineageKeys.CLAN_NAME, clan);
+                    // Protected identities receive the integration marker for
+                    // future readiness checks, but their authored display/name
+                    // slots remain untouched.
+                    actor.data.set(LineageKeys.NAME_INTEGRATED, true);
+                    ArchiveActor(actor, pAlive: true);
+                    continue;
                 }
 
+                actor.data.get(LineageKeys.CLAN_NAME, out string clan,
+                    string.Empty);
+                if (string.IsNullOrWhiteSpace(clan) && shiId >= 0L)
+                {
+                    clan = LineageQuery.GetShiBranchInfo(shiId)?.clan_name ??
+                           string.Empty;
+                }
+                if (string.IsNullOrWhiteSpace(clan) &&
+                    action == NameIntegrationAction.MaterializePersonalClan)
+                {
+                    long cultureId = actor.culture?.getID() ?? -1L;
+                    clan = NameIntegrationMaterializationRules
+                        .ResolvePersonalClan(actor.data.id, cultureId);
+                }
+                if (string.IsNullOrWhiteSpace(clan)) continue;
+
+                actor.data.set(LineageKeys.CLAN_NAME, clan.Trim());
                 actor.data.set(LineageKeys.NAME_INTEGRATED, true);
                 ApplyDisplayName(actor);
                 ArchiveActor(actor, pAlive: true);
             }
+        }
+
+        private static bool HasProtectedAuthoredName(Actor pActor)
+        {
+            if (pActor?.data == null) return true;
+            return pActor.data.custom_name || IsHistoricalFigure(pActor) ||
+                   HistoricalSchoolDescentService.IsCanonicalMaster(pActor);
         }
 
         // ──────────────────────────── 同姓不婚 ────────────────────────────
