@@ -245,6 +245,10 @@ namespace AncientWarfare3.core.performance
         {
             if (pMap == null)
             {
+                // Teardown can race the final scheduler callback. Cancel the
+                // active cycle before releasing its world-owned resources.
+                if (Active || HasMutatingPresentationWorkInFlight)
+                    Abort();
                 _presentationRefresh.Clear();
                 RestoreNativeParallelism();
                 return;

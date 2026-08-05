@@ -73,6 +73,11 @@ internal static class WarForceEliminationRulesTests
         True(central.Contains(
                 "WarForceSpecialSettlementService.TrySettle"),
             "special router runs before ordinary settlement");
+        True(central.Contains("pWar.countAttackersWarriors()") &&
+             central.Contains("pWar.countDefendersWarriors()") &&
+             !central.Contains("CountSideReserves") &&
+             !central.Contains("CityReservePoolService.CountAvailable"),
+            "ordinary force exhaustion uses only native War force facts");
         True(central.Contains("TrySettleZhuluZeroForce(pWar)") &&
              router.Contains("ResolveZeroForceFallback(") &&
              !router.Contains("ZhuluWarSettlementService"),
@@ -87,7 +92,7 @@ internal static class WarForceEliminationRulesTests
         Equal(WarForceSettlementOfferMode.Surrender,
             WarForceEliminationRules.OfferMode(
                 WarForceEliminationDecisionKind.DefendersSurrender),
-            "one-sided exhaustion uses full surrender");
+            "one-sided exhaustion identifies the losing side");
         Equal(WarForceSettlementOfferMode.MaximumBenefit,
             WarForceEliminationRules.OfferMode(
                 WarForceEliminationDecisionKind.ScoreSettlement),
@@ -102,6 +107,19 @@ internal static class WarForceEliminationRulesTests
             "WarPeaceSettlementService.cs"));
         True(service.Contains("ForceMilitaryEliminationSettlement"),
             "ordinary settlement exposes an elimination entry point");
+        True(service.Contains("WarPeaceTermsRules.MaximumWarScore") &&
+             !service.Contains("? -WarPeaceTermsRules.MaximumWarScore"),
+            "force elimination gives the winner a positive full score");
+
+        string elimination = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "WarForceEliminationSettlementService.cs"));
+        True(elimination.Contains("Kingdom requester = winner") &&
+             elimination.Contains("WarPeaceDefaultOfferMode.ExhaustionMaximumBenefit"),
+            "force exhaustion negotiates from the winner at maximum benefit");
+        True(elimination.Contains("TryReadScoreIfRequired") &&
+             elimination.Contains("state.Observe(pMonthKey"),
+            "one-sided exhaustion records force facts without requiring score");
     }
 
     private static void DuplicateObservationsInOneMonthDoNotConfirmExhaustion()

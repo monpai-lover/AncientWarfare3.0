@@ -214,6 +214,8 @@ namespace AncientWarfare3.core.lineage
             var city = ResolveActorCitySnapshot(pActor, pPrevious);
             var social = ResolveSocialTitleSnapshot(pActor,
                 kingdom.kingdomName, kingdom.kingdomColor, city.cityName);
+            string primaryCeremonial = CeremonialTitleResolver.ResolveArchive(
+                pActor, pPrevious);
             long clanId = pActor.clan?.data?.id ?? -1L;
             bool currentClan = clanId >= 0L;
             double deathTime = pAlive
@@ -251,6 +253,7 @@ namespace AncientWarfare3.core.lineage
                 city_name = city.cityName ?? "",
                 social_title = social.title ?? "",
                 social_title_color = social.color ?? "",
+                primary_ceremonial_title = primaryCeremonial,
                 original_clan_id = currentClan
                     ? clanId
                     : pPrevious?.original_clan_id ?? -1L,
@@ -388,6 +391,8 @@ namespace AncientWarfare3.core.lineage
                 !Same(pPrevious.social_title, pCurrent.social_title) ||
                 !Same(pPrevious.social_title_color,
                     pCurrent.social_title_color) ||
+                !Same(pPrevious.primary_ceremonial_title,
+                    pCurrent.primary_ceremonial_title) ||
                 pPrevious.status != pCurrent.status ||
                 pPrevious.noble_distance != pCurrent.noble_distance ||
                 !Same(pPrevious.kingdom_name, pCurrent.kingdom_name) ||
@@ -434,6 +439,8 @@ namespace AncientWarfare3.core.lineage
                  !Same(pPrevious.social_title, pCurrent.social_title) ||
                  !Same(pPrevious.social_title_color,
                      pCurrent.social_title_color) ||
+                 !Same(pPrevious.primary_ceremonial_title,
+                     pCurrent.primary_ceremonial_title) ||
                  pPrevious.status != pCurrent.status ||
                  pPrevious.noble_distance != pCurrent.noble_distance ||
                  !Same(pPrevious.kingdom_name, pCurrent.kingdom_name) ||
@@ -536,6 +543,8 @@ namespace AncientWarfare3.core.lineage
             values.Add(ColumnVal.Create("CITY_NAME", pRow.city_name));
             values.Add(ColumnVal.Create("SOCIAL_TITLE", pRow.social_title));
             values.Add(ColumnVal.Create("SOCIAL_TITLE_COLOR", pRow.social_title_color));
+            values.Add(ColumnVal.Create("PRIMARY_CEREMONIAL_TITLE",
+                pRow.primary_ceremonial_title));
             values.Add(ColumnVal.Create("ORIGINAL_CLAN_ID", pRow.original_clan_id));
             values.Add(ColumnVal.Create("CLAN_COLOR_TEXT", pRow.clan_color_text));
             values.Add(ColumnVal.Create("CLAN_COLOR_ID", pRow.clan_color_id));

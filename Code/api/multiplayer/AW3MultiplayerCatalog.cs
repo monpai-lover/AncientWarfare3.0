@@ -119,7 +119,10 @@ namespace AncientWarfare3.api.multiplayer
                     AW3WindowContextRequirement.Country |
                     AW3WindowContextRequirement.TargetCountry),
                 Window(AW3WindowKind.Supporters, "aw_supporters",
-                    "ui/icons/iconKnowledge", AW3WindowCategory.Records)
+                    "ui/icons/iconKnowledge", AW3WindowCategory.Records),
+                Window(AW3WindowKind.VirtualTitles, "aw_virtual_titles",
+                    "ui/icons/iconKings", AW3WindowCategory.Domestic,
+                    AW3WindowContextRequirement.Country)
             });
 
         private static readonly IReadOnlyList<AW3CommandDescriptor>
@@ -196,7 +199,10 @@ namespace AncientWarfare3.api.multiplayer
                 Command(AW3CommandKind.CancelArmyOrder,
                     AW3WindowCategory.DiplomacyAndWar, Country()),
                 Command(AW3CommandKind.SubmitCivilServiceRanking,
-                    AW3WindowCategory.Domestic, Country())
+                    AW3WindowCategory.Domestic, Country()),
+                Command(AW3CommandKind.GrantVirtualNobleTitle,
+                    AW3WindowCategory.Domestic, Country() |
+                    AW3WindowContextRequirement.Actor)
             });
 
         public static IReadOnlyList<AW3WindowDescriptor> Windows =>

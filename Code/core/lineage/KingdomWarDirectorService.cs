@@ -704,16 +704,6 @@ namespace AncientWarfare3.core.lineage
             }
             if (!batch.Complete) return;
 
-            if (TemporaryLevyRules.ShouldRequestZeroArmyRecovery(
-                    MilitaryEmergencyService.HasAny(pKingdom),
-                    pWork.Armies.Count,
-                    TemporaryLevyService.HasPendingOffensiveRecovery(
-                        pKingdom)))
-                TemporaryLevyService.RequestOffensiveRecovery(pKingdom,
-                    pKingdom.capital,
-                    TemporaryLevyRules.MaxRecruitsPerWorkItem,
-                    pForceEstablishment: true);
-
             var warFacts = new List<WarAllocationFacts>(
                 pWork.SelectedWars.Count);
             for (int i = 0; i < pWork.SelectedWars.Count; i++)
@@ -1630,8 +1620,9 @@ namespace AncientWarfare3.core.lineage
                 ArmyLogisticsRules.MinimumOperationalForce -
                 Math.Max(0, pArmy.UnitCount),
                 targetStrength - Math.Max(0, pArmy.UnitCount));
-            TemporaryLevyService.RequestOffensiveRecovery(pKingdom,
-                anchor, Math.Max(1, demand), pTargetArmy: army);
+            ArmyReplenishmentOperationService.Ensure(
+                army, pKingdom, anchor, Math.Max(1, demand),
+                LineageService.CurTime());
         }
 
         private static bool TryRecoverMissingCaptain(Kingdom pKingdom,
@@ -1659,7 +1650,6 @@ namespace AncientWarfare3.core.lineage
                     !captain.isRekt()) return true;
             }
             catch { }
-            TemporaryLevyService.RequestCaptainRecovery(pKingdom, army);
             return false;
         }
 

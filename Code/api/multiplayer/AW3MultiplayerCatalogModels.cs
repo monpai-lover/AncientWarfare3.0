@@ -59,7 +59,8 @@ namespace AncientWarfare3.api.multiplayer
         CivilServiceExam = 26,
         RulerHousehold = 27,
         HouseholdOffer = 28,
-        Supporters = 29
+        Supporters = 29,
+        VirtualTitles = 30
     }
 
     public enum AW3WindowOpenStatus : byte
@@ -334,7 +335,8 @@ namespace AncientWarfare3.api.multiplayer
         SetArmyPosture = 24,
         CancelArmyOrder = 25,
         SubmitCivilServiceRanking = 26,
-        RenameSurname = 27
+        RenameSurname = 27,
+        GrantVirtualNobleTitle = 28
     }
 
     public enum AW3CommandStatus : byte
@@ -591,6 +593,12 @@ namespace AncientWarfare3.api.multiplayer
             AW3CommandKind.RenameSurname, countryId,
             actorId: Positive(actorId, nameof(actorId)),
             text: DisplayText(familyName, nameof(familyName)));
+
+        public static AW3CommandRequest GrantVirtualNobleTitle(
+            long countryId, long actorId, string titleText) => Create(
+            AW3CommandKind.GrantVirtualNobleTitle, countryId,
+            actorId: Positive(actorId, nameof(actorId)),
+            text: DisplayText(titleText, nameof(titleText)));
 
         public static AW3CommandRequest ChangeEra(long countryId,
             string eraName) => Create(AW3CommandKind.ChangeEra, countryId,

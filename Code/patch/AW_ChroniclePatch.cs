@@ -79,6 +79,7 @@ namespace AncientWarfare3.patch
             VassalService.OnKingdomDestroyed(pKingdom);
             DiplomacyExtinctionService.OnKingdomDestroying(pKingdom);
             WarNoticeService.OnKingdomDestroying(pKingdom);
+            VirtualNobleTitleService.OnKingdomDestroying(pKingdom);
             MilitaryEmergencyService.OnKingdomDestroying(pKingdom);
             TemporaryLevyService.OnKingdomDestroying(pKingdom);
             WartimeGarrisonService.OnKingdomDestroying(pKingdom);

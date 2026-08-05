@@ -93,7 +93,8 @@ namespace AncientWarfare3.core.lineage
                     out int defenders) ||
                 !Observations.TryGetValue(pWar.data.id,
                     out WarForceObservationState state) ||
-                !TryReadAttackerScore(pWar, out int score)) return false;
+                !TryReadScoreIfRequired(pWar, attackers, defenders, state,
+                    out int score)) return false;
             pDecision = WarForceEliminationRules.Resolve(attackers,
                 defenders, state.AttackerZeroStreak,
                 state.DefenderZeroStreak, score);
@@ -105,8 +106,7 @@ namespace AncientWarfare3.core.lineage
         {
             pDecision = default;
             if (!TryReadPotentials(pWar, out int attackers,
-                    out int defenders) ||
-                !TryReadAttackerScore(pWar, out int score)) return false;
+                    out int defenders)) return false;
             if (!Observations.TryGetValue(pWar.data.id,
                     out WarForceObservationState state))
             {
@@ -114,10 +114,27 @@ namespace AncientWarfare3.core.lineage
                 Observations[pWar.data.id] = state;
             }
             state.Observe(pMonthKey, attackers, defenders);
+            if (!TryReadScoreIfRequired(pWar, attackers, defenders, state,
+                    out int score)) return false;
             pDecision = WarForceEliminationRules.Resolve(attackers,
                 defenders, state.AttackerZeroStreak,
                 state.DefenderZeroStreak, score);
             return pDecision.Kind != WarForceEliminationDecisionKind.None;
+        }
+
+        private static bool TryReadScoreIfRequired(War pWar,
+            int pAttackers, int pDefenders,
+            WarForceObservationState pState, out int pScore)
+        {
+            pScore = 0;
+            bool attackersExhausted = pAttackers == 0 &&
+                pState.AttackerZeroStreak >=
+                    WarForceEliminationRules.RequiredZeroObservations;
+            bool defendersExhausted = pDefenders == 0 &&
+                pState.DefenderZeroStreak >=
+                    WarForceEliminationRules.RequiredZeroObservations;
+            if (!attackersExhausted || !defendersExhausted) return true;
+            return TryReadAttackerScore(pWar, out pScore);
         }
 
         internal static bool TryReadPotentials(War pWar,
@@ -129,28 +146,14 @@ namespace AncientWarfare3.core.lineage
                 MainDefender(pWar)?.data == null) return false;
             try
             {
-                pAttackers = WarForceEliminationRules.AddPotential(
-                    Math.Max(0, pWar.countAttackersWarriors()),
-                    CountSideReserves(pWar.getAttackers()));
-                pDefenders = WarForceEliminationRules.AddPotential(
-                    Math.Max(0, pWar.countDefendersWarriors()),
-                    CountSideReserves(pWar.getDefenders()));
+                // The native War counters are the authoritative force facts
+                // for elimination. AW3 reserve capacity is a mobilization
+                // input, not an active force in the current war record.
+                pAttackers = Math.Max(0, pWar.countAttackersWarriors());
+                pDefenders = Math.Max(0, pWar.countDefendersWarriors());
                 return true;
             }
             catch { return false; }
-        }
-
-        private static int CountSideReserves(IEnumerable<Kingdom> pSide)
-        {
-            int total = 0;
-            if (pSide == null) return total;
-            foreach (Kingdom kingdom in pSide)
-            {
-                if (kingdom?.data == null || kingdom.isRekt()) continue;
-                total = WarForceEliminationRules.AddPotential(total,
-                    CityReservePoolService.CountAvailable(kingdom));
-            }
-            return total;
         }
 
         private static bool TryReadAttackerScore(War pWar, out int pScore)
@@ -216,10 +219,12 @@ namespace AncientWarfare3.core.lineage
                 ? attacker
                 : defender;
             Kingdom loser = winner == attacker ? defender : attacker;
-            Kingdom requester = surrender ? loser : winner;
-            Kingdom responder = surrender ? winner : loser;
+            Kingdom requester = winner;
+            Kingdom responder = loser;
             WarPeaceDefaultOfferMode mode = ToRuntimeOfferMode(decision.Kind);
-            int signedScore = surrender ? -100 : decision.Score;
+            int signedScore = surrender
+                ? WarPeaceTermsRules.MaximumWarScore
+                : decision.Score;
             WarPeaceSettlementDraft draft = WarPeaceSettlementService.
                 Instance.BuildDefaultDraft(war, requester, responder,
                     signedScore, mode);
@@ -250,7 +255,7 @@ namespace AncientWarfare3.core.lineage
             switch (WarForceEliminationRules.OfferMode(pKind))
             {
                 case WarForceSettlementOfferMode.Surrender:
-                    return WarPeaceDefaultOfferMode.Surrender;
+                    return WarPeaceDefaultOfferMode.ExhaustionMaximumBenefit;
                 case WarForceSettlementOfferMode.MaximumBenefit:
                     return WarPeaceDefaultOfferMode.
                         ExhaustionMaximumBenefit;

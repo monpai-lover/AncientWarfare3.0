@@ -87,12 +87,9 @@
     {
         "id":  "elf_name",
         "templates":  [
+                         
                           {
-                              "format":  "{精灵姓氏:family_name}{空位识别符}{精灵文化:given_name}",
-                              "weight":  1
-                          },
-                          {
-                              "format":  "{精灵姓氏:family_name}{空位识别符}{精灵名字中缀:middle_name}{精灵名字:given_name}",
+                              "format":  "{精灵名字:given_name}",
                               "weight":  5
                           }
                       ]

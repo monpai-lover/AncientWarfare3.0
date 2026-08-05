@@ -53,6 +53,7 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return AW3RecordsCommandHandler.Dispatch(request);
                 case AW3CommandKind.RenameClan:
                 case AW3CommandKind.RenameSurname:
+                case AW3CommandKind.GrantVirtualNobleTitle:
                     return AW3RecordsCommandHandler.Dispatch(request);
                 case AW3CommandKind.ChangeEra:
                     return AW3RecordsCommandHandler.Dispatch(request);

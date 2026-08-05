@@ -14,6 +14,8 @@ $cityPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
     'Code/patch/AW_ArmySafetyPatch.cs')
 $deferredPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
     'Code/patch/AW_DeferredRuntimeWorkPatch.cs')
+$authorityCycle = Get-Content -Raw -LiteralPath (Join-Path $repo `
+    'Code/core/performance/AWAuthorityCycleService.cs')
 $armyService = Get-Content -Raw -LiteralPath (Join-Path $repo `
     'Code/core/lineage/AWArmyService.cs')
 $dirtyPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
@@ -25,8 +27,11 @@ if ($actorPatch -notmatch 'ArmyMembershipReconciliationService\.Enqueue') {
 if ($cityPatch -notmatch 'ArmyMembershipReconciliationService\.Enqueue') {
     throw 'City.setKingdom must enqueue its anchor army after transfer.'
 }
-if ($deferredPatch -notmatch 'ArmyMembershipReconciliationService\.ProcessFrame') {
-    throw 'The main-thread deferred runtime host must process army reconciliation.'
+if ($authorityCycle -notmatch 'ArmyMembershipReconciliationService\.ProcessFrame') {
+    throw 'The authority cycle must process army reconciliation.'
+}
+if ($deferredPatch -match 'ArmyMembershipReconciliationService\.ProcessFrame') {
+    throw 'Army reconciliation must not run from the render-frame deferred host.'
 }
 if ($service -notmatch 'public static void Enqueue\(Army pArmy\)\s*\{\s*if \(pArmy\?\.data == null\) return;') {
     throw 'The public enqueue boundary must accept actors or cities without an army.'

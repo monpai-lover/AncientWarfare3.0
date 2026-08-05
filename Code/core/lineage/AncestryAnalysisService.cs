@@ -622,6 +622,14 @@ namespace AncientWarfare3.core.lineage
 
                 try
                 {
+                    string virtualTitle = VirtualNobleTitleService.GetPrimaryTitle(pActor);
+                    if (!string.IsNullOrWhiteSpace(virtualTitle))
+                        return virtualTitle;
+                }
+                catch { }
+
+                try
+                {
                     string dynasticTitle =
                         DynasticTitleService.ResolveLivingTitle(pActor);
                     if (!string.IsNullOrEmpty(dynasticTitle))
@@ -677,6 +685,9 @@ namespace AncientWarfare3.core.lineage
                 }
                 catch { }
             }
+
+            if (!string.IsNullOrEmpty(pRow?.primary_ceremonial_title))
+                return pRow.primary_ceremonial_title;
 
             if (!string.IsNullOrEmpty(pRow?.social_title))
             {

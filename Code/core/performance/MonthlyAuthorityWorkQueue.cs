@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.performance
 
     internal sealed class MonthlyAuthorityWorkQueue<T>
     {
+        private const int MaxCatchUpMonths = 12;
         private readonly Queue<MonthlyAuthorityWorkItem<T>> _pending =
             new Queue<MonthlyAuthorityWorkItem<T>>();
         private int _lastScheduledMonthKey = int.MinValue;
@@ -25,12 +26,27 @@ namespace AncientWarfare3.core.performance
 
         internal bool ScheduleMonth(int pMonthKey, IEnumerable<T> pValues)
         {
-            if (pMonthKey == _lastScheduledMonthKey) return false;
-            _lastScheduledMonthKey = pMonthKey;
-            if (pValues != null)
-                foreach (T value in pValues)
+            if (_lastScheduledMonthKey != int.MinValue &&
+                pMonthKey <= _lastScheduledMonthKey)
+                return false;
+
+            // Large simulation passes can cross more than one calendar month
+            // before authority work runs. Snapshot the current population once
+            // and replay it for each missed month so monthly services do not
+            // silently lose pregnancy, policy, levy, or war observations.
+            List<T> snapshot = pValues == null
+                ? new List<T>()
+                : new List<T>(pValues);
+            long firstCandidate = _lastScheduledMonthKey == int.MinValue
+                ? pMonthKey
+                : (long)_lastScheduledMonthKey + 1L;
+            long catchUpFloor = (long)pMonthKey - MaxCatchUpMonths + 1L;
+            int firstMonth = (int)Math.Max(firstCandidate, catchUpFloor);
+            for (int month = firstMonth; month <= pMonthKey; month++)
+                foreach (T value in snapshot)
                     _pending.Enqueue(new MonthlyAuthorityWorkItem<T>(
-                        pMonthKey, value));
+                        month, value));
+            _lastScheduledMonthKey = pMonthKey;
             return true;
         }
 

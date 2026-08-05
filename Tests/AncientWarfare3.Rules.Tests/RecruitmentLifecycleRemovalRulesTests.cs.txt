@@ -1,0 +1,72 @@
+using System;
+using System.IO;
+
+internal static class RecruitmentLifecycleRemovalRulesTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string authority = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWAuthorityCycleService.cs"));
+        string annual = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "policy", "KingdomAnnualWorkService.cs"));
+        string warPatch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_WarPatch.cs"));
+        string notice = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "WarNoticeService.cs"));
+        string deathPatch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_ActorDeathPatch.cs"));
+        string director = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "KingdomWarDirectorService.cs"));
+        string map = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "policy", "HierarchicalVassalMapModeService.cs"));
+
+        Assert(!authority.Contains("TemporaryLevyService.ProcessPreparationMonth",
+            StringComparison.Ordinal),
+            "authority cycles must not run AW3 preparation conscription");
+        Assert(!annual.Contains("TemporaryLevyService.OnKingdomYear",
+            StringComparison.Ordinal),
+            "annual work must not run AW3 levy recruitment");
+        Assert(!annual.Contains("WartimeGarrisonService.OnKingdomYear",
+            StringComparison.Ordinal),
+            "annual work must not run AW3 war mobilization");
+        Assert(!warPatch.Contains("TemporaryLevyService.OnWarStarted",
+            StringComparison.Ordinal) &&
+            !warPatch.Contains("TemporaryLevyService.OnEmergencyChanged",
+                StringComparison.Ordinal),
+            "war lifecycle must not start AW3 levy preparation");
+        Assert(!notice.Contains("TemporaryLevyService.OnEmergencyChanged",
+            StringComparison.Ordinal) &&
+            !notice.Contains("TemporaryLevyService.OnNoticeClosed",
+                StringComparison.Ordinal),
+            "war notices must not schedule AW3 levy preparation");
+        Assert(!deathPatch.Contains("TemporaryLevyService.OnMilitaryCasualty",
+            StringComparison.Ordinal),
+            "casualty events must not start the retired levy recovery plan");
+        Assert(!warPatch.Contains("TemporaryLevyService.OnWarEnded",
+            StringComparison.Ordinal) &&
+            warPatch.Contains("TemporaryLevyService.OnReplenishmentWarEnded",
+                StringComparison.Ordinal),
+            "war end must use replenishment cleanup without legacy scheduling");
+        Assert(!director.Contains("TemporaryLevyService.RequestOffensiveRecovery",
+            StringComparison.Ordinal),
+            "depleted armies must use the dedicated replenishment operation");
+        Assert(director.Contains("ArmyReplenishmentOperationService.Ensure",
+            StringComparison.Ordinal),
+            "depleted armies keep the dedicated replenishment operation");
+        Assert(authority.Contains("ArmyReplenishmentOperationService.ProcessAuthorityCycle",
+            StringComparison.Ordinal),
+            "the dedicated replenishment operation remains scheduled");
+        Assert(!authority.Contains("KingdomMobilizationIndex",
+            StringComparison.Ordinal),
+            "remaining monthly reserve work must not report as war mobilization");
+        Assert(map.Contains("_nativeDrawCacheValid", StringComparison.Ordinal) &&
+            map.Contains("CanReuseNativeLabels", StringComparison.Ordinal),
+            "native map labels must have an explicit reuse gate");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

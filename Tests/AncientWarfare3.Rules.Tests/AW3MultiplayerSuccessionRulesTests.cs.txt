@@ -216,6 +216,17 @@ internal static class AW3MultiplayerSuccessionRulesTests
         True(commit >= 0 && notify > commit,
             "the provider is notified only after canonical AW3 accession");
 
+        Contains(accession, "AccessionIdentityService.DeferInstalledKing(__instance,",
+            "a failed AW3 identity preparation defers repair instead of vetoing native kingship");
+        Contains(accession, "if (!__state.IdentityPrepared)",
+            "identity preparation failure still allows native Kingdom.setKing");
+        string royalGuard = Read(root, "Code", "patch", "AW_RoyalGuardPatch.cs");
+        Contains(royalGuard, "AccessionIdentityService.DeferInstalledKing(__instance,",
+            "royal guard release failure is deferred instead of leaving a kingless kingdom");
+        string promotion = Read(root, "Code", "patch", "AW_PromotionPatch.cs");
+        Contains(promotion, "AccessionIdentityService.DeferInstalledKing(__instance,",
+            "royal asylum cleanup failure is deferred instead of vetoing kingship");
+
         Contains(candidates, "CollectFinalists(",
             "AW3 exposes effective-law finalists without duplicating rules");
         Contains(heir, "ResolveSuccessionModeForCandidate(",

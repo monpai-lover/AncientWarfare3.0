@@ -365,6 +365,7 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("city_economy",
                     CityEconomyService.ClearRuntime),
                 new AW3RestoreStage("city_tech", CityTechService.ClearRuntime),
+                new AW3RestoreStage("virtual_titles", VirtualNobleTitleService.ClearRuntime),
                 new AW3RestoreStage("court_aristocratic_groups",
                     CourtAristocraticGroupService.ClearRuntime),
                 new AW3RestoreStage("court_peace",

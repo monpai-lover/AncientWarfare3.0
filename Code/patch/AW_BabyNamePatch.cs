@@ -1,3 +1,4 @@
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
 
@@ -18,10 +19,26 @@ namespace AncientWarfare3.patch
     public static class AW_BabyNamePatch
     {
         [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(ActorManager),
+            nameof(ActorManager.createBabyActorFromData))]
+        public static void CreateBabyActorFromData_Postfix(
+            City pCity, Actor __result)
+        {
+            // Vanilla receives pCity but ignores it until applyParentsMeta. In
+            // Large mode this leaves a newborn in its default/wild kingdom
+            // while the actor batch continues; establish the explicit birth
+            // affiliation at the creation boundary.
+            ActorBirthAffiliationService.Reconcile(__result, pCity);
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(BabyMaker), nameof(BabyMaker.makeBaby))]
         public static void MakeBaby_Postfix(Actor pParent1, Actor pParent2, Actor __result)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__result?.data == null) return;
+            ActorBirthAffiliationService.Reconcile(__result, pParent1, pParent2);
             if (!LineageService.IsXia(__result) &&
                 !LineageService.UsesAwLineageSystem(__result) &&
                 !LineageService.HasTraceableArchive(__result)) return;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
@@ -30,6 +31,23 @@ namespace AncientWarfare3.patch
         private static bool _bypassAutoSaveDeferral;
         private static bool _ensuringSaveBoundary;
         private static bool _schedulerLifecycleOwned;
+
+        public static void SpecialPatch()
+        {
+            MethodInfo criticalMethod = AccessTools.Method(
+                typeof(MapBox),
+                nameof(MapBox.checkMainSimulationUpdate));
+            Patches patchInfo = Harmony.GetPatchInfo(criticalMethod);
+            bool installed = patchInfo?.Prefixes.Any(patch =>
+                patch.owner == ModClass.GUID) == true;
+            if (!installed)
+            {
+                throw new InvalidOperationException(
+                    "AW3 could not take ownership of MapBox.checkMainSimulationUpdate.");
+            }
+
+            AWFramePriorityGovernor.MarkCriticalHookInstalled();
+        }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(StatusManager), nameof(StatusManager.update))]
@@ -270,6 +288,13 @@ namespace AncientWarfare3.patch
             }
 
             if (AW3MultiplayerReplicaScope.IsReplicaSession)
+            {
+                ResetSchedulerState(pUnbindSimulationTime: false);
+                return false;
+            }
+
+            if (runner.RequiresControl &&
+                AWWorldInitializationGate.IsPending(__instance))
             {
                 ResetSchedulerState(pUnbindSimulationTime: false);
                 return false;

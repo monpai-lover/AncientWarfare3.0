@@ -326,7 +326,15 @@ namespace AncientWarfare3.core.performance
 
             Actor[] dying = _dyingSource;
             for (int i = 0; i < _dyingSourceCount; i++)
-                dying[i].kingdom.preserveAlive();
+            {
+                // Living actors with a missing or invalid kingdom are
+                // quarantined until ActorKingdomSafetyService repairs them.
+                // Do not re-enter vanilla preserve-alive for a stale kingdom
+                // object: large-scheduler batches can outlive its data.
+                Kingdom kingdom = dying[i]?.kingdom;
+                if (kingdom?.data == null || kingdom.isRekt()) continue;
+                kingdom.preserveAlive();
+            }
 
             Actor[] actors = ActorBuffers[KingdomIndex];
             int count = ActorCounts[KingdomIndex];
@@ -423,13 +431,18 @@ namespace AncientWarfare3.core.performance
             for (int i = 0; i < pCount; i++)
             {
                 Actor pActor = pActors[i];
+                Kingdom kingdom = pActor?.kingdom;
+                if (pActor?.data == null || pActor.asset == null ||
+                    kingdom?.data == null || kingdom.isRekt())
+                    continue;
+
                 if (pActor.asset.is_boat)
                 {
-                    pActor.kingdom.listUnit(pActor);
+                    kingdom.listUnit(pActor);
                     continue;
                 }
 
-                pActor.kingdom.units.Add(pActor);
+                kingdom.units.Add(pActor);
             }
         }
 
@@ -440,6 +453,7 @@ namespace AncientWarfare3.core.performance
             pResult = null;
             foreach (Kingdom kingdom in pKingdoms)
             {
+                if (kingdom?.data == null || kingdom.isRekt()) continue;
                 if (!kingdom.isDirtyUnits()) continue;
                 if (pResult != null)
                 {
@@ -476,6 +490,7 @@ namespace AncientWarfare3.core.performance
             for (int i = start; i < end; i++)
             {
                 Actor pActor = _aliveSource[i];
+                if (pActor?.data == null) continue;
                 if ((enabledMask & SubspeciesBit) != 0)
                 {
                     Subspecies subspecies = pActor.subspecies;
@@ -567,7 +582,7 @@ namespace AncientWarfare3.core.performance
                             ActorBuffers[kingdomIndex][start +
                                 _partitionCounts[slot + kingdomIndex]++] =
                                 pActor;
-                            if (pActor.asset.is_boat)
+                            if (pActor.asset != null && pActor.asset.is_boat)
                                 actorFlags |= kingdomBit;
                         }
                     }

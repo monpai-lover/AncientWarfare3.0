@@ -77,6 +77,7 @@ namespace AncientWarfare3.core.lineage
                 city_name = pRow.city_name,
                 social_title = pRow.social_title,
                 social_title_color = pRow.social_title_color,
+                primary_ceremonial_title = pRow.primary_ceremonial_title,
                 original_clan_id = pRow.original_clan_id,
                 clan_color_text = pRow.clan_color_text,
                 clan_color_id = pRow.clan_color_id,

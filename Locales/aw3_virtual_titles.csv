@@ -1,0 +1,17 @@
+key,cz,en,ch
+aw_virtual_titles,爵位持有人,Title Holders,爵位持有人
+aw_virtual_titles_short,爵位,Titles,爵位
+aw_virtual_titles_none,暂无虚爵,No virtual titles,暫無虛爵
+aw_virtual_title_grant,授予虚爵,Grant Virtual Title,授予虛爵
+aw_virtual_title_grant_desc,授予可世袭的任意文本爵位,Grant an inheritable arbitrary-text title,授予可世襲的任意文本爵位
+aw_virtual_title_grant_action,授予,Grant,授予
+aw_virtual_title_prompt,输入任意可世袭的虚爵文本（最多64字）,Enter an inheritable title (up to 64 characters),輸入任意可世襲的虛爵文本（最多64字）
+aw_virtual_title_placeholder,例如：安国侯,Example: Marquis of An,例如：安國侯
+aw_virtual_noble_title,虚爵,Virtual title,虛爵
+aw_unknown_actor,未知人物,Unknown actor,未知人物
+aw_virtual_title_error_generic,无法授予虚爵,Unable to grant the virtual title,無法授予虛爵
+aw_virtual_title_error_not_ready,爵位档案尚未就绪,The title archive is not ready,爵位檔案尚未就緒
+aw_virtual_title_error_invalid_target,授爵对象无效,The selected title holder is invalid,授爵對象無效
+aw_virtual_title_error_invalid_text,爵位文本无效,The title text is invalid,爵位文本無效
+aw_virtual_title_error_duplicate,该爵位已存在,That title already exists,該爵位已存在
+aw_virtual_title_error_persistence,爵位档案写入失败,The title could not be saved,爵位檔案寫入失敗

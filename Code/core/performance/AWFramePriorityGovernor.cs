@@ -47,12 +47,14 @@ namespace AncientWarfare3.core.performance
         private static double _longestPhaseMilliseconds;
         private static bool _faulted;
         private static string _faultMessage = string.Empty;
+        private static bool _criticalHookInstalled;
         private static int _simulationPhaseDepth;
 
         public static long CyclesStarted { get; private set; }
         public static long CyclesCompleted { get; private set; }
         public static bool Faulted => _faulted;
         public static string FaultMessage => _faultMessage;
+        public static bool CriticalHookInstalled => _criticalHookInstalled;
         public static bool IsExecutingSimulationPhase =>
             _simulationPhaseDepth > 0;
         public static string CurrentPhase => _currentPhase;
@@ -225,6 +227,11 @@ namespace AncientWarfare3.core.performance
         {
             _faulted = false;
             _faultMessage = string.Empty;
+        }
+
+        public static void MarkCriticalHookInstalled()
+        {
+            _criticalHookInstalled = true;
         }
 
         public static void RecordCycleStarted()

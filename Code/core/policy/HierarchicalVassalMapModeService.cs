@@ -70,6 +70,9 @@ namespace AncientWarfare3.core.policy
         private static readonly Dictionary<int, NativeZoneMetaCacheEntry>
             NativeDrawMetaCache =
                 new Dictionary<int, NativeZoneMetaCacheEntry>();
+        private static readonly Dictionary<int,
+            List<HierarchicalVassalLabelTile>> NativeLandTileCache =
+                new Dictionary<int, List<HierarchicalVassalLabelTile>>();
         private static readonly Dictionary<long, NativeCountryLabelEntry>
             NativeCountryLabels =
                 new Dictionary<long, NativeCountryLabelEntry>();
@@ -92,6 +95,10 @@ namespace AncientWarfare3.core.policy
         private static bool _nativeDrawPassActive;
         private static HierarchicalVassalMapModeLayer _selectedLayer =
             HierarchicalVassalMapModeLayer.Countries;
+        private static bool _nativeDrawPassUsingCache;
+        private static bool _nativeDrawCacheValid;
+        private static bool _nativeDrawCacheCityLayer;
+        private static long _nativeDrawCacheFocusKey = long.MinValue;
 
         private delegate bool SelectAndInspectInvoker(
             object pAsset, object pObject);
@@ -134,7 +141,7 @@ namespace AncientWarfare3.core.policy
                 HierarchicalVassalMapModeLabelLayer.
                     HideRuntimeLabelsExcept(null);
                 _selectedLayer = nextLayer;
-                NativeDrawMetaCache.Clear();
+                InvalidateNativeLabelCache();
                 RequestNativeRedraw();
             }
             else
@@ -191,10 +198,12 @@ namespace AncientWarfare3.core.policy
 
         internal static void BeginNativeDrawPass()
         {
-            NativeDrawMetaCache.Clear();
+            _nativeDrawPassUsingCache = CanReuseNativeLabels();
+            _nativeDrawPassActive = true;
+            if (_nativeDrawPassUsingCache) return;
+            InvalidateNativeLabelCache();
             ReleaseNativeDrawEntries();
             ClearNativePublishBuffers();
-            _nativeDrawPassActive = true;
         }
 
         internal static void RecordNativeDrawZone(TileZone pZone)
@@ -232,12 +241,14 @@ namespace AncientWarfare3.core.policy
 
         internal static void EndNativeDrawPass()
         {
+            bool published = false;
             try
             {
-                if (_nativeDrawPassActive)
+                if (_nativeDrawPassActive && !_nativeDrawPassUsingCache)
                 {
                     if (IsCityLayer) PublishNativeCityLabels();
                     else PublishNativeCountryLabels();
+                    published = true;
                 }
             }
             catch (Exception error)
@@ -258,11 +269,31 @@ namespace AncientWarfare3.core.policy
             }
             finally
             {
+                if (_nativeDrawPassActive && !_nativeDrawPassUsingCache &&
+                    published)
+                {
+                    _nativeDrawCacheValid = true;
+                    _nativeDrawCacheCityLayer = IsCityLayer;
+                    _nativeDrawCacheFocusKey = CurrentLabelFocusKey;
+                }
                 _nativeDrawPassActive = false;
-                ClearNativePublishBuffers();
-                ReleaseNativeDrawEntries();
-                NativeDrawMetaCache.Clear();
+                if (!_nativeDrawPassUsingCache)
+                    ClearNativePublishBuffers();
+                _nativeDrawPassUsingCache = false;
             }
+        }
+
+        private static bool CanReuseNativeLabels()
+        {
+            return _nativeDrawCacheValid &&
+                   _nativeDrawCacheCityLayer == IsCityLayer &&
+                   _nativeDrawCacheFocusKey == CurrentLabelFocusKey;
+        }
+
+        private static void InvalidateNativeLabelCache()
+        {
+            _nativeDrawCacheValid = false;
+            NativeDrawMetaCache.Clear();
         }
 
         private static void PublishNativeCityLabels()
@@ -383,8 +414,11 @@ namespace AncientWarfare3.core.policy
         {
             pPlacement = default(HierarchicalVassalMapModeLabelPlacement);
             pGap = 0;
-            if (pEntry.Accumulator.TryBuild(
-                    out HierarchicalVassalZoneLabelMetrics metrics))
+            bool hasMetrics = pEntry.Accumulator.TryBuild(
+                out HierarchicalVassalZoneLabelMetrics metrics);
+            if (pEntry.HasLandTileSnapshot &&
+                !pEntry.Accumulator.HasLandTiles) hasMetrics = false;
+            if (hasMetrics)
             {
                 pEntry.HorizontalSpan = metrics.SpanX;
                 var geometry = new HierarchicalVassalMapModeGeometryMetrics
@@ -429,7 +463,8 @@ namespace AncientWarfare3.core.policy
             try
             {
                 if (kingdom?.hasCapital() == true &&
-                    kingdom.capital?.data != null)
+                    kingdom.capital?.data != null &&
+                    IsVisibleLand(kingdom.capital.getTile()))
                 {
                     pPosition = kingdom.capital.city_center;
                     return true;
@@ -438,7 +473,8 @@ namespace AncientWarfare3.core.policy
                 {
                     foreach (City city in kingdom.getCities())
                     {
-                        if (city?.data == null || city.isRekt()) continue;
+                        if (city?.data == null || city.isRekt() ||
+                            !IsVisibleLand(city.getTile())) continue;
                         pPosition = city.city_center;
                         return true;
                     }
@@ -454,7 +490,7 @@ namespace AncientWarfare3.core.policy
 
         internal static void RebuildHierarchyIndex()
         {
-            NativeDrawMetaCache.Clear();
+            InvalidateNativeLabelCache();
             var rawSuzerainIds = new Dictionary<long, long>();
             KingdomIndex.Clear();
             try
@@ -520,7 +556,7 @@ namespace AncientWarfare3.core.policy
                 pIndex.FocusKingdomId != CurrentLabelFocusKey) return false;
             _hierarchyIndex = pIndex;
             KingdomIndex = pKingdoms;
-            NativeDrawMetaCache.Clear();
+            InvalidateNativeLabelCache();
             return true;
         }
 
@@ -851,13 +887,14 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMap()
         {
-            NativeDrawMetaCache.Clear();
+            InvalidateNativeLabelCache();
             RequestNativeRedraw();
         }
 
         public static void MarkCityDirty(City pCity)
         {
             if (pCity?.data == null) return;
+            _nativeDrawCacheValid = false;
             InvalidateCityMeta(pCity);
             HierarchicalVassalMapModeLabelLayer.MarkCityDirty(pCity);
             RequestNativeRedraw();
@@ -866,6 +903,7 @@ namespace AncientWarfare3.core.policy
         internal static void MarkCityGeometryDirty(City pCity)
         {
             if (pCity?.data == null) return;
+            _nativeDrawCacheValid = false;
             InvalidateCityMeta(pCity);
             // City.addZone already invalidates WorldBox's native zone layer.
             // AW3 only accumulates the changed zone for label placement.
@@ -875,6 +913,7 @@ namespace AncientWarfare3.core.policy
         internal static void RemoveCity(City pCity)
         {
             if (pCity == null) return;
+            _nativeDrawCacheValid = false;
             InvalidateCityMeta(pCity);
             HierarchicalVassalMapModeLabelLayer.EvictCity(pCity.id);
             HierarchicalVassalMapModeLabelLayer.EvictNativeCity(pCity.id);
@@ -886,6 +925,7 @@ namespace AncientWarfare3.core.policy
         public static void MarkKingdomDirty(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            _nativeDrawCacheValid = false;
             HierarchicalVassalMapModeLabelLayer.MarkKingdomDirty(pKingdom);
             RequestNativeRedraw();
         }
@@ -893,7 +933,7 @@ namespace AncientWarfare3.core.policy
         public static void MarkHierarchyDirty(params Kingdom[] pAffectedKingdoms)
         {
             _hierarchyIndex = null;
-            NativeDrawMetaCache.Clear();
+            InvalidateNativeLabelCache();
             HierarchicalVassalMapModeLabelLayer.MarkHierarchyDirty();
             RequestNativeRedraw();
         }
@@ -915,12 +955,16 @@ namespace AncientWarfare3.core.policy
             State.Reset();
             _hierarchyIndex = null;
             KingdomIndex.Clear();
-            NativeDrawMetaCache.Clear();
+            InvalidateNativeLabelCache();
+            NativeLandTileCache.Clear();
             ClearNativePublishBuffers();
             ReleaseNativeDrawEntries();
             NativeCountryLabelPool.Clear();
             NativeCityLabelPool.Clear();
             _nativeDrawPassActive = false;
+            _nativeDrawPassUsingCache = false;
+            _nativeDrawCacheValid = false;
+            _nativeDrawCacheFocusKey = long.MinValue;
             HierarchicalVassalMapModeLabelLayer.Reset();
         }
 
@@ -939,7 +983,7 @@ namespace AncientWarfare3.core.policy
             if (wasFocused) State.Reset();
             KingdomIndex.Remove(pKingdomId);
             _hierarchyIndex = null;
-            NativeDrawMetaCache.Clear();
+            InvalidateNativeLabelCache();
             try
             {
                 if (pKingdom?.cities != null)
@@ -962,7 +1006,7 @@ namespace AncientWarfare3.core.policy
         private static void RefreshView()
         {
             _hierarchyIndex = null;
-            NativeDrawMetaCache.Clear();
+            InvalidateNativeLabelCache();
             HierarchicalVassalMapModeLabelLayer.
                 HideRuntimeLabelsExcept(null);
             RequestNativeRedraw();
@@ -983,7 +1027,11 @@ namespace AncientWarfare3.core.policy
             for (int index = 0; index < pCity.zones.Count; index++)
             {
                 TileZone zone = pCity.zones[index];
-                if (zone?.id >= 0) NativeDrawMetaCache.Remove(zone.id);
+                if (zone?.id >= 0)
+                {
+                    NativeDrawMetaCache.Remove(zone.id);
+                    NativeLandTileCache.Remove(zone.id);
+                }
             }
         }
 
@@ -997,6 +1045,31 @@ namespace AncientWarfare3.core.policy
         internal static bool ContainsVisibleLand(TileZone pZone)
         {
             return pZone != null && pZone.tiles_with_ground > 0;
+        }
+
+        private static IReadOnlyList<HierarchicalVassalLabelTile>
+            GetNativeLandTiles(TileZone pZone)
+        {
+            if (pZone == null || pZone.id < 0)
+                return Array.Empty<HierarchicalVassalLabelTile>();
+            if (NativeLandTileCache.TryGetValue(pZone.id,
+                    out List<HierarchicalVassalLabelTile> cached))
+                return cached;
+
+            var result = new List<HierarchicalVassalLabelTile>();
+            WorldTile[] tiles = pZone.tiles;
+            if (tiles != null)
+            {
+                for (int index = 0; index < tiles.Length; index++)
+                {
+                    WorldTile tile = tiles[index];
+                    if (IsVisibleLand(tile))
+                        result.Add(new HierarchicalVassalLabelTile(
+                            tile.x, tile.y));
+                }
+            }
+            NativeLandTileCache[pZone.id] = result;
+            return result;
         }
 
         private static bool IsValidKingdom(Kingdom pKingdom)
@@ -1195,6 +1268,7 @@ namespace AncientWarfare3.core.policy
             internal Kingdom Kingdom { get; private set; }
             internal readonly HierarchicalVassalZoneLabelAccumulator
                 Accumulator = new HierarchicalVassalZoneLabelAccumulator();
+            internal bool HasLandTileSnapshot;
             internal bool HasFallbackZoneCenter;
             internal Vector2 FallbackZoneCenter;
             internal int HorizontalSpan { get; set; } = 1;
@@ -1203,9 +1277,19 @@ namespace AncientWarfare3.core.policy
             {
                 Kingdom = pKingdom;
                 Accumulator.Reset();
+                HasLandTileSnapshot = false;
                 HasFallbackZoneCenter = false;
                 FallbackZoneCenter = Vector2.zero;
                 HorizontalSpan = 1;
+                try
+                {
+                    WorldTile capital = pKingdom?.hasCapital() == true
+                        ? pKingdom.capital?.getTile()
+                        : null;
+                    if (IsVisibleLand(capital))
+                        Accumulator.SetCapital(capital.x, capital.y);
+                }
+                catch { }
             }
 
             internal void Add(TileZone pZone)
@@ -1215,11 +1299,18 @@ namespace AncientWarfare3.core.policy
                 Vector3 position = center.posV;
                 if (!HasFallbackZoneCenter)
                 {
-                    HasFallbackZoneCenter = true;
-                    FallbackZoneCenter = position;
+                    IReadOnlyList<HierarchicalVassalLabelTile> landTiles =
+                        GetNativeLandTiles(pZone);
+                    if (landTiles.Count > 0)
+                    {
+                        HasFallbackZoneCenter = true;
+                        FallbackZoneCenter = new Vector2(
+                            landTiles[0].X, landTiles[0].Y);
+                    }
                 }
+                HasLandTileSnapshot = true;
                 Accumulator.Add(pZone.id, position.x, position.y,
-                    pZone.tiles_with_ground);
+                    pZone.tiles_with_ground, GetNativeLandTiles(pZone));
             }
         }
 

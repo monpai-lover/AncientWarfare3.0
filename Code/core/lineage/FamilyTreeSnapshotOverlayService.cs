@@ -69,6 +69,8 @@ namespace AncientWarfare3.core.lineage
             pNode.social_title = pArchive.social_title ?? string.Empty;
             pNode.social_title_color =
                 pArchive.social_title_color ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(pArchive.primary_ceremonial_title))
+                pNode.social_title = pArchive.primary_ceremonial_title;
             pNode.head = pArchive.head;
             pNode.skin = pArchive.skin;
             pNode.skin_set = pArchive.skin_set;

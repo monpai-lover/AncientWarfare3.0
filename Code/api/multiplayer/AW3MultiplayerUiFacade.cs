@@ -143,6 +143,9 @@ namespace AncientWarfare3.api.multiplayer
                     case AW3WindowKind.Supporters:
                         SupporterLeaderboardWindow.Open();
                         break;
+                    case AW3WindowKind.VirtualTitles:
+                        VirtualNobleTitleRosterWindow.Open(request.CountryId);
+                        break;
                     default:
                         return Result(AW3WindowOpenStatus.Unavailable,
                             request.Kind);

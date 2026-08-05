@@ -68,7 +68,13 @@ namespace AncientWarfare3.patch
                 return true;
             __state.IdentityPrepared =
                 AccessionIdentityService.Prepare(__instance, pActor);
-            if (!__state.IdentityPrepared) return false;
+            if (!__state.IdentityPrepared)
+            {
+                AccessionIdentityService.DeferInstalledKing(__instance,
+                    pActor);
+                return true;
+            }
+            AccessionIdentityService.ClearDeferredInstalledKing(__instance);
             return true;
         }
 
@@ -81,7 +87,12 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (pFromLoad || __instance?.data == null) return;
             if (!UsesManagedSuccession(__instance)) return;
-            if (!__state.IdentityPrepared) return;
+            if (!__state.IdentityPrepared)
+            {
+                AccessionIdentityService.DeferInstalledKing(__instance,
+                    pActor);
+                return;
+            }
 
             Actor king = pActor ?? __instance.king;
             bool setKingSucceeded = king?.data != null &&
@@ -94,6 +105,7 @@ namespace AncientWarfare3.patch
                                     (__instance?.id ?? -1L));
                 return;
             }
+            AccessionIdentityService.ClearDeferredInstalledKing(__instance);
             FormerHeirService.ClearSnapshot(king);
             FormerKingService.ClearSnapshot(king);
             if (SuccessionTransitionRules.ShouldMarkMonarchyEstablished(

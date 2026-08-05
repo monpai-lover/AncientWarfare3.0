@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using AncientWarfare3.core.lineage;
 using life.taxi;
 
 namespace AncientWarfare3.core.performance
@@ -746,8 +747,14 @@ namespace AncientWarfare3.core.performance
         private static ActorMetaPartitionKind GetActorMetaPartition(
             Actor pActor)
         {
+            Kingdom kingdom = pActor?.kingdom;
+            if (kingdom == null || kingdom.data == null || kingdom.isRekt())
+            {
+                ActorKingdomSafetyService.QueueRepair(pActor);
+                return ActorMetaPartitionKind.Dying;
+            }
             if (!pActor.isAlive()) return ActorMetaPartitionKind.Dying;
-            return pActor.kingdom.wild
+            return kingdom.wild
                 ? ActorMetaPartitionKind.AliveWild
                 : ActorMetaPartitionKind.AliveCivilized;
         }

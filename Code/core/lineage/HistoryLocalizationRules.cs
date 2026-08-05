@@ -168,6 +168,11 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_jingnan_stalemate_mid", "靖难未决，仍据地自立为", " ended the Jingnan without decision and retained the claimant realm of ", "靖難未決，仍據地自立為"),
             new Entry("aw_hist_jingnan_stalemate_suffix", "，天下遂入乱世", "; the realm entered an age of disorder", "，天下遂入亂世"),
 
+            new Entry("aw_hist_virtual_title_granted", "授予虚爵：", " granted the virtual title: ", "授予虛爵："),
+            new Entry("aw_hist_virtual_title_inherited", "继承虚爵：", " inherited the virtual title: ", "繼承虛爵："),
+            new Entry("aw_hist_virtual_title_previous_holder", "，前任为", "; previous holder: ", "，前任為"),
+            new Entry("aw_hist_virtual_title_extinct", "虚爵绝嗣：", " virtual title became extinct: ", "虛爵絕嗣："),
+
             // Event labels
             new Entry("aw_hist_event_war_claim_created", "制造宣称", "Claim Fabricated", "製造宣稱"),
             new Entry("aw_hist_event_war_project_started", "开始战争筹备", "War Project Started", "開始戰爭籌備"),

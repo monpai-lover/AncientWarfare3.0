@@ -10,6 +10,7 @@ using AncientWarfare3.ui;
 
 HistoricalWriteModeRulesTests.Run();
 KingdomPolicyInheritanceDiagnosticRulesTests.Run();
+VirtualNobleTitleRulesTests.Run();
 
 if (args.Length == 1 && args[0] == "--classic-civ-lifespan")
 {
@@ -7870,6 +7871,7 @@ ArmyRtsSyntheticRecoveryRulesTests.Run();
 ArmyRtsAssignmentReconciliationRulesTests.Run();
 ArmySharedPathRecoveryRulesTests.Run();
 TemporaryLevyDiagnosticSamplingTests.Run();
+RecruitmentLifecycleRemovalRulesTests.Run();
 ActorDiagnosticSamplingRulesTests.Run();
 ActorAgeWorkRulesTests.Run();
 ActorDeathArchiveRulesTests.Run();

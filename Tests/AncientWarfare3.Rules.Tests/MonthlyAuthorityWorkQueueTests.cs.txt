@@ -7,6 +7,7 @@ internal static class MonthlyAuthorityWorkQueueTests
     {
         SchedulesEachMonthOnceAndDrainsInFifoOrder();
         ResetScheduleGateAllowsExplicitSameMonthReschedule();
+        CatchesUpSkippedMonthsInOrder();
         ClearDropsPendingWorkAndResetsTheMonthGate();
         FailedItemDoesNotDropLaterPendingWork();
         ExposesDedicatedMonthlyBenchmarkIds();
@@ -61,6 +62,21 @@ internal static class MonthlyAuthorityWorkQueueTests
         Equal(0, queue.PendingCount, "clear removes all pending work");
         True(queue.ScheduleMonth(1401, new[] { 3 }),
             "clear permits the current month to be scheduled again");
+    }
+
+    private static void CatchesUpSkippedMonthsInOrder()
+    {
+        var queue = new MonthlyAuthorityWorkQueue<int>();
+        queue.ScheduleMonth(2001, new[] { 1 });
+        True(queue.ScheduleMonth(2004, new[] { 2 }),
+            "a later month schedules the skipped authority months");
+
+        var processed = new List<string>();
+        queue.Drain(8, (month, value) =>
+            processed.Add(month + ":" + value));
+        Equal("2001:1,2002:2,2003:2,2004:2",
+            string.Join(",", processed),
+            "crossed months are replayed in chronological FIFO order");
     }
 
     private static void FailedItemDoesNotDropLaterPendingWork()

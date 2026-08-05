@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AncientWarfare3.core.policy;
 
 internal static class HierarchicalVassalZoneLabelAccumulatorTests
@@ -33,6 +34,27 @@ internal static class HierarchicalVassalZoneLabelAccumulatorTests
         Near(-4d, metrics.AnchorX);
         Near(6d, metrics.AnchorY);
         Equal(5, metrics.LandArea);
+
+        var mainlandAndExclave = new HierarchicalVassalZoneLabelAccumulator();
+        mainlandAndExclave.SetCapital(2, 2);
+        mainlandAndExclave.Add(10, 10d, 10d, 4,
+            Rectangle(0, 0, 5, 5));
+        mainlandAndExclave.Add(11, 100d, 10d, 4,
+            Rectangle(100, 10, 2, 2));
+        Equal(true, mainlandAndExclave.TryBuild(out metrics));
+        Equal(25, metrics.LandArea);
+        True(metrics.AnchorX < 40d,
+            "native label anchor stays on the mainland instead of the sea");
+
+        var equalComponents = new HierarchicalVassalZoneLabelAccumulator();
+        equalComponents.SetCapital(100, 100);
+        equalComponents.Add(20, 0d, 0d, 4,
+            Rectangle(0, 0, 2, 2));
+        equalComponents.Add(21, 100d, 100d, 4,
+            Rectangle(100, 100, 2, 2));
+        Equal(true, equalComponents.TryBuild(out metrics));
+        True(metrics.AnchorX > 90d && metrics.AnchorY > 90d,
+            "equal-area native label tie prefers the capital component");
     }
 
     private static void Equal<T>(T expected, T actual)
@@ -47,5 +69,20 @@ internal static class HierarchicalVassalZoneLabelAccumulatorTests
         if (Math.Abs(expected - actual) > 0.0001d)
             throw new InvalidOperationException(
                 $"expected {expected}, got {actual}");
+    }
+
+    private static List<HierarchicalVassalLabelTile> Rectangle(
+        int pX, int pY, int pWidth, int pHeight)
+    {
+        var result = new List<HierarchicalVassalLabelTile>();
+        for (int y = 0; y < pHeight; y++)
+            for (int x = 0; x < pWidth; x++)
+                result.Add(new HierarchicalVassalLabelTile(pX + x, pY + y));
+        return result;
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
     }
 }

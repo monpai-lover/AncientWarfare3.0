@@ -660,6 +660,18 @@ namespace AncientWarfare3.core.lineage
             foreach (Kingdom kingdom in pWar.getDefenders()) OnEmergencyChanged(kingdom);
         }
 
+        // Replenishment actors still use the shared provenance ledger for
+        // rollback and cleanup, but war end must not enter the retired levy
+        // scheduler or annual recruitment path.
+        internal static void OnReplenishmentWarEnded(War pWar)
+        {
+            if (pWar?.data == null) return;
+            foreach (Kingdom kingdom in pWar.getAttackers())
+                if (kingdom?.data != null) ScheduleDemobilization(kingdom.id);
+            foreach (Kingdom kingdom in pWar.getDefenders())
+                if (kingdom?.data != null) ScheduleDemobilization(kingdom.id);
+        }
+
         public static void OnKingdomDestroying(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;

@@ -36,6 +36,10 @@ namespace AncientWarfare3.patch
                 ShowRawRow(__instance, "aw_ruler_appellation", appellation);
             if (actorKingdom?.king != actor)
             {
+                string virtualTitle = VirtualNobleTitleService.GetPrimaryTitle(actor);
+                if (!string.IsNullOrWhiteSpace(virtualTitle))
+                    ShowRawRow(__instance, "aw_virtual_noble_title",
+                        virtualTitle);
                 string dynasticTitle =
                     DynasticTitleService.ResolveLivingTitle(actor);
                 if (!string.IsNullOrEmpty(dynasticTitle))

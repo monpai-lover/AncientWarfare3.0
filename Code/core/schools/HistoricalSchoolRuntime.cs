@@ -71,6 +71,7 @@ namespace AncientWarfare3.core.schools
         public static void ProcessFrame()
         {
             if (World.world == null) return;
+            HistoricalSchoolAcademyConstructionService.ProcessPendingRebuilds();
             HistoricalSchoolScheduler.ProcessFrame();
             if (!_loaded) return;
             HistoricalSchoolEducationJourneyService.

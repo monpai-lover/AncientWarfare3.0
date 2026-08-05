@@ -1,0 +1,48 @@
+using AncientWarfare3.core.lineage;
+
+internal static class VirtualNobleTitleRulesTests
+{
+    public static void Run()
+    {
+        Equal("天意公", VirtualNobleTitleRules.NormalizeTitle("  天意公  "),
+            "title input is trimmed");
+        True(VirtualNobleTitleRules.IsValidTitle("首席学士"),
+            "non-empty arbitrary title is valid");
+        False(VirtualNobleTitleRules.IsValidTitle("   "),
+            "blank title is rejected");
+        False(VirtualNobleTitleRules.IsValidTitle(
+                new string('x', VirtualNobleTitleRules.MaximumTitleLength + 1)),
+            "over-limit title is rejected");
+        Equal(VirtualNobleTitleRules.NormalizeTitle("天意公"),
+            VirtualNobleTitleRules.NormalizeTitleKey("  天意公 "),
+            "duplicate key uses normalized text");
+
+        True(VirtualNobleTitleRules.ShouldBePrimary(false, true),
+            "virtual title is primary without formal hereditary title");
+        False(VirtualNobleTitleRules.ShouldBePrimary(true, true),
+            "formal hereditary title remains primary");
+
+        var first = new VirtualNobleTitleCandidate(9L, "次子", 20L);
+        var second = new VirtualNobleTitleCandidate(4L, "长子", 10L);
+        Equal(4L, VirtualNobleTitleRules.SelectPrimaryId(
+                new[] { first, second }),
+            "oldest grant order is deterministic");
+        Equal(-1L, VirtualNobleTitleRules.SelectPrimaryId(
+                Array.Empty<VirtualNobleTitleCandidate>()),
+            "empty title set has no primary id");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message) => True(!value, message);
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $" expected={expected} actual={actual}");
+    }
+}

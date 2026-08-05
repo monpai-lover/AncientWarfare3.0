@@ -5,6 +5,7 @@ internal static class SchoolRuntimePerformanceTests
 {
     public static void Run()
     {
+        AcademyRecoveryUsesVanillaConstructionPath();
         HistoricalSchoolDiagnostics.ClearRuntime();
         HistoricalSchoolDiagnostics.RecordYearEnqueue(7);
         HistoricalSchoolDiagnostics.RecordSchedulerFrame(11, 13, true);
@@ -838,6 +839,33 @@ internal static class SchoolRuntimePerformanceTests
             "reading an earlier year never reverses the decay watermark");
         Near(0.4d, futureLedger.Tradition, 0.000000001d,
             "reading an earlier year never applies reverse decay");
+    }
+
+    private static void AcademyRecoveryUsesVanillaConstructionPath()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string construction = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "schools", "HistoricalSchoolAcademyConstructionService.cs"));
+        string runtime = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "schools", "HistoricalSchoolRuntime.cs"));
+        string patch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_HistoricalSchoolPatch.cs"));
+        True(construction.Contains("RequestRebuild"),
+            "academy destruction enters the existing construction service");
+        True(construction.Contains("ProcessPendingRebuilds"),
+            "academy rebuild requests use a bounded runtime drain");
+        True(construction.Contains("pCheckForBuild: true"),
+            "academy rebuilds use the vanilla building eligibility check");
+        True(runtime.Contains("ProcessPendingRebuilds"),
+            "school runtime drains academy rebuild requests");
+        True(patch.Contains("startDestroyBuilding") &&
+             patch.Contains("startMakingRuins") &&
+             patch.Contains("startRemove") && patch.Contains("makeRuins"),
+            "all vanilla academy destruction paths request a rebuild");
+        Equal(false, construction.Contains("QueueAcademyRepair") ||
+            construction.Contains("LoadAcademyRepairTickets") ||
+            construction.Contains("MarkAcademyRebuilding"),
+            "academy recovery does not create a persistent repair ticket pool");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

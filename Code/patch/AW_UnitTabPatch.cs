@@ -14,6 +14,7 @@ namespace AncientWarfare3.patch
         private const string BIO_BTN_NAME = "AW_BiographyTabButton";
         private const string ANCESTRY_BTN_NAME = "AW_AncestryTabButton";
         private const string RESTORE_BTN_NAME = "AW_RestorationButton";
+        private const string VIRTUAL_TITLE_BTN_NAME = "AW_VirtualTitleButton";
         private const int SIZE = 40;
 
         [HarmonyPostfix]
@@ -38,6 +39,7 @@ namespace AncientWarfare3.patch
             SetButtonActive(rail, BIO_BTN_NAME, showBio);
             SetButtonActive(rail, ANCESTRY_BTN_NAME, showAncestry);
             SetButtonActive(rail, RESTORE_BTN_NAME, showRestoration);
+            SetButtonActive(rail, VIRTUAL_TITLE_BTN_NAME, hasActor && actor.isAlive());
             if (!hasActor) return;
 
             long centerId = actor.data.id;
@@ -80,6 +82,16 @@ namespace AncientWarfare3.patch
                     WorldTip.showNow(message, pTranslate: false, "top");
                     if (started) restoreBtn.gameObject.SetActive(false);
                 });
+            }
+
+            if (hasActor && actor.isAlive())
+            {
+                Button titleButton = GetOrCreateButton(rail,
+                    VIRTUAL_TITLE_BTN_NAME, BuildVirtualTitleButton);
+                titleButton.onClick.RemoveAllListeners();
+                long actorId = actor.data.id;
+                titleButton.onClick.AddListener(() =>
+                    VirtualNobleTitleGrantWindow.Open(actorId));
             }
         }
 
@@ -146,6 +158,14 @@ namespace AncientWarfare3.patch
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconClan"),
                 "aw_restoration_button",
                 "aw_restoration_button_desc");
+        }
+
+        private static Button BuildVirtualTitleButton(Transform pRail)
+        {
+            return BuildIconButton(pRail, VIRTUAL_TITLE_BTN_NAME,
+                SpriteTextureLoader.getSprite("ui/icons/iconKings")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconClan"),
+                "aw_virtual_title_grant", "aw_virtual_title_grant_desc");
         }
 
         private static string RestorationFailureText(string pError)

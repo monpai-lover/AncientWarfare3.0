@@ -20,6 +20,8 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return RenameClan(kingdom, request);
                 case AW3CommandKind.RenameSurname:
                     return RenameSurname(kingdom, request);
+                case AW3CommandKind.GrantVirtualNobleTitle:
+                    return GrantVirtualNobleTitle(kingdom, request);
                 default:
                     return AW3CommandResult.Rejected(
                         AW3CommandError.InvalidRequest,
@@ -110,6 +112,60 @@ namespace AncientWarfare3.core.multiplayer.commands
                     request.ActorId, detailCode: changed)
                 : AW3CommandResult.Rejected(AW3CommandError.IllegalTarget,
                     "aw3_rename_visible_surname_none", detailCode: 0);
+        }
+
+        private static AW3CommandResult GrantVirtualNobleTitle(
+            Kingdom kingdom, AW3CommandRequest request)
+        {
+            Actor grantor = kingdom?.king;
+            Actor target = FindActor(request.ActorId);
+            VirtualNobleTitleGrantResult result =
+                VirtualNobleTitleService.TryGrant(kingdom, grantor, target,
+                    request.Text, out _);
+            if (result == VirtualNobleTitleGrantResult.Success)
+                return AW3CommandResult.Success("aw3_command_accepted",
+                    request.ActorId, detailCode: (int)result);
+            return AW3CommandResult.Rejected(MapVirtualTitleError(result),
+                MapVirtualTitleMessageKey(result), request.ActorId,
+                (int)result);
+        }
+
+        private static AW3CommandError MapVirtualTitleError(
+            VirtualNobleTitleGrantResult pResult)
+        {
+            switch (pResult)
+            {
+                case VirtualNobleTitleGrantResult.NotReady:
+                case VirtualNobleTitleGrantResult.PersistenceFailed:
+                    return AW3CommandError.ExecutionFailed;
+                case VirtualNobleTitleGrantResult.Duplicate:
+                    return AW3CommandError.Conflict;
+                case VirtualNobleTitleGrantResult.InvalidText:
+                case VirtualNobleTitleGrantResult.InvalidTarget:
+                    return AW3CommandError.IllegalTarget;
+                default:
+                    return AW3CommandError.InvalidRequest;
+            }
+        }
+
+        private static string MapVirtualTitleMessageKey(
+            VirtualNobleTitleGrantResult pResult)
+        {
+            switch (pResult)
+            {
+                case VirtualNobleTitleGrantResult.NotReady:
+                    return "aw_virtual_title_error_not_ready";
+                case VirtualNobleTitleGrantResult.InvalidTarget:
+                    return "aw_virtual_title_error_invalid_target";
+                case VirtualNobleTitleGrantResult.InvalidText:
+                    return "aw_virtual_title_error_invalid_text";
+                case VirtualNobleTitleGrantResult.Duplicate:
+                    return "aw_virtual_title_error_duplicate";
+                case VirtualNobleTitleGrantResult.PersistenceFailed:
+                    return "aw_virtual_title_error_persistence";
+                default:
+                    return "aw_virtual_title_error_generic";
+            }
         }
 
         private static bool ActorBelongsToKingdom(Kingdom kingdom,

@@ -156,6 +156,38 @@ namespace AncientWarfare3.patch
             HistoricalSchoolRuntimeIndex.Instance.SetLivingXiaCity(cityId, false);
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Building), "startDestroyBuilding")]
+        private static void AcademyStartDestroy_Prefix(Building __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Building), "startMakingRuins")]
+        private static void AcademyStartRuins_Prefix(Building __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Building), "startRemove")]
+        private static void AcademyStartRemove_Prefix(Building __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Building), "makeRuins")]
+        private static void AcademyMakeRuins_Prefix(Building __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
+        }
+
         private static void InvalidateSchoolCityCaches(City pCity)
         {
             long cityId = pCity?.data?.id ?? -1L;

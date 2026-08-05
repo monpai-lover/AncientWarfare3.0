@@ -1,0 +1,72 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ActorBirthAffiliationRulesTests
+{
+    private static void Equal(bool expected, bool actual, string name)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(true,
+            ActorBirthAffiliationRules.ShouldRepairCityKingdom(
+                pHasCity: true,
+                pCityKingdomValid: true,
+                pActorKingdomValid: false,
+                pActorKingdomMatchesCity: false),
+            "a kingdomless newborn in a living city must be repaired");
+        Equal(true,
+            ActorBirthAffiliationRules.ShouldRepairCityKingdom(
+                pHasCity: true,
+                pCityKingdomValid: true,
+                pActorKingdomValid: true,
+                pActorKingdomMatchesCity: false),
+            "a newborn left in a wild or stale kingdom must follow its city");
+        Equal(true,
+            ActorBirthAffiliationRules.ShouldRepairCityKingdom(
+                pHasCity: true,
+                pCityKingdomValid: true,
+                pActorKingdomValid: true,
+                pActorKingdomMatchesCity: true,
+                pActorCityMatchesTarget: false),
+            "a newborn in the right kingdom but wrong city must follow the birth city");
+        Equal(false,
+            ActorBirthAffiliationRules.ShouldRepairCityKingdom(
+                pHasCity: true,
+                pCityKingdomValid: true,
+                pActorKingdomValid: true,
+                pActorKingdomMatchesCity: true),
+            "an already consistent newborn must not be moved");
+        Equal(false,
+            ActorBirthAffiliationRules.ShouldRepairCityKingdom(
+                pHasCity: false,
+                pCityKingdomValid: false,
+                pActorKingdomValid: true,
+                pActorKingdomMatchesCity: false),
+            "ownerless births must retain their vanilla default kingdom");
+        Equal(true,
+            ActorBirthAffiliationRules.ShouldQueueRetry(
+                pHasCity: true,
+                pCityKingdomValid: true,
+                pActorKingdomMatchesCity: false),
+            "a failed birth repair must be retried");
+        Equal(true,
+            ActorBirthAffiliationRules.ShouldQueueRetry(
+                pHasCity: true,
+                pCityKingdomValid: true,
+                pActorKingdomMatchesCity: true,
+                pActorCityMatchesTarget: false),
+            "a failed wrong-city repair must be retried");
+
+        string serviceSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "ActorBirthAffiliationService.cs"));
+        Equal(true, serviceSource.Contains("pHasCity: pBaby.city"),
+            "the service uses the rules method's declared pHasCity parameter");
+        Equal(true, serviceSource.Contains("pCityKingdomValid: targetKingdom"),
+            "the service uses the rules method's declared pCityKingdomValid parameter");
+    }
+}

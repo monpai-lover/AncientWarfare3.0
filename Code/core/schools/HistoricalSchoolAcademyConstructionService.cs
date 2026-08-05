@@ -15,12 +15,50 @@ namespace AncientWarfare3.core.schools
             new Dictionary<long, int>();
         private static readonly Dictionary<long, int> LastPlacementAttemptYear =
             new Dictionary<long, int>();
+        private const int RebuildBudgetPerFrame = 4;
+        private static readonly Queue<long> PendingRebuildCities =
+            new Queue<long>();
+        private static readonly HashSet<long> PendingRebuildCityIds =
+            new HashSet<long>();
 
         public static void ClearRuntime()
         {
             StartedAcademies.Clear();
             PlacementAttempts.Clear();
             LastPlacementAttemptYear.Clear();
+            PendingRebuildCities.Clear();
+            PendingRebuildCityIds.Clear();
+        }
+
+        internal static void RequestRebuild(Building pBuilding)
+        {
+            if (!IsAcademyBuilding(pBuilding)) return;
+            City city = null;
+            try { city = pBuilding.getCity(); }
+            catch { }
+            city ??= pBuilding.current_tile?.zone?.city;
+            long cityId = city?.data?.id ?? -1L;
+            if (cityId < 0 || !PendingRebuildCityIds.Add(cityId)) return;
+            LastPlacementAttemptYear.Remove(cityId);
+            PendingRebuildCities.Enqueue(cityId);
+        }
+
+        internal static void ProcessPendingRebuilds()
+        {
+            int processed = 0;
+            while (processed++ < RebuildBudgetPerFrame &&
+                   PendingRebuildCities.Count > 0)
+            {
+                long cityId = PendingRebuildCities.Dequeue();
+                PendingRebuildCityIds.Remove(cityId);
+                City city = null;
+                try { city = World.world?.cities?.get(cityId); }
+                catch { }
+                if (city?.data == null || city.isRekt() ||
+                    HistoricalSchoolAcademyService.HasLiveAcademy(city))
+                    continue;
+                TryStart(city);
+            }
         }
 
         public static void InvalidateCity(long pCityId)
@@ -88,7 +126,7 @@ namespace AncientWarfare3.core.schools
                 }
 
                 building = World.world.buildings.addBuilding(
-                    asset, placement, pCheckForBuild: false);
+                    asset, placement, pCheckForBuild: true);
                 if (building == null)
                 {
                     return null;
@@ -118,6 +156,14 @@ namespace AncientWarfare3.core.schools
             return pCity?.data != null && !pCity.isRekt() &&
                    pCity.zones != null && pCity.zones.Count > 0 &&
                    kingdom?.data != null && !kingdom.isRekt() && !kingdom.isNeutral();
+        }
+
+        private static bool IsAcademyBuilding(Building pBuilding)
+        {
+            BuildingAsset asset = pBuilding?.asset;
+            return asset != null &&
+                   (asset.id == SchoolAcademyBuildingContent.BuildingId ||
+                    asset.type == SchoolAcademyBuildingContent.BuildingTypeId);
         }
 
         private static WorldTile FindPlacement(City pCity, BuildingAsset pAsset, int pAttempt)

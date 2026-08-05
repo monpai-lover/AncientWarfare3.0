@@ -53,8 +53,8 @@ internal static class AW3MultiplayerCatalogRulesTests
         IReadOnlyList<AW3CommandDescriptor> commands =
             AW3MultiplayerCatalog.Commands;
 
-        Equal(30, windows.Count, "current AW3 window count");
-        Equal(30, windows.Select(value => value.WindowId).Distinct(
+        Equal(31, windows.Count, "current AW3 window count");
+        Equal(31, windows.Select(value => value.WindowId).Distinct(
                 StringComparer.Ordinal).Count(),
             "window IDs are unique");
         Equal(Enum.GetValues<AW3WindowKind>().Length, windows.Count,
@@ -153,7 +153,8 @@ internal static class AW3MultiplayerCatalogRulesTests
             AW3CommandRequest.SetArmyPosture(7, 71, "defend"),
             AW3CommandRequest.CancelArmyOrder(7, 71),
             AW3CommandRequest.SubmitCivilServiceRanking(7, 81, 91, 92, 93),
-            AW3CommandRequest.RenameSurname(7, 31, "Jiang")
+            AW3CommandRequest.RenameSurname(7, 31, "Jiang"),
+            AW3CommandRequest.GrantVirtualNobleTitle(7, 31, "天意公")
         };
 
         Equal(Enum.GetValues<AW3CommandKind>().Length, requests.Length,

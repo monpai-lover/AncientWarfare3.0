@@ -2161,5 +2161,62 @@ namespace AncientWarfare3.core.lineage
             try { return pActor.isArmyGroupLeader(); }
             catch { return false; }
         }
+
+        public static void OnVirtualNobleTitleGranted(Kingdom pKingdom,
+            Actor pGrantor, Actor pRecipient, string pTitle)
+        {
+            if (pKingdom?.data == null || pRecipient?.data == null ||
+                string.IsNullOrWhiteSpace(pTitle)) return;
+            string rulerTitle = pGrantor?.data != null
+                ? RulerAppellationService.GetFullLivingAppellation(pKingdom)
+                : "";
+            if (string.IsNullOrWhiteSpace(rulerTitle))
+                rulerTitle = pGrantor?.getName() ?? pKingdom.name ?? "";
+            HistoryText content = HistoryText.PlainText(rulerTitle) +
+                                  H("aw_hist_virtual_title_granted") +
+                                  HistoryText.Actor(pRecipient) +
+                                  HistoryText.PlainText(pTitle);
+            HistoryWriter.RecordKingdom(pKingdom,
+                "virtual_noble_title_granted", content,
+                HistoryTarget.Actor(pRecipient));
+            HistoryWriter.RecordPerson(pRecipient.data.id, pKingdom,
+                pRecipient.getName(), "virtual_noble_title_granted", content,
+                ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnVirtualNobleTitleInherited(Kingdom pKingdom,
+            Actor pPreviousHolder, Actor pSuccessor, string pTitle)
+        {
+            if (pKingdom?.data == null || pSuccessor?.data == null ||
+                string.IsNullOrWhiteSpace(pTitle)) return;
+            HistoryText content = HistoryText.Actor(pSuccessor) +
+                                  H("aw_hist_virtual_title_inherited") +
+                                  HistoryText.PlainText(pTitle);
+            if (pPreviousHolder?.data != null)
+                content += H("aw_hist_virtual_title_previous_holder") +
+                           HistoryText.Actor(pPreviousHolder);
+            HistoryWriter.RecordKingdom(pKingdom,
+                "virtual_noble_title_inherited", content,
+                HistoryTarget.Actor(pSuccessor));
+            HistoryWriter.RecordPerson(pSuccessor.data.id, pKingdom,
+                pSuccessor.getName(), "virtual_noble_title_inherited", content,
+                ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnVirtualNobleTitleExtinct(Kingdom pKingdom,
+            Actor pLastHolder, string pTitle)
+        {
+            if (pKingdom?.data == null || pLastHolder?.data == null ||
+                string.IsNullOrWhiteSpace(pTitle)) return;
+            HistoryText content = HistoryText.Actor(pLastHolder) +
+                                  H("aw_hist_virtual_title_extinct") +
+                                  HistoryText.PlainText(pTitle);
+            HistoryWriter.RecordKingdom(pKingdom,
+                "virtual_noble_title_extinct", content,
+                HistoryTarget.Actor(pLastHolder));
+            HistoryWriter.RecordPerson(pLastHolder.data.id, pKingdom,
+                pLastHolder.getName(), "virtual_noble_title_extinct", content,
+                ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
+        }
     }
 }

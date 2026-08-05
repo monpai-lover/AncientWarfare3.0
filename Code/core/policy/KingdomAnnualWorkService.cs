@@ -215,13 +215,9 @@ namespace AncientWarfare3.core.policy
 
         private static void RunWarMobilization(Kingdom pKingdom)
         {
-            MeasureRecent(
-                RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
-                () =>
-                {
-                    TemporaryLevyService.OnKingdomYear(pKingdom);
-                    WartimeGarrisonService.OnKingdomYear(pKingdom);
-                });
+            // AW3 no longer performs annual conscription or war mobilization.
+            // Native enlistment and the dedicated wartime replenishment
+            // operation own military strength changes.
         }
 
         private static void RunPolicy(Kingdom pKingdom)

@@ -223,7 +223,7 @@ namespace AncientWarfare3.core.lineage
                 WarForceEliminationDecisionKind.AttackersSurrender ||
                 current.Kind ==
                 WarForceEliminationDecisionKind.DefendersSurrender
-                    ? -WarPeaceTermsRules.MaximumWarScore
+                    ? WarPeaceTermsRules.MaximumWarScore
                     : current.Score;
             pDraft.SignedWarScore = effectiveScore;
             WarPeacePrepareResult prepared = PrepareWithForcedScore(

@@ -32,6 +32,7 @@ namespace AncientWarfare3.core.db
         public string city_name;
         public string social_title = "";
         public string social_title_color = "";
+        [TableItemDef(pDefaultValue: "")] public string primary_ceremonial_title = "";
         public long   original_clan_id = -1;
         public string clan_color_text;
         [TableItemDef(pDefaultValue: "-1")] public int clan_color_id = -1;

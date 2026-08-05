@@ -27,6 +27,7 @@ namespace AncientWarfare3.patch
         {
             if (!AWAsyncClearWorldGuard.CleanupAllowed) return;
             NobleRankService.ClearPendingDeathSuccessions();
+            VirtualNobleTitleService.ClearRuntime();
         }
 
         [HarmonyPrefix]
@@ -56,7 +57,6 @@ namespace AncientWarfare3.patch
                 ArmyRetreatService.OnActorDying(__instance);
                 KingdomMilitaryReadinessService.MarkOrdinaryArmyActorDirty(__instance);
                 WarNoticeService.QueueArmyChanged(__instance.kingdom, __instance.army);
-                TemporaryLevyService.OnMilitaryCasualty(__instance);
                 TemporaryLevyService.OnActorInvalidated(__instance);
                 CityReservePoolService.OnActorInvalidated(__instance);
                 WartimeGarrisonService.OnActorInvalidated(__instance);
@@ -77,7 +77,10 @@ namespace AncientWarfare3.patch
                 () => DynasticTitleService.OnActorDying(__instance));
             TryRunDeathStage(__instance, ActorDeathPerformanceStage.NobleTitle,
                 "noble title succession", () =>
-                NobleRankService.OnActorDying(__instance));
+                {
+                    NobleRankService.OnActorDying(__instance);
+                    VirtualNobleTitleService.OnActorDying(__instance);
+                });
             TryRunDeathStage(__instance, ActorDeathPerformanceStage.BondDeath,
                 "ruler household closure", () =>
                 RulerHouseholdService.OnActorDying(__instance));

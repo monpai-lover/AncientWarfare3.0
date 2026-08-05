@@ -163,6 +163,8 @@
     <Compile Include="ActorBatchPerformanceRulesTests.cs.txt" />
     <Compile Include="ArmyRtsControllerPerformanceRulesTests.cs.txt" />
     <Compile Include="ArmyMobilizationRulesTests.cs.txt" />
+    <Compile Include="VirtualNobleTitleRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\VirtualNobleTitleRules.cs" Link="Production\VirtualNobleTitleRules.cs" />
     <Compile Include="CityManpowerRulesTests.cs.txt" />
     <Compile Include="SyntheticLevyRulesTests.cs.txt" />
     <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />
@@ -187,6 +189,7 @@
     <Compile Include="ArmyLogisticsSustainmentRulesTests.cs.txt" />
     <Compile Include="ArmyRtsRouteChoiceRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyRulesTests.cs.txt" />
+    <Compile Include="RecruitmentLifecycleRemovalRulesTests.cs.txt" />
     <Compile Include="CityArmyReinforcementRulesTests.cs.txt" />
     <Compile Include="CityReservePoolRulesTests.cs.txt" />
     <Compile Include="CityReservePoolPersistenceRulesTests.cs.txt" />
@@ -712,6 +715,7 @@
   </ItemGroup>
   <Target Name="WartimeMilitaryTaskGatePerformanceSourceGuard"
       BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\VirtualNobleTitleUiSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ShadowSettingsSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ActorBirthAffiliationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WartimeMilitaryTaskGatePerformanceSourceGuard.ps1&quot;" />

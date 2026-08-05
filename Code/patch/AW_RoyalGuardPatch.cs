@@ -27,9 +27,18 @@ namespace AncientWarfare3.patch
             if (HeirService.IsCurrentHeir(__instance, pActor) &&
                 !RoyalGuardService.ReleaseForRegisteredHeir(__instance,
                     pActor, "became_king"))
-                return false;
-            return RoyalGuardOfficeRules.CanAcceptNewKingship(
-                RoyalGuardService.IsRoyalGuard(pActor), pFromLoad);
+            {
+                AccessionIdentityService.DeferInstalledKing(__instance,
+                    pActor);
+                return true;
+            }
+            if (!RoyalGuardOfficeRules.CanAcceptNewKingship(
+                    RoyalGuardService.IsRoyalGuard(pActor), pFromLoad))
+            {
+                AccessionIdentityService.DeferInstalledKing(__instance,
+                    pActor);
+            }
+            return true;
         }
 
         [HarmonyPostfix]

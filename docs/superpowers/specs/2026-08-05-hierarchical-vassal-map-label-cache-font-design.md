@@ -89,6 +89,30 @@ Refactor pure geometry so one source build produces:
 deduplicate or rescan the same tile list. The result is a pure immutable
 geometry record safe to consume by the worker task and the cache layer.
 
+#### Native country-anchor safety
+
+The native `draw_zones` path must consume the same immutable visible-land
+coordinate snapshot as the worker path. `HierarchicalVassalZoneLabelAccumulator`
+must not derive a country label anchor from the weighted mean of all zone
+centers, because a cross-sea exclave can move that mean into water. Before
+building the native placement, the source must:
+
+1. merge the representative's visible-land coordinates with duplicate tile
+   IDs removed;
+2. select the largest four-neighbour connected land component;
+3. calculate centroid, span, angle, and candidate anchors from that component;
+4. reject every candidate that is not a valid ground tile owned by the
+   representative; and
+5. fall back in order to a valid representative capital center, a valid city
+   center, then the nearest valid land tile in the largest component.
+
+The excluded exclave coordinates still contribute to native political coloring
+and ownership projection. They are excluded only from primary country-label
+placement. If two components tie, choose the component containing the capital;
+otherwise choose the component with the lexicographically smallest tile
+coordinate for deterministic output. A country with no valid land tile must not
+publish a world-space country label for that pass.
+
 ### 4. Dirty-only collision layout
 
 Country placement is computed in world coordinates and does not depend on the
@@ -183,6 +207,11 @@ Add pure rule/source tests for:
 - zone geometry signature changes;
 - cached water list reuse;
 - single-pass geometry result equivalence;
+- native country labels never anchor in water when a representative has a
+  mainland and a cross-sea exclave;
+- the largest connected land component is selected for native and worker
+  placement, while the exclave remains present in color/ownership input;
+- capital-containing component wins equal-area component ties;
 - collision dirty gates and stable priority ordering;
 - font option clamping, candidate order, fallback, and generation changes;
 - default configuration index `0` and all seven localized option keys.

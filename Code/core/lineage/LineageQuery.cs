@@ -1831,6 +1831,14 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
+            string virtualTitle = VirtualNobleTitleService.GetPrimaryTitle(pLive);
+            if (!string.IsNullOrWhiteSpace(virtualTitle))
+            {
+                pNode.social_title = virtualTitle;
+                pNode.social_title_color = color;
+                return;
+            }
+
             pLive.data.get(LineageKeys.FORMER_KING_TITLE, out string formerTitle, "");
             if (!string.IsNullOrEmpty(formerTitle))
             {
@@ -1932,6 +1940,17 @@ namespace AncientWarfare3.core.lineage
                 pNode.social_title = string.IsNullOrEmpty(pNode.kingdom_name)
                     ? "\u541B\u4E3B"
                     : pNode.kingdom_name + " \u541B\u4E3B";
+                pNode.social_title_color = pNode.kingdom_color;
+                return;
+            }
+
+            string archivedPrimary = pNode.id >= 0
+                ? CeremonialTitleResolver.ResolveArchived(
+                    LineageArchiveReader.ReadRow(pNode.id))
+                : "";
+            if (!string.IsNullOrWhiteSpace(archivedPrimary))
+            {
+                pNode.social_title = archivedPrimary;
                 pNode.social_title_color = pNode.kingdom_color;
                 return;
             }

@@ -60,6 +60,7 @@ namespace AncientWarfare3
             AWPathfindingBootstrap.PrepareOwnership();
             // 注册 Harmony 补丁(扫描本程序集所有 [HarmonyPatch])
             PatchHarmonyByClass();
+            AW_FramePrioritySchedulerPatch.SpecialPatch();
             AW_RuntimeBenchmarkAutoLoadPatch.Initialize();
             LogInfo("AW3 goTo Harmony owner active: " +
                     (PathfindingOwnershipService.HasAw3MovementPatch()

@@ -138,6 +138,16 @@ namespace AncientWarfare3.core.db
                 alter.ExecuteNonQuery();
             }
 
+            if (!ColumnExists(pDb, pTransaction, "ActorArchive",
+                    "PRIMARY_CEREMONIAL_TITLE"))
+            {
+                using var alterTitle = new SQLiteCommand(pDb)
+                    { Transaction = pTransaction };
+                alterTitle.CommandText = "ALTER TABLE ActorArchive ADD COLUMN " +
+                    "PRIMARY_CEREMONIAL_TITLE TEXT DEFAULT ''";
+                alterTitle.ExecuteNonQuery();
+            }
+
             using var create = new SQLiteCommand(pDb)
                 { Transaction = pTransaction };
             create.CommandText = "CREATE TABLE IF NOT EXISTS " +

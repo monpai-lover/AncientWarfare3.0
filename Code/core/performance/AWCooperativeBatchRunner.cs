@@ -335,6 +335,19 @@ namespace AncientWarfare3.core.performance
                 : _batches[0].jobs_parallel.Count;
             while (_parallelJobIndex < jobCount)
             {
+                // The maintenance stage has already prepared every active
+                // container before the actor/building runner starts. Cultiway
+                // skips this redundant wake-up job for the same reason: it
+                // can otherwise reopen container mutation windows during a
+                // large-step parallel pass.
+                if (_batchIndex == 0 &&
+                    ShouldSkipParallelJob(_batches[0].jobs_parallel[
+                        _parallelJobIndex]))
+                {
+                    _parallelJobIndex++;
+                    continue;
+                }
+
                 if (_batchIndex >= _batches.Count)
                 {
                     _parallelJobIndex++;
@@ -370,6 +383,25 @@ namespace AncientWarfare3.core.performance
             }
 
             return false;
+        }
+
+        private const string PrepareJobId = "prepare";
+        private const string UpdateVisibilityJobId = "update_visibility";
+
+        private bool ShouldSkipParallelJob(Job<TObject> pJob)
+        {
+            if (typeof(TBatch) != typeof(BatchActors) || pJob == null)
+                return false;
+
+            // Cultiway owns both container preparation and presentation
+            // visibility when the frame-priority scheduler is active. The
+            // render-frame snapshot path refreshes visibility once per frame,
+            // so running the same scan once per simulation tick is redundant.
+            return string.Equals(pJob.id, PrepareJobId,
+                       StringComparison.Ordinal) ||
+                   (AWPerformanceSettings.EnableFramePriorityScheduler &&
+                    string.Equals(pJob.id, UpdateVisibilityJobId,
+                        StringComparison.Ordinal));
         }
 
         private bool HasParallelJobWork(int pBatchListIndex,
