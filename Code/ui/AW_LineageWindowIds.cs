@@ -6,7 +6,7 @@ namespace AncientWarfare3.ui
         public const string SHI_LIST = "aw_shi_list";
         public const string FAMILY_TREE = "aw_family_tree";
         public const string HISTORY = "aw_history";
-        public const string KINGDOM_ATLAS = "aw_kingdom_atlas";
+        internal const string KINGDOM_ATLAS = "aw_kingdom_atlas";
         public const string KINGDOM_ROSTER = "aw_kingdom_roster";
         public const string POLICY_TREE = "aw_policy_tree";
         public const string ANCESTRY = "aw_ancestry_analysis";

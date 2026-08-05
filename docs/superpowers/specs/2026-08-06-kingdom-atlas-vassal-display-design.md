@@ -19,4 +19,3 @@ Relations are read only from the persisted `VassalRelation` table. A row is vali
 ## Testing
 
 Pure rules tests cover independent owners, direct and nested vassals, relation windows, cyclic relations, and display-owner visibility. Raster tests verify that two adjacent subject realms share a color while retaining separate boundaries and labels.
-

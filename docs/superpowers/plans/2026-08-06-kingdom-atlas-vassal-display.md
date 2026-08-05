@@ -50,4 +50,3 @@
 - [ ] Keep the source guard rejecting live-world, live-map-mode, and current-color reads from atlas generation code.
 - [ ] Run focused rules/artifact tests, source guard, and `git diff --check`.
 - [ ] Record any unavailable full-build prerequisites without altering unrelated dirty files.
-
