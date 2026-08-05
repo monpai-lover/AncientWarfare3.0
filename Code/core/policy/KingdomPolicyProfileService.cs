@@ -25,8 +25,9 @@ namespace AncientWarfare3.core.policy
                 pKingdom.data.original_actor_asset,
                 pKingdom.asset?.id,
                 resolvedActorAsset?.id);
-            bool enteredXia = XiaCultureIntegrationService.IsFullyIntegrated(
-                pKingdom.culture);
+            bool institutionallyXiaized =
+                KingdomInstitutionalXiaizationRules.ShouldUseXiaInstitutions(
+                    XiaizationService.GetLevel(pKingdom));
             bool civilized = resolvedActorAsset != null &&
                              resolvedActorAsset.civ;
 
@@ -35,7 +36,7 @@ namespace AncientWarfare3.core.policy
                 civilized: civilized,
                 nativeXia: nativeXia,
                 monkey: monkey,
-                enteredXia: enteredXia);
+                institutionallyXiaized: institutionallyXiaized);
         }
 
         public static bool TryGet(Kingdom pKingdom,

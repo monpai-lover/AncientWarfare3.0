@@ -21,32 +21,32 @@ internal static class WesternPolicyProfileRulesTests
         Equal(KingdomPolicyProfileId.Xia,
             KingdomPolicyProfileRules.Resolve(valid: true,
                 civilized: true, nativeXia: true, monkey: false,
-                enteredXia: false),
+                institutionallyXiaized: false),
             "native Xia kingdoms resolve to Xia");
         Equal(KingdomPolicyProfileId.Xia,
             KingdomPolicyProfileRules.Resolve(valid: true,
                 civilized: true, nativeXia: false, monkey: true,
-                enteredXia: false),
+                institutionallyXiaized: false),
             "civilized monkeys use the Xia policy profile");
-        Equal(KingdomPolicyProfileId.Xia,
-            KingdomPolicyProfileRules.Resolve(valid: true,
-                civilized: true, nativeXia: false, monkey: false,
-                enteredXia: true),
-            "fully integrated cultures use the Xia policy profile");
         Equal(KingdomPolicyProfileId.WesternGeneral,
             KingdomPolicyProfileRules.Resolve(valid: true,
                 civilized: true, nativeXia: false, monkey: false,
-                enteredXia: false),
+                institutionallyXiaized: false),
+            "culture integration alone does not select the Xia institutional profile");
+        Equal(KingdomPolicyProfileId.WesternGeneral,
+            KingdomPolicyProfileRules.Resolve(valid: true,
+                civilized: true, nativeXia: false, monkey: false,
+                institutionallyXiaized: false),
             "other civilized kingdoms, including orcs, use WesternGeneral");
         Equal(KingdomPolicyProfileId.None,
             KingdomPolicyProfileRules.Resolve(valid: true,
                 civilized: false, nativeXia: true, monkey: true,
-                enteredXia: true),
+                institutionallyXiaized: true),
             "non-civilized assets never receive a policy profile");
         Equal(KingdomPolicyProfileId.None,
             KingdomPolicyProfileRules.Resolve(valid: false,
                 civilized: true, nativeXia: true, monkey: true,
-                enteredXia: true),
+                institutionallyXiaized: true),
             "invalid kingdoms never receive a policy profile");
 
         Equal(true, KingdomPolicyProfileRules.IsResolvableKingdomProfile(
