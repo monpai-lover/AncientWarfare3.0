@@ -2272,7 +2272,7 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        private static bool HasProtectedAuthoredName(Actor pActor)
+        internal static bool HasProtectedAuthoredName(Actor pActor)
         {
             if (pActor?.data == null) return true;
             return pActor.data.custom_name || IsHistoricalFigure(pActor) ||

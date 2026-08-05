@@ -75,6 +75,7 @@
     <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
     <Compile Include="IntegratedNamingRulesTests.cs.txt" />
     <Compile Include="NameIntegrationMaterializationRulesTests.cs.txt" />
+    <Compile Include="IntegratedCultureNamingMigrationPersistenceSqlTests.cs.txt" />
     <Compile Include="XiaizationAuthoritySeparationRulesTests.cs.txt" />
     <Compile Include="ActorLocalizedNameBoundaryRulesTests.cs.txt" />
     <Compile Include="LocalizedNameMigrationRulesTests.cs.txt" />
@@ -478,6 +479,8 @@
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionRules.cs" Link="Production\XiaizedFamilyBranchTransitionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\IntegratedCultureNamingMigrationRules.cs" Link="Production\IntegratedCultureNamingMigrationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NameIntegrationMaterializationRules.cs" Link="Production\NameIntegrationMaterializationRules.cs" />
+    <Compile Include="..\..\Code\core\db\CultureNamingMigrationStateTableItem.cs" Link="Production\CultureNamingMigrationStateTableItem.cs" />
+    <Compile Include="..\..\Code\core\lineage\IntegratedCultureNamingMigrationPersistence.cs" Link="Production\IntegratedCultureNamingMigrationPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternStemConversionRules.cs" Link="Production\WesternStemConversionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionPersistence.cs" Link="Production\XiaizedFamilyBranchTransitionPersistence.cs" />
     <Compile Include="..\..\Code\core\naming\AWCultureNamingTraditionRules.cs" Link="Production\AWCultureNamingTraditionRules.cs" />

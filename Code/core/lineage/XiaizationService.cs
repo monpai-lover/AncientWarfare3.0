@@ -190,8 +190,9 @@ namespace AncientWarfare3.core.lineage
                         LevelNone))
                 return false;
 
-            return XiaCultureIntegrationService.MarkIntegrated(
+            bool changed = XiaCultureIntegrationService.MarkIntegrated(
                 pKingdom.culture);
+            return changed;
         }
 
         public static void ResetCultureIntegrationProjection()
@@ -240,7 +241,8 @@ namespace AncientWarfare3.core.lineage
                     ? ""
                     : Convert.ToString(reader.GetValue(0)) ?? "";
                 if (!long.TryParse(raw, out long cultureId)) continue;
-                pMark?.Invoke(World.world.cultures.get(cultureId));
+                Culture culture = World.world.cultures.get(cultureId);
+                pMark?.Invoke(culture);
             }
         }
 
@@ -495,12 +497,15 @@ namespace AncientWarfare3.core.lineage
                     .ShouldMarkCultureIntegrated(
                         XiaCultureIntegrationService.IsNativeXiaCulture(
                             pKingdom.culture), pLevel))
-                XiaCultureIntegrationService.MarkIntegrated(
-                    pKingdom.culture);
+            {
+                XiaCultureIntegrationService.MarkIntegrated(pKingdom.culture);
+            }
             if (KingdomPolicySplitInheritanceRules
                     .ShouldMarkCultureFullyIntegrated(pLevel))
+            {
                 XiaCultureIntegrationService.MarkFullyIntegrated(
                     pKingdom.culture);
+            }
             XiaizedFamilyBranchTransitionService.Publish(familyTransition);
             UpsertKingdomState(pKingdom, pLevel, pLegitimacy, HasAdoptedRites(pKingdom), HasAdoptedLaw(pKingdom),
                 ReadStableYears(pKingdom));

@@ -180,6 +180,7 @@ if (args.Length == 1 && args[0] == "--integrated-naming-rules-slice")
 {
     IntegratedNamingRulesTests.Run();
     NameIntegrationMaterializationRulesTests.Run();
+    IntegratedCultureNamingMigrationPersistenceSqlTests.Run();
     ActorLocalizedNameBoundaryRulesTests.Run();
     LocalizedNameProfileReadinessRulesTests.Run();
     Console.WriteLine("AW3 integrated naming rules passed.");

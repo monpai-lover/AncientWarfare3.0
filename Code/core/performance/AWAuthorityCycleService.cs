@@ -58,6 +58,7 @@ namespace AncientWarfare3.core.performance
             ZhuluAgeDirectorService.Reset();
             AWLocalizedNameMigrationService.Reset();
             WesternLineageMigrationService.Reset();
+            IntegratedCultureNamingMigrationService.Reset();
             ActorDeathArchiveService.Reset();
         }
 
@@ -72,6 +73,7 @@ namespace AncientWarfare3.core.performance
             WesternCourtElectionService.ProcessAuthorityCycle();
             AWLocalizedNameMigrationService.ProcessAuthorityCycle();
             WesternLineageMigrationService.ProcessAuthorityCycle();
+            IntegratedCultureNamingMigrationService.ProcessAuthorityCycle();
             DynasticMaleLineContinuityService.ProcessAuthorityCycle();
             NobleHeirPregnancyService.ProcessAuthorityCycle();
             RulerHouseholdPregnancyService.ProcessAuthorityCycle();

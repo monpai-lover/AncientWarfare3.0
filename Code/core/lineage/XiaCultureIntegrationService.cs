@@ -25,14 +25,21 @@ namespace AncientWarfare3.core.lineage
 
         public static bool MarkIntegrated(Culture pCulture)
         {
-            return MarkTrait(pCulture, XiaCultureTraits.IntegratedTraitId);
+            bool changed = MarkTrait(pCulture,
+                XiaCultureTraits.IntegratedTraitId);
+            if (IsIntegrated(pCulture) || IsFullyIntegrated(pCulture))
+                IntegratedCultureNamingMigrationService.Request(pCulture);
+            return changed;
         }
 
         public static bool MarkFullyIntegrated(Culture pCulture)
         {
-            bool integratedChanged = MarkIntegrated(pCulture);
+            bool integratedChanged = MarkTrait(pCulture,
+                XiaCultureTraits.IntegratedTraitId);
             bool fullChanged = MarkTrait(pCulture,
                 XiaCultureTraits.FullyIntegratedTraitId);
+            if (IsIntegrated(pCulture) || IsFullyIntegrated(pCulture))
+                IntegratedCultureNamingMigrationService.Request(pCulture);
             return integratedChanged || fullChanged;
         }
 
