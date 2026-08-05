@@ -8,6 +8,7 @@ namespace AncientWarfare3.patch
     public static class AW_KingdomTabPatch
     {
         private const string HISTORY_BTN_NAME = "AW_KingdomHistoryTabButton";
+        private const string ATLAS_BTN_NAME = "AW_KingdomAtlasButton";
         private const string VASSAL_BTN_NAME = "AW_KingdomVassalTabButton";
         private const string WAR_BTN_NAME = "AW_KingdomWarTargetTabButton";
         private const int SIZE = 40;
@@ -31,6 +32,18 @@ namespace AncientWarfare3.patch
                 Kingdom current = __instance != null ? __instance.meta_object : null;
                 if (current?.data == null || current.isRekt()) return;
                 AncientWarfare3.ui.windows.HistoryListWindow.OpenKingdom(current.id);
+            });
+
+            Button atlasBtn = EnsureButton(rail, ATLAS_BTN_NAME,
+                "ui/icons/iconKingdomList", "Kingdom atlas",
+                "Historical territory changes; generated from saved events.");
+            atlasBtn.transform.SetSiblingIndex(historyBtn.transform.GetSiblingIndex() + 1);
+            atlasBtn.onClick.RemoveAllListeners();
+            atlasBtn.onClick.AddListener(() =>
+            {
+                Kingdom current = __instance != null ? __instance.meta_object : null;
+                if (current?.data == null || current.isRekt()) return;
+                AncientWarfare3.ui.windows.KingdomAtlasWindow.Open(current.id);
             });
 
             Button vassalBtn = EnsureButton(rail, VASSAL_BTN_NAME, "ui/wars/war_vassal",

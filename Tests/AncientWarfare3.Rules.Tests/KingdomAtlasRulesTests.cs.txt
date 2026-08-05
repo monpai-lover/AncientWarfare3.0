@@ -1,0 +1,30 @@
+using AncientWarfare3.core.atlas;
+
+internal static class KingdomAtlasRulesTests
+{
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual)) throw new InvalidOperationException(pName + ": expected " + pExpected + ", got " + pActual);
+    }
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue) throw new InvalidOperationException(pName);
+    }
+    public static void Run()
+    {
+        var later = new KingdomAtlasHistoryEvent { EventId = 2, WorldTime = 3d, OldKingdomId = 10, NewKingdomId = 20 };
+        var early = new KingdomAtlasHistoryEvent { EventId = 1, WorldTime = 1d, OldKingdomId = 10, NewKingdomId = 20 };
+        var duplicate = new KingdomAtlasHistoryEvent { EventId = 1, WorldTime = 9d, OldKingdomId = 99, NewKingdomId = 100 };
+        var rows = KingdomAtlasRules.OrderAndDeduplicate(new[] { later, duplicate, early });
+        Equal(2, rows.Count, "event deduplication");
+        Equal(1L, rows[0].EventId, "event ordering");
+        Equal(2L, rows[1].EventId, "event ordering second");
+        True(KingdomAtlasRules.IsVisibleOwner(10, 10, 20), "old participant visible");
+        True(KingdomAtlasRules.IsVisibleOwner(20, 10, 20), "new participant visible");
+        Equal(false, KingdomAtlasRules.IsVisibleOwner(30, 10, 20), "unrelated participant hidden");
+        True(KingdomAtlasRules.TryResolveHistoricalColor("", "#112233", "#fff"), "historical color fallback");
+        Equal(50, KingdomAtlasRules.Percent(1, 2), "progress percentage");
+        Equal("42:768:v3", KingdomAtlasRules.BuildGenerationKey(42, 768, "v3"), "generation key");
+        Equal("kingdom_7_1024_node_0003_event_42", KingdomAtlasRules.BuildOutputStem(7, 1024, 3, 42), "output stem");
+    }
+}

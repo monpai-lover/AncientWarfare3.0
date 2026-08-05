@@ -9,6 +9,13 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="KingdomAtlasRulesTests.cs.txt" />
+    <Compile Include="KingdomAtlasArtifactRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\atlas\KingdomAtlasModels.cs" Link="Production\KingdomAtlasModels.cs" />
+    <Compile Include="..\..\Code\core\atlas\KingdomAtlasRules.cs" Link="Production\KingdomAtlasRules.cs" />
+    <Compile Include="..\..\Code\core\atlas\KingdomAtlasRasterizer.cs" Link="Production\KingdomAtlasRasterizer.cs" />
+    <Compile Include="..\..\Code\core\atlas\KingdomAtlasPngEncoder.cs" Link="Production\KingdomAtlasPngEncoder.cs" />
+    <Compile Include="..\..\Code\core\atlas\KingdomAtlasGifEncoder.cs" Link="Production\KingdomAtlasGifEncoder.cs" />
     <Compile Include="ClassicCivLifespanContentTests.cs.txt" />
     <Compile Include="TestClassicCivLifespanStubs.cs.txt" />
     <Compile Include="..\..\Code\content\ClassicCivLifespanContent.cs" Link="Production\ClassicCivLifespanContent.cs" />
@@ -725,5 +732,8 @@
       BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\XiaItemDynamicAtlasSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ClassicCivLifespanSourceGuard.ps1&quot;" />
+  </Target>
+  <Target Name="KingdomAtlasSourceGuard" BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\KingdomAtlasSourceGuard.ps1&quot;" />
   </Target>
 </Project>

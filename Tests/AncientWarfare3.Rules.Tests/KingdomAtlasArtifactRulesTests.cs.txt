@@ -1,0 +1,38 @@
+using AncientWarfare3.core.atlas;
+
+internal static class KingdomAtlasArtifactRulesTests
+{
+    public static void Run()
+    {
+        var node = new KingdomAtlasNode
+        {
+            Event = new KingdomAtlasHistoryEvent
+            {
+                EventId = 9, OldKingdomId = 1, NewKingdomId = 2,
+                OldKingdomColor = "#aa0000", NewKingdomColor = "#00aa00",
+                OldKingdomName = "A", NewKingdomName = "B"
+            },
+            CityOwners = new Dictionary<long, long> { [5] = 2 },
+            VisibleZones = new[]
+            {
+                new KingdomAtlasZoneCell(5, 0, 0, false, 0),
+                new KingdomAtlasZoneCell(5, 1, 0, false, 0),
+                new KingdomAtlasZoneCell(5, 0, 1, true, 0)
+            }
+        };
+        KingdomAtlasRaster raster = KingdomAtlasRasterizer.Render(node, 64);
+        byte[] png = KingdomAtlasPngEncoder.Encode(raster);
+        Equal(137, png[0], "PNG signature");
+        Equal(80, png[1], "PNG signature second byte");
+        byte[] gif = KingdomAtlasGifEncoder.Encode(new[] { raster });
+        Equal((byte)'G', gif[0], "GIF header");
+        Equal((byte)'F', gif[2], "GIF header");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+}
