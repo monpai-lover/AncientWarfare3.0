@@ -58,6 +58,17 @@ namespace AncientWarfare3.core.lineage
                    completions == 0;
         }
 
+        public static string DescribePendingForSave(int pPendingCount,
+            long pFirstActorId, int pFirstAttempts)
+        {
+            return "pending actor death archives=" + Math.Max(0,
+                       pPendingCount) +
+                   " first_actor_id=" + (pFirstActorId >= 0
+                       ? pFirstActorId
+                       : -1L) +
+                   " first_attempts=" + Math.Max(0, pFirstAttempts);
+        }
+
         public static int ResolveAuthorityItemLimit(int pPendingCount)
         {
             if (pPendingCount > 512) return 256;

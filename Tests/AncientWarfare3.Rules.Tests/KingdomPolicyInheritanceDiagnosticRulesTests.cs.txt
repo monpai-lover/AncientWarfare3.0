@@ -1,0 +1,57 @@
+using System.Collections.Generic;
+using AncientWarfare3.core.policy;
+
+internal static class KingdomPolicyInheritanceDiagnosticRulesTests
+{
+    public static void Run()
+    {
+        string key = KingdomPolicyInheritanceDiagnosticRules.BuildKey(
+            pWorldGeneration: 4, pChildId: 11, pSourceId: 7,
+            pState: "profile-a|profile-b");
+        Equal("4:11:7:profile-a|profile-b", key,
+            "inheritance diagnostic keys are stable");
+        NotEqual(key, KingdomPolicyInheritanceDiagnosticRules.BuildKey(
+                pWorldGeneration: 5, pChildId: 11, pSourceId: 7,
+                pState: "profile-a|profile-b"),
+            "new world generations create new diagnostic keys");
+        NotEqual(key, KingdomPolicyInheritanceDiagnosticRules.BuildKey(
+                pWorldGeneration: 4, pChildId: 11, pSourceId: 7,
+                pState: "profile-c|profile-b"),
+            "state changes create new diagnostic keys");
+
+        var emitted = new HashSet<string>();
+        True(KingdomPolicyInheritanceDiagnosticRules.ShouldLog(emitted, key),
+            "first inheritance state is logged");
+        False(KingdomPolicyInheritanceDiagnosticRules.ShouldLog(emitted, key),
+            "duplicate inheritance state is suppressed");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(
+            pMessage + ": expected true");
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(
+            pMessage + ": expected false");
+    }
+
+    private static void Equal(string pExpected, string pActual,
+        string pMessage)
+    {
+        if (!string.Equals(pExpected, pActual,
+                System.StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage + ": expected=" +
+                pExpected + ", actual=" + pActual);
+    }
+
+    private static void NotEqual(string pExpected, string pActual,
+        string pMessage)
+    {
+        if (string.Equals(pExpected, pActual,
+                System.StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage + ": values matched");
+    }
+}
