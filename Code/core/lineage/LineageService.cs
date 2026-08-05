@@ -159,6 +159,8 @@ namespace AncientWarfare3.core.lineage
 
             EnsureGivenName(pActor);
             ApplyDisplayName(pActor);
+            if (IsKingdomIntegrated(pActor.kingdom))
+                ApplyNameIntegrationToActor(pActor, kingdomIntegrated: true);
         }
 
         /// <summary>
@@ -183,6 +185,8 @@ namespace AncientWarfare3.core.lineage
             SlaveService.EnsureSlaveChild(pBaby, pParent1, pParent2);
             PropagateNobleBloodFromParents(pBaby, pParent1, pParent2);
             ApplyDisplayName(pBaby);
+            if (IsKingdomIntegrated(pBaby.kingdom))
+                ApplyNameIntegrationToActor(pBaby, kingdomIntegrated: true);
             LineageBirthArchiveService.TryRecord(pBaby, pParent1, pParent2);
 
             // 编年史:仅入谱贵族(有 lineage_id)记出生事件。
@@ -2213,53 +2217,57 @@ namespace AncientWarfare3.core.lineage
             UpsertKingdomState(pKingdom, pIntegrated: true);
 
             foreach (var actor in new List<Actor>(pKingdom.getUnits()))
+                ApplyNameIntegrationToActor(actor, kingdomIntegrated: true);
+        }
+
+        private static bool ApplyNameIntegrationToActor(Actor pActor,
+            bool kingdomIntegrated)
+        {
+            if (pActor?.data == null || pActor.isRekt()) return false;
+
+            NamingProfileId profile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pActor).Profile;
+            if (profile == NamingProfileId.None && IsXia(pActor))
+                profile = NamingProfileId.Xia;
+            pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            bool actorIntegrated = profile == NamingProfileId.Xia;
+            NameIntegrationAction action =
+                NameIntegrationMaterializationRules.Decide(
+                    kingdomIntegrated, profile, shiId,
+                    HasProtectedAuthoredName(pActor), actorIntegrated);
+            if (action == NameIntegrationAction.Skip) return false;
+
+            if (action == NameIntegrationAction.RecordProfileOnly)
             {
-                if (actor?.data == null || actor.isRekt()) continue;
-
-                NamingProfileId profile = AWCultureNamingTraditionService
-                    .ResolveForActorReadOnly(actor).Profile;
-                if (profile == NamingProfileId.None && IsXia(actor))
-                    profile = NamingProfileId.Xia;
-                actor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
-                bool actorIntegrated = profile == NamingProfileId.Xia;
-                NameIntegrationAction action =
-                    NameIntegrationMaterializationRules.Decide(
-                        kingdomIntegrated: true, profile, shiId,
-                        protectedName: HasProtectedAuthoredName(actor),
-                        actorIntegrated);
-                if (action == NameIntegrationAction.Skip) continue;
-
-                if (action == NameIntegrationAction.RecordProfileOnly)
-                {
-                    // Protected identities receive the integration marker for
-                    // future readiness checks, but their authored display/name
-                    // slots remain untouched.
-                    actor.data.set(LineageKeys.NAME_INTEGRATED, true);
-                    ArchiveActor(actor, pAlive: true);
-                    continue;
-                }
-
-                actor.data.get(LineageKeys.CLAN_NAME, out string clan,
-                    string.Empty);
-                if (string.IsNullOrWhiteSpace(clan) && shiId >= 0L)
-                {
-                    clan = LineageQuery.GetShiBranchInfo(shiId)?.clan_name ??
-                           string.Empty;
-                }
-                if (string.IsNullOrWhiteSpace(clan) &&
-                    action == NameIntegrationAction.MaterializePersonalClan)
-                {
-                    long cultureId = actor.culture?.getID() ?? -1L;
-                    clan = NameIntegrationMaterializationRules
-                        .ResolvePersonalClan(actor.data.id, cultureId);
-                }
-                if (string.IsNullOrWhiteSpace(clan)) continue;
-
-                actor.data.set(LineageKeys.CLAN_NAME, clan.Trim());
-                actor.data.set(LineageKeys.NAME_INTEGRATED, true);
-                ApplyDisplayName(actor);
-                ArchiveActor(actor, pAlive: true);
+                // Protected identities receive the integration marker for
+                // future readiness checks, but their authored display/name
+                // slots remain untouched.
+                pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
+                ArchiveActor(pActor, pAlive: true);
+                return true;
             }
+
+            pActor.data.get(LineageKeys.CLAN_NAME, out string clan,
+                string.Empty);
+            if (string.IsNullOrWhiteSpace(clan) && shiId >= 0L)
+            {
+                clan = LineageQuery.GetShiBranchInfo(shiId)?.clan_name ??
+                       string.Empty;
+            }
+            if (string.IsNullOrWhiteSpace(clan) &&
+                action == NameIntegrationAction.MaterializePersonalClan)
+            {
+                long cultureId = pActor.culture?.getID() ?? -1L;
+                clan = NameIntegrationMaterializationRules.ResolvePersonalClan(
+                    pActor.data.id, cultureId);
+            }
+            if (string.IsNullOrWhiteSpace(clan)) return false;
+
+            pActor.data.set(LineageKeys.CLAN_NAME, clan.Trim());
+            pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
+            ApplyDisplayName(pActor);
+            ArchiveActor(pActor, pAlive: true);
+            return true;
         }
 
         private static bool HasProtectedAuthoredName(Actor pActor)
