@@ -37,5 +37,5 @@
   "AW3_ENABLE_ASYNC_UI_QUERIES": "启用异步界面候选计算",
   "AW3_ENABLE_ASYNC_UI_QUERIES Description": "在后台准备大型界面的候选列表；重启游戏后生效",
   "AW3_ENABLE_ASYNC_SHADOW_CHECKS": "启用异步影子校验",
-  "AW3_ENABLE_ASYNC_SHADOW_CHECKS Description": "在后台检查策略影子状态；重启游戏后生效"
+  "AW3_ENABLE_ASYNC_SHADOW_CHECKS Description": "Shadow 诊断：仅用于开发/复现异步差异。开启后会额外校验异步结果，可能增加日志和少量开销；不会替代数据库写入。正常游玩请关闭。"
 }
