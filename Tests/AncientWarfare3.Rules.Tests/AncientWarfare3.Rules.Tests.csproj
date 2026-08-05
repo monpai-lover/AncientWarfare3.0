@@ -90,6 +90,7 @@
     <Compile Include="WesternSurnameInheritanceRulesTests.cs.txt" />
     <Compile Include="WesternSurnameInheritancePersistenceSqlTests.cs.txt" />
     <Compile Include="WesternSurnameRepairRulesTests.cs.txt" />
+    <Compile Include="ManualAllianceToolRulesTests.cs.txt" />
     <Compile Include="SkeletonSpawnRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\SkeletonSpawnRules.cs" Link="Production\SkeletonSpawnRules.cs" />
     <Compile Include="WesternFamilyIdentityRulesTests.cs.txt" />
@@ -163,6 +164,7 @@
     <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAsyncPlanningRulesTests.cs.txt" />
     <Compile Include="ActorKingdomSafetyRulesTests.cs.txt" />
+    <Compile Include="ActorBirthAffiliationRulesTests.cs.txt" />
     <Compile Include="SchedulerLoadSafetyRulesTests.cs.txt" />
     <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
     <Compile Include="TestArmyRoutePollKindStub.cs.txt" />
@@ -482,6 +484,7 @@
     <Compile Include="..\..\Code\core\naming\AWNamingProfileRules.cs" Link="Production\AWNamingProfileRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageEligibilityRules.cs" Link="Production\WesternLineageEligibilityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternSurnameInheritanceRules.cs" Link="Production\WesternSurnameInheritanceRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ManualAllianceToolRules.cs" Link="Production\ManualAllianceToolRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionRules.cs" Link="Production\WesternLineageAdmissionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionPersistence.cs" Link="Production\WesternLineageAdmissionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionRules.cs" Link="Production\XiaizedFamilyBranchTransitionRules.cs" />
@@ -619,6 +622,7 @@
     <Compile Include="..\..\Code\core\lineage\HistoryWriteTimingRules.cs" Link="Production\HistoryWriteTimingRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorProfessionLoadSafetyRules.cs" Link="Production\ActorProfessionLoadSafetyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorKingdomSafetyRules.cs" Link="Production\ActorKingdomSafetyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ActorBirthAffiliationRules.cs" Link="Production\ActorBirthAffiliationRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDeathPerformanceRules.cs" Link="Production\ActorDeathPerformanceRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDiagnosticSamplingRules.cs" Link="Production\ActorDiagnosticSamplingRules.cs" />
     <Compile Include="..\..\Code\core\policy\RuntimePerformanceDiagnosticRules.cs" Link="Production\RuntimePerformanceDiagnosticRules.cs" />
@@ -704,6 +708,7 @@
   </ItemGroup>
   <Target Name="WartimeMilitaryTaskGatePerformanceSourceGuard"
       BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ActorBirthAffiliationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WartimeMilitaryTaskGatePerformanceSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\CapturedSlaveMilitaryOwnershipSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ActorDeathArchiveBacklogSourceGuard.ps1&quot;" />

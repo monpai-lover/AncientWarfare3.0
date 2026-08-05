@@ -31,6 +31,13 @@ if (args.Length == 1 && args[0] == "--skeleton-spawn")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--manual-alliance-tool")
+{
+    ManualAllianceToolRulesTests.Run();
+    Console.WriteLine("Manual alliance tool rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--xiaization-naming-transition")
 {
     XiaizationAuthoritySeparationRulesTests.Run();
@@ -300,6 +307,7 @@ if (args.Length == 1 && args[0] == "--monthly-authority-work")
 if (args.Length == 1 && args[0] == "--actor-kingdom-safety-slice")
 {
     ActorKingdomSafetyRulesTests.Run();
+    ActorBirthAffiliationRulesTests.Run();
     Console.WriteLine("AW3 actor kingdom load safety rules passed.");
     return;
 }

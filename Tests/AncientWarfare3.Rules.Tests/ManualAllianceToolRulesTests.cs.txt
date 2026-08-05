@@ -1,0 +1,23 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ManualAllianceToolRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, ManualAllianceToolRules.IsVanillaAllianceTool(
+                "ActionLibrary.clickUnity"),
+            "the vanilla Unity power entry point enables the bypass");
+        Equal(false, ManualAllianceToolRules.IsVanillaAllianceTool(
+                "DiplomacyProposalService.Execute"),
+            "the diplomacy proposal path keeps its distance rule");
+        Equal(false, ManualAllianceToolRules.IsVanillaAllianceTool(null),
+            "missing entry points do not enable the bypass");
+    }
+
+    private static void Equal(bool pExpected, bool pActual, string pMessage)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pMessage);
+    }
+}
