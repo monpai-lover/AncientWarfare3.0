@@ -200,8 +200,21 @@ namespace AncientWarfare3.core.db
                 pError = string.Empty;
                 return true;
             }
-            return worker.Flush(pTimeout,
+            long started = Stopwatch.GetTimestamp();
+            bool flushed = worker.Flush(pTimeout,
                 () => DrainCompletions(64), out pError);
+            if (!flushed)
+            {
+                long elapsedMilliseconds = Math.Max(0L,
+                    (Stopwatch.GetTimestamp() - started) * 1000L /
+                    Stopwatch.Frequency);
+                pError = (pError ?? "historical write flush failed") +
+                    "; pending=" + worker.PendingCount +
+                    "; earliest_uncommitted=" +
+                    worker.EarliestUncommittedSequence +
+                    "; elapsed_ms=" + elapsedMilliseconds;
+            }
+            return flushed;
         }
 
         public static bool TryUpsertState(string pOperationKey,

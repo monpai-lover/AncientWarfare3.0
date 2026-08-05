@@ -114,6 +114,10 @@ internal static class HistoricalWriteRulesTests
             "accepted writes still run shadow comparison");
         Contains(source, "HistoricalWriteModeRules.ShouldAttemptAsyncWrite(",
             "async writes require the real worker");
+        Contains(source, "worker.PendingCount",
+            "flush failures report the remaining worker queue");
+        Contains(source, "elapsed_ms=",
+            "flush failures report elapsed time");
     }
 
     private static void ConsecutiveQueuedReplacementsTransferProvenance()
