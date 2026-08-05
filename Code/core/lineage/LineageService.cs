@@ -149,7 +149,15 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnActorBorn(Actor pActor)
         {
-            if (!IsNativeXiaCultureActor(pActor)) return;
+            bool cultureIntegrated = XiaCultureIntegrationService.IsIntegrated(
+                pActor?.culture) || XiaCultureIntegrationService
+                .IsFullyIntegrated(pActor?.culture);
+            if (!IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
+                    nativeXia: IsNativeXiaCultureActor(pActor),
+                    usesLineage: UsesAwLineageSystem(pActor),
+                    foreignPseudoDynasty: XiaizationService
+                        .IsForeignPseudoDynasty(pActor?.kingdom),
+                    cultureIntegrated)) return;
 
             EnsureGivenName(pActor);
             ApplyDisplayName(pActor);
@@ -2040,8 +2048,15 @@ namespace AncientWarfare3.core.lineage
                 }
                 return;
             }
-            if (!IsXia(pActor) && !UsesAwLineageSystem(pActor) &&
-                !XiaizationService.IsForeignPseudoDynasty(pActor?.kingdom)) return;
+            bool cultureIntegrated = XiaCultureIntegrationService.IsIntegrated(
+                pActor?.culture) || XiaCultureIntegrationService
+                .IsFullyIntegrated(pActor?.culture);
+            if (!IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
+                    nativeXia: IsXia(pActor),
+                    usesLineage: UsesAwLineageSystem(pActor),
+                    foreignPseudoDynasty: XiaizationService
+                        .IsForeignPseudoDynasty(pActor?.kingdom),
+                    cultureIntegrated)) return;
 
             NamingProfileId namingProfile = AWCultureNamingTraditionService
                 .ResolveForActorReadOnly(pActor).Profile;

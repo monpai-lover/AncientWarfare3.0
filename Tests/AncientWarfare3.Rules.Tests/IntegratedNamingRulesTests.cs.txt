@@ -19,6 +19,16 @@ internal static class IntegratedNamingRulesTests
                 integrated: false, fullyIntegrated: false),
             "an ordinary foreign culture keeps its natural naming authority");
         Equal(true,
+            IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
+                nativeXia: false, usesLineage: false,
+                foreignPseudoDynasty: false, cultureIntegrated: true),
+            "an integrated foreign culture without lineage still uses Xia display names");
+        Equal(false,
+            IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
+                nativeXia: false, usesLineage: false,
+                foreignPseudoDynasty: false, cultureIntegrated: false),
+            "an ordinary foreign actor keeps the vanilla display path");
+        Equal(true,
             IntegratedCultureNamingMigrationRules.ShouldStartNewXiaBranch(
                 NamingProfileId.Western, NamingProfileId.Xia,
                 surnameChanged: true),

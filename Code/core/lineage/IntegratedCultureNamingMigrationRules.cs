@@ -17,6 +17,14 @@ namespace AncientWarfare3.core.lineage
             return integrated || fullyIntegrated;
         }
 
+        public static bool ShouldApplyXiaDisplay(bool nativeXia,
+            bool usesLineage, bool foreignPseudoDynasty,
+            bool cultureIntegrated)
+        {
+            return nativeXia || usesLineage || foreignPseudoDynasty ||
+                   cultureIntegrated;
+        }
+
         public static bool ShouldStartNewXiaBranch(
             NamingProfileId sourceProfile, NamingProfileId targetProfile,
             bool surnameChanged)
