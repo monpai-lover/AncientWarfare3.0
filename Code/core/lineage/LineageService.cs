@@ -2199,6 +2199,8 @@ namespace AncientWarfare3.core.lineage
 
                 NamingProfileId profile = AWCultureNamingTraditionService
                     .ResolveForActorReadOnly(actor).Profile;
+                if (profile == NamingProfileId.None && IsXia(actor))
+                    profile = NamingProfileId.Xia;
                 actor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
                 bool actorIntegrated = profile == NamingProfileId.Xia;
                 NameIntegrationAction action =
