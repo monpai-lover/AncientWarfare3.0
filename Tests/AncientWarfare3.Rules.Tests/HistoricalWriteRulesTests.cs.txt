@@ -21,6 +21,7 @@ internal static class HistoricalWriteRulesTests
         ConsecutiveQueuedReplacementsTransferProvenance();
         InFlightCommitSurvivesFailedReplacementChain();
         LatePrerequisiteFollowsReplacementChain();
+        ShadowDatabaseModeIsNotWriteBlocker();
     }
 
     public static void RunTerminalBatchFailure()
@@ -95,6 +96,24 @@ internal static class HistoricalWriteRulesTests
         ConsecutiveQueuedReplacementsTransferProvenance();
         InFlightCommitSurvivesFailedReplacementChain();
         LatePrerequisiteFollowsReplacementChain();
+    }
+
+    private static void ShadowDatabaseModeIsNotWriteBlocker()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "db",
+            "HistoricalWriteService.cs"));
+        False(source.Contains(
+                "AWAsyncRuntime.DatabaseEnabled ||\r\n                    AWAsyncRuntime.ShadowEnabled",
+                StringComparison.Ordinal),
+            "shadow does not disable the historical worker");
+        False(source.Contains("historical async writer is shadow-only",
+                StringComparison.Ordinal),
+            "shadow mode has no persistence-only failure path");
+        Contains(source, "HistoricalWriteModeRules.ShouldCompareShadow(",
+            "accepted writes still run shadow comparison");
+        Contains(source, "HistoricalWriteModeRules.ShouldAttemptAsyncWrite(",
+            "async writes require the real worker");
     }
 
     private static void ConsecutiveQueuedReplacementsTransferProvenance()
