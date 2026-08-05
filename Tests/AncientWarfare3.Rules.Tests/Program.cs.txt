@@ -17,6 +17,13 @@ if (args.Length == 1 && args[0] == "--western-surname-inheritance-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--xiaization-naming-transition")
+{
+    XiaizationAuthoritySeparationRulesTests.Run();
+    Console.WriteLine("Xiaization naming transition rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
 {
     ArmyRtsWarLifecycleRulesTests.Run();
@@ -7744,6 +7751,7 @@ ArmyMembershipOwnershipRulesTests.Run();
 KingdomRenamePersistenceRulesTests.Run();
 XiaExpansionAndCivMonkeyNamingRulesTests.Run();
 IntegratedNamingRulesTests.Run();
+XiaizationAuthoritySeparationRulesTests.Run();
 WesternLineageNamingRulesTests.Run();
 WesternSurnameInheritanceRulesTests.Run();
 WesternSurnameInheritancePersistenceSqlTests.Run();

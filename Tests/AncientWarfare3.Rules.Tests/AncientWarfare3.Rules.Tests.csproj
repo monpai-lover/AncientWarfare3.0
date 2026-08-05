@@ -74,6 +74,7 @@
     <Compile Include="ArmyMembershipOwnershipRulesTests.cs.txt" />
     <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
     <Compile Include="IntegratedNamingRulesTests.cs.txt" />
+    <Compile Include="XiaizationAuthoritySeparationRulesTests.cs.txt" />
     <Compile Include="ActorLocalizedNameBoundaryRulesTests.cs.txt" />
     <Compile Include="LocalizedNameMigrationRulesTests.cs.txt" />
     <Compile Include="KingdomRenamePersistenceRulesTests.cs.txt" />
@@ -479,6 +480,7 @@
     <Compile Include="..\..\Code\core\naming\AWOrcNomadicNamingRules.cs" Link="Production\AWOrcNomadicNamingRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternFamilyIdentityRules.cs" Link="Production\WesternFamilyIdentityRules.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomPolicyProfileRules.cs" Link="Production\KingdomPolicyProfileRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomInstitutionalXiaizationRules.cs" Link="Production\KingdomInstitutionalXiaizationRules.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomPolicyProfileMigrationRules.cs" Link="Production\KingdomPolicyProfileMigrationRules.cs" />
     <Compile Include="..\..\Code\core\policy\WesternRoyalAuthorityRules.cs" Link="Production\WesternRoyalAuthorityRules.cs" />
     <Compile Include="..\..\Code\core\policy\CivMonkeyPolicyRules.cs" Link="Production\CivMonkeyPolicyRules.cs" />
