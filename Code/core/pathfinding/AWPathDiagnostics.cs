@@ -151,7 +151,9 @@ namespace AncientWarfare3.core.pathfinding
         public void Enqueue(AWPathDiagnosticEvent pEvent) => _events.Enqueue(pEvent);
         public bool TryDequeue(out AWPathDiagnosticEvent pEvent) => _events.TryDequeue(out pEvent);
 
-        public void DrainAndMaybeLog(int pBudget, int pQueueDepth, Action<string> pLogger)
+        public void DrainAndMaybeLog(int pBudget, int pQueueDepth,
+            int pActiveSessions = 0, int pWorkerCount = 0,
+            long pStaleWorkCount = 0, Action<string> pLogger = null)
         {
             int drained = 0;
             AWPathDiagnosticEvent latest = default;
@@ -168,6 +170,9 @@ namespace AncientWarfare3.core.pathfinding
                   ", error=" + latest.Message
                 : "";
             pLogger?.Invoke("AW3 pathfinding diagnostics: queue=" + pQueueDepth +
+                ", active_sessions=" + pActiveSessions +
+                ", workers=" + pWorkerCount +
+                ", stale_work=" + pStaleWorkCount +
                 ", errors=" + drained + ", generated=" + Generated + ", completed=" +
                 Completed + ", failed=" + Failed + ", traversal_captured=" +
                 TraversalChunksCaptured + ", traversal_published=" +

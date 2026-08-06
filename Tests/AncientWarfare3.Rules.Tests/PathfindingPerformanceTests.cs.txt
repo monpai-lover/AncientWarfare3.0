@@ -13,6 +13,7 @@ internal static class PathfindingPerformanceTests
         PathDiagnosticsExposeSessionSchedulerState();
         PhysicalTransportUsesPassengerStateMachine();
         AsyncAuthorityCommitUsesBoundedBurst();
+        PathDiagnosticsLogSchedulerState();
         OwnershipIndexUsesSingleHotLookup();
         IsUsingPathHotPathOnlyChecksOwnership();
         RecoveryUsesCultiwayReasonResetAndBackoff();
@@ -249,6 +250,20 @@ internal static class PathfindingPerformanceTests
                authority.Contains("DrainMainThread(0.25") &&
                authority.Contains("ResolveItemLimit(pending)"),
             "authority commits use a completion-count bounded main-thread burst");
+    }
+
+    private static void PathDiagnosticsLogSchedulerState()
+    {
+        string bootstrap = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathfindingBootstrap.cs"));
+        string diagnostics = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathDiagnostics.cs"));
+        Assert(bootstrap.Contains("StaleWorkCount") &&
+               diagnostics.Contains("active_sessions=") &&
+               diagnostics.Contains("stale_work="),
+            "path logs expose session pressure and stale work separately");
     }
 
     private static void RecoveryUsesCultiwayReasonResetAndBackoff()

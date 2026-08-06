@@ -116,7 +116,10 @@ namespace AncientWarfare3.core.pathfinding
             try
             {
                 Diagnostics.DrainAndMaybeLog(32,
-                    _finder?.QueueDepth ?? 0, null);
+                    _finder?.QueueDepth ?? 0,
+                    _finder?.ActiveCount ?? 0,
+                    _finder?.WorkerCount ?? 0,
+                    _finder?.StaleWorkCount ?? 0, null);
             }
             finally
             {
