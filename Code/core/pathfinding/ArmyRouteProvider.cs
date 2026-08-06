@@ -162,11 +162,10 @@ namespace AncientWarfare3.core.pathfinding
             bool traversalGenerationReady, int dedicatedWorkerCount,
             bool sharedFinderReady)
         {
+            _ = dedicatedWorkerCount;
             if (!aw3Mode) return ArmyRouteProviderBackend.Vanilla;
             if (!traversalGenerationReady)
                 return ArmyRouteProviderBackend.VanillaFallback;
-            if (dedicatedWorkerCount > 0)
-                return ArmyRouteProviderBackend.Aw3Dedicated;
             return sharedFinderReady
                 ? ArmyRouteProviderBackend.Aw3Shared
                 : ArmyRouteProviderBackend.VanillaFallback;

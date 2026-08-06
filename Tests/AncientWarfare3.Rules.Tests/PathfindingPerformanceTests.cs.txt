@@ -9,6 +9,7 @@ internal static class PathfindingPerformanceTests
         RequestKeysMatchWithoutAllocating();
         LatestActorSlotKeepsOneQueuedNode();
         FinderUsesSessionTokenQueues();
+        RtsRoutesUseTheSharedFinderOnly();
         OwnershipIndexUsesSingleHotLookup();
         IsUsingPathHotPathOnlyChecksOwnership();
         RecoveryUsesCultiwayReasonResetAndBackoff();
@@ -202,6 +203,18 @@ internal static class PathfindingPerformanceTests
             "the finder owns Cultiway starved, initial, and continuation queues");
         Assert(!finder.Contains("ActorWorkSlot"),
             "the legacy mutable actor-slot queue is removed from path dispatch");
+    }
+
+    private static void RtsRoutesUseTheSharedFinderOnly()
+    {
+        string provider = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "ArmyRouteProvider.cs"));
+        Assert(provider.Contains("return sharedFinderReady") &&
+               provider.Contains("ArmyRouteProviderBackend.Aw3Shared"),
+            "RTS routes choose the global path finder when it is ready");
+        Assert(!provider.Contains("if (dedicatedWorkerCount > 0)"),
+            "RTS routes never create a dedicated path worker pool");
     }
 
     private static void RecoveryUsesCultiwayReasonResetAndBackoff()
