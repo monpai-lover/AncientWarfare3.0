@@ -22,6 +22,17 @@ internal static class RuntimePerformanceBudgetRulesTests
             "the follower cursor advances over a bounded recovery window");
         Equal(24, AWPathLifecycleRules.MaximumSmoothPathStepsPerUpdate,
             "custom path smoothing cannot consume an unbounded frame slice");
+        Equal(1, AWFrameSchedulerRules.PathfindingWorkerCount(3),
+            "a one-core parallel budget still retains one shared path worker");
+        Equal(4, AWFrameSchedulerRules.PathfindingWorkerCount(12),
+            "path workers use one third of the parallel budget");
+        Equal(8, AWFrameSchedulerRules.PathfindingWorkerCount(64),
+            "path workers are capped at the Cultiway global maximum");
+        AWPathWorkerAllocation allocation = AWFrameSchedulerRules.AllocateWorkers(12);
+        Equal(4, allocation.ActorPathWorkers,
+            "all allocated path workers belong to the shared finder");
+        Equal(0, allocation.ArmyRouteWorkers,
+            "RTS does not reserve a dedicated worker pool");
     }
 
     private static void Equal<T>(T expected, T actual, string name)
