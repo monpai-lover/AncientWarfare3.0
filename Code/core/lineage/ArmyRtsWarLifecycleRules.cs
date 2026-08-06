@@ -53,6 +53,15 @@ namespace AncientWarfare3.core.lineage
             return insideTargetTerritory && hostileCombatUnitNearby;
         }
 
+        public static bool ShouldReleaseToVanilla(
+            ArmyRtsWarResolutionMode pMode,
+            bool insideTargetTerritory, bool targetIsEnemy,
+            bool objectiveOpen)
+        {
+            return pMode != ArmyRtsWarResolutionMode.AbstractDecisive &&
+                   insideTargetTerritory && targetIsEnemy && objectiveOpen;
+        }
+
         public static bool CanGenerateReplacements(bool combatActive,
             bool transportActive, bool movementActive)
         {
@@ -80,6 +89,34 @@ namespace AncientWarfare3.core.lineage
             }
             return ShouldReleaseToVanilla(insideTargetTerritory,
                 hostileCombatUnitNearby) && objectiveOpen
+                ? ArmyRtsCombatControlDecision.ReleaseToVanilla
+                : ArmyRtsCombatControlDecision.KeepStrategicControl;
+        }
+
+        public static ArmyRtsCombatControlDecision ResolveCombatControl(
+            ArmyRtsWarResolutionMode pMode, ArmyRtsWarPhase pPhase,
+            bool pWithdrawalRequired, bool pInsideTargetTerritory,
+            bool pTargetIsEnemy, bool pObjectiveOpen,
+            bool pPlayerCommand = false)
+        {
+            if (pPhase == ArmyRtsWarPhase.Withdrawal ||
+                pPhase == ArmyRtsWarPhase.Replenishing)
+                return ArmyRtsCombatControlDecision.KeepStrategicControl;
+            if (pWithdrawalRequired &&
+                ArmyRtsWarDoctrineRules.AllowWithdrawal(pMode,
+                    ArmyRtsWithdrawalOrigin.CasualtyThreshold,
+                    pPlayerCommand))
+                return ArmyRtsCombatControlDecision.ReacquireForWithdrawal;
+            if (pMode == ArmyRtsWarResolutionMode.AbstractDecisive)
+                return ArmyRtsCombatControlDecision.KeepStrategicControl;
+            if (pPhase == ArmyRtsWarPhase.VanillaCombat)
+                return pInsideTargetTerritory && pTargetIsEnemy &&
+                       pObjectiveOpen
+                    ? ArmyRtsCombatControlDecision.KeepVanillaControl
+                    : ArmyRtsCombatControlDecision.
+                        ReacquireStrategicControl;
+            return ShouldReleaseToVanilla(pMode, pInsideTargetTerritory,
+                    pTargetIsEnemy, pObjectiveOpen)
                 ? ArmyRtsCombatControlDecision.ReleaseToVanilla
                 : ArmyRtsCombatControlDecision.KeepStrategicControl;
         }

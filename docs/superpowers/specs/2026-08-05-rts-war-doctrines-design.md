@@ -23,8 +23,12 @@ The persisted values are:
   casualty withdrawal, replenishment, and renewed attack lifecycle.
 - `LastStand`: retain preparation, recruitment, assembly, and strategic march,
   but disable every automatic withdrawal path.
-- `AbstractDecisive`: resolve a fully assembled city battle by army counts
-  before route generation; armies do not march or fight on the map.
+- `AbstractDecisive`: resolve a fully assembled city battle as a remote
+  numerical-card duel before route generation; armies do not march or fight on
+  the map. `Army.countUnits()` is the base card value, the commanding
+  general's published strength is a bounded buff, and one attacker may face
+  multiple defender armies. The larger adjusted value wins; close values use
+  the deterministic weighted roll described below.
 
 Unknown or missing values normalize to `Standard`. The selected value is read
 once during runtime initialization so changing it cannot partially mutate an
@@ -128,11 +132,12 @@ No loser is demobilized until the city transfer succeeds. A failed transfer
 leaves both sides unchanged and retries or aborts safely. After a successful
 transfer, only losing armies reserved for this battlefield are processed:
 
-- real soldiers lose army membership, military profession, captain/general,
-  royal-guard, RTS, deployment, and temporary-conscription state and become
-  ordinary residents;
+- real losing soldiers are removed by the controlled battle-demobilization
+  path (the configured self-sacrifice outcome); they must not be left in the
+  losing army or counted as living military actors;
 - kings, heirs, city leaders, and officials retain valid civil authority but
-  lose military identity;
+  are protected from ordinary preparation recruitment and retain civil
+  authority if a corrupted save places them in a losing roster;
 - synthetic levy actors are deleted instead of becoming permanent residents;
 - winning armies remain intact.
 

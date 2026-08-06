@@ -289,6 +289,9 @@ namespace AncientWarfare3.core.lineage
                     WarId = warId,
                     FrontId = target.id,
                     TargetCityId = target.id,
+                    ProposalKind = target == pCity
+                        ? ArmyRtsProposalKind.Defend
+                        : ArmyRtsProposalKind.Attack,
                     Role = ArmyRtsRole.TemporaryGarrisonSortie,
                     Posture = target == pCity
                         ? ArmyRtsPosture.Defend

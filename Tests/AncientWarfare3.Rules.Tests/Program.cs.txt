@@ -71,6 +71,15 @@ if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--rts-war-doctrines")
+{
+    ArmyRtsWarDoctrineRulesTests.Run();
+    ArmyAbstractBattleRulesTests.Run();
+    ArmyRtsMissionTargetRulesTests.Run();
+    Console.WriteLine("RTS war doctrine rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--runtime-diagnostic-rules")
 {
     RuntimePerformanceDiagnosticRulesTests.Run();
@@ -7872,6 +7881,9 @@ ArmyLogisticsSustainmentRulesTests.Run();
 ArmyRtsRouteChoiceRulesTests.Run();
 ArmyRtsReplenishmentArrivalRulesTests.Run();
 ArmyRtsWarLifecycleRulesTests.Run();
+ArmyRtsWarDoctrineRulesTests.Run();
+ArmyAbstractBattleRulesTests.Run();
+ArmyRtsMissionTargetRulesTests.Run();
 PreparationRecruitmentProtectionRulesTests.Run();
 ArmyRtsWarLifecycleStateTests.Run();
 ArmyRtsCombatHandoffRulesTests.Run();

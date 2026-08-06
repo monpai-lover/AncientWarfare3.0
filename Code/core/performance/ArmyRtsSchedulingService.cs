@@ -55,6 +55,7 @@ namespace AncientWarfare3.core.performance
                     CoalitionWarTaskService.ProcessFrame);
                 Measure(RecentFeatureBenchmarkRules.ArmyRtsDirectorIndex,
                     KingdomWarDirectorService.ProcessFrame);
+                ArmyAbstractBattleService.ProcessFrame();
                 Measure(RecentFeatureBenchmarkRules.PathfindingIndex,
                     ArmyRouteProviderService.ProcessFrame);
                 Measure(RecentFeatureBenchmarkRules.ArmyRtsControllerIndex,

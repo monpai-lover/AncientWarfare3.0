@@ -82,6 +82,9 @@ namespace AncientWarfare3.api.commands
                 WarId = war.data.id,
                 FrontId = city.id,
                 TargetCityId = city.id,
+                ProposalKind = rally
+                    ? ArmyRtsProposalKind.Defend
+                    : ArmyRtsProposalKind.Attack,
                 Role = rally ? ArmyRtsRole.Defense : ArmyRtsRole.Assault,
                 Posture = rally
                     ? ArmyRtsPosture.Defend
@@ -105,7 +108,8 @@ namespace AncientWarfare3.api.commands
                     "aw3_army_command_posture_invalid");
             if (posture == ArmyRtsPosture.Retreat)
             {
-                if (!ArmyRetreatService.AssignArmyRetreat(pArmy) ||
+                if (!ArmyRetreatService.AssignArmyRetreat(pArmy, -1L,
+                        ArmyRtsWithdrawalOrigin.PlayerCommand) ||
                     !ArmyRtsControllerService.TryGetMission(pArmy,
                         out ArmyRtsMission retreatMission))
                     return Reject(AW3CommandError.Conflict,

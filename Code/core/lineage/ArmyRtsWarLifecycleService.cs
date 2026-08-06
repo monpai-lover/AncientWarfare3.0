@@ -204,6 +204,13 @@ namespace AncientWarfare3.core.lineage
             ClearPersisted(pArmy);
         }
 
+        public static void ClearArmy(Army pArmy)
+        {
+            if (pArmy == null) return;
+            Store.RemoveArmy(pArmy.id);
+            ClearPersisted(pArmy);
+        }
+
         public static void OnWarEnded(War pWar)
         {
             long warId = pWar?.data?.id ?? -1L;
@@ -242,8 +249,33 @@ namespace AncientWarfare3.core.lineage
                 out string persistedWaitReason, string.Empty);
             pArmy.data.get(LineageKeys.AW_RTS_WAIT_DEADLINE,
                 out string persistedWaitDeadline, string.Empty);
+            pArmy.data.get(LineageKeys.AW_RTS_PREVIOUS_MISSION_WAR_ID,
+                out long previousWarId, -1L);
+            pArmy.data.get(LineageKeys.AW_RTS_PREVIOUS_MISSION_FRONT_ID,
+                out long previousFrontId, -1L);
+            pArmy.data.get(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_TARGET_CITY_ID,
+                out long previousTargetCityId, -1L);
+            pArmy.data.get(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_TARGET_STRENGTH,
+                out int previousTargetStrength, 0);
+            pArmy.data.get(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_PROPOSAL_KIND,
+                out string previousProposalKind, string.Empty);
+            pArmy.data.get(LineageKeys.AW_RTS_PREVIOUS_MISSION_ROLE,
+                out string previousRole, string.Empty);
+            pArmy.data.get(LineageKeys.AW_RTS_PREVIOUS_MISSION_POSTURE,
+                out string previousPosture, string.Empty);
+            pArmy.data.get(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_PLAYER_ORDER,
+                out bool previousPlayerOrder, false);
+            pArmy.data.get(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_ISSUED_TIME,
+                out string previousIssuedText, string.Empty);
             double.TryParse(persistedWaitDeadline, NumberStyles.Float,
                 CultureInfo.InvariantCulture, out double waitDeadline);
+            double.TryParse(previousIssuedText, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double previousIssuedTime);
             int living = persistedWarId == pWarId && persistedBaseline > 0
                 ? persistedBaseline
                 : SafeUnitCount(pArmy);
@@ -263,6 +295,38 @@ namespace AncientWarfare3.core.lineage
                     persistedWaitDeadline)
                     ? double.NaN
                     : waitDeadline;
+                if (previousWarId >= 0L && previousFrontId >= 0L &&
+                    previousTargetCityId >= 0L &&
+                    Enum.TryParse(previousProposalKind, true,
+                        out ArmyRtsProposalKind previousKind) &&
+                    Enum.IsDefined(typeof(ArmyRtsProposalKind), previousKind) &&
+                    ArmyRtsWarDoctrineRules.
+                        ShouldPersistPreviousOffensiveMission(previousKind) &&
+                    Enum.TryParse(previousRole, true,
+                        out ArmyRtsRole previousRoleValue) &&
+                    Enum.IsDefined(typeof(ArmyRtsRole), previousRoleValue) &&
+                    Enum.TryParse(previousPosture, true,
+                        out ArmyRtsPosture previousPostureValue) &&
+                    Enum.IsDefined(typeof(ArmyRtsPosture),
+                        previousPostureValue) &&
+                    !double.IsNaN(previousIssuedTime) &&
+                    !double.IsInfinity(previousIssuedTime))
+                    record.PreviousOffensiveMission =
+                        new ArmyRtsMission
+                        {
+                            ArmyId = pArmy.id,
+                            KingdomId = SafeKingdom(pArmy)?.id ?? -1L,
+                            WarId = previousWarId,
+                            FrontId = previousFrontId,
+                            TargetCityId = previousTargetCityId,
+                            TargetStrength = Math.Max(0,
+                                previousTargetStrength),
+                            ProposalKind = previousKind,
+                            Role = previousRoleValue,
+                            Posture = previousPostureValue,
+                            PlayerOrder = previousPlayerOrder,
+                            IssuedTime = previousIssuedTime
+                        };
             }
             Persist(pArmy, pWarId, record);
             return record;
@@ -284,6 +348,41 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.set(LineageKeys.AW_RTS_WAIT_DEADLINE,
                 pRecord.WaitDeadline.ToString("R",
                     CultureInfo.InvariantCulture));
+            ArmyRtsMission previous = pRecord.PreviousOffensiveMission;
+            if (previous != null && ArmyRtsWarDoctrineRules.
+                    ShouldPersistPreviousOffensiveMission(
+                        previous.ProposalKind))
+            {
+                pArmy.data.set(
+                    LineageKeys.AW_RTS_PREVIOUS_MISSION_WAR_ID,
+                    previous.WarId);
+                pArmy.data.set(
+                    LineageKeys.AW_RTS_PREVIOUS_MISSION_FRONT_ID,
+                    previous.FrontId);
+                pArmy.data.set(
+                    LineageKeys.AW_RTS_PREVIOUS_MISSION_TARGET_CITY_ID,
+                    previous.TargetCityId);
+                pArmy.data.set(
+                    LineageKeys.AW_RTS_PREVIOUS_MISSION_TARGET_STRENGTH,
+                    Math.Max(0, previous.TargetStrength));
+                pArmy.data.set(
+                    LineageKeys.AW_RTS_PREVIOUS_MISSION_PROPOSAL_KIND,
+                    previous.ProposalKind.ToString());
+                pArmy.data.set(LineageKeys.AW_RTS_PREVIOUS_MISSION_ROLE,
+                    previous.Role.ToString());
+                pArmy.data.set(
+                    LineageKeys.AW_RTS_PREVIOUS_MISSION_POSTURE,
+                    previous.Posture.ToString());
+                pArmy.data.set(
+                    LineageKeys.AW_RTS_PREVIOUS_MISSION_PLAYER_ORDER,
+                    previous.PlayerOrder);
+                pArmy.data.set(
+                    LineageKeys.AW_RTS_PREVIOUS_MISSION_ISSUED_TIME,
+                    previous.IssuedTime.ToString("R",
+                        CultureInfo.InvariantCulture));
+            }
+            else
+                ClearPreviousMission(pArmy);
         }
 
         private static void ClearPersisted(Army pArmy)
@@ -295,6 +394,30 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.removeLong(LineageKeys.AW_RTS_REPLENISHMENT_CITY_ID);
             pArmy.data.removeString(LineageKeys.AW_RTS_WAIT_REASON);
             pArmy.data.removeString(LineageKeys.AW_RTS_WAIT_DEADLINE);
+            ClearPreviousMission(pArmy);
+        }
+
+        private static void ClearPreviousMission(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            pArmy.data.removeLong(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_WAR_ID);
+            pArmy.data.removeLong(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_FRONT_ID);
+            pArmy.data.removeLong(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_TARGET_CITY_ID);
+            pArmy.data.removeInt(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_TARGET_STRENGTH);
+            pArmy.data.removeString(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_PROPOSAL_KIND);
+            pArmy.data.removeString(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_ROLE);
+            pArmy.data.removeString(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_POSTURE);
+            pArmy.data.removeBool(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_PLAYER_ORDER);
+            pArmy.data.removeString(
+                LineageKeys.AW_RTS_PREVIOUS_MISSION_ISSUED_TIME);
         }
 
         private static int SafeUnitCount(Army pArmy)

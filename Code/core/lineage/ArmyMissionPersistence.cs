@@ -193,6 +193,9 @@ namespace AncientWarfare3.core.lineage
             if (!ArmyMissionPersistenceRules.TryRestore(stored, facts,
                     out pMission, out pInitialState))
                 return RejectRestore(pArmy);
+            if (!ArmyRtsControllerService.ValidateMissionTarget(pArmy,
+                    pMission))
+                return RejectRestore(pArmy);
             Restored[pArmy.id] = pMission;
             KingdomWarDirectorService.OnArmyChanged(kingdom);
             return true;

@@ -1,0 +1,127 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyAbstractBattleRulesTests
+{
+    public static void Run()
+    {
+        ArmyAbstractBattleResult empty = ArmyAbstractBattleRules.Resolve(
+            new ArmyAbstractBattleFacts
+            {
+                WarId = 1,
+                TargetCityId = 2,
+                ResolutionSequence = 3,
+                Attackers = Array.Empty<ArmyAbstractBattleParticipant>(),
+                Defenders = Array.Empty<ArmyAbstractBattleParticipant>()
+            });
+        Equal(ArmyAbstractBattleOutcome.NoBattle, empty.Outcome,
+            "zero versus zero does not resolve a battle");
+
+        Equal(ArmyAbstractBattleOutcome.AttackVictory,
+            ArmyAbstractBattleRules.Resolve(OneSided(10, 0)).Outcome,
+            "an attacker-only battle is an attack victory");
+        Equal(ArmyAbstractBattleOutcome.DefenseVictory,
+            ArmyAbstractBattleRules.Resolve(OneSided(0, 10)).Outcome,
+            "a defender-only battle is a defense victory");
+
+        Equal(ArmyAbstractBattleOutcome.AttackVictory,
+            ArmyAbstractBattleRules.Resolve(OneSided(125, 100)).Outcome,
+            "an exact 1.25 ratio resolves directly for the stronger side");
+        Equal(ArmyAbstractBattleOutcome.DefenseVictory,
+            ArmyAbstractBattleRules.Resolve(OneSided(100, 125)).Outcome,
+            "an exact 1.25 ratio resolves directly for the stronger side");
+
+        ArmyAbstractBattleFacts manyDefenders = new ArmyAbstractBattleFacts
+        {
+            WarId = 5,
+            TargetCityId = 8,
+            ResolutionSequence = 1,
+            Attackers = new[]
+            {
+                Participant(101, 100, 0, true),
+                Participant(102, 100, 0, true)
+            },
+            Defenders = new[]
+            {
+                Participant(201, 120, 0, false),
+                Participant(202, 40, 0, false)
+            }
+        };
+        ArmyAbstractBattleResult aggregate =
+            ArmyAbstractBattleRules.Resolve(manyDefenders);
+        Equal(200, aggregate.AttackValue,
+            "one-to-many battle aggregates all attacker cards");
+        Equal(160, aggregate.DefenseValue,
+            "one-to-many battle aggregates all defender cards");
+
+        ArmyAbstractBattleResult commanderBuff =
+            ArmyAbstractBattleRules.Resolve(OneSided(100, 100,
+                attackerCommander: 50, defenderCommander: 0));
+        Equal(150, commanderBuff.AttackValue,
+            "commander strength contributes a bounded percentage buff");
+        Equal(ArmyAbstractBattleOutcome.AttackVictory,
+            commanderBuff.Outcome,
+            "commander buff can decide a close card duel");
+
+        ArmyAbstractBattleFacts stableFacts = OneSided(101, 100);
+        ArmyAbstractBattleResult first =
+            ArmyAbstractBattleRules.Resolve(stableFacts);
+        ArmyAbstractBattleResult replay =
+            ArmyAbstractBattleRules.Resolve(stableFacts);
+        Equal(first.Outcome, replay.Outcome,
+            "the same operation replays the same outcome");
+        Equal(first.Seed, replay.Seed,
+            "the same operation reuses the same deterministic seed identity");
+
+        IReadOnlyList<ArmyAbstractBattleParticipant> attackers =
+            new[]
+            {
+                Participant(50, 100, 0, true),
+                Participant(40, 100, 0, true)
+            };
+        Equal(40L, ArmyAbstractBattleRules.SelectPrimaryAttacker(
+                attackers).ArmyId,
+            "primary attacker tie breaks by the lowest army id");
+        Equal(50L, ArmyAbstractBattleRules.SelectPrimaryAttacker(
+                new[] { Participant(50, 110, 0, true),
+                       Participant(40, 100, 0, true) }).ArmyId,
+            "primary attacker chooses the largest adjusted card");
+    }
+
+    private static ArmyAbstractBattleFacts OneSided(int pAttack,
+        int pDefense, int attackerCommander = 0, int defenderCommander = 0)
+    {
+        return new ArmyAbstractBattleFacts
+        {
+            WarId = 10,
+            TargetCityId = 20,
+            ResolutionSequence = 30,
+            Attackers = pAttack > 0
+                ? new[] { Participant(1, pAttack, attackerCommander, true) }
+                : Array.Empty<ArmyAbstractBattleParticipant>(),
+            Defenders = pDefense > 0
+                ? new[] { Participant(2, pDefense, defenderCommander, false) }
+                : Array.Empty<ArmyAbstractBattleParticipant>()
+        };
+    }
+
+    private static ArmyAbstractBattleParticipant Participant(long pArmyId,
+        int pCount, int pCommander, bool pAttacker)
+    {
+        return new ArmyAbstractBattleParticipant
+        {
+            ArmyId = pArmyId,
+            UnitCount = pCount,
+            CommanderStrength = pCommander,
+            IsAttacker = pAttacker
+        };
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                message + $" (expected {expected}, actual {actual})");
+    }
+}

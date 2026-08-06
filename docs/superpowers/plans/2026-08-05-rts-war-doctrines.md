@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add Standard, Last Stand, and deterministic abstract count-battle doctrines while preventing every offensive mission from targeting a friendly city.
+**Goal:** Add Standard, Last Stand, and deterministic remote numerical-card duel doctrines while preventing every offensive mission from targeting a friendly city.
 
-**Architecture:** Centralize doctrine and mission-target decisions in pure rules reached by both Native and AW3/Large schedulers. Keep vanilla tactical combat outside RTS ownership after target-zone handoff. Run the host-authoritative abstract resolver between director grouping and route generation, with a persisted transfer-before-demobilization transaction.
+**Architecture:** Centralize doctrine and mission-target decisions in pure rules reached by both Native and AW3/Large schedulers. Keep vanilla tactical combat outside RTS ownership after target-zone handoff. Run the host-authoritative abstract resolver between director grouping and route generation, using `Army.countUnits()` plus bounded commander buffs, one-to-many participant aggregation, and a persisted transfer-before-demobilization transaction.
 
 **Tech Stack:** C# 11/net48, Harmony, Unity/WorldBox army APIs, NML config UI, System.Data.SQLite, .NET 9 rules and adversarial simulation, AW3 multiplayer snapshots.
 

@@ -232,6 +232,13 @@ namespace AncientWarfare3.core.lineage
             return _records.TryGetValue(pArmyId, out pRecord);
         }
 
+        public IReadOnlyList<long> SnapshotArmyIds()
+        {
+            var ids = new List<long>(_records.Keys);
+            ids.Sort();
+            return ids;
+        }
+
         public ArmyRtsState ResolveAndSet(long pArmyId,
             ArmyRtsTransitionFacts pFacts)
         {
@@ -656,21 +663,6 @@ namespace AncientWarfare3.core.lineage
                 bool armyKingdomMatches = armyKingdom?.data != null && armyKingdom.id == pSnapshot.KingdomId;
                 bool warMembershipValid = armyKingdomMatches &&
                     IsKingdomInWar(war, armyKingdom);
-                bool proposalValid = warMembershipValid &&
-                    ArmyRtsObjectiveRules.CanCommit(
-                        proposal.ProposalKind, objectiveState,
-                        armyKingdom.id, pSnapshot.KingdomId,
-                        proposal.OpenObjectiveCount);
-                if (!proposalValid)
-                {
-                    CoalitionWarTaskService.ReleaseObjectiveClaim(
-                        proposal.WarId, proposal.ArmyId,
-                        proposal.TargetCityId);
-                    replanRequired = true;
-                    if (armyKingdom?.data != null)
-                        replanKingdomIds.Add(armyKingdom.id);
-                    continue;
-                }
                 var mission = new ArmyRtsMission
                 {
                     ArmyId = proposal.ArmyId,
@@ -683,6 +675,22 @@ namespace AncientWarfare3.core.lineage
                     Posture = proposal.Posture,
                     IssuedTime = issuedTime
                 };
+                bool proposalValid = warMembershipValid &&
+                    ArmyRtsObjectiveRules.CanCommit(
+                        proposal.ProposalKind, objectiveState,
+                        armyKingdom?.id ?? -1L, pSnapshot.KingdomId,
+                        proposal.OpenObjectiveCount) &&
+                    ValidateMissionTarget(army, mission);
+                if (!proposalValid)
+                {
+                    CoalitionWarTaskService.ReleaseObjectiveClaim(
+                        proposal.WarId, proposal.ArmyId,
+                        proposal.TargetCityId);
+                    replanRequired = true;
+                    if (armyKingdom?.data != null)
+                        replanKingdomIds.Add(armyKingdom.id);
+                    continue;
+                }
                 if (ShouldRetainDirectorMission(army, mission))
                 {
                     RefreshRetainedDirectorProjection(army, proposal,
@@ -1019,6 +1027,21 @@ namespace AncientWarfare3.core.lineage
             return pMission != null;
         }
 
+        internal static IReadOnlyList<ArmyRtsMission> SnapshotMissions()
+        {
+            var missions = new List<ArmyRtsMission>();
+            IReadOnlyList<long> ids = Controllers.SnapshotArmyIds();
+            for (int i = 0; i < ids.Count; i++)
+            {
+                if (!Controllers.TryGet(ids[i],
+                        out ArmyRtsControllerRecord record) ||
+                    record?.Mission == null) continue;
+                missions.Add(ArmyRtsControllerRules.CopyMission(
+                    record.Mission));
+            }
+            return missions;
+        }
+
         public static bool HasValidMission(Army pArmy)
         {
             if (pArmy?.data == null ||
@@ -1026,6 +1049,12 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRtsControllerRecord record) ||
                 record?.Mission == null) return false;
             return IsMissionValid(pArmy, record.Mission);
+        }
+
+        internal static bool ValidateMissionTarget(Army pArmy,
+            ArmyRtsMission pMission)
+        {
+            return IsMissionValid(pArmy, pMission);
         }
 
         public static bool TryGetMissionTarget(Army pArmy,
@@ -1080,6 +1109,19 @@ namespace AncientWarfare3.core.lineage
                 runtime.AnchorTileId = -1;
                 runtime.AlternateTargetTileId = -1;
                 runtime.PursuitRoute.Reset();
+                bool playerRetreat = Controllers.TryGet(pArmyId,
+                    out ArmyRtsControllerRecord routeRecord) &&
+                    ArmyRtsWarDoctrineRules.IsExplicitPlayerRetreat(
+                        routeRecord?.Mission);
+                if (!ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                        ArmyRtsWarDoctrine.Current,
+                        ArmyRtsWithdrawalOrigin.Watchdog,
+                        playerRetreat))
+                {
+                    Controllers.SetState(pArmyId, ArmyRtsState.Hold);
+                    Controllers.Requeue(pArmyId);
+                    return;
+                }
                 Controllers.SetState(pArmyId, ArmyRtsState.Retreat);
                 ArmyRouteProviderService.Cancel(pArmyId,
                     ArmyRouteCancelReason.TargetReplaced);
@@ -1092,6 +1134,7 @@ namespace AncientWarfare3.core.lineage
         {
             ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
             if (!ArmyRtsRuntimeModeRules.ShouldPlan(mode)) return;
+            if (ArmyRtsWarDoctrine.IsAbstractDecisive) return;
             ProcessPendingReplenishmentArrivals();
             ArmyRtsTransportService.ProcessFrame();
             IReadOnlyList<long> batch = Controllers.Take(
@@ -2529,6 +2572,20 @@ namespace AncientWarfare3.core.lineage
                     targetFactsDiagnostic);
             }
             ArmyRtsState next = Controllers.ResolveAndSet(pArmyId, facts);
+            if (next == ArmyRtsState.Retreat &&
+                !ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                    ArmyRtsWarDoctrine.Current,
+                    ArmyRtsWithdrawalOrigin.MinimumForce,
+                    ArmyRtsWarDoctrineRules.IsExplicitPlayerRetreat(
+                        record.Mission)))
+            {
+                next = record.Mission.ProposalKind ==
+                           ArmyRtsProposalKind.Attack ||
+                       record.Mission.Posture == ArmyRtsPosture.Attack
+                    ? ArmyRtsState.Assault
+                    : ArmyRtsState.Hold;
+                Controllers.SetState(pArmyId, next);
+            }
             ArmyLogisticsService.OnArmyStateChanged(army, next);
             UpdatePursuitRuntime(army, current, next, runtime);
             if (commit && current == ArmyRtsState.Retreat &&
@@ -2598,15 +2655,37 @@ namespace AncientWarfare3.core.lineage
             if (commit && current == ArmyRtsState.Regroup &&
                 next == ArmyRtsState.Retreat)
             {
+                if (!ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                        ArmyRtsWarDoctrine.Current,
+                        ArmyRtsWithdrawalOrigin.RegroupStall,
+                        ArmyRtsWarDoctrineRules.IsExplicitPlayerRetreat(
+                            record.Mission)))
+                {
+                    Controllers.SetState(pArmyId, ArmyRtsState.Hold);
+                    Controllers.Requeue(pArmyId);
+                    return;
+                }
                 if (!ArmyRetreatService.AssignArmyRetreat(army,
-                        record.Mission.TargetCityId))
+                        record.Mission.TargetCityId,
+                        ArmyRtsWithdrawalOrigin.RegroupStall))
                     RecoverUnavailableRetreat(army);
                 return;
             }
             if (commit && next == ArmyRtsState.Retreat &&
                 record.Mission.Posture != ArmyRtsPosture.Retreat)
             {
-                if (!ArmyRetreatService.AssignArmyRetreat(army))
+                if (!ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                        ArmyRtsWarDoctrine.Current,
+                        ArmyRtsWithdrawalOrigin.MinimumForce,
+                        ArmyRtsWarDoctrineRules.IsExplicitPlayerRetreat(
+                            record.Mission)))
+                {
+                    Controllers.SetState(pArmyId, ArmyRtsState.Hold);
+                    Controllers.Requeue(pArmyId);
+                    return;
+                }
+                if (!ArmyRetreatService.AssignArmyRetreat(army, -1L,
+                        ArmyRtsWithdrawalOrigin.MinimumForce))
                     RecoverUnavailableRetreat(army);
                 return;
             }
@@ -2686,13 +2765,17 @@ namespace AncientWarfare3.core.lineage
                     currentCity, kingdom);
             bool objectiveOpen = target?.data != null &&
                 !TargetComplete(pArmy, pRecord.Mission, target, kingdom);
+            bool targetIsEnemy = IsEnemyWarTarget(war, target, kingdom);
             bool withdrawalRequired = ArmyRtsWarLifecycleRules.
                 ShouldWithdraw(SafeUnitCount(pArmy),
                     lifecycle.BaselineStrength);
             ArmyRtsCombatControlDecision decision =
                 ArmyRtsWarLifecycleRules.ResolveCombatControl(
-                    lifecycle.Phase, withdrawalRequired, insideTarget,
-                    hostileInside, objectiveOpen);
+                    ArmyRtsWarDoctrine.Current, lifecycle.Phase,
+                    withdrawalRequired, insideTarget, targetIsEnemy,
+                    objectiveOpen,
+                    ArmyRtsWarDoctrineRules.IsExplicitPlayerRetreat(
+                        pRecord.Mission));
             switch (decision)
             {
                 case ArmyRtsCombatControlDecision.ReleaseToVanilla:
@@ -2706,6 +2789,16 @@ namespace AncientWarfare3.core.lineage
                         ArmyRtsWarPhase.StrategicMovement);
                     return false;
                 case ArmyRtsCombatControlDecision.ReacquireForWithdrawal:
+                    if (!ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                            ArmyRtsWarDoctrine.Current,
+                            ArmyRtsWithdrawalOrigin.CasualtyThreshold,
+                            ArmyRtsWarDoctrineRules.IsExplicitPlayerRetreat(
+                                pRecord.Mission)))
+                    {
+                        Controllers.SetState(pArmy.id, ArmyRtsState.Hold);
+                        Controllers.Requeue(pArmy.id);
+                        return true;
+                    }
                     if (ArmyRtsWarLifecycleRules.
                             CanReplenishInCurrentCity(
                                 currentCity?.kingdom == kingdom ||
@@ -2724,7 +2817,8 @@ namespace AncientWarfare3.core.lineage
                     ReacquireFromVanillaCombat(pArmy, pRecord, pRuntime,
                         ArmyRtsWarPhase.Withdrawal);
                     Controllers.SetState(pArmy.id, ArmyRtsState.Retreat);
-                    if (!ArmyRetreatService.AssignArmyRetreat(pArmy))
+                    if (!ArmyRetreatService.AssignArmyRetreat(pArmy, -1L,
+                            ArmyRtsWithdrawalOrigin.CasualtyThreshold))
                         RecoverUnavailableRetreat(pArmy);
                     return true;
                 default:
@@ -3650,6 +3744,20 @@ namespace AncientWarfare3.core.lineage
             return state != ArmyRtsObjectiveState.OpenAttack;
         }
 
+        private static bool IsEnemyWarTarget(War pWar, City pTarget,
+            Kingdom pKingdom)
+        {
+            if (pWar?.data == null || pTarget?.data == null ||
+                pKingdom?.data == null || pTarget.kingdom == null ||
+                pTarget.kingdom == pKingdom) return false;
+            try
+            {
+                return !pWar.hasEnded() && pWar.hasKingdom(pKingdom) &&
+                       pWar.hasKingdom(pTarget.kingdom);
+            }
+            catch { return false; }
+        }
+
         private static void ClearCompletedObjectiveRuntime(Army pArmy,
             RuntimeState pRuntime)
         {
@@ -3779,21 +3887,44 @@ namespace AncientWarfare3.core.lineage
             City target = FindCity(pMission?.TargetCityId ?? -1L);
             try
             {
-                bool baseValid = pMission != null &&
-                                 IsLiveKingdom(kingdom) &&
-                                 IsLiveCity(target) && war?.data != null &&
-                                 !war.hasEnded() && war.hasKingdom(kingdom) &&
-                                 (target.kingdom == kingdom ||
-                                  war.hasKingdom(target.kingdom));
-                if (!baseValid || pMission.ProposalKind !=
-                    ArmyRtsProposalKind.Retreat) return baseValid;
-                return ArmyRtsObjectiveRules.IsRetreatAnchorValid(
-                    cityLive: true,
-                    ownedByArmyKingdom: target.kingdom == kingdom,
-                    hostileCaptureActive: target.isGettingCaptured(),
-                    enemyFrozenControlled: WarScoreService.
-                        IsCityFrozenControlledByEnemySide(target, kingdom));
+                bool targetFriendly = target?.kingdom != null &&
+                                      (target.kingdom == kingdom ||
+                                       IsSameWarSide(war, kingdom,
+                                           target.kingdom));
+                bool targetInWar = targetFriendly ||
+                                   IsKingdomInWar(war, target?.kingdom);
+                bool targetSafe = targetFriendly && target.kingdom == kingdom &&
+                                  !target.isGettingCaptured() &&
+                                  !WarScoreService.
+                                      IsCityFrozenControlledByEnemySide(
+                                          target, kingdom);
+                ArmyRtsObjectiveState objective =
+                    ArmyRtsObjectiveService.Classify(war, kingdom, target);
+                var facts = new ArmyRtsMissionTargetFacts
+                {
+                    Kind = pMission?.ProposalKind ?? ArmyRtsProposalKind.None,
+                    Objective = objective,
+                    CityLive = IsLiveCity(target),
+                    ArmyKingdomLive = IsLiveKingdom(kingdom),
+                    WarActive = IsKingdomInWar(war, kingdom),
+                    ArmyKingdomInWar = IsKingdomInWar(war, kingdom),
+                    TargetKingdomInWar = targetInWar,
+                    TargetFriendly = targetFriendly,
+                    TargetSafe = targetSafe,
+                    ControlledFront = targetFriendly &&
+                                      pMission?.FrontId >= 0L
+                };
+                return ArmyRtsMissionTargetRules.Validate(facts).Valid;
             }
+            catch { return false; }
+        }
+
+        private static bool IsSameWarSide(War pWar, Kingdom pFirst,
+            Kingdom pSecond)
+        {
+            if (pWar?.data == null || pFirst?.data == null ||
+                pSecond?.data == null) return false;
+            try { return pWar.onTheSameSide(pFirst, pSecond); }
             catch { return false; }
         }
 

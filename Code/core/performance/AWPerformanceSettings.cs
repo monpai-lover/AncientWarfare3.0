@@ -6,6 +6,7 @@ namespace AncientWarfare3.core.performance
     {
         private static bool _configSchedulerEnabled;
         private static bool _configArmyRtsEnabled = true;
+        private static int _configArmyRtsWarResolutionMode;
         private static bool _configShowArmyRtsVisuals;
         private static bool _configShowArmyMapInformation;
         private static bool _configAw3ArmyRtsScheduler;
@@ -28,6 +29,8 @@ namespace AncientWarfare3.core.performance
         public static bool EnableAsyncShadowChecks { get; private set; }
         public static bool ArmyRtsDiagnosticsEnabled { get; private set; }
         public static bool EnableArmyRts => _configArmyRtsEnabled;
+        public static int ArmyRtsWarResolutionModeIndex =>
+            _configArmyRtsWarResolutionMode;
         public static bool ShowArmyRtsVisuals =>
             _configShowArmyRtsVisuals;
         public static bool ShowArmyMapInformation =>
@@ -92,6 +95,13 @@ namespace AncientWarfare3.core.performance
         public static void SwitchArmyRts(bool pValue)
         {
             _configArmyRtsEnabled = pValue;
+        }
+
+        public static void SetArmyRtsWarResolutionMode(int pValue)
+        {
+            _configArmyRtsWarResolutionMode =
+                (int)AncientWarfare3.core.lineage.ArmyRtsWarDoctrineRules.
+                    Normalize(pValue);
         }
 
         public static void SwitchArmyRtsVisuals(bool pValue)

@@ -1,0 +1,77 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsMissionTargetRulesTests
+{
+    public static void Run()
+    {
+        True(Validate(ArmyRtsProposalKind.Attack,
+                ArmyRtsObjectiveState.OpenAttack, false, true, true),
+            "attack accepts an open enemy target");
+        False(Validate(ArmyRtsProposalKind.Attack,
+                ArmyRtsObjectiveState.OpenAttack, true, true, true),
+            "attack rejects a friendly target");
+        False(Validate(ArmyRtsProposalKind.Attack,
+                ArmyRtsObjectiveState.OpenDefense, false, true, true),
+            "attack rejects a defense objective");
+        True(Validate(ArmyRtsProposalKind.Defend,
+                ArmyRtsObjectiveState.OpenDefense, true, true, true),
+            "defense accepts an open friendly objective");
+        False(Validate(ArmyRtsProposalKind.Defend,
+                ArmyRtsObjectiveState.OpenDefense, false, true, true),
+            "defense rejects an enemy objective");
+        True(Validate(ArmyRtsProposalKind.Retreat,
+                ArmyRtsObjectiveState.ClosedOccupied, true, true, true,
+                targetSafe: true),
+            "retreat accepts a safe friendly city");
+        False(Validate(ArmyRtsProposalKind.Retreat,
+                ArmyRtsObjectiveState.ClosedOccupied, true, true, true,
+                targetSafe: false),
+            "retreat rejects an unsafe city");
+        True(Validate(ArmyRtsProposalKind.FrontHold,
+                ArmyRtsObjectiveState.ClosedOccupied, true, true, true,
+                controlledFront: true),
+            "front hold accepts a controlled front city");
+        False(Validate(ArmyRtsProposalKind.FrontHold,
+                ArmyRtsObjectiveState.ClosedOccupied, true, true, true,
+                controlledFront: false),
+            "front hold rejects a non-front city");
+        False(Validate(ArmyRtsProposalKind.Attack,
+                ArmyRtsObjectiveState.OpenAttack, false, false, true),
+            "an ended war rejects every mission");
+        False(Validate(ArmyRtsProposalKind.Attack,
+                ArmyRtsObjectiveState.OpenAttack, false, true, false),
+            "a target outside the war participant set is rejected");
+    }
+
+    private static bool Validate(ArmyRtsProposalKind pKind,
+        ArmyRtsObjectiveState pObjective, bool pFriendly, bool pWarActive,
+        bool pTargetInWar, bool targetSafe = false,
+        bool controlledFront = false)
+    {
+        return ArmyRtsMissionTargetRules.Validate(
+            new ArmyRtsMissionTargetFacts
+            {
+                Kind = pKind,
+                Objective = pObjective,
+                CityLive = true,
+                ArmyKingdomLive = true,
+                WarActive = pWarActive,
+                ArmyKingdomInWar = true,
+                TargetKingdomInWar = pTargetInWar,
+                TargetFriendly = pFriendly,
+                TargetSafe = targetSafe,
+                ControlledFront = controlledFront
+            }).Valid;
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        True(!value, message);
+    }
+}

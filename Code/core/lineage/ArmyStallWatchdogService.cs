@@ -45,7 +45,8 @@ namespace AncientWarfare3.core.lineage
         public static void OnMissionAssigned(Army pArmy,
             bool pResetState)
         {
-            if (!ArmyRtsRuntimeMode.ShouldCommit || pArmy?.data == null)
+            if (ArmyRtsWarDoctrine.IsAbstractDecisive ||
+                !ArmyRtsRuntimeMode.ShouldCommit || pArmy?.data == null)
                 return;
             ActiveArmyIds.Add(pArmy.id);
             if (pResetState || !StateByArmy.ContainsKey(pArmy.id))
@@ -70,6 +71,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnRouteFailed(long pArmyId,
             bool pAllowTransportEscalation = true)
         {
+            if (ArmyRtsWarDoctrine.IsAbstractDecisive) return;
             if (!StateByArmy.TryGetValue(pArmyId,
                     out RuntimeState state)) return;
             if (pAllowTransportEscalation &&
@@ -100,7 +102,8 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessFrame()
         {
-            if (!ArmyRtsRuntimeMode.ShouldCommit || World.world == null)
+            if (ArmyRtsWarDoctrine.IsAbstractDecisive ||
+                !ArmyRtsRuntimeMode.ShouldCommit || World.world == null)
                 return;
             double now = CurrentRealtime();
             bool paused = World.world.isPaused();
@@ -447,13 +450,21 @@ namespace AncientWarfare3.core.lineage
         private static void CoolDownAndRetreat(
             ArmyWatchdogControllerSample pSample)
         {
+            Army army = FindArmy(pSample.ArmyId);
+            bool playerCommand = ArmyRtsControllerService.TryGetMission(
+                army, out ArmyRtsMission mission) &&
+                ArmyRtsWarDoctrineRules.IsExplicitPlayerRetreat(mission);
+            if (!ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                    ArmyRtsWarDoctrine.Current,
+                    ArmyRtsWithdrawalOrigin.Watchdog, playerCommand))
+                return;
             ArmyRtsControllerService.MarkRouteImpossible(pSample.ArmyId);
             TargetCooldowns.CoolDown(pSample.KingdomId,
                 pSample.TargetCityId, CurrentWorldDay());
             WarByCooledTarget[(pSample.KingdomId,
                 pSample.TargetCityId)] = pSample.WarId;
-            Army army = FindArmy(pSample.ArmyId);
-            ArmyRetreatService.AssignArmyRetreat(army, pSample.TargetCityId);
+            ArmyRetreatService.AssignArmyRetreat(army,
+                pSample.TargetCityId, ArmyRtsWithdrawalOrigin.Watchdog);
         }
 
         private static double Distance(double pFirstX, double pFirstY,

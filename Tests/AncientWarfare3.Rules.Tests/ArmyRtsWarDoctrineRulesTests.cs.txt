@@ -1,0 +1,99 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsWarDoctrineRulesTests
+{
+    public static void Run()
+    {
+        Equal(ArmyRtsWarResolutionMode.Standard,
+            ArmyRtsWarDoctrineRules.Normalize(-1),
+            "unknown doctrine values default to Standard");
+        Equal(true,
+            ArmyRtsWarDoctrineRules.ShouldPersistPreviousOffensiveMission(
+                ArmyRtsProposalKind.Attack),
+            "offensive missions are eligible for replenishment resume");
+        Equal(false,
+            ArmyRtsWarDoctrineRules.ShouldPersistPreviousOffensiveMission(
+                ArmyRtsProposalKind.Retreat),
+            "retreat missions are not saved as prior offense");
+        Equal(ArmyRtsWarResolutionMode.AbstractDecisive,
+            ArmyRtsWarDoctrineRules.Normalize(2),
+            "the third selector value is AbstractDecisive");
+
+        True(ArmyRtsWarDoctrineRules.AllowAutomaticWithdrawal(
+                ArmyRtsWarResolutionMode.Standard,
+                ArmyRtsWithdrawalOrigin.CasualtyThreshold),
+            "Standard keeps casualty withdrawal");
+        False(ArmyRtsWarDoctrineRules.AllowAutomaticWithdrawal(
+                ArmyRtsWarResolutionMode.LastStand,
+                ArmyRtsWithdrawalOrigin.CasualtyThreshold),
+            "LastStand blocks casualty withdrawal");
+        False(ArmyRtsWarDoctrineRules.AllowAutomaticWithdrawal(
+                ArmyRtsWarResolutionMode.LastStand,
+                ArmyRtsWithdrawalOrigin.Logistics),
+            "LastStand blocks logistics withdrawal");
+        False(ArmyRtsWarDoctrineRules.AllowAutomaticWithdrawal(
+                ArmyRtsWarResolutionMode.LastStand,
+                ArmyRtsWithdrawalOrigin.MinimumForce),
+            "LastStand blocks minimum-force withdrawal");
+        False(ArmyRtsWarDoctrineRules.AllowAutomaticWithdrawal(
+                ArmyRtsWarResolutionMode.LastStand,
+                ArmyRtsWithdrawalOrigin.RegroupStall),
+            "LastStand blocks regroup-stall withdrawal");
+        False(ArmyRtsWarDoctrineRules.AllowAutomaticWithdrawal(
+                ArmyRtsWarResolutionMode.LastStand,
+                ArmyRtsWithdrawalOrigin.Watchdog),
+            "LastStand blocks watchdog withdrawal");
+        True(ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                ArmyRtsWarResolutionMode.LastStand,
+                ArmyRtsWithdrawalOrigin.PlayerCommand),
+            "LastStand keeps player retreat commands");
+        False(ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                ArmyRtsWarResolutionMode.LastStand,
+                ArmyRtsWithdrawalOrigin.CasualtyThreshold,
+                playerCommand: false),
+            "LastStand rejects automatic withdrawal when the mission is not a player command");
+        True(ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                ArmyRtsWarResolutionMode.LastStand,
+                ArmyRtsWithdrawalOrigin.CasualtyThreshold,
+                playerCommand: true),
+            "LastStand preserves an explicit player retreat even when the origin is automatic-looking");
+
+        True(ArmyRtsWarDoctrineRules.ShouldCreateStrategicRoute(
+                ArmyRtsWarResolutionMode.Standard),
+            "Standard creates strategic routes");
+        True(ArmyRtsWarDoctrineRules.ShouldCreateStrategicRoute(
+                ArmyRtsWarResolutionMode.LastStand),
+            "LastStand creates strategic routes");
+        False(ArmyRtsWarDoctrineRules.ShouldCreateStrategicRoute(
+                ArmyRtsWarResolutionMode.AbstractDecisive),
+            "AbstractDecisive does not create strategic routes");
+        True(ArmyRtsWarDoctrineRules.ShouldResolveRemoteDuel(
+                ArmyRtsWarResolutionMode.AbstractDecisive),
+            "AbstractDecisive resolves a remote duel");
+
+        Equal(ArmyRtsWarResolutionMode.LastStand,
+            ArmyRtsWarDoctrineRules.Next(ArmyRtsWarResolutionMode.Standard),
+            "selector cycles Standard to LastStand");
+        Equal(ArmyRtsWarResolutionMode.Standard,
+            ArmyRtsWarDoctrineRules.Next(ArmyRtsWarResolutionMode.AbstractDecisive),
+            "selector cycles AbstractDecisive to Standard");
+    }
+
+    private static void True(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool condition, string message)
+    {
+        True(!condition, message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                message + $" (expected {expected}, actual {actual})");
+    }
+}

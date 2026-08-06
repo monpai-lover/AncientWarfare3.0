@@ -204,6 +204,24 @@ namespace AncientWarfare3.core.lineage
             "aw_rts_wait_reason";
         public const string AW_RTS_WAIT_DEADLINE =
             "aw_rts_wait_deadline";
+        public const string AW_RTS_PREVIOUS_MISSION_WAR_ID =
+            "aw_rts_previous_mission_war_id";
+        public const string AW_RTS_PREVIOUS_MISSION_FRONT_ID =
+            "aw_rts_previous_mission_front_id";
+        public const string AW_RTS_PREVIOUS_MISSION_TARGET_CITY_ID =
+            "aw_rts_previous_mission_target_city_id";
+        public const string AW_RTS_PREVIOUS_MISSION_TARGET_STRENGTH =
+            "aw_rts_previous_mission_target_strength";
+        public const string AW_RTS_PREVIOUS_MISSION_PROPOSAL_KIND =
+            "aw_rts_previous_mission_proposal_kind";
+        public const string AW_RTS_PREVIOUS_MISSION_ROLE =
+            "aw_rts_previous_mission_role";
+        public const string AW_RTS_PREVIOUS_MISSION_POSTURE =
+            "aw_rts_previous_mission_posture";
+        public const string AW_RTS_PREVIOUS_MISSION_PLAYER_ORDER =
+            "aw_rts_previous_mission_player_order";
+        public const string AW_RTS_PREVIOUS_MISSION_ISSUED_TIME =
+            "aw_rts_previous_mission_issued_time";
         public const string AW_ARMY_PROJECTED_REPLENISHMENT_SHORTAGE =
             "aw_army_projected_replenishment_shortage";
         public const string AW_ARMY_PROJECTED_KINGDOM_RESERVE_AVAILABLE =
@@ -284,6 +302,14 @@ namespace AncientWarfare3.core.lineage
             "aw_synthetic_levy_emergency_id";
         public const string SYNTHETIC_LEVY_LEDGER_RELEASED =
             "aw_synthetic_levy_ledger_released";
+        public const string AW_RTS_ABSTRACT_BATTLE_OPERATION =
+            "aw_rts_abstract_battle_operation";
+        public const string AW_RTS_ABSTRACT_BATTLE_PHASE =
+            "aw_rts_abstract_battle_phase";
+        public const string AW_RTS_ABSTRACT_BATTLE_PARTICIPANT_HASH =
+            "aw_rts_abstract_battle_participant_hash";
+        public const string AW_RTS_ABSTRACT_BATTLE_SEQUENCE =
+            "aw_rts_abstract_battle_sequence";
         public const string CITY_RESERVE_MEMBER = "aw_city_reserve_member";
         public const string CITY_RESERVE_CITY_ID = "aw_city_reserve_city_id";
         public const string CITY_RESERVE_KINGDOM_ID =

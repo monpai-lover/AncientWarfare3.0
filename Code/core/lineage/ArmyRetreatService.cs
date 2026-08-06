@@ -53,6 +53,9 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldStopAttack(Actor pActor)
         {
             if (pActor?.data == null || pActor.isRekt()) return false;
+            if (ArmyRtsWarDoctrine.IsLastStand &&
+                ArmyRtsControllerService.OwnsLiveActor(pActor))
+                return false;
             Army army = pActor.army;
             City sourceCity = pActor.city;
             City targetCity = sourceCity?.target_attack_city ?? sourceCity?.target_attack_zone?.city;
@@ -219,13 +222,22 @@ namespace AncientWarfare3.core.lineage
 
         public static bool AssignArmyRetreat(Army pArmy)
         {
-            return AssignArmyRetreat(pArmy, failedTargetCityId: -1L);
+            return AssignArmyRetreat(pArmy, failedTargetCityId: -1L,
+                ArmyRtsWithdrawalOrigin.Watchdog);
         }
 
         public static bool AssignArmyRetreat(Army pArmy,
-            long failedTargetCityId)
+            long failedTargetCityId,
+            ArmyRtsWithdrawalOrigin pOrigin =
+                ArmyRtsWithdrawalOrigin.Watchdog)
         {
             if (pArmy?.data == null) return false;
+            bool playerCommand = ArmyRtsControllerService.TryGetMission(
+                pArmy, out ArmyRtsMission mission) &&
+                ArmyRtsWarDoctrineRules.IsExplicitPlayerRetreat(mission);
+            if (!ArmyRtsWarDoctrineRules.AllowWithdrawal(
+                    ArmyRtsWarDoctrine.Current, pOrigin, playerCommand))
+                return false;
             Kingdom kingdom = SafeKingdom(pArmy, null);
             return RequestRetreatSelection(pArmy, kingdom,
                 pSourceCity: null,
