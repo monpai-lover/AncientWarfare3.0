@@ -61,6 +61,7 @@ namespace AncientWarfare3.core.pathfinding
         private int _started;
         private int _stopping;
         private int _queueDepth;
+        private long _staleWorkCount;
 
         public AWPathFinder(IAWPathGenerator pGenerator)
             : this(pGenerator, null)
@@ -76,6 +77,8 @@ namespace AncientWarfare3.core.pathfinding
 
         public int ActiveCount => _sessions.Count;
         public int QueueDepth => Math.Max(0, Volatile.Read(ref _queueDepth));
+        public int WorkerCount => _workers.Length;
+        public long StaleWorkCount => Interlocked.Read(ref _staleWorkCount);
 
         internal AWPathQueueSnapshot SnapshotQueues()
         {
@@ -284,6 +287,7 @@ namespace AncientWarfare3.core.pathfinding
                             !record.Session.TryBeginWork(work.QueueVersion) ||
                             record.Queued == null)
                         {
+                            Interlocked.Increment(ref _staleWorkCount);
                             continue;
                         }
                         task = record.Queued;

@@ -10,6 +10,7 @@ internal static class PathfindingPerformanceTests
         LatestActorSlotKeepsOneQueuedNode();
         FinderUsesSessionTokenQueues();
         RtsRoutesUseTheSharedFinderOnly();
+        PathDiagnosticsExposeSessionSchedulerState();
         OwnershipIndexUsesSingleHotLookup();
         IsUsingPathHotPathOnlyChecksOwnership();
         RecoveryUsesCultiwayReasonResetAndBackoff();
@@ -215,6 +216,16 @@ internal static class PathfindingPerformanceTests
             "RTS routes choose the global path finder when it is ready");
         Assert(!provider.Contains("if (dedicatedWorkerCount > 0)"),
             "RTS routes never create a dedicated path worker pool");
+    }
+
+    private static void PathDiagnosticsExposeSessionSchedulerState()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(finder.Contains("WorkerCount") &&
+               finder.Contains("StaleWorkCount"),
+            "the session scheduler exposes worker and stale-token diagnostics");
     }
 
     private static void RecoveryUsesCultiwayReasonResetAndBackoff()
