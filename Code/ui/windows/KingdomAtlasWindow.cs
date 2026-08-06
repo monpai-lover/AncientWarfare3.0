@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using NeoModLoader.api;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.atlas;
 using AncientWarfare3.ui.components;
@@ -173,21 +174,11 @@ namespace AncientWarfare3.ui.windows
             Func<KingdomAtlasNode, KingdomAtlasRaster, KingdomAtlasRaster>
                 previousRenderer = KingdomAtlasRasterizer.ExternalLabelRenderer;
             KingdomAtlasRasterizer.ExternalLabelRenderer = RenderBitmapLabels;
+            KingdomAtlasGenerationSession session = null;
             try
             {
-                KingdomAtlasGenerationSession session =
-                    KingdomAtlasArtifactWriter.Begin(_kingdomId, _resolution,
-                        pGif);
-                while (!session.IsComplete)
-                {
-                    KingdomAtlasProgress progress;
-                    bool advanced = session.MoveNext(
-                        () => _cancelGeneration, out progress);
-                    if (advanced)
-                        SetStatus("Generating " + progress.Percent + "%");
-                    if (!session.IsComplete) yield return null;
-                }
-                result = session.Result;
+                session = KingdomAtlasArtifactWriter.Begin(_kingdomId,
+                    _resolution, pGif);
             }
             catch (Exception error)
             {
@@ -196,10 +187,31 @@ namespace AncientWarfare3.ui.windows
                     Error = error.Message
                 };
             }
-            finally
+            if (session != null)
             {
-                KingdomAtlasRasterizer.ExternalLabelRenderer = previousRenderer;
+                while (!session.IsComplete)
+                {
+                    KingdomAtlasProgress progress;
+                    try
+                    {
+                        bool advanced = session.MoveNext(
+                            () => _cancelGeneration, out progress);
+                        if (advanced)
+                            SetStatus("Generating " + progress.Percent + "%");
+                    }
+                    catch (Exception error)
+                    {
+                        result = new KingdomAtlasGenerationResult
+                        {
+                            Error = error.Message
+                        };
+                        break;
+                    }
+                    if (!session.IsComplete) yield return null;
+                }
+                if (result == null) result = session.Result;
             }
+            KingdomAtlasRasterizer.ExternalLabelRenderer = previousRenderer;
             _generationCoroutine = null;
             SetGenerationButtons(true);
             SetStatus(result != null && result.Success

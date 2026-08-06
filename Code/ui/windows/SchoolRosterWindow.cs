@@ -69,6 +69,7 @@ namespace AncientWarfare3.ui.windows
         private int _activeLinkCount;
         private bool _resetCanvasOnRefresh;
         private float _nextPortraitCullTime;
+        private float _nextQueryRetryTime;
         private bool _queryPending;
 
         public static void Open(string pSchoolId = CourtSchoolId.Ru)
@@ -103,6 +104,7 @@ namespace AncientWarfare3.ui.windows
         {
             _queryState.Close();
             _queryPending = false;
+            _nextQueryRetryTime = 0f;
             CancelPendingRender();
             HideNodesAndLinks();
         }
@@ -115,6 +117,7 @@ namespace AncientWarfare3.ui.windows
                 !_displayedRevisionStamp.IsCurrent(_selectedSchool,
                     HistoricalSchoolRevisionService.Source))
             {
+                if (Time.unscaledTime < _nextQueryRetryTime) return;
                 Refresh();
                 return;
             }
@@ -385,12 +388,25 @@ namespace AncientWarfare3.ui.windows
                 commit.Commit,
                 error => HandleRosterFault(key, error));
             if (!AWAsyncRuntime.TrySchedule(request))
-                ApplyRosterResult(key, capture,
-                    execution.Execute(System.Threading.CancellationToken.None)
-                        as SchoolRosterLayout, expectedShadow);
+            {
+                _queryPending = false;
+                if (shadow)
+                {
+                    ApplyRosterModel(SchoolRosterReadModelService.Materialize(
+                        capture, synchronousLayout));
+                    return;
+                }
+                _queryState.Close();
+                _displayedRevisionStamp = null;
+                _nextQueryRetryTime = Time.unscaledTime + 0.25f;
+                return;
+            }
             if (shadow)
+            {
                 ApplyRosterModel(SchoolRosterReadModelService.Materialize(
                     capture, synchronousLayout));
+                _queryPending = false;
+            }
         }
 
         private void ApplyRosterResult(AWUiQueryKey pKey,

@@ -49,6 +49,21 @@ internal static class PathfindingPerformanceTests
         Assert(armyRoutes.Contains("AWPathWorkClass.Operational"),
             "RTS captain routes explicitly reserve operational capacity");
 
+        string traversalCache = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        int traversalBranch = traversalCache.IndexOf(
+            "if (AWAsyncRuntime.TraversalEnabled)",
+            StringComparison.Ordinal);
+        int shadowBranch = traversalCache.IndexOf(
+            "pCompareShadow: AWAsyncRuntime.ShadowEnabled",
+            StringComparison.Ordinal);
+        Assert(traversalBranch >= 0 && shadowBranch > traversalBranch,
+            "shadow mode cannot force synchronous traversal rebuilds when async traversal is enabled");
+        Assert(traversalCache.Contains(
+                "if (!AWAsyncRuntime.TraversalEnabled)"),
+            "traversal falls back synchronously only when async traversal is disabled");
+
         string diagnostics = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "policy",
             "RuntimePerformanceDiagnostic.cs"));
@@ -246,10 +261,16 @@ internal static class PathfindingPerformanceTests
         string authority = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "performance",
             "AWAuthorityCycleService.cs"));
-        Assert(authority.Contains("SnapshotDiagnostics().Completions") &&
-               authority.Contains("DrainMainThread(0.25") &&
-               authority.Contains("ResolveItemLimit(pending)"),
-            "authority commits use a completion-count bounded main-thread burst");
+        string deferred = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_DeferredRuntimeWorkPatch.cs"));
+        Assert(!authority.Contains("AWAsyncRuntime.DrainMainThread") &&
+               !authority.Contains("HistoricalWriteService.DrainCompletions"),
+            "simulation authority passes never replay async completions");
+        Assert(deferred.Contains("AWAsyncRuntime.DrainMainThread") &&
+               deferred.Contains("HistoricalWriteService.DrainCompletions") &&
+               deferred.Contains("AWAsyncCompletionDrainRules.ResolveItemLimit"),
+            "render frames own one bounded async completion drain");
     }
 
     private static void PathDiagnosticsLogSchedulerState()

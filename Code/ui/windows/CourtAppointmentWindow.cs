@@ -29,6 +29,9 @@ namespace AncientWarfare3.ui.windows
         private CourtAppointmentCandidateScan _candidateScan;
         private int _candidateScanCursor;
         private bool _candidateScanRunning;
+        private bool _candidateSortPending;
+        private bool _candidateSortShadow;
+        private float _candidateSortRetryAt;
         private int _candidatePage;
         private int _candidateRenderCursor;
         private int _candidateRenderEnd;
@@ -162,6 +165,11 @@ namespace AncientWarfare3.ui.windows
                 return;
             }
             if (_candidateScanRunning) ProcessCandidateScanFrame();
+            else if (_candidateSortPending)
+            {
+                if (Time.unscaledTime >= _candidateSortRetryAt)
+                    ScheduleCandidateSort(_candidateSortShadow);
+            }
             else if (_candidateRenderRunning) ProcessCandidateRowsFrame();
         }
 
@@ -244,17 +252,15 @@ namespace AncientWarfare3.ui.windows
                 new AWAsyncStamp(AWAsyncRuntime.WorldGeneration,
                     Time.frameCount, _candidateQueryKey.Revision),
                 execution.Execute, commit.Commit);
-            if (!AWAsyncRuntime.TrySchedule(request))
+            if (AWAsyncRuntime.TrySchedule(request))
             {
-                AWUiCandidateRow[] result = execution.Execute(
-                    System.Threading.CancellationToken.None) as
-                    AWUiCandidateRow[];
-                if (pShadow)
-                    CompareCandidateShadow(_candidateQueryKey,
-                        expectedShadow, result);
-                else
-                    ApplyCandidateResult(_candidateQueryKey, result);
+                _candidateSortPending = false;
+                return;
             }
+            if (pShadow) return;
+            _candidateSortPending = true;
+            _candidateSortShadow = false;
+            _candidateSortRetryAt = Time.unscaledTime + 0.25f;
         }
 
         private long[] BuildSynchronousCandidateIds()
@@ -433,6 +439,9 @@ namespace AncientWarfare3.ui.windows
             _candidateResults.Clear();
             _candidateScanCursor = 0;
             _candidateScanRunning = false;
+            _candidateSortPending = false;
+            _candidateSortShadow = false;
+            _candidateSortRetryAt = 0f;
             _candidatePage = 0;
             _candidateRenderCursor = 0;
             _candidateRenderEnd = 0;

@@ -58,6 +58,7 @@ namespace AncientWarfare3.core.pathfinding
                     "path_traversal_ensure_started", diagnostic);
             }
             if (!_traversalRunning) return;
+            TraversalCache.ProcessPendingBuild();
             if (state == AWPathOwnerState.Suspending ||
                 state == AWPathOwnerState.Cultiway)
             {

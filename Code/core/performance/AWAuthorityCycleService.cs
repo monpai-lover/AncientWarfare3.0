@@ -125,12 +125,11 @@ namespace AncientWarfare3.core.performance
 
         private static void DrainAuthorityCompletions()
         {
+            // Async results are applied once per render frame by
+            // AW_DeferredRuntimeWorkPatch. Replaying them inside every
+            // simulation pass makes large-step mode pay the same callback
+            // cost multiple times in one frame.
             ActorDeathArchiveService.ProcessAuthorityCycle();
-            int pending = AWAsyncRuntime.SnapshotDiagnostics().Completions;
-            int itemLimit = AuthorityDeferredDrainRules.ResolveItemLimit(pending);
-            if (itemLimit > 0)
-                AWAsyncRuntime.DrainMainThread(0.25, itemLimit);
-            HistoricalWriteService.DrainCompletions(0.25, 4);
         }
 
         private static void DrainDeferredAuthorityWork()
