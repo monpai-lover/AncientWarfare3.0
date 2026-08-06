@@ -73,7 +73,8 @@ namespace AncientWarfare3.core.lineage
             if (pParticipants == null || pParticipants.Count == 0)
                 return Array.Empty<ArmyAbstractBattleParticipant>();
 
-            var unique = new Dictionary<long, ArmyAbstractBattleParticipant>();
+            var unique = new Dictionary<ArmyAbstractBattleCardIdentity,
+                ArmyAbstractBattleParticipant>();
             for (int i = 0; i < pParticipants.Count; i++)
             {
                 ArmyAbstractBattleParticipant participant = pParticipants[i];
@@ -104,8 +105,13 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyList<ArmyAbstractBattleParticipant> pAttackers)
         {
             ArmyAbstractBattleParticipant selected = null;
+            var attackerCards = new List<ArmyAbstractBattleParticipant>();
+            if (pAttackers != null)
+                for (int i = 0; i < pAttackers.Count; i++)
+                    if (pAttackers[i]?.IsAttacker == true)
+                        attackerCards.Add(pAttackers[i]);
             IReadOnlyList<ArmyAbstractBattleParticipant> attackers =
-                Deduplicate(pAttackers);
+                Deduplicate(attackerCards);
             for (int i = 0; i < attackers.Count; i++)
             {
                 ArmyAbstractBattleParticipant candidate = attackers[i];
@@ -126,7 +132,8 @@ namespace AncientWarfare3.core.lineage
                 pSelected.CommanderStrength);
             return candidateValue > selectedValue ||
                    (candidateValue == selectedValue &&
-                    pCandidate.CardIdentity < pSelected.CardIdentity);
+                    pCandidate.CardIdentity.CompareTo(
+                        pSelected.CardIdentity) < 0);
         }
 
         private static ArmyAbstractBattleOutcome ResolveNonEmpty(int pAttack,

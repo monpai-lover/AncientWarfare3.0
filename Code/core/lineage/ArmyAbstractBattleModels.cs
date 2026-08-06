@@ -3,6 +3,45 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
+    public readonly struct ArmyAbstractBattleCardIdentity :
+        IEquatable<ArmyAbstractBattleCardIdentity>,
+        IComparable<ArmyAbstractBattleCardIdentity>
+    {
+        private readonly byte _kind;
+
+        public ArmyAbstractBattleCardIdentity(bool pIsArmy, long pId)
+        {
+            _kind = pId >= 0L ? (byte)(pIsArmy ? 1 : 2) : (byte)0;
+            Id = pId;
+        }
+
+        public long Id { get; }
+        public bool IsArmy => _kind == 1;
+        public bool IsValid => _kind != 0;
+
+        public int CompareTo(ArmyAbstractBattleCardIdentity pOther)
+        {
+            int kind = _kind.CompareTo(pOther._kind);
+            return kind != 0 ? kind : Id.CompareTo(pOther.Id);
+        }
+
+        public bool Equals(ArmyAbstractBattleCardIdentity pOther)
+        {
+            return _kind == pOther._kind && Id == pOther.Id;
+        }
+
+        public override bool Equals(object pObject)
+        {
+            return pObject is ArmyAbstractBattleCardIdentity other &&
+                   Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked { return (_kind * 397) ^ Id.GetHashCode(); }
+        }
+    }
+
     public enum ArmyAbstractBattleOutcome
     {
         NoBattle = 0,
@@ -22,14 +61,16 @@ namespace AncientWarfare3.core.lineage
         public long OwningCityId { get; set; } = -1L;
 
         // Army identity is authoritative; an actor ID is only a fallback for
-        // snapshots that do not have a live army identity.
-        public long CardIdentity
+        // snapshots that do not have a live army identity. The namespaces are
+        // intentionally distinct so IDs from the two stores cannot collide.
+        public ArmyAbstractBattleCardIdentity CardIdentity
         {
-            get { return ArmyId >= 0L ? ArmyId :
-                (ActorId > 0L ? ActorId : -1L); }
+            get { return ArmyId >= 0L
+                ? new ArmyAbstractBattleCardIdentity(true, ArmyId)
+                : new ArmyAbstractBattleCardIdentity(false, ActorId); }
         }
 
-        public bool HasCardIdentity { get { return CardIdentity >= 0L; } }
+        public bool HasCardIdentity { get { return CardIdentity.IsValid; } }
     }
 
     public sealed class ArmyAbstractBattleFacts

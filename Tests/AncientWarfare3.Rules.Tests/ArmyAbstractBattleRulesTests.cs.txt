@@ -86,6 +86,29 @@ internal static class ArmyAbstractBattleRulesTests
         Equal(160, duplicate.DefenseValue,
             "duplicate defender army and fallback actor cards count once");
 
+        ArmyAbstractBattleResult namespaced = ArmyAbstractBattleRules.Resolve(
+            new ArmyAbstractBattleFacts
+            {
+                Attackers = new[]
+                {
+                    Participant(5, 10, 0, true),
+                    Participant(-1, 20, 0, true, actorId: 5),
+                    Participant(0, 30, 0, true),
+                    Participant(-1, 40, 0, true, actorId: 0)
+                },
+                Defenders = Array.Empty<ArmyAbstractBattleParticipant>()
+            });
+        Equal(100, namespaced.AttackValue,
+            "army and actor card namespaces do not collide, including zero IDs");
+
+        Equal(7L, ArmyAbstractBattleRules.SelectPrimaryAttacker(
+            new[]
+            {
+                Participant(7, 100, 0, false),
+                Participant(7, 90, 0, true)
+            }).ArmyId,
+            "primary attacker filters mixed-side records before deduplication");
+
         ArmyAbstractBattleFacts reorderedFacts = new ArmyAbstractBattleFacts
         {
             WarId = duplicateFacts.WarId,
