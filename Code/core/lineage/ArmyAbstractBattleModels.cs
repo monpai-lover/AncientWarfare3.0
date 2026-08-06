@@ -20,6 +20,16 @@ namespace AncientWarfare3.core.lineage
         public bool IsSynthetic { get; set; }
         public bool IsProtectedCivilAuthority { get; set; }
         public long OwningCityId { get; set; } = -1L;
+
+        // Army identity is authoritative; an actor ID is only a fallback for
+        // snapshots that do not have a live army identity.
+        public long CardIdentity
+        {
+            get { return ArmyId >= 0L ? ArmyId :
+                (ActorId > 0L ? ActorId : -1L); }
+        }
+
+        public bool HasCardIdentity { get { return CardIdentity >= 0L; } }
     }
 
     public sealed class ArmyAbstractBattleFacts
