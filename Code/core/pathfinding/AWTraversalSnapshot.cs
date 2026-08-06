@@ -115,6 +115,16 @@ namespace AncientWarfare3.core.pathfinding
             }
         }
 
+        internal AWTileTraversalSnapshot WithOceanComponent(int pComponent)
+        {
+            var neighbors = new int[NeighborCount];
+            for (int i = 0; i < NeighborCount; i++) neighbors[i] = GetNeighbor(i);
+            return new AWTileTraversalSnapshot(Id, X, Y, Ground, Block,
+                Liquid, Ocean, Lava, Fire, DamageUnits, TerrainDamage,
+                WalkMultiplier, GoodForBoat, pComponent, RegionId, IslandId,
+                neighbors);
+        }
+
         private static int Neighbor(int[] pNeighbors, int pIndex)
         {
             return pNeighbors != null && pIndex >= 0 && pIndex < pNeighbors.Length

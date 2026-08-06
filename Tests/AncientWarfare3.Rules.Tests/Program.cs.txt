@@ -7794,6 +7794,7 @@ PathfindingCursorTests.Run();
 PathfindingMigrationRulesTests.Run();
 AWPathSessionTests.Run();
 AWDockTransportRulesTests.Run();
+AWOceanConnectivityRulesTests.Run();
 CourtReplacementSqlTests.Run();
 CourtMeritRewardSqlTests.Run();
 CourtMeritRewardFlowTests.Run();

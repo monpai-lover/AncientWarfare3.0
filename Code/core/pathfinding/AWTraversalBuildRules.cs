@@ -127,6 +127,8 @@ namespace AncientWarfare3.core.pathfinding
                     capture.SourceRevision > pInput.SourceRevision) continue;
                 chunks[capture.ChunkId] = capture.Tiles;
             }
+            chunks = AWOceanConnectivityRules.Apply(pInput.Width,
+                pInput.Height, pInput.ChunkSize, chunks);
             return new AWTraversalBuildResult(pInput.WorldGeneration,
                 pInput.BaseGenerationId, pInput.SourceRevision,
                 pInput.Width, pInput.Height, pInput.ChunkSize, chunks);
