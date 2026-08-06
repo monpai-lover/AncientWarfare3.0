@@ -5,18 +5,10 @@ using AncientWarfare3.api.multiplayer;
 
 namespace AncientWarfare3.core.lineage
 {
-    internal enum ArmyAbstractBattlePhase
-    {
-        None = 0,
-        Prepared = 1,
-        Transferred = 2,
-        Demobilizing = 3,
-        Complete = 4
-    }
-
     internal static class ArmyAbstractBattleService
     {
         private const int MaximumBattlesPerFrame = 4;
+        private const int MaximumDemobilizationsPerFrame = 64;
         private static readonly HashSet<string> ProcessingKeys =
             new HashSet<string>(StringComparer.Ordinal);
 
@@ -68,6 +60,28 @@ namespace AncientWarfare3.core.lineage
                 if (TryResolve(keys[i].WarId, keys[i].CityId, group))
                     processed++;
             }
+
+            if (processed >= MaximumBattlesPerFrame) return;
+            List<(City City, ArmyAbstractBattleTransactionSnapshot Snapshot)>
+                pending = SnapshotPendingTransactions();
+            for (int i = 0; i < pending.Count &&
+                         processed < MaximumBattlesPerFrame; i++)
+            {
+                var entry = pending[i];
+                if (groups.ContainsKey((entry.Snapshot.WarId,
+                        entry.Snapshot.TargetCityId))) continue;
+                string operation = BuildOperation(entry.Snapshot);
+                if (!ProcessingKeys.Add(operation)) continue;
+                try
+                {
+                    if (ResumeTransaction(entry.City, entry.Snapshot))
+                        processed++;
+                }
+                finally
+                {
+                    ProcessingKeys.Remove(operation);
+                }
+            }
         }
 
         public static void ClearRuntime()
@@ -79,14 +93,38 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyList<ArmyRtsMission> pMissions)
         {
             City target = FindCity(pTargetCityId);
+            if (target?.data == null || target.isRekt()) return false;
+
+            ArmyAbstractBattleTransactionSnapshot stored =
+                ReadTransaction(target);
+            if (stored != null)
+            {
+                if (stored.WarId != pWarId ||
+                    stored.TargetCityId != pTargetCityId)
+                    return false;
+                if (stored.Phase == ArmyAbstractBattlePhase.Complete)
+                    stored = null;
+                else
+                {
+                    string operation = BuildOperation(stored);
+                    if (!ProcessingKeys.Add(operation)) return false;
+                    try { return ResumeTransaction(target, stored); }
+                    finally { ProcessingKeys.Remove(operation); }
+                }
+            }
+
+            target.data.get(LineageKeys.AW_RTS_ABSTRACT_BATTLE_PHASE,
+                out int legacyPhase, 0);
+            if (legacyPhase >= (int)ArmyAbstractBattlePhase.Prepared &&
+                legacyPhase < (int)ArmyAbstractBattlePhase.Complete)
+                return false;
+
             War war = FindWar(pWarId);
-            if (target?.data == null || war?.data == null ||
-                target.isRekt() || war.hasEnded()) return false;
+            if (war?.data == null || war.hasEnded()) return false;
             if (!ArmyFieldIndexService.TryGetCityArmy(target,
                     out Army defender)) defender = null;
 
             var attackers = new List<ArmyAbstractBattleParticipant>();
-            var attackerArmies = new Dictionary<long, Army>();
             Kingdom defenderKingdom = target.kingdom;
             for (int i = 0; i < pMissions.Count; i++)
             {
@@ -113,7 +151,6 @@ namespace AncientWarfare3.core.lineage
                     IsSynthetic = false,
                     OwningCityId = AWArmyService.GetAnchorCityId(army)
                 });
-                attackerArmies[army.id] = army;
             }
             if (attackers.Count == 0) return false;
 
@@ -146,18 +183,9 @@ namespace AncientWarfare3.core.lineage
             };
             ulong participantHash = ArmyAbstractBattleRules.ParticipantHash(
                 facts);
-            target.data.get(LineageKeys.AW_RTS_ABSTRACT_BATTLE_PARTICIPANT_HASH,
-                out long storedHash, 0L);
             target.data.get(LineageKeys.AW_RTS_ABSTRACT_BATTLE_SEQUENCE,
                 out long storedSequence, 0L);
-            target.data.get(LineageKeys.AW_RTS_ABSTRACT_BATTLE_PHASE,
-                out int storedPhase, 0);
-            if ((ulong)storedHash == participantHash &&
-                storedPhase == (int)ArmyAbstractBattlePhase.Complete)
-                return false;
-            long sequence = (ulong)storedHash == participantHash
-                ? Math.Max(0L, storedSequence)
-                : Math.Max(0L, storedSequence) + 1L;
+            long sequence = Math.Max(0L, storedSequence) + 1L;
             facts.ResolutionSequence = sequence;
             ArmyAbstractBattleResult result =
                 ArmyAbstractBattleRules.Resolve(facts);
@@ -168,22 +196,6 @@ namespace AncientWarfare3.core.lineage
             if (!ProcessingKeys.Add(operation)) return false;
             try
             {
-                target.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_OPERATION,
-                    operation);
-                target.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_PHASE,
-                    (int)ArmyAbstractBattlePhase.Prepared);
-                target.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_SEQUENCE,
-                    sequence);
-                target.data.set(
-                    LineageKeys.AW_RTS_ABSTRACT_BATTLE_PARTICIPANT_HASH,
-                    unchecked((long)participantHash));
-
-                for (int i = 0; i < attackers.Count; i++)
-                {
-                    Army army = FindArmy(attackers[i].ArmyId);
-                    ReleaseStrategicControl(army);
-                }
-
                 ArmyAbstractBattleParticipant primary =
                     ArmyAbstractBattleRules.SelectPrimaryAttacker(attackers);
                 Kingdom receiver;
@@ -203,29 +215,42 @@ namespace AncientWarfare3.core.lineage
                         : FindCity(primary.OwningCityId);
                 }
                 if (receiver?.data == null || transferredCity?.data == null ||
-                    !TryTransferCity(transferredCity, receiver)) return false;
-                target.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_PHASE,
-                    (int)ArmyAbstractBattlePhase.Transferred);
-                target.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_PHASE,
-                    (int)ArmyAbstractBattlePhase.Demobilizing);
+                    transferredCity.isRekt())
+                    return false;
 
+                var participantArmyIds = new List<long>();
+                var participantActorIds = new List<long>();
+                for (int i = 0; i < attackers.Count; i++)
+                    AddArmyRoster(FindArmy(attackers[i].ArmyId),
+                        participantArmyIds, participantActorIds);
+                for (int i = 0; i < defenders.Count; i++)
+                    AddArmyRoster(FindArmy(defenders[i].ArmyId),
+                        participantArmyIds, participantActorIds);
+
+                var loserArmyIds = new List<long>();
                 if (result.Outcome == ArmyAbstractBattleOutcome.AttackVictory)
                 {
-                    ArmyRtsControllerService.OnTargetCompleted(target);
-                    if (defender?.data != null)
-                        DemobilizeArmy(defender);
+                    if (defender?.data != null) loserArmyIds.Add(defender.id);
                 }
                 else
                 {
-                    var loserIds = new HashSet<long>();
                     for (int i = 0; i < attackers.Count; i++)
-                        if (loserIds.Add(attackers[i].ArmyId) &&
-                            attackerArmies.TryGetValue(attackers[i].ArmyId,
-                                out Army loser)) DemobilizeArmy(loser);
+                        loserArmyIds.Add(attackers[i].ArmyId);
                 }
-                target.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_PHASE,
-                    (int)ArmyAbstractBattlePhase.Complete);
-                return true;
+                var loserActorIds = new List<long>();
+                for (int i = 0; i < loserArmyIds.Count; i++)
+                    AddArmyActorIds(FindArmy(loserArmyIds[i]), loserActorIds);
+
+                ArmyAbstractBattleTransactionSnapshot transaction =
+                    ArmyAbstractBattleTransactionRules.Prepare(
+                        pWarId, pTargetCityId, transferredCity.id, sequence,
+                        result.Outcome, receiver.id,
+                        primary?.ArmyId ?? -1L, participantHash,
+                        participantArmyIds, participantActorIds, loserArmyIds,
+                        loserActorIds);
+                PersistTransaction(target, transaction, operation);
+                ReleasePersistedParticipants(transaction);
+                return ResumeTransaction(target, transaction);
             }
             finally
             {
@@ -233,26 +258,171 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static void DemobilizeArmy(Army pArmy)
+        private static List<(City City,
+            ArmyAbstractBattleTransactionSnapshot Snapshot)>
+            SnapshotPendingTransactions()
+        {
+            var result = new List<(City City,
+                ArmyAbstractBattleTransactionSnapshot Snapshot)>();
+            if (World.world?.cities == null) return result;
+            try
+            {
+                foreach (City city in World.world.cities)
+                {
+                    ArmyAbstractBattleTransactionSnapshot snapshot =
+                        ReadTransaction(city);
+                    if (city?.data == null || snapshot == null ||
+                        snapshot.Phase == ArmyAbstractBattlePhase.Complete)
+                        continue;
+                    result.Add((city, snapshot));
+                }
+            }
+            catch { }
+            result.Sort((pLeft, pRight) =>
+            {
+                int war = pLeft.Snapshot.WarId.CompareTo(
+                    pRight.Snapshot.WarId);
+                return war != 0 ? war : pLeft.Snapshot.TargetCityId.
+                    CompareTo(pRight.Snapshot.TargetCityId);
+            });
+            return result;
+        }
+
+        private static ArmyAbstractBattleTransactionSnapshot ReadTransaction(
+            City pCity)
+        {
+            if (pCity?.data == null) return null;
+            pCity.data.get(LineageKeys.AW_RTS_ABSTRACT_BATTLE_TRANSACTION,
+                out string encoded, string.Empty);
+            return ArmyAbstractBattleTransactionRules.Decode(encoded);
+        }
+
+        private static void PersistTransaction(City pTarget,
+            ArmyAbstractBattleTransactionSnapshot pSnapshot,
+            string pOperation = null)
+        {
+            if (pTarget?.data == null || pSnapshot == null) return;
+            string operation = string.IsNullOrWhiteSpace(pOperation)
+                ? BuildOperation(pSnapshot) : pOperation;
+            pTarget.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_OPERATION,
+                operation);
+            pTarget.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_TRANSACTION,
+                ArmyAbstractBattleTransactionRules.Encode(pSnapshot));
+            pTarget.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_PHASE,
+                (int)pSnapshot.Phase);
+            pTarget.data.set(LineageKeys.AW_RTS_ABSTRACT_BATTLE_SEQUENCE,
+                pSnapshot.Sequence);
+            pTarget.data.set(
+                LineageKeys.AW_RTS_ABSTRACT_BATTLE_PARTICIPANT_HASH,
+                unchecked((long)pSnapshot.ParticipantHash));
+        }
+
+        private static string BuildOperation(
+            ArmyAbstractBattleTransactionSnapshot pSnapshot)
+        {
+            if (pSnapshot == null) return string.Empty;
+            return pSnapshot.WarId + ":" + pSnapshot.TargetCityId + ":" +
+                pSnapshot.Sequence;
+        }
+
+        private static bool ResumeTransaction(City pTarget,
+            ArmyAbstractBattleTransactionSnapshot pSnapshot)
+        {
+            if (pTarget?.data == null || pSnapshot == null ||
+                pSnapshot.Phase == ArmyAbstractBattlePhase.Complete)
+                return false;
+
+            ArmyAbstractBattleTransactionSnapshot snapshot = pSnapshot.Clone();
+            if (snapshot.Phase == ArmyAbstractBattlePhase.Prepared)
+            {
+                City transferredCity = FindCity(snapshot.TransferredCityId);
+                Kingdom receiver = FindKingdom(snapshot.ReceiverKingdomId);
+                if (transferredCity?.data == null || receiver?.data == null ||
+                    !TryTransferCity(transferredCity, receiver)) return false;
+                ReleasePersistedParticipants(snapshot);
+                snapshot = ArmyAbstractBattleTransactionRules.Advance(snapshot,
+                    ArmyAbstractBattlePhase.Transferred);
+                PersistTransaction(pTarget, snapshot);
+            }
+
+            if (snapshot.Phase == ArmyAbstractBattlePhase.Transferred)
+            {
+                if (snapshot.Outcome == ArmyAbstractBattleOutcome.AttackVictory)
+                    ArmyRtsControllerService.OnTargetCompleted(pTarget);
+                snapshot = ArmyAbstractBattleTransactionRules.Advance(snapshot,
+                    ArmyAbstractBattlePhase.Demobilizing);
+                PersistTransaction(pTarget, snapshot);
+            }
+
+            if (snapshot.Phase != ArmyAbstractBattlePhase.Demobilizing)
+                return false;
+
+            IReadOnlyList<long> loserActorIds = snapshot.LoserActorIds ??
+                Array.Empty<long>();
+            int cursor = Math.Max(0, Math.Min(snapshot.DemobilizationCursor,
+                loserActorIds.Count));
+            int end = Math.Min(loserActorIds.Count,
+                cursor + MaximumDemobilizationsPerFrame);
+            for (int i = cursor; i < end; i++)
+            {
+                Actor actor = FindActor(loserActorIds[i]);
+                if (actor?.data == null) continue;
+                DemobilizeActor(SafeArmy(actor), actor);
+            }
+            snapshot.DemobilizationCursor = end;
+            if (end < loserActorIds.Count)
+            {
+                PersistTransaction(pTarget, snapshot);
+                return true;
+            }
+
+            IReadOnlyList<long> loserArmyIds = snapshot.LoserArmyIds ??
+                Array.Empty<long>();
+            for (int i = 0; i < loserArmyIds.Count; i++)
+                CleanupArmy(FindArmy(loserArmyIds[i]));
+            snapshot = ArmyAbstractBattleTransactionRules.Advance(snapshot,
+                ArmyAbstractBattlePhase.Complete);
+            PersistTransaction(pTarget, snapshot);
+            return true;
+        }
+
+        private static void ReleasePersistedParticipants(
+            ArmyAbstractBattleTransactionSnapshot pSnapshot)
+        {
+            IReadOnlyList<long> armyIds = pSnapshot?.ParticipantArmyIds ??
+                Array.Empty<long>();
+            for (int i = 0; i < armyIds.Count; i++)
+                ReleaseStrategicControl(FindArmy(armyIds[i]));
+        }
+
+        private static void AddArmyRoster(Army pArmy, ICollection<long> pArmyIds,
+            ICollection<long> pActorIds)
         {
             if (pArmy?.data == null) return;
-            var actors = new List<Actor>();
-            var seen = new HashSet<long>();
+            pArmyIds.Add(pArmy.id);
+            AddArmyActorIds(pArmy, pActorIds);
+        }
+
+        private static void AddArmyActorIds(Army pArmy,
+            ICollection<long> pActorIds)
+        {
+            if (pArmy?.data == null) return;
             try
             {
                 for (int i = 0; i < pArmy.units.Count; i++)
                 {
                     Actor actor = pArmy.units[i];
-                    if (actor?.data != null && seen.Add(actor.data.id))
-                        actors.Add(actor);
+                    if (actor?.data != null) pActorIds.Add(actor.data.id);
                 }
             }
             catch { }
             Actor captain = SafeCaptain(pArmy);
-            if (captain?.data != null && seen.Add(captain.data.id))
-                actors.Add(captain);
-            for (int i = 0; i < actors.Count; i++)
-                DemobilizeActor(pArmy, actors[i]);
+            if (captain?.data != null) pActorIds.Add(captain.data.id);
+        }
+
+        private static void CleanupArmy(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
             ArmyRtsControllerService.Invalidate(pArmy.id);
             ArmyRtsWarLifecycleService.ClearArmy(pArmy);
         }
@@ -380,6 +550,12 @@ namespace AncientWarfare3.core.lineage
             catch { return null; }
         }
 
+        private static Army SafeArmy(Actor pActor)
+        {
+            try { return pActor?.army; }
+            catch { return null; }
+        }
+
         private static Army FindArmy(long pArmyId)
         {
             try { return World.world?.armies?.get(pArmyId); }
@@ -389,6 +565,26 @@ namespace AncientWarfare3.core.lineage
         private static City FindCity(long pCityId)
         {
             try { return World.world?.cities?.get(pCityId); }
+            catch { return null; }
+        }
+
+        private static Actor FindActor(long pActorId)
+        {
+            try
+            {
+                return pActorId >= 0L ? World.world?.units?.get(pActorId) :
+                    null;
+            }
+            catch { return null; }
+        }
+
+        private static Kingdom FindKingdom(long pKingdomId)
+        {
+            try
+            {
+                return pKingdomId >= 0L ? World.world?.kingdoms?.get(
+                    pKingdomId) : null;
+            }
             catch { return null; }
         }
 

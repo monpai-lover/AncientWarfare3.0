@@ -188,6 +188,7 @@
     <Compile Include="ArmyRtsWarLifecycleRulesTests.cs.txt" />
     <Compile Include="ArmyRtsWarDoctrineRulesTests.cs.txt" />
     <Compile Include="ArmyAbstractBattleRulesTests.cs.txt" />
+    <Compile Include="ArmyAbstractBattleTransactionRulesTests.cs.txt" />
     <Compile Include="ArmyRtsMissionTargetRulesTests.cs.txt" />
     <Compile Include="PreparationRecruitmentProtectionRulesTests.cs.txt" />
     <Compile Include="ArmyRtsWarLifecycleStateTests.cs.txt" />
@@ -413,6 +414,7 @@
     <Compile Include="..\..\Code\core\lineage\ArmyRtsWarDoctrineRules.cs" Link="Production\ArmyRtsWarDoctrineRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyAbstractBattleModels.cs" Link="Production\ArmyAbstractBattleModels.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyAbstractBattleRules.cs" Link="Production\ArmyAbstractBattleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyAbstractBattleTransactionRules.cs" Link="Production\ArmyAbstractBattleTransactionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsMissionTargetRules.cs" Link="Production\ArmyRtsMissionTargetRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PreparationRecruitmentProtectionRules.cs" Link="Production\PreparationRecruitmentProtectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsWarLifecycleService.cs" Link="Production\ArmyRtsWarLifecycleService.cs" />

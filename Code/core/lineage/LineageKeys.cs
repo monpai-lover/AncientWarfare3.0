@@ -310,6 +310,8 @@ namespace AncientWarfare3.core.lineage
             "aw_rts_abstract_battle_participant_hash";
         public const string AW_RTS_ABSTRACT_BATTLE_SEQUENCE =
             "aw_rts_abstract_battle_sequence";
+        public const string AW_RTS_ABSTRACT_BATTLE_TRANSACTION =
+            "aw_rts_abstract_battle_transaction";
         public const string CITY_RESERVE_MEMBER = "aw_city_reserve_member";
         public const string CITY_RESERVE_CITY_ID = "aw_city_reserve_city_id";
         public const string CITY_RESERVE_KINGDOM_ID =

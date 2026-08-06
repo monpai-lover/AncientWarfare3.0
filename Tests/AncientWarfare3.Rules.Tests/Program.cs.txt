@@ -75,6 +75,7 @@ if (args.Length == 1 && args[0] == "--rts-war-doctrines")
 {
     ArmyRtsWarDoctrineRulesTests.Run();
     ArmyAbstractBattleRulesTests.Run();
+    ArmyAbstractBattleTransactionRulesTests.Run();
     ArmyRtsMissionTargetRulesTests.Run();
     Console.WriteLine("RTS war doctrine rules passed.");
     return;
