@@ -121,8 +121,9 @@ namespace AncientWarfare3.core.lineage
 
             War war = FindWar(pWarId);
             if (war?.data == null || war.hasEnded()) return false;
+            Army canonicalDefender = null;
             if (!ArmyFieldIndexService.TryGetCityArmy(target,
-                    out Army defender)) defender = null;
+                    out canonicalDefender)) canonicalDefender = null;
 
             var attackers = new List<ArmyAbstractBattleParticipant>();
             Kingdom defenderKingdom = target.kingdom;
@@ -154,9 +155,12 @@ namespace AncientWarfare3.core.lineage
             }
             if (attackers.Count == 0) return false;
 
+            List<Army> defenderArmies = CollectDefenderArmies(target,
+                defenderKingdom, canonicalDefender);
             var defenders = new List<ArmyAbstractBattleParticipant>();
-            if (defender?.data != null)
+            for (int i = 0; i < defenderArmies.Count; i++)
             {
+                Army defender = defenderArmies[i];
                 int count = SafeUnitCount(defender);
                 if (count > 0)
                 {
@@ -230,7 +234,8 @@ namespace AncientWarfare3.core.lineage
                 var loserArmyIds = new List<long>();
                 if (result.Outcome == ArmyAbstractBattleOutcome.AttackVictory)
                 {
-                    if (defender?.data != null) loserArmyIds.Add(defender.id);
+                    for (int i = 0; i < defenders.Count; i++)
+                        loserArmyIds.Add(defenders[i].ArmyId);
                 }
                 else
                 {
@@ -249,7 +254,6 @@ namespace AncientWarfare3.core.lineage
                         participantArmyIds, participantActorIds, loserArmyIds,
                         loserActorIds);
                 PersistTransaction(target, transaction, operation);
-                ReleasePersistedParticipants(transaction);
                 return ResumeTransaction(target, transaction);
             }
             finally
@@ -335,11 +339,14 @@ namespace AncientWarfare3.core.lineage
             ArmyAbstractBattleTransactionSnapshot snapshot = pSnapshot.Clone();
             if (snapshot.Phase == ArmyAbstractBattlePhase.Prepared)
             {
+                // The roster is frozen in Prepared. Release all strategic
+                // control before any transfer so a retry cannot move these
+                // armies while the city ownership change is in flight.
+                ReleasePersistedParticipants(snapshot);
                 City transferredCity = FindCity(snapshot.TransferredCityId);
                 Kingdom receiver = FindKingdom(snapshot.ReceiverKingdomId);
                 if (transferredCity?.data == null || receiver?.data == null ||
                     !TryTransferCity(transferredCity, receiver)) return false;
-                ReleasePersistedParticipants(snapshot);
                 snapshot = ArmyAbstractBattleTransactionRules.Advance(snapshot,
                     ArmyAbstractBattlePhase.Transferred);
                 PersistTransaction(pTarget, snapshot);
@@ -367,7 +374,7 @@ namespace AncientWarfare3.core.lineage
             {
                 Actor actor = FindActor(loserActorIds[i]);
                 if (actor?.data == null) continue;
-                DemobilizeActor(SafeArmy(actor), actor);
+                DemobilizeActor(FindLoserArmy(snapshot, actor), actor);
             }
             snapshot.DemobilizationCursor = end;
             if (end < loserActorIds.Count)
@@ -420,6 +427,85 @@ namespace AncientWarfare3.core.lineage
             if (captain?.data != null) pActorIds.Add(captain.data.id);
         }
 
+        private static List<Army> CollectDefenderArmies(City pTarget,
+            Kingdom pKingdom, Army pCanonical)
+        {
+            var result = new List<Army>();
+            var seen = new HashSet<long>();
+            AddDefenderArmy(result, seen, pTarget, pKingdom, pCanonical);
+            string[] roles =
+            {
+                AWArmyRole.RoyalGuard,
+                AWArmyRole.SlaveArmy,
+                AWArmyRole.BorderArmy,
+                AWArmyRole.FeudatoryGarrison
+            };
+            for (int i = 0; i < roles.Length; i++)
+            {
+                List<Army> roleArmies;
+                try { roleArmies = AWArmyService.GetRoleArmies(pKingdom,
+                    roles[i]); }
+                catch { roleArmies = null; }
+                if (roleArmies == null) continue;
+                for (int j = 0; j < roleArmies.Count; j++)
+                    AddDefenderArmy(result, seen, pTarget, pKingdom,
+                        roleArmies[j]);
+            }
+            result.Sort((pLeft, pRight) => pLeft.id.CompareTo(pRight.id));
+            return result;
+        }
+
+        private static void AddDefenderArmy(ICollection<Army> pResult,
+            ISet<long> pSeen, City pTarget, Kingdom pKingdom, Army pArmy)
+        {
+            if (pArmy?.data == null || pTarget?.data == null ||
+                pKingdom?.data == null || !pArmy.isAlive() ||
+                SafeKingdom(pArmy) != pKingdom ||
+                AWArmyService.GetAnchorCityId(pArmy) != pTarget.id ||
+                !pSeen.Add(pArmy.id)) return;
+            pResult.Add(pArmy);
+        }
+
+        private static Army FindLoserArmy(
+            ArmyAbstractBattleTransactionSnapshot pSnapshot, Actor pActor)
+        {
+            Army current = SafeArmy(pActor);
+            if (current?.data != null && IsPersistedLoserArmy(pSnapshot,
+                    current.id)) return current;
+            IReadOnlyList<long> loserArmyIds = pSnapshot?.LoserArmyIds ??
+                Array.Empty<long>();
+            for (int i = 0; i < loserArmyIds.Count; i++)
+            {
+                Army candidate = FindArmy(loserArmyIds[i]);
+                if (candidate?.data == null) continue;
+                if (ContainsActor(candidate, pActor)) return candidate;
+            }
+            return null;
+        }
+
+        private static bool IsPersistedLoserArmy(
+            ArmyAbstractBattleTransactionSnapshot pSnapshot, long pArmyId)
+        {
+            IReadOnlyList<long> loserArmyIds = pSnapshot?.LoserArmyIds ??
+                Array.Empty<long>();
+            for (int i = 0; i < loserArmyIds.Count; i++)
+                if (loserArmyIds[i] == pArmyId) return true;
+            return false;
+        }
+
+        private static bool ContainsActor(Army pArmy, Actor pActor)
+        {
+            if (pArmy?.data == null || pActor?.data == null) return false;
+            if (SafeCaptain(pArmy) == pActor) return true;
+            try
+            {
+                for (int i = 0; i < pArmy.units.Count; i++)
+                    if (pArmy.units[i] == pActor) return true;
+            }
+            catch { }
+            return false;
+        }
+
         private static void CleanupArmy(Army pArmy)
         {
             if (pArmy?.data == null) return;
@@ -467,8 +553,15 @@ namespace AncientWarfare3.core.lineage
             }
             try
             {
-                if (pActor.isAlive() && !pActor.isRekt())
-                    pActor.die(false, AttackType.Other, false, false);
+                if (!pActor.isAlive() || pActor.isRekt())
+                {
+                    using (ArmyCaptainDisposalScope.Open(pArmy))
+                    {
+                        try { pActor.removeFromArmy(); } catch { }
+                    }
+                    return;
+                }
+                pActor.die(false, AttackType.Other, false, false);
             }
             catch
             {
