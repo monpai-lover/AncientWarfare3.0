@@ -42,6 +42,7 @@
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingMigrationRulesTests.cs.txt" />
     <Compile Include="AWPathSessionTests.cs.txt" />
+    <Compile Include="AWDockTransportRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathMigrationRules.cs" Link="Production\AWPathMigrationRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathSession.cs" Link="Production\AWPathSession.cs" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
@@ -609,6 +610,7 @@
     <Compile Include="..\..\Code\core\policy\SchoolNameplateRenderRules.cs" Link="Production\SchoolNameplateRenderRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathTypes.cs" Link="Production\AWPathTypes.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathLifecycleRules.cs" Link="Production\AWPathLifecycleRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWDockTransportRules.cs" Link="Production\AWDockTransportRules.cs" />
     <Compile Include="..\..\Code\core\performance\RuntimePerformanceBudgetRules.cs" Link="Production\RuntimePerformanceBudgetRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWIdleBehaviourThrottleRules.cs" Link="Production\AWIdleBehaviourThrottleRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWIdleBehaviourThrottleGate.cs" Link="Production\AWIdleBehaviourThrottleGate.cs" />

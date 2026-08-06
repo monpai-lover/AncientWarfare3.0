@@ -756,7 +756,11 @@ namespace AncientWarfare3.core.pathfinding
 
         private static bool StartTransport(Actor pActor, WorldTile pTarget)
         {
-            if (pActor.is_inside_boat || pActor.current_tile.isSameIsland(pTarget)) return false;
+            if (pActor?.current_tile?.data == null || pTarget?.data == null ||
+                !AWDockTransportRules.CanCreatePhysicalRoute(
+                    pActor.current_tile.data.tile_id, pTarget.data.tile_id,
+                    pActor.current_tile.isSameIsland(pTarget),
+                    pActor.is_inside_boat)) return false;
             if (!RetryContexts.TryGetValue(pActor.data.id, out RetryContext retry)) return false;
             TaxiManager.newRequest(pActor, pTarget);
             if (TaxiManager.getRequestForActor(pActor) == null) return false;

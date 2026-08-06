@@ -7793,6 +7793,7 @@ RuntimePerformanceDiagnosticRulesTests.Run();
 PathfindingCursorTests.Run();
 PathfindingMigrationRulesTests.Run();
 AWPathSessionTests.Run();
+AWDockTransportRulesTests.Run();
 CourtReplacementSqlTests.Run();
 CourtMeritRewardSqlTests.Run();
 CourtMeritRewardFlowTests.Run();
