@@ -41,7 +41,9 @@
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingMigrationRulesTests.cs.txt" />
+    <Compile Include="AWPathSessionTests.cs.txt" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathMigrationRules.cs" Link="Production\AWPathMigrationRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathSession.cs" Link="Production\AWPathSession.cs" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
     <Compile Include="PathMovementExecutorRulesTests.cs.txt" />
     <Compile Include="RuntimePerformanceBudgetRulesTests.cs.txt" />

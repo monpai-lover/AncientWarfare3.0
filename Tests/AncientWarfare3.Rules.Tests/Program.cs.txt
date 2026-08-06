@@ -7792,6 +7792,7 @@ RuntimePerformanceBudgetRulesTests.Run();
 RuntimePerformanceDiagnosticRulesTests.Run();
 PathfindingCursorTests.Run();
 PathfindingMigrationRulesTests.Run();
+AWPathSessionTests.Run();
 CourtReplacementSqlTests.Run();
 CourtMeritRewardSqlTests.Run();
 CourtMeritRewardFlowTests.Run();

@@ -1,0 +1,35 @@
+using System;
+using AncientWarfare3.core.pathfinding;
+
+internal static class AWPathSessionTests
+{
+    internal static void Run()
+    {
+        var session = new AWPathSession(17L);
+        Assert(session.TrySchedule(AWPathWorkPriority.Initial,
+                out AWScheduledPathWork initial),
+            "the first request schedules one work item");
+        Assert(!session.TrySchedule(AWPathWorkPriority.Initial, out _),
+            "a queued owner cannot schedule a duplicate item");
+        Assert(session.TryBeginWork(initial.QueueVersion),
+            "the matching queued version begins work");
+        Assert(session.Replace(),
+            "a running request retains one replacement");
+        Assert(session.CompleteWork(out AWScheduledPathWork replacement),
+            "finishing running work yields the retained replacement");
+        Assert(replacement.Priority == AWPathWorkPriority.Initial,
+            "replacement keeps initial priority");
+        Assert(!session.TryBeginWork(initial.QueueVersion),
+            "a stale queue version cannot run after replacement");
+        Assert(session.TryBeginWork(replacement.QueueVersion),
+            "the latest replacement can begin");
+        session.Cancel();
+        Assert(!session.CompleteWork(out _),
+            "cancelled work cannot requeue");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}
