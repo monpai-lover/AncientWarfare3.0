@@ -310,7 +310,10 @@ namespace AncientWarfare3.core.pathfinding
         public static bool ShouldPollEverySimulationPass(bool schedulerActive,
             bool customPathOwned)
         {
-            return schedulerActive && customPathOwned;
+            // A completed worker segment remains visible through ownership;
+            // repeatedly polling every owned Actor while it is still pending
+            // only shifts queue pressure onto the simulation thread.
+            return false;
         }
 
         public static bool HasUsableMovementBatch(bool actorExists,

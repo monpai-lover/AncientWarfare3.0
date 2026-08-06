@@ -57,9 +57,9 @@ internal static class PathfindingPerformanceTests
 
     private static void LargeSchedulerPathProgressRules()
     {
-        Assert(AWPathLifecycleRules.ShouldPollEverySimulationPass(
+        Assert(!AWPathLifecycleRules.ShouldPollEverySimulationPass(
                 schedulerActive: true, customPathOwned: true),
-            "large scheduler must not wait on wall-clock polling for owned paths");
+            "large scheduler throttles waiting paths instead of spin-polling every owned actor");
         Assert(!AWPathLifecycleRules.ShouldPollEverySimulationPass(
                 schedulerActive: false, customPathOwned: true),
             "native scheduler keeps the normal polling cadence");
