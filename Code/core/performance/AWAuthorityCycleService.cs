@@ -126,8 +126,11 @@ namespace AncientWarfare3.core.performance
         private static void DrainAuthorityCompletions()
         {
             ActorDeathArchiveService.ProcessAuthorityCycle();
-            AWAsyncRuntime.DrainMainThread(1.0, 32);
-            HistoricalWriteService.DrainCompletions(0.5, 16);
+            int pending = AWAsyncRuntime.SnapshotDiagnostics().Completions;
+            int itemLimit = AuthorityDeferredDrainRules.ResolveItemLimit(pending);
+            if (itemLimit > 0)
+                AWAsyncRuntime.DrainMainThread(0.25, itemLimit);
+            HistoricalWriteService.DrainCompletions(0.25, 4);
         }
 
         private static void DrainDeferredAuthorityWork()

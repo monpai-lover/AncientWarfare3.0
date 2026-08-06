@@ -12,6 +12,7 @@ internal static class PathfindingPerformanceTests
         RtsRoutesUseTheSharedFinderOnly();
         PathDiagnosticsExposeSessionSchedulerState();
         PhysicalTransportUsesPassengerStateMachine();
+        AsyncAuthorityCommitUsesBoundedBurst();
         OwnershipIndexUsesSingleHotLookup();
         IsUsingPathHotPathOnlyChecksOwnership();
         RecoveryUsesCultiwayReasonResetAndBackoff();
@@ -237,6 +238,17 @@ internal static class PathfindingPerformanceTests
         Assert(bridge.Contains("AWDockPassengerState") &&
                bridge.Contains("AWDockTransportRules.NextState"),
             "the live boat transport context uses the dock passenger state machine");
+    }
+
+    private static void AsyncAuthorityCommitUsesBoundedBurst()
+    {
+        string authority = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWAuthorityCycleService.cs"));
+        Assert(authority.Contains("SnapshotDiagnostics().Completions") &&
+               authority.Contains("DrainMainThread(0.25") &&
+               authority.Contains("ResolveItemLimit(pending)"),
+            "authority commits use a completion-count bounded main-thread burst");
     }
 
     private static void RecoveryUsesCultiwayReasonResetAndBackoff()
