@@ -7791,6 +7791,7 @@ PathMovementExecutorRulesTests.Run();
 RuntimePerformanceBudgetRulesTests.Run();
 RuntimePerformanceDiagnosticRulesTests.Run();
 PathfindingCursorTests.Run();
+PathfindingMigrationRulesTests.Run();
 CourtReplacementSqlTests.Run();
 CourtMeritRewardSqlTests.Run();
 CourtMeritRewardFlowTests.Run();
