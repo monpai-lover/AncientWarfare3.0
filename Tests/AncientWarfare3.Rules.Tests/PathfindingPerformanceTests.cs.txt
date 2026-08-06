@@ -11,6 +11,7 @@ internal static class PathfindingPerformanceTests
         FinderUsesSessionTokenQueues();
         RtsRoutesUseTheSharedFinderOnly();
         PathDiagnosticsExposeSessionSchedulerState();
+        PhysicalTransportUsesPassengerStateMachine();
         OwnershipIndexUsesSingleHotLookup();
         IsUsingPathHotPathOnlyChecksOwnership();
         RecoveryUsesCultiwayReasonResetAndBackoff();
@@ -226,6 +227,16 @@ internal static class PathfindingPerformanceTests
         Assert(finder.Contains("WorkerCount") &&
                finder.Contains("StaleWorkCount"),
             "the session scheduler exposes worker and stale-token diagnostics");
+    }
+
+    private static void PhysicalTransportUsesPassengerStateMachine()
+    {
+        string bridge = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs"));
+        Assert(bridge.Contains("AWDockPassengerState") &&
+               bridge.Contains("AWDockTransportRules.NextState"),
+            "the live boat transport context uses the dock passenger state machine");
     }
 
     private static void RecoveryUsesCultiwayReasonResetAndBackoff()

@@ -793,6 +793,27 @@ namespace AncientWarfare3.core.pathfinding
                 FailTransport(pActor, AWPathFailureReason.TransportFailed, pCancelTaxi: true);
                 return;
             }
+            TaxiRequest request = TaxiManager.getRequestForActor(pActor);
+            double now = Time.realtimeSinceStartupAsDouble;
+            bool reachedDestination = pActor.current_tile != null &&
+                                      pActor.current_tile.isSameIsland(target);
+            AWDockPassengerState nextState = AWDockTransportRules.NextState(
+                context.State, alive: true, targetValid: true,
+                insideBoat: pActor.is_inside_boat, requestExists: request != null,
+                reachedDestination: reachedDestination,
+                timedOut: request != null && now - context.StartedAt >=
+                    TransportWaitTimeoutSeconds);
+            if (nextState != context.State)
+            {
+                context = context.WithState(nextState);
+                TransportContexts[pActor.data.id] = context;
+            }
+            if (nextState == AWDockPassengerState.Failed)
+            {
+                FailTransport(pActor, AWPathFailureReason.TransportFailed,
+                    pCancelTaxi: request != null);
+                return;
+            }
             if (pActor.is_inside_boat)
             {
                 if (!context.ObservedInsideBoat)
@@ -800,10 +821,8 @@ namespace AncientWarfare3.core.pathfinding
                 return;
             }
 
-            TaxiRequest request = TaxiManager.getRequestForActor(pActor);
             if (request != null)
             {
-                double now = Time.realtimeSinceStartupAsDouble;
                 if (now - context.StartedAt < TransportWaitTimeoutSeconds) return;
                 FailTransport(pActor, AWPathFailureReason.TransportFailed, pCancelTaxi: true);
                 return;
@@ -1115,7 +1134,8 @@ namespace AncientWarfare3.core.pathfinding
         {
             public TransportContext(Actor pActor, int pTargetTileId,
                 AWPathRequestOptions pOptions, double pStartedAt,
-                bool pObservedInsideBoat, double pNextPollAt)
+                bool pObservedInsideBoat, double pNextPollAt,
+                AWDockPassengerState pState = AWDockPassengerState.WaitingBoat)
             {
                 Actor = pActor;
                 TargetTileId = pTargetTileId;
@@ -1123,6 +1143,7 @@ namespace AncientWarfare3.core.pathfinding
                 StartedAt = pStartedAt;
                 ObservedInsideBoat = pObservedInsideBoat;
                 NextPollAt = pNextPollAt;
+                State = pState;
             }
 
             public Actor Actor { get; }
@@ -1131,17 +1152,25 @@ namespace AncientWarfare3.core.pathfinding
             public double StartedAt { get; }
             public bool ObservedInsideBoat { get; }
             public double NextPollAt { get; }
+            public AWDockPassengerState State { get; }
 
             public TransportContext WithObservedInsideBoat()
             {
                 return new TransportContext(Actor, TargetTileId, Options, StartedAt,
-                    pObservedInsideBoat: true, pNextPollAt: NextPollAt);
+                    pObservedInsideBoat: true, pNextPollAt: NextPollAt,
+                    pState: State);
             }
 
             public TransportContext WithNextPoll(double pNextPollAt)
             {
                 return new TransportContext(Actor, TargetTileId, Options,
-                    StartedAt, ObservedInsideBoat, pNextPollAt);
+                    StartedAt, ObservedInsideBoat, pNextPollAt, State);
+            }
+
+            public TransportContext WithState(AWDockPassengerState pState)
+            {
+                return new TransportContext(Actor, TargetTileId, Options,
+                    StartedAt, ObservedInsideBoat, NextPollAt, pState);
             }
         }
     }
