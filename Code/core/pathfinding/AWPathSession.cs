@@ -79,7 +79,10 @@ namespace AncientWarfare3.core.pathfinding
                 }
                 _queued = false;
                 _queueVersion++;
-                _replacementPending = true;
+                // A queued token is now stale. The new request can be
+                // scheduled immediately; only a running request retains a
+                // deferred replacement.
+                _replacementPending = false;
                 return true;
             }
         }

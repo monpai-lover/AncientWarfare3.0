@@ -8,6 +8,7 @@ internal static class PathfindingPerformanceTests
         RuntimeSubmittersClassifyPathWorkExplicitly();
         RequestKeysMatchWithoutAllocating();
         LatestActorSlotKeepsOneQueuedNode();
+        FinderUsesSessionTokenQueues();
         OwnershipIndexUsesSingleHotLookup();
         IsUsingPathHotPathOnlyChecksOwnership();
         RecoveryUsesCultiwayReasonResetAndBackoff();
@@ -186,6 +187,21 @@ internal static class PathfindingPerformanceTests
             "a worker requeues the actor once when newer work exists");
         Assert(rules.MaximumQueuedNodes == 1,
             "one actor slot never owns more than one queued node");
+    }
+
+    private static void FinderUsesSessionTokenQueues()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(finder.Contains("ConcurrentQueue<AWScheduledPathWork>"),
+            "the finder dispatches immutable session work tokens");
+        Assert(finder.Contains("AWPathWorkPriority.Starved") &&
+               finder.Contains("AWPathWorkPriority.Initial") &&
+               finder.Contains("AWPathWorkPriority.Continuation"),
+            "the finder owns Cultiway starved, initial, and continuation queues");
+        Assert(!finder.Contains("ActorWorkSlot"),
+            "the legacy mutable actor-slot queue is removed from path dispatch");
     }
 
     private static void RecoveryUsesCultiwayReasonResetAndBackoff()

@@ -6,6 +6,7 @@ internal static class PathfindingCursorTests
     {
         ActiveRequestReuseAvoidsNewWork();
         SubmissionDispositionExplainsPendingReplacement();
+        RetargetedQueuedWorkNeverExecutesStaleRequest();
         PriorityRequestsRunAheadOfQueuedCivilianWork();
         QueuedRequestExposesWorkerWaitState();
         BoundedRegionalPathsContinueUntilFinalTarget();
@@ -90,6 +91,40 @@ internal static class PathfindingCursorTests
         Assert(!AWPathLifecycleRules.ShouldContinueBoundedSegment(
                 regionLimit: 6, currentTileId: 900, targetTileId: 900),
             "a bounded regional path stops after reaching its final target");
+    }
+
+    private static void RetargetedQueuedWorkNeverExecutesStaleRequest()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(8, 1, 1,
+            new[] { tile });
+        var generator = new TargetRecordingGateGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+
+        AWPathRequest Request(long actorId, int targetTileId) =>
+            new AWPathRequest(actorId, 0, targetTileId,
+                AWPathRequestOptions.Default,
+                AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+                generation, 0d);
+
+        Assert(finder.Request(Request(1, 1), out bool _) &&
+               generator.Started.Wait(TimeSpan.FromSeconds(3)),
+            "the blocking request occupies the only worker");
+        Assert(finder.Request(Request(2, 2), out bool _),
+            "the initial queued target is accepted");
+        Assert(finder.Request(Request(2, 3),
+                out AWPathSubmissionDisposition disposition) &&
+               disposition == AWPathSubmissionDisposition.ReplacedPending,
+            "retargeting a queued owner replaces its session request");
+
+        generator.Release.Set();
+        Assert(SpinUntil(() => generator.Targets.Count >= 2),
+            "the replacement eventually reaches the worker");
+        Assert(generator.Targets.ToArray().SequenceEqual(new[] { 1, 3 }),
+            "a stale queued target is rejected before path generation");
+        finder.StopAndDrain();
     }
 
     private static void ActiveRequestReuseAvoidsNewWork()
@@ -226,6 +261,27 @@ internal static class PathfindingCursorTests
             CancellationToken cancellation)
         {
             Order.Enqueue(request.ActorId);
+            if (request.ActorId == 1)
+            {
+                Started.Set();
+                Release.Wait(cancellation);
+            }
+            cancellation.ThrowIfCancellationRequested();
+            request.Stream.Complete();
+        }
+    }
+
+    private sealed class TargetRecordingGateGenerator : IAWPathGenerator
+    {
+        public readonly ManualResetEventSlim Started = new(false);
+        public readonly ManualResetEventSlim Release = new(false);
+        public readonly System.Collections.Concurrent.ConcurrentQueue<int>
+            Targets = new();
+
+        public void Generate(AWPathRequest request,
+            CancellationToken cancellation)
+        {
+            Targets.Enqueue(request.TargetTileId);
             if (request.ActorId == 1)
             {
                 Started.Set();
