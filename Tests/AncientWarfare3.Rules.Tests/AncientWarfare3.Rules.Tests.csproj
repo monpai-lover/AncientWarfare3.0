@@ -303,6 +303,7 @@
     <Compile Include="..\..\Code\core\lineage\RulerTitleFactRules.cs" Link="Production\RulerTitleFactRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PosthumousTitleDefs.cs" Link="Production\PosthumousTitleDefs.cs" />
     <Compile Include="..\..\Code\core\lineage\PosthumousTitleRules.cs" Link="Production\PosthumousTitleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PosthumousStateNameRules.cs" Link="Production\PosthumousStateNameRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FormerRulerPosthumousRules.cs" Link="Production\FormerRulerPosthumousRules.cs" />
     <Compile Include="..\..\Code\core\lineage\TempleTitleRules.cs" Link="Production\TempleTitleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\StateNameRules.cs" Link="Production\StateNameRules.cs" />
@@ -469,6 +470,7 @@
     <Compile Include="..\..\Code\core\court\ICourtProfile.cs" Link="Production\ICourtProfile.cs" />
     <Compile Include="..\..\Code\core\court\XiaCourtProfile.cs" Link="Production\XiaCourtProfile.cs" />
     <Compile Include="..\..\Code\core\court\WesternCourtProfile.cs" Link="Production\WesternCourtProfile.cs" />
+    <Compile Include="..\..\Code\core\court\WesternCourtMigrationRules.cs" Link="Production\WesternCourtMigrationRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtProfileRegistry.cs" Link="Production\CourtProfileRegistry.cs" />
     <Compile Include="..\..\Code\core\court\WesternCourtElectionRules.cs" Link="Production\WesternCourtElectionRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtInstitutionEffectRules.cs" Link="Production\CourtInstitutionEffectRules.cs" />

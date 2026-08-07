@@ -144,6 +144,48 @@ namespace AncientWarfare3.core.court
 
     internal static class OfficialCareerPersistence
     {
+        internal static int MigrateWesternOfficeIds(SQLiteConnection pDb)
+        {
+            if (pDb == null) return 0;
+            SQLiteTransaction transaction = null;
+            try
+            {
+                transaction = pDb.BeginTransaction();
+                int changed = UpdateOfficeId(pDb, transaction,
+                    CourtOfficerTableItem.GetTableName(),
+                    CourtOfficeId.WestRoyalChamberlain,
+                    CourtOfficeId.WestRoyalConstable);
+                changed += UpdateOfficeId(pDb, transaction,
+                    OfficialCareerStateTableItem.GetTableName(),
+                    CourtOfficeId.WestRoyalChamberlain,
+                    CourtOfficeId.WestRoyalConstable);
+                transaction.Commit();
+                return changed;
+            }
+            catch
+            {
+                try { transaction?.Rollback(); } catch { }
+                throw;
+            }
+            finally
+            {
+                try { transaction?.Dispose(); } catch { }
+            }
+        }
+
+        private static int UpdateOfficeId(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, string pTable, string pLegacy,
+            string pCanonical)
+        {
+            using var command = new SQLiteCommand(pDb)
+                { Transaction = pTransaction };
+            command.CommandText = "UPDATE " + pTable +
+                " SET OFFICE_ID=@canonical WHERE OFFICE_ID=@legacy";
+            command.Parameters.AddWithValue("@canonical", pCanonical);
+            command.Parameters.AddWithValue("@legacy", pLegacy);
+            return command.ExecuteNonQuery();
+        }
+
         internal static int RepairDuplicateFormalAppointments(
             SQLiteConnection pDb)
         {

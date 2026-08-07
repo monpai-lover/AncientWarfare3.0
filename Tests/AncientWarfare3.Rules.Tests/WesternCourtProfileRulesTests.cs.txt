@@ -51,6 +51,20 @@ internal static class WesternCourtProfileRulesTests
         Equal(false, marshal.AvailableIn(
                 CourtInstitutionId.WesternBureaucratic),
             "marshal requires the feudal stage");
+        CourtOfficeDefinition constable = Require(western,
+            CourtOfficeId.WestRoyalConstable);
+        Equal(CourtOfficeLayer.Central, constable.Layer,
+            "royal constable is a central military office");
+        Equal(true, constable.MilitaryCapable,
+            "royal constable uses military lifecycle");
+        Equal(CourtOfficeId.WestRoyalConstable,
+            WesternCourtMigrationRules.NormalizeOfficeId(
+                CourtOfficeId.WestRoyalChamberlain),
+            "legacy chamberlain migrates to royal constable");
+        Equal(CourtOfficeId.WestTreasurer,
+            WesternCourtMigrationRules.NormalizeOfficeId(
+                CourtOfficeId.WestTreasurer),
+            "canonical office ids remain unchanged");
 
         Equal(CourtInstitutionId.WesternPrimitive,
             western.ResolveInstitution(false, false),

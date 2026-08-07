@@ -176,6 +176,9 @@ namespace AncientWarfare3.core.multiplayer
                         throw new InvalidOperationException(
                             reset.FailedStage + ": " + reset.Detail);
                 }),
+                new AW3RestoreStage("western_court_office_migration", () =>
+                    OfficialCareerPersistence.MigrateWesternOfficeIds(
+                        LineageArchiveManager.Instance?.OperatingDB)),
                 new AW3RestoreStage("official_career_repair", () =>
                     OfficialCareerPersistence.
                         RepairDuplicateFormalAppointments(
@@ -295,6 +298,9 @@ namespace AncientWarfare3.core.multiplayer
                         throw new InvalidOperationException(
                             reset.FailedStage + ": " + reset.Detail);
                 }),
+                new AW3RestoreStage("western_court_office_migration", () =>
+                    OfficialCareerPersistence.MigrateWesternOfficeIds(
+                        LineageArchiveManager.Instance?.OperatingDB)),
                 new AW3RestoreStage("official_career_repair", () =>
                     OfficialCareerPersistence.
                         RepairDuplicateFormalAppointments(

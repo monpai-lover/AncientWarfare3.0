@@ -52,6 +52,8 @@ namespace AncientWarfare3.core.court
         public const string WestHighJustice = "west_high_justice";
         public const string WestTreasurer = "west_treasurer";
         public const string WestPalaceSteward = "west_palace_steward";
+        public const string WestRoyalConstable = "west_royal_constable";
+        // Legacy save identifier. Normalize through WesternCourtMigrationRules.
         public const string WestRoyalChamberlain = "west_royal_chamberlain";
         public const string WestMarshal = "west_marshal";
         public const string WestSecretary = "west_secretary";

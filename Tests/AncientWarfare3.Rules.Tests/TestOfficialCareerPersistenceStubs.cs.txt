@@ -7,4 +7,12 @@ namespace AncientWarfare3.core.db
             return "CourtOfficer";
         }
     }
+
+    internal static class OfficialCareerStateTableItem
+    {
+        public static string GetTableName()
+        {
+            return "OfficialCareerState";
+        }
+    }
 }
