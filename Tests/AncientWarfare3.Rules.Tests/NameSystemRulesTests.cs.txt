@@ -19,6 +19,18 @@ internal static class NameSystemRulesTests
 
     public static void Run()
     {
+        Equal("唐", PosthumousStateNameRules.Resolve(
+                "黄", "唐", "唐", NobleRankRules.RankCountyMarquis,
+                1),
+            "matching formal fief outranks the shared family state name");
+        Equal("唐", PosthumousStateNameRules.Resolve(
+                "黄", "唐", "", NobleRankRules.RankNone,
+                1),
+            "current political name outranks a stale bound family name");
+        Equal("黄", PosthumousStateNameRules.Resolve(
+                "黄", "", "", NobleRankRules.RankNone,
+                1),
+            "historical state name remains the final fallback");
         Equal("姬强", LineageDisplayNameRules.Build(
                 givenName: "强", familyName: "", clanName: "姬",
                 isNoble: true, isMale: false, isNameIntegrated: false),

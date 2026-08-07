@@ -92,6 +92,12 @@ namespace AncientWarfare3.core.lineage
             facts.StateName = string.IsNullOrEmpty(pReign.StateNameSnapshot)
                 ? pKingdom?.name ?? ""
                 : pReign.StateNameSnapshot;
+            NobleTitleSnapshot noble = NobleRankService.ReadHot(pActor);
+            facts.StateName = PosthumousStateNameRules.Resolve(
+                facts.StateName, pKingdom?.name, noble.TitleName, noble.Rank,
+                pKingdom == null
+                    ? (int)KingdomTitle.Baron
+                    : (int)KingdomTitleService.GetTitle(pKingdom));
             facts.KingdomColor = HistoryColors.FromKingdom(pKingdom);
             facts.EndReason = pEndReason ?? pReign.EndReason ?? "";
             facts.DeathCause = pReign.DeathCause ?? "";
