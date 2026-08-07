@@ -112,7 +112,9 @@ namespace AncientWarfare3.core.pathfinding
                         pActor.current_tile.data.tile_id, targetTileId,
                         pOptions, profile, generation, now,
                         workClass, terrainRevision, worldGeneration,
-                        insideBoat);
+                        insideBoat,
+                        AWDockTransportService.TryResolveRoute(
+                            pActor.current_tile, pTarget, out _));
                     diagnostic = RuntimePerformanceDiagnostic.BeginScope();
                     bool accepted;
                     try
@@ -770,9 +772,12 @@ namespace AncientWarfare3.core.pathfinding
 
             double now = Time.realtimeSinceStartupAsDouble;
             long actorId = pActor.data.id;
+            AWDockTransportService.TryResolveRoute(pActor.current_tile, pTarget,
+                out AWDockRouteCandidate route);
             TransportContexts[actorId] = new TransportContext(pActor, pTarget.data.tile_id,
                 retry.Options, now, pObservedInsideBoat: false,
-                pNextPollAt: now);
+                pNextPollAt: now, pEntryDockId: route.Entry.Id,
+                pExitDockId: route.Exit.Id);
             TrySetNotMoving(pActor);
             pActor.next_step_position = pActor.current_tile.posV3;
             return true;
@@ -794,6 +799,13 @@ namespace AncientWarfare3.core.pathfinding
                 target.data.tile_id != context.TargetTileId)
             {
                 FailTransport(pActor, AWPathFailureReason.TransportFailed, pCancelTaxi: true);
+                return;
+            }
+            if (!AWDockTransportService.IsEndpointLive(context.EntryDockId) ||
+                !AWDockTransportService.IsEndpointLive(context.ExitDockId))
+            {
+                FailTransport(pActor, AWPathFailureReason.TransportFailed,
+                    pCancelTaxi: true);
                 return;
             }
             TaxiRequest request = TaxiManager.getRequestForActor(pActor);
@@ -1139,7 +1151,8 @@ namespace AncientWarfare3.core.pathfinding
             public TransportContext(Actor pActor, int pTargetTileId,
                 AWPathRequestOptions pOptions, double pStartedAt,
                 bool pObservedInsideBoat, double pNextPollAt,
-                AWDockPassengerState pState = AWDockPassengerState.WaitingBoat)
+                AWDockPassengerState pState = AWDockPassengerState.WaitingBoat,
+                long pEntryDockId = -1L, long pExitDockId = -1L)
             {
                 Actor = pActor;
                 TargetTileId = pTargetTileId;
@@ -1148,6 +1161,8 @@ namespace AncientWarfare3.core.pathfinding
                 ObservedInsideBoat = pObservedInsideBoat;
                 NextPollAt = pNextPollAt;
                 State = pState;
+                EntryDockId = pEntryDockId;
+                ExitDockId = pExitDockId;
             }
 
             public Actor Actor { get; }
@@ -1157,24 +1172,29 @@ namespace AncientWarfare3.core.pathfinding
             public bool ObservedInsideBoat { get; }
             public double NextPollAt { get; }
             public AWDockPassengerState State { get; }
+            public long EntryDockId { get; }
+            public long ExitDockId { get; }
 
             public TransportContext WithObservedInsideBoat()
             {
                 return new TransportContext(Actor, TargetTileId, Options, StartedAt,
                     pObservedInsideBoat: true, pNextPollAt: NextPollAt,
-                    pState: State);
+                    pState: State, pEntryDockId: EntryDockId,
+                    pExitDockId: ExitDockId);
             }
 
             public TransportContext WithNextPoll(double pNextPollAt)
             {
                 return new TransportContext(Actor, TargetTileId, Options,
-                    StartedAt, ObservedInsideBoat, pNextPollAt, State);
+                    StartedAt, ObservedInsideBoat, pNextPollAt, State,
+                    EntryDockId, ExitDockId);
             }
 
             public TransportContext WithState(AWDockPassengerState pState)
             {
                 return new TransportContext(Actor, TargetTileId, Options,
-                    StartedAt, ObservedInsideBoat, NextPollAt, pState);
+                    StartedAt, ObservedInsideBoat, NextPollAt, pState,
+                    EntryDockId, ExitDockId);
             }
         }
     }

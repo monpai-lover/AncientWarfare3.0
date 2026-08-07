@@ -411,7 +411,9 @@ namespace AncientWarfare3.core.pathfinding
                     AWPathWorkClass.Operational,
                     AWPathfindingBootstrap.Cache.SourceRevision,
                     AWAsyncRuntime.WorldGeneration,
-                    captain.is_inside_boat);
+                    captain.is_inside_boat,
+                    AWDockTransportService.TryResolveRoute(
+                        captain.current_tile, target, out _));
                 bool accepted = _finder.Request(pathRequest,
                     out AWPathSubmissionDisposition disposition);
                 bool reused = disposition == AWPathSubmissionDisposition.Reused;

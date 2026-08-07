@@ -52,6 +52,15 @@ namespace AncientWarfare3.core.pathfinding
             try
             {
                 pCancellation.ThrowIfCancellationRequested();
+                if (pRequest.TryTakeCachedSegment(pMaximumSteps,
+                        out AWPathStep[] cachedSteps, out bool cachedComplete))
+                {
+                    int cachedEnd = cachedSteps.Length > 0
+                        ? cachedSteps[cachedSteps.Length - 1].TileId
+                        : pRequest.StartTileId;
+                    return AWPathGenerationResult.Success(cachedEnd,
+                        cachedComplete, cachedSteps);
+                }
                 if (!pRequest.Generation.TryGet(pRequest.StartTileId, out AWTileTraversalSnapshot start))
                     return AWPathGenerationResult.Failure(
                         AWPathFailureReason.InvalidStart);
@@ -76,18 +85,28 @@ namespace AncientWarfare3.core.pathfinding
                 SearchResult result = Search(pRequest, start, target,
                     Math.Max(1, primaryLimit), float.PositiveInfinity,
                     pCancellation, workspace);
+#if !AW3_RULES_TESTS
+                AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(result.ExpandedNodes);
+#endif
                 if (!result.Success && result.HitNodeLimit && longRange)
                 {
+#if !AW3_RULES_TESTS
+                    AWPathfindingBootstrap.PathDiagnostics.OnFallback();
+#endif
                     float detour = Math.Max(_config.FallbackCorridorMinDetour,
                         direct * _config.FallbackCorridorDetourScale);
                     result = Search(pRequest, start, target,
                         Math.Max(_config.MaxNodesLongFallback, _config.MaxNodesLong),
                         direct + detour, pCancellation, workspace);
+#if !AW3_RULES_TESTS
+                    AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(result.ExpandedNodes);
+#endif
                 }
 
                 if (!result.Success)
                 {
-                    if (CanUseVanillaTransport(start, target,
+                    if (pRequest.PhysicalTransportAvailable &&
+                        CanUseVanillaTransport(start, target,
                             pRequest.Profile) &&
                         !AWNarrowWaterRecoveryRules
                             .ShouldTryBoundedCrossingBeforeTransport(
@@ -108,12 +127,17 @@ namespace AncientWarfare3.core.pathfinding
                 int stepCount = workspace.BuildPath(result.NodeIndex);
                 int maximumSteps = Math.Max(1, pMaximumSteps);
                 int outputCount = Math.Min(stepCount, maximumSteps);
+                var fullRoute = new AWPathStep[stepCount];
+                for (int i = 0; i < stepCount; i++)
+                    fullRoute[i] = workspace.PathStep(i);
                 var steps = new AWPathStep[outputCount];
                 for (int i = 0; i < outputCount; i++)
                 {
                     pCancellation.ThrowIfCancellationRequested();
-                    steps[i] = workspace.PathStep(i);
+                    steps[i] = fullRoute[i];
                 }
+                if (outputCount < stepCount)
+                    pRequest.CacheRoute(fullRoute, outputCount);
                 int endTileId = outputCount > 0
                     ? steps[outputCount - 1].TileId
                     : pRequest.StartTileId;
@@ -164,7 +188,7 @@ namespace AncientWarfare3.core.pathfinding
                 expanded++;
                 if (current.TileId == pTarget.Id)
                     return SearchResult.SuccessResult(entry.NodeIndex,
-                        pReachedTarget: true);
+                        pReachedTarget: true, expanded);
                 if (pRequest.Options.LimitPathfindingRegions > 0 &&
                     current.RegionTransitions >=
                     pRequest.Options.LimitPathfindingRegions)
@@ -232,9 +256,9 @@ namespace AncientWarfare3.core.pathfinding
             }
             if (segmentIndex >= 0)
                 return SearchResult.SuccessResult(segmentIndex,
-                    pReachedTarget: false);
+                    pReachedTarget: false, expanded);
             return SearchResult.Failure(pWorkspace.Open.Count > 0 &&
-                                        expanded >= pMaxNodes);
+                                        expanded >= pMaxNodes, expanded);
         }
 
         private static bool PreferSegmentCandidate(SearchNode pCandidate,
@@ -591,25 +615,30 @@ namespace AncientWarfare3.core.pathfinding
         private readonly struct SearchResult
         {
             private SearchResult(bool pSuccess, bool pHitNodeLimit,
-                int pNodeIndex, bool pReachedTarget)
+                int pNodeIndex, bool pReachedTarget, int pExpandedNodes)
             {
                 Success = pSuccess;
                 HitNodeLimit = pHitNodeLimit;
                 NodeIndex = pNodeIndex;
                 ReachedTarget = pReachedTarget;
+                ExpandedNodes = Math.Max(0, pExpandedNodes);
             }
 
             public bool Success { get; }
             public bool HitNodeLimit { get; }
             public int NodeIndex { get; }
             public bool ReachedTarget { get; }
+            public int ExpandedNodes { get; }
 
             public static SearchResult SuccessResult(int pNodeIndex,
-                bool pReachedTarget) =>
-                new SearchResult(true, false, pNodeIndex, pReachedTarget);
+                bool pReachedTarget, int pExpandedNodes) =>
+                new SearchResult(true, false, pNodeIndex, pReachedTarget,
+                    pExpandedNodes);
 
-            public static SearchResult Failure(bool pHitNodeLimit) =>
-                new SearchResult(false, pHitNodeLimit, -1, false);
+            public static SearchResult Failure(bool pHitNodeLimit,
+                int pExpandedNodes) =>
+                new SearchResult(false, pHitNodeLimit, -1, false,
+                    pExpandedNodes);
         }
     }
 }

@@ -12,11 +12,13 @@ internal static class PathfindingPerformanceTests
         LatestActorSlotKeepsOneQueuedNode();
         FinderUsesSessionTokenQueues();
         FinderUsesLosslessWorkerWakeups();
+        LongRangeStreamingCachesSolvedRouteAcrossSegments();
         FinderQueueFairnessBoundsOperationalStarvation();
         RtsRoutesUseTheSharedFinderOnly();
         PathDiagnosticsExposeSessionSchedulerState();
         PathDiagnosticsExposeQueueWaitMetrics();
         PhysicalTransportUsesPassengerStateMachine();
+        TransportGenerationRequiresCapturedPhysicalDockRoute();
         AsyncAuthorityCommitUsesBoundedBurst();
         AsyncPureCommitDoesNotReturnToMainThread();
         AsyncShadowComparisonsDoNotReturnToMainThread();
@@ -303,6 +305,19 @@ internal static class PathfindingPerformanceTests
             "each scheduled path segment preserves a worker wakeup under burst load");
     }
 
+    private static void LongRangeStreamingCachesSolvedRouteAcrossSegments()
+    {
+        string request = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathRequest.cs"));
+        string generator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWStreamingPathGenerator.cs"));
+        Assert(request.Contains("TryTakeCachedSegment") &&
+               generator.Contains("TryTakeCachedSegment"),
+            "continuation segments consume the prior solved route instead of re-running A*");
+    }
+
     private static void RtsRoutesUseTheSharedFinderOnly()
     {
         string provider = File.ReadAllText(Path.Combine(
@@ -353,6 +368,19 @@ internal static class PathfindingPerformanceTests
                File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "Code",
                    "core", "pathfinding", "AWDockTransportService.cs")),
             "cross-water transport resolves two physical dock endpoints before TaxiManager");
+    }
+
+    private static void TransportGenerationRequiresCapturedPhysicalDockRoute()
+    {
+        string request = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathRequest.cs"));
+        string generator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWStreamingPathGenerator.cs"));
+        Assert(request.Contains("PhysicalTransportAvailable") &&
+               generator.Contains("pRequest.PhysicalTransportAvailable"),
+            "workers only emit a transport step from a main-thread physical dock snapshot");
     }
 
     private static void AsyncAuthorityCommitUsesBoundedBurst()

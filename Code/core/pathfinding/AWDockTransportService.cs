@@ -50,20 +50,54 @@ namespace AncientWarfare3.core.pathfinding
             for (int first = 0; first < endpoints.Length; first++)
             {
                 AWDockEndpoint entry = endpoints[first];
-                WorldTile entryTile = ResolveTile(entry.TileId);
-                if (!entry.IsValid || entryTile == null ||
+                if (!TryGetLiveEndpoint(entry, out WorldTile entryTile) ||
                     !pStart.isSameIsland(entryTile)) continue;
                 for (int second = 0; second < endpoints.Length; second++)
                 {
                     AWDockEndpoint exit = endpoints[second];
                     if (!exit.IsValid || entry.Id == exit.Id ||
                         entry.WaterComponent != exit.WaterComponent) continue;
-                    WorldTile exitTile = ResolveTile(exit.TileId);
-                    if (exitTile == null || !pTarget.isSameIsland(exitTile)) continue;
+                    if (!TryGetLiveEndpoint(exit, out WorldTile exitTile) ||
+                        !pTarget.isSameIsland(exitTile)) continue;
                     pCandidate = new AWDockRouteCandidate(entry, exit);
                     return pCandidate.IsValid;
                 }
             }
+            return false;
+        }
+
+        internal static bool IsEndpointLive(long pDockId)
+        {
+            AWDockEndpoint[] endpoints = Registry.Snapshot();
+            for (int i = 0; i < endpoints.Length; i++)
+                if (endpoints[i].Id == pDockId)
+                    return TryGetLiveEndpoint(endpoints[i], out _);
+            return false;
+        }
+
+        private static bool TryGetLiveEndpoint(AWDockEndpoint pEndpoint,
+            out WorldTile pTile)
+        {
+            pTile = ResolveTile(pEndpoint.TileId);
+            Building building = pTile?.building;
+            Docks docks = building?.component_docks;
+            if (!pEndpoint.IsValid || docks == null || building?.data?.id != pEndpoint.Id)
+            {
+                Registry.Remove(pEndpoint.Id);
+                return false;
+            }
+            try
+            {
+                for (int i = 0; i < docks.tiles_ocean.Count; i++)
+                {
+                    WorldTile ocean = docks.tiles_ocean[i];
+                    if (ocean != null && ocean.isGoodForBoat() &&
+                        ocean.region?.island?.id == pEndpoint.WaterComponent)
+                        return true;
+                }
+            }
+            catch { }
+            Registry.Remove(pEndpoint.Id);
             return false;
         }
 

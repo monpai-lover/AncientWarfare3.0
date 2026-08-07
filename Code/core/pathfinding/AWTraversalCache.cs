@@ -150,6 +150,10 @@ namespace AncientWarfare3.core.pathfinding
                     tileCaptureComplete,
                     pendingDirtyChunkCount: _dirtyChunks.Count)) return;
 
+            // The first published snapshot must carry the same connected-water
+            // labels as later overlay generations; dock route snapshots depend on it.
+            _initialChunks = AWOceanConnectivityRules.Apply(_width, _height,
+                AWTraversalGeneration.DefaultChunkSize, _initialChunks);
             _current = new AWTraversalGeneration(++_generationId,
                 _width, _height, AWTraversalGeneration.DefaultChunkSize,
                 _initialChunks);

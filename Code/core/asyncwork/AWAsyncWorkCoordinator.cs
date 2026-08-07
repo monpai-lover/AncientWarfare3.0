@@ -736,7 +736,16 @@ namespace AncientWarfare3.core.asyncwork
                 }
                 lock (_gate)
                 {
+                    if (item.Stamp.WorldGeneration != _worldGeneration)
+                    {
+                        _activeWorkerCount--;
+                        if (_activeWorkerCount == 0)
+                            DisposeRetiredCancellationsLocked();
+                        Monitor.PulseAll(_gate);
+                        continue;
+                    }
                     while (!_shutdownRequested &&
+                           item.Stamp.WorldGeneration == _worldGeneration &&
                            !_completions.TryEnqueue(completion))
                         Monitor.Wait(_gate, 50);
                     _activeWorkerCount--;
@@ -1049,6 +1058,9 @@ namespace AncientWarfare3.core.asyncwork
             CancelQueueLocked(_traversal);
             CancelQueueLocked(_ui);
             CancelQueueLocked(_ai);
+            while (_completions.TryDequeue(out Completion completion))
+                _commits.Remove(completion.Id);
+            _commits.Clear();
             Monitor.PulseAll(_gate);
             return cancellation;
         }
