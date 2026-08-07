@@ -10,7 +10,6 @@ namespace AncientWarfare3.core.court
         CourtOfficeDefinition FindOffice(string officeId);
         IReadOnlyList<string> OfficeIdsForInstitution(string institutionId);
         string ResolveInstitution(bool officeSystemUnlocked,
-            bool electiveAdopted, bool feudalAdopted,
-            bool royalDirectAdopted);
+            bool advancedOfficeSystemUnlocked);
     }
 }

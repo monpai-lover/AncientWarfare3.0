@@ -9,6 +9,10 @@ namespace AncientWarfare3.core.court
         public const string Tang = "tang";
         public const string Song = "song";
         public const string WesternPrimitive = "western_primitive";
+        public const string WesternBureaucratic = "western_bureaucratic";
+        public const string WesternFeudalBureaucratic =
+            "western_feudal_bureaucratic";
+        // Legacy values kept readable for save migration.
         public const string WesternBase = "western_base";
         public const string WesternElective = "western_elective";
         public const string WesternFeudal = "western_feudal";
@@ -39,6 +43,8 @@ namespace AncientWarfare3.core.court
                    pInstitution == CourtInstitutionId.Tang ||
                    pInstitution == CourtInstitutionId.Song ||
                    pInstitution == CourtInstitutionId.WesternPrimitive ||
+                   pInstitution == CourtInstitutionId.WesternBureaucratic ||
+                   pInstitution == CourtInstitutionId.WesternFeudalBureaucratic ||
                    pInstitution == CourtInstitutionId.WesternBase ||
                    pInstitution == CourtInstitutionId.WesternElective ||
                    pInstitution == CourtInstitutionId.WesternFeudal ||
@@ -53,8 +59,10 @@ namespace AncientWarfare3.core.court
                 case CourtInstitutionId.Tang: return 2;
                 case CourtInstitutionId.Song: return 3;
                 case CourtInstitutionId.WesternBase: return 1;
+                case CourtInstitutionId.WesternBureaucratic: return 1;
                 case CourtInstitutionId.WesternElective:
                 case CourtInstitutionId.WesternFeudal: return 2;
+                case CourtInstitutionId.WesternFeudalBureaucratic: return 2;
                 case CourtInstitutionId.WesternRoyalDirect: return 3;
                 default: return 0;
             }
@@ -97,6 +105,8 @@ namespace AncientWarfare3.core.court
                 case CourtInstitutionId.Song:
                     return CourtTier.SanShengLiuBu;
                 case CourtInstitutionId.WesternPrimitive:
+                case CourtInstitutionId.WesternBureaucratic:
+                case CourtInstitutionId.WesternFeudalBureaucratic:
                 case CourtInstitutionId.WesternBase:
                 case CourtInstitutionId.WesternElective:
                 case CourtInstitutionId.WesternFeudal:
@@ -116,6 +126,8 @@ namespace AncientWarfare3.core.court
                 case CourtTier.SanShengLiuBu:
                     return CourtInstitutionId.Tang;
                 case CourtInstitutionId.WesternPrimitive:
+                case CourtInstitutionId.WesternBureaucratic:
+                case CourtInstitutionId.WesternFeudalBureaucratic:
                 case CourtInstitutionId.WesternBase:
                 case CourtInstitutionId.WesternElective:
                 case CourtInstitutionId.WesternFeudal:
@@ -139,6 +151,37 @@ namespace AncientWarfare3.core.court
             return HasInstitutionOfficeName(institution, office)
                 ? "aw_court_office_" + institution + "_" + office
                 : "aw_court_office_" + office;
+        }
+
+        public static bool IsCanonicalWestern(string pInstitution)
+        {
+            return pInstitution == CourtInstitutionId.WesternPrimitive ||
+                   pInstitution == CourtInstitutionId.WesternBureaucratic ||
+                   pInstitution ==
+                   CourtInstitutionId.WesternFeudalBureaucratic;
+        }
+
+        public static string MigrateWesternLegacy(string pInstitution,
+            bool feudalRetainersUnlocked)
+        {
+            switch (pInstitution ?? "")
+            {
+                case CourtInstitutionId.WesternPrimitive:
+                case CourtInstitutionId.WesternBureaucratic:
+                case CourtInstitutionId.WesternFeudalBureaucratic:
+                    return pInstitution;
+                case CourtInstitutionId.WesternFeudal:
+                    return CourtInstitutionId.WesternFeudalBureaucratic;
+                case CourtInstitutionId.WesternRoyalDirect:
+                    return feudalRetainersUnlocked
+                        ? CourtInstitutionId.WesternFeudalBureaucratic
+                        : CourtInstitutionId.WesternBureaucratic;
+                case CourtInstitutionId.WesternBase:
+                case CourtInstitutionId.WesternElective:
+                    return CourtInstitutionId.WesternBureaucratic;
+                default:
+                    return CourtInstitutionId.WesternPrimitive;
+            }
         }
 
         private static int EraScore(int pYear, int pPreferredYear,
