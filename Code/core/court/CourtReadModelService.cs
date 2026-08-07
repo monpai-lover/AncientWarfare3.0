@@ -68,8 +68,11 @@ namespace AncientWarfare3.core.court
         private static void AddOfficersAndVacancies(List<CourtPyramidNodeModel> pSeeds,
             Kingdom pKingdom, List<CourtOfficerView> pOfficers, string pTier)
         {
-            string[] expected =
-                CourtService.CentralOfficeIdsForCurrentProfile(pKingdom);
+            string[] expected = CourtService.CentralOfficeIdsForCurrentProfile(
+                    pKingdom)
+                .Concat(CourtProfileRegistry.OfficeIdsForLayer(pKingdom,
+                    CourtOfficeLayer.Military))
+                .ToArray();
             var expectedOrder = new Dictionary<string, int>();
             for (int i = 0; i < expected.Length; i++) expectedOrder[expected[i]] = i;
 
@@ -117,8 +120,13 @@ namespace AncientWarfare3.core.court
             {
                 string office = expected[i];
                 if (filled.Contains(office)) continue;
+                CourtOfficeDefinition definition =
+                    CourtProfileRegistry.FindOffice(pKingdom, office);
+                int rank = definition?.Layer == CourtOfficeLayer.Military
+                    ? CourtPyramidRules.GeneralRank
+                    : CourtPyramidRules.RankForOffice(office);
                 pSeeds.Add(new CourtPyramidNodeModel(-1L, office, office,
-                    CourtPyramidRules.RankForOffice(office), i, true)
+                    rank, i, true)
                 {
                     SchoolId = CourtSchoolId.None,
                     SchoolIconPath = ""
@@ -187,9 +195,13 @@ namespace AncientWarfare3.core.court
             {
                 Actor leader = city.leader;
                 if (!IsValid(leader, pKingdom)) continue;
+                string office = CourtService.ResolveCityOffice(pKingdom,
+                    city);
+                if (string.IsNullOrEmpty(office))
+                    office = CourtOfficeId.Governor;
                 string school = ActorSchool(leader, "");
-                pSeeds.Add(new CourtPyramidNodeModel(leader.data.id, CourtOfficeId.Governor,
-                    CourtPyramidRoleId.Governor, CourtPyramidRules.GovernorRank, order++, false)
+                pSeeds.Add(new CourtPyramidNodeModel(leader.data.id, office,
+                    office, CourtPyramidRules.GovernorRank, order++, false)
                 {
                     ActorName = SafeActorName(leader),
                     SchoolId = school,

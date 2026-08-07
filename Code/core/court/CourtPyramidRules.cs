@@ -266,6 +266,30 @@ namespace AncientWarfare3.core.court
                    (pNode.Rank >= GovernorRank || pNode.RoleId == CourtPyramidRoleId.Governor);
         }
 
+        public static bool IsMilitaryNode(CourtPyramidNodeModel pNode)
+        {
+            return pNode != null && !IsLocalNode(pNode) &&
+                   pNode.Rank >= GeneralRank;
+        }
+
+        public static float MilitarySectionDividerY(
+            IEnumerable<CourtPyramidNodeModel> pNodes, float nodeHeight)
+        {
+            List<CourtPyramidNodeModel> nodes = (pNodes ??
+                Array.Empty<CourtPyramidNodeModel>()).Where(p => p != null)
+                .ToList();
+            CourtPyramidNodeModel[] central = nodes.Where(p =>
+                !IsLocalNode(p) && !IsMilitaryNode(p)).ToArray();
+            CourtPyramidNodeModel[] military = nodes.Where(IsMilitaryNode)
+                .ToArray();
+            if (central.Length == 0 || military.Length == 0)
+                return float.NaN;
+            float centralBottom = central.Min(p => p.Y -
+                Math.Max(1f, nodeHeight));
+            float militaryTop = military.Max(p => p.Y);
+            return (centralBottom + militaryTop) * 0.5f;
+        }
+
         public static float LocalSectionDividerY(
             IEnumerable<CourtPyramidNodeModel> pNodes, float nodeHeight)
         {
