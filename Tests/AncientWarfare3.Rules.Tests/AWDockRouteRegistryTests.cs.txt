@@ -10,15 +10,10 @@ internal static class AWDockRouteRegistryTests
             "invalid dock identifiers are rejected");
         Assert(registry.Register(new AWDockEndpoint(1, 10, 4)),
             "physical docks can be registered");
-        Assert(registry.Count == 1, "registry contains only valid docks");
-        Assert(!registry.TryFindCandidate(10, 20, 4, out _),
-            "a single endpoint never becomes a zero-distance teleport edge");
-        Assert(registry.Register(new AWDockEndpoint(2, 20, 4)) &&
-               registry.TryFindCandidate(10, 20, 4,
-                   out AWDockRouteCandidate candidate) && candidate.IsValid,
-            "two physical endpoints in one water body form a boat candidate");
-        Assert(registry.Remove(2) && registry.Count == 1,
-            "destroyed docks are removed from topology");
+        Assert(registry.Snapshot().Length == 1,
+            "registered physical dock appears in the immutable lookup snapshot");
+        Assert(registry.Remove(1) && registry.Snapshot().Length == 0,
+            "destroyed docks are removed from the physical topology");
     }
 
     private static void Assert(bool pCondition, string pMessage)

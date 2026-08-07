@@ -43,8 +43,8 @@
     <Compile Include="PathfindingMigrationRulesTests.cs.txt" />
     <Compile Include="AWPathSessionTests.cs.txt" />
     <Compile Include="AWDockTransportRulesTests.cs.txt" />
-    <Compile Include="AWOceanConnectivityRulesTests.cs.txt" />
     <Compile Include="AWDockRouteRegistryTests.cs.txt" />
+    <Compile Include="AWOceanConnectivityRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathMigrationRules.cs" Link="Production\AWPathMigrationRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathSession.cs" Link="Production\AWPathSession.cs" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
@@ -353,6 +353,8 @@
     <Compile Include="..\..\Code\core\lineage\AsyncDiplomacyPlanModels.cs" Link="Production\AsyncDiplomacyPlanModels.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalRelationConversionPersistence.cs" Link="Production\VassalRelationConversionPersistence.cs" />
     <Compile Include="..\..\Code\core\asyncwork\AWAsyncWorkRules.cs" Link="Production\AWAsyncWorkRules.cs" />
+    <Compile Include="..\..\Code\core\asyncwork\AWAsyncDiagnostics.cs" Link="Production\AWAsyncDiagnostics.cs" />
+    <Compile Include="..\..\Code\core\asyncwork\AWAsyncWorkCoordinator.cs" Link="Production\AWAsyncWorkCoordinator.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateConquestRules.cs" Link="Production\MandateConquestRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateWarAiRules.cs" Link="Production\MandateWarAiRules.cs" />
     <Compile Include="..\..\Code\core\court\WarCourtMultiplierRules.cs" Link="Production\WarCourtMultiplierRules.cs" />
@@ -613,9 +615,9 @@
     <Compile Include="..\..\Code\core\pathfinding\AWPathTypes.cs" Link="Production\AWPathTypes.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathLifecycleRules.cs" Link="Production\AWPathLifecycleRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWDockTransportRules.cs" Link="Production\AWDockTransportRules.cs" />
-    <Compile Include="..\..\Code\core\pathfinding\AWOceanConnectivityRules.cs" Link="Production\AWOceanConnectivityRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWDockRouteModels.cs" Link="Production\AWDockRouteModels.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWDockRouteRegistry.cs" Link="Production\AWDockRouteRegistry.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWOceanConnectivityRules.cs" Link="Production\AWOceanConnectivityRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWTraversalBuildModels.cs" Link="Production\AWTraversalBuildModels.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWTraversalBuildRules.cs" Link="Production\AWTraversalBuildRules.cs" />
     <Compile Include="..\..\Code\core\performance\RuntimePerformanceBudgetRules.cs" Link="Production\RuntimePerformanceBudgetRules.cs" />

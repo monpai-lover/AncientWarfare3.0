@@ -5,6 +5,9 @@ namespace AncientWarfare3.core.pathfinding
         Session,
         ActorHooks,
         DockTransport,
+        Dock,
+        Boat,
+        Passenger,
         Teleport,
         Train,
         Cultivation
@@ -16,7 +19,10 @@ namespace AncientWarfare3.core.pathfinding
         {
             return pFeature == CultiwayPathFeature.Session ||
                    pFeature == CultiwayPathFeature.ActorHooks ||
-                   pFeature == CultiwayPathFeature.DockTransport;
+                   pFeature == CultiwayPathFeature.DockTransport ||
+                   pFeature == CultiwayPathFeature.Dock ||
+                   pFeature == CultiwayPathFeature.Boat ||
+                   pFeature == CultiwayPathFeature.Passenger;
         }
     }
 }

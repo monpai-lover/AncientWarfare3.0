@@ -760,10 +760,13 @@ namespace AncientWarfare3.core.pathfinding
                 !AWDockTransportRules.CanCreatePhysicalRoute(
                     pActor.current_tile.data.tile_id, pTarget.data.tile_id,
                     pActor.current_tile.isSameIsland(pTarget),
-                    pActor.is_inside_boat)) return false;
+                    pActor.is_inside_boat) ||
+                !AWDockTransportService.TryResolveRoute(pActor.current_tile,
+                    pTarget, out _)) return false;
             if (!RetryContexts.TryGetValue(pActor.data.id, out RetryContext retry)) return false;
             TaxiManager.newRequest(pActor, pTarget);
             if (TaxiManager.getRequestForActor(pActor) == null) return false;
+            AWPathfindingBootstrap.PathDiagnostics.OnDockRequest();
 
             double now = Time.realtimeSinceStartupAsDouble;
             long actorId = pActor.data.id;
@@ -889,6 +892,7 @@ namespace AncientWarfare3.core.pathfinding
                 pActor.data.id, pReason, now);
             if (retry.ShouldRetry)
             {
+                AWPathfindingBootstrap.PathDiagnostics.OnBoatRetry();
                 if (RetryContexts.TryGetValue(pActor.data.id, out RetryContext context))
                     RetryContexts[pActor.data.id] = new RetryContext(
                         context.TargetTileId, context.Options,

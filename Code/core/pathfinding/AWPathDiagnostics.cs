@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Threading;
 
 namespace AncientWarfare3.core.pathfinding
@@ -43,6 +44,16 @@ namespace AncientWarfare3.core.pathfinding
         private long _replacedPending;
         private long _replacedRunning;
         private long _rejected;
+        private long _queueWaitTicks;
+        private long _queueWaitSamples;
+        private long _queueWaitMaxTicks;
+        private long _firstStepTicks;
+        private long _firstStepSamples;
+        private long _firstStepMaxTicks;
+        private long _dockRequests;
+        private long _boatRetries;
+        private long _rtsSharedRouteReuses;
+        private long _memberCorrections;
         private int _operationalQueueHighWater;
         private int _essentialQueueHighWater;
         private int _ambientQueueHighWater;
@@ -75,6 +86,16 @@ namespace AncientWarfare3.core.pathfinding
         public long ReplacedPending => Interlocked.Read(ref _replacedPending);
         public long ReplacedRunning => Interlocked.Read(ref _replacedRunning);
         public long Rejected => Interlocked.Read(ref _rejected);
+        public long QueueWaitTicks => Interlocked.Read(ref _queueWaitTicks);
+        public long QueueWaitSamples => Interlocked.Read(ref _queueWaitSamples);
+        public long QueueWaitMaxTicks => Interlocked.Read(ref _queueWaitMaxTicks);
+        public long FirstStepTicks => Interlocked.Read(ref _firstStepTicks);
+        public long FirstStepSamples => Interlocked.Read(ref _firstStepSamples);
+        public long FirstStepMaxTicks => Interlocked.Read(ref _firstStepMaxTicks);
+        public long DockRequests => Interlocked.Read(ref _dockRequests);
+        public long BoatRetries => Interlocked.Read(ref _boatRetries);
+        public long RtsSharedRouteReuses => Interlocked.Read(ref _rtsSharedRouteReuses);
+        public long MemberCorrections => Interlocked.Read(ref _memberCorrections);
         public int OperationalQueueHighWater =>
             Volatile.Read(ref _operationalQueueHighWater);
         public int EssentialQueueHighWater =>
@@ -140,6 +161,23 @@ namespace AncientWarfare3.core.pathfinding
         public void OnStaleStep() => Interlocked.Increment(ref _staleSteps);
         public void OnFastStep() => Interlocked.Increment(ref _fastSteps);
         public void OnVanillaStep() => Interlocked.Increment(ref _vanillaSteps);
+        public void OnDockRequest() => Interlocked.Increment(ref _dockRequests);
+        public void OnBoatRetry() => Interlocked.Increment(ref _boatRetries);
+        public void OnRtsSharedRouteReuse() => Interlocked.Increment(ref _rtsSharedRouteReuses);
+        public void OnMemberCorrection() => Interlocked.Increment(ref _memberCorrections);
+        public void OnDequeued(AWPathWorkPriority pPriority, long pEnqueuedAt)
+        {
+            long elapsed = Math.Max(0L, Stopwatch.GetTimestamp() - pEnqueuedAt);
+            Interlocked.Add(ref _queueWaitTicks, elapsed);
+            Interlocked.Increment(ref _queueWaitSamples);
+            UpdateMaximum(ref _queueWaitMaxTicks, elapsed);
+            if (pPriority == AWPathWorkPriority.Initial)
+            {
+                Interlocked.Add(ref _firstStepTicks, elapsed);
+                Interlocked.Increment(ref _firstStepSamples);
+                UpdateMaximum(ref _firstStepMaxTicks, elapsed);
+            }
+        }
         public void AddTraversalChunksCaptured(int pCount) =>
             Interlocked.Add(ref _traversalChunksCaptured, Math.Max(0, pCount));
         public void OnTraversalBuildPublished() =>
@@ -178,7 +216,38 @@ namespace AncientWarfare3.core.pathfinding
                 TraversalChunksCaptured + ", traversal_published=" +
                 TraversalBuildsPublished + ", traversal_stale=" +
                 TraversalBuildsStale + ", traversal_sync_fallback=" +
-                TraversalSyncFallbacks + detail);
+                TraversalSyncFallbacks + ", queue_wait_avg_ms=" +
+                AverageMilliseconds(QueueWaitTicks, QueueWaitSamples) +
+                ", queue_wait_max_ms=" + Milliseconds(QueueWaitMaxTicks) +
+                ", first_step_avg_ms=" +
+                AverageMilliseconds(FirstStepTicks, FirstStepSamples) +
+                ", first_step_max_ms=" + Milliseconds(FirstStepMaxTicks) +
+                ", dock_requests=" + DockRequests +
+                ", boat_retries=" + BoatRetries +
+                ", rts_shared_route_reuse=" + RtsSharedRouteReuses +
+                ", member_corrections=" + MemberCorrections + detail);
+        }
+
+        private static double Milliseconds(long pTicks)
+        {
+            return pTicks <= 0 ? 0d : pTicks * 1000d / Stopwatch.Frequency;
+        }
+
+        private static double AverageMilliseconds(long pTicks, long pSamples)
+        {
+            return pSamples <= 0 ? 0d : Milliseconds(pTicks / pSamples);
+        }
+
+        private static void UpdateMaximum(ref long pTarget, long pValue)
+        {
+            long current = Interlocked.Read(ref pTarget);
+            while (pValue > current)
+            {
+                long observed = Interlocked.CompareExchange(ref pTarget,
+                    pValue, current);
+                if (observed == current) return;
+                current = observed;
+            }
         }
 
         private static void ObserveHighWater(ref int pTarget, int pValue)

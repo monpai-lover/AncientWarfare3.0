@@ -515,6 +515,7 @@ namespace AncientWarfare3.core.policy
                 " async_state=" + AWAsyncRuntime.State +
                 " async_worker_alive=" +
                 (AWAsyncRuntime.WorkerAlive ? 1 : 0) +
+                " async_workers=" + asyncSnapshot.WorkerCount +
                 " async_world=" + asyncSnapshot.WorldGeneration +
                 " async_queued=" + asyncSnapshot.Queued +
                 " async_active=" + asyncSnapshot.Active +
@@ -525,6 +526,8 @@ namespace AncientWarfare3.core.policy
                 " async_stale=" + asyncSnapshot.Stale +
                 " async_faulted=" + asyncSnapshot.Faulted +
                 " async_committed=" + asyncSnapshot.Committed +
+                " async_background_committed=" +
+                asyncSnapshot.BackgroundCommitted +
                 " async_rejected=" + asyncSnapshot.Rejected +
                 " async_db_pending=" + HistoricalWriteService.PendingCount +
                 " async_db_terminal=" +

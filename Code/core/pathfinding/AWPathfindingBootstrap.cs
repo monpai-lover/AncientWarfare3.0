@@ -15,6 +15,7 @@ namespace AncientWarfare3.core.pathfinding
         private static bool _running;
         private static bool _traversalRunning;
         private static long _maintenanceFrame;
+        private static int _lastMaintenanceRenderFrame = -1;
 
         internal static AWPathFinder Finder => _finder;
         internal static bool ReadyToIntercept =>
@@ -58,7 +59,6 @@ namespace AncientWarfare3.core.pathfinding
                     "path_traversal_ensure_started", diagnostic);
             }
             if (!_traversalRunning) return;
-            TraversalCache.ProcessPendingBuild();
             if (state == AWPathOwnerState.Suspending ||
                 state == AWPathOwnerState.Cultiway)
             {
@@ -80,6 +80,11 @@ namespace AncientWarfare3.core.pathfinding
                         "path_ensure_started", diagnostic);
                 }
             }
+            int renderFrame = UnityEngine.Time.frameCount;
+            if (_lastMaintenanceRenderFrame == renderFrame) return;
+            _lastMaintenanceRenderFrame = renderFrame;
+            if (state == AWPathOwnerState.Aw3)
+                TraversalCache.ProcessPendingBuild();
             if (_maintenanceFrame < long.MaxValue) _maintenanceFrame++;
             int dirtyChunkCount = TraversalCache.DirtyChunkCount;
             if (AWTraversalCacheBudgetRules.ShouldProcessDirty(
@@ -138,7 +143,9 @@ namespace AncientWarfare3.core.pathfinding
             TraversalCache.Clear();
             _traversalRunning = false;
             _maintenanceFrame = 0;
+            _lastMaintenanceRenderFrame = -1;
             Recovery.Clear();
+            AWDockTransportService.Clear();
             PathfindingOwnershipService.ResetWorld();
         }
 

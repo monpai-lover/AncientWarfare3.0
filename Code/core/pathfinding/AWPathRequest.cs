@@ -100,7 +100,7 @@ namespace AncientWarfare3.core.pathfinding
             bool pInsideBoat = false)
         {
             ActorId = pActorId;
-            StartTileId = pStartTileId;
+            _startTileId = pStartTileId;
             TargetTileId = pTargetTileId;
             Options = pOptions;
             Key = new AWPathRequestKey(pTargetTileId, pOptions.PathOnWater,
@@ -120,7 +120,9 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         public long ActorId { get; }
-        public int StartTileId { get; }
+        private int _startTileId;
+
+        public int StartTileId => Volatile.Read(ref _startTileId);
         public int TargetTileId { get; }
         public AWPathRequestOptions Options { get; }
         public AWPathRequestKey Key { get; }
@@ -133,6 +135,11 @@ namespace AncientWarfare3.core.pathfinding
         public bool HighPriority => WorkClass == AWPathWorkClass.Operational;
         public CancellationTokenSource Cancellation { get; }
         public AWPathStream Stream { get; }
+
+        internal void AdvanceStartTile(int pTileId)
+        {
+            if (pTileId >= 0) Volatile.Write(ref _startTileId, pTileId);
+        }
 
         private static int StartRegion(int pTileId,
             AWTraversalGeneration pGeneration)

@@ -101,7 +101,10 @@ namespace AncientWarfare3.core.lineage
                         pYear, stamp, revisionSet, factFingerprint),
                 result => CompleteWar(result, expectedShadow, key, shadow,
                     pKingdom, pYear, admissionToken), pFault: fault,
-                pTryAdmit: tryAdmit);
+                pTryAdmit: tryAdmit,
+                pCommitMode: shadow
+                    ? AWAsyncCommitMode.Background
+                    : AWAsyncCommitMode.MainThread);
             try
             {
                 if (!AWAsyncRuntime.TrySchedule(request))
@@ -195,7 +198,10 @@ namespace AncientWarfare3.core.lineage
                         factFingerprint),
                 result => CompleteDiplomacy(result, expectedShadow, key,
                     commitCandidates, shadow, pKingdom, pYear,
-                    admissionToken), pFault: fault, pTryAdmit: tryAdmit);
+                    admissionToken), pFault: fault, pTryAdmit: tryAdmit,
+                pCommitMode: shadow
+                    ? AWAsyncCommitMode.Background
+                    : AWAsyncCommitMode.MainThread);
             try
             {
                 if (!AWAsyncRuntime.TrySchedule(request))

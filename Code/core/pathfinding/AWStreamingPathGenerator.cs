@@ -5,7 +5,7 @@ using System.Threading;
 
 namespace AncientWarfare3.core.pathfinding
 {
-    public sealed class AWStreamingPathGenerator : IAWPathGenerator
+    public sealed class AWStreamingPathGenerator : IAWPathSegmentGenerator
     {
         private const float Epsilon = 0.001f;
         [ThreadStatic] private static SearchWorkspace _threadWorkspace;
@@ -18,38 +18,57 @@ namespace AncientWarfare3.core.pathfinding
 
         public void Generate(AWPathRequest pRequest, CancellationToken pCancellation)
         {
+            AWPathGenerationResult result = GenerateSegment(pRequest,
+                pCancellation, int.MaxValue);
             if (pRequest == null) return;
+            if (!result.Succeeded)
+            {
+                if (result.FailureReason ==
+                    AWPathFailureReason.CancelledByNewRequest)
+                    pRequest.Stream.Cancel(result.FailureReason);
+                else
+                    pRequest.Stream.Fail(result.FailureReason, result.Error);
+                return;
+            }
+
+            for (int index = 0; index < result.Steps.Count; index++)
+                if (!pRequest.Stream.AddStep(result.Steps[index])) return;
+            // The legacy whole-path entry point treats a bounded region result
+            // as a complete request. The session scheduler uses
+            // GenerateSegment directly and keeps that stream open for the
+            // low-watermark continuation.
+            if (result.ReachedTarget || result.Steps.Count > 0)
+                pRequest.Stream.Complete();
+        }
+
+        public AWPathGenerationResult GenerateSegment(AWPathRequest pRequest,
+            CancellationToken pCancellation, int pMaximumSteps)
+        {
+            if (pRequest == null)
+                return AWPathGenerationResult.Failure(
+                    AWPathFailureReason.InvalidTarget);
             SearchWorkspace workspace = _threadWorkspace ??=
                 new SearchWorkspace(OpenEntryComparer.Instance);
             try
             {
                 pCancellation.ThrowIfCancellationRequested();
                 if (!pRequest.Generation.TryGet(pRequest.StartTileId, out AWTileTraversalSnapshot start))
-                {
-                    pRequest.Stream.Fail(AWPathFailureReason.InvalidStart, null);
-                    return;
-                }
+                    return AWPathGenerationResult.Failure(
+                        AWPathFailureReason.InvalidStart);
                 if (!pRequest.Generation.TryGet(pRequest.TargetTileId, out AWTileTraversalSnapshot target))
-                {
-                    pRequest.Stream.Fail(AWPathFailureReason.InvalidTarget, null);
-                    return;
-                }
+                    return AWPathGenerationResult.Failure(
+                        AWPathFailureReason.InvalidTarget);
                 if (pRequest.StartTileId == pRequest.TargetTileId)
-                {
-                    pRequest.Stream.Complete();
-                    return;
-                }
+                    return AWPathGenerationResult.Success(
+                        pRequest.TargetTileId, true,
+                        Array.Empty<AWPathStep>());
                 if (pRequest.Options.BoundedMilitaryWater &&
                     (target.Liquid || target.Ocean))
-                {
-                    pRequest.Stream.Fail(AWPathFailureReason.Unreachable, null);
-                    return;
-                }
+                    return AWPathGenerationResult.Failure(
+                        AWPathFailureReason.Unreachable);
                 if (!AWTraversalRules.CanEnter(target, pRequest.Profile, pRequest.Options))
-                {
-                    pRequest.Stream.Fail(AWPathFailureReason.Unreachable, null);
-                    return;
-                }
+                    return AWPathGenerationResult.Failure(
+                        AWPathFailureReason.Unreachable);
 
                 float direct = AWTraversalRules.Distance(start.X, start.Y, target.X, target.Y);
                 bool longRange = direct > _config.ShortRangeTiles;
@@ -77,32 +96,41 @@ namespace AncientWarfare3.core.pathfinding
                     {
                         var transportEstimate = new AWTraversalEstimate(0f, 0f, 0f, 0f,
                             AWHazardFlags.Transport);
-                        pRequest.Stream.AddStep(new AWPathStep(target.Id,
-                            AWMovementMethod.Transport, transportEstimate));
-                        pRequest.Stream.Complete();
-                        return;
+                        return AWPathGenerationResult.Success(target.Id, true,
+                            new[] { new AWPathStep(target.Id,
+                                AWMovementMethod.Transport, transportEstimate) });
                     }
-                    pRequest.Stream.Fail(result.HitNodeLimit
+                    return AWPathGenerationResult.Failure(result.HitNodeLimit
                         ? AWPathFailureReason.SearchLimitExceeded
-                        : AWPathFailureReason.Unreachable, null);
-                    return;
+                        : AWPathFailureReason.Unreachable);
                 }
 
                 int stepCount = workspace.BuildPath(result.NodeIndex);
-                for (int i = 0; i < stepCount; i++)
+                int maximumSteps = Math.Max(1, pMaximumSteps);
+                int outputCount = Math.Min(stepCount, maximumSteps);
+                var steps = new AWPathStep[outputCount];
+                for (int i = 0; i < outputCount; i++)
                 {
                     pCancellation.ThrowIfCancellationRequested();
-                    if (!pRequest.Stream.AddStep(workspace.PathStep(i))) return;
+                    steps[i] = workspace.PathStep(i);
                 }
-                pRequest.Stream.Complete();
+                int endTileId = outputCount > 0
+                    ? steps[outputCount - 1].TileId
+                    : pRequest.StartTileId;
+                bool reachedTarget = result.ReachedTarget &&
+                    outputCount == stepCount;
+                return AWPathGenerationResult.Success(endTileId,
+                    reachedTarget, steps);
             }
             catch (OperationCanceledException)
             {
-                pRequest.Stream.Cancel(AWPathFailureReason.CancelledByNewRequest);
+                return AWPathGenerationResult.Failure(
+                    AWPathFailureReason.CancelledByNewRequest);
             }
             catch (Exception error)
             {
-                pRequest.Stream.Fail(AWPathFailureReason.GeneratorException, error);
+                return AWPathGenerationResult.Failure(
+                    AWPathFailureReason.GeneratorException, error);
             }
         }
 
@@ -135,7 +163,8 @@ namespace AncientWarfare3.core.pathfinding
                 if (!pWorkspace.IsActive(current.TileId, entry.NodeIndex)) continue;
                 expanded++;
                 if (current.TileId == pTarget.Id)
-                    return SearchResult.SuccessResult(entry.NodeIndex);
+                    return SearchResult.SuccessResult(entry.NodeIndex,
+                        pReachedTarget: true);
                 if (pRequest.Options.LimitPathfindingRegions > 0 &&
                     current.RegionTransitions >=
                     pRequest.Options.LimitPathfindingRegions)
@@ -202,7 +231,8 @@ namespace AncientWarfare3.core.pathfinding
                 }
             }
             if (segmentIndex >= 0)
-                return SearchResult.SuccessResult(segmentIndex);
+                return SearchResult.SuccessResult(segmentIndex,
+                    pReachedTarget: false);
             return SearchResult.Failure(pWorkspace.Open.Count > 0 &&
                                         expanded >= pMaxNodes);
         }
@@ -561,22 +591,25 @@ namespace AncientWarfare3.core.pathfinding
         private readonly struct SearchResult
         {
             private SearchResult(bool pSuccess, bool pHitNodeLimit,
-                int pNodeIndex)
+                int pNodeIndex, bool pReachedTarget)
             {
                 Success = pSuccess;
                 HitNodeLimit = pHitNodeLimit;
                 NodeIndex = pNodeIndex;
+                ReachedTarget = pReachedTarget;
             }
 
             public bool Success { get; }
             public bool HitNodeLimit { get; }
             public int NodeIndex { get; }
+            public bool ReachedTarget { get; }
 
-            public static SearchResult SuccessResult(int pNodeIndex) =>
-                new SearchResult(true, false, pNodeIndex);
+            public static SearchResult SuccessResult(int pNodeIndex,
+                bool pReachedTarget) =>
+                new SearchResult(true, false, pNodeIndex, pReachedTarget);
 
             public static SearchResult Failure(bool pHitNodeLimit) =>
-                new SearchResult(false, pHitNodeLimit, -1);
+                new SearchResult(false, pHitNodeLimit, -1, false);
         }
     }
 }

@@ -50,6 +50,9 @@ namespace AncientWarfare3.patch
                     AWAsyncCompletionDrainRules.RemainingMilliseconds(
                         deadline), itemLimit);
 
+            if (AWAsyncCompletionDrainRules.HasTime(deadline))
+                AWAsyncShadowRuntime.DrainMainThread(2);
+
             int historicalReadPending = AWHistoricalReadService.PendingCount;
             int readLimit = AWAsyncCompletionDrainRules.ResolveItemLimit(
                 historicalReadPending);

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 
 namespace AncientWarfare3.core.pathfinding
 {
@@ -9,6 +10,23 @@ namespace AncientWarfare3.core.pathfinding
         Continuation
     }
 
+    internal static class AWPathQueueFairnessRules
+    {
+        internal const int MaximumConsecutiveStarved = 8;
+
+        internal static AWPathWorkPriority Select(bool hasStarved,
+            bool hasInitial, bool hasContinuation, int consecutiveStarved)
+        {
+            if (hasStarved &&
+                (!hasInitial && !hasContinuation ||
+                 consecutiveStarved < MaximumConsecutiveStarved))
+                return AWPathWorkPriority.Starved;
+            if (hasInitial) return AWPathWorkPriority.Initial;
+            if (hasContinuation) return AWPathWorkPriority.Continuation;
+            return AWPathWorkPriority.Starved;
+        }
+    }
+
     internal readonly struct AWScheduledPathWork
     {
         internal AWScheduledPathWork(long pOwnerId, int pQueueVersion,
@@ -17,11 +35,13 @@ namespace AncientWarfare3.core.pathfinding
             OwnerId = pOwnerId;
             QueueVersion = pQueueVersion;
             Priority = pPriority;
+            EnqueuedAt = Stopwatch.GetTimestamp();
         }
 
         internal long OwnerId { get; }
         internal int QueueVersion { get; }
         internal AWPathWorkPriority Priority { get; }
+        internal long EnqueuedAt { get; }
     }
 
     internal sealed class AWPathSession
@@ -32,6 +52,10 @@ namespace AncientWarfare3.core.pathfinding
         private bool _running;
         private bool _cancelled;
         private bool _replacementPending;
+        private bool _hasMoreSegments = true;
+        private bool _rescheduleRequested;
+        private AWPathWorkPriority _requestedPriority =
+            AWPathWorkPriority.Continuation;
 
         internal AWPathSession(long pOwnerId)
         {
@@ -46,7 +70,15 @@ namespace AncientWarfare3.core.pathfinding
             lock (_gate)
             {
                 pWork = default;
-                if (_cancelled || _running || _queued) return false;
+                if (_cancelled || !_hasMoreSegments) return false;
+                if (_running)
+                {
+                    _rescheduleRequested = true;
+                    if (pPriority < _requestedPriority)
+                        _requestedPriority = pPriority;
+                    return false;
+                }
+                if (_queued) return false;
                 _queued = true;
                 _queueVersion++;
                 pWork = new AWScheduledPathWork(OwnerId, _queueVersion,
@@ -63,6 +95,8 @@ namespace AncientWarfare3.core.pathfinding
                     _queueVersion != pQueueVersion) return false;
                 _queued = false;
                 _running = true;
+                _rescheduleRequested = false;
+                _requestedPriority = AWPathWorkPriority.Continuation;
                 return true;
             }
         }
@@ -83,25 +117,47 @@ namespace AncientWarfare3.core.pathfinding
                 // scheduled immediately; only a running request retains a
                 // deferred replacement.
                 _replacementPending = false;
+                _hasMoreSegments = true;
+                _rescheduleRequested = false;
+                _requestedPriority = AWPathWorkPriority.Continuation;
                 return true;
             }
         }
 
-        internal bool CompleteWork(out AWScheduledPathWork pReplacement)
+        internal bool CompleteWork(bool pHasMoreSegments,
+            bool pScheduleWhenEmpty, out AWScheduledPathWork pReplacement)
         {
             lock (_gate)
             {
                 pReplacement = default;
                 if (!_running) return false;
                 _running = false;
-                if (_cancelled || !_replacementPending) return false;
+                if (_cancelled) return false;
+                _hasMoreSegments = pHasMoreSegments;
+                bool replacementPending = _replacementPending;
+                bool scheduleRequested = _rescheduleRequested;
+                AWPathWorkPriority requestedPriority = _requestedPriority;
+                _rescheduleRequested = false;
+                _requestedPriority = AWPathWorkPriority.Continuation;
+                if (!replacementPending && !_hasMoreSegments) return false;
+                if (!replacementPending && !pScheduleWhenEmpty &&
+                    !scheduleRequested) return false;
                 _replacementPending = false;
                 _queued = true;
                 _queueVersion++;
                 pReplacement = new AWScheduledPathWork(OwnerId,
-                    _queueVersion, AWPathWorkPriority.Initial);
+                    _queueVersion, replacementPending
+                        ? AWPathWorkPriority.Initial
+                        : pScheduleWhenEmpty
+                            ? AWPathWorkPriority.Continuation
+                            : requestedPriority);
                 return true;
             }
+        }
+
+        internal bool CompleteWork(out AWScheduledPathWork pReplacement)
+        {
+            return CompleteWork(false, false, out pReplacement);
         }
 
         internal void Cancel()
@@ -111,6 +167,7 @@ namespace AncientWarfare3.core.pathfinding
                 _cancelled = true;
                 _queued = false;
                 _replacementPending = false;
+                _rescheduleRequested = false;
             }
         }
     }

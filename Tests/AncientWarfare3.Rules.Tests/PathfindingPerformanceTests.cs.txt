@@ -1,3 +1,5 @@
+using System.Threading;
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.pathfinding;
 
 internal static class PathfindingPerformanceTests
@@ -9,13 +11,23 @@ internal static class PathfindingPerformanceTests
         RequestKeysMatchWithoutAllocating();
         LatestActorSlotKeepsOneQueuedNode();
         FinderUsesSessionTokenQueues();
+        FinderUsesLosslessWorkerWakeups();
+        FinderQueueFairnessBoundsOperationalStarvation();
         RtsRoutesUseTheSharedFinderOnly();
         PathDiagnosticsExposeSessionSchedulerState();
+        PathDiagnosticsExposeQueueWaitMetrics();
         PhysicalTransportUsesPassengerStateMachine();
         AsyncAuthorityCommitUsesBoundedBurst();
+        AsyncPureCommitDoesNotReturnToMainThread();
+        AsyncShadowComparisonsDoNotReturnToMainThread();
+        AsyncBackgroundCommitRunsOffCallerThread();
+        AsyncWorkerPoolRunsIndependentRequestsConcurrently();
+        AsyncWorkerWakeSignalsStayBounded();
         PathDiagnosticsLogSchedulerState();
         OwnershipIndexUsesSingleHotLookup();
         IsUsingPathHotPathOnlyChecksOwnership();
+        OwnershipScanIncludesSmoothMovementHook();
+        ArmySafetyYieldsWhenCultiwayOwnsPathfinding();
         RecoveryUsesCultiwayReasonResetAndBackoff();
         FoodAccessSurvivesDecorativePathFailure();
         PathStreamUsesCultiwayLifecycle();
@@ -25,6 +37,7 @@ internal static class PathfindingPerformanceTests
         BoundedMilitaryWaterCrossingIsEnforced();
         RegionLimitedPathReturnsABoundedSegment();
         InitialTraversalPublicationCannotStarveOnLiveDirtyChunks();
+        SparseOverlayGenerationAvoidsFullChunkCopy();
         LargeSchedulerPathProgressRules();
     }
 
@@ -73,6 +86,23 @@ internal static class PathfindingPerformanceTests
             "performance logs expose RTS city-threat cache effectiveness");
         Assert(diagnostics.Contains("rts_async_rejected_stale="),
             "performance logs expose rejected async front snapshots");
+
+        string bootstrap = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathfindingBootstrap.cs"));
+        int frameGate = bootstrap.IndexOf(
+            "if (_lastMaintenanceRenderFrame == renderFrame) return;",
+            StringComparison.Ordinal);
+        int pendingBuild = bootstrap.IndexOf(
+            "TraversalCache.ProcessPendingBuild();",
+            StringComparison.Ordinal);
+        Assert(bootstrap.Contains("_lastMaintenanceRenderFrame",
+                StringComparison.Ordinal) &&
+               bootstrap.Contains("Time.frameCount",
+                   StringComparison.Ordinal),
+            "large-step path maintenance is gated once per render frame");
+        Assert(frameGate >= 0 && pendingBuild > frameGate,
+            "pending traversal builds are scheduled once per render frame");
     }
 
     private static void LargeSchedulerPathProgressRules()
@@ -170,6 +200,26 @@ internal static class PathfindingPerformanceTests
             "the per-actor isUsingPath hook does not poll the pathfinder before updatePathMovement");
     }
 
+    private static void OwnershipScanIncludesSmoothMovementHook()
+    {
+        string ownership = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "PathfindingOwnershipService.cs"));
+        Assert(ownership.Contains(
+                "nameof(Actor.u10_checkSmoothMovement)"),
+            "the owner scanner observes the smooth-movement hook used by Cultiway");
+    }
+
+    private static void ArmySafetyYieldsWhenCultiwayOwnsPathfinding()
+    {
+        string armySafety = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_ArmySafetyPatch.cs"));
+        Assert(armySafety.Contains("PathfindingOwnershipService.State ==") &&
+               armySafety.Contains("AWPathOwnerState.Cultiway"),
+            "army path safety yields its swim provider step when Cultiway owns movement");
+    }
+
     private static void RequestKeysMatchWithoutAllocating()
     {
         var key = new AWPathRequestKey(91, true, false, true, -4);
@@ -221,7 +271,36 @@ internal static class PathfindingPerformanceTests
                finder.Contains("AWPathWorkPriority.Continuation"),
             "the finder owns Cultiway starved, initial, and continuation queues");
         Assert(!finder.Contains("ActorWorkSlot"),
-            "the legacy mutable actor-slot queue is removed from path dispatch");
+               "the legacy mutable actor-slot queue is removed from path dispatch");
+    }
+
+    private static void FinderQueueFairnessBoundsOperationalStarvation()
+    {
+        Assert(AWPathQueueFairnessRules.Select(
+                hasStarved: true, hasInitial: true, hasContinuation: true,
+                consecutiveStarved: AWPathQueueFairnessRules.MaximumConsecutiveStarved - 1) ==
+               AWPathWorkPriority.Starved,
+            "operational path work keeps its priority within the fairness window");
+        Assert(AWPathQueueFairnessRules.Select(
+                hasStarved: true, hasInitial: true, hasContinuation: true,
+                consecutiveStarved: AWPathQueueFairnessRules.MaximumConsecutiveStarved) ==
+               AWPathWorkPriority.Initial,
+            "initial path work is served after the bounded operational streak");
+        Assert(AWPathQueueFairnessRules.Select(
+                hasStarved: true, hasInitial: false, hasContinuation: true,
+                consecutiveStarved: AWPathQueueFairnessRules.MaximumConsecutiveStarved) ==
+               AWPathWorkPriority.Continuation,
+            "continuation path work is served when no initial work is waiting");
+    }
+
+    private static void FinderUsesLosslessWorkerWakeups()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(finder.Contains("SemaphoreSlim") &&
+               finder.Contains("_queueSignal.Release()"),
+            "each scheduled path segment preserves a worker wakeup under burst load");
     }
 
     private static void RtsRoutesUseTheSharedFinderOnly()
@@ -246,6 +325,22 @@ internal static class PathfindingPerformanceTests
             "the session scheduler exposes worker and stale-token diagnostics");
     }
 
+    private static void PathDiagnosticsExposeQueueWaitMetrics()
+    {
+        string diagnostics = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathDiagnostics.cs"));
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(diagnostics.Contains("QueueWait") &&
+               diagnostics.Contains("FirstStep"),
+            "path diagnostics expose queue wait and first-step latency");
+        Assert(finder.Contains("EnqueuedAt") &&
+               finder.Contains("OnDequeued"),
+            "path workers measure queue wait at dequeue time");
+    }
+
     private static void PhysicalTransportUsesPassengerStateMachine()
     {
         string bridge = File.ReadAllText(Path.Combine(
@@ -254,6 +349,10 @@ internal static class PathfindingPerformanceTests
         Assert(bridge.Contains("AWDockPassengerState") &&
                bridge.Contains("AWDockTransportRules.NextState"),
             "the live boat transport context uses the dock passenger state machine");
+        Assert(bridge.Contains("AWDockTransportService.TryResolveRoute") &&
+               File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "Code",
+                   "core", "pathfinding", "AWDockTransportService.cs")),
+            "cross-water transport resolves two physical dock endpoints before TaxiManager");
     }
 
     private static void AsyncAuthorityCommitUsesBoundedBurst()
@@ -271,6 +370,188 @@ internal static class PathfindingPerformanceTests
                deferred.Contains("HistoricalWriteService.DrainCompletions") &&
                deferred.Contains("AWAsyncCompletionDrainRules.ResolveItemLimit"),
             "render frames own one bounded async completion drain");
+    }
+
+    private static void AsyncPureCommitDoesNotReturnToMainThread()
+    {
+        string coordinator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "asyncwork",
+            "AWAsyncWorkCoordinator.cs"));
+        string planner = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "ArmyRtsAsyncPlanningService.cs"));
+
+        Assert(coordinator.Contains("AWAsyncCommitMode",
+                StringComparison.Ordinal),
+            "async work requests must declare where result commits execute");
+        Assert(coordinator.Contains("CommitOnWorker",
+                StringComparison.Ordinal),
+            "pure async results need a worker-side commit path");
+        Assert(coordinator.Contains("Thread[] _workers",
+                StringComparison.Ordinal) &&
+               coordinator.Contains("SemaphoreSlim",
+                   StringComparison.Ordinal),
+            "async work uses a fixed worker pool with lossless wakeups");
+        Assert(planner.Contains("AWAsyncCommitMode.Background",
+                StringComparison.Ordinal),
+               "RTS front ranking must not return its pure dictionary commit to the main thread");
+    }
+
+    private static void AsyncShadowComparisonsDoNotReturnToMainThread()
+    {
+        string coordinator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "asyncwork",
+            "AWAsyncWorkCoordinator.cs"));
+        string shadow = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "asyncwork",
+            "AWAsyncShadowRuntime.cs"));
+        string traversal = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        string strategy = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AsyncKingdomStrategyService.cs"));
+
+        Assert(coordinator.Contains("RunWorkerCommit",
+                StringComparison.Ordinal),
+            "background diagnostic commits must have a worker-side execution path");
+        Assert(shadow.Contains("ConcurrentQueue",
+                StringComparison.Ordinal) &&
+               shadow.Contains("DrainMainThread",
+                   StringComparison.Ordinal),
+            "shadow warnings must be buffered before Unity logging");
+        Assert(traversal.Contains("AWAsyncCommitMode.Background",
+                StringComparison.Ordinal),
+            "traversal shadow comparison must not use the main-thread completion queue");
+        Assert(strategy.Contains("pCommitMode: shadow",
+                StringComparison.Ordinal) &&
+               strategy.Contains("AWAsyncCommitMode.Background",
+                   StringComparison.Ordinal),
+            "strategy shadow comparison must not use the main-thread completion queue");
+    }
+
+    private static void AsyncBackgroundCommitRunsOffCallerThread()
+    {
+        using var coordinator = new AWAsyncWorkCoordinator(true);
+        long generation = coordinator.StartWorld();
+        int callerThread = Thread.CurrentThread.ManagedThreadId;
+        int commitThread = 0;
+        using var committed = new ManualResetEventSlim(false);
+        var request = new AWAsyncWorkRequest("runtime-background-commit",
+            AWAsyncLane.Ai,
+            new AWAsyncStamp(generation, 1L, 1L),
+            token =>
+            {
+                token.ThrowIfCancellationRequested();
+                return new object();
+            },
+            result =>
+            {
+                commitThread = Thread.CurrentThread.ManagedThreadId;
+                committed.Set();
+            },
+            pCommitMode: AWAsyncCommitMode.Background);
+
+        Assert(coordinator.TrySchedule(request),
+            "background runtime request is admitted");
+        Assert(committed.Wait(TimeSpan.FromSeconds(2)),
+            "background commit completes without a main-thread drain");
+        Assert(commitThread != 0 && commitThread != callerThread,
+            "background commit executes on the async worker thread");
+        Assert(coordinator.PendingCompletionCount == 0,
+            "background commit does not enqueue a main-thread completion");
+    }
+
+    private static void AsyncWorkerPoolRunsIndependentRequestsConcurrently()
+    {
+        using var coordinator = new AWAsyncWorkCoordinator(true, 2);
+        long generation = coordinator.StartWorld();
+        using var release = new ManualResetEventSlim(false);
+        using var bothStarted = new ManualResetEventSlim(false);
+        using var bothCommitted = new ManualResetEventSlim(false);
+        int started = 0;
+        int committed = 0;
+
+        Func<object> execute = () =>
+        {
+            if (Interlocked.Increment(ref started) == 2)
+                bothStarted.Set();
+            Assert(release.Wait(TimeSpan.FromSeconds(2)),
+                "independent async work is allowed to finish after both workers start");
+            return new object();
+        };
+        Action<object> commit = _ =>
+        {
+            if (Interlocked.Increment(ref committed) == 2)
+                bothCommitted.Set();
+        };
+
+        Assert(coordinator.TrySchedule(new AWAsyncWorkRequest(
+                "runtime-concurrent-a", AWAsyncLane.Ai,
+                new AWAsyncStamp(generation, 1L, 1L),
+                _ => execute(), commit,
+                pCommitMode: AWAsyncCommitMode.Background)),
+            "first independent async request is admitted");
+        Assert(coordinator.TrySchedule(new AWAsyncWorkRequest(
+                "runtime-concurrent-b", AWAsyncLane.Ai,
+                new AWAsyncStamp(generation, 1L, 2L),
+                _ => execute(), commit,
+                pCommitMode: AWAsyncCommitMode.Background)),
+            "second independent async request is admitted");
+
+        Assert(bothStarted.Wait(TimeSpan.FromSeconds(2)),
+            "independent async requests do not serialize behind one worker");
+        release.Set();
+        Assert(bothCommitted.Wait(TimeSpan.FromSeconds(2)),
+            "both background commits finish without a main-thread drain");
+        Assert(coordinator.WorkerCount == 2 &&
+               coordinator.ActiveWorkerCount == 0,
+               "the coordinator reports a bounded fixed worker pool");
+    }
+
+    private static void AsyncWorkerWakeSignalsStayBounded()
+    {
+        Assert(AWAsyncWorkerRules.ResolveWorkerSignalReleaseCount(
+                pWorkerCount: 4, pActiveWorkerCount: 0, pPendingSignalCount: 0) == 4,
+            "a shutdown wake releases every waiting worker");
+        Assert(AWAsyncWorkerRules.ResolveWorkerSignalReleaseCount(
+                pWorkerCount: 4, pActiveWorkerCount: 2, pPendingSignalCount: 0) == 2,
+            "a barrier wake releases only idle workers");
+        Assert(AWAsyncWorkerRules.ResolveWorkerSignalReleaseCount(
+                pWorkerCount: 4, pActiveWorkerCount: 0, pPendingSignalCount: 4) == 0,
+            "repeated barrier wakes do not accumulate semaphore signals");
+        Assert(AWAsyncWorkerRules.ResolveWorkerSignalReleaseCount(
+                pWorkerCount: 4, pActiveWorkerCount: 8, pPendingSignalCount: 0) == 0,
+            "invalid active counts never produce a negative release");
+        Assert(AWAsyncWorkerRules.ResolveWorkSignalReleaseCount(
+                pQueuedWorkCount: 3, pWorkerCount: 4,
+                pActiveWorkerCount: 0, pPendingSignalCount: 0) == 3,
+            "a burst of queued work wakes one worker per available item");
+        Assert(AWAsyncWorkerRules.ResolveWorkSignalReleaseCount(
+                pQueuedWorkCount: 8, pWorkerCount: 4,
+                pActiveWorkerCount: 1, pPendingSignalCount: 1) == 2,
+            "work wakeups are capped by idle workers and pending signals");
+    }
+
+    private static void SparseOverlayGenerationAvoidsFullChunkCopy()
+    {
+        using var baseGeneration = LinearLandGeneration(16);
+        var overlays = new Dictionary<int, AWTileTraversalSnapshot[]>
+        {
+            [0] = new AWTileTraversalSnapshot[64]
+        };
+        overlays[0][0] = new AWTileTraversalSnapshot(0, 0, 0,
+            ground: false, liquid: true, ocean: true,
+            pNeighbors: Array.Empty<int>());
+        using var overlayGeneration = AWTraversalGeneration.FromOverlay(
+            901, baseGeneration, overlays);
+        Assert(overlayGeneration != null &&
+               overlayGeneration.TryGet(0, out AWTileTraversalSnapshot tile) &&
+               tile.Liquid && !tile.Ground,
+            "sparse overlay generation serves the changed chunk");
+        Assert(overlayGeneration.TryGet(15,
+                out AWTileTraversalSnapshot fallback) && fallback.Ground,
+            "sparse overlay generation falls back to the base generation");
     }
 
     private static void PathDiagnosticsLogSchedulerState()

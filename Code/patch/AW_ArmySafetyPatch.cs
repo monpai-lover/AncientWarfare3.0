@@ -750,6 +750,8 @@ namespace AncientWarfare3.patch
         public static bool UpdatePathMovement_InstalledProviderSwim_Prefix(
             Actor __instance)
         {
+            if (PathfindingOwnershipService.State ==
+                AWPathOwnerState.Cultiway) return true;
             return !AWArmyMarchService.
                 TryAdvanceInstalledProviderSwimEntry(__instance);
         }

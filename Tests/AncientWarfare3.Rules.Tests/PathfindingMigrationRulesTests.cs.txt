@@ -14,6 +14,15 @@ internal static class PathfindingMigrationRulesTests
         Assert(AWPathMigrationRules.ShouldImport(
                 CultiwayPathFeature.DockTransport),
             "dock transport is imported");
+        Assert(AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Dock),
+            "physical docks are imported");
+        Assert(AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Boat),
+            "physical boats are imported");
+        Assert(AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Passenger),
+            "dock passengers are imported");
         Assert(!AWPathMigrationRules.ShouldImport(
                 CultiwayPathFeature.Teleport),
             "magical teleport is excluded");

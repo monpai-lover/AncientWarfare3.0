@@ -415,6 +415,8 @@ namespace AncientWarfare3.core.pathfinding
                 bool accepted = _finder.Request(pathRequest,
                     out AWPathSubmissionDisposition disposition);
                 bool reused = disposition == AWPathSubmissionDisposition.Reused;
+                if (reused)
+                    AWPathfindingBootstrap.PathDiagnostics.OnRtsSharedRouteReuse();
                 if (!accepted)
                     return ArmyRouteHandle.Rejected(request.ArmyId,
                         "finder_rejected");

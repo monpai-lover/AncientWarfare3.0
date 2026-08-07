@@ -28,6 +28,8 @@ internal static class RuntimePerformanceBudgetRulesTests
             "path workers use one third of the parallel budget");
         Equal(8, AWFrameSchedulerRules.PathfindingWorkerCount(64),
             "path workers are capped at the Cultiway global maximum");
+        Equal(8, AWPathfindingConfig.WorkerCount(64),
+            "pathfinder runtime honors the Cultiway eight-worker ceiling");
         AWPathWorkerAllocation allocation = AWFrameSchedulerRules.AllocateWorkers(12);
         Equal(4, allocation.ActorPathWorkers,
             "all allocated path workers belong to the shared finder");

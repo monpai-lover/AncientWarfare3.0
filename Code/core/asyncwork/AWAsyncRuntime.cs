@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.asyncwork
         public static long WorldGeneration => Coordinator.WorldGeneration;
         public static AWAsyncLifecycleState State => Coordinator.State;
         public static bool WorkerAlive => Coordinator.WorkerAlive;
+        public static int WorkerCount => Coordinator.WorkerCount;
 
         public static void Initialize()
         {
@@ -56,7 +57,9 @@ namespace AncientWarfare3.core.asyncwork
                             RecentFeatureBenchmarkRules.AsyncComputeIndex,
                             benchmark);
                     }
-                }, pRequest.Commit, pRequest.Fault, pRequest.TryAdmit);
+                }, pRequest.Commit, pRequest.Fault, pRequest.TryAdmit,
+                pRequest.CommitMode);
+
             return Coordinator.TrySchedule(measured);
         }
 
@@ -93,6 +96,7 @@ namespace AncientWarfare3.core.asyncwork
         public static void ClearWorld(TimeSpan pTimeout)
         {
             Coordinator.ClearWorld(pTimeout);
+            AWAsyncShadowRuntime.Clear();
         }
 
         public static AWAsyncDiagnosticsSnapshot SnapshotDiagnostics()

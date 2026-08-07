@@ -18,18 +18,16 @@ namespace AncientWarfare3.core.pathfinding
     internal readonly struct AWDockRouteCandidate
     {
         internal AWDockRouteCandidate(AWDockEndpoint pEntry,
-            AWDockEndpoint pExit, float pCost)
+            AWDockEndpoint pExit)
         {
             Entry = pEntry;
             Exit = pExit;
-            Cost = pCost < 0f ? 0f : pCost;
         }
 
         internal AWDockEndpoint Entry { get; }
         internal AWDockEndpoint Exit { get; }
-        internal float Cost { get; }
         internal bool IsValid => Entry.IsValid && Exit.IsValid &&
-                                  Entry.Id != Exit.Id &&
-                                  Entry.WaterComponent == Exit.WaterComponent;
+                                 Entry.Id != Exit.Id &&
+                                 Entry.WaterComponent == Exit.WaterComponent;
     }
 }

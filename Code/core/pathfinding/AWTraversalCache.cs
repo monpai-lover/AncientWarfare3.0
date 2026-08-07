@@ -324,7 +324,8 @@ namespace AncientWarfare3.core.pathfinding
                 AWAsyncLane.Traversal,
                 new AWAsyncStamp(worldGeneration,
                     UnityEngine.Time.frameCount, pRevision),
-                execution.Execute, commit.Commit);
+                execution.Execute, commit.Commit,
+                pCommitMode: AWAsyncCommitMode.Background);
             // A rejected shadow comparison must never execute its full build
             // synchronously. It is diagnostic-only and may be skipped when
             // the async worker is saturated.
@@ -502,13 +503,13 @@ namespace AncientWarfare3.core.pathfinding
             _overlayGeneration?.Dispose();
             _overlayGeneration = null;
             if (_current == null || _overlay.Count == 0) return;
-            AWTileTraversalSnapshot[][] chunks = _current.CopyChunkReferences();
+            var chunks = new Dictionary<int, AWTileTraversalSnapshot[]>(
+                _overlay.Count);
             foreach (AWTraversalOverlayEntry entry in _overlay.Values)
-                if (entry.ChunkId >= 0 && entry.ChunkId < chunks.Length)
+                if (entry.ChunkId >= 0)
                     chunks[entry.ChunkId] = entry.Tiles;
-            _overlayGeneration = new AWTraversalGeneration(++_generationId,
-                _width, _height, AWTraversalGeneration.DefaultChunkSize,
-                chunks);
+            _overlayGeneration = AWTraversalGeneration.FromOverlay(
+                ++_generationId, _current, chunks);
         }
 
         private sealed class AWTraversalBuildCommit

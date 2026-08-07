@@ -55,7 +55,7 @@ namespace AncientWarfare3.core.pathfinding
 
         public static int WorkerCount(int pProcessorCount)
         {
-            return Math.Max(1, Math.Min(4, pProcessorCount - 1));
+            return Math.Max(1, Math.Min(8, pProcessorCount - 1));
         }
     }
 }
