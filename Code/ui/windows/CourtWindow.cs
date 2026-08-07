@@ -323,6 +323,7 @@ namespace AncientWarfare3.ui.windows
                     return;
                 }
 
+                UpdateWindowTitle(kingdom);
                 CourtSnapshot snapshot = CourtService.GetSnapshot(kingdom);
                 UpdateSummary(kingdom, snapshot);
                 List<CourtPyramidNodeModel> nodes = CourtReadModelService.Build(kingdom);
@@ -597,6 +598,17 @@ namespace AncientWarfare3.ui.windows
                 "MilitarySectionDivider");
             _localSectionDivider = EnsureSectionDivider(pCanvas,
                 "LocalSectionDivider");
+        }
+
+        private void UpdateWindowTitle(Kingdom pKingdom)
+        {
+            ScrollWindow scrollWindow = GetComponent<ScrollWindow>();
+            if (scrollWindow?.titleText == null) return;
+            bool western = CourtProfileRegistry.For(pKingdom)?.Id ==
+                           CourtProfileId.Western;
+            scrollWindow.titleText.text = western
+                ? AW_L10n.Text("aw_court_title_western", "Western Court")
+                : AW_L10n.Text("aw_court_title", "Court of the Hundred Schools");
         }
 
         private static Image EnsureSectionDivider(Transform pCanvas,
