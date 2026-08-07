@@ -50,7 +50,7 @@ namespace AncientWarfare3.core.pathfinding
             for (int first = 0; first < endpoints.Length; first++)
             {
                 AWDockEndpoint entry = endpoints[first];
-                WorldTile entryTile = World.world?.GetTile(entry.TileId);
+                WorldTile entryTile = ResolveTile(entry.TileId);
                 if (!entry.IsValid || entryTile == null ||
                     !pStart.isSameIsland(entryTile)) continue;
                 for (int second = 0; second < endpoints.Length; second++)
@@ -58,13 +58,21 @@ namespace AncientWarfare3.core.pathfinding
                     AWDockEndpoint exit = endpoints[second];
                     if (!exit.IsValid || entry.Id == exit.Id ||
                         entry.WaterComponent != exit.WaterComponent) continue;
-                    WorldTile exitTile = World.world?.GetTile(exit.TileId);
+                    WorldTile exitTile = ResolveTile(exit.TileId);
                     if (exitTile == null || !pTarget.isSameIsland(exitTile)) continue;
                     pCandidate = new AWDockRouteCandidate(entry, exit);
                     return pCandidate.IsValid;
                 }
             }
             return false;
+        }
+
+        private static WorldTile ResolveTile(int pTileId)
+        {
+            WorldTile[] tiles = World.world?.tiles_list;
+            return tiles != null && pTileId >= 0 && pTileId < tiles.Length
+                ? tiles[pTileId]
+                : null;
         }
 
         private static void RefreshFromWorld()
