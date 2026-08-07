@@ -293,7 +293,23 @@ if (args.Length == 1 && args[0] == "--western-policy-profile-slice")
     WesternPolicyAiRulesTests.Run();
     WesternCourtProfileRulesTests.Run();
     WesternCourtElectionRulesTests.Run();
+    WesternMayorTermRulesTests.Run();
     Console.WriteLine("AW3 western policy profile rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--western-mayor-slice")
+{
+    WesternMayorTermRulesTests.Run();
+    OfficialCirculationRulesTests.Run();
+    Console.WriteLine("AW3 Western Mayor circulation rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--official-circulation-slice")
+{
+    OfficialCirculationRulesTests.Run();
+    Console.WriteLine("AW3 official circulation rules passed.");
     return;
 }
 

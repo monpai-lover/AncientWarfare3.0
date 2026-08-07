@@ -575,6 +575,8 @@ namespace AncientWarfare3.core.lineage
         public const string CIVIL_SERVICE_LEGACY_CREDENTIAL_REMAINING =
             "aw_civil_service_legacy_credential_remaining";
         public const string OFFICIAL_CAREER_LAST_YEAR = "aw_official_career_last_year";
+        public const string WESTERN_MAYOR_CYCLE_END_YEAR =
+            "aw_western_mayor_cycle_end_year";
         public const string COURT_PETITION_FAVOR = "aw_court_petition_favor";
         public const string COURT_PETITION_UNTIL_YEAR = "aw_court_petition_until_year";
         public const string COURT_PETITION_LAST_YEAR = "aw_court_petition_last_year";

@@ -208,6 +208,8 @@ namespace AncientWarfare3.core.court
                              existing.OfficeId != (pOfficeId ?? "");
             int termEndYear = pActing
                 ? pYearAfter(currentYear)
+                : pOfficeId == CourtOfficeId.WestMayor
+                    ? ResolveWesternMayorTermEndYear(pKingdom, currentYear)
                 : freshTerm
                     ? pLayer == CourtOfficeLayer.Central &&
                       CourtService.IsWesternElective(pKingdom)
@@ -294,11 +296,12 @@ namespace AncientWarfare3.core.court
 
                 float merit = state.Merit;
                 using var command = new SQLiteCommand(DB) { Transaction = transaction };
-                bool governor = state.OfficeId == CourtOfficeId.Governor;
-                long previousCityId = governor && state.CityId >= 0
+                bool cityLeader = CourtCityOfficeRules.IsCityLeaderOffice(
+                    state.OfficeId);
+                long previousCityId = cityLeader && state.CityId >= 0
                     ? state.CityId
                     : state.PreviousCityId;
-                int waitingSinceYear = governor ? Date.getCurrentYear() : -1;
+                int waitingSinceYear = cityLeader ? Date.getCurrentYear() : -1;
                 command.CommandText = "UPDATE " + OfficialCareerStateTableItem.GetTableName() +
                     " SET KINGDOM_ID=-1,CITY_ID=-1,OFFICE_ID='',MERIT=@merit," +
                     "MERIT_CAP=1,TERM_END_YEAR=-1,PREVIOUS_CITY_ID=@previous," +
@@ -482,13 +485,15 @@ namespace AncientWarfare3.core.court
             {
                 Actor actor = World.world?.units?.get(state.ActorId);
                 if (actor?.data == null || actor.isRekt() || !actor.isAlive()) continue;
-                if (state.OfficeId != CourtOfficeId.Governor &&
+                bool cityLeaderOffice = CourtCityOfficeRules.IsCityLeaderOffice(
+                    state.OfficeId);
+                if (!cityLeaderOffice &&
                     state.WaitingSinceYear >= 0 &&
                     state.TermEndYear <= year &&
                     CourtService.TryExpireActingCentralOfficial(actor,
                         pKingdom, state.OfficeId))
                     continue;
-                if (state.OfficeId == CourtOfficeId.Governor &&
+                if (cityLeaderOffice &&
                     state.WaitingSinceYear >= 0 &&
                     state.TermEndYear <= year &&
                     CourtService.TryExpireActingCityGovernor(actor, pKingdom,
@@ -558,6 +563,7 @@ namespace AncientWarfare3.core.court
                 }
 
                 bool migratedLifetime = !westernElectiveCentral &&
+                    state.OfficeId != CourtOfficeId.WestMayor &&
                     termLaw != CourtTermLaw.Lifetime &&
                     state.TermEndYear == int.MaxValue &&
                     lifetimeMigrations <
@@ -573,7 +579,16 @@ namespace AncientWarfare3.core.court
 
                 bool termDue = !migratedLifetime &&
                                mutation.TermEndYear <= year;
-                if (termDue && nineRankSystem &&
+                bool westernMayorDue = termDue &&
+                                       state.OfficeId == CourtOfficeId.WestMayor;
+                if (westernMayorDue && realmCityCount <= 1)
+                    mutation.TermEndYear =
+                        WesternMayorTermRules.RetryTermEndYear(year);
+                else if (westernMayorDue)
+                {
+                    // The shared cycle advances only after the full batch commits.
+                }
+                else if (termDue && nineRankSystem &&
                     mutation.Rank > OfficialCareerRankRules.Unranked)
                     EvaluateDueOfficial(mutation, economy, year, pKingdom);
                 else if (termDue)
@@ -584,10 +599,10 @@ namespace AncientWarfare3.core.court
                     mutation.LocalGrade = ResolveLocalGrade(actor, mutation, year);
                     mutation.LocalGradeReviewYear = year;
                 }
-                mutation.RotationDue = circulatingOfficials &&
-                    OfficialCirculationRules.ShouldRotateGovernor(
-                        state.OfficeId == CourtOfficeId.Governor,
-                        termDue, realmCityCount);
+                mutation.RotationDue =
+                    OfficialCirculationRules.IsRotatingCityOffice(
+                        state.OfficeId, circulatingOfficials) &&
+                    termDue && realmCityCount > 1;
                 mutations.Add(mutation);
             }
 
@@ -799,14 +814,20 @@ namespace AncientWarfare3.core.court
                 List<AnnualMutation> pMutations,
                 out List<AnnualMutation> pDue)
         {
-            pDue = pMutations == null
+            List<AnnualMutation> candidates = pMutations == null
                 ? new List<AnnualMutation>()
                 : pMutations
                 .Where(p => p?.RotationDue == true && p.Actor?.data != null)
                 .OrderBy(p => p.State.TermEndYear)
                 .ThenBy(p => p.State.ActorId)
-                .Take(OfficialCirculationRules.MaximumRotationsPerKingdomYear)
                 .ToList();
+            List<AnnualMutation> mayorCycle = candidates.Where(p =>
+                p.State.OfficeId == CourtOfficeId.WestMayor).ToList();
+            pDue = mayorCycle.Count > 0
+                ? mayorCycle
+                : candidates.Take(
+                    OfficialCirculationRules.MaximumRotationsPerKingdomYear)
+                    .ToList();
             if (pKingdom?.data == null || pDue.Count == 0)
                 return new List<GovernorRotationRuntimeAssignment>();
 
@@ -886,53 +907,35 @@ namespace AncientWarfare3.core.court
             List<GovernorRotationRuntimeAssignment> pPlan, int pYear)
         {
             if (!ValidateGovernorRotationPlan(pKingdom, pPlan)) return;
-            using (GovernorRotationRuntimeScope.Enter())
+            bool mayorCycle = pPlan.Any(p =>
+                p.Mutation.State.OfficeId == CourtOfficeId.WestMayor);
+            int nextMayorCycleEndYear = -1;
+            if (mayorCycle)
             {
-                try
-                {
-                    foreach (GovernorRotationRuntimeAssignment item in pPlan)
-                    {
-                        item.FormerCity.removeLeader();
-                        if (item.FormerCity.leader == item.Actor)
-                            throw new InvalidOperationException(
-                                "former city retained governor");
-                    }
-                    foreach (GovernorRotationRuntimeAssignment item in pPlan)
-                    {
-                        FreezeNativeCityFast(item.Actor);
-                        if (item.Actor.city != item.DestinationCity)
-                        {
-                            item.Actor.stopBeingWarrior();
-                            item.Actor.joinCity(item.DestinationCity);
-                        }
-                        item.DestinationCity.setLeader(item.Actor, pNew: true);
-                        if (item.DestinationCity.leader != item.Actor)
-                            throw new InvalidOperationException(
-                                "destination city rejected governor");
-                    }
-                    if (!CommitGovernorRotationPersistence(pKingdom, pPlan))
-                        throw new InvalidOperationException(
-                            "rotation persistence rejected batch");
-                }
-                catch (Exception e)
-                {
-                    bool restored = RestoreGovernorRotation(pPlan);
-                    bool deferred = ScheduleGovernorRotationRetry(pKingdom, pPlan,
-                        pYear);
-                    if (!restored) ScheduleGovernorRotationRuntimeRepair(
-                        pKingdom, pPlan, 0);
-                    ModClass.LogWarning("Governor circulation batch failed: " +
-                                        e.Message + (deferred
-                                            ? ""
-                                            : "; retry defer persistence failed") +
-                                        (restored
-                                            ? ""
-                                            : "; runtime rollback incomplete"));
-                    return;
-                }
-
-                PublishCommittedGovernorRotation(pPlan);
+                pKingdom.data.get(LineageKeys.WESTERN_MAYOR_CYCLE_END_YEAR,
+                    out int sharedCycleEndYear, -1);
+                nextMayorCycleEndYear =
+                    WesternMayorTermRules.AdvanceExpiredCycleEndYear(
+                        pYear, sharedCycleEndYear);
+                foreach (GovernorRotationRuntimeAssignment item in pPlan)
+                    if (item.Mutation.State.OfficeId == CourtOfficeId.WestMayor)
+                        item.Mutation.TermEndYear = nextMayorCycleEndYear;
             }
+            if (!CommitGovernorRotationPersistence(pKingdom, pPlan))
+            {
+                bool deferred = ScheduleGovernorRotationRetry(pKingdom, pPlan,
+                    pYear);
+                ModClass.LogWarning(
+                    "Governor circulation persistence rejected batch" +
+                    (deferred ? "" : "; retry defer persistence failed"));
+                return;
+            }
+
+            if (mayorCycle)
+                pKingdom.data.set(LineageKeys.WESTERN_MAYOR_CYCLE_END_YEAR,
+                    nextMayorCycleEndYear);
+            using (GovernorRotationRuntimeScope.Enter())
+                PublishCommittedGovernorRotation(pPlan);
         }
 
         private static void PublishCommittedGovernorRotation(
@@ -941,6 +944,7 @@ namespace AncientWarfare3.core.court
             if (pPlan == null) return;
             foreach (GovernorRotationRuntimeAssignment item in pPlan)
             {
+                FreezeNativeCityFast(item.Actor);
                 ProjectCommittedGovernorState(item);
                 ProjectCommittedGovernorCourtCity(item);
                 ProjectCommittedGovernorPreviousCity(item);
@@ -957,6 +961,10 @@ namespace AncientWarfare3.core.court
                     throw new InvalidOperationException("missing career state");
                 pItem.Mutation.State.PreviousCityId = pItem.FormerCityId;
                 pItem.Mutation.State.CityId = pItem.DestinationCityId;
+                pItem.Mutation.State.TermEndYear =
+                    pItem.Mutation.TermEndYear;
+                pItem.Actor.data.set(LineageKeys.OFFICER_TERM_END_YEAR,
+                    pItem.Mutation.TermEndYear);
             }
             catch (Exception e)
             {
@@ -1116,11 +1124,12 @@ namespace AncientWarfare3.core.court
                     career.CommandText = "UPDATE " +
                         OfficialCareerStateTableItem.GetTableName() +
                         " SET CITY_ID=@destination,PREVIOUS_CITY_ID=@former," +
+                        "TERM_END_YEAR=@term," +
                         "UPDATED_TIME=@time WHERE ACTOR_ID=@actor AND " +
                         "KINGDOM_ID=@kingdom AND CITY_ID=@former AND OFFICE_ID=@office";
                     AddRotationParameters(career, item, pKingdom.id, now);
                     career.Parameters.AddWithValue("@office",
-                        CourtOfficeId.Governor);
+                        item.Mutation.State.OfficeId);
                     if (career.ExecuteNonQuery() != 1)
                     {
                         transaction.Rollback();
@@ -1138,7 +1147,7 @@ namespace AncientWarfare3.core.court
                     AddRotationParameters(court, item, pKingdom.id, now);
                     court.Parameters.AddWithValue("@layer", CourtOfficeLayer.City);
                     court.Parameters.AddWithValue("@office",
-                        CourtOfficeId.Governor);
+                        item.Mutation.State.OfficeId);
                     if (court.ExecuteNonQuery() != 1)
                     {
                         transaction.Rollback();
@@ -1167,6 +1176,8 @@ namespace AncientWarfare3.core.court
             pCommand.Parameters.AddWithValue("@time", pTime);
             pCommand.Parameters.AddWithValue("@actor", pItem.Actor.data.id);
             pCommand.Parameters.AddWithValue("@kingdom", pKingdomId);
+            pCommand.Parameters.AddWithValue("@term",
+                pItem.Mutation.TermEndYear);
         }
 
         private static bool RestoreGovernorRotation(
@@ -1315,7 +1326,7 @@ namespace AncientWarfare3.core.court
                     command.Parameters.AddWithValue("@city",
                         item.FormerCityId);
                     command.Parameters.AddWithValue("@office",
-                        CourtOfficeId.Governor);
+                        item.Mutation.State.OfficeId);
                     if (command.ExecuteNonQuery() != 1)
                         throw new InvalidOperationException(
                             "governor retry did not affect one career row");
@@ -1354,6 +1365,19 @@ namespace AncientWarfare3.core.court
         private static int pYearAfter(int pYear)
         {
             return pYear >= int.MaxValue ? int.MaxValue : pYear + 1;
+        }
+
+        private static int ResolveWesternMayorTermEndYear(Kingdom pKingdom,
+            int pCurrentYear)
+        {
+            pKingdom.data.get(LineageKeys.WESTERN_MAYOR_CYCLE_END_YEAR,
+                out int sharedCycleEndYear, -1);
+            int result = WesternMayorTermRules.AppointmentTermEndYear(
+                pCurrentYear, sharedCycleEndYear);
+            if (sharedCycleEndYear < 0)
+                pKingdom.data.set(
+                    LineageKeys.WESTERN_MAYOR_CYCLE_END_YEAR, result);
+            return result;
         }
 
         private static int CountLiveCities(Kingdom pKingdom)

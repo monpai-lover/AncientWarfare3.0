@@ -1,0 +1,82 @@
+using AncientWarfare3.core.court;
+
+internal static class WesternMayorTermRulesTests
+{
+    public static void Run()
+    {
+        Equal(10, WesternMayorTermRules.TermYears,
+            "Western Mayor term is exactly ten years");
+        Equal(110, WesternMayorTermRules.InitialCycleEndYear(100),
+            "the first shared cycle lasts exactly ten years");
+
+        Equal(110, WesternMayorTermRules.AppointmentTermEndYear(
+                currentYear: 103, sharedCycleEndYear: 110),
+            "all Mayors inherit the kingdom shared cycle");
+        Equal(110, WesternMayorTermRules.AppointmentTermEndYear(
+                currentYear: 109, sharedCycleEndYear: 110),
+            "new cities and vacancy replacements inherit the live cycle");
+
+        Equal(120, WesternMayorTermRules.AdvanceExpiredCycleEndYear(
+                currentYear: 117, sharedCycleEndYear: 90),
+            "an expired shared cycle advances in ten-year increments");
+        Equal(120, WesternMayorTermRules.AdvanceExpiredCycleEndYear(
+                currentYear: 110, sharedCycleEndYear: 110),
+            "a completed cycle advances by exactly ten years");
+
+        Equal(111, WesternMayorTermRules.RetryTermEndYear(110),
+            "a one-city realm retries one year later");
+        Equal(110, WesternMayorTermRules.SharedCycleAfterFailedRotation(110),
+            "a failed or undersized rotation does not advance the shared cycle");
+
+        RuntimeIntegrationUsesSharedCycleAndExplicitOffice();
+    }
+
+    private static void RuntimeIntegrationUsesSharedCycleAndExplicitOffice()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string keys = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "LineageKeys.cs"));
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "OfficialCareerStateService.cs"));
+        Contains(keys, "WESTERN_MAYOR_CYCLE_END_YEAR",
+            "kingdom data exposes the shared Mayor cycle key");
+        Contains(service, "ResolveWesternMayorTermEndYear(pKingdom",
+            "formal Mayor appointments read the kingdom shared cycle");
+        Contains(service,
+            "OfficialCirculationRules.IsRotatingCityOffice(",
+            "annual rotation identifies Mayor independently of Xia ranks");
+        Contains(service, "item.Mutation.State.OfficeId",
+            "rotation persistence uses each assignment's explicit office id");
+        Contains(service, "AdvanceExpiredCycleEndYear(",
+            "successful Mayor circulation advances the shared cycle");
+        int processStart = service.IndexOf(
+            "private static void ProcessDueGovernorRotations",
+            StringComparison.Ordinal);
+        int persistenceCommit = service.IndexOf(
+            "CommitGovernorRotationPersistence(pKingdom, pPlan)",
+            processStart, StringComparison.Ordinal);
+        int firstRuntimeMove = service.IndexOf(
+            "item.FormerCity.removeLeader()", processStart,
+            StringComparison.Ordinal);
+        Equal(true, processStart >= 0 && persistenceCommit > processStart &&
+                    (firstRuntimeMove < 0 || firstRuntimeMove > persistenceCommit),
+            "rotation persistence commits before runtime projection");
+        Equal(false, service.Contains(
+                "Parameters.AddWithValue(\"@office\",\r\n                        CourtOfficeId.Governor)"),
+            "rotation SQL no longer hard-codes Governor");
+    }
+
+    private static void Contains(string source, string expected,
+        string message)
+    {
+        if (!source.Contains(expected, StringComparison.Ordinal))
+            throw new InvalidOperationException(message + ": missing " + expected);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

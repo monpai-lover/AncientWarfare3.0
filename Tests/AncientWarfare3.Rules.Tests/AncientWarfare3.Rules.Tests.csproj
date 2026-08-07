@@ -129,6 +129,8 @@
     <Compile Include="WesternPolicyAiRulesTests.cs.txt" />
     <Compile Include="WesternCourtProfileRulesTests.cs.txt" />
     <Compile Include="WesternCourtElectionRulesTests.cs.txt" />
+    <Compile Include="WesternMayorTermRulesTests.cs.txt" />
+    <Compile Include="OfficialCirculationRulesTests.cs.txt" />
     <Compile Include="..\..\Code\attributes\TableDefAttribute.cs" Link="Production\TableDefAttribute.cs" />
     <Compile Include="..\..\Code\attributes\TableItemDefAttribute.cs" Link="Production\TableItemDefAttribute.cs" />
     <Compile Include="..\..\Code\core\db\AbstractTableItem.cs" Link="Production\AbstractTableItem.cs" />
@@ -452,6 +454,7 @@
     <Compile Include="..\..\Code\core\court\CourtAuxiliaryLawRules.cs" Link="Production\CourtAuxiliaryLawRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtConscriptionLawRules.cs" Link="Production\CourtConscriptionLawRules.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCirculationRules.cs" Link="Production\OfficialCirculationRules.cs" />
+    <Compile Include="..\..\Code\core\court\WesternMayorTermRules.cs" Link="Production\WesternMayorTermRules.cs" />
     <Compile Include="..\..\Code\core\court\GovernorRotationRuntimeScope.cs" Link="Production\GovernorRotationRuntimeScope.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceExamRules.cs" Link="Production\CivilServiceExamRules.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceLegacyTransitionRules.cs" Link="Production\CivilServiceLegacyTransitionRules.cs" />
