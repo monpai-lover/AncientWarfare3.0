@@ -115,6 +115,12 @@ namespace AncientWarfare3.core.court
                 StringComparison.Ordinal);
         }
 
+        public static bool CanQueueVacancy(bool officeAvailable,
+            bool electiveMode)
+        {
+            return officeAvailable && electiveMode;
+        }
+
         private static WesternCourtElectionCandidate EmptyCandidate()
         {
             return new WesternCourtElectionCandidate(-1L,

@@ -7,6 +7,7 @@ namespace AncientWarfare3.core.court
     {
         public long KingdomId;
         public string OfficeId = "";
+        public string Layer = CourtOfficeLayer.Central;
         public long FormerIncumbentActorId = -1L;
     }
 
@@ -26,29 +27,31 @@ namespace AncientWarfare3.core.court
         public static void QueueKingdomVacancies(Kingdom pKingdom)
         {
             if (!CourtService.IsWesternElective(pKingdom)) return;
-            foreach (string officeId in
-                     CourtProfileRegistry.CentralOfficeIdsFor(pKingdom))
+            foreach (string layer in new[] { CourtOfficeLayer.Central,
+                     CourtOfficeLayer.Military })
+            foreach (string officeId in CourtProfileRegistry.OfficeIdsForLayer(
+                         pKingdom, layer))
             {
                 if (CourtService.TryOpenWesternElectiveVacancy(pKingdom,
-                        officeId, out long formerIncumbentActorId))
+                        officeId, out long formerIncumbentActorId, layer))
                     EnqueueVacancy(pKingdom, officeId,
-                        formerIncumbentActorId);
+                        formerIncumbentActorId, layer);
             }
         }
 
         public static void EnqueueVacancy(Kingdom pKingdom,
-            string pOfficeId, long pFormerIncumbentActorId = -1L)
+            string pOfficeId, long pFormerIncumbentActorId = -1L,
+            string pLayer = CourtOfficeLayer.Central)
         {
-            if (!CourtService.IsWesternElective(pKingdom) ||
-                string.IsNullOrEmpty(pOfficeId) ||
-                !CourtProfileRegistry.IsOfficeAvailableFor(pKingdom,
-                    pOfficeId, CourtOfficeLayer.Central)) return;
-            string key = VacancyKey(pKingdom.id, pOfficeId);
+            if (!CourtService.IsWesternElectiveOffice(pKingdom, pOfficeId,
+                    pLayer)) return;
+            string key = VacancyKey(pKingdom.id, pLayer, pOfficeId);
             if (!QueuedVacancies.Add(key)) return;
             VacancyQueue.Enqueue(new WesternCourtVacancy
             {
                 KingdomId = pKingdom.id,
                 OfficeId = pOfficeId,
+                Layer = pLayer,
                 FormerIncumbentActorId = pFormerIncumbentActorId
             });
         }
@@ -64,7 +67,7 @@ namespace AncientWarfare3.core.court
             {
                 WesternCourtVacancy vacancy = VacancyQueue.Dequeue();
                 QueuedVacancies.Remove(VacancyKey(vacancy.KingdomId,
-                    vacancy.OfficeId));
+                    vacancy.Layer, vacancy.OfficeId));
                 processed++;
                 if (ShouldRetry(vacancy)) retry.Add(vacancy);
             }
@@ -74,7 +77,7 @@ namespace AncientWarfare3.core.court
                 Kingdom kingdom = World.world?.kingdoms?.get(
                     vacancy.KingdomId);
                 EnqueueVacancy(kingdom, vacancy.OfficeId,
-                    vacancy.FormerIncumbentActorId);
+                    vacancy.FormerIncumbentActorId, vacancy.Layer);
             }
         }
 
@@ -82,30 +85,32 @@ namespace AncientWarfare3.core.court
         {
             if (pVacancy == null) return false;
             Kingdom kingdom = World.world?.kingdoms?.get(pVacancy.KingdomId);
-            if (!CourtService.IsWesternElective(kingdom) ||
-                !CourtProfileRegistry.IsOfficeAvailableFor(kingdom,
-                    pVacancy.OfficeId, CourtOfficeLayer.Central)) return false;
-            if (!CourtService.IsWesternElectiveCentralOfficeVacant(kingdom,
-                    pVacancy.OfficeId)) return false;
+            if (!CourtService.IsWesternElectiveOffice(kingdom,
+                    pVacancy.OfficeId, pVacancy.Layer)) return false;
+            if (!CourtService.IsWesternElectiveOfficeVacant(kingdom,
+                    pVacancy.OfficeId, pVacancy.Layer)) return false;
 
             List<WesternCourtElectionCandidate> candidates =
                 CourtService.BuildWesternElectionCandidates(kingdom,
                     pVacancy.OfficeId,
                     pVacancy.FormerIncumbentActorId,
-                    WesternCourtElectionRules.MaxCandidatesPerVacancy);
+                    WesternCourtElectionRules.MaxCandidatesPerVacancy,
+                    pVacancy.Layer);
             WesternCourtElectionCandidate winner =
                 WesternCourtElectionRules.SelectWinner(candidates);
             if (winner.ActorId < 0L) return true;
             Actor actor = World.world?.units?.get(winner.ActorId);
-            if (CourtService.TryElectCentralOfficer(kingdom,
-                    pVacancy.OfficeId, actor)) return false;
-            return CourtService.IsWesternElectiveCentralOfficeVacant(kingdom,
-                pVacancy.OfficeId);
+            if (CourtService.TryElectOfficer(kingdom, pVacancy.OfficeId,
+                    actor, pVacancy.Layer)) return false;
+            return CourtService.IsWesternElectiveOfficeVacant(kingdom,
+                pVacancy.OfficeId, pVacancy.Layer);
         }
 
-        private static string VacancyKey(long pKingdomId, string pOfficeId)
+        private static string VacancyKey(long pKingdomId, string pLayer,
+            string pOfficeId)
         {
-            return pKingdomId + ":" + (pOfficeId ?? "");
+            return pKingdomId + ":" + (pLayer ?? "") + ":" +
+                (pOfficeId ?? "");
         }
     }
 }

@@ -75,6 +75,15 @@ internal static class WesternCourtElectionRulesTests
         Equal(true, WesternCourtElectionRules.CanManualAppoint(
                 CourtInstitutionId.WesternRoyalDirect),
             "royal direct allows manual appointment");
+        Equal(true, WesternCourtElectionRules.CanQueueVacancy(
+                officeAvailable: true, electiveMode: true),
+            "elective mode queues an available office");
+        Equal(false, WesternCourtElectionRules.CanQueueVacancy(
+                officeAvailable: false, electiveMode: true),
+            "government mode cannot make an unavailable office exist");
+        Equal(false, WesternCourtElectionRules.CanQueueVacancy(
+                officeAvailable: true, electiveMode: false),
+            "non-elective mode uses ordinary vacancy filling");
     }
 
     private static void AssertFactor(string message,

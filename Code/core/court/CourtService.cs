@@ -608,21 +608,28 @@ namespace AncientWarfare3.core.court
         internal static bool IsWesternElectiveCentralOffice(Kingdom pKingdom,
             string pOfficeId)
         {
-            return IsWesternElective(pKingdom) &&
-                   CourtProfileRegistry.IsOfficeAvailableFor(pKingdom,
-                       pOfficeId, CourtOfficeLayer.Central);
+            return IsWesternElectiveOffice(pKingdom, pOfficeId,
+                CourtOfficeLayer.Central);
+        }
+
+        internal static bool IsWesternElectiveOffice(Kingdom pKingdom,
+            string pOfficeId, string pLayer)
+        {
+            return WesternCourtElectionRules.CanQueueVacancy(
+                CourtProfileRegistry.IsOfficeAvailableFor(pKingdom,
+                    pOfficeId, pLayer), IsWesternElective(pKingdom));
         }
 
         internal static bool TryOpenWesternElectiveVacancy(Kingdom pKingdom,
-            string pOfficeId, out long pFormerIncumbentActorId)
+            string pOfficeId, out long pFormerIncumbentActorId,
+            string pLayer = CourtOfficeLayer.Central)
         {
             pFormerIncumbentActorId = -1L;
-            if (!IsWesternElective(pKingdom) ||
-                !CourtProfileRegistry.IsOfficeAvailableFor(pKingdom,
-                    pOfficeId, CourtOfficeLayer.Central)) return false;
-            CloseStaleCentralOfficeRow(pKingdom, pOfficeId);
-            CourtOfficerView incumbent = ReadActiveCentralOffice(pKingdom,
-                pOfficeId);
+            if (!IsWesternElectiveOffice(pKingdom, pOfficeId, pLayer))
+                return false;
+            CourtOfficerView incumbent = GetActiveOfficers(pKingdom, 96)
+                .FirstOrDefault(p => p.layer == pLayer &&
+                    p.office_id == pOfficeId);
             if (incumbent == null) return true;
             Actor actor = World.world?.units?.get(incumbent.actor_id);
             if (!IsValidActiveOfficeActor(actor, pKingdom,
@@ -639,18 +646,24 @@ namespace AncientWarfare3.core.court
                     hasIncumbent: true, termEndYear: termEndYear,
                     currentYear: year)) return false;
             pFormerIncumbentActorId = incumbent.actor_id;
-            return TryExpireWesternElectiveCentralOfficial(actor, pKingdom,
-                pOfficeId);
+            return TryExpireWesternElectiveOfficial(actor, pKingdom,
+                pOfficeId, pLayer);
         }
 
         internal static bool IsWesternElectiveCentralOfficeVacant(
             Kingdom pKingdom, string pOfficeId)
         {
-            if (!IsWesternElective(pKingdom) ||
-                !CourtProfileRegistry.IsOfficeAvailableFor(pKingdom,
-                    pOfficeId, CourtOfficeLayer.Central)) return false;
-            CloseStaleCentralOfficeRow(pKingdom, pOfficeId);
-            return FindActiveOfficeActor(pKingdom, pOfficeId) == null;
+            return IsWesternElectiveOfficeVacant(pKingdom, pOfficeId,
+                CourtOfficeLayer.Central);
+        }
+
+        internal static bool IsWesternElectiveOfficeVacant(Kingdom pKingdom,
+            string pOfficeId, string pLayer)
+        {
+            if (!IsWesternElectiveOffice(pKingdom, pOfficeId, pLayer))
+                return false;
+            return !GetActiveOfficers(pKingdom, 96).Any(p =>
+                p.layer == pLayer && p.office_id == pOfficeId);
         }
 
         internal static int ResolveWesternElectiveTermEndYear(
@@ -678,14 +691,22 @@ namespace AncientWarfare3.core.court
         internal static bool TryExpireWesternElectiveCentralOfficial(
             Actor pActor, Kingdom pKingdom, string pOfficeId)
         {
-            if (!IsWesternElective(pKingdom) || pActor?.data == null ||
-                string.IsNullOrEmpty(pOfficeId)) return false;
+            return TryExpireWesternElectiveOfficial(pActor, pKingdom,
+                pOfficeId, CourtOfficeLayer.Central);
+        }
+
+        internal static bool TryExpireWesternElectiveOfficial(Actor pActor,
+            Kingdom pKingdom, string pOfficeId, string pLayer)
+        {
+            if (!IsWesternElectiveOffice(pKingdom, pOfficeId, pLayer) ||
+                pActor?.data == null || string.IsNullOrEmpty(pOfficeId))
+                return false;
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
                 out long courtKingdomId, -1L);
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
-            if (courtKingdomId != pKingdom.id ||
-                layer != CourtOfficeLayer.Central || office != pOfficeId)
+            if (courtKingdomId != pKingdom.id || layer != pLayer ||
+                office != pOfficeId)
                 return false;
             if (CourtAffiliationResolver.IsValidGuestService(
                     pActor, pKingdom))
@@ -698,8 +719,18 @@ namespace AncientWarfare3.core.court
             BuildWesternElectionCandidates(Kingdom pKingdom,
                 string pOfficeId, long pFormerIncumbentActorId, int pLimit)
         {
+            return BuildWesternElectionCandidates(pKingdom, pOfficeId,
+                pFormerIncumbentActorId, pLimit, CourtOfficeLayer.Central);
+        }
+
+        internal static List<WesternCourtElectionCandidate>
+            BuildWesternElectionCandidates(Kingdom pKingdom,
+                string pOfficeId, long pFormerIncumbentActorId, int pLimit,
+                string pLayer)
+        {
             var result = new List<WesternCourtElectionCandidate>();
-            if (!IsWesternElective(pKingdom)) return result;
+            if (!IsWesternElectiveOffice(pKingdom, pOfficeId, pLayer))
+                return result;
             int limit = Math.Max(0, Math.Min(
                 WesternCourtElectionRules.MaxCandidatesPerVacancy, pLimit));
             int inspected = 0;
@@ -708,7 +739,8 @@ namespace AncientWarfare3.core.court
             {
                 if (result.Count >= limit || inspected++ >= limit * 8) break;
                 bool eligible = IsManualCentralCandidateEligible(actor,
-                    pKingdom, pOfficeId, pAllowVacancyPromotion: true);
+                    pKingdom, pOfficeId, pAllowVacancyPromotion: true,
+                    pLayer: pLayer);
                 if (!eligible) continue;
                 string school = SchoolMembershipService.GetSchool(
                     actor.data.id);
@@ -734,13 +766,21 @@ namespace AncientWarfare3.core.court
         internal static bool TryElectCentralOfficer(Kingdom pKingdom,
             string pOfficeId, Actor pCandidate)
         {
-            if (!IsWesternElectiveCentralOfficeVacant(pKingdom, pOfficeId) ||
+            return TryElectOfficer(pKingdom, pOfficeId, pCandidate,
+                CourtOfficeLayer.Central);
+        }
+
+        internal static bool TryElectOfficer(Kingdom pKingdom,
+            string pOfficeId, Actor pCandidate, string pLayer)
+        {
+            if (!IsWesternElectiveOfficeVacant(pKingdom, pOfficeId, pLayer) ||
                 !IsManualCentralCandidateEligible(pCandidate, pKingdom,
-                    pOfficeId, pAllowVacancyPromotion: true)) return false;
+                    pOfficeId, pAllowVacancyPromotion: true,
+                    pLayer: pLayer)) return false;
             string school = SchoolMembershipService.GetSchool(
                 pCandidate.data.id);
             bool committed = SetOfficer(pCandidate, pKingdom,
-                CourtOfficeLayer.Central, pOfficeId, school, null,
+                pLayer, pOfficeId, school, null,
                 pVacancyPromotion: true);
             if (committed)
                 CourtAristocraticGroupService.Refresh(pKingdom,
@@ -1111,13 +1151,14 @@ namespace AncientWarfare3.core.court
         private static bool IsManualCentralCandidateEligible(Actor pActor,
             Kingdom pKingdom, string pOfficeId,
             bool pAllowVacancyPromotion = false,
-            HashSet<long> pUnavailableActorIds = null)
+            HashSet<long> pUnavailableActorIds = null,
+            string pLayer = CourtOfficeLayer.Central)
         {
             return IsCentralCandidateEligibleWithoutQualification(pActor,
-                       pKingdom, pOfficeId, pUnavailableActorIds) &&
+                       pKingdom, pOfficeId, pUnavailableActorIds, pLayer) &&
                    CivilServiceQualificationService.
                        CanReceiveFormalCivilAppointment(pActor, pKingdom,
-                           CourtOfficeLayer.Central, pOfficeId,
+                           pLayer, pOfficeId,
                            pAllowVacancyPromotion);
         }
 
@@ -1133,7 +1174,8 @@ namespace AncientWarfare3.core.court
 
         private static bool IsCentralCandidateEligibleWithoutQualification(
             Actor pActor, Kingdom pKingdom, string pOfficeId,
-            HashSet<long> pUnavailableActorIds = null)
+            HashSet<long> pUnavailableActorIds = null,
+            string pLayer = CourtOfficeLayer.Central)
         {
             if (pActor?.data == null || pKingdom?.data == null || pActor.isRekt())
                 return false;
@@ -1149,7 +1191,7 @@ namespace AncientWarfare3.core.court
             bool king = pActor.isKing();
             pActor.data.get(LineageKeys.COURT_LAYER, out string currentLayer, "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string currentOffice, "");
-            bool hasCentralOffice = currentLayer == CourtOfficeLayer.Central &&
+            bool hasCentralOffice = currentLayer == pLayer &&
                                     !string.IsNullOrEmpty(currentOffice);
             if (!CourtManualAppointmentRules.CanListCandidate(
                     new CourtManualCandidateFacts(alive, adult, domestic: true,
@@ -1170,7 +1212,7 @@ namespace AncientWarfare3.core.court
                     affiliationAvailable:
                          HistoricalAffiliationService.IsAvailableForOffice(pActor))) &&
                    HistoricalSchoolEducationService.CanAppoint(pActor,
-                       pKingdom, CourtOfficeLayer.Central, pOfficeId);
+                       pKingdom, pLayer, pOfficeId);
         }
 
         internal static bool IsManualOfficeInCurrentTier(Kingdom pKingdom,
