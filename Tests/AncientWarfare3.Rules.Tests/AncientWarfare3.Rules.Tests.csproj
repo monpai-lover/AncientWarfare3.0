@@ -473,6 +473,7 @@
     <Compile Include="..\..\Code\core\court\ICourtProfile.cs" Link="Production\ICourtProfile.cs" />
     <Compile Include="..\..\Code\core\court\XiaCourtProfile.cs" Link="Production\XiaCourtProfile.cs" />
     <Compile Include="..\..\Code\core\court\WesternCourtProfile.cs" Link="Production\WesternCourtProfile.cs" />
+    <Compile Include="..\..\Code\core\court\WesternCourtOfficeEffectRules.cs" Link="Production\WesternCourtOfficeEffectRules.cs" />
     <Compile Include="..\..\Code\core\court\WesternCourtMigrationRules.cs" Link="Production\WesternCourtMigrationRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtCityOfficeRules.cs" Link="Production\CourtCityOfficeRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtProfileRegistry.cs" Link="Production\CourtProfileRegistry.cs" />

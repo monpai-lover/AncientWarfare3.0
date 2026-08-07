@@ -1,5 +1,6 @@
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.court;
 
 internal static class WesternPolicyEffectRulesTests
 {
@@ -16,11 +17,42 @@ internal static class WesternPolicyEffectRulesTests
         Equal(false, none.WesternCourtUnlocked,
             "a realm without a policy profile has no western court");
 
+        WesternCourtOfficeEffects officeEffects =
+            WesternCourtOfficeEffectRules.Resolve(new[]
+            {
+                CourtOfficeId.WestExecutive,
+                CourtOfficeId.WestTreasurer,
+                CourtOfficeId.WestFieldGeneral,
+                CourtOfficeId.WestMayor,
+                CourtOfficeId.WestMayor,
+                CourtOfficeId.WestMayor
+            });
+        Near(0.04f, officeEffects.CentralAdministrationBonus,
+            "active central offices add bounded administration");
+        Near(0.02f, officeEffects.MilitaryOrganizationBonus,
+            "active military offices add bounded organization");
+        Near(0.03f, officeEffects.LocalAdministrationBonus,
+            "active mayors add bounded local administration");
+        WesternCourtOfficeEffects capped =
+            WesternCourtOfficeEffectRules.Resolve(Enumerable.Repeat(
+                CourtOfficeId.WestExecutive, 20));
+        Near(WesternCourtOfficeEffectRules.MaximumCentralAdministrationBonus,
+            capped.CentralAdministrationBonus,
+            "central office effects are capped");
+
         KingdomPolicyEffects writing = KingdomPolicyEffectRules.Resolve(
             KingdomPolicyProfileId.WesternGeneral,
             new[] { "aw_tech_writing" }, "default");
         Near(1.03f, writing.AdministrationMultiplier,
             "writing improves real policy and technology administration output");
+        KingdomPolicyEffects applied = writing.WithWesternCourtOfficeEffects(
+            officeEffects);
+        Near(0.04f, applied.WesternCentralAdministrationBonus,
+            "office effects remain separate from policy administration");
+        Near(1.10f, applied.AdministrationMultiplier,
+            "central and local office effects increase effective administration");
+        Near(1.02f, applied.GarrisonMultiplier,
+            "military office effects increase effective organization");
 
         KingdomPolicyEffects survey = KingdomPolicyEffectRules.Resolve(
             KingdomPolicyProfileId.WesternGeneral,

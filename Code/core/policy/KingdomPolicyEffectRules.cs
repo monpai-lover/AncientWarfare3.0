@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 
 namespace AncientWarfare3.core.policy
 {
@@ -26,6 +27,9 @@ namespace AncientWarfare3.core.policy
         public bool RoyalAppointmentsUnlocked { get; init; }
         public bool CentralizationUnlocked { get; init; }
         public float AdministrationMultiplier { get; init; }
+        public float WesternCentralAdministrationBonus { get; init; }
+        public float WesternMilitaryOrganizationBonus { get; init; }
+        public float WesternLocalAdministrationBonus { get; init; }
         public int NobleOpinion { get; init; }
         public int VassalOpinion { get; init; }
 
@@ -37,6 +41,48 @@ namespace AncientWarfare3.core.policy
             GarrisonMultiplier = 1f,
             AdministrationMultiplier = 1f
         };
+
+        public KingdomPolicyEffects WithWesternCourtOfficeEffects(
+            WesternCourtOfficeEffects pOfficeEffects)
+        {
+            return new KingdomPolicyEffects
+            {
+                ExtraWorkshopAttempts = ExtraWorkshopAttempts,
+                EquipmentQualityBonus = EquipmentQualityBonus,
+                TaxMultiplier = TaxMultiplier,
+                StorageMultiplier = StorageMultiplier,
+                OrganizedFamineTransfers = OrganizedFamineTransfers,
+                FarmOutputMultiplier = FarmOutputMultiplier,
+                FamineResilience = FamineResilience,
+                GarrisonMultiplier = Math.Min(1.35f,
+                    GarrisonMultiplier +
+                    pOfficeEffects.MilitaryOrganizationBonus),
+                OccupationResistance = OccupationResistance,
+                ZoneTechnologyTier = ZoneTechnologyTier,
+                LegitimacyBonus = LegitimacyBonus,
+                SameCultureOpinion = SameCultureOpinion,
+                SuccessionStability = SuccessionStability,
+                GovernorAdministrationUnlocked = GovernorAdministrationUnlocked,
+                VassalAdministrationUnlocked = VassalAdministrationUnlocked,
+                WesternCourtUnlocked = WesternCourtUnlocked,
+                ElectiveTermsUnlocked = ElectiveTermsUnlocked,
+                FeudalRetainersUnlocked = FeudalRetainersUnlocked,
+                RoyalAppointmentsUnlocked = RoyalAppointmentsUnlocked,
+                CentralizationUnlocked = CentralizationUnlocked,
+                AdministrationMultiplier = Math.Min(1.25f,
+                    AdministrationMultiplier +
+                    pOfficeEffects.CentralAdministrationBonus +
+                    pOfficeEffects.LocalAdministrationBonus),
+                WesternCentralAdministrationBonus =
+                    pOfficeEffects.CentralAdministrationBonus,
+                WesternMilitaryOrganizationBonus =
+                    pOfficeEffects.MilitaryOrganizationBonus,
+                WesternLocalAdministrationBonus =
+                    pOfficeEffects.LocalAdministrationBonus,
+                NobleOpinion = NobleOpinion,
+                VassalOpinion = VassalOpinion
+            };
+        }
     }
 
     public static class KingdomPolicyEffectRules
