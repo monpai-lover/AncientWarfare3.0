@@ -110,6 +110,20 @@ internal static class WesternCourtProfileRulesTests
                 CourtInstitutionId.WesternRoyalDirect,
                 feudalRetainersUnlocked: true),
             "royal government with advanced tech migrates to advanced");
+        Equal(CourtOfficeId.Governor, CourtCityOfficeRules.Resolve(
+                CourtProfileId.Xia, CourtInstitutionId.Zhou, false),
+            "Xia keeps the native governor office");
+        Equal(CourtOfficeId.WestMayor, CourtCityOfficeRules.Resolve(
+                CourtProfileId.Western,
+                CourtInstitutionId.WesternBureaucratic, false),
+            "Western bureaucracy projects normal cities as Mayors");
+        Equal(CourtOfficeId.WestCount, CourtCityOfficeRules.Resolve(
+                CourtProfileId.Western,
+                CourtInstitutionId.WesternFeudalBureaucratic, true),
+            "advanced feudatory seats project as Counts");
+        Equal("", CourtCityOfficeRules.Resolve(
+                CourtProfileId.Western, CourtInstitutionId.WesternPrimitive,
+                false), "primitive Western courts have no formal city office");
 
         ICourtProfile xia = CourtProfileRegistry.For(
             KingdomPolicyProfileId.Xia);

@@ -136,6 +136,9 @@ namespace AncientWarfare3.patch
             long pHeirId, bool pCirculating)
         {
             if (pCity == null || pKingdom?.data == null) return null;
+            string cityOffice = CourtService.ResolveCityOffice(pKingdom,
+                pCity);
+            if (string.IsNullOrEmpty(cityOffice)) return null;
 
             Clan royalClan = null;
             if (pKingdom.data.royal_clan_id.hasValue())
@@ -155,11 +158,11 @@ namespace AncientWarfare3.patch
                             unit)) continue;
                     if (!HistoricalSchoolEducationService.CanAppoint(unit,
                             pKingdom, CourtOfficeLayer.City,
-                            CourtOfficeId.Governor)) continue;
+                            cityOffice)) continue;
                     if (!CivilServiceQualificationService.
                             CanReceiveFormalCivilAppointment(unit, pKingdom,
                                 CourtOfficeLayer.City,
-                                CourtOfficeId.Governor)) continue;
+                                cityOffice)) continue;
                     if (pCirculating && !CanServeTarget(unit, pCity)) continue;
                     if (unit.hasClan() && royalClan != null && unit.clan == royalClan)
                         royalCandidates.Add(unit);
@@ -180,6 +183,9 @@ namespace AncientWarfare3.patch
             Kingdom pKingdom, long pHeirId)
         {
             if (pCity?.data == null || pKingdom?.data == null) return null;
+            string cityOffice = CourtService.ResolveCityOffice(pKingdom,
+                pCity);
+            if (string.IsNullOrEmpty(cityOffice)) return null;
             using ListPool<Actor> candidates = new ListPool<Actor>();
             foreach (Actor unit in pCity.getUnits())
             {
@@ -189,7 +195,7 @@ namespace AncientWarfare3.patch
                     continue;
                 if (!HistoricalSchoolEducationService.CanAppoint(unit,
                         pKingdom, CourtOfficeLayer.City,
-                        CourtOfficeId.Governor)) continue;
+                        cityOffice)) continue;
                 candidates.Add(unit);
             }
             return PickLeader(candidates, pCity);

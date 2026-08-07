@@ -132,6 +132,26 @@ namespace AncientWarfare3.core.court
             return CourtProfileRegistry.CentralOfficeIdsFor(pKingdom);
         }
 
+        internal static string ResolveCityOffice(Kingdom pKingdom,
+            City pCity)
+        {
+            CourtProfileId profile = CourtProfileRegistry.For(pKingdom)?.Id ??
+                                      CourtProfileId.None;
+            bool feudatorySeat = false;
+            if (pCity?.data != null &&
+                FeudatoryService.TryGetByCity(pCity.data.id,
+                    out FeudatorySnapshot feudatory))
+                feudatorySeat = feudatory.SeatCityId == pCity.data.id;
+            return CourtCityOfficeRules.Resolve(profile,
+                CourtInstitutionService.GetInstitution(pKingdom),
+                feudatorySeat);
+        }
+
+        internal static bool IsCityLeaderOffice(string pOfficeId)
+        {
+            return CourtCityOfficeRules.IsCityLeaderOffice(pOfficeId);
+        }
+
         public static CourtSnapshot GetSnapshot(Kingdom pKingdom)
         {
             var snapshot = new CourtSnapshot();
@@ -1394,8 +1414,9 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null || pKingdom?.data == null ||
                 pCity?.data == null || pCity.kingdom != pKingdom ||
                 pCity.leader != pActor) return false;
-            return SetOfficer(pActor, pKingdom, CourtOfficeLayer.City,
-                CourtOfficeId.Governor,
+            string officeId = ResolveCityOffice(pKingdom, pCity);
+            return !string.IsNullOrEmpty(officeId) &&
+                SetOfficer(pActor, pKingdom, CourtOfficeLayer.City, officeId,
                 SchoolMembershipService.GetSchool(pActor.data.id), pCity);
         }
 
@@ -1407,9 +1428,10 @@ namespace AncientWarfare3.core.court
                 pCity.leader != pActor ||
                 !HistoricalSchoolEducationService.CanAppoint(pActor,
                     pKingdom, CourtOfficeLayer.City,
-                    CourtOfficeId.Governor)) return false;
-            return SetOfficer(pActor, pKingdom, CourtOfficeLayer.City,
-                CourtOfficeId.Governor,
+                    ResolveCityOffice(pKingdom, pCity))) return false;
+            string officeId = ResolveCityOffice(pKingdom, pCity);
+            return !string.IsNullOrEmpty(officeId) &&
+                SetOfficer(pActor, pKingdom, CourtOfficeLayer.City, officeId,
                 SchoolMembershipService.GetSchool(pActor.data.id), pCity,
                 pActing: true);
         }
@@ -1486,7 +1508,7 @@ namespace AncientWarfare3.core.court
                 (city?.data == null || city.isRekt() || city.kingdom != kingdom))
                 return false;
             bool cityOffice = pAppointment.Layer == CourtOfficeLayer.City &&
-                              pAppointment.OfficeId == CourtOfficeId.Governor;
+                              IsCityLeaderOffice(pAppointment.OfficeId);
             if (cityOffice && city?.leader != null && city.leader != pActor)
                 return false;
             if (!OfficialCareerStateService.RestoreAppointmentProjection(
@@ -1577,7 +1599,7 @@ namespace AncientWarfare3.core.court
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             if (layer != CourtOfficeLayer.City ||
-                office != CourtOfficeId.Governor) return false;
+                !IsCityLeaderOffice(office)) return false;
             ClearOfficer(pActor, pReason ?? "city_governor_ended");
             return true;
         }

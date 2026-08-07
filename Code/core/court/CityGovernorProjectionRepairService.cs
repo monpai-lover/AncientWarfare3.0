@@ -81,9 +81,12 @@ namespace AncientWarfare3.core.court
         private static void Apply(City pCity, Actor pActor)
         {
             if (AlreadyProjected(pCity, pActor)) return;
+            string officeId = CourtService.ResolveCityOffice(pCity.kingdom,
+                pCity);
+            if (string.IsNullOrEmpty(officeId)) return;
             bool formal = CivilServiceQualificationService.
                 CanReceiveFormalCivilAppointment(pActor, pCity.kingdom,
-                    CourtOfficeLayer.City, CourtOfficeId.Governor);
+                    CourtOfficeLayer.City, officeId);
             bool appointed = formal
                 ? CourtService.TryAssignCityGovernor(pActor, pCity.kingdom,
                     pCity)
@@ -105,9 +108,11 @@ namespace AncientWarfare3.core.court
                 out long cityId, -1L);
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+            string expectedOffice = CourtService.ResolveCityOffice(
+                pCity.kingdom, pCity);
             return kingdomId == pCity.kingdom?.id && cityId == pCity.data.id &&
                    layer == CourtOfficeLayer.City &&
-                   office == CourtOfficeId.Governor;
+                   office == expectedOffice;
         }
 
         private static Actor FindActor(long pActorId)
