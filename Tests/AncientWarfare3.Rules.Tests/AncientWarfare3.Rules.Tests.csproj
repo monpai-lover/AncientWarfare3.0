@@ -129,6 +129,7 @@
     <Compile Include="WesternPolicyAiRulesTests.cs.txt" />
     <Compile Include="WesternCourtProfileRulesTests.cs.txt" />
     <Compile Include="WesternCourtElectionRulesTests.cs.txt" />
+    <Compile Include="WesternCourtOfficeEffectRulesTests.cs.txt" />
     <Compile Include="WesternMayorTermRulesTests.cs.txt" />
     <Compile Include="OfficialCirculationRulesTests.cs.txt" />
     <Compile Include="..\..\Code\attributes\TableDefAttribute.cs" Link="Production\TableDefAttribute.cs" />

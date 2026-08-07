@@ -63,6 +63,7 @@ namespace AncientWarfare3.core.court
         private static bool IsMilitaryOffice(string pOfficeId)
         {
             return pOfficeId == CourtOfficeId.WestFieldGeneral ||
+                   pOfficeId == CourtOfficeId.WestRoyalConstable ||
                    pOfficeId == CourtOfficeId.WestMarshal;
         }
     }

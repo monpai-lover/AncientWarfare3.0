@@ -17,6 +17,8 @@ foreach ($needle in @('AW_KingdomTitleHoldersButton', 'AW_KingdomAtlasButton')) 
 foreach ($key in @('aw_court_title_western',
                    'aw_court_tier_western_bureaucratic',
                    'aw_court_tier_western_feudal_bureaucratic',
+                   'aw_court_institution_western_bureaucratic',
+                   'aw_court_institution_western_feudal_bureaucratic',
                    'aw_court_office_west_executive',
                    'aw_court_office_west_mayor',
                    'aw_court_office_west_royal_constable',

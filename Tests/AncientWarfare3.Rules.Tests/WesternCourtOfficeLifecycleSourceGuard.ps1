@@ -9,11 +9,17 @@ $migration = Get-Content -Raw (Join-Path $root 'Code/core/court/WesternCourtMigr
 
 foreach ($needle in @('GetActiveOfficers(pKingdom, 96)',
                       'WesternCourtElectionService.QueueKingdomVacancies',
-                      'WesternCourtElectionRules.CanQueueVacancy')) {
+                      'WesternCourtElectionRules.CanQueueVacancy',
+                      'KingdomPolicyEffectService.Read(pKingdom)',
+                      'MilitaryOfficeIdsForCurrentProfile')) {
     if (-not $service.Contains($needle)) { throw "missing western lifecycle contract: $needle" }
 }
 foreach ($needle in @('public static string Resolve(', 'WestMayor', 'WestCount')) {
     if (-not $cityOffice.Contains($needle)) { throw "missing city office projection contract: $needle" }
+}
+if ($service.Contains('CourtInstitutionId.WesternElective') -or
+    $service.Contains('CourtInstitutionId.WesternRoyalDirect')) {
+    throw 'appointment behavior must not be selected from legacy institution IDs'
 }
 foreach ($needle in @('WESTERN_MAYOR_CYCLE_END_YEAR',
                       'WesternMayorTermRules',

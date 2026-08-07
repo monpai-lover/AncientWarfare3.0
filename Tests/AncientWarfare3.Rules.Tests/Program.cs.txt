@@ -293,6 +293,7 @@ if (args.Length == 1 && args[0] == "--western-policy-profile-slice")
     WesternPolicyAiRulesTests.Run();
     WesternCourtProfileRulesTests.Run();
     WesternCourtElectionRulesTests.Run();
+    WesternCourtOfficeEffectRulesTests.Run();
     WesternMayorTermRulesTests.Run();
     Console.WriteLine("AW3 western policy profile rules passed.");
     return;
