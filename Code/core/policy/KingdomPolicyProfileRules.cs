@@ -51,10 +51,10 @@ namespace AncientWarfare3.core.policy
                    pProfileId == KingdomPolicyProfileId.WesternGeneral;
         }
 
-        public static bool UsesWesternCourtLabel(
+        public static string ResolvePolicyStateLabelKey(
             KingdomPolicyProfileId pProfileId)
         {
-            return pProfileId == KingdomPolicyProfileId.WesternGeneral;
+            return "aw_policy_state_short";
         }
 
         public static bool TryParsePersisted(string pPersistedId,

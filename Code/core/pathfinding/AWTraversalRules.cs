@@ -44,6 +44,12 @@ namespace AncientWarfare3.core.pathfinding
             float scale = method == AWMovementMethod.Sail
                 ? config.SailSpeedScale
                 : method == AWMovementMethod.Swim ? config.SwimSpeedScale : config.WalkSpeedScale;
+            float waterStaminaDrain = config.WaterStaminaDrainPerSecond;
+            if (method == AWMovementMethod.Swim && pActor.HasFastSwimming)
+            {
+                scale *= 5f;
+                waterStaminaDrain *= 0.2f;
+            }
             float speed = Math.Max(0.01f, pActor.MovementSpeed * scale * pTo.WalkMultiplier);
             float time = distance / speed;
             float stamina = 0f;
@@ -76,13 +82,13 @@ namespace AncientWarfare3.core.pathfinding
             {
                 hazards |= AWHazardFlags.Ocean | AWHazardFlags.StaminaDrain;
                 stamina += Math.Max(0f,
-                    config.WaterStaminaDrainPerSecond - pActor.StaminaRegeneration) * time;
+                    waterStaminaDrain - pActor.StaminaRegeneration) * time;
                 risk += config.OceanRiskCost;
                 if (stamina > pActor.Stamina)
                 {
                     hazards |= AWHazardFlags.Drowning;
                     float exhaustedSeconds = (stamina - pActor.Stamina) /
-                                             Math.Max(0.01f, config.WaterStaminaDrainPerSecond);
+                                             Math.Max(0.01f, waterStaminaDrain);
                     health += (pActor.WaterDamage > 0f
                         ? pActor.WaterDamage
                         : config.DrowningDamagePerSecond) * exhaustedSeconds;

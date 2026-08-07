@@ -5,7 +5,7 @@ namespace AncientWarfare3.core.lineage
         public ActorAgeWorkState(bool isAdult, int profession,
             bool inPermanentArmy, bool atWar, bool dynasticEligible,
             bool shouldUsePeacetimeJob, bool shouldReleaseMilitaryRole,
-            int yearBucket)
+            bool needsAnnualReproductionRecovery, int yearBucket)
         {
             IsAdult = isAdult;
             Profession = profession;
@@ -14,6 +14,8 @@ namespace AncientWarfare3.core.lineage
             DynasticEligible = dynasticEligible;
             ShouldUsePeacetimeJob = shouldUsePeacetimeJob;
             ShouldReleaseMilitaryRole = shouldReleaseMilitaryRole;
+            NeedsAnnualReproductionRecovery =
+                needsAnnualReproductionRecovery;
             YearBucket = yearBucket;
         }
 
@@ -24,6 +26,7 @@ namespace AncientWarfare3.core.lineage
         public bool DynasticEligible { get; }
         public bool ShouldUsePeacetimeJob { get; }
         public bool ShouldReleaseMilitaryRole { get; }
+        public bool NeedsAnnualReproductionRecovery { get; }
         public int YearBucket { get; }
     }
 }

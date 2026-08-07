@@ -172,6 +172,7 @@ namespace AncientWarfare3.core.lineage
             if (pDraft == null)
                 return new WarPeaceExecutionResult(false, -1,
                     "invalid_settlement_participants");
+            pDraft.AutomaticExhaustionSettlement = true;
             if (!_world.TryGetAuthoritativeSignedWarScore(pDraft,
                     out int signedWarScore, out string scoreReason))
                 return new WarPeaceExecutionResult(false, -1,

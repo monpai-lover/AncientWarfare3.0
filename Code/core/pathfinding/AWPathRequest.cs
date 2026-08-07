@@ -78,17 +78,23 @@ namespace AncientWarfare3.core.pathfinding
     public sealed class AWPathRequest : IDisposable
     {
         private int _disposed;
+        private AWPathStep[] _cachedRoute;
+        private int _cachedRouteOffset;
+        private bool _cachedRouteReachesTarget;
 
         public AWPathRequest(long pActorId, int pStartTileId, int pTargetTileId,
             AWPathRequestOptions pOptions, AWActorTraversalProfile pProfile,
             AWTraversalGeneration pGeneration, double pCreatedTime,
             bool pHighPriority, long pTerrainRevision = 0L,
-            long pWorldGeneration = 0L, bool pInsideBoat = false)
+            long pWorldGeneration = 0L, bool pInsideBoat = false,
+            bool pPhysicalTransportAvailable = false,
+            float pPhysicalTransportRouteTiles = float.PositiveInfinity)
             : this(pActorId, pStartTileId, pTargetTileId, pOptions, pProfile,
                 pGeneration, pCreatedTime, pHighPriority
                     ? AWPathWorkClass.Operational
                     : AWPathWorkClass.Ambient, pTerrainRevision,
-                pWorldGeneration, pInsideBoat)
+                pWorldGeneration, pInsideBoat, pPhysicalTransportAvailable,
+                pPhysicalTransportRouteTiles)
         {
         }
 
@@ -97,10 +103,11 @@ namespace AncientWarfare3.core.pathfinding
             AWTraversalGeneration pGeneration, double pCreatedTime,
             AWPathWorkClass pWorkClass = AWPathWorkClass.Ambient,
             long pTerrainRevision = 0L, long pWorldGeneration = 0L,
-            bool pInsideBoat = false)
+            bool pInsideBoat = false, bool pPhysicalTransportAvailable = false,
+            float pPhysicalTransportRouteTiles = float.PositiveInfinity)
         {
             ActorId = pActorId;
-            StartTileId = pStartTileId;
+            _startTileId = pStartTileId;
             TargetTileId = pTargetTileId;
             Options = pOptions;
             Key = new AWPathRequestKey(pTargetTileId, pOptions.PathOnWater,
@@ -115,12 +122,16 @@ namespace AncientWarfare3.core.pathfinding
             Generation = pGeneration?.Retain() ?? throw new ArgumentNullException(nameof(pGeneration));
             CreatedTime = pCreatedTime;
             WorkClass = pWorkClass;
+            PhysicalTransportAvailable = pPhysicalTransportAvailable;
+            PhysicalTransportRouteTiles = pPhysicalTransportRouteTiles;
             Cancellation = new CancellationTokenSource();
             Stream = new AWPathStream();
         }
 
         public long ActorId { get; }
-        public int StartTileId { get; }
+        private int _startTileId;
+
+        public int StartTileId => Volatile.Read(ref _startTileId);
         public int TargetTileId { get; }
         public AWPathRequestOptions Options { get; }
         public AWPathRequestKey Key { get; }
@@ -131,8 +142,54 @@ namespace AncientWarfare3.core.pathfinding
         public double CreatedTime { get; }
         public AWPathWorkClass WorkClass { get; }
         public bool HighPriority => WorkClass == AWPathWorkClass.Operational;
+        public bool PhysicalTransportAvailable { get; }
+        public float PhysicalTransportRouteTiles { get; }
         public CancellationTokenSource Cancellation { get; }
         public AWPathStream Stream { get; }
+
+        internal void AdvanceStartTile(int pTileId)
+        {
+            if (pTileId >= 0) Volatile.Write(ref _startTileId, pTileId);
+        }
+
+        internal bool TryTakeCachedSegment(int pMaximumSteps,
+            out AWPathStep[] pSteps, out bool pReachedTarget)
+        {
+            AWPathStep[] route = _cachedRoute;
+            int offset = _cachedRouteOffset;
+            if (route == null || offset >= route.Length)
+            {
+                pSteps = Array.Empty<AWPathStep>();
+                pReachedTarget = false;
+                return false;
+            }
+            int count = Math.Min(Math.Max(1, pMaximumSteps), route.Length - offset);
+            pSteps = new AWPathStep[count];
+            Array.Copy(route, offset, pSteps, 0, count);
+            _cachedRouteOffset = offset + count;
+            bool exhausted = _cachedRouteOffset >= route.Length;
+            pReachedTarget = exhausted && _cachedRouteReachesTarget;
+            if (exhausted)
+            {
+                _cachedRoute = null;
+                _cachedRouteReachesTarget = false;
+            }
+            return true;
+        }
+
+        internal void CacheRoute(AWPathStep[] pRoute, int pConsumed,
+            bool pReachesTarget)
+        {
+            _cachedRoute = pRoute;
+            _cachedRouteOffset = Math.Max(0, Math.Min(pConsumed,
+                pRoute?.Length ?? 0));
+            _cachedRouteReachesTarget = pReachesTarget;
+            if (_cachedRouteOffset >= (pRoute?.Length ?? 0))
+            {
+                _cachedRoute = null;
+                _cachedRouteReachesTarget = false;
+            }
+        }
 
         private static int StartRegion(int pTileId,
             AWTraversalGeneration pGeneration)

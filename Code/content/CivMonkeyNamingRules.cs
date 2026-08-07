@@ -115,6 +115,17 @@ namespace AncientWarfare3.content
             return PickFrom(GivenNames, GivenNames, pSeed, pMetaType ^ 0x474E);
         }
 
+        public static string NormalizeGivenName(string pFamilyName,
+            string pCandidateName)
+        {
+            string family = Normalize(pFamilyName);
+            string candidate = Normalize(pCandidateName);
+            if (family.Length > 0 && candidate.StartsWith(family,
+                    StringComparison.Ordinal) && candidate.Length > family.Length)
+                return candidate.Substring(family.Length).Trim();
+            return candidate;
+        }
+
         public static string PickCity(long pSeed, int pMetaType)
         {
             return PickFrom(CityNames, CityNames, pSeed, pMetaType ^ 0x4349);

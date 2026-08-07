@@ -32,7 +32,9 @@ namespace AncientWarfare3.core.naming
                     PersistActorGeneratedComponents(pActor, pGenerated,
                         pSelectedName), pGenerated =>
                     AWActorInitialNameRules.ResolveGeneratedName(
-                        pGenerated.Name, pGenerated.Components));
+                        pGenerated.Name, pGenerated.Components,
+                        CivMonkeyNamingRules.IsCivilizedMonkey(
+                            pActor.asset?.id)));
         }
 
         private static bool TryProjectHistoricalFigure(Actor pActor,
@@ -456,6 +458,18 @@ namespace AncientWarfare3.core.naming
             AWGeneratedName pGenerated, string pSelectedName)
         {
             if (pActor?.data == null || pGenerated?.Components == null) return;
+            if (pGenerated.Components.TryGetValue("family_name",
+                    out string taggedFamily) &&
+                !string.IsNullOrWhiteSpace(taggedFamily))
+            {
+                string family = taggedFamily.Trim();
+                pActor.data.set(AWNameDataKeys.FamilyComponent, family);
+                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, family);
+                pActor.data.get(LineageKeys.FAMILY_NAME,
+                    out string lineageFamily, string.Empty);
+                if (string.IsNullOrWhiteSpace(lineageFamily))
+                    pActor.data.set(LineageKeys.FAMILY_NAME, family);
+            }
             string given = pGenerated.Components.TryGetValue("given_name",
                                out string taggedGiven) &&
                            !string.IsNullOrWhiteSpace(taggedGiven)

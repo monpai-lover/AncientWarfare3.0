@@ -153,7 +153,8 @@ namespace AncientWarfare3.ui
             PowerButton diplomacyAiToggle =
                 PowerButtonCreator.CreateToggleButton(
                     DiplomacyAiRules.TogglePowerId,
-                    SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
+                    SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"),
+                    pNoAutoSetToggleAction: true);
             Register(groups, AWLineageTabLayoutRules.Settings,
                 diplomacyAiToggle);
 

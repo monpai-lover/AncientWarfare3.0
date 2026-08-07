@@ -9,6 +9,7 @@ internal static class TemporaryLevyRulesTests
         PreparationRecruitmentSurvivesMonthBoundaries();
         PreparationRecruitmentStopsAtLegalBoundaries();
         PreparationRuntimeUsesEventDrivenNoticeScheduling();
+        PreparationScanBudgetAndExhaustionAreBounded();
         RecoversEligibleOrphanWarriorsDuringWar();
         PreservesGarrisonAndAssignedSoldiers();
         NotifiesRtsForEveryRosterMembershipChange();
@@ -60,6 +61,27 @@ internal static class TemporaryLevyRulesTests
             "preparation completes as soon as every city is filled or exhausted");
     }
 
+    private static void PreparationScanBudgetAndExhaustionAreBounded()
+    {
+        Assert(TemporaryLevyRules.MaxCandidatesPerWorkItem == 16,
+            "temporary levy keeps each preparation scan within the frame budget");
+        Assert(!TemporaryLevyRules.IsPreparationScanExhausted(
+                scannedSincePass: 16, residentCount: 100),
+            "a bounded scan of a large city must not mark the whole city exhausted");
+        Assert(TemporaryLevyRules.IsPreparationScanExhausted(
+                scannedSincePass: 100, residentCount: 100),
+            "a complete resident pass may mark the city exhausted");
+        Assert(TemporaryLevyRules.ShouldKeepPreparationRecruitmentCity(
+                cityScanComplete: false, recruitedActors: 0),
+            "an incomplete resident pass must continue even when this batch recruits nobody");
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "TemporaryLevyService.cs"));
+        Assert(source.Contains("TEMPORARY_LEVY_PREPARATION_ACTOR_CURSOR",
+                StringComparison.Ordinal),
+            "preparation actor scanning resumes from its persisted cursor after reload");
+    }
+
     private static void PreparationRuntimeUsesEventDrivenNoticeScheduling()
     {
         string source = File.ReadAllText(Path.Combine(
@@ -83,6 +105,23 @@ internal static class TemporaryLevyRulesTests
         Assert(source.Contains("CollectPreparationKingdoms()",
                 StringComparison.Ordinal),
             "monthly recovery queues only active notice participants");
+        int preparationStart = source.IndexOf(
+            "private static void ProcessPreparationRecruitment(",
+            StringComparison.Ordinal);
+        int preparationEnd = source.IndexOf(
+            "private static bool TrySelectPreparationCity(",
+            preparationStart, StringComparison.Ordinal);
+        string preparationBody = preparationStart < 0 ||
+                                 preparationEnd < 0
+            ? string.Empty
+            : source.Substring(preparationStart,
+                preparationEnd - preparationStart);
+        Assert(preparationBody.Contains("CollectPreparationCandidates(",
+                StringComparison.Ordinal),
+            "notice recruitment scans current city residents temporarily");
+        Assert(!preparationBody.Contains("TryConsumeForMobilization(",
+                StringComparison.Ordinal),
+            "notice recruitment must not consume a persistent resident pool");
         Assert(!source.Contains("currentMonthKey != pMonthKey",
                 StringComparison.Ordinal),
             "deferred preparation work cannot expire solely because large-step crossed a month");
@@ -90,6 +129,15 @@ internal static class TemporaryLevyRulesTests
 
     private static void SyntheticRecruitmentStartsOnlyAfterFormalWar()
     {
+        Assert(TemporaryLevyRules.ShouldUseSyntheticWarReplenishment(
+                   ArmyMobilizationPhase.War, targetArmyExists: true),
+            "formal war replenishment must use the integer reserve and synthetic units");
+        Assert(!TemporaryLevyRules.ShouldUseSyntheticWarReplenishment(
+                    ArmyMobilizationPhase.Notice, targetArmyExists: true),
+            "notice recruitment must continue to use vanilla resident enlistment");
+        Assert(!TemporaryLevyRules.ShouldUseSyntheticWarReplenishment(
+                    ArmyMobilizationPhase.War, targetArmyExists: false),
+            "synthetic replenishment requires an existing target army");
         Assert(TemporaryLevyRules.SyntheticFallbackRequest(
                    ArmyMobilizationPhase.Notice, approvedShortage: 10,
                    availableWarReserve: 10) == 0,

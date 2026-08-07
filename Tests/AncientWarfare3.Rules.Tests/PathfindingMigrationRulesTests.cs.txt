@@ -1,0 +1,41 @@
+using System;
+using AncientWarfare3.core.pathfinding;
+
+internal static class PathfindingMigrationRulesTests
+{
+    internal static void Run()
+    {
+        Assert(AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Session),
+            "path sessions are imported");
+        Assert(AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.ActorHooks),
+            "actor hooks are imported");
+        Assert(AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.DockTransport),
+            "dock transport is imported");
+        Assert(AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Dock),
+            "physical docks are imported");
+        Assert(AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Boat),
+            "physical boats are imported");
+        Assert(AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Passenger),
+            "dock passengers are imported");
+        Assert(!AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Teleport),
+            "magical teleport is excluded");
+        Assert(!AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Train),
+            "trains are excluded");
+        Assert(!AWPathMigrationRules.ShouldImport(
+                CultiwayPathFeature.Cultivation),
+            "cultivation is excluded");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.pathfinding;
 
 namespace AncientWarfare3.core.lineage
 {

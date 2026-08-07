@@ -1,4 +1,5 @@
 using HarmonyLib;
+using AncientWarfare3.ui;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,6 +10,8 @@ namespace AncientWarfare3.patch
     {
         private const string HISTORY_BTN_NAME = "AW_KingdomHistoryTabButton";
         private const string ATLAS_BTN_NAME = "AW_KingdomAtlasButton";
+        private const string TITLE_HOLDERS_BTN_NAME =
+            "AW_KingdomTitleHoldersButton";
         private const string VASSAL_BTN_NAME = "AW_KingdomVassalTabButton";
         private const string WAR_BTN_NAME = "AW_KingdomWarTargetTabButton";
         private const int SIZE = 40;
@@ -35,8 +38,8 @@ namespace AncientWarfare3.patch
             });
 
             Button atlasBtn = EnsureButton(rail, ATLAS_BTN_NAME,
-                "ui/icons/iconKingdomList", "Kingdom atlas",
-                "Historical territory changes; generated from saved events.");
+                "ui/icons/iconKingdomList", "aw_kingdom_atlas",
+                "aw_kingdom_atlas_desc");
             atlasBtn.transform.SetSiblingIndex(historyBtn.transform.GetSiblingIndex() + 1);
             atlasBtn.onClick.RemoveAllListeners();
             atlasBtn.onClick.AddListener(() =>
@@ -44,6 +47,22 @@ namespace AncientWarfare3.patch
                 Kingdom current = __instance != null ? __instance.meta_object : null;
                 if (current?.data == null || current.isRekt()) return;
                 AncientWarfare3.ui.windows.KingdomAtlasWindow.Open(current.id);
+            });
+
+            Button titleHoldersBtn = EnsureButton(rail,
+                TITLE_HOLDERS_BTN_NAME, "ui/icons/iconKings",
+                "aw_virtual_titles", "aw_virtual_titles_desc");
+            titleHoldersBtn.transform.SetSiblingIndex(
+                atlasBtn.transform.GetSiblingIndex() + 1);
+            titleHoldersBtn.onClick.RemoveAllListeners();
+            titleHoldersBtn.onClick.AddListener(() =>
+            {
+                Kingdom current = __instance != null
+                    ? __instance.meta_object
+                    : null;
+                if (current?.data == null || current.isRekt()) return;
+                AncientWarfare3.ui.windows.VirtualNobleTitleRosterWindow.Open(
+                    current.id);
             });
 
             Button vassalBtn = EnsureButton(rail, VASSAL_BTN_NAME, "ui/wars/war_vassal",

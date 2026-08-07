@@ -135,6 +135,22 @@ internal static class RulerHouseholdRulesTests
         Equal(1, RulerHouseholdRules.PregnancyStartsForYear(
                 eligibleConsorts: 1),
             "annual conception work does not invent candidates");
+        Equal(false, RulerHouseholdRules.ShouldQueryOnDeath(
+                currentRuler: false, formerRuler: false,
+                cachedHouseholdPartner: false),
+            "ordinary Actor death skips ruler-household SQLite queries");
+        True(RulerHouseholdRules.ShouldQueryOnDeath(
+                currentRuler: true, formerRuler: false,
+                cachedHouseholdPartner: false),
+            "current ruler death closes ruled relationships");
+        True(RulerHouseholdRules.ShouldQueryOnDeath(
+                currentRuler: false, formerRuler: true,
+                cachedHouseholdPartner: false),
+            "former ruler death checks maintenance-lagged relationships");
+        True(RulerHouseholdRules.ShouldQueryOnDeath(
+                currentRuler: false, formerRuler: false,
+                cachedHouseholdPartner: true),
+            "cached household partner death closes its relationship");
         Equal(24324, RulerHouseholdPregnancyRules.ToMonthKey(2027, 1),
             "consort retry scheduling uses a stable calendar month key");
         True(RulerHouseholdPregnancyRules.ShouldProcessMonth(

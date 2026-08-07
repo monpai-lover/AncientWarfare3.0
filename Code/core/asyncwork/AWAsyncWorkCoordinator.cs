@@ -10,7 +10,8 @@ namespace AncientWarfare3.core.asyncwork
         public AWAsyncWorkRequest(string pKey, AWAsyncLane pLane,
             AWAsyncStamp pStamp, Func<CancellationToken, object> pExecute,
             Action<object> pCommit, Action<Exception> pFault = null,
-            Func<bool> pTryAdmit = null)
+            Func<bool> pTryAdmit = null,
+            AWAsyncCommitMode pCommitMode = AWAsyncCommitMode.MainThread)
         {
             Key = pKey;
             Lane = pLane;
@@ -19,6 +20,7 @@ namespace AncientWarfare3.core.asyncwork
             Commit = pCommit;
             Fault = pFault;
             TryAdmit = pTryAdmit;
+            CommitMode = pCommitMode;
         }
 
         public string Key { get; }
@@ -28,6 +30,7 @@ namespace AncientWarfare3.core.asyncwork
         public Action<object> Commit { get; }
         public Action<Exception> Fault { get; }
         public Func<bool> TryAdmit { get; }
+        public AWAsyncCommitMode CommitMode { get; }
     }
 
     internal sealed class AWAsyncWorkCoordinator : IDisposable
@@ -40,6 +43,7 @@ namespace AncientWarfare3.core.asyncwork
             public AWAsyncStamp Stamp;
             public Func<CancellationToken, object> Execute;
             public CancellationToken Token;
+            public bool CommitOnWorker;
         }
 
         private sealed class CommitItem
@@ -50,6 +54,7 @@ namespace AncientWarfare3.core.asyncwork
             public AWAsyncStamp Stamp;
             public Action<object> Commit;
             public Action<Exception> Fault;
+            public bool CommitOnWorker;
         }
 
         private sealed class Completion
@@ -107,7 +112,8 @@ namespace AncientWarfare3.core.asyncwork
 
         private readonly object _gate = new object();
         private readonly bool _enabled;
-        private readonly AutoResetEvent _workSignal = new AutoResetEvent(false);
+        private readonly int _workerCapacity;
+        private readonly SemaphoreSlim _workSignal = new SemaphoreSlim(0);
         private readonly AWBoundedLatestQueue<WorkerItem> _traversal;
         private readonly AWBoundedLatestQueue<WorkerItem> _ui;
         private readonly AWBoundedLatestQueue<WorkerItem> _ai;
@@ -127,7 +133,7 @@ namespace AncientWarfare3.core.asyncwork
             new List<CancellationTokenSource>();
         private readonly AWAsyncDiagnostics _diagnostics = new AWAsyncDiagnostics();
 
-        private Thread _worker;
+        private Thread[] _workers = Array.Empty<Thread>();
         private CancellationTokenSource _worldCancellation;
         private CancellationAttempt _cancellationAttempt;
         private AWAsyncLifecycleState _state = AWAsyncLifecycleState.Stopped;
@@ -144,8 +150,17 @@ namespace AncientWarfare3.core.asyncwork
         private bool _disposed;
 
         public AWAsyncWorkCoordinator(bool pEnabled)
+            : this(pEnabled, 0)
+        {
+        }
+
+        internal AWAsyncWorkCoordinator(bool pEnabled, int pWorkerCount)
         {
             _enabled = pEnabled;
+            _workerCapacity = pEnabled
+                ? AWAsyncWorkerRules.NormalizeWorkerCount(pWorkerCount,
+                    Environment.ProcessorCount)
+                : 0;
             _traversal = new AWBoundedLatestQueue<WorkerItem>(1,
                 pItem => pItem.Key);
             _ui = new AWBoundedLatestQueue<WorkerItem>(AWAsyncCapacity.Ui,
@@ -181,7 +196,20 @@ namespace AncientWarfare3.core.asyncwork
 
         public bool WorkerAlive
         {
-            get { lock (_gate) return _worker?.IsAlive == true; }
+            get
+            {
+                lock (_gate)
+                {
+                    for (int i = 0; i < _workers.Length; i++)
+                        if (_workers[i]?.IsAlive == true) return true;
+                    return false;
+                }
+            }
+        }
+
+        public int WorkerCount
+        {
+            get { lock (_gate) return _workers.Length; }
         }
 
         public long StartWorld()
@@ -226,7 +254,7 @@ namespace AncientWarfare3.core.asyncwork
                 }
                 var newWorldCancellation = new CancellationTokenSource();
                 bool previousShutdownRequested = _shutdownRequested;
-                Thread worker = null;
+                Thread[] workers = null;
                 try
                 {
                     if (previousState == AWAsyncLifecycleState.Stopped)
@@ -234,13 +262,18 @@ namespace AncientWarfare3.core.asyncwork
                         _shutdownRequested = false;
                         if (_enabled)
                         {
-                            worker = new Thread(WorkerLoop)
+                            workers = new Thread[_workerCapacity];
+                            for (int index = 0; index < workers.Length; index++)
                             {
-                                IsBackground = true,
-                                Name = "AW3 Async Compute",
-                                Priority = ThreadPriority.BelowNormal
-                            };
-                            worker.Start();
+                                Thread worker = new Thread(WorkerLoop)
+                                {
+                                    IsBackground = true,
+                                    Name = "AW3 Async Compute " + (index + 1),
+                                    Priority = ThreadPriority.BelowNormal
+                                };
+                                workers[index] = worker;
+                                worker.Start();
+                            }
                         }
                     }
                 }
@@ -252,7 +285,7 @@ namespace AncientWarfare3.core.asyncwork
                     throw;
                 }
                 _worldCancellation = newWorldCancellation;
-                if (worker != null) _worker = worker;
+                if (workers != null) _workers = workers;
                 _saveBarrier = false;
                 _saveBarrierPending = false;
                 _saveBarrierDrainThreadId = 0;
@@ -322,7 +355,9 @@ namespace AncientWarfare3.core.asyncwork
                 Lane = pRequest.Lane,
                 Stamp = pRequest.Stamp,
                 Execute = pRequest.Execute,
-                Token = _worldCancellation.Token
+                Token = _worldCancellation.Token,
+                CommitOnWorker = pRequest.CommitMode ==
+                    AWAsyncCommitMode.Background
             };
             if (!TryEnqueueLocked(item, out WorkerItem replaced))
             {
@@ -342,10 +377,12 @@ namespace AncientWarfare3.core.asyncwork
                 Lane = item.Lane,
                 Stamp = pRequest.Stamp,
                 Commit = pRequest.Commit,
-                Fault = pRequest.Fault
+                Fault = pRequest.Fault,
+                CommitOnWorker = pRequest.CommitMode ==
+                    AWAsyncCommitMode.Background
             };
             _diagnostics.RecordScheduled();
-            _workSignal.Set();
+            SignalWorkLocked();
             return true;
         }
 
@@ -417,7 +454,7 @@ namespace AncientWarfare3.core.asyncwork
                 int queued = _traversal.Count + _ui.Count + _ai.Count;
                 return _diagnostics.Snapshot().WithRuntime(queued,
                     _activeWorkerCount, _completions.Count,
-                    _worldGeneration);
+                    _worldGeneration, _workers.Length);
             }
         }
 
@@ -461,7 +498,7 @@ namespace AncientWarfare3.core.asyncwork
                 _saveBarrierPending = true;
                 _saveBarrierDrainThreadId =
                     Environment.CurrentManagedThreadId;
-                _workSignal.Set();
+                SignalWorkersLocked();
                 Monitor.PulseAll(_gate);
             }
 
@@ -548,7 +585,7 @@ namespace AncientWarfare3.core.asyncwork
         public bool TryShutdown(TimeSpan pTimeout, out string pError)
         {
             long deadline = Deadline(pTimeout);
-            Thread worker;
+            Thread[] workers;
             CancellationAttempt attempt;
             lock (_gate)
             {
@@ -577,8 +614,8 @@ namespace AncientWarfare3.core.asyncwork
                         _cancellationAttempt = attempt;
                     }
                 }
-                worker = _worker;
-                _workSignal.Set();
+                workers = _workers;
+                SignalWorkersLocked();
                 Monitor.PulseAll(_gate);
             }
 
@@ -591,7 +628,7 @@ namespace AncientWarfare3.core.asyncwork
 
             lock (_gate) CompleteCancellationLocked(attempt);
 
-            if (!TryJoinUntil(worker, deadline))
+            if (!TryJoinUntil(workers, deadline))
             {
                 pError = CancellationError("async compute",
                              attempt?.Error) +
@@ -602,7 +639,7 @@ namespace AncientWarfare3.core.asyncwork
 
             lock (_gate)
             {
-                if (worker?.IsAlive == true)
+                if (AnyWorkerAlive(workers))
                 {
                     pError = CancellationError("async compute",
                                  attempt?.Error) +
@@ -616,7 +653,7 @@ namespace AncientWarfare3.core.asyncwork
                 DisposeRetiredCancellationsLocked();
                 _worldCancellation?.Dispose();
                 _worldCancellation = null;
-                _worker = null;
+                _workers = Array.Empty<Thread>();
                 _state = AWAsyncLifecycleState.Stopped;
                 if (attempt?.Error != null)
                 {
@@ -663,7 +700,7 @@ namespace AncientWarfare3.core.asyncwork
                 }
                 if (item == null)
                 {
-                    _workSignal.WaitOne(100);
+                    _workSignal.Wait(100);
                     continue;
                 }
 
@@ -685,9 +722,30 @@ namespace AncientWarfare3.core.asyncwork
                     Result = result,
                     Error = error
                 };
+                if (item.CommitOnWorker)
+                {
+                    RunWorkerCommit(item, result, error);
+                    lock (_gate)
+                    {
+                        _activeWorkerCount--;
+                        if (_activeWorkerCount == 0)
+                            DisposeRetiredCancellationsLocked();
+                        Monitor.PulseAll(_gate);
+                    }
+                    continue;
+                }
                 lock (_gate)
                 {
+                    if (item.Stamp.WorldGeneration != _worldGeneration)
+                    {
+                        _activeWorkerCount--;
+                        if (_activeWorkerCount == 0)
+                            DisposeRetiredCancellationsLocked();
+                        Monitor.PulseAll(_gate);
+                        continue;
+                    }
                     while (!_shutdownRequested &&
+                           item.Stamp.WorldGeneration == _worldGeneration &&
                            !_completions.TryEnqueue(completion))
                         Monitor.Wait(_gate, 50);
                     _activeWorkerCount--;
@@ -695,6 +753,44 @@ namespace AncientWarfare3.core.asyncwork
                         DisposeRetiredCancellationsLocked();
                     Monitor.PulseAll(_gate);
                 }
+            }
+        }
+
+        private void RunWorkerCommit(WorkerItem pItem, object pResult,
+            Exception pExecuteError)
+        {
+            CommitItem commit;
+            bool stale;
+            lock (_gate)
+            {
+                _commits.TryGetValue(pItem.Id, out commit);
+                _commits.Remove(pItem.Id);
+                stale = pItem.Stamp.WorldGeneration != _worldGeneration;
+                Monitor.PulseAll(_gate);
+            }
+            if (commit == null) return;
+            if (stale)
+            {
+                _diagnostics.RecordStale();
+                return;
+            }
+            if (pExecuteError != null)
+            {
+                _diagnostics.RecordFaulted();
+                NotifyFault(commit, AWAsyncFaultPhase.Execute,
+                    pExecuteError);
+                return;
+            }
+            try
+            {
+                commit.Commit(pResult);
+                _diagnostics.RecordCommitted();
+                _diagnostics.RecordBackgroundCommitted();
+            }
+            catch (Exception error)
+            {
+                _diagnostics.RecordFaulted();
+                NotifyFault(commit, AWAsyncFaultPhase.Commit, error);
             }
         }
 
@@ -892,7 +988,7 @@ namespace AncientWarfare3.core.asyncwork
                         pError = "async save barrier timed out";
                         return false;
                     }
-                    _workSignal.Set();
+                    SignalWorkersLocked();
                     int waitMilliseconds = (int)Math.Min(10L,
                         Math.Max(1L, remaining * 1000L /
                             Stopwatch.Frequency));
@@ -962,6 +1058,9 @@ namespace AncientWarfare3.core.asyncwork
             CancelQueueLocked(_traversal);
             CancelQueueLocked(_ui);
             CancelQueueLocked(_ai);
+            while (_completions.TryDequeue(out Completion completion))
+                _commits.Remove(completion.Id);
+            _commits.Clear();
             Monitor.PulseAll(_gate);
             return cancellation;
         }
@@ -1028,6 +1127,22 @@ namespace AncientWarfare3.core.asyncwork
             return pThread.Join(milliseconds);
         }
 
+        private static bool TryJoinUntil(Thread[] pThreads, long pDeadline)
+        {
+            if (pThreads == null || pThreads.Length == 0) return true;
+            for (int index = 0; index < pThreads.Length; index++)
+                if (!TryJoinUntil(pThreads[index], pDeadline)) return false;
+            return true;
+        }
+
+        private static bool AnyWorkerAlive(Thread[] pThreads)
+        {
+            if (pThreads == null) return false;
+            for (int index = 0; index < pThreads.Length; index++)
+                if (pThreads[index]?.IsAlive == true) return true;
+            return false;
+        }
+
         private void CancelQueueLocked(AWBoundedLatestQueue<WorkerItem> pQueue)
         {
             while (pQueue.TryDequeue(out WorkerItem item))
@@ -1042,6 +1157,24 @@ namespace AncientWarfare3.core.asyncwork
             foreach (CancellationTokenSource source in _retiredCancellations)
                 source.Dispose();
             _retiredCancellations.Clear();
+        }
+
+        private void SignalWorkLocked()
+        {
+            if (!_enabled || _workers.Length == 0) return;
+            int queuedWork = _traversal.Count + _ui.Count + _ai.Count;
+            int releaseCount = AWAsyncWorkerRules.ResolveWorkSignalReleaseCount(
+                queuedWork, _workers.Length, _activeWorkerCount,
+                _workSignal.CurrentCount);
+            if (releaseCount > 0) _workSignal.Release(releaseCount);
+        }
+
+        private void SignalWorkersLocked()
+        {
+            if (!_enabled || _workers.Length == 0) return;
+            int releaseCount = AWAsyncWorkerRules.ResolveWorkerSignalReleaseCount(
+                _workers.Length, _activeWorkerCount, _workSignal.CurrentCount);
+            if (releaseCount > 0) _workSignal.Release(releaseCount);
         }
 
         private void ThrowIfDisposed()

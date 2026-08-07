@@ -75,6 +75,9 @@ namespace AncientWarfare3.core.lineage
             bool dynasticEligible = IsDynasticEligible(pActor);
             string professionId = pActor.profession_asset?.id ?? "";
             int profession = StringComparer.Ordinal.GetHashCode(professionId);
+            bool needsAnnualReproductionRecovery =
+                DynasticReproductionRules.IsSexualReproductionTask(
+                    pActor.ai?.task?.id);
             int year;
             try { year = Math.Max(0, Date.getCurrentYear()); }
             catch { year = 0; }
@@ -82,7 +85,8 @@ namespace AncientWarfare3.core.lineage
                 emergency, dynasticEligible,
                 StandingArmyPeacetimeService.ShouldUsePeacetimeJob(pActor),
                 DynasticReproductionService
-                    .ShouldReleaseExistingMilitaryRole(pActor), year);
+                    .ShouldReleaseExistingMilitaryRole(pActor),
+                needsAnnualReproductionRecovery, year);
         }
 
         private static bool IsDynasticEligible(Actor pActor)

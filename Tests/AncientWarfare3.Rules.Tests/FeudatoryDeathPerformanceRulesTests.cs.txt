@@ -1,0 +1,27 @@
+using AncientWarfare3.core.lineage;
+
+internal static class FeudatoryDeathPerformanceRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, FeudatorySuccessionRules.ShouldRefreshAfterDeath(
+                dyingActorIsPrince: true,
+                dyingActorIsDesignatedSuccessor: false),
+            "a dying prince requires feudatory succession work");
+        Equal(true, FeudatorySuccessionRules.ShouldRefreshAfterDeath(
+                dyingActorIsPrince: false,
+                dyingActorIsDesignatedSuccessor: true),
+            "a dying designated successor requires replacement");
+        Equal(false, FeudatorySuccessionRules.ShouldRefreshAfterDeath(
+                dyingActorIsPrince: false,
+                dyingActorIsDesignatedSuccessor: false),
+            "an ordinary branch-member death skips successor rescanning");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected=" + pExpected + ", actual=" + pActual);
+    }
+}

@@ -283,5 +283,11 @@ namespace AncientWarfare3.core.lineage
             return Math.Min(Math.Max(eligibleConsorts, 0),
                 MaximumPregnancyStartsPerKingdomYear);
         }
+
+        public static bool ShouldQueryOnDeath(bool currentRuler,
+            bool formerRuler, bool cachedHouseholdPartner)
+        {
+            return currentRuler || formerRuler || cachedHouseholdPartner;
+        }
     }
 }

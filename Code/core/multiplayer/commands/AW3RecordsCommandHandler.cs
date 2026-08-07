@@ -22,6 +22,10 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return RenameSurname(kingdom, request);
                 case AW3CommandKind.GrantVirtualNobleTitle:
                     return GrantVirtualNobleTitle(kingdom, request);
+                case AW3CommandKind.EditVirtualNobleTitle:
+                    return EditVirtualNobleTitle(kingdom, request);
+                case AW3CommandKind.DeleteVirtualNobleTitle:
+                    return DeleteVirtualNobleTitle(kingdom, request);
                 default:
                     return AW3CommandResult.Rejected(
                         AW3CommandError.InvalidRequest,
@@ -121,13 +125,63 @@ namespace AncientWarfare3.core.multiplayer.commands
             Actor target = FindActor(request.ActorId);
             VirtualNobleTitleGrantResult result =
                 VirtualNobleTitleService.TryGrant(kingdom, grantor, target,
-                    request.Text, out _);
+                    request.Text, request.BoolValue, out _);
             if (result == VirtualNobleTitleGrantResult.Success)
                 return AW3CommandResult.Success("aw3_command_accepted",
                     request.ActorId, detailCode: (int)result);
             return AW3CommandResult.Rejected(MapVirtualTitleError(result),
                 MapVirtualTitleMessageKey(result), request.ActorId,
                 (int)result);
+        }
+
+        private static AW3CommandResult EditVirtualNobleTitle(
+            Kingdom kingdom, AW3CommandRequest request)
+        {
+            VirtualNobleTitleEditResult result = VirtualNobleTitleService.
+                TryEdit(request.SecondaryId, kingdom.id, request.Text);
+            return MapVirtualTitleEditResult(result, request.SecondaryId);
+        }
+
+        private static AW3CommandResult DeleteVirtualNobleTitle(
+            Kingdom kingdom, AW3CommandRequest request)
+        {
+            VirtualNobleTitleEditResult result = VirtualNobleTitleService.
+                TryDelete(request.SecondaryId, kingdom.id);
+            return MapVirtualTitleEditResult(result, request.SecondaryId);
+        }
+
+        private static AW3CommandResult MapVirtualTitleEditResult(
+            VirtualNobleTitleEditResult pResult, long pTitleId)
+        {
+            if (pResult == VirtualNobleTitleEditResult.Success)
+                return AW3CommandResult.Success("aw3_command_accepted",
+                    pTitleId, detailCode: (int)pResult);
+            AW3CommandError error;
+            string message;
+            switch (pResult)
+            {
+                case VirtualNobleTitleEditResult.NotReady:
+                case VirtualNobleTitleEditResult.PersistenceFailed:
+                    error = AW3CommandError.ExecutionFailed;
+                    message = pResult == VirtualNobleTitleEditResult.NotReady
+                        ? "aw_virtual_title_error_not_ready"
+                        : "aw_virtual_title_error_persistence";
+                    break;
+                case VirtualNobleTitleEditResult.InvalidText:
+                    error = AW3CommandError.IllegalTarget;
+                    message = "aw_virtual_title_error_invalid_text";
+                    break;
+                case VirtualNobleTitleEditResult.Duplicate:
+                    error = AW3CommandError.Conflict;
+                    message = "aw_virtual_title_error_duplicate";
+                    break;
+                default:
+                    error = AW3CommandError.IllegalTarget;
+                    message = "aw_virtual_title_error_not_found";
+                    break;
+            }
+            return AW3CommandResult.Rejected(error, message, pTitleId,
+                (int)pResult);
         }
 
         private static AW3CommandError MapVirtualTitleError(

@@ -485,6 +485,24 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorDying(Actor pActor)
         {
             if (!IsAuthority() || !Ready || pActor?.data == null) return;
+            bool currentRuler;
+            try
+            {
+                currentRuler = pActor.isKing() &&
+                               pActor.kingdom?.king == pActor;
+            }
+            catch { currentRuler = false; }
+            bool formerRuler;
+            try
+            {
+                formerRuler = pActor.hasTrait(
+                    LineageKeys.TRAIT_FORMER_KING);
+            }
+            catch { formerRuler = false; }
+            pActor.data.get(LineageKeys.RULER_HOUSEHOLD_RULER_ID,
+                out long cachedRulerId, -1L);
+            if (!RulerHouseholdRules.ShouldQueryOnDeath(currentRuler,
+                    formerRuler, cachedRulerId >= 0L)) return;
             try
             {
                 var query = new RulerHouseholdQuery(DB);

@@ -111,15 +111,40 @@ namespace AncientWarfare3.core.atlas
                         pNode.DisplayColors, pNode.VisibleZones, pNode.CityOwners,
                         pResolution);
                 }
-                return result;
             }
-            AddLabel(result, pNode.Event.OldKingdomId, pNode.Event.OldKingdomName,
-                pNode.Event.OldKingdomColor, pNode.DisplayColors,
-                pNode.VisibleZones, pNode.CityOwners, pResolution);
-            AddLabel(result, pNode.Event.NewKingdomId, pNode.Event.NewKingdomName,
-                pNode.Event.NewKingdomColor, pNode.DisplayColors,
-                pNode.VisibleZones, pNode.CityOwners, pResolution);
+            AddMissingLabel(result, pNode.Event.OldKingdomId,
+                pNode.Event.OldKingdomName, pNode.Event.OldKingdomColor,
+                pNode, pResolution);
+            AddMissingLabel(result, pNode.Event.NewKingdomId,
+                pNode.Event.NewKingdomName, pNode.Event.NewKingdomColor,
+                pNode, pResolution);
+            if (pNode.VassalRelations != null)
+                for (int index = 0; index < pNode.VassalRelations.Count;
+                     index++)
+                {
+                    KingdomAtlasVassalRelationSnapshot relation =
+                        pNode.VassalRelations[index];
+                    if (!KingdomAtlasRules.IsRelationAt(relation,
+                            pNode.Event.WorldTime)) continue;
+                    AddMissingLabel(result, relation.VassalId,
+                        relation.VassalName, relation.VassalColor, pNode,
+                        pResolution);
+                    AddMissingLabel(result, relation.SuzerainId,
+                        relation.SuzerainName, relation.SuzerainColor, pNode,
+                        pResolution);
+                }
             return result;
+        }
+
+        private static void AddMissingLabel(List<KingdomAtlasLabel> pResult,
+            long pKingdomId, string pName, string pColor,
+            KingdomAtlasNode pNode, int pResolution)
+        {
+            for (int index = 0; index < pResult.Count; index++)
+                if (pResult[index].KingdomId == pKingdomId) return;
+            AddLabel(pResult, pKingdomId, pName, pColor,
+                pNode.DisplayColors, pNode.VisibleZones, pNode.CityOwners,
+                pResolution);
         }
 
         private static void AddLabel(List<KingdomAtlasLabel> pResult, long pKingdomId,

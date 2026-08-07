@@ -54,6 +54,17 @@ namespace AncientWarfare3.core.policy
             HierarchicalVassalMapLabelRuntime.RequestRefresh();
         }
 
+        internal static void RefreshMapFont()
+        {
+            HierarchicalVassalMapFontLoader.Reset();
+            LabelNode.ResetMapFont();
+            foreach (LabelNode node in Nodes)
+                node.RefreshMapFont();
+            foreach (LabelNode node in RuntimeNodes.Values)
+                node.RefreshMapFont();
+            RequestRefresh();
+        }
+
         internal static void MarkCityDirty(City pCity)
         {
             _reportedFailure = false;
@@ -586,6 +597,23 @@ namespace AncientWarfare3.core.policy
                 ApplySortingLayer(_country, pMinimap);
             }
 
+            internal void RefreshMapFont()
+            {
+                RefreshFont(_text);
+                for (int index = 0; index < _outlines.Length; index++)
+                    RefreshFont(_outlines[index]);
+                if (_secondText == null) return;
+                RefreshFont(_secondText);
+                for (int index = 0; index < _secondOutlines.Length; index++)
+                    RefreshFont(_secondOutlines[index]);
+            }
+
+            internal static void ResetMapFont()
+            {
+                _mapFont = null;
+                _mapFontResolved = false;
+            }
+
             private void ApplySplitCountryLabel(string pValue, float pSize,
                 Color pColor, Color pOutlineColor, int pCountryLabelGap)
             {
@@ -842,8 +870,14 @@ namespace AncientWarfare3.core.policy
             {
                 if (_mapFontResolved) return _mapFont;
                 _mapFontResolved = true;
-                Font bundled = HierarchicalVassalMapFontLoader.TryLoad(16);
-                if (bundled != null) return _mapFont = bundled;
+                if (HierarchicalVassalMapFontSettings.UseBundledFont)
+                {
+                    Font bundled = HierarchicalVassalMapFontLoader.TryLoad(16);
+                    if (bundled != null) return _mapFont = bundled;
+                }
+                Font selected = HierarchicalVassalMapFontSettings.
+                    TryCreateSelectedFont(16);
+                if (selected != null) return _mapFont = selected;
                 try
                 {
                     Font font = Font.CreateDynamicFontFromOSFont(

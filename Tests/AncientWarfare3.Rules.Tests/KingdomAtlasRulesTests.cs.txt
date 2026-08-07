@@ -12,6 +12,12 @@ internal static class KingdomAtlasRulesTests
     }
     public static void Run()
     {
+        AtlasNodeDescriptorsHaveStableIdentityAndOrdering();
+        AtlasRelationDescriptorsFilterAndSnapshotPersistedRelations();
+        SameTimeRelationsUseDeterministicOrderAndSnapshots();
+        LaterActiveRelationSuppliesHistoricalIdentity();
+        ChronicleDisplayReplacesPunctuationWithSpaces();
+        ChronicleColorsOnlyKnownEntities();
         var later = new KingdomAtlasHistoryEvent { EventId = 2, WorldTime = 3d, OldKingdomId = 10, NewKingdomId = 20 };
         var early = new KingdomAtlasHistoryEvent { EventId = 1, WorldTime = 1d, OldKingdomId = 10, NewKingdomId = 20 };
         var duplicate = new KingdomAtlasHistoryEvent { EventId = 1, WorldTime = 9d, OldKingdomId = 99, NewKingdomId = 100 };
@@ -50,6 +56,56 @@ internal static class KingdomAtlasRulesTests
             "transfer rejects missing old kingdom");
         Equal(false, KingdomAtlasRules.IsCompleteTransfer(10, 10),
             "transfer rejects unchanged kingdom");
+        SameTimeTransfersReplayInEventOrder();
+        True(KingdomAtlasRules.IsDuplicateTransferWithoutEvidence(4L, 4L,
+            false, false), "duplicate transfer without country evidence");
+        Equal(false, KingdomAtlasRules.IsDuplicateTransferWithoutEvidence(
+            4L, 4L, true, false),
+            "loss-only transfer is a real unowned transition");
+        Equal(false, KingdomAtlasRules.IsDuplicateTransferWithoutEvidence(
+            4L, 1L, false, false),
+            "different context remains a real transfer");
+
+        var cityHistory = new[]
+        {
+            new KingdomAtlasHistoryEvent
+            {
+                EventId = 10, WorldTime = 2d, CityId = 101,
+                EventType = "city_found", NewKingdomId = 7
+            },
+            new KingdomAtlasHistoryEvent
+            {
+                EventId = 11, WorldTime = 2d, CityId = 102,
+                EventType = "city_found", NewKingdomId = 7
+            },
+            new KingdomAtlasHistoryEvent
+            {
+                EventId = 30, WorldTime = 3d, CityId = 103,
+                EventType = "city_found", NewKingdomId = 7
+            },
+            new KingdomAtlasHistoryEvent
+            {
+                EventId = 40, WorldTime = 4d, CityId = 101,
+                EventType = "city_transfer", OldKingdomId = 7,
+                NewKingdomId = 8
+            }
+        };
+        Dictionary<long, long> ownersAtYearTwo =
+            KingdomAtlasRules.ReplayCityOwnersAt(cityHistory, 2d, 11L);
+        Equal(2, ownersAtYearTwo.Count(p => p.Value == 7),
+            "year two contains both existing cities");
+        Equal(false, ownersAtYearTwo.ContainsKey(103),
+            "year two excludes a city founded later");
+        Dictionary<long, long> ownersAtYearThree =
+            KingdomAtlasRules.ReplayCityOwnersAt(cityHistory, 3d, 30L);
+        Equal(3, ownersAtYearThree.Count(p => p.Value == 7),
+            "year three adds the newly founded city");
+        Dictionary<long, long> ownersAfterTransfer =
+            KingdomAtlasRules.ReplayCityOwnersAt(cityHistory, 4d, 40L);
+        Equal(2, ownersAfterTransfer.Count(p => p.Value == 7),
+            "transferred city leaves its former kingdom");
+        Equal(8L, ownersAfterTransfer[101],
+            "transferred city belongs to the new kingdom");
 
         var directRelation = new KingdomAtlasVassalRelationSnapshot
         {
@@ -65,6 +121,24 @@ internal static class KingdomAtlasRulesTests
             VassalId = 30,
             SuzerainId = 20,
             StartTime = 6d,
+            EndTime = -1d
+        };
+        var tributaryRelation = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 6,
+            VassalId = 40,
+            SuzerainId = 10,
+            ContractTier = 3,
+            StartTime = 5d,
+            EndTime = -1d
+        };
+        var tributaryVassalRelation = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 7,
+            VassalId = 50,
+            SuzerainId = 40,
+            ContractTier = 1,
+            StartTime = 5d,
             EndTime = -1d
         };
         Equal(10L, KingdomAtlasRules.ResolveDisplayOwner(30,
@@ -102,15 +176,288 @@ internal static class KingdomAtlasRulesTests
         var displayColors = KingdomAtlasRules.BuildDisplayColors(
             new Dictionary<long, string>
             {
-                [10] = "#112233", [20] = "#445566", [30] = "#778899"
-            }, new[] { directRelation, nestedRelation }, 7d);
-        Equal(new KingdomAtlasColor(17, 34, 51, 255), displayColors[20],
-            "direct vassal uses suzerain color");
-        Equal(new KingdomAtlasColor(17, 34, 51, 255), displayColors[30],
-            "nested vassal uses root suzerain color");
+                [10] = "#112233", [20] = "#445566", [30] = "#778899",
+                [40] = "#aabbcc", [50] = "#ddeeff"
+            }, new[] { directRelation, nestedRelation, tributaryRelation,
+                tributaryVassalRelation }, 7d);
+        Equal(new KingdomAtlasColor(17, 34, 51, 255), displayColors[10],
+            "root suzerain keeps its own color");
+        Equal(new KingdomAtlasColor(27, 44, 61, 255), displayColors[20],
+            "direct vassal keeps twenty percent of its own color");
+        Equal(new KingdomAtlasColor(45, 62, 79, 255), displayColors[30],
+            "nested vassal follows its immediate suzerain display color");
+        Equal(new KingdomAtlasColor(78, 95, 112, 255), displayColors[40],
+            "tributary keeps forty percent of its own color");
+        Equal(new KingdomAtlasColor(107, 124, 141, 255), displayColors[50],
+            "tributary vassal follows the tributary as its immediate suzerain");
         var visible = KingdomAtlasRules.BuildVisibleOwnerIds(
             new[] { 10L }, new[] { directRelation, nestedRelation }, 7d);
         True(visible.Contains(10L) && visible.Contains(20L) && visible.Contains(30L),
             "historical vassals remain independently visible");
+    }
+
+    private static void AtlasNodeDescriptorsHaveStableIdentityAndOrdering()
+    {
+        var city = new KingdomAtlasHistoryEvent
+        {
+            EventId = 7, WorldTime = 10d, CityId = 70,
+            EventType = "city_transfer", OldKingdomId = 1,
+            NewKingdomId = 2
+        };
+        var relation = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 7, VassalId = 2, SuzerainId = 1,
+            StartTime = 10d, EndTime = 10d
+        };
+
+        List<KingdomAtlasNodeDescriptor> descriptors =
+            KingdomAtlasRules.BuildNodeDescriptors(
+                new[] { city }, new[] { relation }, 1L);
+
+        Equal(3, descriptors.Count, "city and relation descriptor count");
+        Equal(KingdomAtlasNodeKind.City, descriptors[0].NodeKind,
+            "city descriptor sorts first at equal time");
+        Equal(KingdomAtlasNodeKind.VassalStart, descriptors[1].NodeKind,
+            "vassal start descriptor sorts second at equal time");
+        Equal(KingdomAtlasNodeKind.VassalEnd, descriptors[2].NodeKind,
+            "vassal end descriptor sorts third at equal time");
+        Equal("city:7", descriptors[0].StableKey,
+            "city stable key");
+        Equal("vassal_start:7", descriptors[1].StableKey,
+            "vassal start stable key");
+        Equal("vassal_end:7", descriptors[2].StableKey,
+            "vassal end stable key");
+        Equal(3, descriptors.Select(pDescriptor => pDescriptor.StableKey)
+            .Distinct(StringComparer.Ordinal).Count(),
+            "same numeric source ids do not collide");
+        Equal(7L, descriptors[0].CityReplayEventId,
+            "city node replays through its own event");
+        Equal(long.MaxValue, descriptors[1].CityReplayEventId,
+            "relation start replays every same-time city event");
+        Equal(long.MaxValue, descriptors[2].CityReplayEventId,
+            "relation end replays every same-time city event");
+    }
+
+    private static void AtlasRelationDescriptorsFilterAndSnapshotPersistedRelations()
+    {
+        var open = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 10, VassalId = 2, VassalName = "Open Vassal",
+            VassalColor = "#223344", SuzerainId = 1,
+            SuzerainName = "Suzerain", SuzerainColor = "#112233",
+            StartTime = 3d, EndTime = -1d
+        };
+        var closed = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 11, VassalId = 1, VassalName = "Atlas Realm",
+            VassalColor = "#445566", SuzerainId = 3,
+            SuzerainName = "Former Suzerain", SuzerainColor = "#778899",
+            StartTime = 4d, EndTime = 6d
+        };
+        var unrelated = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 12, VassalId = 8, SuzerainId = 9,
+            StartTime = 2d, EndTime = 5d
+        };
+        var relations = new[] { open, closed, unrelated };
+
+        List<KingdomAtlasNodeDescriptor> descriptors =
+            KingdomAtlasRules.BuildNodeDescriptors(
+                Array.Empty<KingdomAtlasHistoryEvent>(), relations, 1L);
+
+        Equal(3, descriptors.Count,
+            "only current-kingdom relation nodes are emitted");
+        Equal("vassal_start:10", descriptors[0].StableKey,
+            "open relation emits start");
+        Equal("vassal_start:11", descriptors[1].StableKey,
+            "closed relation emits start");
+        Equal("vassal_end:11", descriptors[2].StableKey,
+            "closed relation emits end");
+        Equal(false, descriptors.Any(pDescriptor =>
+            pDescriptor.SourceId == unrelated.RelationId),
+            "unrelated relation is filtered");
+
+        IReadOnlyList<KingdomAtlasVassalRelationSnapshot> startSnapshot =
+            KingdomAtlasRules.BuildRelationSnapshotAt(relations,
+                descriptors[1]);
+        True(startSnapshot.Any(pRelation =>
+                pRelation.RelationId == closed.RelationId),
+            "start snapshot includes newly active relation");
+
+        IReadOnlyList<KingdomAtlasVassalRelationSnapshot> endSnapshot =
+            KingdomAtlasRules.BuildRelationSnapshotAt(relations,
+                descriptors[2]);
+        Equal(false, endSnapshot.Any(pRelation =>
+                pRelation.RelationId == closed.RelationId),
+            "end snapshot reflects relation removal");
+        True(endSnapshot.Any(pRelation =>
+                pRelation.RelationId == open.RelationId),
+            "end snapshot preserves other active relations");
+
+        KingdomAtlasHistoryEvent startEvent =
+            KingdomAtlasRules.BuildNodeEvent(descriptors[1], 12, "十二年");
+        Equal(-1L, startEvent.EventId,
+            "relation id is not stored as a city event id");
+        Equal("vassal_start", startEvent.EventType,
+            "relation start event type");
+        Equal(closed.SuzerainId, startEvent.OldKingdomId,
+            "relation event left participant is suzerain");
+        Equal(closed.SuzerainName, startEvent.OldKingdomName,
+            "relation event preserves suzerain historical name");
+        Equal(closed.SuzerainColor, startEvent.OldKingdomColor,
+            "relation event preserves suzerain historical color");
+        Equal(closed.VassalId, startEvent.NewKingdomId,
+            "relation event right participant is vassal");
+        Equal(closed.VassalName, startEvent.NewKingdomName,
+            "relation event preserves vassal historical name");
+        Equal(closed.VassalColor, startEvent.NewKingdomColor,
+            "relation event preserves vassal historical color");
+        Equal(12, startEvent.Year, "relation event year");
+        Equal("十二年", startEvent.YearText, "relation event year text");
+
+        KingdomAtlasHistoryEvent endEvent =
+            KingdomAtlasRules.BuildNodeEvent(descriptors[2], 13, "十三年");
+        Equal("vassal_end", endEvent.EventType,
+            "relation end event type");
+    }
+
+    private static void SameTimeRelationsUseDeterministicOrderAndSnapshots()
+    {
+        var ending = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 40, VassalId = 4, SuzerainId = 1,
+            StartTime = 2d, EndTime = 8d
+        };
+        var startHigh = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 30, VassalId = 3, SuzerainId = 1,
+            StartTime = 8d, EndTime = -1d
+        };
+        var startLow = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 20, VassalId = 2, SuzerainId = 1,
+            StartTime = 8d, EndTime = -1d
+        };
+        var city = new KingdomAtlasHistoryEvent
+        {
+            EventId = 99, WorldTime = 8d, CityId = 9,
+            EventType = "city_found", NewKingdomId = 1
+        };
+        var relations = new[] { ending, startHigh, startLow };
+
+        List<KingdomAtlasNodeDescriptor> descriptors =
+            KingdomAtlasRules.BuildNodeDescriptors(
+                new[] { city }, relations, 1L);
+        List<KingdomAtlasNodeDescriptor> sameTime = descriptors.Where(
+            pDescriptor => pDescriptor.WorldTime == 8d).ToList();
+
+        Equal("city:99", sameTime[0].StableKey,
+            "same-time city sorts before relations");
+        Equal("vassal_start:20", sameTime[1].StableKey,
+            "same-time starts sort by source id");
+        Equal("vassal_start:30", sameTime[2].StableKey,
+            "second same-time start follows source id");
+        Equal("vassal_end:40", sameTime[3].StableKey,
+            "same-time end sorts after starts");
+
+        IReadOnlyList<KingdomAtlasVassalRelationSnapshot> startSnapshot =
+            KingdomAtlasRules.BuildRelationSnapshotAt(relations,
+                sameTime[1]);
+        Equal("20,30", string.Join(",", startSnapshot.Select(
+            pRelation => pRelation.RelationId)),
+            "start snapshot includes all same-time starts deterministically");
+
+        IReadOnlyList<KingdomAtlasVassalRelationSnapshot> endSnapshot =
+            KingdomAtlasRules.BuildRelationSnapshotAt(relations,
+                sameTime[3]);
+        Equal("20,30", string.Join(",", endSnapshot.Select(
+            pRelation => pRelation.RelationId)),
+            "end snapshot excludes the ended relation");
+    }
+
+    private static void LaterActiveRelationSuppliesHistoricalIdentity()
+    {
+        var nodeEvent = new KingdomAtlasHistoryEvent
+        {
+            WorldTime = 9d, OldKingdomId = 1, OldKingdomName = "Event Name",
+            OldKingdomColor = "#010101", NewKingdomId = 2,
+            NewKingdomName = "Participant", NewKingdomColor = "#020202"
+        };
+        var earlier = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 5, VassalId = 2, VassalName = "Earlier Name",
+            VassalColor = "#111111", SuzerainId = 1,
+            SuzerainName = "Earlier Suzerain", SuzerainColor = "#222222",
+            StartTime = 3d, EndTime = -1d
+        };
+        var later = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 6, VassalId = 2, VassalName = "Later Name",
+            VassalColor = "#333333", SuzerainId = 1,
+            SuzerainName = "Later Suzerain", SuzerainColor = "#444444",
+            StartTime = 7d, EndTime = -1d
+        };
+
+        Dictionary<long, KingdomAtlasKingdomSnapshot> snapshots =
+            KingdomAtlasRules.BuildKingdomSnapshots(nodeEvent,
+                new[] { later, earlier });
+
+        Equal("Later Name", snapshots[2].Name,
+            "later active relation supplies vassal name");
+        Equal("#333333", snapshots[2].Color,
+            "later active relation supplies vassal color");
+        Equal("Later Suzerain", snapshots[1].Name,
+            "later active relation supplies suzerain name");
+        Equal("#444444", snapshots[1].Color,
+            "later active relation supplies suzerain color");
+    }
+
+    private static void ChronicleDisplayReplacesPunctuationWithSpaces()
+    {
+        Equal("王申 129年4月7日  完國策 ",
+            KingdomAtlasRules.SanitizeChronicleDisplayText(
+                "王申（129年4月7日），完國策。"),
+            "chronicle punctuation becomes display spacing");
+    }
+
+    private static void ChronicleColorsOnlyKnownEntities()
+    {
+        string display = KingdomAtlasRules.ColorizeChronicleEntities(
+            "大魏迁都洛阳，普通说明", new[] { "大魏", "洛阳" }, "#112233");
+        True(display.Contains("<color=#112233>大魏</color>"),
+            "country name receives country color");
+        True(display.Contains("<color=#112233>洛阳</color>"),
+            "city name receives country color");
+        True(display.Contains("普通说明") &&
+            !display.Contains("<color=#112233>普通说明</color>"),
+            "ordinary text keeps the default color");
+    }
+
+    private static void SameTimeTransfersReplayInEventOrder()
+    {
+        var rows = new[]
+        {
+            new KingdomAtlasHistoryEvent
+            {
+                EventId = 304, WorldTime = 10d, CityId = 152,
+                EventType = "city_found", NewKingdomId = 4
+            },
+            new KingdomAtlasHistoryEvent
+            {
+                EventId = 340, WorldTime = 11d, CityId = 152,
+                EventType = "city_transfer", OldKingdomId = 4,
+                NewKingdomId = 1
+            },
+            new KingdomAtlasHistoryEvent
+            {
+                EventId = 344, WorldTime = 11d, CityId = 152,
+                EventType = "city_transfer", OldKingdomId = 1,
+                NewKingdomId = 4
+            }
+        };
+        Dictionary<long, long> owners = KingdomAtlasRules.ReplayCityOwnersAt(
+            rows, 11d, 344L);
+        Equal(4L, owners[152],
+            "same-time transfer keeps the later historical owner");
     }
 }

@@ -43,9 +43,7 @@ function Require-DiagnosticGate([string]$source, [string]$startToken,
 $settings = Read-Source `
     'Code/core/performance/AWPerformanceSettings.cs'
 $configText = Read-Source 'default_config.json'
-$localeCzText = Read-Source 'Locales/cz.json'
-$localeEnText = Read-Source 'Locales/en.json'
-$localeChText = Read-Source 'Locales/ch.json'
+$localeCsvText = Read-Source 'Locales/aw3_config.csv'
 $controller = Read-Source `
     'Code/core/lineage/ArmyRtsControllerService.cs'
 $transport = Read-Source `
@@ -152,18 +150,24 @@ catch {
 }
 
 try {
-    $localeCz = $localeCzText | ConvertFrom-Json
-    $localeEn = $localeEnText | ConvertFrom-Json
-    $localeCh = $localeChText | ConvertFrom-Json
-    $labelCz = $localeCz.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS'
-    $labelEn = $localeEn.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS'
-    $labelCh = $localeCh.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS'
+    $localeRows = @($localeCsvText | ConvertFrom-Csv)
+    $localeCz = @{}
+    $localeEn = @{}
+    $localeCh = @{}
+    foreach ($row in $localeRows) {
+        $localeCz[$row.key] = $row.cz
+        $localeEn[$row.key] = $row.en
+        $localeCh[$row.key] = $row.ch
+    }
+    $labelCz = $localeCz['AW3_ENABLE_ARMY_RTS_DIAGNOSTICS']
+    $labelEn = $localeEn['AW3_ENABLE_ARMY_RTS_DIAGNOSTICS']
+    $labelCh = $localeCh['AW3_ENABLE_ARMY_RTS_DIAGNOSTICS']
     $descriptionCz =
-        $localeCz.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description'
+        $localeCz['AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description']
     $descriptionEn =
-        $localeEn.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description'
+        $localeEn['AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description']
     $descriptionCh =
-        $localeCh.'AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description'
+        $localeCh['AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description']
     $teamNoticeSuffix = ' ' + [char]0x5F00 + [char]0x542F +
         [char]0x89C6 + [char]0x4E3A + [char]0x52A0 + [char]0x5165 +
         [char]0x6625 + [char]0x79CB + [char]0x5236 + [char]0x4F5C +
@@ -198,11 +202,11 @@ try {
             $failures.Add('the Traditional Chinese RTS diagnostics label is missing')
         }
     }
-    if ($localeCz.'AW3_ENABLE_SCHEDULER_DIAGNOSTICS' -cne
+    if ($localeCz['AW3_ENABLE_SCHEDULER_DIAGNOSTICS'] -cne
         $simplifiedSchedulerLabel) {
         $failures.Add('the Simplified Chinese scheduler diagnostics label is incorrect')
     }
-    if ($localeCz.'AW3_ENABLE_PERFORMANCE_DIAGNOSTICS' -cne
+    if ($localeCz['AW3_ENABLE_PERFORMANCE_DIAGNOSTICS'] -cne
         $simplifiedPerformanceLabel) {
         $failures.Add('the Simplified Chinese performance diagnostics label is incorrect')
     }
@@ -227,7 +231,7 @@ try {
     }
 }
 catch {
-    $failures.Add('RTS diagnostics locale JSON is invalid: ' +
+    $failures.Add('RTS diagnostics locale CSV is invalid: ' +
         $_.Exception.Message)
 }
 

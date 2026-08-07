@@ -336,6 +336,7 @@ namespace AncientWarfare3.core.lineage
         public const string TEMPORARY_LEVY_PREPARATION_VISITED_CITIES = "aw_temporary_levy_preparation_visited_cities";
         public const string TEMPORARY_LEVY_PREPARATION_CURRENT_CITY = "aw_temporary_levy_preparation_current_city";
         public const string TEMPORARY_LEVY_PREPARATION_FRONTIER_CURSOR = "aw_temporary_levy_preparation_frontier_cursor";
+        public const string TEMPORARY_LEVY_PREPARATION_ACTOR_CURSOR = "aw_temporary_levy_preparation_actor_cursor";
         public const string WARTIME_GARRISON = "aw_wartime_garrison";
         public const string WARTIME_GARRISON_KINGDOM_ID = "aw_wartime_garrison_kingdom_id";
         public const string WARTIME_GARRISON_CITY_ID = "aw_wartime_garrison_city_id";

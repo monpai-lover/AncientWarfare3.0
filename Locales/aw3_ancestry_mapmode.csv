@@ -23,6 +23,11 @@ aw3_hierarchical_vassal_map Description,逐层查看宗主与直属附庸的领�
 aw3_hierarchical_vassal_map_description,逐层查看宗主与直属附庸的领土结构,Drill through suzerains and their direct vassals,逐層查看宗主與直屬附庸的領土結構
 aw3_hierarchical_vassal_map_tooltip,层级附庸地图,Hierarchical Vassal Map,層級附庸地圖
 map_aw3_hierarchical_vassal_map,层级附庸地图,Hierarchical Vassal Map,層級附庸地圖
+aw3_map_font_prefix,字体,Font,字體
+aw3_map_font_bundled,字体:魏碑,Font: Beiwei,字體:魏碑
+aw3_map_font_localized,字体:游戏,Font: Game,字體:遊戲
+aw3_map_font_bundled_name,AW3 魏碑,AW3 Beiwei,AW3 魏碑
+aw3_map_font_system_name,系统字体：{0},System font: {0},系統字體：{0}
 aw_vassal_set,创建附庸,Create Vassal,建立附庸
 aw_vassal_set Description,先选择附庸国再选择宗主国,Select vassal first then suzerain,先選擇附庸國再選擇宗主國
 aw_vassal_set_description,先选择附庸国再选择宗主国,Select vassal first then suzerain,先選擇附庸國再選擇宗主國

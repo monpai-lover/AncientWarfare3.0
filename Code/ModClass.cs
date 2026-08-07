@@ -12,6 +12,7 @@ using AncientWarfare3.core.naming;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.performance;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.core.presentation;
 using AncientWarfare3.patch;
 
@@ -33,6 +34,7 @@ namespace AncientWarfare3
 
         protected override void OnModLoad()
         {
+            HierarchicalVassalMapFontSettings.InitializeConfig();
             AWFramePriorityGovernor.Initialize();
             AWSimulationTickBenchmark.Initialize();
             LogInfo("AW3 simulation scheduler: " +

@@ -2161,7 +2161,7 @@ namespace AncientWarfare3.core.lineage
             }
             bool cultureIntegrated = UsesXiaPersonalNaming(pActor);
             if (!IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
-                    nativeXia: IsXia(pActor),
+                    nativeXia: IsNativeXiaCultureActor(pActor),
                     usesLineage: UsesAwLineageSystem(pActor),
                     foreignPseudoDynasty: XiaizationService
                         .IsForeignPseudoDynasty(pActor?.kingdom),
@@ -2240,7 +2240,7 @@ namespace AncientWarfare3.core.lineage
 
             bool noble = status == LineageStatus.NOBLE;
             bool male = pActor.isSexMale();
-            bool integratedName = integrated ||
+            bool integratedName = IsCivilizedMonkey(pActor) || integrated ||
                                   IsKingdomIntegrated(pActor.kingdom);
             string dirtyGiven = given;
             string normalizedGiven =

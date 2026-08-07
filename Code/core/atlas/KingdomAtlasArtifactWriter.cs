@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.presentation;
 
 namespace AncientWarfare3.core.atlas
 {
@@ -11,20 +13,23 @@ namespace AncientWarfare3.core.atlas
         public int NodesGenerated { get; set; }
         public int NodesSkipped { get; set; }
         public string OutputDirectory { get; set; } = "";
+        public string GifPath { get; set; } = "";
         public string Error { get; set; } = "";
         public bool Success => string.IsNullOrEmpty(Error);
     }
 
     internal static class KingdomAtlasArtifactWriter
     {
-        internal const string GeometryVersion = "zones-v2";
+        internal const string GeometryVersion =
+            "historical-city-chronicle-v14-territory-scaled-labels";
 
         internal static KingdomAtlasGenerationResult Generate(long pKingdomId,
             int pResolution, bool pGif, Action<KingdomAtlasProgress> pProgress = null,
-            Func<bool> pCancellationRequested = null)
+            Func<bool> pCancellationRequested = null,
+            ArmyRtsPlanWorldTerrainSnapshot pTerrain = null)
         {
             KingdomAtlasGenerationSession session = Begin(pKingdomId,
-                pResolution, pGif);
+                pResolution, pGif, pTerrain);
             KingdomAtlasProgress progress;
             while (session.MoveNext(pCancellationRequested, out progress))
                 pProgress?.Invoke(progress);
@@ -32,10 +37,94 @@ namespace AncientWarfare3.core.atlas
         }
 
         internal static KingdomAtlasGenerationSession Begin(long pKingdomId,
-            int pResolution, bool pGif)
+            int pResolution, bool pGif,
+            ArmyRtsPlanWorldTerrainSnapshot pTerrain = null)
         {
             return KingdomAtlasGenerationSession.Create(pKingdomId,
-                pResolution, pGif);
+                pResolution, pGif, pTerrain);
+        }
+
+        internal static string GetOutputDirectory(string pSaveDirectory)
+        {
+            return Path.Combine(pSaveDirectory ?? "", "aw3_kingdom_atlas",
+                GeometryVersion);
+        }
+
+        internal static string BuildPngPath(string pSaveDirectory,
+            long pKingdomId, int pResolution, int pNodeIndex, long pEventId)
+        {
+            return Path.Combine(GetOutputDirectory(pSaveDirectory),
+                KingdomAtlasRules.BuildOutputStem(pKingdomId, pResolution,
+                    pNodeIndex, pEventId) + ".png");
+        }
+
+        internal static string BuildPreviewPngPath(string pSaveDirectory,
+            long pKingdomId, int pResolution, int pNodeIndex, long pEventId,
+            int pFontIndex = 0)
+        {
+            return Path.Combine(GetOutputDirectory(pSaveDirectory),
+                KingdomAtlasRules.BuildPreviewCacheRelativePath(pKingdomId,
+                    pResolution, pNodeIndex, pEventId, pFontIndex));
+        }
+
+        internal static bool TryLoadCachedPng(long pKingdomId,
+            int pResolution, int pNodeIndex, long pEventId,
+            out byte[] pPng)
+        {
+            pPng = null;
+            if (!AW3SaveDirectoryRegistry.TryGet(out string saveDirectory))
+                return false;
+            try
+            {
+                string path = BuildPngPath(saveDirectory, pKingdomId,
+                    pResolution, pNodeIndex, pEventId);
+                if (!File.Exists(path)) return false;
+                pPng = File.ReadAllBytes(path);
+                return pPng.Length > 0;
+            }
+            catch
+            {
+                pPng = null;
+                return false;
+            }
+        }
+
+        internal static bool TryLoadCachedPreviewPng(long pKingdomId,
+            int pResolution, int pNodeIndex, long pEventId,
+            out byte[] pPng, int pFontIndex = 0)
+        {
+            pPng = null;
+            if (!AW3SaveDirectoryRegistry.TryGet(out string saveDirectory))
+                return false;
+            try
+            {
+                string path = BuildPreviewPngPath(saveDirectory, pKingdomId,
+                    pResolution, pNodeIndex, pEventId, pFontIndex);
+                if (!File.Exists(path)) return false;
+                pPng = File.ReadAllBytes(path);
+                return pPng.Length > 0;
+            }
+            catch
+            {
+                pPng = null;
+                return false;
+            }
+        }
+
+        internal static void CachePreviewPng(long pKingdomId,
+            int pResolution, int pNodeIndex, long pEventId,
+            KingdomAtlasRaster pRaster, int pFontIndex = 0)
+        {
+            if (pRaster == null || !AW3SaveDirectoryRegistry.TryGet(
+                    out string saveDirectory)) return;
+            try
+            {
+                string path = BuildPreviewPngPath(saveDirectory, pKingdomId,
+                    pResolution, pNodeIndex, pEventId, pFontIndex);
+                Directory.CreateDirectory(Path.GetDirectoryName(path) ?? "");
+                WriteAtomically(path, KingdomAtlasPngEncoder.Encode(pRaster));
+            }
+            catch { }
         }
 
         internal static HashSet<long> ReadCompletedEvents(string pPath,

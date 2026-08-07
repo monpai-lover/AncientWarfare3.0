@@ -108,35 +108,42 @@ namespace AncientWarfare3.core.atlas
             LineageArchiveManager manager = LineageArchiveManager.Instance;
             SQLiteConnection db = manager?.OperatingDB;
             if (db == null) return result;
-            using (var cmd = new SQLiteCommand(db))
+            try
             {
-                cmd.CommandText = "SELECT SNAPSHOT_ID,CITY_ID,WORLD_TIME,EVENT_TYPE," +
-                    "KINGDOM_ID,KINGDOM_NAME,KINGDOM_COLOR,X,Y,WATER,NEIGHBOR_MASK " +
-                    "FROM " + KingdomAtlasZoneArchiveTableItem.GetTableName() +
-                    " WHERE WORLD_TIME<=@time" + (pCityId >= 0 ? " AND CITY_ID=@city" : "") +
-                    " ORDER BY WORLD_TIME ASC,SNAPSHOT_ID ASC";
-                cmd.Parameters.AddWithValue("@time", pWorldTime);
-                if (pCityId >= 0) cmd.Parameters.AddWithValue("@city", pCityId);
-                using (var reader = (SQLiteDataReader)cmd.ExecuteReader())
+                using (var cmd = new SQLiteCommand(db))
                 {
-                    while (reader.Read())
+                    cmd.CommandText = "SELECT SNAPSHOT_ID,CITY_ID,WORLD_TIME,EVENT_TYPE," +
+                        "KINGDOM_ID,KINGDOM_NAME,KINGDOM_COLOR,X,Y,WATER,NEIGHBOR_MASK " +
+                        "FROM " + KingdomAtlasZoneArchiveTableItem.GetTableName() +
+                        " WHERE WORLD_TIME<=@time" + (pCityId >= 0 ? " AND CITY_ID=@city" : "") +
+                        " ORDER BY WORLD_TIME ASC,SNAPSHOT_ID ASC";
+                    cmd.Parameters.AddWithValue("@time", pWorldTime);
+                    if (pCityId >= 0) cmd.Parameters.AddWithValue("@city", pCityId);
+                    using (var reader = (SQLiteDataReader)cmd.ExecuteReader())
                     {
-                        result.Add(new KingdomAtlasZoneSnapshot
+                        while (reader.Read())
                         {
-                            SnapshotId = reader.GetInt64(0),
-                            CityId = reader.GetInt64(1),
-                            WorldTime = reader.GetDouble(2),
-                            EventType = reader.IsDBNull(3) ? "" : reader.GetString(3),
-                            KingdomId = reader.IsDBNull(4) ? -1L : reader.GetInt64(4),
-                            KingdomName = reader.IsDBNull(5) ? "" : reader.GetString(5),
-                            KingdomColor = reader.IsDBNull(6) ? "" : reader.GetString(6),
-                            X = reader.GetInt32(7),
-                            Y = reader.GetInt32(8),
-                            Water = !reader.IsDBNull(9) && reader.GetInt32(9) != 0,
-                            NeighborMask = reader.IsDBNull(10) ? (byte)0 : (byte)reader.GetInt32(10)
-                        });
+                            result.Add(new KingdomAtlasZoneSnapshot
+                            {
+                                SnapshotId = reader.GetInt64(0),
+                                CityId = reader.GetInt64(1),
+                                WorldTime = reader.GetDouble(2),
+                                EventType = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                                KingdomId = reader.IsDBNull(4) ? -1L : reader.GetInt64(4),
+                                KingdomName = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                                KingdomColor = reader.IsDBNull(6) ? "" : reader.GetString(6),
+                                X = reader.GetInt32(7),
+                                Y = reader.GetInt32(8),
+                                Water = !reader.IsDBNull(9) && reader.GetInt32(9) != 0,
+                                NeighborMask = reader.IsDBNull(10) ? (byte)0 : (byte)reader.GetInt32(10)
+                            });
+                        }
                     }
                 }
+            }
+            catch (Exception)
+            {
+                result.Clear();
             }
             return result;
         }

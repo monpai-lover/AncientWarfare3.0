@@ -113,6 +113,20 @@ namespace AncientWarfare3.core.pathfinding
 
     internal static class AWTraversalBuildRules
     {
+        internal static bool ShouldScheduleInitialAsync(
+            bool asyncTraversalEnabled, bool buildScheduled,
+            bool tileCaptureComplete, int pendingDirtyChunkCount)
+        {
+            return asyncTraversalEnabled && !buildScheduled &&
+                   tileCaptureComplete && pendingDirtyChunkCount <= 0;
+        }
+
+        internal static bool ShouldPublishInitialSynchronously(
+            bool asyncTraversalEnabled, bool buildScheduled)
+        {
+            return !asyncTraversalEnabled && !buildScheduled;
+        }
+
         public static AWTraversalBuildResult Build(
             AWTraversalBuildInput pInput)
         {
@@ -127,6 +141,8 @@ namespace AncientWarfare3.core.pathfinding
                     capture.SourceRevision > pInput.SourceRevision) continue;
                 chunks[capture.ChunkId] = capture.Tiles;
             }
+            chunks = AWOceanConnectivityRules.Apply(pInput.Width,
+                pInput.Height, pInput.ChunkSize, chunks);
             return new AWTraversalBuildResult(pInput.WorldGeneration,
                 pInput.BaseGenerationId, pInput.SourceRevision,
                 pInput.Width, pInput.Height, pInput.ChunkSize, chunks);

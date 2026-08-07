@@ -31,5 +31,6 @@ namespace AncientWarfare3.core.naming
                 pChineseName, GivenName, FamilyComponent, GeneratorId,
                 CultureId, pSchemaVersion);
         }
+
     }
 }

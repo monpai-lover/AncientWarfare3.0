@@ -28,8 +28,8 @@ namespace AncientWarfare3.core.performance
         {
             if (_nativeCycleToken < long.MaxValue)
                 _nativeCycleToken++;
-            bool paused = MapBox.instance == null ||
-                          MapBox.instance.isPaused();
+            bool paused = World.world == null ||
+                          World.world.isPaused();
             ProcessCycle(NativeGate, _nativeCycleToken, paused);
         }
 
@@ -132,8 +132,9 @@ namespace AncientWarfare3.core.performance
 
         private static void DrainDeferredAuthorityWork()
         {
-            int itemLimit = AuthorityDeferredDrainRules.ResolveItemLimit(
-                DeferredRuntimeWorkService.PendingCount);
+            int itemLimit = DeferredRuntimeWorkRules.
+                ResolveItemsPerAuthorityFrame(
+                    DeferredRuntimeWorkService.PendingCount);
             if (itemLimit <= 0) return;
             DeferredRuntimeWorkService.DrainFrame(pMilliseconds: 1.0,
                 pMaxItems: itemLimit);

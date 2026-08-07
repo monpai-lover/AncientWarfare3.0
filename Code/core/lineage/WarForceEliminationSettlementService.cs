@@ -77,9 +77,6 @@ namespace AncientWarfare3.core.lineage
             if (special == WarForceSpecialSettlementResult.Handled)
                 return true;
             if (special == WarForceSpecialSettlementResult.Failed ||
-                ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
-                RebellionDirectTerritoryTransferService.
-                    BlocksOrdinarySettlement(pWar) ||
                 !QueuedWarIds.Add(pWar.data.id)) return false;
             Enqueue(pWar.data.id, decision, 0);
             return true;
@@ -199,10 +196,7 @@ namespace AncientWarfare3.core.lineage
             War war = FindWar(pWarId);
             if (!TryGetConfirmedDecision(war,
                     out WarForceEliminationDecision decision) ||
-                !SameDecision(pExpected, decision) ||
-                ZhuluPeaceGuard.BlocksOrdinarySettlement(war) ||
-                RebellionDirectTerritoryTransferService.
-                    BlocksOrdinarySettlement(war))
+                !SameDecision(pExpected, decision))
             {
                 QueuedWarIds.Remove(pWarId);
                 return;
@@ -229,6 +223,7 @@ namespace AncientWarfare3.core.lineage
                 Instance.BuildDefaultDraft(war, requester, responder,
                     signedScore, mode);
             draft.PlayerInitiated = false;
+            draft.AutomaticExhaustionSettlement = true;
             WarPeaceExecutionResult result = WarPeaceSettlementService.
                 Instance.ForceMilitaryEliminationSettlement(draft,
                     decision);

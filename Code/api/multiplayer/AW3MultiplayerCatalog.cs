@@ -202,7 +202,11 @@ namespace AncientWarfare3.api.multiplayer
                     AW3WindowCategory.Domestic, Country()),
                 Command(AW3CommandKind.GrantVirtualNobleTitle,
                     AW3WindowCategory.Domestic, Country() |
-                    AW3WindowContextRequirement.Actor)
+                    AW3WindowContextRequirement.Actor),
+                Command(AW3CommandKind.EditVirtualNobleTitle,
+                    AW3WindowCategory.Records, Country()),
+                Command(AW3CommandKind.DeleteVirtualNobleTitle,
+                    AW3WindowCategory.Records, Country())
             });
 
         public static IReadOnlyList<AW3WindowDescriptor> Windows =>

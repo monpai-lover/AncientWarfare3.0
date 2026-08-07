@@ -61,10 +61,12 @@ internal static class WesternPolicyProfileRulesTests
         Equal(false, KingdomPolicyProfileRules.IsResolvableKingdomProfile(
                 KingdomPolicyProfileId.Common),
             "Common is catalog membership, not a kingdom profile");
-        Equal(true, KingdomPolicyProfileRules.UsesWesternCourtLabel(
+        Equal("aw_policy_state_short",
+            KingdomPolicyProfileRules.ResolvePolicyStateLabelKey(
                 KingdomPolicyProfileId.WesternGeneral),
-            "western realms label the policy-state entry as court");
-        Equal(false, KingdomPolicyProfileRules.UsesWesternCourtLabel(
+            "western realms keep the political-state entry separate from court");
+        Equal("aw_policy_state_short",
+            KingdomPolicyProfileRules.ResolvePolicyStateLabelKey(
                 KingdomPolicyProfileId.Xia),
             "Xia realms keep the political-state entry label");
 

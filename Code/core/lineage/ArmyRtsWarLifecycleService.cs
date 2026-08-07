@@ -426,6 +426,16 @@ namespace AncientWarfare3.core.lineage
             catch { return 0; }
         }
 
+        private static Kingdom SafeKingdom(Army pArmy)
+        {
+            try { return AWArmyService.GetIntendedKingdom(pArmy); }
+            catch
+            {
+                try { return pArmy?.getKingdom(); }
+                catch { return null; }
+            }
+        }
+
         private static Army FindArmy(long pArmyId)
         {
             try { return World.world?.armies?.get(pArmyId); }

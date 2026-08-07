@@ -324,45 +324,23 @@ namespace AncientWarfare3.core.presentation
         private static ArmyRtsPlanTerrain CaptureTerrain(
             IReadOnlyList<ArmyRtsPlanKingdom> pParticipants)
         {
-            int worldWidth = Math.Max(1, MapBox.width);
-            int worldHeight = Math.Max(1, MapBox.height);
-            ArmyRtsPlanCanvas canvas = ArmyRtsPlanRules.Project(worldWidth,
-                worldHeight);
-            int count = checked(canvas.Width * canvas.Height);
-            var colors = new ArmyRtsPlanColor[count];
-            var owners = new long[count];
             var kingdomColors =
                 new Dictionary<long, ArmyRtsPlanColor>();
             var participantIds = new HashSet<long>();
             for (int i = 0; i < pParticipants.Count; i++)
                 participantIds.Add(pParticipants[i].KingdomId);
-            WorldTile[] tiles = World.world?.tiles_list;
-            for (int y = 0; y < canvas.Height; y++)
+            ArmyRtsPlanWorldTerrainSnapshot terrain =
+                ArmyRtsPlanWorldTerrainCapture.Capture();
+            for (int i = 0; i < terrain.OwnerIds.Count; i++)
             {
-                int worldY = UnprojectAxis(canvas.Height - 1 - y,
-                    canvas.Height, worldHeight);
-                for (int x = 0; x < canvas.Width; x++)
-                {
-                    int index = y * canvas.Width + x;
-                    int worldX = UnprojectAxis(x, canvas.Width,
-                        worldWidth);
-                    int tileIndex = worldX + worldY * worldWidth;
-                    WorldTile tile = tiles != null && tileIndex >= 0 &&
-                                     tileIndex < tiles.Length
-                        ? tiles[tileIndex]
-                        : null;
-                    colors[index] = TileColor(tile);
-                    Kingdom owner = tile?.zone?.city?.kingdom;
-                    long ownerId = owner?.data?.id ?? -1L;
-                    owners[index] = ownerId;
-                    if (ownerId >= 0L &&
-                        !kingdomColors.ContainsKey(ownerId))
-                        kingdomColors[ownerId] = ColorOf(owner);
-                }
+                long ownerId = terrain.OwnerIds[i];
+                if (ownerId < 0L || kingdomColors.ContainsKey(ownerId))
+                    continue;
+                Kingdom owner = World.world?.kingdoms?.get(ownerId);
+                if (owner != null) kingdomColors[ownerId] = ColorOf(owner);
             }
-            return ArmyRtsPlanTerrainBuilder.Build(canvas.Width,
-                canvas.Height, colors, owners, participantIds,
-                kingdomColors);
+            return ArmyRtsPlanWorldTerrainCapture.BuildPlanTerrain(terrain,
+                participantIds, kingdomColors);
         }
 
         private static ArmyRtsPlanSnapshot WithTerrain(
@@ -373,27 +351,6 @@ namespace AncientWarfare3.core.presentation
                 pSnapshot.WorldHeight, pSnapshot.Reason,
                 pSnapshot.Kingdoms, pSnapshot.Zones, pSnapshot.Cities,
                 pSnapshot.Armies, pSnapshot.Fronts, pTerrain);
-        }
-
-        private static int UnprojectAxis(int pCanvasValue,
-            int pCanvasExtent, int pWorldExtent)
-        {
-            if (pCanvasExtent <= 1 || pWorldExtent <= 1) return 0;
-            return Math.Max(0, Math.Min(pWorldExtent - 1,
-                (int)Math.Round(pCanvasValue * (pWorldExtent - 1d) /
-                                (pCanvasExtent - 1d))));
-        }
-
-        private static ArmyRtsPlanColor TileColor(WorldTile pTile)
-        {
-            try
-            {
-                if (pTile == null) return ArmyRtsPlanRasterizer.LandColor;
-                Color32 color = pTile.getColor();
-                return new ArmyRtsPlanColor(color.r, color.g, color.b,
-                    color.a);
-            }
-            catch { return ArmyRtsPlanRasterizer.LandColor; }
         }
 
         private static ParticipantSet CaptureParticipants(War pWar,

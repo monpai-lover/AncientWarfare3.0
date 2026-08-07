@@ -16,6 +16,7 @@ if (args.Length == 1 && args[0] == "--kingdom-atlas")
 {
     KingdomAtlasRulesTests.Run();
     KingdomAtlasArtifactRulesTests.Run();
+    KingdomAtlasLiveTerrainRulesTests.Run();
     Console.WriteLine("Kingdom atlas rules passed.");
     return;
 }
@@ -231,6 +232,13 @@ if (args.Length == 1 && args[0] == "--integrated-naming-rules-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--war-exhaustion-settlement-slice")
+{
+    WarExhaustionSettlementRulesTests.Run();
+    Console.WriteLine("AW3 war exhaustion settlement rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--localized-name-migration-slice")
 {
     LocalizedNameMigrationRulesTests.Run();
@@ -429,6 +437,27 @@ if (args.Length == 1 && args[0] == "--actor-runtime")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--actor-age-work-only")
+{
+    ActorAgeWorkRulesTests.Run();
+    Console.WriteLine("Actor age-work rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--feudatory-death-performance-only")
+{
+    FeudatoryDeathPerformanceRulesTests.Run();
+    Console.WriteLine("Feudatory death performance rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--ruler-household-only")
+{
+    RulerHouseholdRulesTests.Run();
+    Console.WriteLine("Ruler household rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--army-rts")
 {
     ArmyMobilizationRulesTests.Run();
@@ -549,6 +578,15 @@ if (args.Length == 1 && args[0] == "--rts-logistics-sustainment-slice")
     ArmyLogisticsSustainmentRulesTests.Run();
     ArmyRtsRouteChoiceRulesTests.Run();
     Console.WriteLine("AW3 RTS logistics sustainment rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--rts-frame-budget")
+{
+    RuntimePerformanceBudgetRulesTests.Run();
+    ArmyLogisticsSustainmentRulesTests.Run();
+    DeferredRuntimeWorkRulesTests.Run();
+    Console.WriteLine("AW3 RTS frame-budget rules passed.");
     return;
 }
 
@@ -3154,6 +3192,46 @@ Equal(false, ArmyRetreatRules.ProtectUncontestedOccupation(
         hostileRivalActive: false,
         ownershipChanged: false),
     "a non-dominant force cannot claim occupation protection");
+Equal(2, ArmyRetreatRules.CalculateFormalWarLossThreshold(6),
+    "formal-war retreat threshold rounds six soldiers up to two losses");
+Equal(1, ArmyRetreatRules.CalculateFormalWarLossThreshold(1),
+    "a one-soldier formal army still has a one-loss retreat threshold");
+True(ArmyRetreatRules.ShouldRetreatAfterFormalWarLosses(10, 2),
+    "formal-war retreat starts at twenty percent cumulative losses");
+Equal(false, ArmyRetreatRules.ShouldRetreatAfterFormalWarLosses(10, 1),
+    "formal-war retreat waits below the twenty-percent loss threshold");
+Equal(2, ArmyRetreatRules.CalculateFormalWarLossThreshold(10),
+    "formal-war threshold uses ceiling arithmetic");
+True(ArmyRetreatRules.ShouldRetreatAfterFormalWarLosses(11, 3),
+    "formal-war retreat rounds a fractional twenty-percent loss upward");
+Equal(false, ArmyRetreatRules.ShouldRetreatAfterFormalWarLosses(11, 2),
+    "formal-war retreat does not trigger before the rounded threshold");
+Equal(false, ArmyRetreatRules.ShouldResetFormalWarBaseline(
+    pStoredBaselineUnits: 10, pCurrentUnits: 14),
+    "changing attack target never resets the formal-war baseline");
+Equal(10, ArmyRetreatRules.KeepFormalWarBaseline(
+    pStoredBaselineUnits: 10, pCurrentUnits: 14),
+    "formal-war baseline remains frozen when the army grows");
+True(ArmyRetreatRules.ShouldRetreat(
+        pRole: "", pBaselineUnits: 10, pCurrentUnits: 8,
+        pCaptainAlive: true, pIsAttacking: true, pCooldownActive: false),
+    "formal-war retreat triggers at exactly twenty-percent loss");
+Equal(false, ArmyRetreatRules.ShouldRetreat(
+        pRole: "", pBaselineUnits: 10, pCurrentUnits: 9,
+        pCaptainAlive: true, pIsAttacking: true, pCooldownActive: false),
+    "formal-war retreat does not trigger below twenty-percent loss");
+Equal(false, ArmyRetreatRules.ShouldRetreat(
+        pRole: "", pBaselineUnits: 10, pCurrentUnits: 8,
+        pCaptainAlive: true, pIsAttacking: false, pCooldownActive: false),
+    "non-attacking armies do not retreat from losses");
+Equal(false, ArmyRetreatRules.ShouldRetreat(
+        pRole: "", pBaselineUnits: 10, pCurrentUnits: 8,
+        pCaptainAlive: true, pIsAttacking: true, pCooldownActive: true),
+    "retreat cooldown suppresses loss-based retreat");
+Equal(false, ArmyRetreatRules.ShouldRetreat(
+        pRole: AWArmyRole.RoyalGuard, pBaselineUnits: 10, pCurrentUnits: 0,
+        pCaptainAlive: true, pIsAttacking: true, pCooldownActive: false),
+    "royal guards remain protected from loss-based retreat");
 
 True(CityOccupationAccelerationRules.HasActiveDefenderSignal(
         pZonePresence: false,
@@ -7787,6 +7865,9 @@ if (recruitmentPriorityRule != null)
 }
 
 PathfindingPerformanceTests.Run();
+PathfindingMigrationRulesTests.Run();
+AWPathSessionTests.Run();
+AWDockRouteRegistryTests.Run();
 PathMovementExecutorRulesTests.Run();
 RuntimePerformanceBudgetRulesTests.Run();
 RuntimePerformanceDiagnosticRulesTests.Run();
@@ -7837,6 +7918,7 @@ ZhuluWarRulesTests.Run();
 ZhuluAgeRulesTests.Run();
 XiaizationStatusDisplayRulesTests.Run();
 WarGoalSettlementRulesTests.Run();
+WarExhaustionSettlementRulesTests.Run();
 WarScoreBudgetRulesTests.Run();
 WarScoreBudgetServiceTests.Run();
 OccupiedCityCivilianProtectionRulesTests.Run();
@@ -7854,6 +7936,7 @@ Regression20260721Tests.Run();
 ArmyMapInformationRulesTests.Run();
 RoyalGuardCaptainHandoffRulesTests.Run();
 HierarchicalVassalMapActivationRulesTests.Run();
+HierarchicalVassalMapFontRulesTests.Run();
 HierarchicalVassalZoneLabelAccumulatorTests.Run();
 AW3MultiplayerWorldLoadRulesTests.Run();
 LineageRuntimePathRulesTests.Run();

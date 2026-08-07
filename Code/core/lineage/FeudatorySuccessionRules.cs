@@ -81,6 +81,13 @@ namespace AncientWarfare3.core.lineage
             return currentPrinceInvalid && successorActorId < 0;
         }
 
+        public static bool ShouldRefreshAfterDeath(
+            bool dyingActorIsPrince,
+            bool dyingActorIsDesignatedSuccessor)
+        {
+            return dyingActorIsPrince || dyingActorIsDesignatedSuccessor;
+        }
+
         private static bool Better(FeudatorySuccessionCandidate left,
             FeudatorySuccessionCandidate right)
         {

@@ -260,6 +260,18 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
         Equal(false, string.Equals("name", actorName,
                 StringComparison.OrdinalIgnoreCase),
             "actor fallback never emits the name placeholder");
+        Equal("悟空", CivMonkeyNamingRules.NormalizeGivenName(
+                "孙", "孙悟空"),
+            "monkey identity stores the surname separately from the given name");
+        Equal("悟空", CivMonkeyNamingRules.NormalizeGivenName(
+                "孙", "悟空"),
+            "an already normalized monkey given name remains unchanged");
+        string promotionPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_PromotionPatch.cs"));
+        Equal(true, promotionPatch.Contains(
+                "CivMonkeyNamingContent.EnsureActorFamilyIdentity(pActor)"),
+            "monkey king promotion repairs the persisted family identity");
         string city = CivMonkeyNamingRules.PickCity(987654321L, 1);
         Equal(true, expectedCityNames.Contains(city),
             "city selection returns only the dedicated settlement pool");

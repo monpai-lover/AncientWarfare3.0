@@ -1,3 +1,5 @@
+using System;
+
 namespace AncientWarfare3.core.asyncwork
 {
     internal enum AWAsyncLifecycleState
@@ -16,6 +18,12 @@ namespace AncientWarfare3.core.asyncwork
         Traversal,
         Ui,
         Ai
+    }
+
+    internal enum AWAsyncCommitMode
+    {
+        MainThread,
+        Background
     }
 
     internal readonly struct AWAsyncStamp
@@ -50,6 +58,47 @@ namespace AncientWarfare3.core.asyncwork
         public static int LowWatermark(int pCapacity)
         {
             return pCapacity / 2;
+        }
+    }
+
+    internal static class AWAsyncWorkerRules
+    {
+        internal const int MaximumWorkers = 4;
+
+        internal static int ResolveWorkerCount(int pProcessorCount)
+        {
+            int parallelBudget = Math.Max(1, pProcessorCount - 2);
+            return Math.Min(MaximumWorkers,
+                Math.Max(1, (parallelBudget + 2) / 3));
+        }
+
+        internal static int NormalizeWorkerCount(int pRequested,
+            int pProcessorCount)
+        {
+            return pRequested <= 0
+                ? ResolveWorkerCount(pProcessorCount)
+                : Math.Min(MaximumWorkers, Math.Max(1, pRequested));
+        }
+
+        internal static int ResolveWorkerSignalReleaseCount(
+            int pWorkerCount, int pActiveWorkerCount, int pPendingSignalCount)
+        {
+            int workers = Math.Max(0, pWorkerCount);
+            int active = Math.Max(0, pActiveWorkerCount);
+            int pending = Math.Max(0, pPendingSignalCount);
+            return Math.Max(0, workers - active - pending);
+        }
+
+        internal static int ResolveWorkSignalReleaseCount(
+            int pQueuedWorkCount, int pWorkerCount,
+            int pActiveWorkerCount, int pPendingSignalCount)
+        {
+            int queued = Math.Max(0, pQueuedWorkCount);
+            int workers = Math.Max(0, pWorkerCount);
+            int active = Math.Min(workers, Math.Max(0, pActiveWorkerCount));
+            int pending = Math.Max(0, pPendingSignalCount);
+            int idle = Math.Max(0, workers - active);
+            return Math.Max(0, Math.Min(idle, queued) - pending);
         }
     }
 

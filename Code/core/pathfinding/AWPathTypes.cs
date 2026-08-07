@@ -1,5 +1,6 @@
 // Derived from Cultiway-Reborn pathfinding (MIT, Copyright (c) 2025 Inmny).
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.pathfinding
 {
@@ -29,6 +30,7 @@ namespace AncientWarfare3.core.pathfinding
         InvalidStart,
         InvalidTarget,
         CancelledByNewRequest,
+        StaleTraversal,
         WorldCleared,
         StepBlocked,
         UnsafeStep,
@@ -121,6 +123,43 @@ namespace AncientWarfare3.core.pathfinding
         public Exception Error { get; }
     }
 
+    public readonly struct AWPathGenerationResult
+    {
+        public AWPathGenerationResult(bool pSucceeded, bool pReachedTarget,
+            int pEndTileId, IReadOnlyList<AWPathStep> pSteps,
+            AWPathFailureReason pFailureReason = AWPathFailureReason.None,
+            Exception pError = null)
+        {
+            Succeeded = pSucceeded;
+            ReachedTarget = pReachedTarget;
+            EndTileId = pEndTileId;
+            Steps = pSteps ?? Array.Empty<AWPathStep>();
+            FailureReason = pFailureReason;
+            Error = pError;
+        }
+
+        public bool Succeeded { get; }
+        public bool ReachedTarget { get; }
+        public int EndTileId { get; }
+        public IReadOnlyList<AWPathStep> Steps { get; }
+        public AWPathFailureReason FailureReason { get; }
+        public Exception Error { get; }
+
+        public static AWPathGenerationResult Success(int pEndTileId,
+            bool pReachedTarget, IReadOnlyList<AWPathStep> pSteps)
+        {
+            return new AWPathGenerationResult(true, pReachedTarget,
+                pEndTileId, pSteps);
+        }
+
+        public static AWPathGenerationResult Failure(
+            AWPathFailureReason pReason, Exception pError = null)
+        {
+            return new AWPathGenerationResult(false, false, -1,
+                Array.Empty<AWPathStep>(), pReason, pError);
+        }
+    }
+
     public enum AWPathProcessKind
     {
         Consumed,
@@ -160,6 +199,7 @@ namespace AncientWarfare3.core.pathfinding
                 case AWPathFailureReason.InvalidStart:
                 case AWPathFailureReason.InvalidTarget:
                 case AWPathFailureReason.CancelledByNewRequest:
+                case AWPathFailureReason.StaleTraversal:
                 case AWPathFailureReason.WorldCleared:
                 case AWPathFailureReason.Unreachable:
                 case AWPathFailureReason.SearchLimitExceeded:

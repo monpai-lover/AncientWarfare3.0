@@ -24,5 +24,6 @@ namespace AncientWarfare3.core.db
         [TableItemDef(pDefaultValue: "1")] public int active = 1;
         public string end_reason = "";
         public string primary_title_snapshot = "";
+        [TableItemDef(pDefaultValue: "1")] public int hereditary = 1;
     }
 }

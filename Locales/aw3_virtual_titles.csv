@@ -1,8 +1,13 @@
 key,cz,en,ch
 aw_virtual_titles,爵位持有人,Title Holders,爵位持有人
+aw_virtual_titles Title,爵位持有人,Title Holders,爵位持有人
 aw_virtual_titles_short,爵位,Titles,爵位
 aw_virtual_titles_none,暂无虚爵,No virtual titles,暫無虛爵
+aw_virtual_titles_desc,查看该国所有爵位持有人,View this realm's title holders,查看該國所有爵位持有人
+aw_virtual_title_edit,编辑,Edit,編輯
+aw_virtual_title_delete,删除,Delete,刪除
 aw_virtual_title_grant,授予虚爵,Grant Virtual Title,授予虛爵
+aw_virtual_title_grant Title,授予虚爵,Grant Virtual Title,授予虛爵
 aw_virtual_title_grant_desc,授予可世袭的任意文本爵位,Grant an inheritable arbitrary-text title,授予可世襲的任意文本爵位
 aw_virtual_title_grant_action,授予,Grant,授予
 aw_virtual_title_prompt,输入任意可世袭的虚爵文本（最多64字）,Enter an inheritable title (up to 64 characters),輸入任意可世襲的虛爵文本（最多64字）
@@ -15,3 +20,6 @@ aw_virtual_title_error_invalid_target,授爵对象无效,The selected title hold
 aw_virtual_title_error_invalid_text,爵位文本无效,The title text is invalid,爵位文本無效
 aw_virtual_title_error_duplicate,该爵位已存在,That title already exists,該爵位已存在
 aw_virtual_title_error_persistence,爵位档案写入失败,The title could not be saved,爵位檔案寫入失敗
+aw_virtual_title_hereditary,世袭罔替,Hereditary,世襲罔替
+aw_virtual_title_hereditary_on,是,Yes,是
+aw_virtual_title_hereditary_off,否,No,否

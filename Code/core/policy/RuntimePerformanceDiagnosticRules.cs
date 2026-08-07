@@ -103,7 +103,10 @@ namespace AncientWarfare3.core.policy
         public static bool ShouldEmitTextLog(bool diagnosticsEnabled,
             bool benchmarkEnabled)
         {
-            return diagnosticsEnabled || benchmarkEnabled;
+            // Benchmark capture may remain active for internal measurement, but
+            // it must never override the player's diagnostics preference.
+            _ = benchmarkEnabled;
+            return diagnosticsEnabled;
         }
 
         public static bool IsPerformanceFrameEligible(bool gameLoaded,

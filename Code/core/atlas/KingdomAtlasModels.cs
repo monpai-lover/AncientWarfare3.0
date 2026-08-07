@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.atlas
 {
+    internal enum KingdomAtlasNodeKind
+    {
+        City = 0,
+        VassalStart = 1,
+        VassalEnd = 2
+    }
+
     internal readonly struct KingdomAtlasColor : IEquatable<KingdomAtlasColor>
     {
         public KingdomAtlasColor(byte pRed, byte pGreen, byte pBlue, byte pAlpha = 255)
@@ -111,14 +118,33 @@ namespace AncientWarfare3.core.atlas
         public double EndTime { get; set; } = -1d;
     }
 
+    internal sealed class KingdomAtlasNodeDescriptor
+    {
+        public KingdomAtlasNodeKind NodeKind { get; set; }
+        public long SourceId { get; set; } = -1L;
+        public string StableKey { get; set; } = "";
+        public double WorldTime { get; set; }
+        public long CityReplayEventId { get; set; } = long.MaxValue;
+        public KingdomAtlasHistoryEvent CityEvent { get; set; }
+        public KingdomAtlasVassalRelationSnapshot Relation { get; set; }
+    }
+
     internal sealed class KingdomAtlasNode
     {
+        public KingdomAtlasNodeKind NodeKind { get; set; }
+        public long SourceId { get; set; } = -1L;
+        public string StableKey { get; set; } = "";
+        public KingdomAtlasVassalRelationSnapshot Relation { get; set; }
         public KingdomAtlasHistoryEvent Event { get; set; }
         public IReadOnlyList<KingdomAtlasHistoryEvent> Events { get; set; } = Array.Empty<KingdomAtlasHistoryEvent>();
         public IReadOnlyDictionary<long, long> CityOwners { get; set; } = new Dictionary<long, long>();
         public IReadOnlyList<KingdomAtlasZoneCell> VisibleZones { get; set; } = Array.Empty<KingdomAtlasZoneCell>();
+        public int TerrainWorldWidth { get; set; } = 1;
+        public int TerrainWorldHeight { get; set; } = 1;
         public IReadOnlyList<KingdomAtlasChronicleRow> OldChronicle { get; set; } = Array.Empty<KingdomAtlasChronicleRow>();
         public IReadOnlyList<KingdomAtlasChronicleRow> NewChronicle { get; set; } = Array.Empty<KingdomAtlasChronicleRow>();
+        public string OldChronicleYearText { get; set; } = "";
+        public string NewChronicleYearText { get; set; } = "";
         public IReadOnlyList<KingdomAtlasVassalRelationSnapshot> VassalRelations { get; set; } = Array.Empty<KingdomAtlasVassalRelationSnapshot>();
         public IReadOnlyDictionary<long, KingdomAtlasKingdomSnapshot> Kingdoms { get; set; } = new Dictionary<long, KingdomAtlasKingdomSnapshot>();
         public IReadOnlyDictionary<long, KingdomAtlasColor> DisplayColors { get; set; } = new Dictionary<long, KingdomAtlasColor>();

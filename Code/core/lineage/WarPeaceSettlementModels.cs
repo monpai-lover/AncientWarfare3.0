@@ -82,6 +82,7 @@ namespace AncientWarfare3.core.lineage
         public long ExitRootKingdomId { get; set; } = -1;
         public int SignedWarScore { get; set; }
         public bool PlayerInitiated { get; set; }
+        public bool AutomaticExhaustionSettlement { get; internal set; }
         public List<WarPeaceSettlementTermDraft> Terms { get; } =
             new List<WarPeaceSettlementTermDraft>();
         public List<WarPeaceSettlementParticipantSnapshot> Participants
@@ -202,6 +203,7 @@ namespace AncientWarfare3.core.lineage
         public int SignedWarScore { get; set; }
         public int TotalCost { get; set; }
         public bool PlayerInitiated { get; set; }
+        public bool AutomaticExhaustionSettlement { get; internal set; }
         public WarPeaceSettlementStatus Status { get; set; }
         public string ResponseReason { get; set; } = "";
         public int RecoveryAttempts { get; set; }
@@ -227,6 +229,8 @@ namespace AncientWarfare3.core.lineage
                 SignedWarScore = WarPeaceTermsRules.ClampSignedWarScore(
                     draft.SignedWarScore),
                 PlayerInitiated = draft.PlayerInitiated,
+                AutomaticExhaustionSettlement =
+                    draft.AutomaticExhaustionSettlement,
                 Status = WarPeaceSettlementStatus.Pending
             };
             for (int i = 0; i < terms.Count; i++)

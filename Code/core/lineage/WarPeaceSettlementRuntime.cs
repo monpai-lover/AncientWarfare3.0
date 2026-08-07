@@ -102,6 +102,7 @@ namespace AncientWarfare3.core.lineage
             reason = "";
             if (draft == null || !TryContext(draft.WarId,
                     draft.RequesterKingdomId, draft.ResponderKingdomId,
+                    draft.AutomaticExhaustionSettlement,
                     out War war, out Kingdom requester,
                     out Kingdom responder, out reason)) return false;
             if (!TryBuildAuthorizedScope(war, requester, responder,
@@ -125,7 +126,8 @@ namespace AncientWarfare3.core.lineage
             reason = "";
             if (proposal == null || !TryContext(proposal.WarId,
                     proposal.RequesterKingdomId,
-                    proposal.ResponderKingdomId, out War war,
+                    proposal.ResponderKingdomId,
+                    proposal.AutomaticExhaustionSettlement, out War war,
                     out Kingdom requester, out Kingdom responder,
                     out reason)) return false;
             if (!TryBuildAuthorizedScope(war, requester, responder,
@@ -155,6 +157,7 @@ namespace AncientWarfare3.core.lineage
             reason = "";
             if (draft == null || !TryContext(draft.WarId,
                     draft.RequesterKingdomId, draft.ResponderKingdomId,
+                    draft.AutomaticExhaustionSettlement,
                     out War war, out Kingdom requester, out _, out reason))
                 return false;
             if (!WarScoreService.TryGetSnapshot(war, requester,
@@ -174,7 +177,9 @@ namespace AncientWarfare3.core.lineage
         {
             facts = new WarPeaceSettlementTermFacts();
             if (!TryContext(draft.WarId, draft.RequesterKingdomId,
-                    draft.ResponderKingdomId, out _, out _, out _,
+                    draft.ResponderKingdomId,
+                    draft.AutomaticExhaustionSettlement,
+                    out _, out _, out _,
                     out reason)) return false;
             if (!TryValidateTerm(draft.WarId, term.Kind,
                     term.FromKingdomId,
@@ -191,7 +196,9 @@ namespace AncientWarfare3.core.lineage
         {
             reason = "";
             if (!TryContext(proposal.WarId, proposal.RequesterKingdomId,
-                    proposal.ResponderKingdomId, out _, out _, out _,
+                    proposal.ResponderKingdomId,
+                    proposal.AutomaticExhaustionSettlement,
+                    out _, out _, out _,
                     out reason)) return false;
             var survival = new WarPeaceTreatySurvivalLedger();
             for (int i = 0; i < proposal.Terms.Count; i++)
@@ -1121,7 +1128,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool TryContext(long warId, long requesterId,
-            long responderId, out War war, out Kingdom requester,
+            long responderId, bool automaticExhaustionSettlement,
+            out War war, out Kingdom requester,
             out Kingdom responder, out string reason)
         {
             war = FindWar(warId);
@@ -1133,13 +1141,17 @@ namespace AncientWarfare3.core.lineage
                 reason = "war_no_longer_active";
                 return false;
             }
-            if (ZhuluPeaceGuard.BlocksOrdinarySettlement(war))
+            if (WarExhaustionSettlementRules.RespectsOrdinarySettlementBlock(
+                    ZhuluPeaceGuard.BlocksOrdinarySettlement(war),
+                    automaticExhaustionSettlement))
             {
                 reason = ZhuluPeaceGuard.Reason(war);
                 return false;
             }
-            if (RebellionDirectTerritoryTransferService.
-                    BlocksOrdinarySettlement(war))
+            if (WarExhaustionSettlementRules.RespectsOrdinarySettlementBlock(
+                RebellionDirectTerritoryTransferService.
+                        BlocksOrdinarySettlement(war),
+                    automaticExhaustionSettlement))
             {
                 reason = RebellionDirectTerritoryTransferRules.
                     SettlementBlockedReason;

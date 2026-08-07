@@ -12,6 +12,7 @@ internal static class ArmyLogisticsSustainmentRulesTests
         DisabledSupplyDoesNotBlockRegroupCompletion();
         OrganizationStillRespondsToCasualtiesAndRegrouping();
         LogisticsSchedulerDoesNotRequestASecondSnapshotWithinSamePeriod();
+        EmptyKingdomsRemainPendingForLaterFrameSlices();
     }
 
     private static void AConfirmedMissionCorridorKeepsMarchSupplyConnected()
@@ -50,6 +51,21 @@ internal static class ArmyLogisticsSustainmentRulesTests
             "the same logistics period never rebuilds its snapshot every frame");
         Equal(true, scheduler.ShouldBeginDay(13L),
             "the next logistics period may build a fresh snapshot");
+    }
+
+    private static void EmptyKingdomsRemainPendingForLaterFrameSlices()
+    {
+        var scheduler = new ArmyStrategicDayScheduler();
+        scheduler.BeginDay(18L, new long[] { 4L, 9L, 15L });
+
+        // The runtime scans one candidate per frame. Empty candidates stay
+        // queued rather than causing a full active-kingdom sweep.
+        Equal(4L, scheduler.TakeKingdom(),
+            "the first frame consumes only its first empty kingdom candidate");
+        Equal(true, scheduler.HasPending,
+            "unscanned kingdoms remain available to the next frame");
+        Equal(9L, scheduler.TakeKingdom(),
+            "the next frame resumes from the retained scheduler cursor");
     }
 
     private static void ACurrentCorridorCityAndRouteAnchorPreventFalseIsolation()

@@ -27,6 +27,10 @@ internal static class KingdomAtlasArtifactRulesTests
         byte[] gif = KingdomAtlasGifEncoder.Encode(new[] { raster });
         Equal((byte)'G', gif[0], "GIF header");
         Equal((byte)'F', gif[2], "GIF header");
+        string previewPath = KingdomAtlasRules.BuildPreviewCacheRelativePath(
+            3L, 768, 4, 9L);
+        True(previewPath.Contains("preview-cache"),
+            "preview cache is separate from generated artifacts");
         int boundaryOffset = (32 * raster.Width + 0) * 4;
         Equal((byte)245, raster.Rgba[boundaryOffset], "coastline boundary red");
         Equal((byte)245, raster.Rgba[boundaryOffset + 1], "coastline boundary green");
@@ -78,6 +82,85 @@ internal static class KingdomAtlasArtifactRulesTests
         Equal(2, subjectLabels.Count, "subjects retain independent labels");
         Equal("Subject A", subjectLabels[0].Text, "first subject label is independent");
         Equal("Subject B", subjectLabels[1].Text, "second subject label is independent");
+
+        Near(60f, KingdomAtlasRules.CalculateLabelPixelSize(
+                80f, 768, 1024, 1024),
+            "world label units convert through map scale");
+        Near(61.44f, KingdomAtlasRules.CalculateLabelPixelSize(
+                800f, 768, 1024, 1024),
+            "continental labels are capped relative to output resolution");
+        Near(4f, KingdomAtlasRules.CalculateLabelPixelSize(
+                0.1f, 768, 1024, 1024),
+            "small territories use a smaller country label floor");
+        Near(30f, KingdomAtlasRules.ScaleAtlasCountryLabelForTerritory(
+                60f, 500, 100, 100),
+            "five-percent territories halve the fitted country label");
+        Near(60f, KingdomAtlasRules.ScaleAtlasCountryLabelForTerritory(
+                60f, 2000, 100, 100),
+            "large territories retain the fitted country label");
+        Near(4f, KingdomAtlasRules.ScaleAtlasCountryLabelForTerritory(
+                4f, 1, 100, 100),
+            "tiny territories retain the readable pixel floor");
+
+        HistoricalRasterRowsKeepWorldYOrientation();
+        EventLabelsSurviveIncompleteKingdomSnapshots();
+    }
+
+    private static void HistoricalRasterRowsKeepWorldYOrientation()
+    {
+        var node = new KingdomAtlasNode
+        {
+            Event = new KingdomAtlasHistoryEvent
+            {
+                EventId = 12, OldKingdomId = 1, NewKingdomId = 2,
+                OldKingdomColor = "#aa0000", NewKingdomColor = "#00aa00",
+                OldKingdomName = "Old", NewKingdomName = "New"
+            },
+            CityOwners = new Dictionary<long, long> { [1] = 1, [2] = 2 },
+            VisibleZones = new[]
+            {
+                new KingdomAtlasZoneCell(1, 0, 0, false, 0),
+                new KingdomAtlasZoneCell(2, 0, 1, false, 0)
+            }
+        };
+
+        KingdomAtlasRaster raster = KingdomAtlasRasterizer.Render(node, 64);
+        KingdomAtlasColor bottom = ReadColor(raster, 32, 48);
+        KingdomAtlasColor top = ReadColor(raster, 32, 16);
+        Equal(new KingdomAtlasColor(170, 0, 0, 255), bottom,
+            "world y=0 remains at the raster bottom");
+        Equal(new KingdomAtlasColor(0, 170, 0, 255), top,
+            "world y=1 remains above world y=0");
+    }
+
+    private static void EventLabelsSurviveIncompleteKingdomSnapshots()
+    {
+        var node = new KingdomAtlasNode
+        {
+            Event = new KingdomAtlasHistoryEvent
+            {
+                EventId = 13, OldKingdomId = 1, NewKingdomId = 2,
+                OldKingdomName = "Old Realm", NewKingdomName = "New Realm",
+                OldKingdomColor = "#aa0000", NewKingdomColor = "#00aa00"
+            },
+            CityOwners = new Dictionary<long, long> { [1] = 1, [2] = 2 },
+            VisibleZones = new[]
+            {
+                new KingdomAtlasZoneCell(1, 0, 0, false, 0),
+                new KingdomAtlasZoneCell(2, 1, 0, false, 0)
+            },
+            Kingdoms = new Dictionary<long, KingdomAtlasKingdomSnapshot>
+            {
+                [99] = new KingdomAtlasKingdomSnapshot
+                {
+                    KingdomId = 99, Name = "Unrelated"
+                }
+            }
+        };
+        List<KingdomAtlasLabel> labels = KingdomAtlasRasterizer.BuildLabels(
+            node, 64);
+        Equal(2, labels.Count,
+            "event kingdoms retain labels when snapshot dictionary is incomplete");
     }
 
     private static KingdomAtlasColor ReadColor(KingdomAtlasRaster pRaster,
@@ -92,6 +175,18 @@ internal static class KingdomAtlasArtifactRulesTests
     private static void Equal<T>(T pExpected, T pActual, string pName)
     {
         if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+
+    private static void True(bool pCondition, string pName)
+    {
+        if (!pCondition) throw new InvalidOperationException(pName);
+    }
+
+    private static void Near(float pExpected, float pActual, string pName)
+    {
+        if (Math.Abs(pExpected - pActual) > 0.01f)
             throw new InvalidOperationException(pName + ": expected " +
                 pExpected + ", got " + pActual);
     }

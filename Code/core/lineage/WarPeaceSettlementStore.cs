@@ -96,6 +96,7 @@ namespace AncientWarfare3.core.lineage
                     "REQUESTER_KINGDOM_ID,RESPONDER_KINGDOM_ID," +
                     "SCOPE_KIND,EXIT_ROOT_KINGDOM_ID," +
                     "SIGNED_WAR_SCORE,TOTAL_COST,PLAYER_INITIATED," +
+                    "AUTOMATIC_EXHAUSTION_SETTLEMENT," +
                     "STATUS,RESPONSE_REASON,RECOVERY_ATTEMPTS," +
                     "CREATED_YEAR,RESPONSE_YEAR FROM " +
                     WarPeaceSettlementProposalTableItem.GetTableName() +
@@ -117,17 +118,19 @@ namespace AncientWarfare3.core.lineage
                     SignedWarScore = reader.GetInt32(5),
                     TotalCost = reader.GetInt32(6),
                     PlayerInitiated = reader.GetInt32(7) != 0,
-                    Status = ParseStatus(reader.GetString(8)),
-                    ResponseReason = reader.IsDBNull(9)
+                    AutomaticExhaustionSettlement =
+                        reader.GetInt32(8) != 0,
+                    Status = ParseStatus(reader.GetString(9)),
+                    ResponseReason = reader.IsDBNull(10)
                         ? ""
-                        : reader.GetString(9),
-                    RecoveryAttempts = reader.GetInt32(10),
-                    CreatedYear = reader.IsDBNull(11)
+                        : reader.GetString(10),
+                    RecoveryAttempts = reader.GetInt32(11),
+                    CreatedYear = reader.IsDBNull(12)
                         ? -1
-                        : reader.GetInt32(11),
-                    ResponseYear = reader.IsDBNull(12)
+                        : reader.GetInt32(12),
+                    ResponseYear = reader.IsDBNull(13)
                         ? -1
-                        : reader.GetInt32(12)
+                        : reader.GetInt32(13)
                 };
                 reader.Close();
                 ReadTerms(db, proposalId, proposal.Terms);
@@ -722,13 +725,14 @@ namespace AncientWarfare3.core.lineage
                     " (PROPOSAL_ID,WAR_ID,REQUESTER_KINGDOM_ID," +
                     "RESPONDER_KINGDOM_ID,SCOPE_KIND," +
                     "EXIT_ROOT_KINGDOM_ID,SIGNED_WAR_SCORE,TOTAL_COST," +
-                    "PLAYER_INITIATED,STATUS,RESPONSE_REASON," +
+                    "PLAYER_INITIATED,AUTOMATIC_EXHAUSTION_SETTLEMENT," +
+                    "STATUS,RESPONSE_REASON," +
                     "RECOVERY_ATTEMPTS," +
                     "CREATED_YEAR,RESPONSE_YEAR,CREATED_TIME," +
                     "RESPONSE_TIME,EXECUTED_TIME) VALUES " +
                     "(@id,@war,@requester,@responder,@scope,@exitRoot," +
-                    "@score,@cost," +
-                    "@player,'pending','',0,@year,-1,@time,-1,-1)"
+                    "@score,@cost,@player,@automaticExhaustion," +
+                    "'pending','',0,@year,-1,@time,-1,-1)"
             };
             command.Parameters.AddWithValue("@id", proposal.ProposalId);
             command.Parameters.AddWithValue("@war", proposal.WarId);
@@ -745,6 +749,8 @@ namespace AncientWarfare3.core.lineage
             command.Parameters.AddWithValue("@cost", proposal.TotalCost);
             command.Parameters.AddWithValue("@player",
                 proposal.PlayerInitiated ? 1 : 0);
+            command.Parameters.AddWithValue("@automaticExhaustion",
+                proposal.AutomaticExhaustionSettlement ? 1 : 0);
             command.Parameters.AddWithValue("@year", proposal.CreatedYear);
             command.Parameters.AddWithValue("@time",
                 LineageService.CurTime());

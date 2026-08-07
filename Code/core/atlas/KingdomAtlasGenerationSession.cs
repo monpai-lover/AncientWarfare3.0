@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.presentation;
 
 namespace AncientWarfare3.core.atlas
 {
@@ -21,6 +22,7 @@ namespace AncientWarfare3.core.atlas
         private readonly string _manifestPath;
         private readonly List<KingdomAtlasNode> _nodes;
         private readonly HashSet<long> _completed;
+        private readonly ArmyRtsPlanWorldTerrainSnapshot _terrain;
         private readonly List<KingdomAtlasRaster> _gifFrames =
             new List<KingdomAtlasRaster>();
         private readonly KingdomAtlasGenerationResult _result;
@@ -39,7 +41,8 @@ namespace AncientWarfare3.core.atlas
         private KingdomAtlasGenerationSession(long pKingdomId,
             int pResolution, bool pGif, string pSaveDirectory,
             string pOutputDirectory, string pManifestPath,
-            List<KingdomAtlasNode> pNodes, HashSet<long> pCompleted)
+            List<KingdomAtlasNode> pNodes, HashSet<long> pCompleted,
+            ArmyRtsPlanWorldTerrainSnapshot pTerrain)
         {
             _kingdomId = pKingdomId;
             _resolution = pResolution;
@@ -49,7 +52,11 @@ namespace AncientWarfare3.core.atlas
             _manifestPath = pManifestPath;
             _nodes = pNodes ?? new List<KingdomAtlasNode>();
             _completed = pCompleted ?? new HashSet<long>();
-            _result = new KingdomAtlasGenerationResult();
+            _terrain = pTerrain;
+            _result = new KingdomAtlasGenerationResult
+            {
+                OutputDirectory = _outputDirectory
+            };
         }
 
         internal KingdomAtlasGenerationResult Result => _result;
@@ -57,7 +64,8 @@ namespace AncientWarfare3.core.atlas
         internal bool IsComplete => _finished;
 
         internal static KingdomAtlasGenerationSession Create(long pKingdomId,
-            int pResolution, bool pGif)
+            int pResolution, bool pGif,
+            ArmyRtsPlanWorldTerrainSnapshot pTerrain = null)
         {
             var invalid = new KingdomAtlasGenerationResult();
             if (!KingdomAtlasRules.IsReliableResolution(pResolution,
@@ -88,10 +96,26 @@ namespace AncientWarfare3.core.atlas
                 return new KingdomAtlasGenerationSession(invalid);
             }
 
+            ArmyRtsPlanWorldTerrainSnapshot terrain = pTerrain;
             try
             {
-                string output = Path.Combine(saveDirectory,
-                    "aw3_kingdom_atlas");
+                if (terrain == null)
+                    terrain = KingdomAtlasLiveTerrainService.Capture(
+                        Math.Max(768, pResolution));
+                for (int index = 0; index < nodes.Count; index++)
+                    KingdomAtlasLiveTerrainService.AttachNodeGeometry(
+                        nodes[index], terrain);
+            }
+            catch (Exception error)
+            {
+                invalid.Error = error.Message;
+                return new KingdomAtlasGenerationSession(invalid);
+            }
+
+            try
+            {
+                string output = KingdomAtlasArtifactWriter.GetOutputDirectory(
+                    saveDirectory);
                 Directory.CreateDirectory(output);
                 string manifestPath = Path.Combine(output, "kingdom_" +
                     pKingdomId.ToString(CultureInfo.InvariantCulture) + "_" +
@@ -102,7 +126,7 @@ namespace AncientWarfare3.core.atlas
                         manifestPath, saveDirectory, pResolution);
                 return new KingdomAtlasGenerationSession(pKingdomId,
                     pResolution, pGif, saveDirectory, output, manifestPath,
-                    nodes, completed);
+                    nodes, completed, terrain);
             }
             catch (Exception error)
             {
@@ -131,24 +155,22 @@ namespace AncientWarfare3.core.atlas
             }
 
             KingdomAtlasNode node = _nodes[_index];
-            string stem = KingdomAtlasRules.BuildOutputStem(_kingdomId,
-                _resolution, _index, node.Event.EventId);
-            string pngPath = Path.Combine(_outputDirectory, stem + ".png");
+            string pngPath = KingdomAtlasArtifactWriter.BuildPngPath(
+                _saveDirectory, _kingdomId, _resolution, _index,
+                node.Event.EventId);
             bool hasOutput = File.Exists(pngPath);
             if (_completed.Contains(node.Event.EventId) && hasOutput)
             {
                 _result.NodesSkipped++;
                 if (_gif)
-                    _gifFrames.Add(KingdomAtlasRasterizer.Render(node,
-                        _resolution));
+                    _gifFrames.Add(RenderForExport(node));
                 pProgress = new KingdomAtlasProgress(_index + 1,
                     _nodes.Count, "skipped", node.Event.EventId);
                 _index++;
                 return true;
             }
 
-            KingdomAtlasRaster raster = KingdomAtlasRasterizer.Render(node,
-                _resolution);
+            KingdomAtlasRaster raster = RenderForExport(node);
             KingdomAtlasArtifactWriter.WriteAtomically(pngPath,
                 KingdomAtlasPngEncoder.Encode(raster));
             if (_gif) _gifFrames.Add(raster);
@@ -162,6 +184,23 @@ namespace AncientWarfare3.core.atlas
             return true;
         }
 
+        private KingdomAtlasRaster RenderForExport(KingdomAtlasNode pNode)
+        {
+            KingdomAtlasRaster raster = KingdomAtlasLiveTerrainService.Render(
+                pNode, _resolution, _terrain);
+            Func<KingdomAtlasNode, KingdomAtlasRaster, KingdomAtlasRaster>
+                labelRenderer = KingdomAtlasRasterizer.ExternalLabelRenderer;
+            if (labelRenderer == null) return raster;
+            try
+            {
+                return labelRenderer(pNode, raster) ?? raster;
+            }
+            catch
+            {
+                return raster;
+            }
+        }
+
         internal void Cancel()
         {
             if (_finished) return;
@@ -173,11 +212,12 @@ namespace AncientWarfare3.core.atlas
         {
             if (!_gif || _gifFrames.Count == 0) return;
             byte[] gif = KingdomAtlasGifEncoder.Encode(_gifFrames);
-            KingdomAtlasArtifactWriter.WriteAtomically(Path.Combine(
+            string gifPath = Path.Combine(
                 _outputDirectory, "kingdom_" +
                 _kingdomId.ToString(CultureInfo.InvariantCulture) + "_" +
-                _resolution.ToString(CultureInfo.InvariantCulture) + ".gif"),
-                gif);
+                _resolution.ToString(CultureInfo.InvariantCulture) + ".gif");
+            KingdomAtlasArtifactWriter.WriteAtomically(gifPath, gif);
+            _result.GifPath = gifPath;
         }
     }
 }

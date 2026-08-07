@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.pathfinding
         private WorldTile[] _initialCaptureTiles;
         private AWTileTraversalSnapshot[][] _initialChunks;
         private bool _initializing;
+        private bool _initialBuildScheduled;
         private int _initialCaptureCursor;
         private int _generationId;
         private int _mainThreadId;
@@ -27,6 +28,7 @@ namespace AncientWarfare3.core.pathfinding
         private int _height;
         private int _chunksWide;
         private long _sourceRevision;
+        private bool _overlayBuildScheduled;
 
         public int GenerationId => (_overlayGeneration ?? _current)?.Id ?? -1;
         public long SourceRevision => _sourceRevision;
@@ -148,15 +150,17 @@ namespace AncientWarfare3.core.pathfinding
             if (!AWTraversalRules.CanPublishInitialGeneration(
                     tileCaptureComplete,
                     pendingDirtyChunkCount: _dirtyChunks.Count)) return;
-
-            _current = new AWTraversalGeneration(++_generationId,
-                _width, _height, AWTraversalGeneration.DefaultChunkSize,
-                _initialChunks);
-            _initialCaptureTiles = null;
-            _initialChunks = null;
-            _initialCaptureCursor = 0;
-            _initializing = false;
-            _sweepCursor = 0;
+            if (AWTraversalBuildRules.ShouldScheduleInitialAsync(
+                    AWAsyncRuntime.TraversalEnabled, _initialBuildScheduled,
+                    tileCaptureComplete, _dirtyChunks.Count))
+            {
+                ScheduleInitialBuild();
+                return;
+            }
+            if (_initialBuildScheduled) return;
+            if (AWTraversalBuildRules.ShouldPublishInitialSynchronously(
+                    AWAsyncRuntime.TraversalEnabled, _initialBuildScheduled))
+                PublishInitialBuild(BuildInitialSnapshot());
         }
 
         private bool CaptureInitialDirtyFrame(long pStarted,
@@ -229,14 +233,29 @@ namespace AncientWarfare3.core.pathfinding
         public int ProcessDirty(int pChunkBudget)
         {
             AssertMainThread();
-            if (_current == null || pChunkBudget <= 0 || _dirtyChunks.Count == 0) return 0;
-            if (AWAsyncRuntime.ShadowEnabled)
-                return ProcessDirtySynchronously(pChunkBudget,
-                    pCompareShadow: true);
-            return AWAsyncRuntime.TraversalEnabled
-                ? CaptureDirtyForAsyncBuild(pChunkBudget)
-                : ProcessDirtySynchronously(pChunkBudget,
-                    pCompareShadow: false);
+            if (_current == null || pChunkBudget <= 0) return 0;
+            if (AWAsyncRuntime.TraversalEnabled)
+            {
+                // Shadow is a comparison mode, not permission to rebuild the
+                // complete traversal generation on the simulation thread.
+                // Capture the small live-tile delta here and let the worker
+                // assemble the generation and water components.
+                if (_overlay.Count > 0 && !_overlayBuildScheduled)
+                    ScheduleOverlayBuild();
+                if (_dirtyChunks.Count == 0) return 0;
+                return CaptureDirtyForAsyncBuild(pChunkBudget);
+            }
+            if (_dirtyChunks.Count == 0) return 0;
+            return ProcessDirtySynchronously(pChunkBudget,
+                pCompareShadow: AWAsyncRuntime.ShadowEnabled);
+        }
+
+        public void ProcessPendingBuild()
+        {
+            AssertMainThread();
+            if (!AWAsyncRuntime.TraversalEnabled ||
+                _overlay.Count == 0 || _overlayBuildScheduled) return;
+            ScheduleOverlayBuild();
         }
 
         private int ProcessDirtySynchronously(int pChunkBudget,
@@ -308,9 +327,12 @@ namespace AncientWarfare3.core.pathfinding
                 AWAsyncLane.Traversal,
                 new AWAsyncStamp(worldGeneration,
                     UnityEngine.Time.frameCount, pRevision),
-                execution.Execute, commit.Commit);
-            if (!AWAsyncRuntime.TrySchedule(request))
-                commit.Commit(execution.Execute(CancellationToken.None));
+                execution.Execute, commit.Commit,
+                pCommitMode: AWAsyncCommitMode.Background);
+            // A rejected shadow comparison must never execute its full build
+            // synchronously. It is diagnostic-only and may be skipped when
+            // the async worker is saturated.
+            AWAsyncRuntime.TrySchedule(request);
         }
 
         private int CaptureDirtyForAsyncBuild(int pChunkBudget)
@@ -383,6 +405,7 @@ namespace AncientWarfare3.core.pathfinding
             _initialCaptureTiles = null;
             _initialChunks = null;
             _initializing = false;
+            _initialBuildScheduled = false;
             _initialCaptureCursor = 0;
             _generationId = 0;
             _sweepCursor = 0;
@@ -390,6 +413,74 @@ namespace AncientWarfare3.core.pathfinding
             _height = 0;
             _chunksWide = 0;
             _sourceRevision = 0L;
+            _overlayBuildScheduled = false;
+        }
+
+        private AWTraversalBuildResult BuildInitialSnapshot()
+        {
+            var input = new AWTraversalBuildInput(AWAsyncRuntime.WorldGeneration,
+                baseGenerationId: 0, sourceRevision: _sourceRevision,
+                width: _width, height: _height,
+                chunkSize: AWTraversalGeneration.DefaultChunkSize,
+                baseChunks: (AWTileTraversalSnapshot[][])_initialChunks.Clone(),
+                captures: Array.Empty<AWTraversalChunkCapture>());
+            return AWTraversalBuildRules.Build(input);
+        }
+
+        private void ScheduleInitialBuild()
+        {
+            if (!_initializing || _initialBuildScheduled ||
+                _initialChunks == null) return;
+            long worldGeneration = AWAsyncRuntime.WorldGeneration;
+            var input = new AWTraversalBuildInput(worldGeneration,
+                baseGenerationId: 0, sourceRevision: _sourceRevision,
+                width: _width, height: _height,
+                chunkSize: AWTraversalGeneration.DefaultChunkSize,
+                baseChunks: (AWTileTraversalSnapshot[][])_initialChunks.Clone(),
+                captures: Array.Empty<AWTraversalChunkCapture>());
+            var execution = new AWTraversalBuildExecution(input);
+            var request = new AWAsyncWorkRequest("traversal-initial-cache",
+                AWAsyncLane.Traversal,
+                new AWAsyncStamp(worldGeneration, UnityEngine.Time.frameCount,
+                    input.SourceRevision),
+                execution.Execute, new AWInitialTraversalBuildCommit(this).Commit,
+                HandleInitialBuildFault);
+            _initialBuildScheduled = AWAsyncRuntime.TrySchedule(request);
+        }
+
+        private void HandleInitialBuildFault(Exception pError)
+        {
+            AssertMainThread();
+            _initialBuildScheduled = false;
+            _diagnostics?.OnTraversalBuildStale();
+        }
+
+        private void PublishInitialBuild(AWTraversalBuildResult pResult)
+        {
+            AssertMainThread();
+            _initialBuildScheduled = false;
+            if (!_initializing || _current != null || pResult == null ||
+                pResult.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
+                pResult.BaseGenerationId != 0 ||
+                pResult.SourceRevision != _sourceRevision ||
+                pResult.Width != _width || pResult.Height != _height ||
+                pResult.ChunkSize != AWTraversalGeneration.DefaultChunkSize ||
+                pResult.Chunks.Length != AWTraversalCaptureRules.ChunkCount(
+                    _width, _height, AWTraversalGeneration.DefaultChunkSize) ||
+                _dirtyChunks.Count > 0)
+            {
+                _diagnostics?.OnTraversalBuildStale();
+                return;
+            }
+            _current = new AWTraversalGeneration(++_generationId,
+                _width, _height, AWTraversalGeneration.DefaultChunkSize,
+                pResult.Chunks);
+            _initialCaptureTiles = null;
+            _initialChunks = null;
+            _initialCaptureCursor = 0;
+            _initializing = false;
+            _sweepCursor = 0;
+            _diagnostics?.OnTraversalBuildPublished();
         }
 
         private void ScheduleOverlayBuild()
@@ -413,7 +504,12 @@ namespace AncientWarfare3.core.pathfinding
                     UnityEngine.Time.frameCount, input.SourceRevision),
                 execution.Execute, commit.Commit,
                 error => HandleBuildFault(error));
-            if (!AWAsyncRuntime.TrySchedule(request))
+            if (AWAsyncRuntime.TrySchedule(request))
+            {
+                _overlayBuildScheduled = true;
+                return;
+            }
+            if (!AWAsyncRuntime.TraversalEnabled)
             {
                 _diagnostics?.OnTraversalSyncFallback();
                 PublishBuild((AWTraversalBuildResult)execution.Execute(
@@ -424,6 +520,7 @@ namespace AncientWarfare3.core.pathfinding
         private void HandleBuildFault(Exception pError)
         {
             AssertMainThread();
+            _overlayBuildScheduled = false;
             _diagnostics?.OnTraversalBuildStale();
             if (_current != null && _overlay.Count > 0)
                 ScheduleOverlayBuild();
@@ -442,6 +539,7 @@ namespace AncientWarfare3.core.pathfinding
                     AWTraversalGeneration.DefaultChunkSize,
                     currentChunkCount: currentChunkCount))
             {
+                _overlayBuildScheduled = false;
                 _diagnostics?.OnTraversalBuildStale();
                 if (_dirtyChunks.Count == 0 && _overlay.Count > 0)
                     ScheduleOverlayBuild();
@@ -451,6 +549,7 @@ namespace AncientWarfare3.core.pathfinding
                 pResult.Width, pResult.Height, pResult.ChunkSize,
                 pResult.Chunks);
             AWTraversalGeneration previous = _current;
+            _overlayBuildScheduled = false;
             _current = next;
             previous?.Dispose();
             _diagnostics?.OnTraversalBuildPublished();
@@ -475,13 +574,13 @@ namespace AncientWarfare3.core.pathfinding
             _overlayGeneration?.Dispose();
             _overlayGeneration = null;
             if (_current == null || _overlay.Count == 0) return;
-            AWTileTraversalSnapshot[][] chunks = _current.CopyChunkReferences();
+            var chunks = new Dictionary<int, AWTileTraversalSnapshot[]>(
+                _overlay.Count);
             foreach (AWTraversalOverlayEntry entry in _overlay.Values)
-                if (entry.ChunkId >= 0 && entry.ChunkId < chunks.Length)
+                if (entry.ChunkId >= 0)
                     chunks[entry.ChunkId] = entry.Tiles;
-            _overlayGeneration = new AWTraversalGeneration(++_generationId,
-                _width, _height, AWTraversalGeneration.DefaultChunkSize,
-                chunks);
+            _overlayGeneration = AWTraversalGeneration.FromOverlay(
+                ++_generationId, _current, chunks);
         }
 
         private sealed class AWTraversalBuildCommit
@@ -496,6 +595,21 @@ namespace AncientWarfare3.core.pathfinding
             public void Commit(object pResult)
             {
                 _owner.PublishBuild(pResult as AWTraversalBuildResult);
+            }
+        }
+
+        private sealed class AWInitialTraversalBuildCommit
+        {
+            private readonly AWTraversalCache _owner;
+
+            public AWInitialTraversalBuildCommit(AWTraversalCache pOwner)
+            {
+                _owner = pOwner;
+            }
+
+            public void Commit(object pResult)
+            {
+                _owner.PublishInitialBuild(pResult as AWTraversalBuildResult);
             }
         }
 

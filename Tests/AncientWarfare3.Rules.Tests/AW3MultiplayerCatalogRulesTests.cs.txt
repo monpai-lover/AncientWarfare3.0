@@ -154,7 +154,9 @@ internal static class AW3MultiplayerCatalogRulesTests
             AW3CommandRequest.CancelArmyOrder(7, 71),
             AW3CommandRequest.SubmitCivilServiceRanking(7, 81, 91, 92, 93),
             AW3CommandRequest.RenameSurname(7, 31, "Jiang"),
-            AW3CommandRequest.GrantVirtualNobleTitle(7, 31, "天意公")
+            AW3CommandRequest.GrantVirtualNobleTitle(7, 31, "天意公"),
+            AW3CommandRequest.EditVirtualNobleTitle(7, 91, "天意公"),
+            AW3CommandRequest.DeleteVirtualNobleTitle(7, 91)
         };
 
         Equal(Enum.GetValues<AW3CommandKind>().Length, requests.Length,
@@ -749,6 +751,8 @@ internal static class AW3MultiplayerCatalogRulesTests
             "WarScoreService.TryGetSnapshot",
             "WarParticipantRosterService.TryBuildReadOnly",
             "ArmyRtsControllerService.TryGetProjection",
+            "KingdomAtlasArtifactWriter.TryLoadCachedPng",
+            "KingdomAtlasArtifactWriter.TryLoadCachedPreviewPng",
             "SchoolMapModeService.SetFocus"
         };
         var violations = new List<string>();
