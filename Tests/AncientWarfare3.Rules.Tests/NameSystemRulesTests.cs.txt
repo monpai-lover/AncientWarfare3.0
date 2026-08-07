@@ -24,6 +24,10 @@ internal static class NameSystemRulesTests
                 1),
             "matching formal fief outranks the shared family state name");
         Equal("唐", PosthumousStateNameRules.Resolve(
+                "黄", "黄", "唐", NobleRankRules.RankCountyMarquis,
+                0, 17L, 17L),
+            "held formal fief remains authoritative when kingdom rank differs");
+        Equal("唐", PosthumousStateNameRules.Resolve(
                 "黄", "唐", "", NobleRankRules.RankNone,
                 1),
             "current political name outranks a stale bound family name");

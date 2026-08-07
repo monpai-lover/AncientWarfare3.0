@@ -6,11 +6,15 @@ namespace AncientWarfare3.core.lineage
     {
         public static string Resolve(string pHistoricalStateName,
             string pCurrentKingdomName, string pNobleTitleName,
-            int pNobleRank, int pKingdomTitle)
+            int pNobleRank, int pKingdomTitle,
+            long pNobleKingdomId = -1L, long pCurrentKingdomId = -1L)
         {
             string noble = (pNobleTitleName ?? "").Trim();
-            if (MatchesRulingTitle(pNobleRank, pKingdomTitle) &&
-                noble.Length > 0) return noble;
+            bool sameKingdom = pNobleKingdomId >= 0L &&
+                               pNobleKingdomId == pCurrentKingdomId;
+            if (noble.Length > 0 &&
+                (sameKingdom || MatchesRulingTitle(pNobleRank, pKingdomTitle)))
+                return noble;
 
             string current = (pCurrentKingdomName ?? "").Trim();
             if (current.Length > 0) return current;

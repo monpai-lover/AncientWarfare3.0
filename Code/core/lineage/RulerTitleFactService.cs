@@ -97,7 +97,8 @@ namespace AncientWarfare3.core.lineage
                 facts.StateName, pKingdom?.name, noble.TitleName, noble.Rank,
                 pKingdom == null
                     ? (int)KingdomTitle.Baron
-                    : (int)KingdomTitleService.GetTitle(pKingdom));
+                    : (int)KingdomTitleService.GetTitle(pKingdom),
+                noble.KingdomId, pKingdom?.id ?? -1L);
             facts.KingdomColor = HistoryColors.FromKingdom(pKingdom);
             facts.EndReason = pEndReason ?? pReign.EndReason ?? "";
             facts.DeathCause = pReign.DeathCause ?? "";
