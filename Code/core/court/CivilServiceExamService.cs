@@ -41,6 +41,9 @@ namespace AncientWarfare3.core.court
 
         private static readonly SortedSet<DueSession> DueSessions =
             new SortedSet<DueSession>();
+        // Runtime creation and rebuild both populate DueSessions. Keep one
+        // recovery lookup for legacy saves, never poll SQLite while idle.
+        private static bool _dueSessionRecoveryPending = true;
         private const string ForeignInvitationYearKey =
             "aw3_civil_service_foreign_invitation_year";
         private const string ForeignInvitationCountKey =
@@ -284,6 +287,7 @@ namespace AncientWarfare3.core.court
         public static void ClearRuntime()
         {
             DueSessions.Clear();
+            _dueSessionRecoveryPending = true;
             CivilServiceQualificationService.ClearRuntime();
             CivilServiceLegacyTransitionService.ClearRuntime();
         }
@@ -295,6 +299,7 @@ namespace AncientWarfare3.core.court
             foreach (CivilServiceExamSessionRecord session in
                      CivilServiceExamPersistence.LoadActiveSessions(DB))
                 Enqueue(session);
+            _dueSessionRecoveryPending = false;
         }
 
         public static void OnCurrentRulerDied(Kingdom pKingdom)
@@ -983,6 +988,8 @@ namespace AncientWarfare3.core.court
                     return session;
                 Enqueue(session);
             }
+            if (!_dueSessionRecoveryPending) return null;
+            _dueSessionRecoveryPending = false;
             CivilServiceExamSessionRecord fallback =
                 CivilServiceExamPersistence.LoadDueSession(DB, pDay);
             if (fallback != null)

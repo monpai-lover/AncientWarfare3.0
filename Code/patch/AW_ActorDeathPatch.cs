@@ -28,6 +28,7 @@ namespace AncientWarfare3.patch
             if (!AWAsyncClearWorldGuard.CleanupAllowed) return;
             NobleRankService.ClearPendingDeathSuccessions();
             VirtualNobleTitleService.ClearRuntime();
+            HeirMinimapMarkerIndex.Reset();
         }
 
         [HarmonyPrefix]
@@ -141,11 +142,11 @@ namespace AncientWarfare3.patch
             {
                 DyingKingActorId = __instance.data.id;
                 TryRunDeathStage(__instance,
-                    ActorDeathPerformanceStage.KingSuccession,
+                    ActorDeathPerformanceStage.KingHeirPreparation,
                     "king succession preparation", () =>
                     HeirService.PrepareSuccessionBeforeKingDeath(dyingKingdom, __instance));
                 TryRunDeathStage(__instance,
-                    ActorDeathPerformanceStage.KingSuccession,
+                    ActorDeathPerformanceStage.KingChronicle,
                     "king death chronicle", () =>
                     ChronicleEvents.OnKingDied(dyingKingdom, __instance));
             }
@@ -199,7 +200,7 @@ namespace AncientWarfare3.patch
                 __state.DyingKingActorId < 0L || __instance == null ||
                 __instance.isAlive()) return;
             TryRunDeathStage(__instance,
-                ActorDeathPerformanceStage.KingSuccession,
+                ActorDeathPerformanceStage.KingCivilService,
                 "civil-service ranking ruler death", () =>
                 CivilServiceExamService.OnCurrentRulerDied(
                     __state.DyingKingdom));

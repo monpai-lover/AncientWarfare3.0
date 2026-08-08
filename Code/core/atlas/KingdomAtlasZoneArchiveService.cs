@@ -52,41 +52,46 @@ namespace AncientWarfare3.core.atlas
                     using (var tx = db.BeginTransaction())
                     {
                         long nextId = NextSnapshotId(db, tx);
-                        for (int zoneIndex = 0; zoneIndex < pCity.zones.Count; zoneIndex++)
+                        using (SQLiteCommand insert =
+                               CreateSnapshotInsertCommand(db, tx))
                         {
-                            TileZone zone = pCity.zones[zoneIndex];
-                            if (zone?.tiles == null) continue;
-                            byte neighborMask = NeighborMask(zone);
-                            for (int tileIndex = 0; tileIndex < zone.tiles.Length; tileIndex++)
+                            for (int zoneIndex = 0;
+                                 zoneIndex < pCity.zones.Count;
+                                 zoneIndex++)
                             {
-                                WorldTile tile = zone.tiles[tileIndex];
-                                if (tile == null || tile.data == null) continue;
-                                bool water = tile.Type == null || tile.Type.liquid ||
-                                    tile.Type.ocean || tile.Type.lava || !tile.Type.ground;
-                                using (var cmd = new SQLiteCommand(db))
+                                TileZone zone = pCity.zones[zoneIndex];
+                                if (zone?.tiles == null) continue;
+                                byte neighborMask = NeighborMask(zone);
+                                for (int tileIndex = 0;
+                                     tileIndex < zone.tiles.Length;
+                                     tileIndex++)
                                 {
-                                    cmd.Transaction = tx;
-                                    cmd.CommandText = "INSERT INTO " +
-                                        KingdomAtlasZoneArchiveTableItem.GetTableName() +
-                                        " (SNAPSHOT_ID,CITY_ID,WORLD_TIME,EVENT_TYPE,KINGDOM_ID," +
-                                        "KINGDOM_NAME,KINGDOM_COLOR,X,Y,WATER,NEIGHBOR_MASK,SNAPSHOT_KEY) " +
-                                        "VALUES (@id,@city,@time,@type,@kingdom,@name,@color,@x,@y,@water,@mask,@key)";
-                                    cmd.Parameters.AddWithValue("@id", nextId++);
-                                    cmd.Parameters.AddWithValue("@city", cityId);
-                                    cmd.Parameters.AddWithValue("@time", pWorldTime);
-                                    cmd.Parameters.AddWithValue("@type", pEventType);
-                                    cmd.Parameters.AddWithValue("@kingdom", kingdomId);
-                                    cmd.Parameters.AddWithValue("@name", kingdomName ?? "");
-                                    cmd.Parameters.AddWithValue("@color", kingdomColor ?? "");
-                                    cmd.Parameters.AddWithValue("@x", tile.x);
-                                    cmd.Parameters.AddWithValue("@y", tile.y);
-                                    cmd.Parameters.AddWithValue("@water", water ? 1 : 0);
-                                    cmd.Parameters.AddWithValue("@mask", neighborMask);
-                                    cmd.Parameters.AddWithValue("@key",
+                                    WorldTile tile = zone.tiles[tileIndex];
+                                    if (tile == null || tile.data == null)
+                                        continue;
+                                    bool water = tile.Type == null ||
+                                        tile.Type.liquid || tile.Type.ocean ||
+                                        tile.Type.lava || !tile.Type.ground;
+                                    insert.Parameters["@id"].Value = nextId++;
+                                    insert.Parameters["@city"].Value = cityId;
+                                    insert.Parameters["@time"].Value = pWorldTime;
+                                    insert.Parameters["@type"].Value = pEventType;
+                                    insert.Parameters["@kingdom"].Value = kingdomId;
+                                    insert.Parameters["@name"].Value =
+                                        kingdomName ?? "";
+                                    insert.Parameters["@color"].Value =
+                                        kingdomColor ?? "";
+                                    insert.Parameters["@x"].Value = tile.x;
+                                    insert.Parameters["@y"].Value = tile.y;
+                                    insert.Parameters["@water"].Value =
+                                        water ? 1 : 0;
+                                    insert.Parameters["@mask"].Value =
+                                        neighborMask;
+                                    insert.Parameters["@key"].Value =
                                         KingdomAtlasRules.BuildSnapshotTileKey(
                                             cityId, pEventType, pWorldTime,
-                                            zone.id, tile.x, tile.y));
-                                    cmd.ExecuteNonQuery();
+                                            zone.id, tile.x, tile.y);
+                                    insert.ExecuteNonQuery();
                                 }
                             }
                         }
@@ -169,6 +174,34 @@ namespace AncientWarfare3.core.atlas
                     KingdomAtlasZoneArchiveTableItem.GetTableName();
                 return Convert.ToInt64(cmd.ExecuteScalar(), CultureInfo.InvariantCulture);
             }
+        }
+
+        private static SQLiteCommand CreateSnapshotInsertCommand(
+            SQLiteConnection pDb, SQLiteTransaction pTransaction)
+        {
+            var command = new SQLiteCommand(pDb)
+            {
+                Transaction = pTransaction,
+                CommandText = "INSERT INTO " +
+                    KingdomAtlasZoneArchiveTableItem.GetTableName() +
+                    " (SNAPSHOT_ID,CITY_ID,WORLD_TIME,EVENT_TYPE,KINGDOM_ID," +
+                    "KINGDOM_NAME,KINGDOM_COLOR,X,Y,WATER,NEIGHBOR_MASK,SNAPSHOT_KEY) " +
+                    "VALUES (@id,@city,@time,@type,@kingdom,@name,@color,@x,@y,@water,@mask,@key)"
+            };
+            command.Parameters.AddWithValue("@id", 0L);
+            command.Parameters.AddWithValue("@city", 0L);
+            command.Parameters.AddWithValue("@time", 0d);
+            command.Parameters.AddWithValue("@type", "");
+            command.Parameters.AddWithValue("@kingdom", 0L);
+            command.Parameters.AddWithValue("@name", "");
+            command.Parameters.AddWithValue("@color", "");
+            command.Parameters.AddWithValue("@x", 0);
+            command.Parameters.AddWithValue("@y", 0);
+            command.Parameters.AddWithValue("@water", 0);
+            command.Parameters.AddWithValue("@mask", 0);
+            command.Parameters.AddWithValue("@key", "");
+            command.Prepare();
+            return command;
         }
 
         private static byte NeighborMask(TileZone pZone)

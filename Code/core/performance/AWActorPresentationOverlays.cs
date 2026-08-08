@@ -896,7 +896,8 @@ internal static class AWActorPresentationOverlays
 
     private static AWActorPresentationSnapshot GetSnapshot()
     {
-        return AWPerformanceSettings.EnableFramePriorityScheduler
+        return AWPerformanceSettings.EnableFramePriorityScheduler &&
+               AWPerformanceSettings.EnableActorOverlaySnapshots
             ? AWActorPresentationRenderer.PreparedSnapshot
             : null;
     }

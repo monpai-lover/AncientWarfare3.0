@@ -22,6 +22,10 @@ namespace AncientWarfare3.core.performance
         private readonly string _phasePrefix;
         private readonly bool _allowWorkerParallelism;
         private readonly bool _deferParallelToPresentation;
+        private readonly IAWCooperativeBatchPostRunner<TBatch, TObject>
+            _postRunner;
+        private readonly IAWCooperativeBatchParallelJobRunner<TBatch, TObject>
+            _parallelJobRunner;
         private readonly Action<int> _parallelJobAction;
         private readonly Action _runParallelStageInBackground;
         private int[] _activeParallelBatchIndices = Array.Empty<int>();
@@ -35,19 +39,25 @@ namespace AncientWarfare3.core.performance
         private int _parallelGroupSize;
         private ParallelOptions _parallelOptions;
         private bool _collectJobBenchmarks;
+        private bool _useCustomPostRunner;
         private bool _parallelStageFinishedInBackground;
         private AWSimulationCoordinatorThread.WorkTicket
             _parallelStageTicket;
 
         public AWCooperativeBatchRunner(string pPhasePrefix,
             bool pAllowWorkerParallelism,
-            bool pDeferParallelToPresentation = false)
+            bool pDeferParallelToPresentation = false,
+            IAWCooperativeBatchPostRunner<TBatch, TObject> pPostRunner = null,
+            IAWCooperativeBatchParallelJobRunner<TBatch, TObject>
+                pParallelJobRunner = null)
         {
             _phasePrefix = pPhasePrefix ??
                 throw new ArgumentNullException(nameof(pPhasePrefix));
             _allowWorkerParallelism = pAllowWorkerParallelism;
             _deferParallelToPresentation =
                 pDeferParallelToPresentation;
+            _postRunner = pPostRunner;
+            _parallelJobRunner = pParallelJobRunner;
             _parallelJobAction = RunCurrentParallelJob;
             _runParallelStageInBackground =
                 RunParallelStageInBackground;
@@ -64,11 +74,15 @@ namespace AncientWarfare3.core.performance
             _stage == RunnerStage.Parallel &&
             _parallelStageTicket.IsValid;
         public bool WaitingForBackgroundWork =>
-            HasParallelPresentationWorkInFlight;
+            HasParallelPresentationWorkInFlight ||
+            (_stage == RunnerStage.Post && _useCustomPostRunner &&
+             _postRunner.WaitingForBackgroundWork);
         public bool IsBackgroundWorkCompleted =>
-            HasParallelPresentationWorkInFlight &&
-            AWSimulationCoordinatorThread.Instance.IsCompleted(
-                _parallelStageTicket);
+            HasParallelPresentationWorkInFlight
+                ? AWSimulationCoordinatorThread.Instance.IsCompleted(
+                    _parallelStageTicket)
+                : _stage == RunnerStage.Post && _useCustomPostRunner &&
+                  _postRunner.IsBackgroundWorkCompleted;
 
         public void Start(JobManagerBase<TBatch, TObject> pJobManager,
             IEnumerable<TBatch> pActiveBatches, float pCycleElapsed,
@@ -86,6 +100,7 @@ namespace AncientWarfare3.core.performance
                     AWPerformanceSettings.ForegroundParallelism * 4)
                 : 1;
             _parallelOptions = pCycleParallelOptions;
+            _useCustomPostRunner = _parallelEnabled && _postRunner != null;
             if (_parallelEnabled && _parallelOptions == null)
                 throw new InvalidOperationException(
                     "AW scheduler parallel batch is missing ParallelOptions.");
@@ -111,6 +126,8 @@ namespace AncientWarfare3.core.performance
                 return _phasePrefix + ".parallel.presentation.await";
             if (WaitingForPresentationDispatch)
                 return _phasePrefix + ".parallel.presentation.dispatch";
+            if (_stage == RunnerStage.Post && _useCustomPostRunner)
+                return _postRunner.GetNextPhaseName(_phasePrefix);
 
             switch (_stage)
             {
@@ -182,9 +199,14 @@ namespace AncientWarfare3.core.performance
                     case RunnerStage.ApplyParallelResults:
                         _manager.applyParallelResults();
                         _stage = RunnerStage.Post;
+                        if (_useCustomPostRunner)
+                            _postRunner.Start(_batches, _elapsed,
+                                _parallelOptions);
                         return false;
                     case RunnerStage.Post:
-                        if (TryRunNextMainThreadBatch(RunnerStage.Post))
+                        if (_useCustomPostRunner
+                                ? !_postRunner.Step()
+                                : TryRunNextMainThreadBatch(RunnerStage.Post))
                             return false;
                         _stage = RunnerStage.Finish;
                         continue;
@@ -202,9 +224,11 @@ namespace AncientWarfare3.core.performance
 
         public bool TryJoinBackgroundWork(double pMaximumMilliseconds)
         {
-            return !HasParallelPresentationWorkInFlight ||
-                   AWSimulationCoordinatorThread.Instance.TryWait(
-                       _parallelStageTicket, pMaximumMilliseconds);
+            if (HasParallelPresentationWorkInFlight)
+                return AWSimulationCoordinatorThread.Instance.TryWait(
+                    _parallelStageTicket, pMaximumMilliseconds);
+            return _stage != RunnerStage.Post || !_useCustomPostRunner ||
+                   _postRunner.TryJoinBackgroundWork(pMaximumMilliseconds);
         }
 
         public void WaitForBackgroundWork()
@@ -212,6 +236,9 @@ namespace AncientWarfare3.core.performance
             if (HasParallelPresentationWorkInFlight)
                 AWSimulationCoordinatorThread.Instance.Wait(
                     _parallelStageTicket);
+            else if (_stage == RunnerStage.Post && _useCustomPostRunner &&
+                     _postRunner.WaitingForBackgroundWork)
+                _postRunner.WaitForBackgroundWork();
         }
 
         public bool BeginParallelPresentationWork()
@@ -259,6 +286,7 @@ namespace AncientWarfare3.core.performance
                 _parallelStageTicket = default;
             }
 
+            _postRunner?.Abort();
             Reset();
             _batchIndex = 0;
         }
@@ -283,6 +311,7 @@ namespace AncientWarfare3.core.performance
             _parallelJobIndex = 0;
             _activeParallelBatchCount = 0;
             _collectJobBenchmarks = false;
+            _useCustomPostRunner = false;
             _parallelStageFinishedInBackground = false;
             _parallelStageTicket = default;
             _stage = RunnerStage.Idle;
@@ -341,8 +370,11 @@ namespace AncientWarfare3.core.performance
                 // can otherwise reopen container mutation windows during a
                 // large-step parallel pass.
                 if (_batchIndex == 0 &&
-                    ShouldSkipParallelJob(_batches[0].jobs_parallel[
-                        _parallelJobIndex]))
+                    ((_parallelJobRunner?.TrySkipAllBatches(
+                         _batches[0].jobs_parallel[_parallelJobIndex],
+                         _batches.Count, _elapsed) ?? false) ||
+                     ShouldSkipParallelJob(_batches[0].jobs_parallel[
+                         _parallelJobIndex])))
                 {
                     _parallelJobIndex++;
                     continue;
@@ -369,8 +401,16 @@ namespace AncientWarfare3.core.performance
                         _activeParallelBatchCount++] = _batchIndex;
                 }
 
-                if (_parallelEnabled &&
-                    _activeParallelBatchCount > 1)
+                bool handledAsGroup = _activeParallelBatchCount > 0 &&
+                    (_parallelJobRunner?.TryRunGroup(_batches,
+                        _parallelJobIndex, _activeParallelBatchIndices,
+                        _activeParallelBatchCount, _elapsed,
+                        _parallelOptions) ?? false);
+                if (handledAsGroup)
+                {
+                }
+                else if (_parallelEnabled &&
+                         _activeParallelBatchCount > 1)
                     Parallel.For(0, _activeParallelBatchCount,
                         _parallelOptions, _parallelJobAction);
                 else
@@ -445,7 +485,9 @@ namespace AncientWarfare3.core.performance
             Job<TObject> job = batch.jobs_parallel[pJobListIndex];
             batch._elapsed = _elapsed;
             batch._cur_container = job.container;
-            job.job_updater();
+            if (_parallelJobRunner == null ||
+                !_parallelJobRunner.TryRun(batch, job, _elapsed))
+                job.job_updater();
         }
 
         private static List<Job<TObject>> GetJobs(TBatch pBatch,

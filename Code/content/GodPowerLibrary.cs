@@ -28,6 +28,13 @@ namespace AncientWarfare3.content
         private static readonly Dictionary<long, FeudatorySnapshot> FeudatoryNameplateSnapshots =
             new Dictionary<long, FeudatorySnapshot>();
         private static readonly List<long> FeudatoryNameplateIds = new List<long>();
+        private const float NameplateCandidateRefreshSeconds = 0.25f;
+        private static bool _schoolNameplateCandidatesReady;
+        private static ulong _schoolNameplateCandidateSignature;
+        private static float _schoolNameplateCandidateRefreshAt;
+        private static bool _feudatoryNameplateCandidatesReady;
+        private static ulong _feudatoryNameplateCandidateSignature;
+        private static float _feudatoryNameplateCandidateRefreshAt;
 
         public static void Init()
         {
@@ -56,6 +63,12 @@ namespace AncientWarfare3.content
             FeudatoryNameplateZones.Clear();
             FeudatoryNameplateSnapshots.Clear();
             FeudatoryNameplateIds.Clear();
+            _schoolNameplateCandidatesReady = false;
+            _schoolNameplateCandidateSignature = 0UL;
+            _schoolNameplateCandidateRefreshAt = 0f;
+            _feudatoryNameplateCandidatesReady = false;
+            _feudatoryNameplateCandidateSignature = 0UL;
+            _feudatoryNameplateCandidateRefreshAt = 0f;
         }
 
         private static void RegisterSpawnXia()
@@ -609,53 +622,60 @@ namespace AncientWarfare3.content
             if (pManager == null || pAsset == null ||
                 World.world?.zone_camera == null) return;
 
-            FeudatoryNameplateAnchors.Clear();
-            FeudatoryNameplateZones.Clear();
-            FeudatoryNameplateSnapshots.Clear();
-            FeudatoryNameplateIds.Clear();
-            List<TileZone> visibleZones =
-                World.world.zone_camera.getVisibleZones();
-            for (int i = 0; i < visibleZones.Count; i++)
+            if (ShouldRefreshNameplateCandidates(
+                    ref _feudatoryNameplateCandidatesReady,
+                    ref _feudatoryNameplateCandidateSignature,
+                    ref _feudatoryNameplateCandidateRefreshAt))
             {
-                TileZone zone = visibleZones[i];
-                City city = zone?.city;
-                if (!FeudatoryMapModeService.TryGetSnapshot(city,
-                        out FeudatorySnapshot snapshot)) continue;
-
-                bool centerVisible = World.world.move_camera != null &&
-                    World.world.move_camera.isWithinCameraViewNotPowerBar(
-                        city.city_center);
-                bool candidateIsSeat = city.id == snapshot.SeatCityId;
-                if (FeudatoryNameplateAnchors.TryGetValue(
-                        snapshot.FeudatoryId, out City current))
+                FeudatoryNameplateAnchors.Clear();
+                FeudatoryNameplateZones.Clear();
+                FeudatoryNameplateSnapshots.Clear();
+                FeudatoryNameplateIds.Clear();
+                List<TileZone> visibleZones =
+                    World.world.zone_camera.getVisibleZones();
+                for (int i = 0; i < visibleZones.Count; i++)
                 {
-                    TileZone currentZone =
-                        FeudatoryNameplateZones[snapshot.FeudatoryId];
-                    FeudatorySnapshot currentSnapshot =
-                        FeudatoryNameplateSnapshots[snapshot.FeudatoryId];
-                    bool currentCenterVisible =
-                        World.world.move_camera != null &&
+                    TileZone zone = visibleZones[i];
+                    City city = zone?.city;
+                    if (!FeudatoryMapModeService.TryGetSnapshot(city,
+                            out FeudatorySnapshot snapshot)) continue;
+
+                    bool centerVisible = World.world.move_camera != null &&
                         World.world.move_camera.isWithinCameraViewNotPowerBar(
-                            current.city_center);
-                    if (!FeudatoryMapModeRules.ShouldReplaceNameplateAnchor(
-                            current.id,
-                            current.id == currentSnapshot.SeatCityId,
-                            currentCenterVisible,
-                            currentZone?.id ?? int.MaxValue,
-                            city.id, candidateIsSeat, centerVisible,
-                            zone.id)) continue;
-                }
-                else
-                {
-                    FeudatoryNameplateIds.Add(snapshot.FeudatoryId);
+                            city.city_center);
+                    bool candidateIsSeat = city.id == snapshot.SeatCityId;
+                    if (FeudatoryNameplateAnchors.TryGetValue(
+                            snapshot.FeudatoryId, out City current))
+                    {
+                        TileZone currentZone =
+                            FeudatoryNameplateZones[snapshot.FeudatoryId];
+                        FeudatorySnapshot currentSnapshot =
+                            FeudatoryNameplateSnapshots[snapshot.FeudatoryId];
+                        bool currentCenterVisible =
+                            World.world.move_camera != null &&
+                            World.world.move_camera.isWithinCameraViewNotPowerBar(
+                                current.city_center);
+                        if (!FeudatoryMapModeRules.ShouldReplaceNameplateAnchor(
+                                current.id,
+                                current.id == currentSnapshot.SeatCityId,
+                                currentCenterVisible,
+                                currentZone?.id ?? int.MaxValue,
+                                city.id, candidateIsSeat, centerVisible,
+                                zone.id)) continue;
+                    }
+                    else
+                    {
+                        FeudatoryNameplateIds.Add(snapshot.FeudatoryId);
+                    }
+
+                    FeudatoryNameplateAnchors[snapshot.FeudatoryId] = city;
+                    FeudatoryNameplateZones[snapshot.FeudatoryId] = zone;
+                    FeudatoryNameplateSnapshots[snapshot.FeudatoryId] = snapshot;
                 }
 
-                FeudatoryNameplateAnchors[snapshot.FeudatoryId] = city;
-                FeudatoryNameplateZones[snapshot.FeudatoryId] = zone;
-                FeudatoryNameplateSnapshots[snapshot.FeudatoryId] = snapshot;
+                FeudatoryNameplateIds.Sort();
             }
 
-            FeudatoryNameplateIds.Sort();
             int count = 0;
             for (int i = 0; i < FeudatoryNameplateIds.Count; i++)
             {
@@ -700,17 +720,23 @@ namespace AncientWarfare3.content
         {
             if (pManager == null || pAsset == null || World.world?.zone_camera == null) return;
 
-            SchoolNameplateCandidates.Clear();
-            SchoolNameplateCandidateIds.Clear();
-            List<TileZone> visibleZones = World.world.zone_camera.getVisibleZones();
-            for (int i = 0; i < visibleZones.Count; i++)
+            if (ShouldRefreshNameplateCandidates(
+                    ref _schoolNameplateCandidatesReady,
+                    ref _schoolNameplateCandidateSignature,
+                    ref _schoolNameplateCandidateRefreshAt))
             {
-                City city = visibleZones[i]?.city;
-                if (city?.data == null || city.isRekt() || !city.isAlive()) continue;
-                if (SchoolNameplateCandidateIds.Add(city.data.id))
-                    SchoolNameplateCandidates.Add(city);
+                SchoolNameplateCandidates.Clear();
+                SchoolNameplateCandidateIds.Clear();
+                List<TileZone> visibleZones = World.world.zone_camera.getVisibleZones();
+                for (int i = 0; i < visibleZones.Count; i++)
+                {
+                    City city = visibleZones[i]?.city;
+                    if (city?.data == null || city.isRekt() || !city.isAlive()) continue;
+                    if (SchoolNameplateCandidateIds.Add(city.data.id))
+                        SchoolNameplateCandidates.Add(city);
+                }
+                SchoolNameplateCandidates.Sort(SchoolNameplateCityOrder);
             }
-            SchoolNameplateCandidates.Sort(SchoolNameplateCityOrder);
 
             int count = 0;
             for (int i = 0; i < SchoolNameplateCandidates.Count; i++)
@@ -733,6 +759,23 @@ namespace AncientWarfare3.content
                 if (definition != null) text.showSpecial(definition.IconPath);
                 count++;
             }
+        }
+
+        private static bool ShouldRefreshNameplateCandidates(
+            ref bool pReady, ref ulong pPreviousSignature,
+            ref float pRefreshAt)
+        {
+            ulong signature = AWPresentationVisibility.GetSignature(
+                renderGameplay: false);
+            float now = Time.unscaledTime;
+            if (pReady && pPreviousSignature == signature &&
+                now < pRefreshAt)
+                return false;
+
+            pReady = true;
+            pPreviousSignature = signature;
+            pRefreshAt = now + NameplateCandidateRefreshSeconds;
+            return true;
         }
 
         private static int CompareSchoolNameplateCities(City pLeft, City pRight)

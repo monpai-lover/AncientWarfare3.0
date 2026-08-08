@@ -1,6 +1,6 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
@@ -10,9 +10,18 @@ namespace AncientWarfare3.core.policy
 {
     internal static class KingdomInstitutionalXiaizationService
     {
+        private const int MaxKingdomStagesPerCycle = 1;
+        private const int MaxPendingInspectionsPerCycle = 8;
+        private const int MaxRestoreKingdomsPerCycle = 4;
         private static readonly Dictionary<long, Kingdom> Pending =
             new Dictionary<long, Kingdom>();
+        private static readonly Queue<long> PendingOrder =
+            new Queue<long>();
+        private static readonly HashSet<long> Enqueued =
+            new HashSet<long>();
         private static bool _restored;
+        private static IEnumerator _restoreEnumerator;
+        private static MapBox _restoreWorld;
 
         internal static void Request(Kingdom pKingdom)
         {
@@ -27,11 +36,16 @@ namespace AncientWarfare3.core.policy
             KingdomInstitutionalXiaizationStatePersistence.Request(db,
                 kingdomId, LineageService.CurTime());
             Pending[kingdomId] = pKingdom;
+            Enqueue(kingdomId);
         }
 
         internal static void Reset()
         {
             Pending.Clear();
+            PendingOrder.Clear();
+            Enqueued.Clear();
+            DisposeRestoreEnumerator();
+            _restoreWorld = null;
             _restored = false;
         }
 
@@ -43,8 +57,15 @@ namespace AncientWarfare3.core.policy
             var db = LineageArchiveManager.Instance?.OperatingDB;
             if (db == null) return;
 
-            foreach (long kingdomId in Pending.Keys.ToArray())
+            int stages = 0;
+            int inspections = 0;
+            while (stages < MaxKingdomStagesPerCycle &&
+                   inspections < MaxPendingInspectionsPerCycle &&
+                   PendingOrder.Count > 0)
             {
+                inspections++;
+                long kingdomId = PendingOrder.Dequeue();
+                Enqueued.Remove(kingdomId);
                 if (!Pending.TryGetValue(kingdomId,
                         out Kingdom kingdom) || kingdom?.data == null ||
                     kingdom.isRekt() ||
@@ -64,6 +85,7 @@ namespace AncientWarfare3.core.policy
                     continue;
                 }
 
+                bool completed = false;
                 try
                 {
                     if (state.Phase == "prepared")
@@ -73,10 +95,8 @@ namespace AncientWarfare3.core.policy
                         KingdomInstitutionalXiaizationStatePersistence
                             .AdvancePhase(db, kingdomId, "policy_migrated",
                                 LineageService.CurTime());
-                        continue;
                     }
-
-                    if (state.Phase == "policy_migrated")
+                    else if (state.Phase == "policy_migrated")
                     {
                         CourtInstitutionService.Refresh(kingdom,
                             pRecordHistory: false);
@@ -85,6 +105,7 @@ namespace AncientWarfare3.core.policy
                             .MarkComplete(db, kingdomId,
                                 LineageService.CurTime());
                         Pending.Remove(kingdomId);
+                        completed = true;
                     }
                     else
                     {
@@ -99,6 +120,9 @@ namespace AncientWarfare3.core.policy
                         .RecordFailure(db, kingdomId, error.Message,
                             LineageService.CurTime());
                 }
+                stages++;
+                if (!completed && Pending.ContainsKey(kingdomId))
+                    Enqueue(kingdomId);
             }
         }
 
@@ -107,22 +131,66 @@ namespace AncientWarfare3.core.policy
             if (_restored) return;
             var db = LineageArchiveManager.Instance?.OperatingDB;
             if (db == null || World.world?.kingdoms == null) return;
+            MapBox world = World.world;
             try
             {
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                    if (kingdom?.data != null &&
-                        KingdomInstitutionalXiaizationRules
+                if (!ReferenceEquals(_restoreWorld, world) ||
+                    _restoreEnumerator == null)
+                {
+                    DisposeRestoreEnumerator();
+                    _restoreWorld = world;
+                    _restoreEnumerator = world.kingdoms.GetEnumerator();
+                }
+                int remaining = MaxRestoreKingdomsPerCycle;
+                while (remaining-- > 0)
+                {
+                    if (!_restoreEnumerator.MoveNext())
+                    {
+                        DisposeRestoreEnumerator();
+                        _restored = true;
+                        return;
+                    }
+                    Kingdom kingdom = _restoreEnumerator.Current as Kingdom;
+                    if (kingdom?.data == null ||
+                        !KingdomInstitutionalXiaizationRules
                             .ShouldUseXiaInstitutions(
                                 XiaizationService.GetLevel(kingdom)))
+                        continue;
+                    KingdomInstitutionalXiaizationState state =
+                        KingdomInstitutionalXiaizationStatePersistence.Load(
+                            db, kingdom.id);
+                    if (state == null || state.Version !=
+                            KingdomInstitutionalXiaizationStatePersistence.
+                                CurrentVersion)
+                    {
                         Request(kingdom);
-                _restored = true;
+                        continue;
+                    }
+                    if (state.Phase == "complete") continue;
+                    Pending[kingdom.id] = kingdom;
+                    Enqueue(kingdom.id);
+                }
             }
             catch (Exception error)
             {
+                DisposeRestoreEnumerator();
                 ModClass.LogWarning(
                     "Institutional Xiaization restore failed: " +
                     error.Message);
             }
+        }
+
+        private static void DisposeRestoreEnumerator()
+        {
+            if (_restoreEnumerator is IDisposable disposable)
+                disposable.Dispose();
+            _restoreEnumerator = null;
+        }
+
+        private static void Enqueue(long pKingdomId)
+        {
+            if (pKingdomId < 0L || !Enqueued.Add(pKingdomId)) return;
+            PendingOrder.Enqueue(pKingdomId);
         }
     }
 }

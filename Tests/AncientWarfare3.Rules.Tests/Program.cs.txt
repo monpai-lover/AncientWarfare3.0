@@ -12,6 +12,13 @@ HistoricalWriteModeRulesTests.Run();
 KingdomPolicyInheritanceDiagnosticRulesTests.Run();
 VirtualNobleTitleRulesTests.Run();
 
+if (args.Length == 1 && args[0] == "--empty-city-resettlement")
+{
+    EmptyCityResettlementRulesTests.Run();
+    Console.WriteLine("Empty city resettlement rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--kingdom-atlas")
 {
     KingdomAtlasRulesTests.Run();
@@ -451,6 +458,13 @@ if (args.Length == 1 && args[0] == "--actor-runtime")
     PathfindingCursorTests.Run();
     SchoolRuntimePerformanceTests.Run();
     Console.WriteLine("AW3 actor runtime rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--actor-scale-performance")
+{
+    ActorScalePerformanceRulesTests.Run();
+    Console.WriteLine("AW3 actor scale performance rules passed.");
     return;
 }
 

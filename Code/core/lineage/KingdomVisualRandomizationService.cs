@@ -44,18 +44,21 @@ namespace AncientWarfare3.core.lineage
                 return false;
 
             bool changed = false;
-            int colorIndex = PickColorIndex(pKingdom, actorAsset, colorLibrary, pKingdom.data.color_id);
+            bool colorChanged = false;
+            int colorIndex = PickColorIndex(pKingdom, actorAsset,
+                colorLibrary, pKingdom.data.color_id);
             if (colorIndex >= 0 && colorIndex < colorCount && colorIndex != pKingdom.data.color_id)
             {
                 ColorAsset color = colorLibrary.getColorByIndex(colorIndex);
                 if (color != null)
                 {
-                    try { changed |= pKingdom.updateColor(color); }
+                    try { colorChanged = pKingdom.updateColor(color); }
                     catch
                     {
                         pKingdom.data.setColorID(colorIndex);
-                        changed = true;
+                        colorChanged = true;
                     }
+                    changed |= colorChanged;
                 }
             }
 
@@ -75,7 +78,9 @@ namespace AncientWarfare3.core.lineage
                 changed = true;
             }
 
-            MetaColorCacheService.RefreshKingdomAfterGeneratedColor(pKingdom);
+            if (changed || colorChanged)
+                MetaColorCacheService.RefreshKingdomAfterGeneratedColor(
+                    pKingdom);
             return changed;
         }
 
@@ -88,6 +93,7 @@ namespace AncientWarfare3.core.lineage
             var main = new List<int>();
             var bonus = new List<int>();
             var fallback = new List<int>();
+            HashSet<int> usedColorIds = CollectUsedColorIds(pKingdom);
             int count = pLibrary.list.Count;
 
             for (int i = 0; i < count; i++)
@@ -95,7 +101,7 @@ namespace AncientWarfare3.core.lineage
                 ColorAsset color = pLibrary.list[i];
                 if (color == null) continue;
                 if (count > 1 && i == pCurrentColorId) continue;
-                if (IsColorUsedByOtherMeta(pKingdom, i)) continue;
+                if (usedColorIds.Contains(i)) continue;
 
                 if (pActorAsset?.preferred_colors != null && pActorAsset.preferred_colors.Contains(color.id))
                     preferred.Add(i);
@@ -118,14 +124,16 @@ namespace AncientWarfare3.core.lineage
             return pCurrentColorId >= 0 && pCurrentColorId < count ? pCurrentColorId : 0;
         }
 
-        private static bool IsColorUsedByOtherMeta(Kingdom pKingdom, int pColorId)
+        private static HashSet<int> CollectUsedColorIds(Kingdom pKingdom)
         {
+            var used = new HashSet<int>();
             try
             {
                 foreach (Kingdom kingdom in World.world.kingdoms)
                 {
                     if (kingdom == null || kingdom == pKingdom || kingdom.data == null) continue;
-                    if (kingdom.data.color_id == pColorId) return true;
+                    if (kingdom.data.color_id >= 0)
+                        used.Add(kingdom.data.color_id);
                 }
             }
             catch
@@ -137,14 +145,15 @@ namespace AncientWarfare3.core.lineage
                 foreach (Alliance alliance in World.world.alliances)
                 {
                     if (alliance?.data == null) continue;
-                    if (alliance.data.color_id == pColorId) return true;
+                    if (alliance.data.color_id >= 0)
+                        used.Add(alliance.data.color_id);
                 }
             }
             catch
             {
             }
 
-            return false;
+            return used;
         }
     }
 }

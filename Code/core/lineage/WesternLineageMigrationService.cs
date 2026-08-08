@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.core.lineage
@@ -8,6 +9,10 @@ namespace AncientWarfare3.core.lineage
     {
         private const int DefaultBudget = 8;
         private static bool _pending;
+        private static readonly Queue<long> PendingKingdomIds =
+            new Queue<long>();
+        private static readonly HashSet<long> QueuedKingdomIds =
+            new HashSet<long>();
         private static IEnumerator _kingdoms;
         private static IEnumerator _actors;
         private static Kingdom _kingdom;
@@ -17,12 +22,23 @@ namespace AncientWarfare3.core.lineage
         internal static void Request()
         {
             DisposeEnumerators();
+            PendingKingdomIds.Clear();
+            QueuedKingdomIds.Clear();
             _pending = true;
+        }
+
+        internal static void Request(Kingdom pKingdom)
+        {
+            long kingdomId = pKingdom?.data?.id ?? -1L;
+            if (kingdomId < 0L || !QueuedKingdomIds.Add(kingdomId)) return;
+            PendingKingdomIds.Enqueue(kingdomId);
         }
 
         internal static void Reset()
         {
             DisposeEnumerators();
+            PendingKingdomIds.Clear();
+            QueuedKingdomIds.Clear();
             _pending = false;
         }
 
@@ -33,9 +49,11 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle(int pBudget)
         {
-            if (!_pending || pBudget <= 0 || World.world == null) return;
+            if (pBudget <= 0 || World.world == null ||
+                !_pending && _actors == null &&
+                PendingKingdomIds.Count == 0) return;
             int remaining = pBudget;
-            while (remaining > 0 && _pending)
+            while (remaining > 0)
             {
                 if (_actors != null)
                 {
@@ -49,6 +67,8 @@ namespace AncientWarfare3.core.lineage
                     continue;
                 }
 
+                if (TryBeginPendingKingdom()) continue;
+                if (!_pending) return;
                 if (_kingdoms == null)
                     _kingdoms = World.world.kingdoms?.GetEnumerator();
                 if (_kingdoms == null ||
@@ -60,6 +80,21 @@ namespace AncientWarfare3.core.lineage
                 }
                 BeginKingdom(kingdomObject as Kingdom);
             }
+        }
+
+        private static bool TryBeginPendingKingdom()
+        {
+            while (PendingKingdomIds.Count > 0)
+            {
+                long kingdomId = PendingKingdomIds.Dequeue();
+                QueuedKingdomIds.Remove(kingdomId);
+                Kingdom kingdom = null;
+                try { kingdom = World.world?.kingdoms?.get(kingdomId); }
+                catch { }
+                BeginKingdom(kingdom);
+                if (_actors != null) return true;
+            }
+            return false;
         }
 
         private static void BeginKingdom(Kingdom pKingdom)

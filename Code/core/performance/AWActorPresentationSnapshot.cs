@@ -759,13 +759,19 @@ internal sealed class AWActorPresentationSnapshot
         long actorLoopCompletedAt = profileCapture
             ? Stopwatch.GetTimestamp()
             : 0L;
-        CaptureBuildings(world);
+        if (AWPerformanceSettings.EnableWorldObjectPresentationSnapshots)
+        {
+            CaptureBuildings(world);
+        }
         long buildingsCompletedAt = profileCapture
             ? Stopwatch.GetTimestamp()
             : 0L;
-        CaptureProjectiles(world);
-        CaptureResourceThrows(world);
-        CaptureWorldLights(world);
+        if (AWPerformanceSettings.EnableWorldObjectPresentationSnapshots)
+        {
+            CaptureProjectiles(world);
+            CaptureResourceThrows(world);
+            CaptureWorldLights(world);
+        }
         long worldObjectsCompletedAt = profileCapture
             ? Stopwatch.GetTimestamp()
             : 0L;
@@ -825,7 +831,8 @@ internal sealed class AWActorPresentationSnapshot
         long captureStartedAt = profileCapture
             ? Stopwatch.GetTimestamp()
             : 0L;
-        CopyStableDataFrom(source);
+        CopyStableDataFrom(source,
+            AWPerformanceSettings.EnableWorldObjectPresentationSnapshots);
         long stableCopyCompletedAt = profileCapture
             ? Stopwatch.GetTimestamp()
             : 0L;
@@ -836,7 +843,9 @@ internal sealed class AWActorPresentationSnapshot
 
         dynamicUpdateCount = source.Count;
         dynamicInvalidCount = 0;
-        if (dynamicUpdateCount > 1)
+        if (ActorScalePerformanceRules.ShouldParallelizePresentationCapture(
+                dynamicUpdateCount,
+                dynamicCaptureParallelOptions.MaxDegreeOfParallelism))
         {
             Parallel.For(
                 0,
@@ -844,9 +853,10 @@ internal sealed class AWActorPresentationSnapshot
                 dynamicCaptureParallelOptions,
                 updateDynamicSampleAt);
         }
-        else if (dynamicUpdateCount == 1)
+        else
         {
-            UpdateDynamicSampleAt(0);
+            for (int i = 0; i < dynamicUpdateCount; i++)
+                UpdateDynamicSampleAt(i);
         }
 
         long actorUpdateCompletedAt = profileCapture
@@ -876,9 +886,12 @@ internal sealed class AWActorPresentationSnapshot
         resourceThrowCount = 0;
         worldLightCount = 0;
         fireCount = 0;
-        CaptureProjectiles(world);
-        CaptureResourceThrows(world);
-        CaptureWorldLights(world);
+        if (AWPerformanceSettings.EnableWorldObjectPresentationSnapshots)
+        {
+            CaptureProjectiles(world);
+            CaptureResourceThrows(world);
+            CaptureWorldLights(world);
+        }
         long worldObjectsCompletedAt = profileCapture
             ? Stopwatch.GetTimestamp()
             : 0L;
@@ -1086,7 +1099,8 @@ internal sealed class AWActorPresentationSnapshot
     }
 
     private void CopyStableDataFrom(
-        AWActorPresentationSnapshot source)
+        AWActorPresentationSnapshot source,
+        bool pIncludeWorldObjects)
     {
         EnsureCapacity(source.Count);
         Array.Copy(source.samples, samples, source.Count);
@@ -1106,23 +1120,32 @@ internal sealed class AWActorPresentationSnapshot
         EnsureLightCapacity(lightCount);
         Array.Copy(source.lights, lights, lightCount);
 
-        buildingCount = source.buildingCount;
-        EnsureBuildingCapacity(buildingCount);
-        Array.Copy(source.buildings, buildings, buildingCount);
+        if (pIncludeWorldObjects)
+        {
+            buildingCount = source.buildingCount;
+            EnsureBuildingCapacity(buildingCount);
+            Array.Copy(source.buildings, buildings, buildingCount);
 
-        stockpileResourceCount = source.stockpileResourceCount;
-        EnsureStockpileResourceCapacity(stockpileResourceCount);
-        Array.Copy(
-            source.stockpileResources,
-            stockpileResources,
-            stockpileResourceCount);
+            stockpileResourceCount = source.stockpileResourceCount;
+            EnsureStockpileResourceCapacity(stockpileResourceCount);
+            Array.Copy(
+                source.stockpileResources,
+                stockpileResources,
+                stockpileResourceCount);
 
-        buildingLightCount = source.buildingLightCount;
-        EnsureBuildingLightCapacity(buildingLightCount);
-        Array.Copy(
-            source.buildingLights,
-            buildingLights,
-            buildingLightCount);
+            buildingLightCount = source.buildingLightCount;
+            EnsureBuildingLightCapacity(buildingLightCount);
+            Array.Copy(
+                source.buildingLights,
+                buildingLights,
+                buildingLightCount);
+        }
+        else
+        {
+            buildingCount = 0;
+            stockpileResourceCount = 0;
+            buildingLightCount = 0;
+        }
     }
 
     private static void UpdateDynamicSample(

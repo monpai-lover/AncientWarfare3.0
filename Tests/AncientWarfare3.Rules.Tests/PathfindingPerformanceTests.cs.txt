@@ -1,4 +1,5 @@
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.performance;
 
 internal static class PathfindingPerformanceTests
 {
@@ -45,6 +46,282 @@ internal static class PathfindingPerformanceTests
         PathfinderStopLinearizesAgainstNewSubmissions();
         ConcurrentDisposeWaitsForTheActiveDrain();
         RecoveryStateSupportsIndependentActorWorkers();
+        NativeMovementHotPathShortCircuitsBeforeOwnershipLookup();
+        IncrementalTraversalBuildSkipsGlobalConnectivityPass();
+        TraversalTopologyReuseIsExplicitForTerrainOnlyChanges();
+        ActorRunnerSupportsSpecializedPostAndParallelStages();
+        ActorParallelJobsUseOneWorkerLayer();
+        ActorPostPipelineKeepsEnemySearchOrdered();
+        EnemySearchUsesVanillaChunkLocalCacheOnly();
+        EmptyEnemySearchUsesCultiwayBackoff();
+        PresentationVisibilitySignatureIsSharedPerFrame();
+        CustomNameplatesReuseVisibleZoneCandidates();
+        VassalPowerTraversalUsesRelationIndex();
+        WarAiDistantCandidatesUseABoundedNearestWindow();
+        ActorPostDiagnosticsExposeWorkerAndCommitCosts();
+    }
+
+    private static void ActorPostDiagnosticsExposeWorkerAndCommitCosts()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string diagnostic = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "policy", "RuntimePerformanceDiagnostic.cs"));
+        Assert(diagnostic.Contains("actor_post_worker_ms") &&
+               diagnostic.Contains("actor_post_commit_ms") &&
+               diagnostic.Contains("enemy_search_calls") &&
+               diagnostic.Contains("enemy_search_candidates") &&
+               diagnostic.Contains("enemy_search_empty"),
+            "AW3 PERF separates Actor post worker and commit costs");
+        Assert(diagnostic.Contains("TakeDiagnostics()"),
+            "runtime diagnostics consume Actor post metrics");
+    }
+
+    private static void EnemySearchUsesVanillaChunkLocalCacheOnly()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string cachePath = Path.Combine(root, "Code", "core",
+            "performance", "AWEnemyPresenceCache.cs");
+        string patchPath = Path.Combine(root, "Code", "patch",
+            "AW_EnemyFinderCachePatch.cs");
+        Assert(!File.Exists(cachePath) && !File.Exists(patchPath),
+            "AW3 does not replace vanilla chunk-local enemy caching with a world scan");
+
+        string postRunner = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        Assert(postRunner.Contains("EnemiesFinder.findEnemiesFrom(") &&
+               postRunner.Contains(
+                   "pActor.current_tile, pActor.kingdom)") &&
+               !postRunner.Contains("AWEnemyPresenceCache") &&
+               !postRunner.Contains("World.world.kingdoms_wild") &&
+               !postRunner.Contains("World.world.kingdoms"),
+            "Actor post preparation delegates spatial lookup to vanilla's kingdom/chunk/range cache");
+    }
+
+    private static void EmptyEnemySearchUsesCultiwayBackoff()
+    {
+        Assert(Near(1f, AWEnemySearchBackoffRules.ResolveTimeout(1f, 1f)),
+            "normal speed preserves vanilla enemy-search timing");
+        Assert(Near(5f, AWEnemySearchBackoffRules.ResolveTimeout(1f, 20f)),
+            "high-speed empty searches use Cultiway's bounded backoff");
+
+        string postRunner = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core",
+            "performance", "AWCooperativeActorPostRunner.cs"));
+        Assert(postRunner.Contains("applyBackoff") &&
+               postRunner.Contains("ResolveTimeout(") &&
+               postRunner.Contains("CaptureDiagnostics") &&
+               postRunner.Contains("if (captureDiagnostics)"),
+            "Actor post search applies empty-result backoff and does not collect diagnostics on every search while diagnostics are disabled");
+    }
+
+    private static void PresentationVisibilitySignatureIsSharedPerFrame()
+    {
+        string visibility = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core",
+            "performance", "AWPresentationVisibility.cs"));
+        Assert(visibility.Contains("zones[0]") &&
+               visibility.Contains("zones[zones.Count - 1]") &&
+               !visibility.Contains("for (int i = 0; i < zones.Count; i++)"),
+            "presentation visibility uses the native ordered visible-zone range without a per-frame full-zone hash");
+    }
+
+    private static void CustomNameplatesReuseVisibleZoneCandidates()
+    {
+        string nameplates = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "content",
+            "GodPowerLibrary.cs"));
+        Assert(nameplates.Contains("ShouldRefreshNameplateCandidates") &&
+               nameplates.Contains("AWPresentationVisibility.GetSignature") &&
+               nameplates.Contains("NameplateCandidateRefreshSeconds"),
+            "custom map-mode nameplates rebuild visible-zone candidates only when the native view changes or their bounded refresh is due");
+    }
+
+    private static void VassalPowerTraversalUsesRelationIndex()
+    {
+        string vassals = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "VassalService.cs"));
+        int getVassals = vassals.IndexOf(
+            "public static List<Kingdom> GetVassals(",
+            StringComparison.Ordinal);
+        int nextMethod = vassals.IndexOf(
+            "private static void EnsureDirectVassalIndex()", getVassals,
+            StringComparison.Ordinal);
+        Assert(getVassals >= 0 && nextMethod > getVassals,
+            "vassal traversal implementation is present");
+        string traversal = vassals.Substring(getVassals,
+            nextMethod - getVassals);
+        Assert(vassals.Contains("DirectVassalIdsBySuzerain") &&
+               traversal.Contains("EnsureDirectVassalIndex()") &&
+               !traversal.Contains("World.world.kingdoms"),
+            "war-power vassal traversal follows indexed relation edges instead of rescanning every kingdom recursively");
+        Assert(vassals.Contains(
+                "if (!pIncludeVassals || GetDirectVassalCount(pKingdom) <= 0) return score;"),
+            "independent kingdoms return their war power without allocating a vassal traversal");
+    }
+
+    private static void WarAiDistantCandidatesUseABoundedNearestWindow()
+    {
+        string warAi = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "WarDecisionAI.cs"));
+        Assert(warAi.Contains(
+                "AsyncStrategyRevisionSet.MaximumCandidateKingdoms") &&
+               warAi.Contains("InsertBoundedDistantCandidate(") &&
+               warAi.Contains("pMaximumCandidates") &&
+               warAi.Contains("remainingCandidateSlots"),
+            "war AI keeps only the nearest bounded distant candidates for normal and async planning");
+    }
+
+    private static void ActorPostPipelineKeepsEnemySearchOrdered()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string postRunnerPath = Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeActorPostRunner.cs");
+        Assert(File.Exists(postRunnerPath),
+            "Actor scheduler has an ordered post-stage runner");
+
+        string simulation = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeSimulationRunner.cs"));
+        Assert(simulation.Contains(
+                "pPostRunner: new AWCooperativeActorPostRunner()"),
+            "Actor scheduler injects the ordered post-stage runner");
+
+        string postRunner = File.ReadAllText(postRunnerPath);
+        int before = postRunner.IndexOf("RunPostRange(pBatch, 0,",
+            StringComparison.Ordinal);
+        int prepare = postRunner.IndexOf("PrepareEnemySearchJob(pBatch)",
+            before, StringComparison.Ordinal);
+        int schedule = postRunner.IndexOf("ScheduleEnemySearch()",
+            prepare, StringComparison.Ordinal);
+        int commit = postRunner.IndexOf("CommitEnemySearchGroup()",
+            schedule, StringComparison.Ordinal);
+        int after = postRunner.IndexOf("RunPostRange(pBatch,",
+            commit, StringComparison.Ordinal);
+        Assert(before >= 0 && prepare > before && schedule > prepare &&
+               commit > schedule && after > commit,
+            "Actor post runner preserves before/search/commit/after order");
+
+        int workerStart = postRunner.IndexOf("private void SearchWorkItemAt(",
+            StringComparison.Ordinal);
+        int commitStart = postRunner.IndexOf("private bool CommitEnemySearchGroup(",
+            StringComparison.Ordinal);
+        Assert(workerStart >= 0 && commitStart > workerStart,
+            "Actor enemy worker and commit phases are isolated");
+        string worker = postRunner.Substring(workerStart,
+            commitStart - workerStart);
+        Assert(!worker.Contains("startFightingWith") &&
+               !worker.Contains("stopMovement") &&
+               !worker.Contains("skipBehaviour"),
+            "enemy workers never mutate live Actor combat state");
+        Assert(!worker.Contains("EnemiesFinder.findEnemiesFrom"),
+            "enemy workers never touch the vanilla finder cache");
+        Assert(postRunner.Substring(commitStart).Contains(
+                "actor.canAttackTarget("),
+            "main-thread commit revalidates a worker-selected target");
+    }
+
+    private static void ActorParallelJobsUseOneWorkerLayer()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string actorRunnerPath = Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeActorParallelJobRunner.cs");
+        Assert(File.Exists(actorRunnerPath),
+            "Actor scheduler has a specialized parallel-job runner");
+
+        string simulation = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeSimulationRunner.cs"));
+        Assert(simulation.Contains(
+                "pParallelJobRunner: new AWCooperativeActorParallelJobRunner()"),
+            "Actor scheduler injects the specialized parallel-job runner");
+
+        string actorRunner = File.ReadAllText(actorRunnerPath);
+        Assert(actorRunner.Contains("private const int TimerRangeSize = 128"),
+            "Actor timer work is grouped into 128-actor ranges");
+        Assert(actorRunner.Contains("Parallel.For(0, rangeCount,"),
+            "Actor timer ranges use the existing AW worker layer");
+        Assert(actorRunner.Contains("pParallelOptions"),
+            "Actor timer ranges inherit the cycle ParallelOptions");
+        Assert(!actorRunner.Contains("AWSimulationCoordinatorThread.Instance.Begin"),
+            "Actor timer ranges do not nest coordinator tickets");
+    }
+
+    private static void ActorRunnerSupportsSpecializedPostAndParallelStages()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string postInterface = Path.Combine(root, "Code", "core",
+            "performance", "IAWCooperativeBatchPostRunner.cs");
+        string parallelInterface = Path.Combine(root, "Code", "core",
+            "performance", "IAWCooperativeBatchParallelJobRunner.cs");
+        Assert(File.Exists(postInterface),
+            "Actor scheduler exposes a specialized post-stage contract");
+        Assert(File.Exists(parallelInterface),
+            "Actor scheduler exposes a specialized parallel-job contract");
+
+        string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeBatchRunner.cs"));
+        Assert(runner.Contains("IAWCooperativeBatchPostRunner<TBatch, TObject>"),
+            "batch runner accepts an Actor post-stage implementation");
+        Assert(runner.Contains(
+                "IAWCooperativeBatchParallelJobRunner<TBatch, TObject>"),
+            "batch runner accepts an Actor parallel-job implementation");
+        Assert(runner.Contains("_postRunner.Start(_batches, _elapsed,"),
+            "custom Actor post work starts after parallel results apply");
+        Assert(runner.Contains("TryRunGroup("),
+            "custom Actor parallel work owns complete job groups");
+    }
+
+    private static void NativeMovementHotPathShortCircuitsBeforeOwnershipLookup()
+    {
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_GlobalPathfindingPatch.cs"));
+        int prefixStart = patch.IndexOf(
+            "private static bool UpdateMovement_Prefix",
+            StringComparison.Ordinal);
+        int directStart = patch.IndexOf(
+            "private static void UpdateMovementDirect",
+            prefixStart, StringComparison.Ordinal);
+        int customStart = patch.IndexOf(
+            "private static void UpdateCustomSmoothMovement",
+            directStart, StringComparison.Ordinal);
+        Assert(prefixStart >= 0 && directStart > prefixStart &&
+               customStart > directStart,
+            "movement hot-path methods are present");
+        string prefix = patch.Substring(prefixStart, directStart - prefixStart);
+        string direct = patch.Substring(directStart, customStart - directStart);
+        Assert(prefix.IndexOf("!AWPerformanceSettings.EnableFramePriorityScheduler",
+                    StringComparison.Ordinal) >= 0,
+            "Native movement prefix exits before AW3 ownership work");
+        Assert(direct.IndexOf("!AWPerformanceSettings.EnableFramePriorityScheduler",
+                    StringComparison.Ordinal) >= 0,
+            "Native transpiled movement exits before AW3 ownership work");
+    }
+
+    private static void IncrementalTraversalBuildSkipsGlobalConnectivityPass()
+    {
+        Assert(!AWTraversalBuildRules.ShouldRebuildWaterConnectivity(
+                baseGenerationId: 7, topologyDirty: false),
+            "a normal dirty chunk must not launch a global water connectivity pass");
+        Assert(AWTraversalBuildRules.ShouldRebuildWaterConnectivity(
+                baseGenerationId: 0, topologyDirty: false),
+            "the initial traversal baseline may build water connectivity once");
+        Assert(AWTraversalBuildRules.ShouldRebuildWaterConnectivity(
+                baseGenerationId: 7, topologyDirty: true),
+            "a real region topology change may rebuild water connectivity");
+    }
+
+    private static void TraversalTopologyReuseIsExplicitForTerrainOnlyChanges()
+    {
+        Assert(AWTraversalBuildRules.ShouldReuseRegionTopology(
+                baseGenerationId: 7, topologyDirty: false),
+            "terrain-only dirty publication reuses the immutable region topology");
+        Assert(!AWTraversalBuildRules.ShouldReuseRegionTopology(
+                baseGenerationId: 7, topologyDirty: true),
+            "region topology changes must not reuse the previous topology");
+        Assert(!AWTraversalBuildRules.ShouldReuseRegionTopology(
+                baseGenerationId: 0, topologyDirty: false),
+            "the initial baseline has no topology to reuse");
     }
 
     private static void ActorPathConsumptionDoesNotTakeTheGlobalRequestGate()
@@ -444,6 +721,11 @@ internal static class PathfindingPerformanceTests
         string patch = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "patch",
             "AW_GlobalPathfindingPatch.cs"));
+        string normalizedPatch = patch.Replace("\r\n", "\n");
+        Assert(normalizedPatch.Contains(
+                "if (!PathfindingOwnershipService.ShouldIntercept || __result ||\n" +
+                "                __instance?.tile_target == null) return;"),
+            "idle actors bypass the ownership dictionary exactly like Cultiway");
         Assert(patch.Contains(
                 "__result = AWPathMovementBridge.HasOwnership(__instance);"),
             "the per-actor isUsingPath hook performs one ownership lookup");
@@ -846,6 +1128,10 @@ internal static class PathfindingPerformanceTests
                 asyncTraversalEnabled: true, buildScheduled: false,
                 tileCaptureComplete: true, pendingDirtyChunkCount: 0),
             "a captured initial snapshot schedules its connectivity build on the traversal worker");
+        Assert(AWTraversalBuildRules.ShouldScheduleInitialAsync(
+                asyncTraversalEnabled: true, buildScheduled: false,
+                tileCaptureComplete: true, pendingDirtyChunkCount: 37),
+            "live dirty chunks cannot starve the first traversal worker build");
         Assert(!AWTraversalBuildRules.ShouldScheduleInitialAsync(
                 asyncTraversalEnabled: true, buildScheduled: true,
                 tileCaptureComplete: true, pendingDirtyChunkCount: 0),
@@ -867,6 +1153,20 @@ internal static class PathfindingPerformanceTests
         Assert(!cache.Contains("_initialChunks = AWOceanConnectivityRules.Apply",
                 StringComparison.Ordinal),
             "initial connectivity is not computed inline on the simulation thread");
+        int publishStart = cache.IndexOf("private void PublishInitialBuild(",
+            StringComparison.Ordinal);
+        int publishEnd = cache.IndexOf("private void ScheduleOverlayBuild(",
+            publishStart, StringComparison.Ordinal);
+        Assert(publishStart >= 0 && publishEnd > publishStart,
+            "initial traversal publication has an isolated validation block");
+        string publish = cache.Substring(publishStart,
+            publishEnd - publishStart);
+        Assert(!publish.Contains("_dirtyChunks.Count > 0",
+                StringComparison.Ordinal),
+            "live dirty chunks cannot reject the immutable initial traversal baseline");
+        Assert(cache.Contains("pResult.SourceRevision > _sourceRevision",
+                StringComparison.Ordinal),
+            "an initial baseline remains publishable when newer dirty overlays arrived while it was building");
     }
 
     private static void RegionWaypointDoesNotCompleteFinalTarget()

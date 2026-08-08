@@ -4,6 +4,19 @@ internal static class ActorAgeWorkRulesTests
 {
     public static void Run()
     {
+        Equal(false, ActorAgeWorkRules.ShouldTrack(
+                wasTracked: false, dirty: false, dynasticEligible: false,
+                warrior: false, reproductionRecoveryActive: false),
+            "ordinary civilians do not enter AW3 annual Actor tracking");
+        Equal(true, ActorAgeWorkRules.ShouldTrack(
+                wasTracked: false, dirty: false, dynasticEligible: true,
+                warrior: false, reproductionRecoveryActive: false),
+            "dynastic civilians remain eligible for annual work");
+        Equal(true, ActorAgeWorkRules.ShouldTrack(
+                wasTracked: true, dirty: false, dynasticEligible: false,
+                warrior: false, reproductionRecoveryActive: false),
+            "previously tracked Actors receive one cleanup transition");
+
         var same = new ActorAgeWorkState(isAdult: true, profession: 2,
             inPermanentArmy: true, atWar: true, dynasticEligible: false,
             shouldUsePeacetimeJob: false,

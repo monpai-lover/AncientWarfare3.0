@@ -77,6 +77,14 @@ namespace AncientWarfare3.core.policy
             HierarchicalVassalMapLabelRuntime.MarkCityGeometryDirty(pCity);
         }
 
+        internal static void MarkCityZoneGeometryDirty(City pCity,
+            TileZone pZone)
+        {
+            _reportedFailure = false;
+            HierarchicalVassalMapLabelRuntime.MarkCityZoneGeometryDirty(
+                pCity, pZone);
+        }
+
         internal static void EvictCity(long pCityId)
         {
             HierarchicalVassalMapLabelRuntime.EvictCity(pCityId);

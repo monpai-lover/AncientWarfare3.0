@@ -173,5 +173,11 @@ namespace AncientWarfare3.core.policy
         {
             return candidateTicks > currentTicks;
         }
+
+        public static bool ShouldReplaceSlowestFrame(long pCurrentTicks,
+            long pCandidateTicks)
+        {
+            return pCandidateTicks > pCurrentTicks;
+        }
     }
 }

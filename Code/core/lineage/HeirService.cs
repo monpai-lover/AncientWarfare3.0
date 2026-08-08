@@ -428,6 +428,7 @@ namespace AncientWarfare3.core.lineage
             if (previousHeirId >= 0 || previousMode != SuccessionMode.NONE)
                 FamilyTreeProjectionRevision.Advance(
                     FamilyTreeProjectionChange.Heir);
+            HeirMinimapMarkerIndex.Refresh(pKingdom);
         }
 
         public static void StoreSelectedHeir(Kingdom pKingdom, Actor pHeir, string pMode)
@@ -560,6 +561,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID,
                 heir?.data == null ? -1L : referenceKingId);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_SELECTION_DIRTY, false);
+            HeirMinimapMarkerIndex.Refresh(pKingdom);
             InheritanceLawService.MirrorCandidate(pKingdom, heir,
                 pSelection.Mode, referenceKingId);
             SetHeirFlag(heir, true);

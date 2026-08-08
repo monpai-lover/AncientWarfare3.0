@@ -7,6 +7,7 @@ namespace AncientWarfare3.core.policy
     {
         private static readonly long[] s_ticks = new long[UpdateAgeBenchmarkRules.EntryIds.Length];
         private static readonly int[] s_counts = new int[UpdateAgeBenchmarkRules.EntryIds.Length];
+        private static bool s_hasSamples;
 
         public static long Begin()
         {
@@ -18,15 +19,17 @@ namespace AncientWarfare3.core.policy
             if (pStartTicks == 0L || !Bench.bench_enabled || !UpdateAgeBenchmarkRules.IsValidIndex(pIndex)) return;
             s_ticks[pIndex] += Stopwatch.GetTimestamp() - pStartTicks;
             s_counts[pIndex]++;
+            s_hasSamples = true;
         }
 
         public static void Flush(long pFullStartTicks = 0L)
         {
             if (!Bench.bench_enabled)
             {
-                Reset();
+                if (s_hasSamples) Reset();
                 return;
             }
+            if (!s_hasSamples && pFullStartTicks <= 0L) return;
 
             long totalTicks = 0L;
             int totalCalls = 0;
@@ -69,6 +72,7 @@ namespace AncientWarfare3.core.policy
                 s_ticks[i] = 0L;
                 s_counts[i] = 0;
             }
+            s_hasSamples = false;
         }
     }
 }

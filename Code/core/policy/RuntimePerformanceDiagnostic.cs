@@ -44,6 +44,17 @@ namespace AncientWarfare3.core.policy
         private static long _intervalFrameStarted;
         private static int _intervalMode;
         private static int _actorDetailSamples;
+        private static long _frameStarted;
+        private static string _frameContinuousStageId = "none";
+        private static long _frameContinuousStageTicks;
+        private static string _frameAnnualStageId = "none";
+        private static long _frameAnnualStageTicks;
+        private static long _worstFrameNumber;
+        private static long _worstFrameTicks;
+        private static string _worstFrameStageId = "none";
+        private static long _worstFrameStageTicks;
+        private static string _worstFrameAnnualStageId = "none";
+        private static long _worstFrameAnnualStageTicks;
         private const int ActorDetailBudgetPerFrame =
             ActorDiagnosticSamplingRules.MaximumDetailSamplesPerFrame;
         private static long _sampleFrameStarted;
@@ -114,6 +125,7 @@ namespace AncientWarfare3.core.policy
                             _intervalMode, _sampling))
                     TerminateIntervalBaseline();
                 _sampling = false;
+                _frameStarted = 0L;
                 return;
             }
             Interlocked.Exchange(ref _actorDetailSamples, 0);
@@ -123,8 +135,14 @@ namespace AncientWarfare3.core.policy
                 ResetDeathInterval();
                 _intervalStarted = Stopwatch.GetTimestamp();
                 _intervalFrameStarted = Math.Max(0L, _frame - 1L);
+                ResetWorstFrameInterval();
             }
             _intervalMode = currentMode;
+            _frameStarted = Stopwatch.GetTimestamp();
+            _frameContinuousStageId = "none";
+            _frameContinuousStageTicks = 0L;
+            _frameAnnualStageId = "none";
+            _frameAnnualStageTicks = 0L;
             _sampling = RuntimePerformanceDiagnosticRules.ShouldSample(
                 currentMode != 0, _frame);
             if (_sampling)
@@ -141,6 +159,11 @@ namespace AncientWarfare3.core.policy
         public static long BeginScope()
         {
             return _sampling ? Stopwatch.GetTimestamp() : 0L;
+        }
+
+        public static long BeginContinuousScope()
+        {
+            return _frameStarted != 0L ? Stopwatch.GetTimestamp() : 0L;
         }
 
         public static bool ShouldCollectActorDetail()
@@ -367,12 +390,33 @@ namespace AncientWarfare3.core.policy
         public static void EndAnnualStage(string pId, long started)
         {
             long elapsed = Elapsed(started);
-            if (elapsed < 0L || !RuntimePerformanceDiagnosticRules.
+            if (elapsed < 0L) return;
+            if (RuntimePerformanceDiagnosticRules.ShouldReplaceSlowest(
+                    _frameAnnualStageTicks, elapsed))
+            {
+                _frameAnnualStageTicks = elapsed;
+                _frameAnnualStageId = string.IsNullOrEmpty(pId)
+                    ? "annual_unknown"
+                    : pId;
+            }
+            if (!_sampling || !RuntimePerformanceDiagnosticRules.
                     ShouldReplaceSlowest(_slowestAnnualStageTicks, elapsed))
                 return;
             _slowestAnnualStageTicks = elapsed;
             _slowestAnnualStageId = string.IsNullOrEmpty(pId)
                 ? "annual_unknown"
+                : pId;
+        }
+
+        public static void EndContinuousStage(string pId, long pStarted)
+        {
+            long elapsed = Elapsed(pStarted);
+            if (elapsed < 0L || !RuntimePerformanceDiagnosticRules.
+                    ShouldReplaceSlowest(_frameContinuousStageTicks,
+                        elapsed)) return;
+            _frameContinuousStageTicks = elapsed;
+            _frameContinuousStageId = string.IsNullOrEmpty(pId)
+                ? "unknown"
                 : pId;
         }
 
@@ -392,6 +436,9 @@ namespace AncientWarfare3.core.policy
 
         public static void FlushFrame()
         {
+            long continuousFrameTicks = Elapsed(_frameStarted);
+            RecordWorstFrame(continuousFrameTicks);
+            _frameStarted = 0L;
             if (!_sampling) return;
             int currentMode = CurrentIntervalMode();
             if (!RuntimePerformanceDiagnosticRules.ShouldFlushInterval(
@@ -412,6 +459,8 @@ namespace AncientWarfare3.core.policy
             long intervalTicks = _intervalStarted <= 0L
                 ? 0L
                 : Math.Max(0L, intervalEnded - _intervalStarted);
+            AWActorPostDiagnosticSnapshot actorPostDiagnostics =
+                AWCooperativeActorPostRunner.TakeDiagnostics();
             long intervalFrames = RuntimePerformanceDiagnosticRules.
                 IntervalFrameCount(_intervalFrameStarted, _frame);
             double averageFps = RuntimePerformanceDiagnosticRules.
@@ -483,8 +532,25 @@ namespace AncientWarfare3.core.policy
                 " live_population=" + livePopulation +
                 " army_count=" + armyCount +
                 " frame_ms=" + Milliseconds(frameTicks) +
+                " worst_frame=" + _worstFrameNumber +
+                " worst_frame_ms=" + Milliseconds(_worstFrameTicks) +
+                " worst_frame_stage=" + _worstFrameStageId +
+                " worst_frame_stage_ms=" +
+                Milliseconds(_worstFrameStageTicks) +
+                " worst_frame_annual_stage=" +
+                _worstFrameAnnualStageId +
+                " worst_frame_annual_stage_ms=" +
+                Milliseconds(_worstFrameAnnualStageTicks) +
                 " actor_ms=" + Milliseconds(_actorWallTicks) +
                 ActorParallelFields() +
+                " actor_post_worker_ms=" +
+                Milliseconds(actorPostDiagnostics.WorkerTicks) +
+                " actor_post_commit_ms=" +
+                Milliseconds(actorPostDiagnostics.CommitTicks) +
+                " enemy_search_calls=" + actorPostDiagnostics.Calls +
+                " enemy_search_candidates=" +
+                actorPostDiagnostics.Candidates +
+                " enemy_search_empty=" + actorPostDiagnostics.Empty +
                 " actor_ai_ms=" + Milliseconds(_actorAiTicks) +
                 " actor_ai_calls=" + _actorAiCalls +
                 " actor_task=" + actorTaskId +
@@ -651,6 +717,7 @@ namespace AncientWarfare3.core.policy
                     "main_sprite"));
             _intervalStarted = intervalEnded;
             _intervalFrameStarted = _frame;
+            ResetWorstFrameInterval();
             ResetDeathInterval();
             _sampling = false;
         }
@@ -819,7 +886,32 @@ namespace AncientWarfare3.core.policy
             _intervalStarted = 0L;
             _intervalFrameStarted = 0L;
             _intervalMode = 0;
+            _frameStarted = 0L;
+            ResetWorstFrameInterval();
             ResetDeathInterval();
+        }
+
+        private static void RecordWorstFrame(long pFrameTicks)
+        {
+            if (pFrameTicks < 0L || !RuntimePerformanceDiagnosticRules.
+                    ShouldReplaceSlowestFrame(_worstFrameTicks,
+                        pFrameTicks)) return;
+            _worstFrameNumber = _frame;
+            _worstFrameTicks = pFrameTicks;
+            _worstFrameStageId = _frameContinuousStageId;
+            _worstFrameStageTicks = _frameContinuousStageTicks;
+            _worstFrameAnnualStageId = _frameAnnualStageId;
+            _worstFrameAnnualStageTicks = _frameAnnualStageTicks;
+        }
+
+        private static void ResetWorstFrameInterval()
+        {
+            _worstFrameNumber = 0L;
+            _worstFrameTicks = 0L;
+            _worstFrameStageId = "none";
+            _worstFrameStageTicks = 0L;
+            _worstFrameAnnualStageId = "none";
+            _worstFrameAnnualStageTicks = 0L;
         }
 
         private static bool DeathDiagnosticsEnabled()

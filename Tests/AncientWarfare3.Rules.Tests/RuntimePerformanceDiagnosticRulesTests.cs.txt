@@ -26,6 +26,41 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         BenchmarkTimeoutPollingIsPendingOnlyAndCleansUp();
         BenchmarkTimeoutCoversExceptionalMapUpdate();
         BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20();
+        ContinuousWorstFrameSamplingKeepsUnsampledSpikes();
+    }
+
+    private static void ContinuousWorstFrameSamplingKeepsUnsampledSpikes()
+    {
+        Equal(true, RuntimePerformanceDiagnosticRules.
+                ShouldReplaceSlowestFrame(100L, 101L),
+            "a slower frame replaces the interval maximum");
+        Equal(false, RuntimePerformanceDiagnosticRules.
+                ShouldReplaceSlowestFrame(100L, 100L),
+            "an equal frame keeps the earlier interval maximum");
+
+        string source = Read("Code", "core", "policy",
+            "RuntimePerformanceDiagnostic.cs");
+        Contains(source, "private static long _frameStarted;",
+            "every eligible frame has a low-cost wall clock baseline");
+        Contains(source, "RecordWorstFrame(",
+            "frame flush retains the interval maximum");
+        Contains(source, "public static long BeginContinuousScope()",
+            "rare lifecycle stages can be measured outside sampled frames");
+        Contains(source, " worst_frame_ms=",
+            "PERF output reports the actual worst frame in the interval");
+        Contains(source, " worst_frame_stage=",
+            "PERF output reports the slowest continuous stage on that frame");
+        Contains(source, " worst_frame_annual_stage=",
+            "PERF output reports the annual stage active on that frame");
+
+        int flush = source.IndexOf("public static void FlushFrame()",
+            StringComparison.Ordinal);
+        int record = source.IndexOf("RecordWorstFrame(", flush,
+            StringComparison.Ordinal);
+        int sampledReturn = source.IndexOf("if (!_sampling) return;", flush,
+            StringComparison.Ordinal);
+        True(record > flush && sampledReturn > record,
+            "unsampled frames are retained before the sampled-log return");
     }
 
     private static void PerformanceIntervalLifecycleIsWorldAndModeBound()

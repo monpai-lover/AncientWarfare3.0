@@ -700,6 +700,12 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawBuildings")]
         private static void BeginBuildingPresentationOverlap()
         {
+            if (!AWPerformanceSettings.EnableWorldObjectPresentationSnapshots)
+            {
+                EnsureBuildingReadBoundary("quantum.buildings.native");
+                return;
+            }
+
             try
             {
                 AWCooperativeSimulationRunner.Instance
@@ -791,8 +797,10 @@ namespace AncientWarfare3.patch
         private static bool DrawSnapshotProjectiles(
             QuantumSpriteAsset pAsset)
         {
-            return !AWWorldObjectPresentationRenderer
-                .TryDrawProjectiles(pAsset);
+            if (AWWorldObjectPresentationRenderer.TryDrawProjectiles(pAsset))
+                return false;
+            EnsureLiveObjectReadBoundary("quantum.projectiles.native");
+            return true;
         }
 
         [HarmonyPrefix]
@@ -801,8 +809,10 @@ namespace AncientWarfare3.patch
         private static bool DrawSnapshotProjectileShadows(
             QuantumSpriteAsset pAsset)
         {
-            return !AWWorldObjectPresentationRenderer
-                .TryDrawProjectileShadows(pAsset);
+            if (AWWorldObjectPresentationRenderer.
+                    TryDrawProjectileShadows(pAsset)) return false;
+            EnsureLiveObjectReadBoundary("quantum.projectiles.native");
+            return true;
         }
 
         [HarmonyPrefix]
@@ -810,8 +820,11 @@ namespace AncientWarfare3.patch
         private static bool DrawSnapshotResourceThrows(
             QuantumSpriteAsset pAsset)
         {
-            return !AWWorldObjectPresentationRenderer
-                .TryDrawResourceThrows(pAsset, shadows: false);
+            if (AWWorldObjectPresentationRenderer.
+                    TryDrawResourceThrows(pAsset, shadows: false))
+                return false;
+            EnsureLiveObjectReadBoundary("quantum.resource_throws.native");
+            return true;
         }
 
         [HarmonyPrefix]
@@ -820,8 +833,11 @@ namespace AncientWarfare3.patch
         private static bool DrawSnapshotResourceThrowShadows(
             QuantumSpriteAsset pAsset)
         {
-            return !AWWorldObjectPresentationRenderer
-                .TryDrawResourceThrows(pAsset, shadows: true);
+            if (AWWorldObjectPresentationRenderer.
+                    TryDrawResourceThrows(pAsset, shadows: true))
+                return false;
+            EnsureLiveObjectReadBoundary("quantum.resource_throws.native");
+            return true;
         }
 
         [HarmonyPrefix]

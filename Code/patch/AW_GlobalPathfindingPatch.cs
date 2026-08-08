@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
 using ai;
@@ -81,7 +82,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.isUsingPath))]
         private static void IsUsingPath_Postfix(Actor __instance, ref bool __result)
         {
-            if (!PathfindingOwnershipService.ShouldIntercept || __result) return;
+            if (!PathfindingOwnershipService.ShouldIntercept || __result ||
+                __instance?.tile_target == null) return;
             __result = AWPathMovementBridge.HasOwnership(__instance);
         }
 
@@ -202,6 +204,7 @@ namespace AncientWarfare3.patch
         private static bool UpdateMovement_Prefix(Actor __instance, float pElapsed,
             float pWalkedDistance = 0f)
         {
+            if (!AWPerformanceSettings.EnableFramePriorityScheduler) return true;
             if (!PathfindingOwnershipService.ShouldIntercept) return true;
             if (!AWPathMovementBridge.ShouldUseCustomSmoothMovement(__instance)) return true;
             UpdateCustomSmoothMovement(__instance, pElapsed, pWalkedDistance);
@@ -212,6 +215,11 @@ namespace AncientWarfare3.patch
         private static void UpdateMovementDirect(Actor pActor, float pElapsed,
             float pWalkedDistance)
         {
+            if (!AWPerformanceSettings.EnableFramePriorityScheduler)
+            {
+                pActor.updateMovement(pElapsed, pWalkedDistance);
+                return;
+            }
             if (PathfindingOwnershipService.ShouldIntercept &&
                 AWPathMovementBridge.ShouldUseCustomSmoothMovement(pActor))
             {

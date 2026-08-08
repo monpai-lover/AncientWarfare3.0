@@ -16,7 +16,10 @@ namespace AncientWarfare3.core.policy
         BondDeath = 11,
         SchoolDeath = 12,
         RoyalClaim = 13,
-        RoyalGuard = 14
+        RoyalGuard = 14,
+        KingHeirPreparation = 15,
+        KingChronicle = 16,
+        KingCivilService = 17
     }
 
     public static class ActorDeathPerformanceRules
@@ -37,7 +40,10 @@ namespace AncientWarfare3.core.policy
             "bond_death",
             "school_death",
             "royal_claim",
-            "royal_guard"
+            "royal_guard",
+            "king_heir_prepare",
+            "king_chronicle",
+            "king_civil_service"
         };
 
         public static int StageCount => StageIds.Length;

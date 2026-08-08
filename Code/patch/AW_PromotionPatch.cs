@@ -74,7 +74,7 @@ namespace AncientWarfare3.patch
             if (actorIsActualKing && profile == NamingProfileId.Monkey)
                 CivMonkeyNamingContent.EnsureActorFamilyIdentity(pActor);
             if (actorIsActualKing)
-                WesternLineageMigrationService.Request();
+                WesternLineageMigrationService.Request(__instance);
             if (!WesternLineageAdmissionRules.ShouldRunKingAdmission(
                     pFromLoad, actorIsActualKing,
                     profile)) return;

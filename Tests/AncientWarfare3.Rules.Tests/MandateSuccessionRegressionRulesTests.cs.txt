@@ -29,6 +29,22 @@ internal static class MandateSuccessionRegressionRulesTests
         ClosedDeclarationConnectionReturnsFailure();
         ActiveMandateKeepsItsImperialStateName();
         SavedMandateReignUsesImperialPosthumousRank();
+        AutoCandidatePowerAggregatesVassalsInOnePass();
+    }
+
+    private static void AutoCandidatePowerAggregatesVassalsInOnePass()
+    {
+        float[] powers = MandatePowerRules.AggregateCompetitionPowersByRoot(
+            new[] { 100f, 40f, 20f, 80f },
+            new[] { -1, 0, 1, -1 });
+        Equal(136f, powers[0],
+            "an independent candidate receives each nested vassal exactly once at the standard weight");
+        Equal(40f, powers[1],
+            "a vassal retains only its own value because it cannot be an independent candidate");
+        Equal(20f, powers[2],
+            "a nested vassal retains only its own value because it cannot be an independent candidate");
+        Equal(80f, powers[3],
+            "an unrelated independent candidate remains isolated");
     }
 
     private static void ActiveMandateSuccessionRefreshesInstalledRuler()

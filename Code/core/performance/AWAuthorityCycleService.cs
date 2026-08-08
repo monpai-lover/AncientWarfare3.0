@@ -21,7 +21,14 @@ namespace AncientWarfare3.core.performance
         public static void ProcessCooperativeCycle(long pCycleToken,
             bool pCyclePaused)
         {
-            ProcessCycle(CooperativeGate, pCycleToken, pCyclePaused);
+            long diagnostic = RuntimePerformanceDiagnostic.
+                BeginContinuousScope();
+            try { ProcessCycle(CooperativeGate, pCycleToken, pCyclePaused); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndContinuousStage(
+                    "authority_cycle", diagnostic);
+            }
         }
 
         public static void ProcessNativeCycle()
@@ -30,7 +37,14 @@ namespace AncientWarfare3.core.performance
                 _nativeCycleToken++;
             bool paused = World.world == null ||
                           World.world.isPaused();
-            ProcessCycle(NativeGate, _nativeCycleToken, paused);
+            long diagnostic = RuntimePerformanceDiagnostic.
+                BeginContinuousScope();
+            try { ProcessCycle(NativeGate, _nativeCycleToken, paused); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndContinuousStage(
+                    "authority_cycle", diagnostic);
+            }
         }
 
         public static void Reset()
@@ -51,11 +65,11 @@ namespace AncientWarfare3.core.performance
             TemporaryMilitaryReturnService.ClearRuntime();
             WarArmyReturnService.ClearRuntime();
             ArmyRtsAssignmentReconciliationService.Reset();
-            AWEnemyPresenceCache.Clear();
             AWStatusSimulationScheduler.ClearRuntime();
             CityReservePoolService.ClearRuntime();
             WarForceEliminationSettlementService.ClearRuntime();
             ArmyReplenishmentOperationService.ClearRuntime();
+            MonthlyKingdomSnapshotService.Reset();
             KingdomDecisionMonthlyService.Reset();
             WarParticipantEntrySourceService.Instance.ClearRuntime();
             ZhuluAgeDirectorService.Reset();

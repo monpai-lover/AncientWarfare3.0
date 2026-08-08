@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.naming;
@@ -9,11 +8,18 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class IntegratedCultureNamingMigrationService
     {
-        internal const int DefaultBudget = 24;
+        internal const int DefaultBudget = 8;
         private static readonly Dictionary<long, Culture> Pending =
             new Dictionary<long, Culture>();
         private static readonly Dictionary<long, List<Actor>> Candidates =
             new Dictionary<long, List<Actor>>();
+        private static readonly Dictionary<long, int> CandidateCursors =
+            new Dictionary<long, int>();
+        private static readonly Queue<long> PendingOrder =
+            new Queue<long>();
+        private static readonly HashSet<long> Enqueued =
+            new HashSet<long>();
+        private static bool _candidateIndexBuilt;
 
         internal static void Request(Culture pCulture)
         {
@@ -26,13 +32,19 @@ namespace AncientWarfare3.core.lineage
             IntegratedCultureNamingMigrationStatePersistence.Request(db,
                 cultureId, LineageService.CurTime());
             Pending[cultureId] = pCulture;
-            Candidates.Remove(cultureId);
+            _candidateIndexBuilt = false;
+            CandidateCursors.Clear();
+            Enqueue(cultureId);
         }
 
         internal static void Reset()
         {
             Pending.Clear();
             Candidates.Clear();
+            CandidateCursors.Clear();
+            PendingOrder.Clear();
+            Enqueued.Clear();
+            _candidateIndexBuilt = false;
         }
 
         internal static void ProcessAuthorityCycle()
@@ -48,14 +60,16 @@ namespace AncientWarfare3.core.lineage
             if (db == null) return;
 
             int remaining = pBudget;
-            foreach (long cultureId in Pending.Keys.ToArray())
+            int culturesToInspect = PendingOrder.Count;
+            while (remaining > 0 && culturesToInspect-- > 0 &&
+                   PendingOrder.Count > 0)
             {
-                if (remaining <= 0) break;
+                long cultureId = PendingOrder.Dequeue();
+                Enqueued.Remove(cultureId);
                 if (!Pending.TryGetValue(cultureId, out Culture culture) ||
                     culture?.data == null)
                 {
-                    Pending.Remove(cultureId);
-                    Candidates.Remove(cultureId);
+                    RemovePending(cultureId);
                     continue;
                 }
 
@@ -64,8 +78,7 @@ namespace AncientWarfare3.core.lineage
                         cultureId);
                 if (state == null || state.Phase == "complete")
                 {
-                    Pending.Remove(cultureId);
-                    Candidates.Remove(cultureId);
+                    RemovePending(cultureId);
                     continue;
                 }
 
@@ -78,13 +91,20 @@ namespace AncientWarfare3.core.lineage
                         Candidates[cultureId] = actors;
                     }
 
-                    bool found = false;
+                    if (!CandidateCursors.TryGetValue(cultureId,
+                            out int cursor))
+                        cursor = FindFirstActorAfter(actors,
+                            state.CursorActorId);
                     long latestCursor = state.CursorActorId;
-                    foreach (Actor actor in actors)
+                    int startCursor = cursor;
+                    while (cursor < actors.Count && remaining > 0)
                     {
-                        if (actor?.data == null || actor.data.id <=
-                            latestCursor) continue;
-                        found = true;
+                        Actor actor = actors[cursor];
+                        if (actor?.data == null)
+                        {
+                            cursor++;
+                            continue;
+                        }
                         if (!ProcessActor(actor, culture))
                         {
                             IntegratedCultureNamingMigrationStatePersistence
@@ -93,53 +113,102 @@ namespace AncientWarfare3.core.lineage
                                     LineageService.CurTime());
                             break;
                         }
-                        IntegratedCultureNamingMigrationStatePersistence
-                            .AdvanceCursor(db, cultureId, actor.data.id,
-                                LineageService.CurTime());
+                        cursor++;
                         latestCursor = actor.data.id;
                         remaining--;
-                        if (remaining <= 0) break;
                     }
+                    CandidateCursors[cultureId] = cursor;
+                    if (cursor > startCursor && latestCursor >
+                            state.CursorActorId)
+                        IntegratedCultureNamingMigrationStatePersistence
+                            .AdvanceCursor(db, cultureId, latestCursor,
+                                LineageService.CurTime());
 
-                    if (!found || remaining > 0 &&
-                        !HasActorAfter(actors, latestCursor))
+                    if (cursor >= actors.Count)
                     {
                         IntegratedCultureNamingMigrationStatePersistence
                             .MarkComplete(db, cultureId,
                                 LineageService.CurTime());
-                        Pending.Remove(cultureId);
-                        Candidates.Remove(cultureId);
+                        RemovePending(cultureId);
                     }
+                    else
+                        Enqueue(cultureId);
                 }
                 catch (Exception error)
                 {
                     IntegratedCultureNamingMigrationStatePersistence
                         .RecordFailure(db, cultureId, error.Message,
                             LineageService.CurTime());
+                    CandidateCursors.Remove(cultureId);
+                    Enqueue(cultureId);
                 }
             }
         }
 
         private static List<Actor> BuildCandidates(Culture pCulture)
         {
-            var result = new List<Actor>();
-            if (World.world?.units == null) return result;
-            foreach (Actor actor in World.world.units)
-            {
-                if (actor?.data != null && actor.culture == pCulture)
-                    result.Add(actor);
-            }
-            result.Sort((left, right) => left.data.id.CompareTo(right.data.id));
+            BuildCandidateIndex();
+            long cultureId = pCulture?.getID() ?? -1L;
+            if (cultureId >= 0L && Candidates.TryGetValue(cultureId,
+                    out List<Actor> result)) return result;
+            result = new List<Actor>();
+            if (cultureId >= 0L) Candidates[cultureId] = result;
             return result;
         }
 
-        private static bool HasActorAfter(List<Actor> pActors,
+        private static void BuildCandidateIndex()
+        {
+            if (_candidateIndexBuilt) return;
+            Candidates.Clear();
+            if (World.world?.units == null)
+            {
+                _candidateIndexBuilt = true;
+                return;
+            }
+            foreach (Actor actor in World.world.units)
+            {
+                long cultureId = actor?.culture?.getID() ?? -1L;
+                if (actor?.data == null || cultureId < 0L) continue;
+                if (!Candidates.TryGetValue(cultureId,
+                        out List<Actor> actors))
+                {
+                    actors = new List<Actor>();
+                    Candidates[cultureId] = actors;
+                }
+                actors.Add(actor);
+            }
+            foreach (List<Actor> actors in Candidates.Values)
+                actors.Sort((left, right) =>
+                    left.data.id.CompareTo(right.data.id));
+            _candidateIndexBuilt = true;
+        }
+
+        private static int FindFirstActorAfter(List<Actor> pActors,
             long pCursor)
         {
-            foreach (Actor actor in pActors)
-                if (actor?.data != null && actor.data.id > pCursor)
-                    return true;
-            return false;
+            int low = 0;
+            int high = pActors?.Count ?? 0;
+            while (low < high)
+            {
+                int middle = low + (high - low) / 2;
+                long actorId = pActors[middle]?.data?.id ?? long.MinValue;
+                if (actorId <= pCursor) low = middle + 1;
+                else high = middle;
+            }
+            return low;
+        }
+
+        private static void Enqueue(long pCultureId)
+        {
+            if (pCultureId < 0L || !Enqueued.Add(pCultureId)) return;
+            PendingOrder.Enqueue(pCultureId);
+        }
+
+        private static void RemovePending(long pCultureId)
+        {
+            Pending.Remove(pCultureId);
+            CandidateCursors.Remove(pCultureId);
+            Enqueued.Remove(pCultureId);
         }
 
         private static bool ProcessActor(Actor pActor, Culture pCulture)

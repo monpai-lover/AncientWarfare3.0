@@ -133,7 +133,8 @@ namespace AncientWarfare3.core.lineage
                 return;
             int monthKey = RulerHouseholdPregnancyRules.ToMonthKey(
                 Date.getCurrentYear(), Date.getCurrentMonth());
-            MonthlyWork.ScheduleMonth(monthKey, World.world.kingdoms);
+            MonthlyWork.ScheduleMonth(monthKey,
+                MonthlyKingdomSnapshotService.Get(monthKey));
             MonthlyWork.Drain(KingdomsPerAuthorityCycle,
                 (queuedMonthKey, kingdom) =>
             {

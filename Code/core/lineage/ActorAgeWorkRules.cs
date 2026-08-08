@@ -14,6 +14,14 @@ namespace AncientWarfare3.core.lineage
 
     public static class ActorAgeWorkRules
     {
+        public static bool ShouldTrack(bool wasTracked, bool dirty,
+            bool dynasticEligible, bool warrior,
+            bool reproductionRecoveryActive)
+        {
+            return wasTracked || dirty || dynasticEligible || warrior ||
+                   reproductionRecoveryActive;
+        }
+
         public static ActorAgeWorkStage Resolve(ActorAgeWorkState pPrevious,
             ActorAgeWorkState pCurrent, bool force)
         {

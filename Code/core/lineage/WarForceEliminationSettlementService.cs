@@ -34,6 +34,13 @@ namespace AncientWarfare3.core.lineage
                 World.world?.wars == null) return;
             int monthKey = KingdomDecisionMonthlyRules.ToMonthKey(
                 Date.getCurrentYear(), Date.getCurrentMonth());
+            if (!MonthlyWork.ShouldScheduleMonth(monthKey))
+            {
+                MonthlyWork.Drain(WarsPerAuthorityCycle,
+                    (queuedMonth, warId) => ObserveAndQueue(
+                        FindWar(warId), queuedMonth));
+                return;
+            }
             var liveWarIds = new List<long>();
             var liveSet = new HashSet<long>();
             try

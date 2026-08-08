@@ -1048,6 +1048,7 @@ namespace AncientWarfare3.core.lineage
                 string.IsNullOrEmpty(pRow.ClaimantMode)
                     ? SuccessionMode.COLLATERAL_RESTORE
                     : pRow.ClaimantMode);
+            HeirMinimapMarkerIndex.Refresh(pKingdom);
         }
 
         private static void SettleReunification(

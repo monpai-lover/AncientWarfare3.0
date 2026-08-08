@@ -1,7 +1,14 @@
 public sealed class LocalizedTextManager
 {
     public static LocalizedTextManager instance;
+    public static TestLanguageAsset current_language =
+        new TestLanguageAsset { id = "cz" };
     public string language = "cz";
+}
+
+public sealed class TestLanguageAsset
+{
+    public string id;
 }
 
 namespace AncientWarfare3.core.lineage

@@ -22,18 +22,8 @@ namespace AncientWarfare3.core.lineage
                     pColorCount: colorCount))
                 return;
 
-            try
-            {
-                ColorAsset color = AssetManager.kingdom_colors_library.getColorByIndex(pKingdom.data.color_id);
-                pKingdom.updateColor(color);
-            }
-            catch
-            {
-            }
             ClearCachedColor(pKingdom);
             MarkKingdomUnitsDirty(pKingdom);
-            try { World.world?.zone_calculator?.dirtyAndClear(); }
-            catch { }
         }
 
         internal static bool ClearCachedColor(object pMetaObject)

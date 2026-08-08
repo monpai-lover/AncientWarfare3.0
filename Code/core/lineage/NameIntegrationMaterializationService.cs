@@ -1,6 +1,6 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.db;
 
@@ -8,12 +8,21 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class NameIntegrationMaterializationService
     {
-        internal const int DefaultBudget = 24;
+        internal const int DefaultBudget = 8;
+        private const int MaxRestoreKingdomsPerCycle = 4;
         private static readonly Dictionary<long, Kingdom> Pending =
             new Dictionary<long, Kingdom>();
         private static readonly Dictionary<long, List<Actor>> Candidates =
             new Dictionary<long, List<Actor>>();
+        private static readonly Dictionary<long, int> CandidateCursors =
+            new Dictionary<long, int>();
+        private static readonly Queue<long> PendingOrder =
+            new Queue<long>();
+        private static readonly HashSet<long> Enqueued =
+            new HashSet<long>();
         private static bool _restored;
+        private static IEnumerator _restoreEnumerator;
+        private static MapBox _restoreWorld;
 
         internal static void Request(Kingdom pKingdom)
         {
@@ -27,12 +36,19 @@ namespace AncientWarfare3.core.lineage
                 kingdomId, LineageService.CurTime());
             Pending[kingdomId] = pKingdom;
             Candidates.Remove(kingdomId);
+            CandidateCursors.Remove(kingdomId);
+            Enqueue(kingdomId);
         }
 
         internal static void Reset()
         {
             Pending.Clear();
             Candidates.Clear();
+            CandidateCursors.Clear();
+            PendingOrder.Clear();
+            Enqueued.Clear();
+            DisposeRestoreEnumerator();
+            _restoreWorld = null;
             _restored = false;
         }
 
@@ -51,16 +67,18 @@ namespace AncientWarfare3.core.lineage
             if (db == null) return;
 
             int remaining = pBudget;
-            foreach (long kingdomId in Pending.Keys.ToArray())
+            int kingdomsToInspect = PendingOrder.Count;
+            while (remaining > 0 && kingdomsToInspect-- > 0 &&
+                   PendingOrder.Count > 0)
             {
-                if (remaining <= 0) break;
+                long kingdomId = PendingOrder.Dequeue();
+                Enqueued.Remove(kingdomId);
                 if (!Pending.TryGetValue(kingdomId,
                         out Kingdom kingdom) || kingdom?.data == null ||
                     kingdom.isRekt() || !LineageService.IsKingdomIntegrated(
                         kingdom))
                 {
-                    Pending.Remove(kingdomId);
-                    Candidates.Remove(kingdomId);
+                    RemovePending(kingdomId);
                     continue;
                 }
 
@@ -69,8 +87,7 @@ namespace AncientWarfare3.core.lineage
                         kingdomId);
                 if (state == null || state.Phase == "complete")
                 {
-                    Pending.Remove(kingdomId);
-                    Candidates.Remove(kingdomId);
+                    RemovePending(kingdomId);
                     continue;
                 }
 
@@ -83,39 +100,46 @@ namespace AncientWarfare3.core.lineage
                         Candidates[kingdomId] = actors;
                     }
 
-                    bool found = false;
+                    if (!CandidateCursors.TryGetValue(kingdomId,
+                            out int cursor))
+                        cursor = FindFirstActorAfter(actors,
+                            state.CursorActorId);
                     long latestCursor = state.CursorActorId;
-                    foreach (Actor actor in actors)
+                    int startCursor = cursor;
+                    while (cursor < actors.Count && remaining > 0)
                     {
-                        if (actor?.data == null || actor.data.id <=
-                            latestCursor) continue;
-                        found = true;
+                        Actor actor = actors[cursor++];
+                        if (actor?.data == null) continue;
                         if (actor.kingdom == kingdom && !actor.isRekt())
                             LineageService.ApplyNameIntegrationToActor(actor,
                                 kingdomIntegrated: true);
-                        NameIntegrationMaterializationStatePersistence
-                            .AdvanceCursor(db, kingdomId, actor.data.id,
-                                LineageService.CurTime());
                         latestCursor = actor.data.id;
                         remaining--;
-                        if (remaining <= 0) break;
                     }
+                    CandidateCursors[kingdomId] = cursor;
+                    if (cursor > startCursor && latestCursor >
+                            state.CursorActorId)
+                        NameIntegrationMaterializationStatePersistence
+                            .AdvanceCursor(db, kingdomId, latestCursor,
+                                LineageService.CurTime());
 
-                    if (!found || remaining > 0 &&
-                        !HasActorAfter(actors, latestCursor))
+                    if (cursor >= actors.Count)
                     {
                         NameIntegrationMaterializationStatePersistence
                             .MarkComplete(db, kingdomId,
                                 LineageService.CurTime());
-                        Pending.Remove(kingdomId);
-                        Candidates.Remove(kingdomId);
+                        RemovePending(kingdomId);
                     }
+                    else
+                        Enqueue(kingdomId);
                 }
                 catch (Exception error)
                 {
                     NameIntegrationMaterializationStatePersistence
                         .RecordFailure(db, kingdomId, error.Message,
                             LineageService.CurTime());
+                    CandidateCursors.Remove(kingdomId);
+                    Enqueue(kingdomId);
                 }
             }
         }
@@ -125,20 +149,58 @@ namespace AncientWarfare3.core.lineage
             if (_restored) return;
             var db = LineageArchiveManager.Instance?.OperatingDB;
             if (db == null || World.world?.kingdoms == null) return;
+            MapBox world = World.world;
             try
             {
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                    if (kingdom?.data != null &&
-                        LineageService.IsKingdomIntegrated(kingdom))
+                if (!ReferenceEquals(_restoreWorld, world) ||
+                    _restoreEnumerator == null)
+                {
+                    DisposeRestoreEnumerator();
+                    _restoreWorld = world;
+                    _restoreEnumerator = world.kingdoms.GetEnumerator();
+                }
+                int remaining = MaxRestoreKingdomsPerCycle;
+                while (remaining-- > 0)
+                {
+                    if (!_restoreEnumerator.MoveNext())
+                    {
+                        DisposeRestoreEnumerator();
+                        _restored = true;
+                        return;
+                    }
+                    Kingdom kingdom = _restoreEnumerator.Current as Kingdom;
+                    if (kingdom?.data == null ||
+                        !LineageService.IsKingdomIntegrated(kingdom))
+                        continue;
+                    NameIntegrationMaterializationState state =
+                        NameIntegrationMaterializationStatePersistence.Load(
+                            db, kingdom.id);
+                    if (state == null || state.Version !=
+                            NameIntegrationMaterializationStatePersistence.
+                                CurrentVersion)
+                    {
                         Request(kingdom);
-                _restored = true;
+                        continue;
+                    }
+                    if (state.Phase == "complete") continue;
+                    Pending[kingdom.id] = kingdom;
+                    Enqueue(kingdom.id);
+                }
             }
             catch (Exception error)
             {
+                DisposeRestoreEnumerator();
                 ModClass.LogWarning(
                     "Name integration migration restore failed: " +
                     error.Message);
             }
+        }
+
+        private static void DisposeRestoreEnumerator()
+        {
+            if (_restoreEnumerator is IDisposable disposable)
+                disposable.Dispose();
+            _restoreEnumerator = null;
         }
 
         private static List<Actor> BuildCandidates(Kingdom pKingdom)
@@ -151,13 +213,33 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
-        private static bool HasActorAfter(List<Actor> pActors,
+        private static int FindFirstActorAfter(List<Actor> pActors,
             long pCursor)
         {
-            foreach (Actor actor in pActors)
-                if (actor?.data != null && actor.data.id > pCursor)
-                    return true;
-            return false;
+            int low = 0;
+            int high = pActors?.Count ?? 0;
+            while (low < high)
+            {
+                int middle = low + (high - low) / 2;
+                long actorId = pActors[middle]?.data?.id ?? long.MinValue;
+                if (actorId <= pCursor) low = middle + 1;
+                else high = middle;
+            }
+            return low;
+        }
+
+        private static void Enqueue(long pKingdomId)
+        {
+            if (pKingdomId < 0L || !Enqueued.Add(pKingdomId)) return;
+            PendingOrder.Enqueue(pKingdomId);
+        }
+
+        private static void RemovePending(long pKingdomId)
+        {
+            Pending.Remove(pKingdomId);
+            Candidates.Remove(pKingdomId);
+            CandidateCursors.Remove(pKingdomId);
+            Enqueued.Remove(pKingdomId);
         }
     }
 }

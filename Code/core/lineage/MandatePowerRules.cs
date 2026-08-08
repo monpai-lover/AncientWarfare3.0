@@ -31,6 +31,42 @@ namespace AncientWarfare3.core.lineage
             return pOwnPower + pVassalPower * VassalPowerWeight;
         }
 
+        public static float[] AggregateCompetitionPowersByRoot(
+            float[] pRealmPowers, int[] pParentIndices)
+        {
+            if (pRealmPowers == null || pParentIndices == null ||
+                pRealmPowers.Length != pParentIndices.Length)
+                return System.Array.Empty<float>();
+
+            var result = new float[pRealmPowers.Length];
+            for (int index = 0; index < pRealmPowers.Length; index++)
+                result[index] = pRealmPowers[index] < 0f
+                    ? 0f
+                    : pRealmPowers[index];
+
+            for (int index = 0; index < pRealmPowers.Length; index++)
+            {
+                float realmPower = pRealmPowers[index] < 0f
+                    ? 0f
+                    : pRealmPowers[index];
+                if (realmPower <= 0f) continue;
+
+                int rootIndex = index;
+                int steps = 0;
+                while (pParentIndices[rootIndex] >= 0 &&
+                       pParentIndices[rootIndex] < pRealmPowers.Length &&
+                       steps++ < pRealmPowers.Length)
+                    rootIndex = pParentIndices[rootIndex];
+
+                // A malformed suzerain cycle has no independent root.
+                if (steps > pRealmPowers.Length || rootIndex == index)
+                    continue;
+                result[rootIndex] += realmPower * VassalPowerWeight;
+            }
+
+            return result;
+        }
+
         public static bool HasRequiredLeadForMandate(float pCandidatePower, float pStrongestOtherPower,
             float pWeakestOtherPower)
         {

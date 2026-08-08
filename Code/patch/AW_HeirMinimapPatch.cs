@@ -34,12 +34,26 @@ namespace AncientWarfare3.patch
 
             DrawnHeirActorIds.Clear();
             int createdThisFrame = 0;
-            foreach (Kingdom kingdom in World.world.kingdoms)
+            IReadOnlyList<long> candidateKingdomIds =
+                HeirMinimapMarkerIndex.GetCandidateKingdomIds();
+            for (int index = candidateKingdomIds.Count - 1; index >= 0;
+                 index--)
             {
                 if (createdThisFrame > 2) break;
-                if (kingdom == null || !kingdom.isCiv() || kingdom.isRekt() || !kingdom.hasCities()) continue;
+                Kingdom kingdom = World.world?.kingdoms?.get(
+                    candidateKingdomIds[index]);
+                if (kingdom == null || !kingdom.isCiv() || kingdom.isRekt() ||
+                    !kingdom.hasCities())
+                {
+                    HeirMinimapMarkerIndex.Remove(candidateKingdomIds[index]);
+                    continue;
+                }
                 Actor unit = HeirService.PeekStoredHeirForMinimap(kingdom);
-                if (unit == null) continue;
+                if (unit == null)
+                {
+                    HeirMinimapMarkerIndex.Remove(kingdom.id);
+                    continue;
+                }
                 bool visibleZone = unit.current_zone != null && unit.current_zone.visible;
                 if (!HeirMinimapVisualRules.ShouldDrawIcon(
                         markersEnabled,

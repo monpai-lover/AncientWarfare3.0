@@ -1,0 +1,34 @@
+using AncientWarfare3.core.performance;
+
+internal static class ActorScalePerformanceRulesTests
+{
+    public static void Run()
+    {
+        Equal(false, ActorScalePerformanceRules.ShouldUseWarOnlyExplanation(
+                liveActors: 84, kingdomCount: 24,
+                mapTileCount: 512 * 512, activeWars: 0),
+            "no-war large-map sample is still a valid actor-scale regression");
+        Equal(true, ActorScalePerformanceRules.ShouldPrepareEnemySearchOffThread(
+                activeActorStage: true, enemySearchJobPresent: true),
+            "enemy search must use the actor post pipeline");
+        Equal(false, ActorScalePerformanceRules.ShouldHoldGlobalEnemyCacheLock(
+                preparationWorkerCount: 8),
+            "worker enemy preparation cannot use a global cache lock");
+        Equal(false, ActorScalePerformanceRules.
+                ShouldParallelizePresentationCapture(
+                    actorCount: 84, workerCount: 16),
+            "small peaceful populations avoid synchronous thread-pool joins");
+        Equal(true, ActorScalePerformanceRules.
+                ShouldParallelizePresentationCapture(
+                    actorCount: 2048, workerCount: 16),
+            "large presentation batches can amortize parallel dispatch");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                pMessage + ": expected=" + pExpected +
+                " actual=" + pActual);
+    }
+}

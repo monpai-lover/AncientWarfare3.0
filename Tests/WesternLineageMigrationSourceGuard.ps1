@@ -9,6 +9,8 @@ if (-not (Test-Path -LiteralPath $servicePath)) {
 $service = Get-Content -LiteralPath $servicePath -Raw -Encoding UTF8
 foreach ($token in @(
     'ProcessAuthorityCycle'
+    'Request(Kingdom pKingdom)'
+    'PendingKingdomIds'
     'WesternLineageAdmissionService.TryEnsure'
     'AWCultureNamingTraditionService.ResolveForActorReadOnly'
     'NamingProfileId.Western'

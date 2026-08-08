@@ -1,13 +1,22 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class EmptyCityResettlementService
     {
-        private const int ScanBudgetPerCycle = 4;
-        private static IEnumerator _cities;
+        private const int WorkBudgetPerCycle = 4;
+        private static readonly Queue<long> PendingOrder = new Queue<long>();
+        private static readonly Dictionary<long, PendingCity> Pending =
+            new Dictionary<long, PendingCity>();
+        private static long _authorityCycle;
+
+        private sealed class PendingCity
+        {
+            internal int FailureCount;
+            internal long DueCycle;
+            internal bool Queued;
+        }
 
         private sealed class NeighbourCandidate
         {
@@ -16,47 +25,113 @@ namespace AncientWarfare3.core.lineage
             public int SharedBorders;
         }
 
+        private enum AttemptResult
+        {
+            Cancel,
+            Retry,
+            Success
+        }
+
         public static void Reset()
         {
-            DisposeEnumerator();
+            PendingOrder.Clear();
+            Pending.Clear();
+            _authorityCycle = 0L;
+        }
+
+        public static void ObserveLoadedCity(City pCity)
+        {
+            Enqueue(pCity, true);
+        }
+
+        public static void ObserveResidentRemoved(City pCity)
+        {
+            Enqueue(pCity, true);
+        }
+
+        public static void ObserveResidentAdded(City pCity)
+        {
+            if (pCity?.data == null) return;
+            Pending.Remove(pCity.id);
+        }
+
+        public static void ObserveOwnershipChanged(City pCity)
+        {
+            Enqueue(pCity, true);
         }
 
         public static void ProcessAuthorityCycle()
         {
-            if (World.world?.cities == null) return;
-            int remaining = ScanBudgetPerCycle;
-            while (remaining-- > 0)
+            _authorityCycle++;
+            int remaining = EmptyCityResettlementRules.ResolveScanCount(
+                PendingOrder.Count, WorkBudgetPerCycle);
+            while (remaining-- > 0 && PendingOrder.Count > 0)
             {
-                if (_cities == null)
-                    _cities = World.world.cities.GetEnumerator();
-                City city;
-                try
+                long cityId = PendingOrder.Dequeue();
+                if (!Pending.TryGetValue(cityId, out PendingCity pending))
+                    continue;
+                pending.Queued = false;
+                if (!EmptyCityResettlementRules.IsRetryDue(_authorityCycle,
+                        pending.DueCycle))
                 {
-                    if (!_cities.MoveNext())
-                    {
-                        DisposeEnumerator();
-                        return;
-                    }
-                    city = _cities.Current as City;
+                    Queue(cityId, pending);
+                    continue;
                 }
-                catch
+
+                City city = ResolveCity(cityId);
+                AttemptResult result = TryResettle(city);
+                if (result == AttemptResult.Retry)
                 {
-                    DisposeEnumerator();
-                    return;
+                    pending.FailureCount++;
+                    pending.DueCycle = _authorityCycle +
+                        EmptyCityResettlementRules.ResolveRetryDelayCycles(
+                            pending.FailureCount);
+                    Queue(cityId, pending);
+                    continue;
                 }
-                TryResettle(city);
+                Pending.Remove(cityId);
             }
         }
 
-        private static bool TryResettle(City pCity)
+        private static void Enqueue(City pCity, bool pImmediate)
         {
-            if (!CanResettle(pCity)) return false;
+            if (pCity?.data == null) return;
+            long cityId = pCity.id;
+            if (!Pending.TryGetValue(cityId, out PendingCity pending))
+            {
+                pending = new PendingCity();
+                Pending[cityId] = pending;
+            }
+            if (pImmediate)
+            {
+                pending.FailureCount = 0;
+                pending.DueCycle = _authorityCycle;
+            }
+            Queue(cityId, pending);
+        }
+
+        private static void Queue(long pCityId, PendingCity pPending)
+        {
+            if (pPending == null || pPending.Queued) return;
+            pPending.Queued = true;
+            PendingOrder.Enqueue(pCityId);
+        }
+
+        private static City ResolveCity(long pCityId)
+        {
+            try { return World.world?.cities?.get(pCityId); }
+            catch { return null; }
+        }
+
+        private static AttemptResult TryResettle(City pCity)
+        {
+            if (!CanResettle(pCity)) return AttemptResult.Cancel;
             NeighbourCandidate candidate = FindBestNeighbour(pCity);
             if (candidate?.Kingdom?.data == null ||
-                candidate.SourceCity?.data == null) return false;
+                candidate.SourceCity?.data == null) return AttemptResult.Retry;
             Actor settler = FindSettler(candidate.SourceCity,
                 candidate.Kingdom);
-            if (settler?.data == null) return false;
+            if (settler?.data == null) return AttemptResult.Retry;
 
             try
             {
@@ -67,9 +142,9 @@ namespace AncientWarfare3.core.lineage
                 pCity.setUnitMetas(settler);
                 candidate.Kingdom.setUnitMetas(settler);
                 settler.cancelAllBeh();
-                return true;
+                return AttemptResult.Success;
             }
-            catch { return false; }
+            catch { return AttemptResult.Retry; }
         }
 
         private static bool CanResettle(City pCity)
@@ -147,12 +222,6 @@ namespace AncientWarfare3.core.lineage
                 result = actor;
             }
             return livingResidents > 1 ? result : null;
-        }
-
-        private static void DisposeEnumerator()
-        {
-            if (_cities is IDisposable disposable) disposable.Dispose();
-            _cities = null;
         }
     }
 }

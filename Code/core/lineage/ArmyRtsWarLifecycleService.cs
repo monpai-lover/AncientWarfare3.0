@@ -22,6 +22,9 @@ namespace AncientWarfare3.core.lineage
             ArmyRtsWarLifecycleRecord> _records =
                 new Dictionary<(long WarId, long ArmyId),
                     ArmyRtsWarLifecycleRecord>();
+        private IReadOnlyList<ArmyRtsWarLifecycleRecord> _snapshot =
+            Array.Empty<ArmyRtsWarLifecycleRecord>();
+        private bool _snapshotDirty;
 
         public int Count => _records.Count;
 
@@ -41,6 +44,7 @@ namespace AncientWarfare3.core.lineage
                 Phase = phase
             };
             _records[key] = created;
+            _snapshotDirty = true;
             return created;
         }
 
@@ -61,16 +65,19 @@ namespace AncientWarfare3.core.lineage
 
         public IReadOnlyList<ArmyRtsWarLifecycleRecord> Snapshot()
         {
-            var snapshot = new List<ArmyRtsWarLifecycleRecord>(
-                _records.Values);
-            snapshot.Sort((left, right) =>
+            if (!_snapshotDirty) return _snapshot;
+            var snapshot = new ArmyRtsWarLifecycleRecord[_records.Count];
+            _records.Values.CopyTo(snapshot, 0);
+            Array.Sort(snapshot, (left, right) =>
             {
                 int war = left.WarId.CompareTo(right.WarId);
                 return war != 0
                     ? war
                     : left.ArmyId.CompareTo(right.ArmyId);
             });
-            return snapshot;
+            _snapshot = snapshot;
+            _snapshotDirty = false;
+            return _snapshot;
         }
 
         public int RemoveArmy(long armyId)
@@ -81,6 +88,7 @@ namespace AncientWarfare3.core.lineage
                 if (pair.Key.ArmyId == armyId) remove.Add(pair.Key);
             for (int i = 0; i < remove.Count; i++)
                 _records.Remove(remove[i]);
+            if (remove.Count > 0) _snapshotDirty = true;
             return remove.Count;
         }
 
@@ -92,12 +100,15 @@ namespace AncientWarfare3.core.lineage
                 if (pair.Key.WarId == warId) remove.Add(pair.Key);
             for (int i = 0; i < remove.Count; i++)
                 _records.Remove(remove[i]);
+            if (remove.Count > 0) _snapshotDirty = true;
             return remove.Count;
         }
 
         public void Clear()
         {
             _records.Clear();
+            _snapshot = Array.Empty<ArmyRtsWarLifecycleRecord>();
+            _snapshotDirty = false;
         }
     }
 

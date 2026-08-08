@@ -47,6 +47,8 @@
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
+    <Compile Include="ActorScalePerformanceRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\performance\ActorScalePerformanceRules.cs" Link="Production\ActorScalePerformanceRules.cs" />
     <Compile Include="PathMovementExecutorRulesTests.cs.txt" />
     <Compile Include="RuntimePerformanceBudgetRulesTests.cs.txt" />
     <Compile Include="MonthlyAuthorityWorkQueueTests.cs.txt" />
@@ -234,6 +236,7 @@
     <Compile Include="HistoryLocalizationRulesTests.cs.txt" />
     <Compile Include="ConsistencyRegressionRulesTests.cs.txt" />
     <Compile Include="MandateSuccessionRegressionRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandatePowerRules.cs" Link="Production\MandatePowerRules.cs" />
     <Compile Include="Regression20260721Tests.cs.txt" />
     <Compile Include="ArmyMapInformationRulesTests.cs.txt" />
     <Compile Include="RoyalGuardCaptainHandoffRulesTests.cs.txt" />
@@ -373,6 +376,7 @@
     <Compile Include="..\..\Code\core\lineage\WarGoalSettlementRules.cs" Link="Production\WarGoalSettlementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarParticipantCityBaselineRules.cs" Link="Production\WarParticipantCityBaselineRules.cs" />
     <Compile Include="..\..\Code\core\lineage\EmptyCityResettlementRules.cs" Link="Production\EmptyCityResettlementRules.cs" />
+    <Compile Include="EmptyCityResettlementRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\WarParticipantMobilizationBaselineRules.cs" Link="Production\WarParticipantMobilizationBaselineRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarScoreRules.cs" Link="Production\WarScoreRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarExhaustionSettlementRules.cs" Link="Production\WarExhaustionSettlementRules.cs" />
@@ -629,6 +633,7 @@
     <Compile Include="..\..\Code\core\pathfinding\AWDockTransportRules.cs" Link="Production\AWDockTransportRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathLifecycleRules.cs" Link="Production\AWPathLifecycleRules.cs" />
     <Compile Include="..\..\Code\core\performance\RuntimePerformanceBudgetRules.cs" Link="Production\RuntimePerformanceBudgetRules.cs" />
+    <Compile Include="..\..\Code\core\performance\AWEnemySearchBackoffRules.cs" Link="Production\AWEnemySearchBackoffRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWIdleBehaviourThrottleRules.cs" Link="Production\AWIdleBehaviourThrottleRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWIdleBehaviourThrottleGate.cs" Link="Production\AWIdleBehaviourThrottleGate.cs" />
     <Compile Include="..\..\Code\core\performance\MonthlyAuthorityWorkQueue.cs" Link="Production\MonthlyAuthorityWorkQueue.cs" />

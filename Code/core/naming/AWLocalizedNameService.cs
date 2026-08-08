@@ -302,7 +302,7 @@ namespace AncientWarfare3.core.naming
 
         internal static string CurrentLanguage()
         {
-            return LocalizedTextManager.instance?.language ?? string.Empty;
+            return LocalizedTextManager.current_language?.id ?? string.Empty;
         }
 
         internal static void ClearRuntime()

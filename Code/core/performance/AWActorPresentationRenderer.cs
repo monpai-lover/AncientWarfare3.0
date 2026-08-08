@@ -670,7 +670,7 @@ internal static class AWActorPresentationRenderer
             manager.visible_units.array[visibleCount++] = actor;
             if (sample.HasFlag(AWActorPresentationFlags.Alive))
             {
-                AddLegacyAliveLists(manager, actor);
+                AddLegacyAliveLists(manager, actor, in sample);
             }
 
         }
@@ -680,9 +680,28 @@ internal static class AWActorPresentationRenderer
         return missingActorCount;
     }
 
-    private static void AddLegacyAliveLists(ActorManager manager, Actor actor)
+    private static void AddLegacyAliveLists(ActorManager manager, Actor actor,
+        in AWActorPresentationSample sample)
     {
         manager.visible_units_alive.array[manager.visible_units_alive.count++] = actor;
+        if (sample.HasFlag(AWActorPresentationFlags.HasAvatar))
+            manager.visible_units_avatars.array[
+                manager.visible_units_avatars.count++] = actor;
+        if (sample.StatusCount > 0)
+            manager.visible_units_with_status.array[
+                manager.visible_units_with_status.count++] = actor;
+        if (sample.HasFlag(AWActorPresentationFlags.Favorite))
+            manager.visible_units_with_favorite.array[
+                manager.visible_units_with_favorite.count++] = actor;
+        if (sample.HasFlag(AWActorPresentationFlags.ArmyCaptain))
+            manager.visible_units_with_banner.array[
+                manager.visible_units_with_banner.count++] = actor;
+        if (sample.HasFlag(AWActorPresentationFlags.JustAte))
+            manager.visible_units_just_ate.array[
+                manager.visible_units_just_ate.count++] = actor;
+        if (sample.HasFlag(AWActorPresentationFlags.Socializing))
+            manager.visible_units_socialize.array[
+                manager.visible_units_socialize.count++] = actor;
     }
 
     private static void FillRenderData(

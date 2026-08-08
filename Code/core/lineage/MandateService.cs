@@ -1827,20 +1827,44 @@ namespace AncientWarfare3.core.lineage
 
             if (World.world?.kingdoms == null) return -1L;
             MandateReport last = ReadReport();
-            var ids = new List<long>();
-            var powers = new List<float>();
-            var eligible = new List<bool>();
-
+            var kingdoms = new List<Kingdom>();
+            var kingdomIndexes = new Dictionary<long, int>();
             foreach (Kingdom kingdom in World.world.kingdoms)
             {
-                ids.Add(kingdom?.id ?? -1L);
-                bool canCompete = IsAutoMandateCandidateBaseEligible(kingdom, last);
-                eligible.Add(canCompete);
-                powers.Add(canCompete ? CalculateMandateCompetitionPower(kingdom) : 0f);
+                int index = kingdoms.Count;
+                kingdoms.Add(kingdom);
+                if (kingdom?.data != null)
+                    kingdomIndexes[kingdom.id] = index;
             }
 
-            int winner = MandatePowerRules.SelectWinningCandidateIndex(powers.ToArray(), eligible.ToArray());
-            if (winner >= 0 && winner < ids.Count)
+            var ids = new long[kingdoms.Count];
+            var realmPowers = new float[kingdoms.Count];
+            var parentIndexes = new int[kingdoms.Count];
+            var eligible = new bool[kingdoms.Count];
+            for (int index = 0; index < kingdoms.Count; index++)
+            {
+                Kingdom kingdom = kingdoms[index];
+                ids[index] = kingdom?.id ?? -1L;
+                parentIndexes[index] = -1;
+                if (kingdom?.data == null || kingdom.isRekt() ||
+                    !kingdom.isCiv()) continue;
+
+                realmPowers[index] = CalculateMandateRealmPower(kingdom);
+                long suzerainId = VassalService.GetSuzerainId(kingdom);
+                if (suzerainId >= 0L &&
+                    kingdomIndexes.TryGetValue(suzerainId,
+                        out int parentIndex))
+                    parentIndexes[index] = parentIndex;
+                eligible[index] = IsAutoMandateCandidateBaseEligible(
+                    kingdom, last);
+            }
+
+            float[] powers = MandatePowerRules.
+                AggregateCompetitionPowersByRoot(realmPowers,
+                    parentIndexes);
+            int winner = MandatePowerRules.SelectWinningCandidateIndex(
+                powers, eligible);
+            if (winner >= 0 && winner < ids.Length)
                 _autoCandidateKingdomId = ids[winner];
             return _autoCandidateKingdomId;
         }

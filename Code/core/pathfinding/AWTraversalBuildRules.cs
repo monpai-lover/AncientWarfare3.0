@@ -113,12 +113,29 @@ namespace AncientWarfare3.core.pathfinding
 
     internal static class AWTraversalBuildRules
     {
+        internal static bool ShouldRebuildWaterConnectivity(
+            int baseGenerationId, bool topologyDirty)
+        {
+            return baseGenerationId <= 0 || topologyDirty;
+        }
+
+        internal static bool ShouldReuseRegionTopology(
+            int baseGenerationId, bool topologyDirty)
+        {
+            return baseGenerationId > 0 && !topologyDirty;
+        }
+
         internal static bool ShouldScheduleInitialAsync(
             bool asyncTraversalEnabled, bool buildScheduled,
             bool tileCaptureComplete, int pendingDirtyChunkCount)
         {
+            // The initial snapshot is a baseline. Live terrain changes are
+            // captured into the dirty queue and published as an overlay
+            // after the baseline; they must not prevent the first worker
+            // build from ever being scheduled.
+            _ = pendingDirtyChunkCount;
             return asyncTraversalEnabled && !buildScheduled &&
-                   tileCaptureComplete && pendingDirtyChunkCount <= 0;
+                   tileCaptureComplete;
         }
 
         internal static bool ShouldPublishInitialSynchronously(
@@ -141,8 +158,15 @@ namespace AncientWarfare3.core.pathfinding
                     capture.SourceRevision > pInput.SourceRevision) continue;
                 chunks[capture.ChunkId] = capture.Tiles;
             }
-            chunks = AWOceanConnectivityRules.Apply(pInput.Width,
-                pInput.Height, pInput.ChunkSize, chunks);
+            // Cultiway updates dirty tile storage in place. Rebuilding water
+            // connectivity for every terrain/fire delta turns one local edit
+            // into a full-map BFS and allocates every tile again. Keep the
+            // baseline pass for world initialization; topology changes are
+            // explicitly handled by the caller and may opt back in.
+            if (ShouldRebuildWaterConnectivity(pInput.BaseGenerationId,
+                    pInput.RebuildWaterConnectivity))
+                chunks = AWOceanConnectivityRules.Apply(pInput.Width,
+                    pInput.Height, pInput.ChunkSize, chunks);
             return new AWTraversalBuildResult(pInput.WorldGeneration,
                 pInput.BaseGenerationId, pInput.SourceRevision,
                 pInput.Width, pInput.Height, pInput.ChunkSize, chunks);

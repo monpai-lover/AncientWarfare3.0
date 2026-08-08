@@ -25,7 +25,8 @@ namespace AncientWarfare3.core.pathfinding
             int baseGenerationId, long sourceRevision, int width,
             int height, int chunkSize,
             AWTileTraversalSnapshot[][] baseChunks,
-            AWTraversalChunkCapture[] captures)
+            AWTraversalChunkCapture[] captures,
+            bool rebuildWaterConnectivity = false)
         {
             WorldGeneration = worldGeneration;
             BaseGenerationId = baseGenerationId;
@@ -39,6 +40,7 @@ namespace AncientWarfare3.core.pathfinding
             Captures = captures == null
                 ? Array.Empty<AWTraversalChunkCapture>()
                 : (AWTraversalChunkCapture[])captures.Clone();
+            RebuildWaterConnectivity = rebuildWaterConnectivity;
         }
 
         public long WorldGeneration { get; }
@@ -49,6 +51,7 @@ namespace AncientWarfare3.core.pathfinding
         public int ChunkSize { get; }
         public AWTileTraversalSnapshot[][] BaseChunks { get; }
         public AWTraversalChunkCapture[] Captures { get; }
+        public bool RebuildWaterConnectivity { get; }
     }
 
     internal sealed class AWTraversalBuildResult

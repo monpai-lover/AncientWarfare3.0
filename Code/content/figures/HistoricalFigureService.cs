@@ -534,7 +534,7 @@ namespace AncientWarfare3.content.figures
                     ProjectStateName(pDef.DynastyName, pDef.KingdomName);
                 string localizedStateName = AncientWarfare3.ui.AW_L10n.Text(
                     pDef.DynastyLocaleKey, canonicalStateName);
-                string language = LocalizedTextManager.instance?.language ??
+                string language = LocalizedTextManager.current_language?.id ??
                                   string.Empty;
                 string localizedDynasty = HistoricalFigureSpawnRules.
                     ProjectLocalizedStateName(canonicalStateName,

@@ -74,10 +74,13 @@ namespace AncientWarfare3.core.policy
             if (!IsValid(kingdom))
             {
                 Pending.Remove(pKingdomId);
+                FlushBenchmarkIfIdle();
                 return;
             }
 
-            long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            long annualDiagnostic = RuntimePerformanceDiagnostic.
+                BeginContinuousScope();
+            long sampledDiagnostic = RuntimePerformanceDiagnostic.BeginScope();
             try
             {
                 RunStage(kingdom, pending.ActiveYear, pending.Stage);
@@ -85,10 +88,9 @@ namespace AncientWarfare3.core.policy
             finally
             {
                 RuntimePerformanceDiagnostic.EndAnnualStage(
-                    StageDetailId(pending.Stage), diagnostic);
+                    StageDetailId(pending.Stage), annualDiagnostic);
                 RuntimePerformanceDiagnostic.EndDetail(
-                    StageDetailId(pending.Stage), diagnostic);
-                UpdateAgeBenchmark.Flush();
+                    StageDetailId(pending.Stage), sampledDiagnostic);
             }
 
             pending.Stage = KingdomAnnualWorkRules.NextStage(pending.Stage);
@@ -107,6 +109,12 @@ namespace AncientWarfare3.core.policy
                 return;
             }
             Pending.Remove(pKingdomId);
+            FlushBenchmarkIfIdle();
+        }
+
+        private static void FlushBenchmarkIfIdle()
+        {
+            if (Pending.Count == 0) UpdateAgeBenchmark.Flush();
         }
 
         private static void RunStage(Kingdom pKingdom, int pYear,

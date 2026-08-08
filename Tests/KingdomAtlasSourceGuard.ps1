@@ -16,13 +16,22 @@ foreach ($file in $files) {
   if ($file -like '*AW_ChroniclePatch.cs') { continue }
 }
 $history = Get-Content -Raw (Join-Path $root 'Code\core\atlas\KingdomAtlasHistoryService.cs')
-foreach ($needle in @('KingdomAtlasZoneArchiveService.Read',
-        'ReplayCityOwnersAt', 'TryReadZoneArchive', 'city_found',
+foreach ($needle in @('ReplayCityOwnersAt', 'city_found',
         'city_transfer', 'ReadCityTerritorialRows',
         'ReadKingdomTerritorialRows', 'MatchCityTransferRows',
         'consumedKingdomEventIds')) {
   if (-not $history.Contains($needle)) {
     throw "Historical atlas reconstruction is missing: $needle"
+  }
+}
+$forbiddenHistoryPaths = @(
+  'KingdomAtlasZoneArchiveService',
+  'TryReadZoneArchive',
+  'KingdomAtlasZoneSnapshot'
+)
+foreach ($needle in $forbiddenHistoryPaths) {
+  if ($history.Contains($needle)) {
+    throw "Historical atlas reconstruction still reads runtime tile geometry: $needle"
   }
 }
 foreach ($pattern in @(
@@ -36,10 +45,6 @@ foreach ($pattern in @(
 }
 if (-not $history.Contains('BuildKingdomSnapshots(row, relationSnapshot)')) {
   throw 'Kingdom atlas kingdom snapshots must use only the node relation snapshot.'
-}
-$archive = Get-Content -Raw (Join-Path $root 'Code\core\atlas\KingdomAtlasZoneArchiveService.cs')
-if ($archive -notmatch 'catch\s*\(Exception') {
-  throw 'Kingdom atlas zone archive reads must tolerate legacy saves without the archive table.'
 }
 $liveTerrain = Get-Content -Raw (Join-Path $root 'Code\core\atlas\KingdomAtlasLiveTerrainService.cs')
 if (-not $liveTerrain.Contains('ProjectHistoricalOwners')) {
@@ -119,14 +124,35 @@ if (-not $artifact.Contains('TryLoadCachedPng')) {
   throw 'Atlas artifact writer does not expose the generated PNG cache to preview.'
 }
 $chroniclePatch = Get-Content -Raw (Join-Path $root 'Code\patch\AW_ChroniclePatch.cs')
-if ($chroniclePatch -notmatch 'DestroyCity_Prefix') {
-  throw 'Kingdom atlas must capture city geometry before destruction.'
+if ($chroniclePatch -match 'DestroyCity_Prefix') {
+  throw 'City destruction must not scan or persist atlas geometry at runtime.'
 }
 if ($chroniclePatch -notmatch 'CityAddZone_Postfix') {
-  throw 'Kingdom atlas must capture geometry after city zones are added.'
+  throw 'City zone additions must still invalidate the live map geometry.'
 }
-if ($chroniclePatch -notmatch 'CaptureCityGeometry\(') {
-  throw 'Chronicle patch must call the atlas geometry archive hook.'
+$cityAddZoneMatch = [regex]::Match(
+  $chroniclePatch,
+  '(?s)CityAddZone_Postfix\s*\([^)]*\)\s*\{(?<body>.*?)\n\s*\}')
+if (-not $cityAddZoneMatch.Success) {
+  throw 'CityAddZone_Postfix body could not be inspected.'
+}
+$cityAddZoneBody = $cityAddZoneMatch.Groups['body'].Value
+if ($cityAddZoneBody.Contains('CaptureCityGeometry') -or
+    $cityAddZoneBody.Contains('CaptureCityEvent')) {
+  throw 'City.addZone must not synchronously archive full atlas geometry.'
+}
+if (-not $cityAddZoneBody.Contains('MarkCityGeometryDirty') -and
+    -not $cityAddZoneBody.Contains('MarkCityZoneGeometryDirty')) {
+  throw 'City.addZone must keep the live map geometry invalidation.'
+}
+$chronicleEvents = Get-Content -Raw (Join-Path $root `
+  'Code\core\lineage\ChronicleEvents.cs')
+if ($chronicleEvents.Contains('KingdomAtlasZoneArchiveService')) {
+  throw 'City chronicle events must record ownership only, not tile geometry.'
+}
+$savePatch = Get-Content -Raw (Join-Path $root 'Code\patch\AW_SavePatch.cs')
+if ($savePatch.Contains('KingdomAtlasZoneArchiveService')) {
+  throw 'Save preparation must not flush an atlas-specific tile archive.'
 }
 $window = Get-Content -Raw (Join-Path $root 'Code\ui\windows\KingdomAtlasWindow.cs')
 if ($window -notmatch 'StartCoroutine\(' -or

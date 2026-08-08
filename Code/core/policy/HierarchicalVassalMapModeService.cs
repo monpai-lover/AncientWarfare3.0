@@ -910,6 +910,15 @@ namespace AncientWarfare3.core.policy
             HierarchicalVassalMapModeLabelLayer.MarkCityGeometryDirty(pCity);
         }
 
+        internal static void MarkCityZoneGeometryDirty(City pCity, TileZone pZone)
+        {
+            if (pCity?.data == null || pZone == null || pZone.id < 0) return;
+            _nativeDrawCacheValid = false;
+            InvalidateZoneMeta(pZone);
+            HierarchicalVassalMapModeLabelLayer.MarkCityZoneGeometryDirty(
+                pCity, pZone);
+        }
+
         internal static void RemoveCity(City pCity)
         {
             if (pCity == null) return;
@@ -1033,6 +1042,13 @@ namespace AncientWarfare3.core.policy
                     NativeLandTileCache.Remove(zone.id);
                 }
             }
+        }
+
+        private static void InvalidateZoneMeta(TileZone pZone)
+        {
+            if (pZone == null || pZone.id < 0) return;
+            NativeDrawMetaCache.Remove(pZone.id);
+            NativeLandTileCache.Remove(pZone.id);
         }
 
         internal static bool IsVisibleLand(WorldTile pTile)

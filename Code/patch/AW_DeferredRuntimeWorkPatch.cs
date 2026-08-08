@@ -55,7 +55,6 @@ namespace AncientWarfare3.patch
             AWLocalizedNameRefreshService.Clear();
             ArmyCaptainDisposalScope.ClearRuntime();
             ArmyMembershipReconciliationService.ClearRuntime();
-            AWEnemyPresenceCache.Clear();
             ArmyRetreatService.ClearRuntime();
             ArmyRtsControllerService.ClearRuntime();
             ArmyStallWatchdogService.ClearRuntime();

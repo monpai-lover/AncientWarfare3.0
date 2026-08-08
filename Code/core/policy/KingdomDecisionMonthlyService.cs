@@ -21,7 +21,8 @@ namespace AncientWarfare3.core.policy
             if (World.world?.kingdoms == null) return;
             int monthKey = KingdomDecisionMonthlyRules.ToMonthKey(
                 Date.getCurrentYear(), Date.getCurrentMonth());
-            MonthlyWork.ScheduleMonth(monthKey, World.world.kingdoms);
+            MonthlyWork.ScheduleMonth(monthKey,
+                MonthlyKingdomSnapshotService.Get(monthKey));
             MonthlyWork.Drain(KingdomsPerAuthorityCycle,
                 (queuedMonthKey, kingdom) =>
                 {

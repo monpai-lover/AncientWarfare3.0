@@ -284,11 +284,11 @@ if ($promotionPatch -notmatch
     throw 'Western setKing admission must include generated/load-style kings.'
 }
 if ($promotionPatch -notmatch
-        '(?s)SetKing_Postfix.*?WesternLineageMigrationService\.Request') {
+        '(?s)SetKing_Postfix.*?WesternLineageMigrationService\.Request\(__instance\)') {
     throw 'Every actual accession must queue a stable-state western lineage reconciliation.'
 }
 if ($chroniclePatch -notmatch
-        '(?s)MakeNewCivKingdom_Postfix.*?WesternLineageMigrationService\.Request') {
+        '(?s)MakeNewCivKingdom_Postfix.*?WesternLineageMigrationService\.Request\(__result\)') {
     throw 'Each newly founded civilization kingdom must refresh western lineage migration.'
 }
 if ($familyTreeWindow -notmatch

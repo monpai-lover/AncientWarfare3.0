@@ -31,9 +31,15 @@ internal static class ArmyRtsWarLifecycleStateTests
                snapshot[0].ArmyId == 7 && snapshot[1].WarId == 11 &&
                snapshot[1].ArmyId == 8 && snapshot[2].WarId == 12,
             "reconciliation receives a stable war and army ordered snapshot");
+        Assert(ReferenceEquals(snapshot, unordered.Snapshot()),
+            "unchanged lifecycle state reuses the ordered reconciliation snapshot");
         unordered.RemoveArmy(7);
         Assert(snapshot.Count == 3,
             "a reconciliation snapshot is isolated from later store changes");
+        var refreshedSnapshot = unordered.Snapshot();
+        Assert(!ReferenceEquals(snapshot, refreshedSnapshot) &&
+               refreshedSnapshot.Count == 2,
+            "structural lifecycle changes invalidate the cached snapshot");
 
         Assert(store.Ensure(11, 103, 0,
                    ArmyRtsWarPhase.StrategicMovement) == null,

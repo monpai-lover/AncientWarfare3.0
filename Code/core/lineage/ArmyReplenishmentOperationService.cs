@@ -181,6 +181,7 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
+            if (ActiveArmyIds.Count == 0) return;
             IReadOnlyList<long> batch = TakeActiveBatch(
                 ArmyReplenishmentOperationRules.MaximumOperationsPerCycle);
             double now = CurrentWorldTime();

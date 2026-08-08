@@ -6,11 +6,25 @@ internal static class MonthlyAuthorityWorkQueueTests
     public static void Run()
     {
         SchedulesEachMonthOnceAndDrainsInFifoOrder();
+        ExposesScheduleGateBeforeBuildingMonthlySnapshot();
         ResetScheduleGateAllowsExplicitSameMonthReschedule();
         CatchesUpSkippedMonthsInOrder();
+        CatchUpUsesOneBatchPerMonth();
         ClearDropsPendingWorkAndResetsTheMonthGate();
         FailedItemDoesNotDropLaterPendingWork();
         ExposesDedicatedMonthlyBenchmarkIds();
+    }
+
+    private static void ExposesScheduleGateBeforeBuildingMonthlySnapshot()
+    {
+        var queue = new MonthlyAuthorityWorkQueue<int>();
+        True(queue.ShouldScheduleMonth(1201),
+            "an unseen month is eligible before callers build a snapshot");
+        queue.ScheduleMonth(1201, new[] { 1 });
+        Equal(false, queue.ShouldScheduleMonth(1201),
+            "the current month is rejected without enumerating source data");
+        True(queue.ShouldScheduleMonth(1202),
+            "a later month remains eligible");
     }
 
     private static void SchedulesEachMonthOnceAndDrainsInFifoOrder()
@@ -77,6 +91,23 @@ internal static class MonthlyAuthorityWorkQueueTests
         Equal("2001:1,2002:2,2003:2,2004:2",
             string.Join(",", processed),
             "crossed months are replayed in chronological FIFO order");
+    }
+
+    private static void CatchUpUsesOneBatchPerMonth()
+    {
+        var queue = new MonthlyAuthorityWorkQueue<int>();
+        queue.ScheduleMonth(3001, new[] { 1, 2, 3 });
+        queue.ScheduleMonth(3004, new[] { 4, 5 });
+
+        Equal(4, queue.PendingBatchCount,
+            "catch-up retains one cursor batch per month");
+        Equal(9, queue.PendingCount,
+            "batch storage preserves the exact pending item count");
+        queue.Drain(4, (month, value) => { });
+        Equal(3, queue.PendingBatchCount,
+            "draining removes completed month batches");
+        Equal(5, queue.PendingCount,
+            "batch cursors decrement pending work without item objects");
     }
 
     private static void FailedItemDoesNotDropLaterPendingWork()

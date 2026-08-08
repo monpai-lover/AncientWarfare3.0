@@ -19,7 +19,7 @@ internal static class ActorRacePerformanceRulesTests
 
     public static void Run()
     {
-        Equal(15, ActorDeathPerformanceRules.StageCount,
+        Equal(18, ActorDeathPerformanceRules.StageCount,
             "death diagnostics retain one fixed allocation-free stage table");
         Equal("lineage_archive",
             ActorDeathPerformanceRules.Id(
@@ -29,6 +29,18 @@ internal static class ActorRacePerformanceRulesTests
             ActorDeathPerformanceRules.Id(
                 ActorDeathPerformanceStage.SchoolDeath),
             "school death persistence has a stable diagnostic id");
+        Equal("king_heir_prepare",
+            ActorDeathPerformanceRules.Id(
+                ActorDeathPerformanceStage.KingHeirPreparation),
+            "king heir preparation has an independent diagnostic id");
+        Equal("king_chronicle",
+            ActorDeathPerformanceRules.Id(
+                ActorDeathPerformanceStage.KingChronicle),
+            "king chronicle work has an independent diagnostic id");
+        Equal("king_civil_service",
+            ActorDeathPerformanceRules.Id(
+                ActorDeathPerformanceStage.KingCivilService),
+            "king civil-service reshuffle has an independent diagnostic id");
         Equal("unknown",
             ActorDeathPerformanceRules.Id(
                 (ActorDeathPerformanceStage)ActorDeathPerformanceRules.StageCount),

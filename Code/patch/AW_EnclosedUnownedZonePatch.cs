@@ -6,12 +6,21 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_EnclosedUnownedZonePatch
     {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TileZone), "setCity")]
+        private static void SetCity_Prefix(TileZone __instance,
+            out City __state)
+        {
+            __state = __instance?.city;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TileZone), "setCity")]
-        private static void SetCity_Postfix(TileZone __instance)
+        private static void SetCity_Postfix(TileZone __instance, City pCity,
+            City __state)
         {
             EnclosedUnownedZoneRepairService.
-                ObserveOwnershipChange(__instance);
+                ObserveOwnershipChange(__instance, __state, pCity);
         }
 
         [HarmonyPostfix]
@@ -33,7 +42,7 @@ namespace AncientWarfare3.patch
         private static void OnWorldLoaded()
         {
             MapBox.on_world_loaded -= OnWorldLoaded;
-            EnclosedUnownedZoneRepairService.RepairWorldImmediately();
+            EnclosedUnownedZoneRepairService.BeginInitialSweep();
         }
     }
 }

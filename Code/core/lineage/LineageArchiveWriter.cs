@@ -27,11 +27,26 @@ namespace AncientWarfare3.core.lineage
 
         public static bool QueueDeath(Actor pActor, bool pTraceOnly)
         {
-            return Upsert(pActor, pAlive: false, pTraceOnly,
-                pForceSynchronous: false,
-                pAllowSynchronousFallback: false,
-                pFinalizeProjection: true,
-                pIdentityOnlyProjection: false);
+            if (LineageArchiveManager.Instance.OperatingDB == null ||
+                !LineageArchiveManager.Instance.InitializeSuccessful ||
+                pActor?.data == null) return false;
+            bool traceableSpecies = LineageService.IsHuman(pActor) ||
+                                    LineageService
+                                        .IsNativeXiaCultureActor(pActor);
+            if (!LineageService.UsesAwLineageSystem(pActor) &&
+                !LineageService.HasOriginalClan(pActor) &&
+                (!pTraceOnly || !traceableSpecies)) return false;
+
+            ActorArchivePendingStore.TryRead(pActor.data.id,
+                out ActorArchiveTableItem previous);
+            ActorArchiveTableItem snapshot = CaptureRelationshipSnapshot(
+                pActor, pAlive: false, previous);
+            if (snapshot == null) return false;
+            FamilyTreeProjectionChange projectionChange = previous == null
+                ? FamilyTreeProjectionChange.LifeStatus
+                : ResolveProjectionChange(previous, snapshot);
+            return ActorDeathArchiveService.EnqueueLineage(snapshot,
+                projectionChange, pFinalizeProjection: true);
         }
 
         private static bool Upsert(Actor pActor, bool pAlive,

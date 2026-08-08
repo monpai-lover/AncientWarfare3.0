@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using AncientWarfare3.core.court;
 
@@ -49,7 +50,27 @@ public static class CivilServiceExamRulesTests
         GovernorRotationIsAllOrNothing();
         GovernorRotationRuntimeScopeIsNestedAndExceptionSafe();
         CrossLayerPromotionReleasesThePriorCityLeader();
+        RuntimeSchedulingAvoidsIdleDatabasePollAndWorldRescan();
         CivilServiceForeignResidentSqlTests.Run();
+    }
+
+    private static void RuntimeSchedulingAvoidsIdleDatabasePollAndWorldRescan()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string examService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "court", "CivilServiceExamService.cs"));
+        string transitionService = File.ReadAllText(Path.Combine(root,
+            "Code", "core", "court",
+            "CivilServiceLegacyTransitionService.cs"));
+
+        True(examService.Contains("_dueSessionRecoveryPending") &&
+               examService.Contains("if (!_dueSessionRecoveryPending) return null;") &&
+               examService.Contains("_dueSessionRecoveryPending = false;"),
+            "an empty in-memory exam schedule performs at most one persistence recovery lookup");
+        True(transitionService.Contains("_backfillKingdomIds") &&
+               transitionService.Contains("_backfillCursor") &&
+               transitionService.Contains("InitializeBackfill"),
+            "legacy civil-service migration advances through a cached kingdom snapshot");
     }
 
     private static void ExamModeAndCadenceAreStable()

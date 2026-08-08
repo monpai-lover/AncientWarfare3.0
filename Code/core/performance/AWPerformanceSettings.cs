@@ -20,6 +20,8 @@ namespace AncientWarfare3.core.performance
         public static float TargetRenderFps { get; private set; } = 60f;
         public static float MaxSimulationMillisecondsPerFrame { get; private set; } = 8f;
         public static bool EnablePresentationSmoothing { get; private set; } = true;
+        internal static bool EnableActorOverlaySnapshots => false;
+        internal static bool EnableWorldObjectPresentationSnapshots => false;
         public static bool EnableSchedulerDiagnostics { get; private set; }
         public static bool EnablePerformanceDiagnostics { get; private set; }
         public static bool EnableAsyncDatabaseWrites { get; private set; }

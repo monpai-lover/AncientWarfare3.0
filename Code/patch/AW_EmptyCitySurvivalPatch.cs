@@ -45,12 +45,29 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(CityManager), nameof(CityManager.loadObject))]
+        private static void CityLoad_Postfix(City __result)
+        {
+            EmptyCityResettlementService.ObserveLoadedCity(__result);
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(City), nameof(City.eventUnitAdded))]
         private static void EventUnitAdded_Postfix(City __instance,
             Actor pActor, bool __runOriginal)
         {
             if (!__runOriginal) return;
             EmptyCitySurvivalService.ClearRazeIntentForResident(__instance, pActor);
+            EmptyCityResettlementService.ObserveResidentAdded(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), nameof(City.eventUnitRemoved))]
+        private static void EventUnitRemoved_Postfix(City __instance,
+            bool __runOriginal)
+        {
+            if (!__runOriginal) return;
+            EmptyCityResettlementService.ObserveResidentRemoved(__instance);
         }
 
         [HarmonyPrefix]
@@ -69,6 +86,7 @@ namespace AncientWarfare3.patch
             if (!__runOriginal) return;
             EmptyCitySurvivalService.ClearRazeIntentForTakeover(
                 __instance, __state, pFromLoad);
+            EmptyCityResettlementService.ObserveOwnershipChanged(__instance);
         }
 
         [HarmonyPrefix]
@@ -76,6 +94,16 @@ namespace AncientWarfare3.patch
         private static bool TurnCityToNeutral_Prefix(City __instance)
         {
             return !EmptyCitySurvivalService.ShouldKeepFormalOwner(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), "turnCityToNeutral")]
+        private static void TurnCityToNeutral_Postfix(City __instance,
+            bool __runOriginal)
+        {
+            if (__runOriginal)
+                EmptyCityResettlementService.ObserveOwnershipChanged(
+                    __instance);
         }
 
     }

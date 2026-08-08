@@ -58,6 +58,7 @@ namespace AncientWarfare3.core.court
 
         public static void ProcessAuthorityCycle()
         {
+            if (VacancyQueue.Count == 0) return;
             var retry = new List<WesternCourtVacancy>(
                 WesternCourtElectionRules.MaxVacanciesPerCycle);
             int processed = 0;

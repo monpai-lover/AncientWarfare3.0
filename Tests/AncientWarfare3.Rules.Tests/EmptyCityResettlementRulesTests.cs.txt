@@ -1,0 +1,27 @@
+using AncientWarfare3.core.lineage;
+
+internal static class EmptyCityResettlementRulesTests
+{
+    public static void Run()
+    {
+        Equal(30, EmptyCityResettlementRules.ResolveRetryDelayCycles(1),
+            "first failed resettlement uses a low-frequency retry");
+        Equal(60, EmptyCityResettlementRules.ResolveRetryDelayCycles(2),
+            "retry delay grows exponentially");
+        Equal(600, EmptyCityResettlementRules.ResolveRetryDelayCycles(20),
+            "retry delay is bounded");
+        Equal(false, EmptyCityResettlementRules.IsRetryDue(99, 100),
+            "future retry is not due");
+        Equal(true, EmptyCityResettlementRules.IsRetryDue(100, 100),
+            "retry is due at its scheduled cycle");
+        Equal(4, EmptyCityResettlementRules.ResolveScanCount(100, 4),
+            "authority work remains bounded");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage + ": expected=" +
+                pExpected + " actual=" + pActual);
+    }
+}

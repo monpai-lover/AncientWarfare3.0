@@ -686,8 +686,8 @@ namespace AncientWarfare3.core.lineage
             bool isZhuluAge = World.world?.map_stats?.world_age_id ==
                               ZhuluAgeRules.AgeId;
             return CandidateKingdomsWithMandate(pKingdom,
-                    MandateService.GetCurrentMandateKingdom())
-                .Take(ZhuluAgeRules.WarCandidateLimit(isZhuluAge));
+                MandateService.GetCurrentMandateKingdom(),
+                ZhuluAgeRules.WarCandidateLimit(isZhuluAge));
         }
 
         private static IEnumerable<Kingdom> CandidateKingdomsReadOnly(
@@ -695,13 +695,16 @@ namespace AncientWarfare3.core.lineage
         {
             return CandidateKingdomsWithMandate(pKingdom,
                 MandateService.GetCurrentMandateKingdomReadOnly(
-                    pMandateReport));
+                    pMandateReport),
+                AsyncStrategyRevisionSet.MaximumCandidateKingdoms);
         }
 
         private static IEnumerable<Kingdom> CandidateKingdomsWithMandate(
-            Kingdom pKingdom, Kingdom pMandate)
+            Kingdom pKingdom, Kingdom pMandate, int pMaximumCandidates)
         {
+            if (pMaximumCandidates <= 0) yield break;
             var seen = new HashSet<long>();
+            int yieldedCandidates = 0;
 
             Kingdom mandate = pMandate;
             if (mandate?.data != null && mandate != pKingdom &&
@@ -709,6 +712,8 @@ namespace AncientWarfare3.core.lineage
                 !mandate.isNeutral() && seen.Add(mandate.id))
             {
                 yield return mandate;
+                yieldedCandidates++;
+                if (yieldedCandidates >= pMaximumCandidates) yield break;
             }
 
             IEnumerable<City> cities;
@@ -723,6 +728,8 @@ namespace AncientWarfare3.core.lineage
                         other.isRekt() || !other.isCiv() ||
                         other.isNeutral() || !seen.Add(other.id)) continue;
                     yield return other;
+                    yieldedCandidates++;
+                    if (yieldedCandidates >= pMaximumCandidates) yield break;
                 }
             }
 
@@ -732,7 +739,18 @@ namespace AncientWarfare3.core.lineage
                     MandatePhaseService.CurrentPhase,
                     XiaizationService.CanUseMandateSystem(pKingdom)))
                 yield break;
-            var distant = new List<Kingdom>();
+            int remainingCandidateSlots = pMaximumCandidates == int.MaxValue
+                ? int.MaxValue
+                : pMaximumCandidates - yieldedCandidates;
+            if (remainingCandidateSlots <= 0) yield break;
+            var distant = new List<Kingdom>(
+                remainingCandidateSlots == int.MaxValue
+                    ? 0
+                    : remainingCandidateSlots);
+            List<float> distantDistances = remainingCandidateSlots ==
+                                           int.MaxValue
+                ? null
+                : new List<float>(remainingCandidateSlots);
             try
             {
                 foreach (Kingdom other in World.world.kingdoms)
@@ -743,17 +761,46 @@ namespace AncientWarfare3.core.lineage
                         !ZhuluAgeRules.IsEligibleDistantTarget(isZhuluAge,
                             XiaizationService.CanUseMandateSystem(other)))
                         continue;
-                    distant.Add(other);
+                    if (remainingCandidateSlots == int.MaxValue)
+                        distant.Add(other);
+                    else
+                        InsertBoundedDistantCandidate(pKingdom, other,
+                            distant, distantDistances,
+                            remainingCandidateSlots);
                 }
             }
             catch { yield break; }
-            distant.Sort((left, right) => CapitalDistance(pKingdom, left)
-                .CompareTo(CapitalDistance(pKingdom, right)));
+            if (remainingCandidateSlots == int.MaxValue)
+                distant.Sort((left, right) => CapitalDistance(pKingdom, left)
+                    .CompareTo(CapitalDistance(pKingdom, right)));
             for (int index = 0; index < distant.Count; index++)
             {
                 Kingdom other = distant[index];
                 if (seen.Add(other.id)) yield return other;
             }
+        }
+
+        private static void InsertBoundedDistantCandidate(Kingdom pSource,
+            Kingdom pCandidate, List<Kingdom> pCandidates,
+            List<float> pDistances, int pMaximumCandidates)
+        {
+            if (pCandidate?.data == null || pMaximumCandidates <= 0) return;
+            float distance = CapitalDistance(pSource, pCandidate);
+            int insertionIndex = pDistances.BinarySearch(distance);
+            if (insertionIndex < 0)
+                insertionIndex = ~insertionIndex;
+            else
+                while (insertionIndex < pDistances.Count &&
+                       pDistances[insertionIndex] == distance &&
+                       pCandidates[insertionIndex].id < pCandidate.id)
+                    insertionIndex++;
+            if (insertionIndex >= pMaximumCandidates) return;
+
+            pDistances.Insert(insertionIndex, distance);
+            pCandidates.Insert(insertionIndex, pCandidate);
+            if (pCandidates.Count <= pMaximumCandidates) return;
+            pCandidates.RemoveAt(pMaximumCandidates);
+            pDistances.RemoveAt(pMaximumCandidates);
         }
 
         private static float CapitalDistance(Kingdom pSource,

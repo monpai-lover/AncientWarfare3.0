@@ -183,6 +183,27 @@ namespace AncientWarfare3.core.policy
             SupersedeCurrentBatch();
         }
 
+        internal static void MarkCityZoneGeometryDirty(City pCity,
+            TileZone pZone)
+        {
+            if (pCity == null || pZone == null || pZone.id < 0) return;
+            bool hasObserved = ObservedCityZoneIds.ContainsKey(pCity.id);
+            bool hasCityCache = CityKeysByEntityId.ContainsKey(pCity.id);
+            bool hasTerritoryCache = HasCacheForExistingCityZone(pCity,
+                pZone.id);
+            if (!_mapModeActive && !hasObserved && !hasCityCache &&
+                !hasTerritoryCache) return;
+
+            _processFailureRetryCount = 0;
+            if (TryAccumulateCityZoneAddition(pCity, pZone.id)) return;
+
+            // An active view with no baseline needs one normal discovery pass.
+            _activeViewDirty = _mapModeActive;
+            _rootCountriesDirty = true;
+            _rootCitiesDirty = true;
+            SupersedeCurrentBatch();
+        }
+
         internal static void EvictCity(long pCityId)
         {
             ObservedCityZoneIds.Remove(pCityId);
@@ -1054,6 +1075,85 @@ namespace AncientWarfare3.core.policy
                 ScheduleRefreshForKey(key);
             }
             return true;
+        }
+
+        private static bool TryAccumulateCityZoneAddition(City pCity,
+            int pZoneId)
+        {
+            if (pCity == null || pZoneId < 0) return true;
+            if (ObservedCityZoneIds.TryGetValue(pCity.id,
+                    out HashSet<int> observed))
+                observed.Add(pZoneId);
+
+            var keys = new HashSet<string>();
+            AddIndexedKeys(keys, CityKeysByEntityId, pCity.id);
+            AddIndexedKeys(keys, CacheKeysByZoneId, pZoneId);
+            int anchorZoneId = FindExistingCityZoneId(pCity, pZoneId);
+            if (anchorZoneId >= 0)
+                AddIndexedKeys(keys, CacheKeysByZoneId, anchorZoneId);
+            if (keys.Count == 0) return false;
+
+            foreach (string key in keys)
+            {
+                if (!Cache.TryGetValue(key,
+                        out HierarchicalVassalLabelCacheEntry cached))
+                {
+                    MarkSourceDirty(key);
+                    ScheduleRefreshForKey(key);
+                    continue;
+                }
+
+                if (!PendingZoneChanges.TryGetValue(key,
+                        out HashSet<int> pending))
+                {
+                    pending = new HashSet<int>();
+                    PendingZoneChanges[key] = pending;
+                }
+                if (!PendingAddedZoneIds.TryGetValue(key,
+                        out HashSet<int> pendingAdded))
+                {
+                    pendingAdded = new HashSet<int>();
+                    PendingAddedZoneIds[key] = pendingAdded;
+                }
+
+                if (cached.BaselineZoneIds.Contains(pZoneId))
+                {
+                    pending.Remove(pZoneId);
+                    pendingAdded.Remove(pZoneId);
+                    continue;
+                }
+                pending.Add(pZoneId);
+                pendingAdded.Add(pZoneId);
+                int removedCount = pending.Count - pendingAdded.Count;
+                int currentZoneCount = Math.Max(0,
+                    cached.BaselineZoneIds.Count + pendingAdded.Count -
+                    removedCount);
+                if (!HierarchicalVassalLabelInvalidationRules.
+                        ShouldRecalculate(pending.Count, currentZoneCount,
+                            false)) continue;
+                MarkSourceDirty(key);
+                ScheduleRefreshForKey(key);
+            }
+            return true;
+        }
+
+        private static bool HasCacheForExistingCityZone(City pCity,
+            int pAddedZoneId)
+        {
+            int zoneId = FindExistingCityZoneId(pCity, pAddedZoneId);
+            return zoneId >= 0 && CacheKeysByZoneId.ContainsKey(zoneId);
+        }
+
+        private static int FindExistingCityZoneId(City pCity,
+            int pAddedZoneId)
+        {
+            if (pCity?.zones == null || pCity.zones.Count <= 1) return -1;
+            TileZone first = pCity.zones[0];
+            if (first != null && first.id >= 0 && first.id != pAddedZoneId)
+                return first.id;
+            TileZone second = pCity.zones[1];
+            return second != null && second.id >= 0 &&
+                   second.id != pAddedZoneId ? second.id : -1;
         }
 
         private static bool TryGetObservedCityZones(long pCityId,

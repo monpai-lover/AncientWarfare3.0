@@ -168,32 +168,25 @@ namespace AncientWarfare3.core.lineage
             if (!Ready || pActor?.data == null || !ShouldArchive(pActor)) return;
             RulerPersonalFacts facts = BuildPersonalFacts(pActor);
             string table = ActorTitleFactSnapshotTableItem.GetTableName();
-            try
+            ColumnVal[] values = PersonalColumns(facts);
+            var updates = new HistoricalSqlColumn[values.Length];
+            var inserts = new HistoricalSqlColumn[values.Length + 1];
+            inserts[0] = new HistoricalSqlColumn("ACTOR_ID", facts.ActorId);
+            for (int i = 0; i < values.Length; i++)
             {
-                if (DB.CheckKeyExist(table,
-                        SimpleColumnConstraint.CreateEq("ACTOR_ID", facts.ActorId)))
-                {
-                    DB.UpdateValue(table,
-                        new List<SimpleColumnConstraint>
-                        {
-                            SimpleColumnConstraint.CreateEq("ACTOR_ID", facts.ActorId)
-                        },
-                        PersonalColumns(facts));
-                }
-                else
-                {
-                    var columns = new List<ColumnVal>
+                HistoricalSqlColumn column = new HistoricalSqlColumn(
+                    values[i].Name, values[i].Value);
+                updates[i] = column;
+                inserts[i + 1] = column;
+            }
+            if (HistoricalWriteService.TryUpsertState(
+                    "ruler-personal-facts:" + facts.ActorId, table,
+                    new[]
                     {
-                        ColumnVal.Create("ACTOR_ID", facts.ActorId)
-                    };
-                    columns.AddRange(PersonalColumns(facts));
-                    DB.Insert(table, columns.ToArray());
-                }
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Archive ruler fact snapshot failed: " + error.Message);
-            }
+                        new HistoricalSqlColumn("ACTOR_ID", facts.ActorId)
+                    }, updates, inserts, pOnCommitted: null,
+                    out _, out string error)) return;
+            ModClass.LogWarning("Queue ruler fact snapshot failed: " + error);
         }
 
         public static bool TryReadPersonalSnapshot(long pActorId, out RulerPersonalFacts pFacts)

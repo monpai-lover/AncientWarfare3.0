@@ -128,7 +128,9 @@ namespace AncientWarfare3.core.performance
         private readonly AWCooperativeBatchRunner<BatchActors, Actor>
             _actorRunner = new AWCooperativeBatchRunner<BatchActors, Actor>(
                 "vanilla.actors", pAllowWorkerParallelism: true,
-                pDeferParallelToPresentation: true);
+                pDeferParallelToPresentation: true,
+                pPostRunner: new AWCooperativeActorPostRunner(),
+                pParallelJobRunner: new AWCooperativeActorParallelJobRunner());
         private readonly AWCooperativeBatchRunner<BatchBuildings, Building>
             _buildingRunner =
                 new AWCooperativeBatchRunner<BatchBuildings, Building>(

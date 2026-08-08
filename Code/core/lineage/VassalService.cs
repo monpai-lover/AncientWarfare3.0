@@ -38,6 +38,10 @@ namespace AncientWarfare3.core.lineage
     internal static class VassalService
     {
         private const float VASSAL_POWER_WEIGHT = 0.6f;
+        private static readonly Dictionary<long, HashSet<long>>
+            DirectVassalIdsBySuzerain =
+                new Dictionary<long, HashSet<long>>();
+        private static object _directVassalIndexWorld;
 
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
@@ -287,6 +291,9 @@ namespace AncientWarfare3.core.lineage
                 ReadRuntimeProjectionIdentities();
             if (World.world?.kingdoms == null) return;
 
+            DirectVassalIdsBySuzerain.Clear();
+            _directVassalIndexWorld = World.world;
+
             foreach (Kingdom kingdom in World.world.kingdoms)
             {
                 if (kingdom?.data == null) continue;
@@ -320,7 +327,10 @@ namespace AncientWarfare3.core.lineage
 
                 if (VassalContractTierRules.CountsAsVassal(
                         projection.ContractTier))
+                {
                     AdjustDirectVassalCount(suzerain, 1);
+                    AddDirectVassalIndex(suzerain.id, vassal.id);
+                }
                 else
                     AdjustDirectTributaryCount(suzerain, 1);
             }
@@ -432,17 +442,75 @@ namespace AncientWarfare3.core.lineage
         {
             var result = new List<Kingdom>();
             if (pSuzerain?.data == null || World.world?.kingdoms == null) return result;
+            EnsureDirectVassalIndex();
+            if (!DirectVassalIdsBySuzerain.ContainsKey(pSuzerain.id))
+                return result;
+            AddIndexedVassals(pSuzerain.id, result, pRecursive,
+                new HashSet<long> { pSuzerain.id });
+            return result;
+        }
 
+        private static void EnsureDirectVassalIndex()
+        {
+            object currentWorld = World.world;
+            if (ReferenceEquals(_directVassalIndexWorld, currentWorld))
+                return;
+
+            DirectVassalIdsBySuzerain.Clear();
+            _directVassalIndexWorld = currentWorld;
+            if (World.world?.kingdoms == null) return;
             foreach (Kingdom kingdom in World.world.kingdoms)
             {
-                if (kingdom?.data == null || kingdom == pSuzerain || kingdom.isRekt() || !kingdom.isCiv()) continue;
-                if (GetSuzerainId(kingdom) != pSuzerain.id) continue;
-                result.Add(kingdom);
-                if (pRecursive)
-                    AddVassalsRecursive(kingdom, result, new HashSet<long> { pSuzerain.id, kingdom.id });
+                if (kingdom?.data == null || kingdom.isRekt() ||
+                    !kingdom.isCiv()) continue;
+                long suzerainId = GetSuzerainId(kingdom);
+                if (suzerainId >= 0L)
+                    AddDirectVassalIndex(suzerainId, kingdom.id);
             }
+        }
 
-            return result;
+        private static void AddIndexedVassals(long pSuzerainId,
+            List<Kingdom> pResult, bool pRecursive, HashSet<long> pVisited)
+        {
+            if (!DirectVassalIdsBySuzerain.TryGetValue(pSuzerainId,
+                    out HashSet<long> directIds)) return;
+
+            foreach (long vassalId in directIds)
+            {
+                if (!pVisited.Add(vassalId)) continue;
+                Kingdom vassal = FindKingdom(vassalId);
+                if (vassal?.data == null || vassal.isRekt() ||
+                    !vassal.isCiv() ||
+                    GetSuzerainId(vassal) != pSuzerainId) continue;
+                pResult.Add(vassal);
+                if (pRecursive)
+                    AddIndexedVassals(vassalId, pResult,
+                        pRecursive: true, pVisited);
+            }
+        }
+
+        private static void AddDirectVassalIndex(long pSuzerainId,
+            long pVassalId)
+        {
+            if (pSuzerainId < 0L || pVassalId < 0L) return;
+            if (!DirectVassalIdsBySuzerain.TryGetValue(pSuzerainId,
+                    out HashSet<long> directIds))
+            {
+                directIds = new HashSet<long>();
+                DirectVassalIdsBySuzerain[pSuzerainId] = directIds;
+            }
+            directIds.Add(pVassalId);
+        }
+
+        private static void RemoveDirectVassalIndex(long pSuzerainId,
+            long pVassalId)
+        {
+            if (pSuzerainId < 0L || pVassalId < 0L ||
+                !DirectVassalIdsBySuzerain.TryGetValue(pSuzerainId,
+                    out HashSet<long> directIds)) return;
+            directIds.Remove(pVassalId);
+            if (directIds.Count == 0)
+                DirectVassalIdsBySuzerain.Remove(pSuzerainId);
         }
 
         public static bool CanAbsorbVassalByDecision(Kingdom pSuzerain, Kingdom pVassal, out string pReason)
@@ -683,6 +751,8 @@ namespace AncientWarfare3.core.lineage
                 pVassal.data.set(LineageKeys.TRIBUTARY_SUZERAIN_ID, -1L);
                 pVassal.data.set(LineageKeys.TRIBUTARY_RELATION_ID, -1L);
                 AdjustDirectVassalCount(pSuzerain, 1);
+                EnsureDirectVassalIndex();
+                AddDirectVassalIndex(pSuzerain.id, pVassal.id);
             }
             else
             {
@@ -770,6 +840,8 @@ namespace AncientWarfare3.core.lineage
                 replacementRelationId);
             pTributary.data.set(LineageKeys.TRIBUTARY_SUZERAIN_ID, -1L);
             pTributary.data.set(LineageKeys.TRIBUTARY_RELATION_ID, -1L);
+            EnsureDirectVassalIndex();
+            AddDirectVassalIndex(pSuzerain.id, pTributary.id);
             RecordVassalSet(pTributary, pSuzerain,
                 pContractTier == VassalContractTierRules.Inner
                     ? "internalized_inner"
@@ -1208,7 +1280,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return 0f;
             float score = CountWarriors(pKingdom) * 2f + CountCities(pKingdom) * 5f + pKingdom.countZones() * 0.02f;
-            if (!pIncludeVassals) return score;
+            if (!pIncludeVassals || GetDirectVassalCount(pKingdom) <= 0) return score;
 
             foreach (Kingdom vassal in GetVassals(pKingdom, pRecursive: true))
                 score += GetPowerScore(vassal, pIncludeVassals: false) * VASSAL_POWER_WEIGHT;
@@ -1223,7 +1295,7 @@ namespace AncientWarfare3.core.lineage
                               CountPotentialWarriors(pKingdom) * 2f +
                           CountCities(pKingdom) * 5f +
                           pKingdom.countZones() * 0.02f;
-            if (!pIncludeVassals) return score;
+            if (!pIncludeVassals || GetDirectVassalCount(pKingdom) <= 0) return score;
 
             foreach (Kingdom vassal in GetVassals(pKingdom,
                          pRecursive: true))
@@ -1236,6 +1308,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return 0;
             int count = CountWarriors(pKingdom);
+            if (GetDirectVassalCount(pKingdom) <= 0) return count;
             foreach (Kingdom vassal in GetVassals(pKingdom, pRecursive: true))
                 count += CountWarriors(vassal);
             return count;
@@ -1307,18 +1380,6 @@ namespace AncientWarfare3.core.lineage
             lines.Add(L("aw_vassal_label_network_army", "Network military strength: ") +
                       GetNetworkArmy(root ?? pKingdom));
             return string.Join("\n", lines.ToArray());
-        }
-
-        private static void AddVassalsRecursive(Kingdom pKingdom, List<Kingdom> pResult, HashSet<long> pVisited)
-        {
-            foreach (Kingdom kingdom in World.world.kingdoms)
-            {
-                if (kingdom?.data == null || kingdom.isRekt() || !kingdom.isCiv()) continue;
-                if (!pVisited.Add(kingdom.id)) continue;
-                if (GetSuzerainId(kingdom) != pKingdom.id) continue;
-                pResult.Add(kingdom);
-                AddVassalsRecursive(kingdom, pResult, pVisited);
-            }
         }
 
         private static void AddVassalRows(Kingdom pSuzerain, List<VassalRelationInfo> pRows, int pDepth,
@@ -2157,6 +2218,8 @@ namespace AncientWarfare3.core.lineage
         private static void ClearRelationProjection(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            EnsureDirectVassalIndex();
+            RemoveDirectVassalIndex(GetSuzerainId(pKingdom), pKingdom.id);
             pKingdom.data.set(LineageKeys.VASSAL_SUZERAIN_ID, -1L);
             pKingdom.data.set(LineageKeys.VASSAL_RELATION_ID, -1L);
             pKingdom.data.set(LineageKeys.TRIBUTARY_SUZERAIN_ID, -1L);

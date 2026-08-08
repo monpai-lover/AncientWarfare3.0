@@ -6,7 +6,7 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
-                string lang = LocalizedTextManager.instance?.language;
+                string lang = LocalizedTextManager.current_language?.id;
                 return NormalizeLanguage(lang);
             }
             catch

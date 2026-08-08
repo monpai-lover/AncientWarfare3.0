@@ -56,13 +56,7 @@ namespace AncientWarfare3.core.atlas
                 IReadOnlyList<KingdomAtlasVassalRelationSnapshot>
                     relationSnapshot = KingdomAtlasRules.
                         BuildRelationSnapshotAt(relations, descriptor);
-                List<KingdomAtlasZoneSnapshot> snapshots =
-                    TryReadZoneArchive(descriptor.WorldTime);
                 var visible = new List<KingdomAtlasZoneCell>();
-                HashSet<long> visibleOwners = KingdomAtlasRules.BuildVisibleOwnerIds(
-                    new[] { row.OldKingdomId, row.NewKingdomId },
-                    relationSnapshot, descriptor.WorldTime);
-                AddVisibleCells(snapshots, owners, visibleOwners, visible);
                 Dictionary<long, KingdomAtlasKingdomSnapshot> kingdoms =
                     BuildKingdomSnapshots(row, relationSnapshot);
                 var historicalColors = kingdoms.ToDictionary(
@@ -246,20 +240,6 @@ namespace AncientWarfare3.core.atlas
 
             if (pLost != null) pConsumedEventIds?.Add(pLost.EventId);
             if (pGained != null) pConsumedEventIds?.Add(pGained.EventId);
-        }
-
-        private static List<KingdomAtlasZoneSnapshot> TryReadZoneArchive(
-            double pWorldTime)
-        {
-            try
-            {
-                return KingdomAtlasZoneArchiveService.Read(pWorldTime);
-            }
-            catch
-            {
-                // Legacy history databases did not have this optional table.
-                return new List<KingdomAtlasZoneSnapshot>();
-            }
         }
 
         private static List<CityTerritorialHistoryRow> ReadCityTerritorialRows(
@@ -518,37 +498,6 @@ namespace AncientWarfare3.core.atlas
             public long KingdomId { get; set; } = -1L;
             public string Name { get; set; } = "";
             public string Color { get; set; } = "";
-        }
-
-        private static void AddVisibleCells(List<KingdomAtlasZoneSnapshot> pSnapshots,
-            IReadOnlyDictionary<long, long> pOwners,
-            ISet<long> pVisibleOwners,
-            List<KingdomAtlasZoneCell> pOutput)
-        {
-            if (pSnapshots == null || pOutput == null) return;
-            var latest = new Dictionary<long, KingdomAtlasZoneSnapshot>();
-            for (int index = 0; index < pSnapshots.Count; index++)
-            {
-                KingdomAtlasZoneSnapshot row = pSnapshots[index];
-                if (row == null || !pOwners.ContainsKey(row.CityId)) continue;
-                if (!latest.TryGetValue(row.CityId, out KingdomAtlasZoneSnapshot current) ||
-                    KingdomAtlasRules.ShouldReplaceSnapshot(row.WorldTime,
-                        row.SnapshotId, current.WorldTime, current.SnapshotId))
-                    latest[row.CityId] = row;
-            }
-            for (int index = 0; index < pSnapshots.Count; index++)
-            {
-                KingdomAtlasZoneSnapshot row = pSnapshots[index];
-                if (row == null || !latest.TryGetValue(row.CityId,
-                        out KingdomAtlasZoneSnapshot current) ||
-                    !KingdomAtlasRules.IsSameSnapshotGroup(row.CityId,
-                        row.EventType, row.WorldTime, current.CityId,
-                        current.EventType, current.WorldTime)) continue;
-                if (!pOwners.TryGetValue(row.CityId, out long owner) ||
-                    pVisibleOwners == null || !pVisibleOwners.Contains(owner)) continue;
-                pOutput.Add(new KingdomAtlasZoneCell(row.CityId, row.X, row.Y,
-                    row.Water, row.NeighborMask));
-            }
         }
 
         private static List<KingdomAtlasVassalRelationSnapshot>

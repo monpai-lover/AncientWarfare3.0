@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 using UnityEngine;
 
@@ -7,8 +7,7 @@ namespace AncientWarfare3.core.performance;
 
 internal static class AWPresentationInterpolator
 {
-    private static Dictionary<AWActorPresentationHandle, AWActorPresentationState> states = new();
-    private static readonly List<AWActorPresentationHandle> staleHandles = new();
+    private static ConditionalWeakTable<Actor, AWActorPresentationState> states = new();
     private static int preparedFrame = -1;
     private static float presentationDelta = 1f / 60f;
     private static float presentationTimeScale = 1f;
@@ -25,22 +24,6 @@ internal static class AWPresentationInterpolator
                 : AWWorldTimeRateTracker.GetRequestedSpeed();
         presentationClock = Time.unscaledTime;
 
-        if (preparedFrame > 0 && preparedFrame % 600 == 0)
-        {
-            staleHandles.Clear();
-            foreach (var pair in states)
-            {
-                if (preparedFrame - pair.Value.LastSeenFrame > 600)
-                {
-                    staleHandles.Add(pair.Key);
-                }
-            }
-
-            for (int i = 0; i < staleHandles.Count; i++)
-            {
-                states.Remove(staleHandles[i]);
-            }
-        }
     }
 
     public static bool TryApply(Actor actor, out Vector3 result)
@@ -136,13 +119,13 @@ internal static class AWPresentationInterpolator
         bool controlled,
         out bool requiresContinuousUpdate)
     {
-        if (!states.TryGetValue(
-                sample.Handle,
-                out AWActorPresentationState state))
+        Actor actor = sample.ActorReference;
+        if (actor == null)
         {
-            state = new AWActorPresentationState();
-            states.Add(sample.Handle, state);
+            requiresContinuousUpdate = false;
+            return target;
         }
+        AWActorPresentationState state = states.GetValue(actor, CreateState);
 
         if (IsWorldPaused())
         {
@@ -153,13 +136,11 @@ internal static class AWPresentationInterpolator
             state.EstimatedAuthorityInterval = 0.25f;
             state.AuthoritativeChangedAt = presentationClock;
             state.LastFrame = preparedFrame;
-            state.LastSeenFrame = preparedFrame;
             requiresContinuousUpdate = false;
             return target;
         }
 
         Vector2 presented;
-        state.LastSeenFrame = preparedFrame;
         if (!state.Initialized)
         {
             state.Initialized = true;
@@ -251,8 +232,7 @@ internal static class AWPresentationInterpolator
 
     public static void Reset()
     {
-        states = new Dictionary<AWActorPresentationHandle, AWActorPresentationState>();
-        staleHandles.Clear();
+        states = new ConditionalWeakTable<Actor, AWActorPresentationState>();
         preparedFrame = -1;
         presentationDelta = 1f / 60f;
         presentationTimeScale = 1f;
@@ -273,6 +253,11 @@ internal static class AWPresentationInterpolator
                (World.world != null && World.world.isPaused());
     }
 
+    private static AWActorPresentationState CreateState(Actor _)
+    {
+        return new AWActorPresentationState();
+    }
+
     private sealed class AWActorPresentationState
     {
         public bool Initialized;
@@ -282,6 +267,5 @@ internal static class AWPresentationInterpolator
         public float EstimatedAuthorityInterval = 0.25f;
         public int AuthoritySampleCount;
         public int LastFrame;
-        public int LastSeenFrame;
     }
 }

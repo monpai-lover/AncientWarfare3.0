@@ -61,6 +61,7 @@ internal static class AWWorldObjectPresentationRenderer
         AWActorPresentationSnapshot snapshot)
     {
         if (!AWPerformanceSettings.EnableFramePriorityScheduler ||
+            !AWPerformanceSettings.EnableWorldObjectPresentationSnapshots ||
             manager == null ||
             snapshot == null ||
             !snapshot.MatchesCurrentWorld ||
@@ -685,7 +686,8 @@ internal static class AWWorldObjectPresentationRenderer
 
     private static AWActorPresentationSnapshot GetPreparedSnapshot()
     {
-        if (lastPreparedFrame != Time.frameCount ||
+        if (!AWPerformanceSettings.EnableWorldObjectPresentationSnapshots ||
+            lastPreparedFrame != Time.frameCount ||
             preparedSnapshot == null ||
             !preparedSnapshot.MatchesCurrentWorld)
         {

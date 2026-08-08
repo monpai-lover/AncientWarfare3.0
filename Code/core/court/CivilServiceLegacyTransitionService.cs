@@ -9,10 +9,17 @@ namespace AncientWarfare3.core.court
     internal static class CivilServiceLegacyTransitionService
     {
         private static bool _backfillComplete;
+        private static readonly List<long> _backfillKingdomIds =
+            new List<long>();
+        private static object _backfillWorld;
+        private static int _backfillCursor;
 
         internal static void ClearRuntime()
         {
             _backfillComplete = false;
+            _backfillKingdomIds.Clear();
+            _backfillWorld = null;
+            _backfillCursor = 0;
         }
 
         internal static void OnTechnologyCompleted(Kingdom pKingdom,
@@ -26,22 +33,38 @@ namespace AncientWarfare3.core.court
 
         internal static void ProcessVersionedBackfill()
         {
-            if (_backfillComplete || World.world?.kingdoms == null) return;
+            MapBox world = World.world;
+            if (_backfillComplete || world?.kingdoms == null) return;
+            if (!ReferenceEquals(_backfillWorld, world))
+                InitializeBackfill(world);
 
-            Kingdom pending = null;
-            foreach (Kingdom kingdom in World.world.kingdoms)
+            while (_backfillCursor < _backfillKingdomIds.Count)
             {
-                if (!NeedsTransition(kingdom)) continue;
-                pending = kingdom;
-                break;
-            }
+                long kingdomId = _backfillKingdomIds[_backfillCursor];
+                Kingdom pending = world.kingdoms.get(kingdomId);
+                if (!NeedsTransition(pending))
+                {
+                    _backfillCursor++;
+                    continue;
+                }
 
-            if (pending == null)
-            {
-                _backfillComplete = true;
+                if (ApplyTransition(pending)) _backfillCursor++;
                 return;
             }
-            ApplyTransition(pending);
+            _backfillComplete = true;
+        }
+
+        private static void InitializeBackfill(MapBox pWorld)
+        {
+            _backfillKingdomIds.Clear();
+            _backfillWorld = pWorld;
+            _backfillCursor = 0;
+            _backfillComplete = false;
+            foreach (Kingdom kingdom in pWorld.kingdoms)
+            {
+                if (kingdom?.data != null)
+                    _backfillKingdomIds.Add(kingdom.id);
+            }
         }
 
         internal static bool HasUsableCredential(Actor pActor,
@@ -115,9 +138,9 @@ namespace AncientWarfare3.core.court
             return version < CivilServiceLegacyTransitionRules.TransitionVersion;
         }
 
-        private static void ApplyTransition(Kingdom pKingdom)
+        private static bool ApplyTransition(Kingdom pKingdom)
         {
-            if (!NeedsTransition(pKingdom)) return;
+            if (!NeedsTransition(pKingdom)) return true;
 
             try
             {
@@ -126,11 +149,12 @@ namespace AncientWarfare3.core.court
             }
             catch
             {
-                return;
+                return false;
             }
 
             pKingdom.data.set(LineageKeys.CIVIL_SERVICE_LEGACY_TRANSITION_VERSION,
                 CivilServiceLegacyTransitionRules.TransitionVersion);
+            return true;
         }
 
         private static void GrantCredentialIfEligible(Actor pActor,

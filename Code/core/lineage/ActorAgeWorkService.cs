@@ -18,15 +18,26 @@ namespace AncientWarfare3.core.lineage
             EnsureWorld();
 
             long actorId = pActor.data.id;
-            ActorAgeWorkState current = Capture(pActor);
             bool hasPrevious = States.TryGetValue(actorId,
                 out ActorAgeWorkState previous);
-            bool force = DirtyActors.Remove(actorId) || !hasPrevious;
+            bool dirty = DirtyActors.Remove(actorId);
+            bool dynasticEligible = IsDynasticEligible(pActor);
+            bool warrior = SafeIsWarrior(pActor);
+            bool reproductionRecoveryActive =
+                HasAnnualReproductionRecovery(pActor);
+            if (!ActorAgeWorkRules.ShouldTrack(hasPrevious, dirty,
+                    dynasticEligible, warrior,
+                    reproductionRecoveryActive)) return;
+
+            ActorAgeWorkState current = Capture(pActor, dynasticEligible,
+                warrior, reproductionRecoveryActive);
+            bool force = dirty || !hasPrevious;
             ActorAgeWorkStage stages = ActorAgeWorkRules.Resolve(previous,
                 current, force);
             if (stages == ActorAgeWorkStage.None)
             {
-                States[actorId] = current;
+                StoreOrRemove(actorId, current, dynasticEligible, warrior,
+                    reproductionRecoveryActive);
                 return;
             }
 
@@ -39,7 +50,17 @@ namespace AncientWarfare3.core.lineage
                     pActor, current.ShouldReleaseMilitaryRole);
 
             if (pActor.data != null && pActor.isAlive() && !pActor.isRekt())
-                States[actorId] = Capture(pActor);
+            {
+                dynasticEligible = IsDynasticEligible(pActor);
+                warrior = SafeIsWarrior(pActor);
+                reproductionRecoveryActive =
+                    HasAnnualReproductionRecovery(pActor);
+                ActorAgeWorkState refreshed = Capture(pActor,
+                    dynasticEligible, warrior,
+                    reproductionRecoveryActive);
+                StoreOrRemove(actorId, refreshed, dynasticEligible, warrior,
+                    reproductionRecoveryActive);
+            }
             else
                 Remove(actorId);
         }
@@ -65,28 +86,51 @@ namespace AncientWarfare3.core.lineage
             _world = World.world;
         }
 
-        private static ActorAgeWorkState Capture(Actor pActor)
+        private static ActorAgeWorkState Capture(Actor pActor,
+            bool pDynasticEligible, bool pWarrior,
+            bool pReproductionRecoveryActive)
         {
             bool adult = pActor.isAdult();
-            bool permanent = StandingArmyPeacetimeService
+            bool permanent = pWarrior && StandingArmyPeacetimeService
                 .IsCareerStandingSoldier(pActor);
-            bool emergency = StandingArmyPeacetimeService
+            bool emergency = pWarrior && StandingArmyPeacetimeService
                 .HasMilitaryEmergency(pActor);
-            bool dynasticEligible = IsDynasticEligible(pActor);
             string professionId = pActor.profession_asset?.id ?? "";
             int profession = StringComparer.Ordinal.GetHashCode(professionId);
-            bool needsAnnualReproductionRecovery =
-                DynasticReproductionRules.IsSexualReproductionTask(
-                    pActor.ai?.task?.id);
             int year;
             try { year = Math.Max(0, Date.getCurrentYear()); }
             catch { year = 0; }
             return new ActorAgeWorkState(adult, profession, permanent,
-                emergency, dynasticEligible,
-                StandingArmyPeacetimeService.ShouldUsePeacetimeJob(pActor),
-                DynasticReproductionService
+                emergency, pDynasticEligible,
+                pWarrior && StandingArmyPeacetimeService
+                    .ShouldUsePeacetimeJob(pActor),
+                pWarrior && DynasticReproductionService
                     .ShouldReleaseExistingMilitaryRole(pActor),
-                needsAnnualReproductionRecovery, year);
+                pReproductionRecoveryActive, year);
+        }
+
+        private static bool SafeIsWarrior(Actor pActor)
+        {
+            try { return pActor?.isWarrior() == true; }
+            catch { return false; }
+        }
+
+        private static bool HasAnnualReproductionRecovery(Actor pActor)
+        {
+            return DynasticReproductionRules.IsSexualReproductionTask(
+                pActor?.ai?.task?.id);
+        }
+
+        private static void StoreOrRemove(long pActorId,
+            ActorAgeWorkState pState, bool pDynasticEligible,
+            bool pWarrior, bool pReproductionRecoveryActive)
+        {
+            if (ActorAgeWorkRules.ShouldTrack(false, false,
+                    pDynasticEligible, pWarrior,
+                    pReproductionRecoveryActive))
+                States[pActorId] = pState;
+            else
+                Remove(pActorId);
         }
 
         private static bool IsDynasticEligible(Actor pActor)
