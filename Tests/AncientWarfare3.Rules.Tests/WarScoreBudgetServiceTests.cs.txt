@@ -94,6 +94,34 @@ internal static class WarScoreBudgetServiceTests
         Equal(80, persisted.DefenderMobilizationBaseline,
             "the defender baseline survives SQLite reload");
 
+        True(restored.StartWar(304, 9, 10, 41d, 100, 90, 90, true),
+            "a non-negotiable war records its slower exhaustion profile");
+        True(restored.TryGetSnapshot(304, WarScoreSide.Attackers,
+                out WarScoreSnapshot nonNegotiable),
+            "the non-negotiable snapshot can be read");
+        Equal(true, nonNegotiable.NonNegotiableWar,
+            "the non-negotiable marker is stored on the active snapshot");
+        True(restored.CalibrateYear(304, 39, 39, 90, 90, 80d),
+            "the non-negotiable war calibrates before its target year");
+        True(restored.TryGetSnapshot(304, WarScoreSide.Attackers,
+                out WarScoreSnapshot beforeTarget),
+            "the pre-target exhaustion snapshot can be read");
+        Equal(97, beforeTarget.AttackerExhaustion,
+            "the slower profile remains below maximum in year thirty-nine");
+        True(restored.CalibrateYear(304, 40, 40, 90, 90, 81d),
+            "the non-negotiable war calibrates at its target year");
+        True(restored.TryGetSnapshot(304, WarScoreSide.Attackers,
+                out WarScoreSnapshot atTarget),
+            "the target-year exhaustion snapshot can be read");
+        Equal(100, atTarget.AttackerExhaustion,
+            "the slower profile reaches maximum in year forty");
+        var nonNegotiableReloaded = new WarScoreService(database);
+        True(nonNegotiableReloaded.TryGetSnapshot(304,
+                WarScoreSide.Attackers, out WarScoreSnapshot restoredMarker),
+            "the non-negotiable marker survives SQLite reload");
+        Equal(true, restoredMarker.NonNegotiableWar,
+            "reload keeps the slower exhaustion profile");
+
         True(WarBattleEpisodeRules.TryResolve(0, 5,
                 out WarScoreSide oneSidedWinner, out int oneSidedIntensity),
             "a one-sided military defeat still resolves as a battle");

@@ -371,6 +371,7 @@ namespace AncientWarfare3.core.lineage
                  "DEFENDER_RESERVE_EXHAUSTION INTEGER NOT NULL," +
                  "ATTACKER_EXHAUSTION INTEGER NOT NULL," +
                 "DEFENDER_EXHAUSTION INTEGER NOT NULL," +
+                "NON_NEGOTIABLE_WAR INTEGER NOT NULL," +
                 "ACTIVE INTEGER NOT NULL," +
                 "WINNER TEXT NOT NULL," +
                 "STARTED_TIME REAL NOT NULL," +
@@ -428,6 +429,8 @@ namespace AncientWarfare3.core.lineage
             EnsureColumn(SnapshotTable, "ATTACKER_MOBILIZATION_BASELINE",
                 "INTEGER NOT NULL DEFAULT 0");
             EnsureColumn(SnapshotTable, "DEFENDER_MOBILIZATION_BASELINE",
+                "INTEGER NOT NULL DEFAULT 0");
+            EnsureColumn(SnapshotTable, "NON_NEGOTIABLE_WAR",
                 "INTEGER NOT NULL DEFAULT 0");
             EnsureColumn(ControlTable, "HOME_KINGDOM_ID",
                 "INTEGER NOT NULL DEFAULT -1");
@@ -504,7 +507,8 @@ namespace AncientWarfare3.core.lineage
                  "@attackerRelief,@defenderRelief," +
                  "@attackerReserveExhaustion," +
                  "@defenderReserveExhaustion," +
-                 "@attackerExhaustion,@defenderExhaustion,@active,@winner," +
+                 "@attackerExhaustion,@defenderExhaustion,@nonNegotiable," +
+                 "@active,@winner," +
                 "@started,@updated,@ended,@revision)", _db, pTransaction);
             command.Parameters.AddWithValue("@war", pValue.WarId);
             command.Parameters.AddWithValue("@attacker", pValue.AttackerKingdomId);
@@ -534,6 +538,8 @@ namespace AncientWarfare3.core.lineage
                 pValue.DefenderReserveExhaustion);
             command.Parameters.AddWithValue("@attackerExhaustion", pValue.AttackerExhaustion);
             command.Parameters.AddWithValue("@defenderExhaustion", pValue.DefenderExhaustion);
+            command.Parameters.AddWithValue("@nonNegotiable",
+                pValue.NonNegotiableWar ? 1 : 0);
             command.Parameters.AddWithValue("@active", pValue.Active ? 1 : 0);
             command.Parameters.AddWithValue("@winner", pValue.Winner ?? "");
             command.Parameters.AddWithValue("@started", pValue.StartedTime);
@@ -630,6 +636,8 @@ namespace AncientWarfare3.core.lineage
                     "DEFENDER_RESERVE_EXHAUSTION"),
                 AttackerExhaustion = Convert.ToInt32(pReader["ATTACKER_EXHAUSTION"]),
                 DefenderExhaustion = Convert.ToInt32(pReader["DEFENDER_EXHAUSTION"]),
+                NonNegotiableWar = ReadInt32(pReader,
+                    "NON_NEGOTIABLE_WAR") != 0,
                 Active = Convert.ToInt32(pReader["ACTIVE"]) != 0,
                 Winner = Convert.ToString(pReader["WINNER"]) ?? "",
                 StartedTime = Convert.ToDouble(pReader["STARTED_TIME"]),
@@ -684,7 +692,8 @@ namespace AncientWarfare3.core.lineage
             "ATTACKER_EXHAUSTION_RELIEF,DEFENDER_EXHAUSTION_RELIEF," +
             "ATTACKER_RESERVE_EXHAUSTION," +
             "DEFENDER_RESERVE_EXHAUSTION," +
-            "ATTACKER_EXHAUSTION,DEFENDER_EXHAUSTION,ACTIVE,WINNER," +
+            "ATTACKER_EXHAUSTION,DEFENDER_EXHAUSTION," +
+            "NON_NEGOTIABLE_WAR,ACTIVE,WINNER," +
             "STARTED_TIME,UPDATED_TIME,ENDED_TIME,REVISION";
     }
 }

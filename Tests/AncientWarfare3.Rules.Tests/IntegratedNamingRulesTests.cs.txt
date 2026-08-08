@@ -392,6 +392,15 @@ internal static class IntegratedNamingRulesTests
                     ["given_name"] = "Given"
                 }),
             "actor creation keeps only the tagged given name");
+        Equal("FamilyGiven",
+            AWActorInitialNameRules.ResolveGeneratedName(
+                "FamilyGiven",
+                new Dictionary<string, string>
+                {
+                    ["family_name"] = "Family",
+                    ["given_name"] = "Given"
+                }, preserveFamilyIdentity: true),
+            "monkey actor creation preserves the generated surname and given name");
         Equal("Given",
             AWActorInitialNameRules.ResolveGeneratedName("FamilyGiven",
                 new Dictionary<string, string>

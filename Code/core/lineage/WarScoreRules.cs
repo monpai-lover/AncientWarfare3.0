@@ -61,6 +61,7 @@ namespace AncientWarfare3.core.lineage
         public const int MaximumLossExhaustion = 60;
         public const int LongWarGraceYears = 15;
         public const int LongWarAnnualExhaustion = 20;
+        public const int NonNegotiableWarTargetYears = 40;
 
         public static int CityScoreBudgetForWarType(string pWarType)
         {
@@ -197,6 +198,17 @@ namespace AncientWarfare3.core.lineage
                 longWarYears * LongWarAnnualExhaustion);
             int duration = Math.Min(MaximumDurationExhaustion,
                 baseDuration + longWar);
+            return Math.Min(100, duration +
+                CasualtyExhaustion(pOwnLosses, pMobilizationBaseline));
+        }
+
+        public static int NonNegotiableWarExhaustion(int pDurationYears,
+            int pOwnLosses, int pMobilizationBaseline)
+        {
+            long years = Math.Max(0L, pDurationYears);
+            int duration = (int)Math.Min(MaximumDurationExhaustion,
+                years * MaximumDurationExhaustion /
+                NonNegotiableWarTargetYears);
             return Math.Min(100, duration +
                 CasualtyExhaustion(pOwnLosses, pMobilizationBaseline));
         }

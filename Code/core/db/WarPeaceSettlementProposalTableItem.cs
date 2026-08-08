@@ -17,6 +17,8 @@ namespace AncientWarfare3.core.db
         public int signed_war_score;
         public int total_cost;
         public int player_initiated;
+        [TableItemDef(pDefaultValue: "0")]
+        public int automatic_exhaustion_settlement;
         public string status = "pending";
         public string response_reason = "";
         [TableItemDef(pDefaultValue: "0")] public int recovery_attempts;

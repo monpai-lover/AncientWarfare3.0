@@ -15,11 +15,21 @@ namespace AncientWarfare3.core.lineage
         PersistenceFailed = 5
     }
 
+    internal enum VirtualNobleTitleEditResult
+    {
+        Success = 0,
+        NotReady = 1,
+        NotFound = 2,
+        InvalidText = 3,
+        Duplicate = 4,
+        PersistenceFailed = 5
+    }
+
     internal readonly struct VirtualNobleTitleSnapshot
     {
         public VirtualNobleTitleSnapshot(long pTitleId, long pKingdomId,
             long pActorId, string pText, long pPredecessorId,
-            string pState, int pGrantedYear)
+            string pState, int pGrantedYear, bool pHereditary)
         {
             TitleId = pTitleId;
             KingdomId = pKingdomId;
@@ -28,6 +38,7 @@ namespace AncientWarfare3.core.lineage
             PredecessorId = pPredecessorId;
             State = pState ?? "";
             GrantedYear = pGrantedYear;
+            Hereditary = pHereditary;
         }
 
         public long TitleId { get; }
@@ -37,6 +48,7 @@ namespace AncientWarfare3.core.lineage
         public long PredecessorId { get; }
         public string State { get; }
         public int GrantedYear { get; }
+        public bool Hereditary { get; }
         public bool IsActive => string.Equals(State, "active",
             StringComparison.OrdinalIgnoreCase) && ActorId >= 0;
     }
@@ -57,8 +69,14 @@ namespace AncientWarfare3.core.lineage
         private static bool Ready => DB != null &&
             LineageArchiveManager.Instance.InitializeSuccessful;
 
+        internal static bool ShouldCreateSuccessor(bool pHereditary)
+        {
+            return pHereditary;
+        }
+
         internal static VirtualNobleTitleGrantResult TryGrant(
             Kingdom pKingdom, Actor pGrantor, Actor pTarget, string pText,
+            bool pHereditary,
             out VirtualNobleTitleSnapshot pSnapshot)
         {
             pSnapshot = default;
@@ -95,8 +113,8 @@ namespace AncientWarfare3.core.lineage
                     "TITLE_TEXT,NORMALIZED_KEY,GRANTOR_ACTOR_ID,GRANTOR_NAME," +
                     "PREDECESSOR_TITLE_ID,INHERITED_FROM_ACTOR_ID,SUCCESSION_STATE," +
                     "GRANTED_YEAR,GRANTED_TIME,END_YEAR,END_TIME,ACTIVE,END_REASON," +
-                    "PRIMARY_TITLE_SNAPSHOT) VALUES (@id,@k,@kn,@a,@t,@n,@g,@gn," +
-                    "-1,-1,'active',@y,@time,-1,-1,1,'',@t)";
+                    "PRIMARY_TITLE_SNAPSHOT,HEREDITARY) VALUES (@id,@k,@kn,@a,@t,@n,@g,@gn," +
+                    "-1,-1,'active',@y,@time,-1,-1,1,'',@t,@h)";
                 Add(insert, "@id", titleId);
                 Add(insert, "@k", pKingdom.id);
                 Add(insert, "@kn", pKingdom.name ?? "");
@@ -107,6 +125,7 @@ namespace AncientWarfare3.core.lineage
                 Add(insert, "@gn", pGrantor.getName() ?? "");
                 Add(insert, "@y", year);
                 Add(insert, "@time", now);
+                Add(insert, "@h", pHereditary ? 1 : 0);
                 insert.ExecuteNonQuery();
                 transaction.Commit();
 
@@ -125,7 +144,8 @@ namespace AncientWarfare3.core.lineage
                 }
                 Invalidate(pKingdom.id, pTarget.data.id);
                 pSnapshot = new VirtualNobleTitleSnapshot(titleId,
-                    pKingdom.id, pTarget.data.id, title, -1L, "active", year);
+                    pKingdom.id, pTarget.data.id, title, -1L, "active", year,
+                    pHereditary);
                 ChronicleEvents.OnVirtualNobleTitleGranted(pKingdom, pGrantor,
                     pTarget, title);
                 try { LineageService.ArchiveActor(pTarget, pAlive: true); }
@@ -152,7 +172,7 @@ namespace AncientWarfare3.core.lineage
             {
                 using SQLiteCommand command = new SQLiteCommand(DB);
                 command.CommandText = "SELECT TITLE_ID,KINGDOM_ID,CURRENT_ACTOR_ID," +
-                    "TITLE_TEXT,PREDECESSOR_TITLE_ID,SUCCESSION_STATE,GRANTED_YEAR " +
+                    "TITLE_TEXT,PREDECESSOR_TITLE_ID,SUCCESSION_STATE,GRANTED_YEAR,HEREDITARY " +
                     "FROM " + Table + " WHERE KINGDOM_ID=@k AND ACTIVE=1 " +
                     "ORDER BY GRANTED_TIME,TITLE_ID";
                 command.Parameters.AddWithValue("@k", pKingdomId);
@@ -180,7 +200,7 @@ namespace AncientWarfare3.core.lineage
             {
                 using SQLiteCommand command = new SQLiteCommand(DB);
                 command.CommandText = "SELECT TITLE_ID,KINGDOM_ID,CURRENT_ACTOR_ID," +
-                    "TITLE_TEXT,PREDECESSOR_TITLE_ID,SUCCESSION_STATE,GRANTED_YEAR " +
+                    "TITLE_TEXT,PREDECESSOR_TITLE_ID,SUCCESSION_STATE,GRANTED_YEAR,HEREDITARY " +
                     "FROM " + Table + " WHERE CURRENT_ACTOR_ID=@a AND ACTIVE=1 " +
                     "ORDER BY GRANTED_TIME,TITLE_ID";
                 command.Parameters.AddWithValue("@a", pActorId);
@@ -194,6 +214,87 @@ namespace AncientWarfare3.core.lineage
             }
             ActorCache[pActorId] = result;
             return result;
+        }
+
+        internal static VirtualNobleTitleEditResult TryEdit(
+            long pTitleId, long pKingdomId, string pText)
+        {
+            if (!Ready) return VirtualNobleTitleEditResult.NotReady;
+            if (!VirtualNobleTitleRules.IsValidTitle(pText))
+                return VirtualNobleTitleEditResult.InvalidText;
+            string title = VirtualNobleTitleRules.NormalizeTitle(pText);
+            string key = VirtualNobleTitleRules.NormalizeTitleKey(title);
+            try
+            {
+                using SQLiteCommand command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT KINGDOM_ID FROM " + Table +
+                    " WHERE TITLE_ID=@id AND ACTIVE=1 LIMIT 1";
+                Add(command, "@id", pTitleId);
+                object owner = command.ExecuteScalar();
+                if (owner == null) return VirtualNobleTitleEditResult.NotFound;
+                if (Convert.ToInt64(owner) != pKingdomId)
+                    return VirtualNobleTitleEditResult.NotFound;
+
+                long actorId = FindActiveActorId(pTitleId, pKingdomId);
+
+                using SQLiteCommand duplicate = new SQLiteCommand(DB);
+                duplicate.CommandText = "SELECT TITLE_ID FROM " + Table +
+                    " WHERE KINGDOM_ID=@k AND NORMALIZED_KEY=@n AND ACTIVE=1 " +
+                    " AND TITLE_ID<>@id LIMIT 1";
+                Add(duplicate, "@k", pKingdomId);
+                Add(duplicate, "@n", key);
+                Add(duplicate, "@id", pTitleId);
+                if (duplicate.ExecuteScalar() != null)
+                    return VirtualNobleTitleEditResult.Duplicate;
+
+                using SQLiteCommand update = new SQLiteCommand(DB);
+                update.CommandText = "UPDATE " + Table +
+                    " SET TITLE_TEXT=@t,NORMALIZED_KEY=@n," +
+                    "PRIMARY_TITLE_SNAPSHOT=@t WHERE TITLE_ID=@id AND " +
+                    "KINGDOM_ID=@k AND ACTIVE=1";
+                Add(update, "@t", title);
+                Add(update, "@n", key);
+                Add(update, "@id", pTitleId);
+                Add(update, "@k", pKingdomId);
+                if (update.ExecuteNonQuery() != 1)
+                    return VirtualNobleTitleEditResult.NotFound;
+                Invalidate(pKingdomId, actorId);
+                return VirtualNobleTitleEditResult.Success;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Virtual noble title edit failed: " + error.Message);
+                return VirtualNobleTitleEditResult.PersistenceFailed;
+            }
+        }
+
+        internal static VirtualNobleTitleEditResult TryDelete(
+            long pTitleId, long pKingdomId)
+        {
+            if (!Ready) return VirtualNobleTitleEditResult.NotReady;
+            try
+            {
+                long actorId = FindActiveActorId(pTitleId, pKingdomId);
+                if (actorId < 0) return VirtualNobleTitleEditResult.NotFound;
+                using SQLiteCommand command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " + Table +
+                    " SET ACTIVE=0,SUCCESSION_STATE='extinct'," +
+                    "END_REASON='manual_deleted',END_YEAR=@y,END_TIME=@t " +
+                    "WHERE TITLE_ID=@id AND KINGDOM_ID=@k AND ACTIVE=1";
+                Add(command, "@y", Date.getCurrentYear());
+                Add(command, "@t", LineageService.CurTime());
+                Add(command, "@id", pTitleId);
+                Add(command, "@k", pKingdomId);
+                if (command.ExecuteNonQuery() != 1)
+                    return VirtualNobleTitleEditResult.NotFound;
+                Invalidate(pKingdomId, actorId);
+                return VirtualNobleTitleEditResult.Success;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Virtual noble title delete failed: " + error.Message);
+                return VirtualNobleTitleEditResult.PersistenceFailed;
+            }
         }
 
         internal static string GetPrimaryTitle(Actor pActor)
@@ -216,6 +317,14 @@ namespace AncientWarfare3.core.lineage
             for (int i = 0; i < titles.Count; i++)
             {
                 VirtualNobleTitleSnapshot title = titles[i];
+                if (!ShouldCreateSuccessor(title.Hereditary))
+                {
+                    Close(title.TitleId, "extinct");
+                    ChronicleEvents.OnVirtualNobleTitleExtinct(
+                        ResolveKingdom(title.KingdomId), pHolder, title.Text);
+                    Invalidate(title.KingdomId, pHolder.data.id);
+                    continue;
+                }
                 Actor successor = FindSuccessor(pHolder, title.KingdomId);
                 if (successor == null)
                 {
@@ -272,9 +381,9 @@ namespace AncientWarfare3.core.lineage
                 command.CommandText = "INSERT INTO " + Table +
                     " (TITLE_ID,KINGDOM_ID,CURRENT_ACTOR_ID,TITLE_TEXT,NORMALIZED_KEY," +
                     "GRANTOR_ACTOR_ID,PREDECESSOR_TITLE_ID,INHERITED_FROM_ACTOR_ID," +
-                    "SUCCESSION_STATE,GRANTED_YEAR,GRANTED_TIME,ACTIVE,PRIMARY_TITLE_SNAPSHOT) " +
+                    "SUCCESSION_STATE,GRANTED_YEAR,GRANTED_TIME,ACTIVE,PRIMARY_TITLE_SNAPSHOT,HEREDITARY) " +
                     "SELECT @id,KINGDOM_ID,@actor,TITLE_TEXT,NORMALIZED_KEY,GRANTOR_ACTOR_ID," +
-                    "TITLE_ID,@prev,'active',@year,@time,1,TITLE_TEXT FROM " + Table +
+                    "TITLE_ID,@prev,'active',@year,@time,1,TITLE_TEXT,HEREDITARY FROM " + Table +
                     " WHERE TITLE_ID=@title";
                 Add(command, "@id", nextId);
                 Add(command, "@actor", pSuccessor.data.id);
@@ -318,6 +427,17 @@ namespace AncientWarfare3.core.lineage
             return best;
         }
 
+        private static long FindActiveActorId(long pTitleId, long pKingdomId)
+        {
+            using SQLiteCommand command = new SQLiteCommand(DB);
+            command.CommandText = "SELECT CURRENT_ACTOR_ID FROM " + Table +
+                " WHERE TITLE_ID=@id AND KINGDOM_ID=@k AND ACTIVE=1 LIMIT 1";
+            Add(command, "@id", pTitleId);
+            Add(command, "@k", pKingdomId);
+            object actorId = command.ExecuteScalar();
+            return actorId == null ? -1L : Convert.ToInt64(actorId);
+        }
+
         private static VirtualNobleTitleSnapshot ReadSnapshot(
             SQLiteDataReader pReader)
         {
@@ -325,7 +445,8 @@ namespace AncientWarfare3.core.lineage
                 pReader.GetInt64(1), pReader.GetInt64(2),
                 pReader.IsDBNull(3) ? "" : pReader.GetString(3),
                 pReader.GetInt64(4), pReader.IsDBNull(5) ? "" :
-                    pReader.GetString(5), pReader.GetInt32(6));
+                    pReader.GetString(5), pReader.GetInt32(6),
+                !pReader.IsDBNull(7) && pReader.GetInt32(7) != 0);
         }
 
         private static Kingdom ResolveKingdom(long pKingdomId)

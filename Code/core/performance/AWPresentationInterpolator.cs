@@ -270,7 +270,7 @@ internal static class AWPresentationInterpolator
     private static bool IsWorldPaused()
     {
         return Config.paused ||
-               (MapBox.instance != null && MapBox.instance.isPaused());
+               (World.world != null && World.world.isPaused());
     }
 
     private sealed class AWActorPresentationState

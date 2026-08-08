@@ -8,16 +8,13 @@ namespace AncientWarfare3.core.court
     {
         private static readonly string[] BaseInstitutions =
         {
-            CourtInstitutionId.WesternBase,
-            CourtInstitutionId.WesternElective,
-            CourtInstitutionId.WesternFeudal,
-            CourtInstitutionId.WesternRoyalDirect
+            CourtInstitutionId.WesternBureaucratic,
+            CourtInstitutionId.WesternFeudalBureaucratic
         };
 
         private static readonly string[] AdvancedInstitutions =
         {
-            CourtInstitutionId.WesternFeudal,
-            CourtInstitutionId.WesternRoyalDirect
+            CourtInstitutionId.WesternFeudalBureaucratic
         };
 
         private static readonly CourtOfficeDefinition[] Definitions =
@@ -38,8 +35,8 @@ namespace AncientWarfare3.core.court
                 CourtSchoolId.Merchant, false, AdvancedInstitutions),
             Office(CourtOfficeId.WestPalaceSteward, CourtOfficeLayer.Central,
                 20, CourtSchoolId.Agrarian, false, AdvancedInstitutions),
-            Office(CourtOfficeId.WestRoyalChamberlain,
-                CourtOfficeLayer.Central, 20, CourtSchoolId.Diplomat, false,
+            Office(CourtOfficeId.WestRoyalConstable,
+                CourtOfficeLayer.Central, 20, CourtSchoolId.Military, true,
                 AdvancedInstitutions),
             Office(CourtOfficeId.WestMarshal, CourtOfficeLayer.Military, 10,
                 CourtSchoolId.Military, true, AdvancedInstitutions),
@@ -73,18 +70,13 @@ namespace AncientWarfare3.core.court
         }
 
         public string ResolveInstitution(bool officeSystemUnlocked,
-            bool electiveAdopted, bool feudalAdopted,
-            bool royalDirectAdopted)
+            bool advancedOfficeSystemUnlocked)
         {
             if (!officeSystemUnlocked)
                 return CourtInstitutionId.WesternPrimitive;
-            if (royalDirectAdopted)
-                return CourtInstitutionId.WesternRoyalDirect;
-            if (feudalAdopted)
-                return CourtInstitutionId.WesternFeudal;
-            if (electiveAdopted)
-                return CourtInstitutionId.WesternElective;
-            return CourtInstitutionId.WesternBase;
+            return advancedOfficeSystemUnlocked
+                ? CourtInstitutionId.WesternFeudalBureaucratic
+                : CourtInstitutionId.WesternBureaucratic;
         }
 
         private static CourtOfficeDefinition Office(string id, string layer,

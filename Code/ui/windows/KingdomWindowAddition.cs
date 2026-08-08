@@ -58,8 +58,6 @@ namespace AncientWarfare3.ui.windows
         private Text _inheritanceText;
         private Image _inheritanceIcon;
         private TipButton _inheritanceTip;
-        private Text _virtualTitlesText;
-        private TipButton _virtualTitlesTip;
         private UiUnitAvatarElement _kingAvatar;
         private UiUnitAvatarElement _heirAvatar;
         private GameObject _kingCol;   // 国王头像+标签竖列(整体显隐)
@@ -141,11 +139,6 @@ namespace AncientWarfare3.ui.windows
                 "ui/Icons/iconKings", out _inheritanceText,
                 out _inheritanceIcon, out _inheritanceTip,
                 OpenInheritanceWindow));
-            middleBar.AddChild(BuildTextButton("VirtualTitles",
-                new Vector2(CourtUiRules.CourtButtonWidth,
-                    CourtUiRules.CourtButtonHeight), out _virtualTitlesText,
-                out _virtualTitlesTip, OpenVirtualTitlesWindow));
-
             // 右:继承人头像 + 下方"继承人"标签(与国王对称)。show(heir) 自带点击→打开继承人窗;
             //    无继承人时 Refresh 里整列隐藏(不顶国王位 —— 用户报"继承人顶替了国王显示位")。
             _heirCol = BuildAvatarColumn(custom, avatarTemplate, "AW_HeirAvatar", "aw_label_heir", out _heirAvatar);
@@ -278,20 +271,10 @@ namespace AncientWarfare3.ui.windows
                     out _inheritanceIcon, out _inheritanceTip,
                     OpenInheritanceWindow);
             }
-            Transform virtualTitles = middle.transform.FindRecursive("VirtualTitles");
-            if (virtualTitles == null && middleBar != null)
-            {
-                GameObject obj = BuildTextButton("VirtualTitles",
-                    new Vector2(CourtUiRules.CourtButtonWidth,
-                        CourtUiRules.CourtButtonHeight), out _virtualTitlesText,
-                    out _virtualTitlesTip, OpenVirtualTitlesWindow);
-                obj.transform.SetParent(middleBar, false);
-            }
-            else if (virtualTitles != null)
-            {
-                CacheTextButton(virtualTitles, out _virtualTitlesText,
-                    out _virtualTitlesTip, OpenVirtualTitlesWindow);
-            }
+            Transform virtualTitles = middle.transform.FindRecursive(
+                "VirtualTitles");
+            if (virtualTitles != null)
+                Object.Destroy(virtualTitles.gameObject);
             var avatars = middle.GetComponentsInChildren<UiUnitAvatarElement>(true);
             // 约定建立顺序:[0]=国王(AW_KingAvatar)、[1]=继承人(AW_HeirAvatar)。
             _kingAvatar = avatars.FirstOrDefault(a => a.name == "AW_KingAvatar") ?? (avatars.Length > 0 ? avatars[0] : null);
@@ -596,13 +579,6 @@ namespace AncientWarfare3.ui.windows
             InheritanceLawWindow.Open(kingdom.id);
         }
 
-        private void OpenVirtualTitlesWindow()
-        {
-            Kingdom kingdom = _window != null ? _window.meta_object : null;
-            if (kingdom?.data == null || kingdom.isRekt()) return;
-            VirtualNobleTitleRosterWindow.Open(kingdom.id);
-        }
-
         // ───────────────────────── 刷新数据(每次开窗) ─────────────────────────
 
         private void RefreshPolicyBoxes(Kingdom pKingdom)
@@ -711,11 +687,10 @@ namespace AncientWarfare3.ui.windows
 
         private static string PolicyStateButtonLabel(Kingdom pKingdom)
         {
-            bool western = KingdomPolicyProfileRules.UsesWesternCourtLabel(
-                KingdomPolicyService.GetPolicyProfile(pKingdom));
-            return western
-                ? AW_L10n.Text("aw_policy_court_short", "Court")
-                : AW_L10n.Text("aw_policy_state_short", "\u653F");
+            string localeKey = KingdomPolicyProfileRules
+                .ResolvePolicyStateLabelKey(
+                    KingdomPolicyService.GetPolicyProfile(pKingdom));
+            return AW_L10n.Text(localeKey, "\u653F");
         }
 
         private void RefreshCourtButton(Kingdom pKingdom)
@@ -723,11 +698,19 @@ namespace AncientWarfare3.ui.windows
             if (pKingdom?.data == null) return;
             bool policyEnabled = KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom);
             bool officialCourt = policyEnabled && CourtService.HasOfficialCourt(pKingdom);
+            bool western = CourtProfileRegistry.For(pKingdom)?.Id ==
+                           CourtProfileId.Western;
             string title = !policyEnabled
                 ? AW_L10n.Text("aw_court_button_locked", "\u5B98\u573A\u672A\u542F\u7528")
-                : officialCourt
-                    ? AW_L10n.Text("aw_court_button_official", "\u767E\u5BB6\u5B98\u573A")
-                    : AW_L10n.Text("aw_court_button_primitive", "\u539F\u59CB\u671D\u4F1A");
+                : western
+                    ? officialCourt
+                        ? AW_L10n.Text("aw_court_button_western_official",
+                            "Western Court")
+                        : AW_L10n.Text("aw_court_button_western_primitive",
+                            "Household Council")
+                    : officialCourt
+                        ? AW_L10n.Text("aw_court_button_official", "\u767E\u5BB6\u5B98\u573A")
+                        : AW_L10n.Text("aw_court_button_primitive", "\u539F\u59CB\u671D\u4F1A");
 
             if (_courtText != null)
             {
@@ -807,27 +790,6 @@ namespace AncientWarfare3.ui.windows
             SetPolicyTip(_inheritanceTip,
                 AW_L10n.Text("aw_inheritance_window_title", "\u7ee7\u627f\u6cd5"),
                 title + "\n" + heirTitle + ": " + heirName);
-        }
-
-        private void RefreshVirtualTitlesButton(Kingdom pKingdom)
-        {
-            if (pKingdom?.data == null || _virtualTitlesText == null) return;
-            var titles = VirtualNobleTitleService.GetActiveForKingdom(pKingdom.id);
-            _virtualTitlesText.text = AW_L10n.Text("aw_virtual_titles_short", "Titles") + ":" + titles.Count;
-            _virtualTitlesText.color = Color.white;
-            var tip = new System.Text.StringBuilder();
-            tip.AppendLine(AW_L10n.Text("aw_virtual_titles", "Title Holders"));
-            if (titles.Count == 0)
-                tip.Append(AW_L10n.Text("aw_virtual_titles_none", "No virtual titles"));
-            for (int i = 0; i < titles.Count; i++)
-            {
-                Actor holder = World.world?.units?.get(titles[i].ActorId);
-                tip.AppendLine(titles[i].Text + " - " +
-                    (holder?.getName() ?? AW_L10n.Text(
-                        "aw_unknown_actor", "Unknown actor")));
-            }
-            SetPolicyTip(_virtualTitlesTip,
-                AW_L10n.Text("aw_virtual_titles", "Title Holders"), tip.ToString());
         }
 
         private static string BuildCurrentPolicyText(Kingdom pKingdom)
@@ -996,7 +958,6 @@ namespace AncientWarfare3.ui.windows
             RefreshReservedButton();
             RefreshVassalButton(kingdom);
             RefreshInheritanceButton(kingdom);
-            RefreshVirtualTitlesButton(kingdom);
             if (_kingCol != null && _kingAvatar != null)
             {
                 bool hasKing = kingdom.hasKing();

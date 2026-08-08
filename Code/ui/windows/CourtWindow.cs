@@ -53,7 +53,9 @@ namespace AncientWarfare3.ui.windows
         private Text _householdText;
         private TipButton _householdTip;
         private Text _centralSectionLabel;
+        private Text _militarySectionLabel;
         private Text _localSectionLabel;
+        private Image _militarySectionDivider;
         private Image _localSectionDivider;
         private WideWindowChrome _windowChrome;
         private long _displayedKingdomId = -1L;
@@ -321,6 +323,7 @@ namespace AncientWarfare3.ui.windows
                     return;
                 }
 
+                UpdateWindowTitle(kingdom);
                 CourtSnapshot snapshot = CourtService.GetSnapshot(kingdom);
                 UpdateSummary(kingdom, snapshot);
                 List<CourtPyramidNodeModel> nodes = CourtReadModelService.Build(kingdom);
@@ -574,7 +577,9 @@ namespace AncientWarfare3.ui.windows
             foreach (GameObject link in _linkPool)
                 if (link != null) link.SetActive(false);
             if (_centralSectionLabel != null) _centralSectionLabel.gameObject.SetActive(false);
+            if (_militarySectionLabel != null) _militarySectionLabel.gameObject.SetActive(false);
             if (_localSectionLabel != null) _localSectionLabel.gameObject.SetActive(false);
+            if (_militarySectionDivider != null) _militarySectionDivider.gameObject.SetActive(false);
             if (_localSectionDivider != null) _localSectionDivider.gameObject.SetActive(false);
             _activeLinkCount = 0;
             RemoveOrphanedLinkChildren();
@@ -584,23 +589,47 @@ namespace AncientWarfare3.ui.windows
         {
             _centralSectionLabel = EnsureText(pCanvas, "CentralSectionLabel", 10, TextAnchor.UpperLeft);
             _centralSectionLabel.fontStyle = FontStyle.Bold;
+            _militarySectionLabel = EnsureText(pCanvas, "MilitarySectionLabel", 10, TextAnchor.UpperLeft);
+            _militarySectionLabel.fontStyle = FontStyle.Bold;
             _localSectionLabel = EnsureText(pCanvas, "LocalSectionLabel", 10, TextAnchor.UpperLeft);
             _localSectionLabel.fontStyle = FontStyle.Bold;
 
-            Transform existing = pCanvas.Find("LocalSectionDivider");
-            GameObject divider = existing != null
-                ? existing.gameObject
-                : new GameObject("LocalSectionDivider", typeof(RectTransform), typeof(Image));
+            _militarySectionDivider = EnsureSectionDivider(pCanvas,
+                "MilitarySectionDivider");
+            _localSectionDivider = EnsureSectionDivider(pCanvas,
+                "LocalSectionDivider");
+        }
+
+        private void UpdateWindowTitle(Kingdom pKingdom)
+        {
+            ScrollWindow scrollWindow = GetComponent<ScrollWindow>();
+            if (scrollWindow?.titleText == null) return;
+            bool western = CourtProfileRegistry.For(pKingdom)?.Id ==
+                           CourtProfileId.Western;
+            scrollWindow.titleText.text = western
+                ? AW_L10n.Text("aw_court_title_western", "Western Court")
+                : AW_L10n.Text("aw_court_title", "Court of the Hundred Schools");
+        }
+
+        private static Image EnsureSectionDivider(Transform pCanvas,
+            string pName)
+        {
+            Transform existing = pCanvas.Find(pName);
+            GameObject divider = existing != null ? existing.gameObject :
+                new GameObject(pName, typeof(RectTransform), typeof(Image));
             if (existing == null) divider.transform.SetParent(pCanvas, false);
-            _localSectionDivider = divider.GetComponent<Image>();
-            _localSectionDivider.sprite = WhiteSprite();
-            _localSectionDivider.raycastTarget = false;
+            Image image = divider.GetComponent<Image>();
+            image.sprite = WhiteSprite();
+            image.raycastTarget = false;
+            return image;
         }
 
         private void LayoutSectionMarkers(List<CourtPyramidNodeModel> pNodes,
             CourtPyramidCanvasBounds pBounds, Vector2 pOffset, Color pColor)
         {
-            bool hasCentral = pNodes.Any(p => !CourtPyramidRules.IsLocalNode(p));
+            bool hasCentral = pNodes.Any(p => !CourtPyramidRules.IsLocalNode(p) &&
+                !CourtPyramidRules.IsMilitaryNode(p));
+            bool hasMilitary = pNodes.Any(CourtPyramidRules.IsMilitaryNode);
             bool hasLocal = pNodes.Any(CourtPyramidRules.IsLocalNode);
             if (_centralSectionLabel != null)
             {
@@ -610,6 +639,24 @@ namespace AncientWarfare3.ui.windows
                 LayoutCanvasText(_centralSectionLabel, 8f, -4f, Mathf.Max(1f, pBounds.Width - 16f), 18f);
                 _centralSectionLabel.transform.SetAsLastSibling();
             }
+
+            float militaryDividerY = CourtPyramidRules.MilitarySectionDividerY(
+                pNodes, CourtActorNodeView.Height) + pOffset.y;
+            bool showMilitaryMarker = hasCentral && hasMilitary &&
+                !float.IsNaN(militaryDividerY);
+            if (_militarySectionLabel != null)
+            {
+                _militarySectionLabel.gameObject.SetActive(showMilitaryMarker);
+                _militarySectionLabel.text = AW_L10n.Text(
+                    "aw_court_layer_military", "Military Bureau");
+                _militarySectionLabel.color = new Color(pColor.r, pColor.g,
+                    pColor.b, 0.9f);
+                LayoutCanvasText(_militarySectionLabel, 8f,
+                    militaryDividerY + 8f, 82f, 18f);
+                _militarySectionLabel.transform.SetAsLastSibling();
+            }
+            LayoutSectionDivider(_militarySectionDivider,
+                showMilitaryMarker, militaryDividerY, pBounds, pColor);
 
             float dividerY = CourtPyramidRules.LocalSectionDividerY(
                 pNodes, CourtActorNodeView.Height) + pOffset.y;
@@ -622,18 +669,25 @@ namespace AncientWarfare3.ui.windows
                 LayoutCanvasText(_localSectionLabel, 8f, dividerY + 8f, 82f, 18f);
                 _localSectionLabel.transform.SetAsLastSibling();
             }
-            if (_localSectionDivider != null)
-            {
-                _localSectionDivider.gameObject.SetActive(showLocalMarker);
-                RectTransform rect = _localSectionDivider.rectTransform;
-                rect.anchorMin = new Vector2(0f, 1f);
-                rect.anchorMax = new Vector2(0f, 1f);
-                rect.pivot = new Vector2(0f, 0.5f);
-                rect.anchoredPosition = new Vector2(92f, dividerY);
-                rect.sizeDelta = new Vector2(Mathf.Max(1f, pBounds.Width - 104f), 2f);
-                _localSectionDivider.color = new Color(pColor.r, pColor.g, pColor.b, 0.52f);
-                _localSectionDivider.transform.SetAsLastSibling();
-            }
+            LayoutSectionDivider(_localSectionDivider, showLocalMarker,
+                dividerY, pBounds, pColor);
+        }
+
+        private static void LayoutSectionDivider(Image pDivider, bool pVisible,
+            float pY, CourtPyramidCanvasBounds pBounds, Color pColor)
+        {
+            if (pDivider == null) return;
+            pDivider.gameObject.SetActive(pVisible);
+            if (!pVisible) return;
+            RectTransform rect = pDivider.rectTransform;
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.anchoredPosition = new Vector2(92f, pY);
+            rect.sizeDelta = new Vector2(Mathf.Max(1f,
+                pBounds.Width - 104f), 2f);
+            pDivider.color = new Color(pColor.r, pColor.g, pColor.b, 0.52f);
+            pDivider.transform.SetAsLastSibling();
         }
 
         private void RemoveOrphanedLinkChildren()
@@ -804,12 +858,14 @@ namespace AncientWarfare3.ui.windows
                     return AW_L10n.Text("aw_court_tier_easternzhou", "Eastern Zhou Six Ministers");
                 case CourtInstitutionId.WesternPrimitive:
                     return AW_L10n.Text("aw_court_tier_western_primitive", "Household Council");
+                case CourtInstitutionId.WesternBureaucratic:
                 case CourtInstitutionId.WesternBase:
-                    return AW_L10n.Text("aw_court_tier_western_base", "Royal Council");
+                    return AW_L10n.Text("aw_court_tier_western_bureaucratic", "Bureaucratic Court");
                 case CourtInstitutionId.WesternElective:
                     return AW_L10n.Text("aw_court_tier_western_elective", "Elective Offices");
+                case CourtInstitutionId.WesternFeudalBureaucratic:
                 case CourtInstitutionId.WesternFeudal:
-                    return AW_L10n.Text("aw_court_tier_western_feudal", "Feudal Court");
+                    return AW_L10n.Text("aw_court_tier_western_feudal_bureaucratic", "Feudal Bureaucratic Court");
                 case CourtInstitutionId.WesternRoyalDirect:
                     return AW_L10n.Text("aw_court_tier_western_royal_direct", "Royal Administration");
                 default:

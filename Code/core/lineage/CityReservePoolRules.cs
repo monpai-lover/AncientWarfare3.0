@@ -94,7 +94,7 @@ namespace AncientWarfare3.core.lineage
 
         public static int ActorBudget(bool preparation)
         {
-            return preparation ? int.MaxValue : PeaceActorBudget;
+            return preparation ? PreparationActorBudget : PeaceActorBudget;
         }
 
         public static int FullReconciliationBudget(int residentCount,

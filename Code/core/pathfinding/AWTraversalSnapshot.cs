@@ -1,5 +1,6 @@
 // Derived from Cultiway-Reborn pathfinding (MIT, Copyright (c) 2025 Inmny).
 using System;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace AncientWarfare3.core.pathfinding
@@ -115,6 +116,16 @@ namespace AncientWarfare3.core.pathfinding
             }
         }
 
+        internal AWTileTraversalSnapshot WithOceanComponent(int pComponent)
+        {
+            var neighbors = new int[NeighborCount];
+            for (int i = 0; i < NeighborCount; i++) neighbors[i] = GetNeighbor(i);
+            return new AWTileTraversalSnapshot(Id, X, Y, Ground, Block,
+                Liquid, Ocean, Lava, Fire, DamageUnits, TerrainDamage,
+                WalkMultiplier, GoodForBoat, pComponent, RegionId, IslandId,
+                neighbors);
+        }
+
         private static int Neighbor(int[] pNeighbors, int pIndex)
         {
             return pNeighbors != null && pIndex >= 0 && pIndex < pNeighbors.Length
@@ -130,7 +141,7 @@ namespace AncientWarfare3.core.pathfinding
             bool pDiesInLava, bool pBurning, bool pStartsInLiquid, bool pStartsInWater,
             float pHealth, float pMaxHealth, float pStamina, float pMaxStamina,
             float pMovementSpeed, float pWaterDamage, float pStaminaRegeneration,
-            bool pIsMilitary = false)
+            bool pIsMilitary = false, bool pHasFastSwimming = false)
         {
             CanFly = pCanFly;
             IsBoat = pIsBoat;
@@ -150,6 +161,7 @@ namespace AncientWarfare3.core.pathfinding
             WaterDamage = Math.Max(0f, pWaterDamage);
             StaminaRegeneration = Math.Max(0f, pStaminaRegeneration);
             IsMilitary = pIsMilitary;
+            HasFastSwimming = pHasFastSwimming;
         }
 
         public bool CanFly { get; }
@@ -170,6 +182,7 @@ namespace AncientWarfare3.core.pathfinding
         public float WaterDamage { get; }
         public float StaminaRegeneration { get; }
         public bool IsMilitary { get; }
+        public bool HasFastSwimming { get; }
 
         public static AWActorTraversalProfile CreateWalker(float health, float stamina, float speed)
         {
@@ -181,12 +194,19 @@ namespace AncientWarfare3.core.pathfinding
     public sealed class AWTraversalGeneration : IDisposable
     {
         public const int DefaultChunkSize = 8;
+        private static long _nextIdentity;
 
         private readonly AWTileTraversalSnapshot[][] _chunks;
+        private readonly IReadOnlyDictionary<int,
+            AWTileTraversalSnapshot[]> _overlayChunks;
+        private readonly AWRegionTopologySnapshot _regionTopology;
+        private readonly long _identity;
+        private AWTraversalGeneration _baseGeneration;
         private int _references = 1;
 
         internal AWTraversalGeneration(int pId, int pWidth, int pHeight, int pChunkSize,
-            AWTileTraversalSnapshot[][] pChunks)
+            AWTileTraversalSnapshot[][] pChunks,
+            AWRegionTopologySnapshot pRegionTopology = null)
         {
             Id = pId;
             Width = Math.Max(0, pWidth);
@@ -194,6 +214,36 @@ namespace AncientWarfare3.core.pathfinding
             ChunkSize = Math.Max(1, pChunkSize);
             ChunksWide = Math.Max(1, (Width + ChunkSize - 1) / ChunkSize);
             _chunks = pChunks ?? Array.Empty<AWTileTraversalSnapshot[]>();
+            _overlayChunks = null;
+            _identity = Interlocked.Increment(ref _nextIdentity);
+            _regionTopology = pRegionTopology ?? AWRegionTopologySnapshot.Build(
+                _chunks, Width, Height, ChunkSize);
+        }
+
+        private AWTraversalGeneration(int pId, AWTraversalGeneration pBase,
+            IReadOnlyDictionary<int, AWTileTraversalSnapshot[]> pOverlays)
+        {
+            if (pBase == null) throw new ArgumentNullException(nameof(pBase));
+            Id = pId;
+            Width = pBase.Width;
+            Height = pBase.Height;
+            ChunkSize = pBase.ChunkSize;
+            ChunksWide = pBase.ChunksWide;
+            _chunks = Array.Empty<AWTileTraversalSnapshot[]>();
+            _identity = Interlocked.Increment(ref _nextIdentity);
+            _regionTopology = pBase.RegionTopology;
+            if (pOverlays == null || pOverlays.Count == 0)
+                _overlayChunks = null;
+            else
+            {
+                var overlays = new Dictionary<int,
+                    AWTileTraversalSnapshot[]>(pOverlays.Count);
+                foreach (KeyValuePair<int, AWTileTraversalSnapshot[]> entry in
+                         pOverlays)
+                    overlays[entry.Key] = entry.Value;
+                _overlayChunks = overlays;
+            }
+            _baseGeneration = pBase.Retain();
         }
 
         public int Id { get; }
@@ -203,12 +253,20 @@ namespace AncientWarfare3.core.pathfinding
         public int ChunksWide { get; }
         public int TileCount => Width * Height;
         public int ReferenceCount => Math.Max(0, Volatile.Read(ref _references));
+        internal long Identity => _identity;
+        internal AWRegionTopologySnapshot RegionTopology => _regionTopology;
 
         public AWTraversalGeneration Retain()
         {
-            if (Interlocked.Increment(ref _references) <= 1)
-                throw new ObjectDisposedException(nameof(AWTraversalGeneration));
-            return this;
+            while (true)
+            {
+                int current = Volatile.Read(ref _references);
+                if (current <= 0 || current == int.MaxValue)
+                    throw new ObjectDisposedException(nameof(AWTraversalGeneration));
+                if (Interlocked.CompareExchange(ref _references, current + 1,
+                        current) == current)
+                    return this;
+            }
         }
 
         public bool TryGet(int pTileId, out AWTileTraversalSnapshot pTile)
@@ -220,8 +278,16 @@ namespace AncientWarfare3.core.pathfinding
             int chunkX = x / ChunkSize;
             int chunkY = y / ChunkSize;
             int chunkId = chunkX + chunkY * ChunksWide;
-            if (chunkId < 0 || chunkId >= _chunks.Length) return false;
-            AWTileTraversalSnapshot[] chunk = _chunks[chunkId];
+            AWTileTraversalSnapshot[] chunk;
+            if (_overlayChunks != null &&
+                _overlayChunks.TryGetValue(chunkId, out chunk)) { }
+            else if (_baseGeneration != null)
+                return _baseGeneration.TryGet(pTileId, out pTile);
+            else
+            {
+                if (chunkId < 0 || chunkId >= _chunks.Length) return false;
+                chunk = _chunks[chunkId];
+            }
             if (chunk == null) return false;
             int local = x % ChunkSize + (y % ChunkSize) * ChunkSize;
             if (local < 0 || local >= chunk.Length) return false;
@@ -231,7 +297,24 @@ namespace AncientWarfare3.core.pathfinding
 
         internal AWTileTraversalSnapshot[][] CopyChunkReferences()
         {
-            return (AWTileTraversalSnapshot[][])_chunks.Clone();
+            if (_baseGeneration == null)
+                return (AWTileTraversalSnapshot[][])_chunks.Clone();
+            AWTileTraversalSnapshot[][] chunks =
+                _baseGeneration.CopyChunkReferences();
+            if (_overlayChunks != null)
+                foreach (KeyValuePair<int, AWTileTraversalSnapshot[]> entry in
+                         _overlayChunks)
+                    if (entry.Key >= 0 && entry.Key < chunks.Length)
+                        chunks[entry.Key] = entry.Value;
+            return chunks;
+        }
+
+        internal static AWTraversalGeneration FromOverlay(int pId,
+            AWTraversalGeneration pBase,
+            IReadOnlyDictionary<int, AWTileTraversalSnapshot[]> pOverlays)
+        {
+            return pBase == null ? null : new AWTraversalGeneration(pId,
+                pBase, pOverlays);
         }
 
         public static AWTraversalGeneration FromTiles(int pId, int width, int height,
@@ -259,7 +342,13 @@ namespace AncientWarfare3.core.pathfinding
         public void Dispose()
         {
             int value = Interlocked.Decrement(ref _references);
-            if (value < 0) Interlocked.Exchange(ref _references, 0);
+            if (value == 0)
+            {
+                AWTraversalGeneration baseGeneration = Interlocked.Exchange(
+                    ref _baseGeneration, null);
+                baseGeneration?.Dispose();
+            }
+            else if (value < 0) Interlocked.Exchange(ref _references, 0);
         }
     }
 }

@@ -1,0 +1,39 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class WesternCourtOfficeEffectRulesTests
+{
+    public static void Run()
+    {
+        WesternCourtOfficeEffects effects =
+            WesternCourtOfficeEffectRules.Resolve(new[]
+            {
+                CourtOfficeId.WestRoyalConstable
+            });
+        Equal(0.02f, effects.CentralAdministrationBonus,
+            "Royal Constable contributes central administration");
+        Equal(0.02f, effects.MilitaryOrganizationBonus,
+            "Royal Constable contributes military organization");
+
+        effects = WesternCourtOfficeEffectRules.Resolve(new[]
+        {
+            CourtOfficeId.WestExecutive,
+            CourtOfficeId.WestSenateElder,
+            CourtOfficeId.WestHighPriest,
+            CourtOfficeId.WestHighJustice,
+            CourtOfficeId.WestTreasurer,
+            CourtOfficeId.WestPalaceSteward,
+            CourtOfficeId.WestRoyalConstable,
+            CourtOfficeId.WestSecretary
+        });
+        Equal(0.10f, effects.CentralAdministrationBonus,
+            "central office effects are capped");
+    }
+
+    private static void Equal(float expected, float actual, string message)
+    {
+        if (Math.Abs(expected - actual) > 0.0001f)
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

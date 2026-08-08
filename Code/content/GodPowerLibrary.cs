@@ -108,15 +108,13 @@ namespace AncientWarfare3.content
                     name = optionId,
                     path_icon = "ui/icons/iconDiplomacy",
                     toggle_name = optionId,
-                    toggle_action = BuildMapModeToggleAction(
-                        SyncDiplomacyAiSetting)
+                    toggle_action = BuildBooleanToggleAction(SyncDiplomacyAiSetting)
                 });
             }
             else
             {
                 power.toggle_name = optionId;
-                power.toggle_action = BuildMapModeToggleAction(
-                    SyncDiplomacyAiSetting);
+                power.toggle_action = BuildBooleanToggleAction(SyncDiplomacyAiSetting);
             }
 
             SyncDiplomacyAiSetting();
@@ -768,6 +766,21 @@ namespace AncientWarfare3.content
                     try { pDirtyAction?.Invoke(); }
                     catch { }
                 }));
+        }
+
+        private static PowerToggleAction BuildBooleanToggleAction(Action pChangedAction)
+        {
+            return new PowerToggleAction(pPowerId =>
+            {
+                GodPower power = AssetManager.powers.get(pPowerId);
+                if (power == null || string.IsNullOrEmpty(power.toggle_name)) return;
+                if (!PlayerConfig.dict.TryGetValue(power.toggle_name,
+                        out PlayerOptionData optionData)) return;
+
+                optionData.boolVal = !optionData.boolVal;
+                PlayerConfig.saveData();
+                pChangedAction?.Invoke();
+            });
         }
 
         private static void LinkMapModeAssets()

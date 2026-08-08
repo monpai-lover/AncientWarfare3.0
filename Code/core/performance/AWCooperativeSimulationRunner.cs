@@ -265,7 +265,8 @@ namespace AncientWarfare3.core.performance
                     AW3MultiplayerReplicaScope.IsReplicaSession;
                 AWPausedFrameAction pausedAction =
                     AWFrameSchedulerRules.ResolvePausedFrameAction(
-                        AWPerformanceSettings.Mode, pMap.isPaused(),
+                        AWPerformanceSettings.Mode,
+                        World.world == null || World.world.isPaused(),
                         replicaSession, Active);
                 if (pausedAction == AWPausedFrameAction.AbortReplicaCycle)
                 {
@@ -832,7 +833,7 @@ namespace AncientWarfare3.core.performance
         private void StartAdmissionCycle(MapBox pMap)
         {
             _world = pMap;
-            _cyclePaused = pMap.isPaused();
+            _cyclePaused = World.world == null || World.world.isPaused();
             _cycleMode = AWPerformanceSettings.Mode;
             _cycleTimeScale = Config.time_scale_asset;
             if (_cycleTimeScale == null)
@@ -1390,7 +1391,8 @@ namespace AncientWarfare3.core.performance
 
             _requestedSpeed = (float)nextRequestedSpeed;
             if (!pAllowNewCycles || mode == AWSimulationMode.Native ||
-                pMap.isPaused() || pReplicaSession ||
+                World.world == null || World.world.isPaused() ||
+                pReplicaSession ||
                 _requestedSpeed <= 0f)
             {
                 _admissionCredits = 0d;
@@ -1408,7 +1410,8 @@ namespace AncientWarfare3.core.performance
         {
             return AWFrameSchedulerRules.CanAdmit(
                 AWPerformanceSettings.Mode, pAllowNewCycles,
-                pMap.isPaused(), pReplicaSession, _admissionCredits,
+                World.world == null || World.world.isPaused(),
+                pReplicaSession, _admissionCredits,
                 modCycleActive: false);
         }
 

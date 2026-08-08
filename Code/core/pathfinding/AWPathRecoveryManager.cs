@@ -1,6 +1,6 @@
 // Derived from Cultiway-Reborn pathfinding (MIT, Copyright (c) 2025 Inmny).
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 namespace AncientWarfare3.core.pathfinding
 {
@@ -23,8 +23,8 @@ namespace AncientWarfare3.core.pathfinding
 
     public sealed class AWPathRecoveryManager
     {
-        private readonly Dictionary<long, RecoveryState> _states =
-            new Dictionary<long, RecoveryState>();
+        private readonly ConcurrentDictionary<long, RecoveryState> _states =
+            new ConcurrentDictionary<long, RecoveryState>();
 
         public static int RetryLimit(AWPathFailureReason pReason)
         {
@@ -36,7 +36,7 @@ namespace AncientWarfare3.core.pathfinding
             int limit = RetryLimit(pReason);
             if (pActorId < 0 || limit <= 0)
             {
-                _states.Remove(pActorId);
+                _states.TryRemove(pActorId, out _);
                 return default;
             }
             _states.TryGetValue(pActorId, out RecoveryState state);
@@ -44,7 +44,7 @@ namespace AncientWarfare3.core.pathfinding
             int attempt = state.Attempt + 1;
             if (attempt > limit)
             {
-                _states.Remove(pActorId);
+                _states.TryRemove(pActorId, out _);
                 return new AWPathRetryDecision(false, attempt, 0f, now);
             }
             float delay = AWPathLifecycleRules.RetryDelay(attempt);
@@ -57,8 +57,8 @@ namespace AncientWarfare3.core.pathfinding
             return _states.TryGetValue(pActorId, out RecoveryState state) && now >= state.DueTime;
         }
 
-        public void OnProgress(long pActorId) => _states.Remove(pActorId);
-        public void Clear(long pActorId) => _states.Remove(pActorId);
+        public void OnProgress(long pActorId) => _states.TryRemove(pActorId, out _);
+        public void Clear(long pActorId) => _states.TryRemove(pActorId, out _);
         public void Clear() => _states.Clear();
 
         private readonly struct RecoveryState

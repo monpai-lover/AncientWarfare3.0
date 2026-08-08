@@ -17,8 +17,8 @@ namespace AncientWarfare3.core.performance
         {
             if (_nativeCycleToken < long.MaxValue)
                 _nativeCycleToken++;
-            bool paused = MapBox.instance == null ||
-                          MapBox.instance.isPaused();
+            bool paused = World.world == null ||
+                          World.world.isPaused();
             ProcessCycle(NativeGate,
                 ArmyRtsSchedulerOwner.NativeArmyManager,
                 _nativeCycleToken, paused);

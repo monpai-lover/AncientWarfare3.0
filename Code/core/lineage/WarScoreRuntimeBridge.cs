@@ -71,10 +71,14 @@ namespace AncientWarfare3.core.lineage
                 }
                 int cityScoreBudget =
                     WarScoreRules.CityScoreBudgetForWarType(warType);
+                bool nonNegotiableWar =
+                    ZhuluPeaceGuard.BlocksOrdinarySettlement(war) ||
+                    RebellionDirectTerritoryTransferService.
+                        BlocksOrdinarySettlement(war);
                 return runtime.StartWar(war.data.id, attacker.id,
                     defender?.id ?? -1L, CurrentWorldTime(),
                     cityScoreBudget, baselines.Attackers,
-                    baselines.Defenders);
+                    baselines.Defenders, nonNegotiableWar);
             }
             catch { return false; }
         }
@@ -199,9 +203,13 @@ namespace AncientWarfare3.core.lineage
                 WarParticipantMobilizationBaselines baselines =
                     WarParticipantMobilizationBaselineService.
                         RegisterExistingParticipants(war);
+                bool nonNegotiableWar =
+                    ZhuluPeaceGuard.BlocksOrdinarySettlement(war) ||
+                    RebellionDirectTerritoryTransferService.
+                        BlocksOrdinarySettlement(war);
                 bool changed = runtime.CalibrateYear(war.data.id, duration,
                     year, baselines.Attackers, baselines.Defenders,
-                    CurrentWorldTime());
+                    CurrentWorldTime(), nonNegotiableWar);
                 if (changed)
                 {
                     ScheduleActiveParticipantControlRevaluation(war);

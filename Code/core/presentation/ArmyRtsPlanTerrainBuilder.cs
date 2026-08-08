@@ -9,7 +9,8 @@ namespace AncientWarfare3.core.presentation
             IReadOnlyList<ArmyRtsPlanColor> pColors,
             IReadOnlyList<long> pOwnerIds,
             ISet<long> pParticipantIds,
-            IReadOnlyDictionary<long, ArmyRtsPlanColor> pKingdomColors)
+            IReadOnlyDictionary<long, ArmyRtsPlanColor> pKingdomColors,
+            bool pDrawNonParticipantBoundaries = true)
         {
             int width = Math.Max(1, pWidth);
             int height = Math.Max(1, pHeight);
@@ -45,13 +46,19 @@ namespace AncientWarfare3.core.presentation
                 {
                     int index = y * width + x;
                     if (x + 1 < width && pOwnerIds[index] !=
-                        pOwnerIds[index + 1])
+                        pOwnerIds[index + 1] &&
+                        (pDrawNonParticipantBoundaries ||
+                         IsParticipantBoundary(pOwnerIds[index],
+                             pOwnerIds[index + 1], pParticipantIds)))
                         MarkBoundary(pixels, index, index + 1,
                             pOwnerIds[index], pOwnerIds[index + 1],
                             pParticipantIds, participantBoundary,
                             otherBoundary);
                     if (y + 1 < height && pOwnerIds[index] !=
-                        pOwnerIds[index + width])
+                        pOwnerIds[index + width] &&
+                        (pDrawNonParticipantBoundaries ||
+                         IsParticipantBoundary(pOwnerIds[index],
+                             pOwnerIds[index + width], pParticipantIds)))
                         MarkBoundary(pixels, index, index + width,
                             pOwnerIds[index], pOwnerIds[index + width],
                             pParticipantIds, participantBoundary,
@@ -59,6 +66,14 @@ namespace AncientWarfare3.core.presentation
                 }
             }
             return new ArmyRtsPlanTerrain(width, height, pixels);
+        }
+
+        private static bool IsParticipantBoundary(long pFirstOwner,
+            long pSecondOwner, ISet<long> pParticipantIds)
+        {
+            return pParticipantIds != null &&
+                ((pFirstOwner >= 0L && pParticipantIds.Contains(pFirstOwner)) ||
+                 (pSecondOwner >= 0L && pParticipantIds.Contains(pSecondOwner)));
         }
 
         private static void MarkBoundary(byte[] pPixels, int pFirst,

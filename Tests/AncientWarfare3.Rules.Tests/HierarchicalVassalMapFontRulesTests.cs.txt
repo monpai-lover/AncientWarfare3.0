@@ -1,0 +1,35 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalMapFontRulesTests
+{
+    public static void Run()
+    {
+        Equal(HierarchicalVassalMapFontMode.Bundled,
+            HierarchicalVassalMapFontRules.ResolveMode(true),
+            "enabled setting selects bundled font");
+        Equal(HierarchicalVassalMapFontMode.GameLocalized,
+            HierarchicalVassalMapFontRules.Toggle(
+                HierarchicalVassalMapFontMode.Bundled),
+            "button switches to game localized font");
+        Equal(HierarchicalVassalMapFontMode.Bundled,
+            HierarchicalVassalMapFontRules.Toggle(
+                HierarchicalVassalMapFontMode.GameLocalized),
+            "button switches back to bundled font");
+        Equal(false, HierarchicalVassalMapFontRules.ShouldUseBundledFont(
+            HierarchicalVassalMapFontMode.GameLocalized),
+            "localized mode bypasses bundled loader");
+        Equal(1, HierarchicalVassalMapFontRules.NextIndex(0, 3),
+            "font cycle advances to the next entry");
+        Equal(0, HierarchicalVassalMapFontRules.NextIndex(2, 3),
+            "font cycle wraps to the first entry");
+        Equal(-1, HierarchicalVassalMapFontRules.NextIndex(0, 0),
+            "empty font catalog has no next entry");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected=" + pExpected + ", actual=" + pActual);
+    }
+}

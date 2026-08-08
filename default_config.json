@@ -120,5 +120,15 @@
       "BoolVal": false,
       "Callback": "AWPerformanceSettings:SwitchAsyncShadowChecks"
     }
+  ],
+  "AWMapModeSettings": [
+    {
+      "Id": "AW3_USE_BUNDLED_HIERARCHICAL_VASSAL_MAP_FONT",
+      "Type": "SELECT",
+      "IntVal": 0,
+      "MinIntVal": 0,
+      "MaxIntVal": 1024,
+      "Callback": "HierarchicalVassalMapFontSettings:SelectFont"
+    }
   ]
 }

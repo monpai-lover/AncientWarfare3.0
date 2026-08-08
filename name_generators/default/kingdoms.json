@@ -343,7 +343,7 @@
                       ]
     },
     {
-        "id":  "civ_rhinot_kingdom",
+        "id":  "civ_rhino_kingdom",
         "templates":  [
                           {
                               "format":  "{古波斯姓氏}{空位识别符}{专制国名后缀}",

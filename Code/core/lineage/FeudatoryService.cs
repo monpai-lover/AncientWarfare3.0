@@ -868,21 +868,20 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorDying(Actor pActor)
         {
             if (pActor?.data == null) return;
-            if (IsActivePrince(pActor))
+            bool activePrince = IsActivePrince(pActor);
+            if (FeudatorySuccessionRules.ShouldRefreshAfterDeath(
+                    activePrince,
+                    dyingActorIsDesignatedSuccessor: false))
             {
                 OnPrinceDying(pActor);
                 return;
             }
-            if (TryGetBySuccessor(pActor.data.id,
-                    out FeudatorySnapshot successorSnapshot))
-            {
-                RefreshSuccessor(successorSnapshot.FeudatoryId,
-                    pActor.data.id);
-                return;
-            }
-            long shiId = LineageQuery.GetActorShiId(pActor.data.id);
-            if (TryGetByShiBranch(shiId, out FeudatorySnapshot branchSnapshot))
-                RefreshSuccessor(branchSnapshot.FeudatoryId, pActor.data.id);
+            bool designatedSuccessor = TryGetBySuccessor(pActor.data.id,
+                out FeudatorySnapshot successorSnapshot);
+            if (!FeudatorySuccessionRules.ShouldRefreshAfterDeath(
+                    activePrince, designatedSuccessor)) return;
+            RefreshSuccessor(successorSnapshot.FeudatoryId,
+                pActor.data.id);
         }
 
         public static void OnChildBorn(Actor pChild, Actor pParent1,

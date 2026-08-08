@@ -10,9 +10,9 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         Equal(true, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
                 diagnosticsEnabled: true, benchmarkEnabled: false),
             "diagnostic mode emits the runtime diagnostic text log");
-        Equal(true, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
+        Equal(false, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
                 diagnosticsEnabled: false, benchmarkEnabled: true),
-            "benchmark mode emits the runtime diagnostic text log");
+            "benchmark mode cannot bypass the diagnostics setting");
         Equal(true, RuntimePerformanceDiagnosticRules.ShouldEmitTextLog(
                 diagnosticsEnabled: true, benchmarkEnabled: true),
             "combined diagnostic and benchmark mode emits one text log");

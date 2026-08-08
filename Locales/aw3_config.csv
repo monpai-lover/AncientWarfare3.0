@@ -1,0 +1,48 @@
+key,cz,en,ch
+aw_settings_btn,AW3 设置,AW3 Settings,AW3 設定
+aw_settings_btn Description,打开 AW3 模组设置,Open AW3 mod settings,開啟 AW3 模組設定
+AW3_ENABLE_AI_ALLIANCE_ACTIONS,允许 AI 主动结盟,Allow AI alliance actions,允許 AI 主動結盟
+AW3_ENABLE_AI_ALLIANCE_ACTIONS Description,允许 AI 提出或加入新联盟；不影响玩家外交和已有联盟的结束,Allow AI to propose or join new alliances; player diplomacy and existing alliance termination remain available,允許 AI 提出或加入新聯盟；不影響玩家外交和既有聯盟的結束
+AW3_ENABLE_AI_VASSAL_ACTIONS,允许 AI 主动附庸/朝贡,Allow AI vassal and tributary actions,允許 AI 主動附庸/朝貢
+AW3_ENABLE_AI_VASSAL_ACTIONS Description,允许 AI 提出附庸、朝贡、保护关系或发动征服附庸战争；不影响玩家外交,Allow AI to propose vassalage; tributary status; protection; or subjugation wars; player diplomacy remains available,允許 AI 提出附庸、朝貢、保護關係或發動征服附庸戰爭；不影響玩家外交
+AW3_ENABLE_ARMY_RTS,启用 AW3 RTS 军队,Enable AW3 Army RTS,啟用 AW3 RTS 軍隊
+AW3_ENABLE_ARMY_RTS Description,由 AW3 接管军队战略任务和行动；关闭时使用原版军队 AI；重启游戏后生效,Let AW3 control army strategy missions and movement; off uses the native army AI; takes effect after restart,由 AW3 接管軍隊戰略任務和行動；關閉時使用原版軍隊 AI；重新啟動遊戲後生效
+AW3_ARMY_RTS_WAR_RESOLUTION_MODE,RTS 战争决议模式,RTS war resolution mode,RTS 戰爭決議模式
+AW3_ARMY_RTS_WAR_RESOLUTION_MODE Description,循环选择标准原版战斗交接；站至最后一刻（关闭自动撤退）或抽象决胜（远程数值卡牌对决）；重启游戏后生效,Cycle between Standard vanilla handoff; Last Stand with automatic withdrawal disabled; and Abstract Decisive remote numerical-card duels; takes effect after restart,循環選擇標準原版戰鬥交接；站至最後一刻（關閉自動撤退）或抽象決勝（遠程數值卡牌對決）；重新啟動遊戲後生效
+AW3_ARMY_RTS_WAR_RESOLUTION_MODE Option 0,标准,Standard,標準
+AW3_ARMY_RTS_WAR_RESOLUTION_MODE Option 1,站至最后一刻,Last Stand,站至最後一刻
+AW3_ARMY_RTS_WAR_RESOLUTION_MODE Option 2,抽象决胜,Abstract Decisive,抽象決勝
+AW3_ENABLE_ARMY_RTS_DIAGNOSTICS,RTS 诊断输出 开启视为加入春秋制作组,RTS diagnostic output,RTS 診斷輸出
+AW3_ENABLE_ARMY_RTS_DIAGNOSTICS Description,控制 RTS 诊断日志和战术 GIF 输出；立即生效,Controls RTS diagnostic logs and tactical GIF output; takes effect immediately,控制 RTS 診斷日誌和戰術 GIF 輸出；立即生效
+AW3_ENABLE_ASYNC_DATABASE_WRITES,启用异步历史写入,Enable asynchronous history writes,啟用非同步歷史寫入
+AW3_ENABLE_ASYNC_DATABASE_WRITES Description,将历史数据库写入批量移至后台；重启游戏后生效,Batch history database writes in the background; takes effect after restart,將歷史資料庫寫入批次移至背景；重新啟動遊戲後生效
+AW3_ENABLE_ASYNC_SHADOW_CHECKS,启用异步影子校验,Enable asynchronous shadow checks,啟用非同步影子校驗
+AW3_ENABLE_ASYNC_SHADOW_CHECKS Description,Shadow 诊断：仅用于开发/复现异步差异。开启后会额外校验异步结果，可能增加日志和少量开销；不会替代数据库写入。正常游玩请关闭。,Shadow diagnostics: for development and reproducing async differences only. Adds validation; log output; and a small amount of overhead; it does not replace database writes. Keep it off for normal play.,Shadow 診斷：僅用於開發/重現非同步差異。開啟後會額外校驗非同步結果；可能增加日誌和少量開銷；不會取代資料庫寫入。正常遊玩請關閉。
+AW3_ENABLE_ASYNC_STRATEGY_PLANNING,启用异步战略规划,Enable asynchronous strategy planning,啟用非同步戰略規劃
+AW3_ENABLE_ASYNC_STRATEGY_PLANNING Description,在后台计算外交和战争 AI 候选；重启游戏后生效,Calculate diplomacy and war AI candidates in the background; takes effect after restart,在背景計算外交和戰爭 AI 候選；重新啟動遊戲後生效
+AW3_ENABLE_ASYNC_TRAVERSAL_BUILDS,启用异步寻路缓存,Enable asynchronous pathfinding cache builds,啟用非同步尋路快取建置
+AW3_ENABLE_ASYNC_TRAVERSAL_BUILDS Description,在后台构建地形寻路缓存；重启游戏后生效,Build terrain pathfinding caches in the background; takes effect after restart,在背景建置地形尋路快取；重新啟動遊戲後生效
+AW3_ENABLE_ASYNC_UI_QUERIES,启用异步界面候选计算,Enable asynchronous UI candidate queries,啟用非同步介面候選計算
+AW3_ENABLE_ASYNC_UI_QUERIES Description,在后台准备大型界面的候选列表；重启游戏后生效,Prepare large interface candidate lists in the background; takes effect after restart,在背景準備大型介面的候選清單；重新啟動遊戲後生效
+AW3_ENABLE_FRAME_PRIORITY_SCHEDULER,启用帧优先调度,Enable frame-priority scheduling,啟用幀優先調度
+AW3_ENABLE_FRAME_PRIORITY_SCHEDULER Description,将一次原版大步长逻辑 tick 分摊到多个渲染帧；人物移动与寻路保持原版倍速语义,Spread one native large-step logic tick across render frames while preserving movement and pathfinding speed semantics,將一次原版大步長邏輯 tick 分攤到多個渲染幀；人物移動與尋路保持原版倍速語義
+AW3_ENABLE_PERFORMANCE_DIAGNOSTICS,启用性能诊断 开启视为加入春秋制作组,Enable performance diagnostics,啟用效能診斷
+AW3_ENABLE_PERFORMANCE_DIAGNOSTICS Description,输出 AW3 性能统计；仅用于排查性能问题,Output AW3 performance statistics; use only for performance investigation,輸出 AW3 效能統計；僅用於排查效能問題
+AW3_ENABLE_PRESENTATION_SMOOTHING,启用单位表现平滑,Enable unit presentation smoothing,啟用單位表現平滑
+AW3_ENABLE_PRESENTATION_SMOOTHING Description,预测并平滑可见单位的渲染位置；不改变权威逻辑位置,Predict and smooth visible unit rendering without changing authoritative positions,預測並平滑可見單位的渲染位置；不改變權威邏輯位置
+AW3_ENABLE_SCHEDULER_DIAGNOSTICS,启用调度诊断 开启视为加入春秋制作组,Enable scheduler diagnostics,啟用調度診斷
+AW3_ENABLE_SCHEDULER_DIAGNOSTICS Description,在 AW3 性能日志中输出帧预算阶段速度与 tick 进度,Include frame budget phase speed and tick progress in AW3 performance logs,在 AW3 效能日誌中輸出幀預算階段速度與 tick 進度
+AW3_MAX_SIMULATION_MS_PER_FRAME,每帧最大模拟时间,Maximum simulation milliseconds per frame,每幀最大模擬時間
+AW3_MAX_SIMULATION_MS_PER_FRAME Description,提高数值可加快模拟；但会降低保留给渲染的时间,Higher values accelerate simulation but reserve less time for rendering,提高數值可加快模擬；但會降低保留給渲染的時間
+AW3_SHOW_ARMY_MAP_INFORMATION,地图显示军队信息,Show army map information,地圖顯示軍隊資訊
+AW3_SHOW_ARMY_MAP_INFORMATION Description,在当前选中国家的军旗旁显示军名人数统帅和 RTS 任务；需要启用 AW3 RTS 军队,Show each selected kingdom army name size captain and RTS task beside its banner; requires AW3 Army RTS,在目前選中國家的軍旗旁顯示軍名人數統帥和 RTS 任務；需要啟用 AW3 RTS 軍隊
+AW3_SHOW_ARMY_RTS_VISUALS,显示 RTS 军队进攻路线,Show RTS army routes,顯示 RTS 軍隊進攻路線
+AW3_SHOW_ARMY_RTS_VISUALS Description,立即显示当前选中国家的军队目标路线；需要启用 AW3 RTS 军队,Show target routes for the selected kingdom armies; requires AW3 Army RTS,立即顯示目前選中國家的軍隊目標路線；需要啟用 AW3 RTS 軍隊
+AW3_TARGET_RENDER_FPS,目标渲染帧率,Target render FPS,目標渲染幀率
+AW3_TARGET_RENDER_FPS Description,目标越高；每帧可用于世界模拟的时间越少,Higher targets leave less frame time for world simulation,目標越高；每幀可用於世界模擬的時間越少
+AW3_USE_AW3_ARMY_RTS_SCHEDULER,由 AW3 调度 RTS 军队,Schedule RTS armies through AW3,由 AW3 調度 RTS 軍隊
+AW3_USE_AW3_ARMY_RTS_SCHEDULER Description,关闭时跟随原版 ArmyManager.update；开启时改由 AW3 权威循环调度；重启游戏后生效,Off follows native ArmyManager.update; on uses the AW3 authority cycle; takes effect after restart,關閉時跟隨原版 ArmyManager.update；開啟時改由 AW3 權威循環調度；重新啟動遊戲後生效
+AWPerformanceSettings,AW3 性能设置,AW3 Performance,AW3 效能設定
+AWMapModeSettings,AW3 地图模式设置,AW3 Map Modes,AW3 地圖模式設定
+AW3_USE_BUNDLED_HIERARCHICAL_VASSAL_MAP_FONT,层级附庸地图字体,Hierarchical vassal map font,層級附庸地圖字體
+AW3_USE_BUNDLED_HIERARCHICAL_VASSAL_MAP_FONT Description,点击下拉栏选择 AW3 魏碑或 Unity 可用的系统字体,Select AW3 Beiwei or any Unity-exposed system font from the dropdown,點擊下拉選單選擇 AW3 魏碑或 Unity 可用的系統字體

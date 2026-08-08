@@ -28,9 +28,11 @@ internal static class WesternCourtProfileRulesTests
         CourtOfficeDefinition count = Require(western,
             CourtOfficeId.WestCount);
         Equal(CourtOfficeLayer.City, count.Layer, "count is city office");
-        Equal(true, count.AvailableIn(CourtInstitutionId.WesternFeudal),
-            "count unlocks under feudal institution");
-        Equal(false, count.AvailableIn(CourtInstitutionId.WesternBase),
+        Equal(true, count.AvailableIn(
+                CourtInstitutionId.WesternFeudalBureaucratic),
+            "count unlocks under feudal bureaucratic institution");
+        Equal(false, count.AvailableIn(
+                CourtInstitutionId.WesternBureaucratic),
             "count is not a base office");
 
         CourtOfficeDefinition fieldGeneral = Require(western,
@@ -46,24 +48,82 @@ internal static class WesternCourtProfileRulesTests
             "marshal is military");
         Equal(true, marshal.MilitaryCapable,
             "marshal supports military careers");
-        Equal(false, marshal.AvailableIn(CourtInstitutionId.WesternBase),
+        Equal(false, marshal.AvailableIn(
+                CourtInstitutionId.WesternBureaucratic),
             "marshal requires the feudal stage");
+        CourtOfficeDefinition constable = Require(western,
+            CourtOfficeId.WestRoyalConstable);
+        Equal(CourtOfficeLayer.Central, constable.Layer,
+            "royal constable is a central military office");
+        Equal(true, constable.MilitaryCapable,
+            "royal constable uses military lifecycle");
+        Equal(CourtOfficeId.WestRoyalConstable,
+            WesternCourtMigrationRules.NormalizeOfficeId(
+                CourtOfficeId.WestRoyalChamberlain),
+            "legacy chamberlain migrates to royal constable");
+        Equal(CourtOfficeId.WestTreasurer,
+            WesternCourtMigrationRules.NormalizeOfficeId(
+                CourtOfficeId.WestTreasurer),
+            "canonical office ids remain unchanged");
 
         Equal(CourtInstitutionId.WesternPrimitive,
-            western.ResolveInstitution(false, false, false, false),
+            western.ResolveInstitution(false, false),
             "office system gates the Western court");
-        Equal(CourtInstitutionId.WesternBase,
-            western.ResolveInstitution(true, false, false, false),
-            "office system opens the base court");
-        Equal(CourtInstitutionId.WesternElective,
-            western.ResolveInstitution(true, true, false, false),
-            "elective policy selects elective court");
-        Equal(CourtInstitutionId.WesternFeudal,
-            western.ResolveInstitution(true, false, true, false),
-            "feudal policy selects feudal court");
-        Equal(CourtInstitutionId.WesternRoyalDirect,
-            western.ResolveInstitution(true, false, false, true),
-            "direct rule selects royal court");
+        Equal(CourtInstitutionId.WesternBureaucratic,
+            western.ResolveInstitution(true, false),
+            "office system opens the bureaucratic court");
+        Equal(CourtInstitutionId.WesternFeudalBureaucratic,
+            western.ResolveInstitution(true, true),
+            "feudal retainers open the cumulative advanced court");
+
+        Sequence(new[]
+            {
+                CourtOfficeId.WestExecutive,
+                CourtOfficeId.WestSenateElder,
+                CourtOfficeId.WestHighPriest,
+                CourtOfficeId.WestFieldGeneral,
+                CourtOfficeId.WestMayor
+            }, western.OfficeIdsForInstitution(
+                CourtInstitutionId.WesternBureaucratic),
+            "bureaucratic office catalog");
+        Equal(12, western.OfficeIdsForInstitution(
+                CourtInstitutionId.WesternFeudalBureaucratic).Count,
+            "advanced catalog retains basic offices and adds seven");
+
+        Equal(CourtInstitutionId.WesternBureaucratic,
+            CourtInstitutionRules.MigrateWesternLegacy(
+                CourtInstitutionId.WesternElective,
+                feudalRetainersUnlocked: false),
+            "elective government migrates to basic bureaucracy");
+        Equal(CourtInstitutionId.WesternFeudalBureaucratic,
+            CourtInstitutionRules.MigrateWesternLegacy(
+                CourtInstitutionId.WesternFeudal,
+                feudalRetainersUnlocked: false),
+            "legacy feudal institution migrates to advanced bureaucracy");
+        Equal(CourtInstitutionId.WesternBureaucratic,
+            CourtInstitutionRules.MigrateWesternLegacy(
+                CourtInstitutionId.WesternRoyalDirect,
+                feudalRetainersUnlocked: false),
+            "royal government without advanced tech migrates to basic");
+        Equal(CourtInstitutionId.WesternFeudalBureaucratic,
+            CourtInstitutionRules.MigrateWesternLegacy(
+                CourtInstitutionId.WesternRoyalDirect,
+                feudalRetainersUnlocked: true),
+            "royal government with advanced tech migrates to advanced");
+        Equal(CourtOfficeId.Governor, CourtCityOfficeRules.Resolve(
+                CourtProfileId.Xia, CourtInstitutionId.Zhou, false),
+            "Xia keeps the native governor office");
+        Equal(CourtOfficeId.WestMayor, CourtCityOfficeRules.Resolve(
+                CourtProfileId.Western,
+                CourtInstitutionId.WesternBureaucratic, false),
+            "Western bureaucracy projects normal cities as Mayors");
+        Equal(CourtOfficeId.WestCount, CourtCityOfficeRules.Resolve(
+                CourtProfileId.Western,
+                CourtInstitutionId.WesternFeudalBureaucratic, true),
+            "advanced feudatory seats project as Counts");
+        Equal("", CourtCityOfficeRules.Resolve(
+                CourtProfileId.Western, CourtInstitutionId.WesternPrimitive,
+                false), "primitive Western courts have no formal city office");
 
         ICourtProfile xia = CourtProfileRegistry.For(
             KingdomPolicyProfileId.Xia);

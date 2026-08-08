@@ -43,6 +43,7 @@ internal static class LocalizedNameMigrationRulesTests
         Equal(false, current.NeedsPersistence,
             "current schema identities are idempotent");
 
+
         AWLocalizedNameMigrationDecision host =
             AWLocalizedNameMigrationRules.Resolve("Native", "Native", "中文名",
                 AWLocalizedNameMigrationRules.CurrentSchemaVersion,

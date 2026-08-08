@@ -434,6 +434,8 @@ namespace AncientWarfare3.core.policy
                 AWPathfindingBootstrap.Finder?.ActiveCount ?? 0;
             int actorPathQueue =
                 AWPathfindingBootstrap.Finder?.QueueDepth ?? 0;
+            int actorPathWorkers =
+                AWPathfindingBootstrap.Finder?.WorkerCount ?? 0;
             int strategicPathActive = ArmyRouteProviderService.ActiveCount;
             ArmyRtsBenchmarkSnapshot armyRts =
                 ArmyRtsBenchmark.Snapshot();
@@ -581,8 +583,11 @@ namespace AncientWarfare3.core.policy
                 " path_ambient_queue_high=" +
                 pathDiagnostics.AmbientQueueHighWater +
                 " path_expanded_nodes=" + pathDiagnostics.ExpandedNodes +
+                " path_owner_state=" + PathfindingOwnershipService.State +
+                " actor_path_workers=" + actorPathWorkers +
                 " actor_path_active=" + actorPathActive +
                 " actor_path_queue=" + actorPathQueue +
+                " actor_path_gates=" + AWPathMovementBridge.ActorGateCount +
                 " city_threat_requests=" + cityThreatDiagnostics.Requests +
                 " city_threat_physical_scans=" +
                 cityThreatDiagnostics.PhysicalScans +

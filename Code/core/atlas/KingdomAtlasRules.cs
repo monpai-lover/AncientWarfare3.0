@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.atlas
 {
@@ -31,6 +34,192 @@ namespace AncientWarfare3.core.atlas
             return ordered;
         }
 
+        internal static List<KingdomAtlasNodeDescriptor> BuildNodeDescriptors(
+            IEnumerable<KingdomAtlasHistoryEvent> pEvents,
+            IEnumerable<KingdomAtlasVassalRelationSnapshot> pRelations,
+            long pKingdomId)
+        {
+            var descriptors = new List<KingdomAtlasNodeDescriptor>();
+            foreach (KingdomAtlasHistoryEvent row in OrderAndDeduplicate(pEvents))
+            {
+                if (row.OldKingdomId != pKingdomId &&
+                    row.NewKingdomId != pKingdomId) continue;
+                descriptors.Add(new KingdomAtlasNodeDescriptor
+                {
+                    NodeKind = KingdomAtlasNodeKind.City,
+                    SourceId = row.EventId,
+                    StableKey = BuildNodeStableKey(
+                        KingdomAtlasNodeKind.City, row.EventId),
+                    WorldTime = row.WorldTime,
+                    CityReplayEventId = row.EventId,
+                    CityEvent = row
+                });
+            }
+
+            var relationKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (KingdomAtlasVassalRelationSnapshot relation in
+                     pRelations ?? Enumerable.Empty<KingdomAtlasVassalRelationSnapshot>())
+            {
+                if (!IsValidRelationRecord(relation) ||
+                    relation.VassalId != pKingdomId &&
+                    relation.SuzerainId != pKingdomId) continue;
+                AddRelationDescriptor(descriptors, relationKeys, relation,
+                    KingdomAtlasNodeKind.VassalStart, relation.StartTime);
+                if (relation.EndTime >= relation.StartTime)
+                    AddRelationDescriptor(descriptors, relationKeys, relation,
+                        KingdomAtlasNodeKind.VassalEnd, relation.EndTime);
+            }
+
+            return descriptors.OrderBy(pDescriptor => pDescriptor.WorldTime)
+                .ThenBy(pDescriptor => (int)pDescriptor.NodeKind)
+                .ThenBy(pDescriptor => pDescriptor.SourceId).ToList();
+        }
+
+        internal static IReadOnlyList<KingdomAtlasVassalRelationSnapshot>
+            BuildRelationSnapshotAt(
+                IEnumerable<KingdomAtlasVassalRelationSnapshot> pRelations,
+                KingdomAtlasNodeDescriptor pDescriptor)
+        {
+            if (pDescriptor == null)
+                return Array.Empty<KingdomAtlasVassalRelationSnapshot>();
+            var result = (pRelations ??
+                    Enumerable.Empty<KingdomAtlasVassalRelationSnapshot>())
+                .Where(pRelation => IsRelationAt(pRelation,
+                    pDescriptor.WorldTime))
+                .OrderBy(pRelation => pRelation.RelationId).ToList();
+            if (pDescriptor.NodeKind == KingdomAtlasNodeKind.VassalStart &&
+                IsValidRelationRecord(pDescriptor.Relation) &&
+                result.All(pRelation => pRelation.RelationId !=
+                    pDescriptor.Relation.RelationId))
+                result.Add(pDescriptor.Relation);
+            if (pDescriptor.NodeKind == KingdomAtlasNodeKind.VassalEnd)
+                result.RemoveAll(pRelation => pRelation.RelationId ==
+                    pDescriptor.SourceId);
+            return result.OrderBy(pRelation => pRelation.RelationId).ToList();
+        }
+
+        internal static KingdomAtlasHistoryEvent BuildNodeEvent(
+            KingdomAtlasNodeDescriptor pDescriptor, int pYear,
+            string pYearText)
+        {
+            if (pDescriptor?.NodeKind == KingdomAtlasNodeKind.City)
+                return pDescriptor.CityEvent;
+            KingdomAtlasVassalRelationSnapshot relation =
+                pDescriptor?.Relation;
+            if (relation == null) return null;
+            return new KingdomAtlasHistoryEvent
+            {
+                EventId = -1L,
+                WorldTime = pDescriptor.WorldTime,
+                Year = pYear,
+                YearText = pYearText ?? "",
+                CityId = -1L,
+                EventType = pDescriptor.NodeKind ==
+                    KingdomAtlasNodeKind.VassalEnd
+                        ? "vassal_end"
+                        : "vassal_start",
+                OldKingdomId = relation.SuzerainId,
+                OldKingdomName = relation.SuzerainName ?? "",
+                OldKingdomColor = relation.SuzerainColor ?? "",
+                NewKingdomId = relation.VassalId,
+                NewKingdomName = relation.VassalName ?? "",
+                NewKingdomColor = relation.VassalColor ?? ""
+            };
+        }
+
+        internal static Dictionary<long, KingdomAtlasKingdomSnapshot>
+            BuildKingdomSnapshots(KingdomAtlasHistoryEvent pEvent,
+                IEnumerable<KingdomAtlasVassalRelationSnapshot> pRelations)
+        {
+            var result = new Dictionary<long, KingdomAtlasKingdomSnapshot>();
+            SetKingdomSnapshot(result, pEvent?.OldKingdomId ?? -1L,
+                pEvent?.OldKingdomName, pEvent?.OldKingdomColor, false);
+            SetKingdomSnapshot(result, pEvent?.NewKingdomId ?? -1L,
+                pEvent?.NewKingdomName, pEvent?.NewKingdomColor, false);
+            foreach (KingdomAtlasVassalRelationSnapshot relation in
+                     (pRelations ?? Enumerable.Empty<KingdomAtlasVassalRelationSnapshot>())
+                     .Where(pRelation => pRelation != null)
+                     .OrderBy(pRelation => pRelation.StartTime)
+                     .ThenBy(pRelation => pRelation.RelationId))
+            {
+                SetKingdomSnapshot(result, relation.VassalId,
+                    relation.VassalName, relation.VassalColor, true);
+                SetKingdomSnapshot(result, relation.SuzerainId,
+                    relation.SuzerainName, relation.SuzerainColor, true);
+            }
+            return result;
+        }
+
+        private static void SetKingdomSnapshot(
+            IDictionary<long, KingdomAtlasKingdomSnapshot> pResult,
+            long pKingdomId, string pName, string pColor, bool pOverwrite)
+        {
+            if (pKingdomId < 0L) return;
+            if (!pResult.TryGetValue(pKingdomId,
+                    out KingdomAtlasKingdomSnapshot snapshot))
+            {
+                snapshot = new KingdomAtlasKingdomSnapshot
+                {
+                    KingdomId = pKingdomId
+                };
+                pResult[pKingdomId] = snapshot;
+            }
+            if (!string.IsNullOrWhiteSpace(pName) &&
+                (pOverwrite || string.IsNullOrWhiteSpace(snapshot.Name)))
+                snapshot.Name = pName;
+            if (!string.IsNullOrWhiteSpace(pColor) &&
+                (pOverwrite || string.IsNullOrWhiteSpace(snapshot.Color)))
+                snapshot.Color = pColor;
+        }
+
+        internal static string BuildNodeStableKey(KingdomAtlasNodeKind pKind,
+            long pSourceId)
+        {
+            string prefix;
+            switch (pKind)
+            {
+                case KingdomAtlasNodeKind.VassalStart:
+                    prefix = "vassal_start";
+                    break;
+                case KingdomAtlasNodeKind.VassalEnd:
+                    prefix = "vassal_end";
+                    break;
+                default:
+                    prefix = "city";
+                    break;
+            }
+            return prefix + ":" +
+                pSourceId.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static void AddRelationDescriptor(
+            ICollection<KingdomAtlasNodeDescriptor> pDescriptors,
+            ISet<string> pKeys, KingdomAtlasVassalRelationSnapshot pRelation,
+            KingdomAtlasNodeKind pKind, double pWorldTime)
+        {
+            string stableKey = BuildNodeStableKey(pKind,
+                pRelation.RelationId);
+            if (!pKeys.Add(stableKey)) return;
+            pDescriptors.Add(new KingdomAtlasNodeDescriptor
+            {
+                NodeKind = pKind,
+                SourceId = pRelation.RelationId,
+                StableKey = stableKey,
+                WorldTime = pWorldTime,
+                CityReplayEventId = long.MaxValue,
+                Relation = pRelation
+            });
+        }
+
+        private static bool IsValidRelationRecord(
+            KingdomAtlasVassalRelationSnapshot pRelation)
+        {
+            return pRelation != null && pRelation.RelationId >= 0L &&
+                pRelation.StartTime >= 0d && pRelation.VassalId >= 0L &&
+                pRelation.SuzerainId >= 0L &&
+                pRelation.VassalId != pRelation.SuzerainId;
+        }
+
         public static bool IsTerritorialEvent(string pEventType)
         {
             return string.Equals(pEventType, "city_gained",
@@ -41,6 +230,15 @@ namespace AncientWarfare3.core.atlas
                        StringComparison.Ordinal) ||
                    string.Equals(pEventType, "city_found",
                        StringComparison.Ordinal);
+        }
+
+        internal static bool IsDuplicateTransferWithoutEvidence(
+            long pPreviousOwnerId, long pContextOwnerId, bool pHasLoss,
+            bool pHasGain)
+        {
+            return pPreviousOwnerId >= 0L &&
+                   pContextOwnerId == pPreviousOwnerId &&
+                   !pHasLoss && !pHasGain;
         }
 
         public static long ResolveOwnerAt(IReadOnlyList<KingdomAtlasHistoryEvent> pEvents,
@@ -58,6 +256,33 @@ namespace AncientWarfare3.core.atlas
                     owner = row.OldKingdomId;
             }
             return owner;
+        }
+
+        public static Dictionary<long, long> ReplayCityOwnersAt(
+            IEnumerable<KingdomAtlasHistoryEvent> pEvents,
+            double pNodeTime, long pNodeEventId)
+        {
+            var result = new Dictionary<long, long>();
+            if (pEvents == null) return result;
+            IEnumerable<KingdomAtlasHistoryEvent> ordered = pEvents
+                .Where(pEvent => pEvent != null && pEvent.CityId >= 0L &&
+                    IsTerritorialEvent(pEvent.EventType))
+                .OrderBy(pEvent => pEvent.WorldTime)
+                .ThenBy(pEvent => pEvent.EventId);
+            foreach (KingdomAtlasHistoryEvent row in ordered)
+            {
+                if (!IsEventAtOrBeforeNode(row.WorldTime, row.EventId,
+                        pNodeTime, pNodeEventId)) continue;
+                if (row.NewKingdomId >= 0L)
+                {
+                    result[row.CityId] = row.NewKingdomId;
+                    continue;
+                }
+                if (row.EventType == "city_lost" ||
+                    row.EventType == "city_transfer")
+                    result[row.CityId] = -1L;
+            }
+            return result;
         }
 
         public static bool IsReliableResolution(int pWidth, int pHeight)
@@ -122,14 +347,89 @@ namespace AncientWarfare3.core.atlas
                     owners.Add(relation.SuzerainId);
                 }
             foreach (long owner in owners)
-            {
-                long displayOwner = ResolveDisplayOwner(owner, pRelations, pWorldTime);
-                if (source.TryGetValue(displayOwner, out KingdomAtlasColor displayColor))
-                    result[owner] = displayColor;
-                else if (source.TryGetValue(owner, out KingdomAtlasColor ownColor))
-                    result[owner] = ownColor;
-            }
+                TryResolveHierarchicalDisplayColor(owner, source, pRelations,
+                    pWorldTime, result, new HashSet<long>(), out _);
             return result;
+        }
+
+        private static bool TryResolveHierarchicalDisplayColor(long pOwnerId,
+            IReadOnlyDictionary<long, KingdomAtlasColor> pSource,
+            IReadOnlyList<KingdomAtlasVassalRelationSnapshot> pRelations,
+            double pWorldTime,
+            IDictionary<long, KingdomAtlasColor> pResolved,
+            ISet<long> pVisiting, out KingdomAtlasColor pColor)
+        {
+            if (pResolved.TryGetValue(pOwnerId, out pColor)) return true;
+            if (!pVisiting.Add(pOwnerId))
+                return pSource.TryGetValue(pOwnerId, out pColor);
+
+            bool hasOwnColor = pSource.TryGetValue(pOwnerId,
+                out KingdomAtlasColor ownColor);
+            KingdomAtlasVassalRelationSnapshot relation = FindRelation(
+                pOwnerId, pRelations, pWorldTime);
+            KingdomAtlasColor suzerainColor = default;
+            bool hasSuzerainColor = relation != null &&
+                relation.SuzerainId >= 0L &&
+                relation.SuzerainId != pOwnerId &&
+                TryResolveHierarchicalDisplayColor(relation.SuzerainId,
+                    pSource, pRelations, pWorldTime, pResolved, pVisiting,
+                    out suzerainColor);
+
+            bool resolved = false;
+            if (hasOwnColor && hasSuzerainColor)
+            {
+                pColor = relation.ContractTier ==
+                    VassalContractTierRules.Tributary
+                        ? BlendTributaryDisplayColor(suzerainColor, ownColor)
+                        : BlendSubjectDisplayColor(suzerainColor, ownColor);
+                resolved = true;
+            }
+            else if (hasOwnColor)
+            {
+                pColor = ownColor;
+                resolved = true;
+            }
+            else if (hasSuzerainColor)
+            {
+                pColor = suzerainColor;
+                resolved = true;
+            }
+
+            pVisiting.Remove(pOwnerId);
+            if (resolved) pResolved[pOwnerId] = pColor;
+            return resolved;
+        }
+
+        private static KingdomAtlasColor BlendSubjectDisplayColor(
+            KingdomAtlasColor pSuzerain, KingdomAtlasColor pSubject)
+        {
+            return new KingdomAtlasColor(
+                BlendSubjectColorChannel(pSuzerain.Red, pSubject.Red),
+                BlendSubjectColorChannel(pSuzerain.Green, pSubject.Green),
+                BlendSubjectColorChannel(pSuzerain.Blue, pSubject.Blue),
+                pSuzerain.Alpha);
+        }
+
+        private static byte BlendSubjectColorChannel(byte pSuzerain,
+            byte pSubject)
+        {
+            return (byte)((pSuzerain * 4 + pSubject + 2) / 5);
+        }
+
+        private static KingdomAtlasColor BlendTributaryDisplayColor(
+            KingdomAtlasColor pSuzerain, KingdomAtlasColor pSubject)
+        {
+            return new KingdomAtlasColor(
+                BlendTributaryColorChannel(pSuzerain.Red, pSubject.Red),
+                BlendTributaryColorChannel(pSuzerain.Green, pSubject.Green),
+                BlendTributaryColorChannel(pSuzerain.Blue, pSubject.Blue),
+                pSubject.Alpha);
+        }
+
+        private static byte BlendTributaryColorChannel(byte pSuzerain,
+            byte pSubject)
+        {
+            return (byte)((pSubject * 2 + pSuzerain * 3 + 2) / 5);
         }
 
         internal static HashSet<long> BuildVisibleOwnerIds(
@@ -166,7 +466,7 @@ namespace AncientWarfare3.core.atlas
                 return false;
             const double epsilon = 0.000000001d;
             return pRelation.StartTime <= pWorldTime + epsilon &&
-                (pRelation.EndTime < 0d || pRelation.EndTime + epsilon >= pWorldTime);
+                (pRelation.EndTime < 0d || pRelation.EndTime > pWorldTime + epsilon);
         }
 
         private static KingdomAtlasVassalRelationSnapshot FindRelation(long pVassalId,
@@ -274,5 +574,85 @@ namespace AncientWarfare3.core.atlas
 
         public static string BuildOutputStem(long pKingdomId, int pResolution, int pIndex, long pEventId) =>
             "kingdom_" + pKingdomId.ToString(CultureInfo.InvariantCulture) + "_" + pResolution.ToString(CultureInfo.InvariantCulture) + "_node_" + pIndex.ToString("0000", CultureInfo.InvariantCulture) + "_event_" + pEventId.ToString(CultureInfo.InvariantCulture);
+
+        public static string BuildPreviewCacheRelativePath(long pKingdomId,
+            int pResolution, int pIndex, long pEventId, int pFontIndex = 0)
+        {
+            return Path.Combine("preview-cache", "font_" +
+                pFontIndex.ToString(CultureInfo.InvariantCulture),
+                BuildOutputStem(pKingdomId, pResolution, pIndex, pEventId) +
+                ".png");
+        }
+
+        public static float CalculateLabelPixelSize(float pRenderedWorldSize,
+            int pResolution, int pWorldWidth, int pWorldHeight)
+        {
+            int resolution = Math.Max(64, Math.Min(8192, pResolution));
+            int worldSpan = Math.Max(1, Math.Max(pWorldWidth, pWorldHeight));
+            float scaled = Math.Max(0f, pRenderedWorldSize) *
+                resolution / worldSpan;
+            const float minimum = 4f;
+            float maximum = Math.Max(8f, resolution * 0.08f);
+            return Math.Max(minimum, Math.Min(maximum, scaled));
+        }
+
+        public static float ScaleAtlasCountryLabelForTerritory(
+            float pPixelSize, int pLandTileCount, int pWorldWidth,
+            int pWorldHeight)
+        {
+            const float minimumPixelSize = 4f;
+            const float fullScaleTerritoryRatio = 0.20f;
+            const float minimumTerritoryScale = 0.25f;
+            long worldArea = Math.Max(1L,
+                (long)Math.Max(1, pWorldWidth) * Math.Max(1, pWorldHeight));
+            float territoryRatio = Math.Max(0, pLandTileCount) /
+                                   (float)worldArea;
+            float normalized = Math.Max(0f, Math.Min(1f,
+                territoryRatio / fullScaleTerritoryRatio));
+            float territoryScale = Math.Max(minimumTerritoryScale,
+                (float)Math.Sqrt(normalized));
+            return Math.Max(minimumPixelSize,
+                Math.Max(0f, pPixelSize) * territoryScale);
+        }
+
+        public static string SanitizeChronicleDisplayText(string pText)
+        {
+            if (string.IsNullOrEmpty(pText)) return pText ?? "";
+            char[] characters = pText.ToCharArray();
+            for (int index = 0; index < characters.Length; index++)
+                if (char.IsPunctuation(characters[index]))
+                    characters[index] = ' ';
+            return new string(characters);
+        }
+
+        public static string ColorizeChronicleEntities(string pText,
+            IEnumerable<string> pEntityNames, string pColor)
+        {
+            if (string.IsNullOrEmpty(pText) ||
+                string.IsNullOrWhiteSpace(pColor)) return pText ?? "";
+            var names = (pEntityNames ?? Enumerable.Empty<string>())
+                .Where(pName => !string.IsNullOrWhiteSpace(pName))
+                .Select(pName => pName.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .OrderByDescending(pName => pName.Length)
+                .ToList();
+            if (names.Count == 0) return pText;
+            string color = pColor.Trim();
+            if (!color.StartsWith("#", StringComparison.Ordinal)) color = "#" + color;
+            var result = new StringBuilder(pText);
+            for (int index = 0; index < names.Count; index++)
+            {
+                string name = names[index];
+                string escaped = EscapeRichText(name);
+                result.Replace(escaped, "<color=" + color + ">" + escaped + "</color>");
+            }
+            return result.ToString();
+        }
+
+        private static string EscapeRichText(string pText)
+        {
+            return (pText ?? "").Replace("&", "&amp;")
+                .Replace("<", "&lt;").Replace(">", "&gt;");
+        }
     }
 }

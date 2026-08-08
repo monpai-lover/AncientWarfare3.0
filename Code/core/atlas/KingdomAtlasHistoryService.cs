@@ -24,46 +24,116 @@ namespace AncientWarfare3.core.atlas
             rows = KingdomAtlasRules.OrderAndDeduplicate(rows);
             List<KingdomAtlasVassalRelationSnapshot> relations =
                 ReadVassalRelations();
+            List<KingdomAtlasNodeDescriptor> descriptors =
+                KingdomAtlasRules.BuildNodeDescriptors(rows, relations,
+                    pKingdomId);
             var nodes = new List<KingdomAtlasNode>();
-            for (int index = 0; index < rows.Count; index++)
+            for (int index = 0; index < descriptors.Count; index++)
             {
-                KingdomAtlasHistoryEvent row = rows[index];
-                if (row == null || (row.OldKingdomId != pKingdomId &&
-                    row.NewKingdomId != pKingdomId)) continue;
+                KingdomAtlasNodeDescriptor descriptor = descriptors[index];
+                NodeYearContext nodeDisplayYear = descriptor.NodeKind ==
+                    KingdomAtlasNodeKind.City
+                        ? new NodeYearContext(descriptor.CityEvent?.Year ?? 0,
+                            descriptor.CityEvent?.YearText ?? "")
+                        : ResolveNodeYear(pKingdomId, descriptor.WorldTime);
+                KingdomAtlasHistoryEvent row = KingdomAtlasRules.BuildNodeEvent(
+                    descriptor, nodeDisplayYear.Year,
+                    nodeDisplayYear.YearText);
+                if (row == null) continue;
                 if (!HasReliableParticipantColours(row, relations)) continue;
+                NodeYearContext oldChronicleYear = ResolveNodeYear(
+                    row.OldKingdomId, descriptor.WorldTime);
+                NodeYearContext newChronicleYear = ResolveNodeYear(
+                    row.NewKingdomId, descriptor.WorldTime);
                 var all = rows.Where(pEvent => KingdomAtlasRules.
                     IsEventAtOrBeforeNode(pEvent.WorldTime, pEvent.EventId,
-                        row.WorldTime, row.EventId)).ToList();
-                IReadOnlyDictionary<long, long> owners = ReplayOwners(all);
+                        descriptor.WorldTime,
+                        descriptor.CityReplayEventId)).ToList();
+                IReadOnlyDictionary<long, long> owners =
+                    KingdomAtlasRules.ReplayCityOwnersAt(rows,
+                        descriptor.WorldTime,
+                        descriptor.CityReplayEventId);
+                IReadOnlyList<KingdomAtlasVassalRelationSnapshot>
+                    relationSnapshot = KingdomAtlasRules.
+                        BuildRelationSnapshotAt(relations, descriptor);
                 List<KingdomAtlasZoneSnapshot> snapshots =
-                    KingdomAtlasZoneArchiveService.Read(row.WorldTime);
+                    TryReadZoneArchive(descriptor.WorldTime);
                 var visible = new List<KingdomAtlasZoneCell>();
                 HashSet<long> visibleOwners = KingdomAtlasRules.BuildVisibleOwnerIds(
-                    new[] { row.OldKingdomId, row.NewKingdomId }, relations,
-                    row.WorldTime);
+                    new[] { row.OldKingdomId, row.NewKingdomId },
+                    relationSnapshot, descriptor.WorldTime);
                 AddVisibleCells(snapshots, owners, visibleOwners, visible);
                 Dictionary<long, KingdomAtlasKingdomSnapshot> kingdoms =
-                    BuildKingdomSnapshots(row, relations);
+                    BuildKingdomSnapshots(row, relationSnapshot);
                 var historicalColors = kingdoms.ToDictionary(
                     pPair => pPair.Key, pPair => pPair.Value.Color);
                 var node = new KingdomAtlasNode
                 {
+                    NodeKind = descriptor.NodeKind,
+                    SourceId = descriptor.SourceId,
+                    StableKey = descriptor.StableKey,
+                    Relation = descriptor.Relation,
                     Event = row,
                     Events = all,
                     CityOwners = owners,
                     VisibleZones = visible,
-                    VassalRelations = relations,
+                    VassalRelations = relationSnapshot,
                     Kingdoms = kingdoms,
                     DisplayColors = KingdomAtlasRules.BuildDisplayColors(
-                        historicalColors, relations, row.WorldTime),
-                    OldChronicle = ReadChronicle(row.OldKingdomId, row.WorldTime,
-                        row.EventId, row.Year),
-                    NewChronicle = ReadChronicle(row.NewKingdomId, row.WorldTime,
-                        row.EventId, row.Year)
+                        historicalColors, relationSnapshot,
+                        descriptor.WorldTime),
+                    OldChronicle = ReadChronicle(row.OldKingdomId,
+                        descriptor.WorldTime, descriptor.CityReplayEventId,
+                        oldChronicleYear.Year),
+                    NewChronicle = ReadChronicle(row.NewKingdomId,
+                        descriptor.WorldTime, descriptor.CityReplayEventId,
+                        newChronicleYear.Year),
+                    OldChronicleYearText = oldChronicleYear.YearText,
+                    NewChronicleYearText = newChronicleYear.YearText
                 };
                 nodes.Add(node);
             }
             return nodes;
+        }
+
+        private static NodeYearContext ResolveNodeYear(long pKingdomId,
+            double pWorldTime)
+        {
+            LineageArchiveManager manager = LineageArchiveManager.Instance;
+            SQLiteConnection db = manager?.OperatingDB;
+            if (db == null || pKingdomId < 0L) return default;
+            try
+            {
+                using (var cmd = new SQLiteCommand(db))
+                {
+                    cmd.CommandText = "SELECT YEAR_PREFIX FROM KingdomHistory " +
+                        "WHERE KINGDOM_ID=@id AND WORLD_TIME<=@time " +
+                        "ORDER BY WORLD_TIME DESC,EVENT_ID DESC LIMIT 1";
+                    cmd.Parameters.AddWithValue("@id", pKingdomId);
+                    cmd.Parameters.AddWithValue("@time", pWorldTime);
+                    object value = cmd.ExecuteScalar();
+                    string yearText = value == null || value == DBNull.Value
+                        ? ""
+                        : Convert.ToString(value, CultureInfo.InvariantCulture);
+                    return new NodeYearContext(ParseYear(yearText), yearText);
+                }
+            }
+            catch
+            {
+                return default;
+            }
+        }
+
+        private readonly struct NodeYearContext
+        {
+            internal NodeYearContext(int pYear, string pYearText)
+            {
+                Year = pYear;
+                YearText = pYearText ?? "";
+            }
+
+            internal int Year { get; }
+            internal string YearText { get; }
         }
 
         internal static bool HasReliableColours(IReadOnlyList<KingdomAtlasNode> pNodes)
@@ -114,97 +184,116 @@ namespace AncientWarfare3.core.atlas
             LineageArchiveManager manager = LineageArchiveManager.Instance;
             SQLiteConnection db = manager?.OperatingDB;
             if (db == null) return result;
-            var lost = new Dictionary<string, Queue<KingdomAtlasHistoryEvent>>();
-            var gained = new Dictionary<string, Queue<KingdomAtlasHistoryEvent>>();
-            using (var cmd = new SQLiteCommand(db))
-            {
-                cmd.CommandText = "SELECT EVENT_ID,WORLD_TIME,YEAR_PREFIX,SUBJECT_NAME," +
-                    "EVENT_TYPE,CONTEXT_KINGDOM_ID,CONTEXT_KINGDOM_NAME," +
-                    "CONTEXT_KINGDOM_COLOR,TARGET_ID FROM KingdomHistory " +
-                    "WHERE EVENT_TYPE IN ('city_lost','city_gained') " +
-                    "ORDER BY WORLD_TIME ASC,EVENT_ID ASC";
-                using (var reader = (SQLiteDataReader)cmd.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        long cityId = reader.IsDBNull(8) ? -1L : reader.GetInt64(8);
-                        if (cityId < 0L) continue;
-                        var row = new KingdomAtlasHistoryEvent
-                        {
-                            EventId = reader.GetInt64(0),
-                            WorldTime = reader.GetDouble(1),
-                            YearText = reader.IsDBNull(2) ? "" : reader.GetString(2),
-                            Year = ParseYear(reader.IsDBNull(2) ? "" : reader.GetString(2)),
-                            CityId = cityId,
-                            CityName = reader.IsDBNull(3) ? "" : reader.GetString(3),
-                            EventType = reader.IsDBNull(4) ? "" : reader.GetString(4),
-                            OldKingdomId = -1L,
-                            NewKingdomId = -1L
-                        };
-                        long kingdomId = reader.IsDBNull(5) ? -1L : reader.GetInt64(5);
-                        string name = reader.IsDBNull(6) ? "" : reader.GetString(6);
-                        string color = reader.IsDBNull(7) ? "" : reader.GetString(7);
-                        if (row.EventType == "city_lost")
-                        {
-                            row.OldKingdomId = kingdomId;
-                            row.OldKingdomName = name;
-                            row.OldKingdomColor = color;
-                            Enqueue(lost, EventKey(cityId, row.WorldTime), row);
-                        }
-                        else
-                        {
-                            row.NewKingdomId = kingdomId;
-                            row.NewKingdomName = name;
-                            row.NewKingdomColor = color;
-                            Enqueue(gained, EventKey(cityId, row.WorldTime), row);
-                        }
-                    }
-                }
-            }
-            var keys = new HashSet<string>(lost.Keys);
-            keys.UnionWith(gained.Keys);
-            foreach (string key in keys)
-            {
-                lost.TryGetValue(key, out Queue<KingdomAtlasHistoryEvent> losses);
-                gained.TryGetValue(key, out Queue<KingdomAtlasHistoryEvent> gains);
-                while (losses != null && losses.Count > 0)
-                {
-                    KingdomAtlasHistoryEvent loss = losses.Dequeue();
-                    if (gains == null || gains.Count == 0) continue;
-                    KingdomAtlasHistoryEvent gain = gains.Dequeue();
-                    if (KingdomAtlasRules.IsCompleteTransfer(
-                            loss.OldKingdomId, gain.NewKingdomId))
-                        result.Add(Merge(loss, gain));
-                }
-            }
 
-            using (var cmd = new SQLiteCommand(db))
+            Dictionary<long, List<KingdomTerritorialHistoryRow>> kingdomRows =
+                ReadKingdomTerritorialRows(db);
+            List<CityTerritorialHistoryRow> cityRows =
+                ReadCityTerritorialRows(db);
+            var ownerSnapshots = new Dictionary<long, CityOwnerSnapshot>();
+            var consumedKingdomEventIds = new HashSet<long>();
+
+            for (int index = 0; index < cityRows.Count; index++)
             {
-                cmd.CommandText = "SELECT EVENT_ID,WORLD_TIME,YEAR_PREFIX,SUBJECT_NAME," +
-                    "EVENT_TYPE,CONTEXT_KINGDOM_ID,CONTEXT_KINGDOM_NAME," +
-                    "CONTEXT_KINGDOM_COLOR,CITY_ID FROM CityHistory " +
+                CityTerritorialHistoryRow city = cityRows[index];
+                if (city == null || city.CityId < 0L) continue;
+                long previousOwnerId = -1L;
+                if (ownerSnapshots.TryGetValue(city.CityId,
+                        out CityOwnerSnapshot previousOwner))
+                    previousOwnerId = previousOwner.KingdomId;
+                MatchCityTransferRows(city, previousOwnerId, kingdomRows,
+                    consumedKingdomEventIds, out KingdomTerritorialHistoryRow lost,
+                    out KingdomTerritorialHistoryRow gained);
+
+                KingdomAtlasHistoryEvent normalized = NormalizeCityEvent(city,
+                    lost, gained, ownerSnapshots);
+                if (normalized == null) continue;
+                result.Add(normalized);
+                if (normalized.NewKingdomId >= 0L)
+                {
+                    ownerSnapshots[city.CityId] = new CityOwnerSnapshot
+                    {
+                        KingdomId = normalized.NewKingdomId,
+                        Name = normalized.NewKingdomName,
+                        Color = normalized.NewKingdomColor
+                    };
+                }
+                else
+                {
+                    ownerSnapshots.Remove(city.CityId);
+                }
+            }
+            return KingdomAtlasRules.OrderAndDeduplicate(result);
+        }
+
+        private static void MatchCityTransferRows(CityTerritorialHistoryRow pCity,
+            long pPreviousOwnerId,
+            IReadOnlyDictionary<long, List<KingdomTerritorialHistoryRow>> pRows,
+            ISet<long> pConsumedEventIds,
+            out KingdomTerritorialHistoryRow pLost,
+            out KingdomTerritorialHistoryRow pGained)
+        {
+            pLost = null;
+            pGained = null;
+            if (pCity == null || pCity.EventType != "city_transfer") return;
+
+            long contextOwnerId = pCity.ContextKingdomId;
+            pLost = FindKingdomRow(pRows, pCity.CityId, pCity.WorldTime,
+                "city_lost", pPreviousOwnerId, pConsumedEventIds);
+            long minimumGainEventId = pLost?.EventId ?? -1L;
+            pGained = FindKingdomRow(pRows, pCity.CityId, pCity.WorldTime,
+                "city_gained", contextOwnerId, pConsumedEventIds,
+                minimumGainEventId);
+
+            if (pLost != null) pConsumedEventIds?.Add(pLost.EventId);
+            if (pGained != null) pConsumedEventIds?.Add(pGained.EventId);
+        }
+
+        private static List<KingdomAtlasZoneSnapshot> TryReadZoneArchive(
+            double pWorldTime)
+        {
+            try
+            {
+                return KingdomAtlasZoneArchiveService.Read(pWorldTime);
+            }
+            catch
+            {
+                // Legacy history databases did not have this optional table.
+                return new List<KingdomAtlasZoneSnapshot>();
+            }
+        }
+
+        private static List<CityTerritorialHistoryRow> ReadCityTerritorialRows(
+            SQLiteConnection pDb)
+        {
+            var result = new List<CityTerritorialHistoryRow>();
+            using (var cmd = new SQLiteCommand(pDb))
+            {
+                cmd.CommandText = "SELECT EVENT_ID,WORLD_TIME,YEAR_PREFIX," +
+                    "SUBJECT_NAME,EVENT_TYPE,KINGDOM_NAME,KINGDOM_COLOR," +
+                    "CONTEXT_KINGDOM_ID,CONTEXT_KINGDOM_NAME," +
+                    "CONTEXT_KINGDOM_COLOR,CITY_ID,TARGET_ID FROM CityHistory " +
                     "WHERE EVENT_TYPE IN ('city_found','city_transfer') " +
                     "ORDER BY WORLD_TIME ASC,EVENT_ID ASC";
                 using (var reader = (SQLiteDataReader)cmd.ExecuteReader())
                 {
                     while (reader.Read())
                     {
-                        long cityId = reader.IsDBNull(8) ? -1L : reader.GetInt64(8);
+                        long cityId = ReadLong(reader, 10, -1L);
+                        if (cityId < 0L) cityId = ReadLong(reader, 11, -1L);
                         if (cityId < 0L) continue;
-                        string type = reader.IsDBNull(4) ? "" : reader.GetString(4);
-                        if (type != "city_found") continue;
-                        result.Add(new KingdomAtlasHistoryEvent
+                        result.Add(new CityTerritorialHistoryRow
                         {
-                            EventId = reader.GetInt64(0),
-                            WorldTime = reader.GetDouble(1),
-                            YearText = reader.IsDBNull(2) ? "" : reader.GetString(2),
-                            Year = ParseYear(reader.IsDBNull(2) ? "" : reader.GetString(2)),
-                            CityId = cityId,
-                            CityName = reader.IsDBNull(3) ? "" : reader.GetString(3),
-                            EventType = type,
-                            NewKingdomId = reader.IsDBNull(5) ? -1L : reader.GetInt64(5),
-                            NewKingdomName = reader.IsDBNull(6) ? "" : reader.GetString(6),
-                            NewKingdomColor = reader.IsDBNull(7) ? "" : reader.GetString(7)
+                            EventId = ReadLong(reader, 0, -1L),
+                            WorldTime = ReadDouble(reader, 1),
+                            YearText = ReadText(reader, 2),
+                            CityName = ReadText(reader, 3),
+                            EventType = ReadText(reader, 4),
+                            KingdomName = ReadText(reader, 5),
+                            KingdomColor = ReadText(reader, 6),
+                            ContextKingdomId = ReadLong(reader, 7, -1L),
+                            ContextKingdomName = ReadText(reader, 8),
+                            ContextKingdomColor = ReadText(reader, 9),
+                            CityId = cityId
                         });
                     }
                 }
@@ -212,40 +301,223 @@ namespace AncientWarfare3.core.atlas
             return result;
         }
 
-        private static KingdomAtlasHistoryEvent Merge(KingdomAtlasHistoryEvent pLost,
-            KingdomAtlasHistoryEvent pGain)
+        private static Dictionary<long, List<KingdomTerritorialHistoryRow>>
+            ReadKingdomTerritorialRows(SQLiteConnection pDb)
         {
+            var result = new Dictionary<long, List<KingdomTerritorialHistoryRow>>();
+            using (var cmd = new SQLiteCommand(pDb))
+            {
+                cmd.CommandText = "SELECT EVENT_ID,WORLD_TIME,YEAR_PREFIX," +
+                    "SUBJECT_NAME,EVENT_TYPE,KINGDOM_ID,CONTEXT_KINGDOM_ID," +
+                    "CONTEXT_KINGDOM_NAME,CONTEXT_KINGDOM_COLOR,TARGET_ID " +
+                    "FROM KingdomHistory WHERE EVENT_TYPE IN " +
+                    "('city_lost','city_gained') ORDER BY WORLD_TIME ASC,EVENT_ID ASC";
+                using (var reader = (SQLiteDataReader)cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        long cityId = ReadLong(reader, 9, -1L);
+                        if (cityId < 0L) continue;
+                        long kingdomId = ReadLong(reader, 5, -1L);
+                        if (kingdomId < 0L)
+                            kingdomId = ReadLong(reader, 6, -1L);
+                        var row = new KingdomTerritorialHistoryRow
+                        {
+                            EventId = ReadLong(reader, 0, -1L),
+                            WorldTime = ReadDouble(reader, 1),
+                            EventType = ReadText(reader, 4),
+                            KingdomId = kingdomId,
+                            KingdomName = ReadText(reader, 7),
+                            KingdomColor = ReadText(reader, 8),
+                            CityName = ReadText(reader, 3)
+                        };
+                        if (!result.TryGetValue(cityId,
+                                out List<KingdomTerritorialHistoryRow> rows))
+                        {
+                            rows = new List<KingdomTerritorialHistoryRow>();
+                            result[cityId] = rows;
+                        }
+                        rows.Add(row);
+                    }
+                }
+            }
+            return result;
+        }
+
+        private static KingdomAtlasHistoryEvent NormalizeCityEvent(
+            CityTerritorialHistoryRow pCity,
+            KingdomTerritorialHistoryRow pLost,
+            KingdomTerritorialHistoryRow pGained,
+            IReadOnlyDictionary<long, CityOwnerSnapshot> pOwners)
+        {
+            long previousId = -1L;
+            CityOwnerSnapshot previous = null;
+            if (pOwners != null) pOwners.TryGetValue(pCity.CityId, out previous);
+            if (previous != null) previousId = previous.KingdomId;
+
+            long contextId = pCity.ContextKingdomId;
+            long oldId = -1L;
+            long newId = -1L;
+            string oldName = previous?.Name ?? "";
+            string oldColor = previous?.Color ?? "";
+            string newName = FirstNonEmpty(pCity.ContextKingdomName,
+                pCity.KingdomName);
+            string newColor = FirstNonEmpty(pCity.ContextKingdomColor,
+                pCity.KingdomColor);
+
+            if (pLost != null && pLost.KingdomId >= 0L)
+            {
+                oldId = pLost.KingdomId;
+                oldName = FirstNonEmpty(pLost.KingdomName, oldName);
+                oldColor = FirstNonEmpty(pLost.KingdomColor, oldColor);
+            }
+            else if (previousId >= 0L)
+            {
+                oldId = previousId;
+            }
+
+            if (pGained != null && pGained.KingdomId >= 0L)
+            {
+                newId = pGained.KingdomId;
+                newName = FirstNonEmpty(pGained.KingdomName, newName);
+                newColor = FirstNonEmpty(pGained.KingdomColor, newColor);
+            }
+            else if (pCity.EventType == "city_found")
+            {
+                newId = contextId;
+            }
+            else if (contextId >= 0L && contextId != oldId)
+            {
+                newId = contextId;
+            }
+            else if (pLost == null && contextId >= 0L && oldId < 0L)
+            {
+                newId = contextId;
+            }
+
+            if (pCity.EventType == "city_transfer" &&
+                pLost != null && pGained == null && newId == oldId)
+                newId = -1L;
+            if (pCity.EventType == "city_transfer" &&
+                KingdomAtlasRules.IsDuplicateTransferWithoutEvidence(
+                    previousId, contextId, pLost != null, pGained != null))
+                return null;
+            if (pCity.EventType == "city_transfer" &&
+                oldId >= 0L && newId == oldId) return null;
+
+            if (newId >= 0L && string.IsNullOrEmpty(newName) &&
+                contextId == newId)
+                newName = pCity.ContextKingdomName;
             return new KingdomAtlasHistoryEvent
             {
-                EventId = Math.Min(pLost.EventId, pGain.EventId),
-                WorldTime = pLost.WorldTime,
-                Year = pLost.Year != 0 ? pLost.Year : pGain.Year,
-                YearText = pLost.YearText ?? pGain.YearText ?? "",
-                CityId = pLost.CityId,
-                CityName = string.IsNullOrEmpty(pGain.CityName) ? pLost.CityName : pGain.CityName,
-                EventType = "city_transfer",
-                OldKingdomId = pLost.OldKingdomId,
-                OldKingdomName = pLost.OldKingdomName,
-                OldKingdomColor = pLost.OldKingdomColor,
-                NewKingdomId = pGain.NewKingdomId,
-                NewKingdomName = pGain.NewKingdomName,
-                NewKingdomColor = pGain.NewKingdomColor
+                EventId = pCity.EventId,
+                WorldTime = pCity.WorldTime,
+                Year = ParseYear(pCity.YearText),
+                YearText = pCity.YearText,
+                CityId = pCity.CityId,
+                CityName = pCity.CityName,
+                EventType = pCity.EventType,
+                OldKingdomId = oldId,
+                OldKingdomName = oldName,
+                OldKingdomColor = oldColor,
+                NewKingdomId = newId,
+                NewKingdomName = newName,
+                NewKingdomColor = newColor
             };
         }
 
-        private static Dictionary<long, long> ReplayOwners(
-            IReadOnlyList<KingdomAtlasHistoryEvent> pRows)
+        private static KingdomTerritorialHistoryRow FindKingdomRow(
+            IReadOnlyDictionary<long, List<KingdomTerritorialHistoryRow>> pRows,
+            long pCityId, double pWorldTime, string pEventType,
+            long pExpectedKingdomId, ISet<long> pConsumedEventIds,
+            long pMinimumEventId = -1L)
         {
-            var result = new Dictionary<long, long>();
-            if (pRows == null) return result;
-            for (int index = 0; index < pRows.Count; index++)
+            if (pRows == null || !pRows.TryGetValue(pCityId,
+                    out List<KingdomTerritorialHistoryRow> rows)) return null;
+            for (int index = 0; index < rows.Count; index++)
             {
-                KingdomAtlasHistoryEvent row = pRows[index];
-                if (row == null || row.CityId < 0L) continue;
-                result[row.CityId] = row.NewKingdomId >= 0L
-                    ? row.NewKingdomId : -1L;
+                KingdomTerritorialHistoryRow row = rows[index];
+                if (row == null || row.EventType != pEventType) continue;
+                if (row.EventId < pMinimumEventId ||
+                    pConsumedEventIds?.Contains(row.EventId) == true) continue;
+                if (Math.Abs(row.WorldTime - pWorldTime) > 0.000001d)
+                    continue;
+                if (pExpectedKingdomId >= 0L &&
+                    row.KingdomId != pExpectedKingdomId) continue;
+                return row;
             }
-            return result;
+            return null;
+        }
+
+        private static string FirstNonEmpty(params string[] pValues)
+        {
+            if (pValues == null) return "";
+            for (int index = 0; index < pValues.Length; index++)
+                if (!string.IsNullOrWhiteSpace(pValues[index]))
+                    return pValues[index];
+            return "";
+        }
+
+        private static string ReadText(SQLiteDataReader pReader, int pIndex)
+        {
+            return pReader == null || pReader.IsDBNull(pIndex)
+                ? "" : pReader.GetValue(pIndex)?.ToString() ?? "";
+        }
+
+        private static long ReadLong(SQLiteDataReader pReader, int pIndex,
+            long pFallback)
+        {
+            if (pReader == null || pReader.IsDBNull(pIndex)) return pFallback;
+            try
+            {
+                return Convert.ToInt64(pReader.GetValue(pIndex),
+                    CultureInfo.InvariantCulture);
+            }
+            catch { return pFallback; }
+        }
+
+        private static double ReadDouble(SQLiteDataReader pReader, int pIndex)
+        {
+            if (pReader == null || pReader.IsDBNull(pIndex)) return 0d;
+            try
+            {
+                return Convert.ToDouble(pReader.GetValue(pIndex),
+                    CultureInfo.InvariantCulture);
+            }
+            catch { return 0d; }
+        }
+
+        private sealed class CityTerritorialHistoryRow
+        {
+            public long EventId { get; set; }
+            public double WorldTime { get; set; }
+            public string YearText { get; set; } = "";
+            public string CityName { get; set; } = "";
+            public string EventType { get; set; } = "";
+            public string KingdomName { get; set; } = "";
+            public string KingdomColor { get; set; } = "";
+            public long ContextKingdomId { get; set; } = -1L;
+            public string ContextKingdomName { get; set; } = "";
+            public string ContextKingdomColor { get; set; } = "";
+            public long CityId { get; set; } = -1L;
+        }
+
+        private sealed class KingdomTerritorialHistoryRow
+        {
+            public long EventId { get; set; }
+            public double WorldTime { get; set; }
+            public string EventType { get; set; } = "";
+            public long KingdomId { get; set; } = -1L;
+            public string KingdomName { get; set; } = "";
+            public string KingdomColor { get; set; } = "";
+            public string CityName { get; set; } = "";
+        }
+
+        private sealed class CityOwnerSnapshot
+        {
+            public long KingdomId { get; set; } = -1L;
+            public string Name { get; set; } = "";
+            public string Color { get; set; } = "";
         }
 
         private static void AddVisibleCells(List<KingdomAtlasZoneSnapshot> pSnapshots,
@@ -324,22 +596,7 @@ namespace AncientWarfare3.core.atlas
             BuildKingdomSnapshots(KingdomAtlasHistoryEvent pEvent,
                 IReadOnlyList<KingdomAtlasVassalRelationSnapshot> pRelations)
         {
-            var result = new Dictionary<long, KingdomAtlasKingdomSnapshot>();
-            AddKingdomSnapshot(result, pEvent?.OldKingdomId,
-                pEvent?.OldKingdomName, pEvent?.OldKingdomColor);
-            AddKingdomSnapshot(result, pEvent?.NewKingdomId,
-                pEvent?.NewKingdomName, pEvent?.NewKingdomColor);
-            if (pRelations == null) return result;
-            for (int index = 0; index < pRelations.Count; index++)
-            {
-                KingdomAtlasVassalRelationSnapshot relation = pRelations[index];
-                if (relation == null || relation.StartTime > pEvent.WorldTime) continue;
-                MergeKingdomSnapshot(result, relation.VassalId,
-                    relation.VassalName, relation.VassalColor);
-                MergeKingdomSnapshot(result, relation.SuzerainId,
-                    relation.SuzerainName, relation.SuzerainColor);
-            }
-            return result;
+            return KingdomAtlasRules.BuildKingdomSnapshots(pEvent, pRelations);
         }
 
         private static void AddKingdomSnapshot(

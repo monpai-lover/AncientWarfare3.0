@@ -9,11 +9,16 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="PathfindingMigrationRulesTests.cs.txt" />
+    <Compile Include="AWPathSessionTests.cs.txt" />
+    <Compile Include="AWDockRouteRegistryTests.cs.txt" />
     <Compile Include="KingdomAtlasRulesTests.cs.txt" />
     <Compile Include="KingdomAtlasArtifactRulesTests.cs.txt" />
+    <Compile Include="KingdomAtlasLiveTerrainRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\atlas\KingdomAtlasModels.cs" Link="Production\KingdomAtlasModels.cs" />
     <Compile Include="..\..\Code\core\atlas\KingdomAtlasRules.cs" Link="Production\KingdomAtlasRules.cs" />
     <Compile Include="..\..\Code\core\atlas\KingdomAtlasRasterizer.cs" Link="Production\KingdomAtlasRasterizer.cs" />
+    <Compile Include="..\..\Code\core\atlas\KingdomAtlasLiveTerrainRules.cs" Link="Production\KingdomAtlasLiveTerrainRules.cs" />
     <Compile Include="..\..\Code\core\atlas\KingdomAtlasPngEncoder.cs" Link="Production\KingdomAtlasPngEncoder.cs" />
     <Compile Include="..\..\Code\core\atlas\KingdomAtlasGifEncoder.cs" Link="Production\KingdomAtlasGifEncoder.cs" />
     <Compile Include="ClassicCivLifespanContentTests.cs.txt" />
@@ -29,6 +34,7 @@
     <Compile Include="ActorDiagnosticSamplingRulesTests.cs.txt" />
     <Compile Include="RuntimePerformanceDiagnosticRulesTests.cs.txt" />
     <Compile Include="ActorAgeWorkRulesTests.cs.txt" />
+    <Compile Include="FeudatoryDeathPerformanceRulesTests.cs.txt" />
     <Compile Include="ActorDeathArchiveRulesTests.cs.txt" />
     <Compile Include="CapturedMilitaryOwnershipRulesTests.cs.txt" />
     <Compile Include="ActorPresentationDirtyRulesTests.cs.txt" />
@@ -123,6 +129,9 @@
     <Compile Include="WesternPolicyAiRulesTests.cs.txt" />
     <Compile Include="WesternCourtProfileRulesTests.cs.txt" />
     <Compile Include="WesternCourtElectionRulesTests.cs.txt" />
+    <Compile Include="WesternCourtOfficeEffectRulesTests.cs.txt" />
+    <Compile Include="WesternMayorTermRulesTests.cs.txt" />
+    <Compile Include="OfficialCirculationRulesTests.cs.txt" />
     <Compile Include="..\..\Code\attributes\TableDefAttribute.cs" Link="Production\TableDefAttribute.cs" />
     <Compile Include="..\..\Code\attributes\TableItemDefAttribute.cs" Link="Production\TableItemDefAttribute.cs" />
     <Compile Include="..\..\Code\core\db\AbstractTableItem.cs" Link="Production\AbstractTableItem.cs" />
@@ -218,6 +227,7 @@
     <Compile Include="ZhuluAgeRulesTests.cs.txt" />
     <Compile Include="XiaizationStatusDisplayRulesTests.cs.txt" />
     <Compile Include="WarGoalSettlementRulesTests.cs.txt" />
+    <Compile Include="WarExhaustionSettlementRulesTests.cs.txt" />
     <Compile Include="WarScoreBudgetRulesTests.cs.txt" />
     <Compile Include="WarScoreBudgetServiceTests.cs.txt" />
     <Compile Include="OccupiedCityCivilianProtectionRulesTests.cs.txt" />
@@ -228,6 +238,7 @@
     <Compile Include="ArmyMapInformationRulesTests.cs.txt" />
     <Compile Include="RoyalGuardCaptainHandoffRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalMapActivationRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalMapFontRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalLabelPrecomputeRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalZoneLabelAccumulatorTests.cs.txt" />
     <Compile Include="AW3MultiplayerWorldLoadRulesTests.cs.txt" />
@@ -295,6 +306,7 @@
     <Compile Include="..\..\Code\core\lineage\RulerTitleFactRules.cs" Link="Production\RulerTitleFactRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PosthumousTitleDefs.cs" Link="Production\PosthumousTitleDefs.cs" />
     <Compile Include="..\..\Code\core\lineage\PosthumousTitleRules.cs" Link="Production\PosthumousTitleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PosthumousStateNameRules.cs" Link="Production\PosthumousStateNameRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FormerRulerPosthumousRules.cs" Link="Production\FormerRulerPosthumousRules.cs" />
     <Compile Include="..\..\Code\core\lineage\TempleTitleRules.cs" Link="Production\TempleTitleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\StateNameRules.cs" Link="Production\StateNameRules.cs" />
@@ -363,6 +375,7 @@
     <Compile Include="..\..\Code\core\lineage\EmptyCityResettlementRules.cs" Link="Production\EmptyCityResettlementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarParticipantMobilizationBaselineRules.cs" Link="Production\WarParticipantMobilizationBaselineRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarScoreRules.cs" Link="Production\WarScoreRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarExhaustionSettlementRules.cs" Link="Production\WarExhaustionSettlementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarForceEliminationRules.cs" Link="Production\WarForceEliminationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarBattleEpisodeRules.cs" Link="Production\WarBattleEpisodeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarVictoryExhaustionRules.cs" Link="Production\WarVictoryExhaustionRules.cs" />
@@ -386,6 +399,7 @@
     <Compile Include="..\..\Code\core\lineage\MinimapActorMarkerRules.cs" Link="Production\MinimapActorMarkerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyMapInformationRules.cs" Link="Production\ArmyMapInformationRules.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalMapActivationRules.cs" Link="Production\HierarchicalVassalMapActivationRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalMapFontRules.cs" Link="Production\HierarchicalVassalMapFontRules.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalZoneLabelAccumulator.cs" Link="Production\HierarchicalVassalZoneLabelAccumulator.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalLabelInvalidationRules.cs" Link="Production\HierarchicalVassalLabelInvalidationRules.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalMapModeSchedulingRules.cs" Link="Production\HierarchicalVassalMapModeSchedulingRules.cs" />
@@ -441,6 +455,7 @@
     <Compile Include="..\..\Code\core\court\CourtAuxiliaryLawRules.cs" Link="Production\CourtAuxiliaryLawRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtConscriptionLawRules.cs" Link="Production\CourtConscriptionLawRules.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCirculationRules.cs" Link="Production\OfficialCirculationRules.cs" />
+    <Compile Include="..\..\Code\core\court\WesternMayorTermRules.cs" Link="Production\WesternMayorTermRules.cs" />
     <Compile Include="..\..\Code\core\court\GovernorRotationRuntimeScope.cs" Link="Production\GovernorRotationRuntimeScope.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceExamRules.cs" Link="Production\CivilServiceExamRules.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceLegacyTransitionRules.cs" Link="Production\CivilServiceLegacyTransitionRules.cs" />
@@ -459,6 +474,9 @@
     <Compile Include="..\..\Code\core\court\ICourtProfile.cs" Link="Production\ICourtProfile.cs" />
     <Compile Include="..\..\Code\core\court\XiaCourtProfile.cs" Link="Production\XiaCourtProfile.cs" />
     <Compile Include="..\..\Code\core\court\WesternCourtProfile.cs" Link="Production\WesternCourtProfile.cs" />
+    <Compile Include="..\..\Code\core\court\WesternCourtOfficeEffectRules.cs" Link="Production\WesternCourtOfficeEffectRules.cs" />
+    <Compile Include="..\..\Code\core\court\WesternCourtMigrationRules.cs" Link="Production\WesternCourtMigrationRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtCityOfficeRules.cs" Link="Production\CourtCityOfficeRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtProfileRegistry.cs" Link="Production\CourtProfileRegistry.cs" />
     <Compile Include="..\..\Code\core\court\WesternCourtElectionRules.cs" Link="Production\WesternCourtElectionRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtInstitutionEffectRules.cs" Link="Production\CourtInstitutionEffectRules.cs" />
@@ -604,6 +622,11 @@
     <Compile Include="..\..\Code\core\policy\MandateMapMarkerRules.cs" Link="Production\MandateMapMarkerRules.cs" />
     <Compile Include="..\..\Code\core\policy\SchoolNameplateRenderRules.cs" Link="Production\SchoolNameplateRenderRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathTypes.cs" Link="Production\AWPathTypes.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathMigrationRules.cs" Link="Production\AWPathMigrationRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathSession.cs" Link="Production\AWPathSession.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWDockRouteModels.cs" Link="Production\AWDockRouteModels.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWDockRouteRegistry.cs" Link="Production\AWDockRouteRegistry.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWDockTransportRules.cs" Link="Production\AWDockTransportRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathLifecycleRules.cs" Link="Production\AWPathLifecycleRules.cs" />
     <Compile Include="..\..\Code\core\performance\RuntimePerformanceBudgetRules.cs" Link="Production\RuntimePerformanceBudgetRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWIdleBehaviourThrottleRules.cs" Link="Production\AWIdleBehaviourThrottleRules.cs" />
@@ -611,11 +634,15 @@
     <Compile Include="..\..\Code\core\performance\MonthlyAuthorityWorkQueue.cs" Link="Production\MonthlyAuthorityWorkQueue.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathStream.cs" Link="Production\AWPathStream.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWTraversalSnapshot.cs" Link="Production\AWTraversalSnapshot.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWTraversalBuildRules.cs" Link="Production\AWTraversalBuildRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWTraversalBuildModels.cs" Link="Production\AWTraversalBuildModels.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWOceanConnectivityRules.cs" Link="Production\AWOceanConnectivityRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathRequest.cs" Link="Production\AWPathRequest.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathfindingConfig.cs" Link="Production\AWPathfindingConfig.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathfindingRuntimeMode.cs" Link="Production\AWPathfindingRuntimeMode.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWBinaryHeap.cs" Link="Production\AWBinaryHeap.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWTraversalRules.cs" Link="Production\AWTraversalRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWRegionRouteCache.cs" Link="Production\AWRegionRouteCache.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWStreamingPathGenerator.cs" Link="Production\AWStreamingPathGenerator.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathDiagnostics.cs" Link="Production\AWPathDiagnostics.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathFinder.cs" Link="Production\AWPathFinder.cs" />
@@ -729,6 +756,7 @@
   </ItemGroup>
   <Target Name="WartimeMilitaryTaskGatePerformanceSourceGuard"
       BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\FontSettingsSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\VirtualNobleTitleUiSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ShadowSettingsSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ActorBirthAffiliationSourceGuard.ps1&quot;" />
@@ -738,6 +766,8 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\LineageGivenNameNormalizationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ArmyMembershipReconciliationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\HierarchicalVassalOccupationReuseSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\RtsSchedulingPerformanceSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\DiplomacyAiToggleSourceGuard.ps1&quot;" />
   </Target>
   <Target Name="XiaItemDynamicAtlasSourceGuard"
       BeforeTargets="Build">

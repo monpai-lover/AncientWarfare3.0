@@ -15,7 +15,9 @@ namespace AncientWarfare3.core.court
             pKingdom.data.get(LineageKeys.COURT_INSTITUTION,
                 out string institution, "");
             if (CourtInstitutionRules.IsKnown(institution) &&
-                InstitutionMatchesProfile(profile, institution))
+                InstitutionMatchesProfile(profile, institution) &&
+                (profile.Id != CourtProfileId.Western ||
+                 CourtInstitutionRules.IsCanonicalWestern(institution)))
                 return institution;
             return Refresh(pKingdom, pRecordHistory: false);
         }
@@ -40,16 +42,15 @@ namespace AncientWarfare3.core.court
             {
                 KingdomPolicyEffects effects =
                     KingdomPolicyEffectService.Read(pKingdom);
-                pKingdom.data.get(LineageKeys.POLICY_GOVERNMENT_STATE,
-                    out string governmentState, "default");
-                next = profile.ResolveInstitution(
-                    effects.WesternCourtUnlocked,
-                    effects.ElectiveTermsUnlocked &&
-                    governmentState == CourtInstitutionId.WesternElective,
-                    effects.FeudalRetainersUnlocked &&
-                    governmentState == CourtInstitutionId.WesternFeudal,
-                    effects.RoyalAppointmentsUnlocked &&
-                    governmentState == CourtInstitutionId.WesternRoyalDirect);
+                string migrated = CourtInstitutionRules.MigrateWesternLegacy(
+                    previous, effects.FeudalRetainersUnlocked);
+                bool officeSystemUnlocked = effects.WesternCourtUnlocked ||
+                    migrated != CourtInstitutionId.WesternPrimitive;
+                bool advancedUnlocked = effects.FeudalRetainersUnlocked ||
+                    migrated ==
+                    CourtInstitutionId.WesternFeudalBureaucratic;
+                next = profile.ResolveInstitution(officeSystemUnlocked,
+                    advancedUnlocked);
             }
             else
             {
@@ -94,14 +95,10 @@ namespace AncientWarfare3.core.court
                     "Cross-culture opinion +10 · Slots +12% · Domestic spread +10%",
                 CourtInstitutionId.WesternPrimitive =>
                     "No formal office system",
-                CourtInstitutionId.WesternBase =>
+                CourtInstitutionId.WesternBureaucratic =>
                     "Standing royal and local offices",
-                CourtInstitutionId.WesternElective =>
-                    "Six-year terms; vacancies filled by election",
-                CourtInstitutionId.WesternFeudal =>
-                    "Landed nobles and educated retainers favored",
-                CourtInstitutionId.WesternRoyalDirect =>
-                    "Royal appointment; higher administration and tax; noble and vassal discontent",
+                CourtInstitutionId.WesternFeudalBureaucratic =>
+                    "Expanded central, military, and territorial offices",
                 CourtInstitutionId.Song =>
                     "Policy +15% · Tech/spread +20% · Tax +10% · Direct tribute +10 · Slots -10%",
                 _ => "Vassal soft cap 8 · Feudatory maintenance loyalty +1"

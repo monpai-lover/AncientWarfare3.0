@@ -1,0 +1,46 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.pathfinding;
+
+internal static class AWDockRouteRegistryTests
+{
+    internal static void Run()
+    {
+        var registry = new AWDockRouteRegistry();
+        Assert(registry.Register(new AWDockEndpoint(7L, 12, 101)),
+            "the first dock-water endpoint is accepted");
+        Assert(registry.Register(new AWDockEndpoint(7L, 12, 202)),
+            "a dock may expose a second water component");
+        AWDockEndpoint[] endpoints = registry.Snapshot();
+        Assert(endpoints.Length == 2 &&
+               endpoints.Any(endpoint => endpoint.WaterComponent == 101) &&
+               endpoints.Any(endpoint => endpoint.WaterComponent == 202),
+            "registering one dock on two water bodies retains both physical endpoints");
+
+        Assert(registry.Remove(7L), "removing the dock reports a mutation");
+        Assert(registry.Snapshot().Length == 0,
+            "removing a dock clears every endpoint belonging to it");
+
+        Assert(AWDockTransportRules.ShouldPreferTransport(
+                landRouteTiles: 120f, transportRouteTiles: 80f),
+            "a substantially shorter physical dock route wins over land");
+        Assert(!AWDockTransportRules.ShouldPreferTransport(
+                landRouteTiles: 80f, transportRouteTiles: 76f),
+            "a marginal dock route does not replace a stable land route");
+        Assert(AWDockTransportRules.ShouldRefreshWorldRegistry(false, 0),
+            "the initial dock scan is allowed when the registry is empty");
+        Assert(!AWDockTransportRules.ShouldRefreshWorldRegistry(true, 0),
+            "a completed world scan is never repeated for every actor goTo");
+        Assert(!AWDockTransportRules.ShouldRefreshWorldRegistry(false, 2),
+            "a populated registry does not need a world scan");
+        Assert(!AWDockTransportRules.ShouldAttemptDockLookup(true),
+            "same-island civilian routes skip the dock endpoint scan");
+        Assert(AWDockTransportRules.ShouldAttemptDockLookup(false),
+            "cross-island routes retain the physical dock lookup");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

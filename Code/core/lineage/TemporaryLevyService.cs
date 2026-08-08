@@ -42,6 +42,7 @@ namespace AncientWarfare3.core.lineage
                 new HashSet<long>();
             public long CurrentCityId = -1L;
             public int CitySelectionCursor;
+            public int ActorScanCursor;
 
             public PreparationRecruitmentPlan(long pKingdomId,
                 int pMonthKey)
@@ -988,11 +989,8 @@ namespace AncientWarfare3.core.lineage
             var candidates = new List<Actor>(requested);
             bool confirmedExhausted = false;
             if (requested > 0)
-                CityReservePoolService.TryConsumeForMobilization(
-                    kingdom, city, requested, targetArmy,
-                    allowArmyCreation:
-                        disposition == ArmyRecruitmentDisposition.Create,
-                    candidates, out confirmedExhausted);
+                CollectPreparationCandidates(kingdom, city, targetArmy,
+                    requested, plan, candidates, out confirmedExhausted);
             int recruited = EnlistPreparationActors(kingdom, city,
                 disposition, ref targetArmy, candidates,
                 ref confirmedExhausted);
@@ -1000,8 +998,7 @@ namespace AncientWarfare3.core.lineage
                 ? ApprovedTargetShortage(kingdom, targetArmy)
                 : Math.Max(0, targetStrength);
             bool cityWorkComplete = confirmedExhausted ||
-                                    remainingShortage <= 0 ||
-                                    candidates.Count == 0;
+                                    remainingShortage <= 0;
             bool keepCity = TemporaryLevyRules.
                 ShouldKeepPreparationRecruitmentCity(cityWorkComplete,
                     recruited);
@@ -1009,6 +1006,7 @@ namespace AncientWarfare3.core.lineage
             {
                 plan.VisitedCityIds.Add(city.id);
                 plan.CurrentCityId = -1L;
+                plan.ActorScanCursor = 0;
             }
             PersistPreparationRecruitmentPlan(kingdom, plan);
             if (TemporaryLevyRules.ShouldContinuePreparationMonth(
@@ -1102,6 +1100,9 @@ namespace AncientWarfare3.core.lineage
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_FRONTIER_CURSOR,
                 out plan.CitySelectionCursor, 0);
             pKingdom.data.get(
+                LineageKeys.TEMPORARY_LEVY_PREPARATION_ACTOR_CURSOR,
+                out plan.ActorScanCursor, 0);
+            pKingdom.data.get(
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_VISITED_CITIES,
                 out string visitedCityIds, "");
             RestoreVisitedPreparationCities(plan, visitedCityIds);
@@ -1125,6 +1126,9 @@ namespace AncientWarfare3.core.lineage
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_FRONTIER_CURSOR,
                 pPlan.CitySelectionCursor);
             pKingdom.data.set(
+                LineageKeys.TEMPORARY_LEVY_PREPARATION_ACTOR_CURSOR,
+                pPlan.ActorScanCursor);
+            pKingdom.data.set(
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_VISITED_CITIES,
                 SerializeVisitedPreparationCities(pPlan.VisitedCityIds));
         }
@@ -1139,6 +1143,8 @@ namespace AncientWarfare3.core.lineage
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_CURRENT_CITY, -1L);
             pKingdom.data.set(
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_FRONTIER_CURSOR, 0);
+            pKingdom.data.set(
+                LineageKeys.TEMPORARY_LEVY_PREPARATION_ACTOR_CURSOR, 0);
             pKingdom.data.set(
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_VISITED_CITIES, "");
         }
@@ -1164,6 +1170,8 @@ namespace AncientWarfare3.core.lineage
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_CURRENT_CITY, -1L);
             pKingdom.data.set(
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_FRONTIER_CURSOR, 0);
+            pKingdom.data.set(
+                LineageKeys.TEMPORARY_LEVY_PREPARATION_ACTOR_CURSOR, 0);
             pKingdom.data.set(
                 LineageKeys.TEMPORARY_LEVY_PREPARATION_VISITED_CITIES, "");
         }
@@ -1705,7 +1713,48 @@ namespace AncientWarfare3.core.lineage
                     demand));
             bool confirmedExhausted = false;
             int scanned = 0;
-            if (establishmentReady)
+            int recruited = 0;
+            int reserved = 0;
+            bool syntheticWarReplenishment = establishmentReady &&
+                TemporaryLevyRules.ShouldUseSyntheticWarReplenishment(
+                    CityReservePoolService.ResolveMobilizationPhase(kingdom),
+                    targetArmy?.data != null);
+            bool formalWar = CityReservePoolService.ResolveMobilizationPhase(
+                kingdom) == ArmyMobilizationPhase.War;
+            if (formalWar && syntheticWarReplenishment)
+            {
+                if (!MilitaryEmergencyService.TryGetActiveWarId(
+                        kingdom, out long emergencyId))
+                {
+                    confirmedExhausted = true;
+                    emergencyId = -1L;
+                }
+                int available = CityReservePoolService.OpenOrReadWarReserve(
+                    city, emergencyId);
+                int requestedSynthetic = TemporaryLevyRules.
+                    SyntheticFallbackRequest(
+                        ArmyMobilizationPhase.War, demand, available);
+                reserved = CityReservePoolService.TryReserveWarManpower(
+                    city, emergencyId,
+                    requestedSynthetic);
+                recruited = SyntheticLevyService.CreateBatch(
+                    city, kingdom, targetArmy, reserved,
+                    emergencyId, candidates);
+                CityReservePoolService.ReleaseUnmaterializedWarReservation(
+                    city, emergencyId,
+                    reserved - recruited);
+                confirmedExhausted = recruited <= 0 &&
+                    CityReservePoolService.OpenOrReadWarReserve(
+                        city, emergencyId) <= 0;
+            }
+            else if (formalWar)
+            {
+                // Formal-war replenishment is synthetic-only. The integer
+                // reserve is the source of manpower; live residents are not
+                // scanned after the war has started.
+                confirmedExhausted = true;
+            }
+            else if (establishmentReady)
                 scanned = CityReservePoolService.TryConsumeForMobilization(
                     kingdom, city,
                     TemporaryLevyRules.CasualtyReinforcementBatchLimit(
@@ -1714,14 +1763,21 @@ namespace AncientWarfare3.core.lineage
                         disposition == ArmyRecruitmentDisposition.Create,
                     candidates,
                     out confirmedExhausted);
-            int recruited = 0;
             var scanSummary = default(RecruitmentScanSummary);
-            scanSummary.Viable = candidates.Count;
-            if (establishmentReady && targetArmy?.data != null)
+            if (formalWar)
+            {
+                scanSummary.Viable = recruited;
+                scanSummary.EnlistFailures = Math.Max(0,
+                    reserved - recruited);
+            }
+            else if (establishmentReady &&
+                     targetArmy?.data != null)
                 recruited = EnlistReserveActors(kingdom, city,
                     targetArmy, candidates,
                     preparationRecruitment: false);
-            else
+            else if (!syntheticWarReplenishment &&
+                     CityReservePoolService.ResolveMobilizationPhase(kingdom) !=
+                     ArmyMobilizationPhase.War)
                 for (int i = 0; i < candidates.Count; i++)
                 {
                     Actor actor = candidates[i];
@@ -1731,14 +1787,18 @@ namespace AncientWarfare3.core.lineage
                             ref establishmentArmy)) continue;
                     recruited++;
                 }
-            int availableAfterReturn = CityReservePoolService.
-                RestoreRejectedCandidates(kingdom, city,
-                    establishmentArmy, candidates);
-            confirmedExhausted = CityReservePoolRules.
-                ResolveConfirmedExhaustionAfterReturn(confirmedExhausted,
-                    availableAfterReturn);
-            scanSummary.EnlistFailures = Math.Max(0,
-                candidates.Count - recruited);
+            if (!formalWar)
+            {
+                scanSummary.Viable = candidates.Count;
+                int availableAfterReturn = CityReservePoolService.
+                    RestoreRejectedCandidates(kingdom, city,
+                        establishmentArmy, candidates);
+                confirmedExhausted = CityReservePoolRules.
+                    ResolveConfirmedExhaustionAfterReturn(
+                        confirmedExhausted, availableAfterReturn);
+                scanSummary.EnlistFailures = Math.Max(0,
+                    candidates.Count - recruited);
+            }
             LogRecoveryBatch(kingdom, plan, targetArmy, city, demand,
                 scanned, recruited, establishmentReady, scanSummary);
             if (!establishmentReady)
@@ -1817,6 +1877,46 @@ namespace AncientWarfare3.core.lineage
             catch { return 0; }
         }
 
+        private static int CollectPreparationCandidates(
+            Kingdom pKingdom, City pCity, Army pTargetArmy, int pRequested,
+            PreparationRecruitmentPlan pPlan, List<Actor> pCandidates,
+            out bool pConfirmedExhausted)
+        {
+            pConfirmedExhausted = false;
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pPlan == null || pCandidates == null || pRequested <= 0 ||
+                pCity.units == null || pCity.units.Count == 0)
+            {
+                pConfirmedExhausted = true;
+                return 0;
+            }
+
+            int count = pCity.units.Count;
+            int cursor = pPlan.ActorScanCursor;
+            if (cursor < 0 || cursor >= count) cursor = 0;
+            int scanLimit = Math.Min(
+                TemporaryLevyRules.MaxCandidatesPerWorkItem, count);
+            int living = SafeArmyCount(pTargetArmy);
+            int target = pTargetArmy?.data != null
+                ? StandingArmyService.TargetStrength(pTargetArmy, pKingdom)
+                : PreparationTargetStrength(pKingdom, pCity);
+            int scanned = 0;
+            while (scanned < scanLimit && pCandidates.Count < pRequested)
+            {
+                Actor actor = pCity.units[cursor];
+                cursor = (cursor + 1) % count;
+                scanned++;
+                if (actor?.data == null) continue;
+                if (CanEnlist(pKingdom, pCity, actor, living,
+                        Math.Max(living, target), out _))
+                    pCandidates.Add(actor);
+            }
+            pPlan.ActorScanCursor = cursor;
+            pConfirmedExhausted = TemporaryLevyRules.IsPreparationScanExhausted(
+                scanned, count);
+            return scanned;
+        }
+
         private static int EnlistPreparationActors(Kingdom pKingdom,
             City pSourceCity, ArmyRecruitmentDisposition pDisposition,
             ref Army pTargetArmy, IReadOnlyList<Actor> pCandidates,
@@ -1840,12 +1940,6 @@ namespace AncientWarfare3.core.lineage
                             pTrackReplenishmentArrival: false)) continue;
                     recruited++;
                 }
-            int availableAfterReturn = CityReservePoolService.
-                RestoreRejectedCandidates(pKingdom, pSourceCity,
-                    pTargetArmy, pCandidates);
-            pConfirmedExhausted = CityReservePoolRules.
-                ResolveConfirmedExhaustionAfterReturn(pConfirmedExhausted,
-                    availableAfterReturn);
             return recruited;
         }
 

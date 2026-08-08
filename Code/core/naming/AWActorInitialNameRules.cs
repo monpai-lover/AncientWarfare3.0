@@ -6,10 +6,12 @@ namespace AncientWarfare3.core.naming
     public static class AWActorInitialNameRules
     {
         public static string ResolveGeneratedName(string pGeneratedName,
-            IReadOnlyDictionary<string, string> pComponents)
+            IReadOnlyDictionary<string, string> pComponents,
+            bool preserveFamilyIdentity = false)
         {
             string generated = (pGeneratedName ?? string.Empty).Trim();
             if (generated.Length == 0) return string.Empty;
+            if (preserveFamilyIdentity) return generated;
 
             if (TryGetComponent(pComponents, "given_name", out string given))
                 return given;

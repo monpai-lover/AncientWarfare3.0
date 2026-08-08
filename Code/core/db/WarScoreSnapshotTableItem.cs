@@ -25,6 +25,7 @@ namespace AncientWarfare3.core.db
         public int defender_reserve_exhaustion;
         public int attacker_exhaustion;
         public int defender_exhaustion;
+        [TableItemDef(pDefaultValue: "0")] public int non_negotiable_war;
         public int active = 1;
         public string winner = "";
         public double started_time = -1d;

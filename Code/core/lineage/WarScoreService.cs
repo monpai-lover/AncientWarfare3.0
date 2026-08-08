@@ -57,6 +57,7 @@ namespace AncientWarfare3.core.lineage
         public int DefenderReserveExhaustion { get; internal set; }
         public int AttackerExhaustion { get; internal set; }
         public int DefenderExhaustion { get; internal set; }
+        public bool NonNegotiableWar { get; internal set; }
         public bool Active { get; internal set; }
         public string Winner { get; internal set; } = "";
         public double StartedTime { get; internal set; } = -1d;
@@ -156,7 +157,8 @@ namespace AncientWarfare3.core.lineage
         public bool StartWar(long pWarId, long pAttackerKingdomId,
             long pDefenderKingdomId, double pWorldTime,
             int pCityScoreBudget, int pAttackerMobilizationBaseline,
-            int pDefenderMobilizationBaseline)
+            int pDefenderMobilizationBaseline,
+            bool pNonNegotiableWar = false)
         {
             if (pWarId < 0 || pAttackerKingdomId < 0 ||
                 pAttackerKingdomId == pDefenderKingdomId) return false;
@@ -176,16 +178,20 @@ namespace AncientWarfare3.core.lineage
                         current.DefenderMobilizationBaseline,
                         WarParticipantMobilizationBaselineRules.
                             NormalizePotential(pDefenderMobilizationBaseline));
+                    bool nonNegotiableWar = current.NonNegotiableWar ||
+                                            pNonNegotiableWar;
                     if (attackerBaseline !=
                             current.AttackerMobilizationBaseline ||
                         defenderBaseline !=
-                            current.DefenderMobilizationBaseline)
+                            current.DefenderMobilizationBaseline ||
+                        nonNegotiableWar != current.NonNegotiableWar)
                     {
                         WarScoreSnapshot repaired = current.CloneCanonical();
                         repaired.AttackerMobilizationBaseline =
                             attackerBaseline;
                         repaired.DefenderMobilizationBaseline =
                             defenderBaseline;
+                        repaired.NonNegotiableWar = nonNegotiableWar;
                         RecalculateLossesAndExhaustion(repaired);
                         RecalculateTotal(repaired);
                         Touch(repaired, pWorldTime);
@@ -209,6 +215,7 @@ namespace AncientWarfare3.core.lineage
                         WarParticipantMobilizationBaselineRules.
                             NormalizePotential(
                                 pDefenderMobilizationBaseline),
+                    NonNegotiableWar = pNonNegotiableWar,
                     Perspective = WarScoreSide.Attackers,
                     Active = true,
                     StartedTime = pWorldTime,
@@ -592,7 +599,8 @@ namespace AncientWarfare3.core.lineage
 
         public bool CalibrateYear(long pWarId, int pDurationYears,
             int pCalibrationYear, int pAttackerMobilizationBaseline,
-            int pDefenderMobilizationBaseline, double pWorldTime)
+            int pDefenderMobilizationBaseline, double pWorldTime,
+            bool pNonNegotiableWar = false)
         {
             lock (_gate)
             {
@@ -603,6 +611,8 @@ namespace AncientWarfare3.core.lineage
                 int duration = Math.Max(current.DurationYears,
                     Math.Max(0, pDurationYears));
                 WarScoreSnapshot next = current.CloneCanonical();
+                next.NonNegotiableWar = current.NonNegotiableWar ||
+                                        pNonNegotiableWar;
                 int elapsedYears = ElapsedCalibrationYears(
                     current.LastCalibratedYear, pCalibrationYear);
                 next.DurationYears = duration;
@@ -910,20 +920,28 @@ namespace AncientWarfare3.core.lineage
         {
             pSnapshot.LossScore = WarScoreRules.LossScore(
                 pSnapshot.AttackerLosses, pSnapshot.DefenderLosses);
+            int attackerBaseExhaustion = pSnapshot.NonNegotiableWar
+                ? WarScoreRules.NonNegotiableWarExhaustion(
+                    pSnapshot.DurationYears, pSnapshot.AttackerLosses,
+                    pSnapshot.AttackerMobilizationBaseline)
+                : WarScoreRules.WarExhaustion(
+                    pSnapshot.DurationYears, pSnapshot.AttackerLosses,
+                    pSnapshot.AttackerMobilizationBaseline);
+            int defenderBaseExhaustion = pSnapshot.NonNegotiableWar
+                ? WarScoreRules.NonNegotiableWarExhaustion(
+                    pSnapshot.DurationYears, pSnapshot.DefenderLosses,
+                    pSnapshot.DefenderMobilizationBaseline)
+                : WarScoreRules.WarExhaustion(
+                    pSnapshot.DurationYears, pSnapshot.DefenderLosses,
+                    pSnapshot.DefenderMobilizationBaseline);
             pSnapshot.AttackerExhaustion = WarVictoryExhaustionRules.
                 ApplyRelief(CityReservePoolRules.ComposeExhaustion(
-                        WarScoreRules.WarExhaustion(
-                            pSnapshot.DurationYears,
-                            pSnapshot.AttackerLosses,
-                            pSnapshot.AttackerMobilizationBaseline),
+                        attackerBaseExhaustion,
                         pSnapshot.AttackerReserveExhaustion),
                     pSnapshot.AttackerExhaustionRelief);
             pSnapshot.DefenderExhaustion = WarVictoryExhaustionRules.
                 ApplyRelief(CityReservePoolRules.ComposeExhaustion(
-                        WarScoreRules.WarExhaustion(
-                            pSnapshot.DurationYears,
-                            pSnapshot.DefenderLosses,
-                            pSnapshot.DefenderMobilizationBaseline),
+                        defenderBaseExhaustion,
                         pSnapshot.DefenderReserveExhaustion),
                     pSnapshot.DefenderExhaustionRelief);
             if (pSnapshot.DecisiveScore > 0)

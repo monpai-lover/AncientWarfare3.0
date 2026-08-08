@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -419,6 +420,7 @@ namespace AncientWarfare3.core.lineage
         }
 
         public bool HasPending => _kingdomIds.Count > 0;
+        public int PendingCount => _kingdomIds.Count;
 
         public void Clear()
         {
@@ -499,8 +501,6 @@ namespace AncientWarfare3.core.lineage
 
     internal static class ArmyLogisticsService
     {
-        private const int MaximumArmiesPerFrame = 8;
-
         private static readonly ArmyLogisticsRuntimeIndex EventIndex =
             new ArmyLogisticsRuntimeIndex();
         private static readonly ArmyLogisticsActivityIndex ActivityIndex =
@@ -559,12 +559,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnActorDying(Actor pActor)
         {
-            Army army = pActor?.army;
-            if (pActor?.data == null || army?.data == null) return;
-            bool captainLost = false;
-            try { captainLost = army.getCaptain() == pActor; }
-            catch { }
-            EventIndex.RecordCasualty(army.id, captainLost);
+            // ArmyRetreatService owns the vanilla roster-loss baseline and
+            // casualty counter. Do not enqueue a second logistics event.
+            return;
         }
 
         public static void OnArmyDisposed(Army pArmy)
@@ -625,23 +622,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessFrame()
         {
-            if (!ArmyRtsRuntimeMode.ShouldPlan) return;
-            long worldDay = CurrentLogisticsPeriod();
-            if (_armyCursor == null && !DayScheduler.HasPending &&
-                DayScheduler.ShouldBeginDay(worldDay))
-                DayScheduler.BeginDay(worldDay,
-                    ActivityIndex.GetActiveKingdomIds());
-            if (_armyCursor == null && DayScheduler.HasPending)
-                BeginNextKingdom();
-            if (_armyCursor == null) return;
-
-            IReadOnlyList<long> armyIds = _armyCursor.Take(
-                MaximumArmiesPerFrame);
-            for (int i = 0; i < armyIds.Count; i++)
-                UpdateArmy(armyIds[i], _cursorKingdomId);
-            if (!_armyCursor.IsComplete) return;
-            _armyCursor = null;
-            _cursorKingdomId = -1L;
+            // Supply, organization and movement logistics are no longer
+            // simulated. Retreated armies are evaluated from vanilla Army
+            // membership/loss observations in ArmyRetreatService.
         }
 
         public static void RebuildRuntime()
@@ -671,7 +654,11 @@ namespace AncientWarfare3.core.lineage
 
         private static void BeginNextKingdom()
         {
-            while (DayScheduler.HasPending)
+            int scanLimit = RuntimePerformanceBudgetRules.
+                ResolveLogisticsKingdomScansPerFrame(
+                    DayScheduler.PendingCount);
+            for (int scan = 0; scan < scanLimit &&
+                 DayScheduler.HasPending; scan++)
             {
                 long kingdomId = DayScheduler.TakeKingdom();
                 Kingdom kingdom = FindKingdom(kingdomId);

@@ -45,12 +45,9 @@ namespace AncientWarfare3.core.court
         }
 
         public string ResolveInstitution(bool officeSystemUnlocked,
-            bool electiveAdopted, bool feudalAdopted,
-            bool royalDirectAdopted)
+            bool advancedOfficeSystemUnlocked)
         {
-            if (officeSystemUnlocked && electiveAdopted && feudalAdopted)
-                return CourtInstitutionId.Song;
-            if (officeSystemUnlocked && electiveAdopted)
+            if (officeSystemUnlocked && advancedOfficeSystemUnlocked)
                 return CourtInstitutionId.Tang;
             return officeSystemUnlocked
                 ? CourtInstitutionId.Han

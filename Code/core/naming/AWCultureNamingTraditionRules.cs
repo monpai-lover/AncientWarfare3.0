@@ -247,7 +247,7 @@ namespace AncientWarfare3.core.naming
                     WesternNamingTradition.Von, pExplicitGeneratorId);
             if (pProfile == NamingProfileId.Western &&
                 !IsHumanSpecies(pSpeciesId))
-                return ResolveNativeGenerator(pKind, pSpeciesId,
+                return ResolveNativeFallbackGenerator(pKind, pSpeciesId,
                     WesternNamingTradition.Von, pExplicitGeneratorId);
             if (pProfile == NamingProfileId.OrcNomadic)
                 return AWOrcNomadicNamingRules.ResolveFallbackGeneratorId(
@@ -349,10 +349,49 @@ namespace AncientWarfare3.core.naming
             string pSpeciesId, WesternNamingTradition pTradition,
             string pExplicitGeneratorId)
         {
+            string civilizationGenerator = ResolveNativeCivilizationGenerator(
+                pKind, pSpeciesId);
+            if (!string.IsNullOrEmpty(civilizationGenerator))
+                return civilizationGenerator;
             return pKind == AWNamingObjectKind.Actor
                 ? ResolveNativeActorGenerator(pSpeciesId, pTradition,
                     pExplicitGeneratorId)
                 : pExplicitGeneratorId ?? string.Empty;
+        }
+
+        private static string ResolveNativeCivilizationGenerator(
+            AWNamingObjectKind pKind, string pSpeciesId)
+        {
+            if (string.IsNullOrWhiteSpace(pSpeciesId) ||
+                !pSpeciesId.StartsWith("civ_", StringComparison.Ordinal))
+                return string.Empty;
+            return pKind switch
+            {
+                AWNamingObjectKind.Actor => pSpeciesId + "_name",
+                AWNamingObjectKind.City => pSpeciesId + "_city",
+                AWNamingObjectKind.Kingdom => pSpeciesId + "_kingdom",
+                _ => string.Empty
+            };
+        }
+
+        private static string ResolveNativeFallbackGenerator(
+            AWNamingObjectKind pKind, string pSpeciesId,
+            WesternNamingTradition pTradition, string pExplicitGeneratorId)
+        {
+            string civilizationGenerator = ResolveNativeCivilizationGenerator(
+                pKind, pSpeciesId);
+            if (!string.IsNullOrEmpty(civilizationGenerator))
+                return civilizationGenerator;
+            if (pKind == AWNamingObjectKind.Actor)
+                return ResolveNativeActorGenerator(pSpeciesId, pTradition,
+                    pExplicitGeneratorId);
+            if (string.Equals(pSpeciesId, "dwarf", StringComparison.Ordinal))
+            {
+                if (pKind == AWNamingObjectKind.City) return "dwarf_city";
+                if (pKind == AWNamingObjectKind.Kingdom)
+                    return "dwarf_kingdom";
+            }
+            return pExplicitGeneratorId ?? string.Empty;
         }
 
         private static string ResolveNativeActorGenerator(string pSpeciesId,

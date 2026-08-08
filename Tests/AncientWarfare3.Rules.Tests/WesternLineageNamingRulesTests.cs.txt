@@ -181,11 +181,26 @@ internal static class WesternLineageNamingRulesTests
                 NamingProfileId.Western, WesternNamingTradition.De,
                 AWNamingObjectKind.Kingdom, "dwarf", "dwarf_kingdom"),
             "western naming never replaces a dwarf kingdom generator");
-        Equal("civ_bear_name",
+        Equal("dwarf_city",
+            AWCultureNamingTraditionRules.ResolveFallbackGeneratorId(
+                NamingProfileId.Western, AWNamingObjectKind.City,
+                "dwarf", "nordic_city"),
+            "an unavailable Nordic dwarf city route falls back to the localized dwarf city generator");
+        Equal("dwarf_kingdom",
+            AWCultureNamingTraditionRules.ResolveFallbackGeneratorId(
+                NamingProfileId.Western, AWNamingObjectKind.Kingdom,
+                "dwarf", "nordic_kingdom"),
+            "an unavailable Nordic dwarf kingdom route falls back to the localized dwarf kingdom generator");
+        Equal("civ_bear_city",
             AWCultureNamingTraditionRules.ResolveGeneratorId(
                 NamingProfileId.Western, WesternNamingTradition.Di,
-                AWNamingObjectKind.Actor, "civ_bear", "civ_bear_name"),
-            "other civilized species keep their explicit actor generator");
+                AWNamingObjectKind.City, "civ_bear", "bear_name"),
+            "native ChineseName routing uses the civilized species city id");
+        Equal("civ_rabbit_kingdom",
+            AWCultureNamingTraditionRules.ResolveGeneratorId(
+                NamingProfileId.Western, WesternNamingTradition.Von,
+                AWNamingObjectKind.Kingdom, "civ_rabbit", "rabbit_name"),
+            "native ChineseName routing uses the civilized species kingdom id");
         Equal("elf_given_name",
             AWCultureNamingTraditionRules.ResolveGeneratorId(
                 NamingProfileId.Xia, WesternNamingTradition.Von,

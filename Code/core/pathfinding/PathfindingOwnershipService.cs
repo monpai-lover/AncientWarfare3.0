@@ -72,6 +72,7 @@ namespace AncientWarfare3.core.pathfinding
             AddOwners(owners, AccessTools.Method(typeof(Actor), nameof(Actor.goTo)));
             AddOwners(owners, AccessTools.Method(typeof(Actor), nameof(Actor.updatePathMovement)));
             AddOwners(owners, AccessTools.Method(typeof(Actor), nameof(Actor.isUsingPath)));
+            AddOwners(owners, AccessTools.Method(typeof(Actor), nameof(Actor.u10_checkSmoothMovement)));
             AddOwners(owners, AccessTools.Method(typeof(Actor), "updateMovement",
                 new[] { typeof(float), typeof(float) }));
             return owners;

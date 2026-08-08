@@ -15,6 +15,16 @@ namespace AncientWarfare3.core.policy
         private static AssetBundle _loadedBundle;
         private static Font _loadedFont;
 
+        internal static void Reset()
+        {
+            _loadAttempted = false;
+            _diagnosticWritten = false;
+            _loadedFont = null;
+            if (_loadedBundle != null)
+                _loadedBundle.Unload(false);
+            _loadedBundle = null;
+        }
+
         internal static Font TryLoad(int pSize)
         {
             if (_loadAttempted) return _loadedFont;

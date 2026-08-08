@@ -40,6 +40,14 @@ namespace AncientWarfare3.core.court
     {
         public const int MaximumRotationsPerKingdomYear = 8;
 
+        public static bool IsRotatingCityOffice(string pOfficeId,
+            bool xiaCirculationUnlocked)
+        {
+            if (pOfficeId == CourtOfficeId.WestMayor) return true;
+            return pOfficeId == CourtOfficeId.Governor &&
+                   xiaCirculationUnlocked;
+        }
+
         public static bool CanServeCity(long pNativeCityId,
             long pCurrentTermCityId, long pCandidateCityId)
         {
@@ -61,8 +69,7 @@ namespace AncientWarfare3.core.court
             out IReadOnlyList<GovernorRotationAssignment> pPlan)
         {
             pPlan = Array.Empty<GovernorRotationAssignment>();
-            if (pGovernors == null || pGovernors.Count < 2 ||
-                pGovernors.Count > MaximumRotationsPerKingdomYear)
+            if (pGovernors == null || pGovernors.Count < 2)
                 return false;
 
             List<GovernorRotationFacts> governors = pGovernors
@@ -79,9 +86,16 @@ namespace AncientWarfare3.core.court
             long[] destinations = governors.Select(p => p.CurrentCityId)
                 .OrderBy(p => p).ToArray();
             long[] selected = new long[governors.Count];
-            var used = new HashSet<long>();
-            if (!TryAssign(governors, destinations, 0, selected, used))
-                return false;
+            int[] destinationOwners = Enumerable.Repeat(-1,
+                destinations.Length).ToArray();
+            for (int governorIndex = 0;
+                 governorIndex < governors.Count; governorIndex++)
+            {
+                var visitedDestinations = new bool[destinations.Length];
+                if (!TryMatch(governors, destinations, governorIndex,
+                        selected, destinationOwners, visitedDestinations))
+                    return false;
+            }
 
             var result = new List<GovernorRotationAssignment>(governors.Count);
             for (int i = 0; i < governors.Count; i++)
@@ -91,23 +105,27 @@ namespace AncientWarfare3.core.court
             return true;
         }
 
-        private static bool TryAssign(IReadOnlyList<GovernorRotationFacts> pGovernors,
-            IReadOnlyList<long> pDestinations, int pIndex, long[] pSelected,
-            HashSet<long> pUsed)
+        private static bool TryMatch(
+            IReadOnlyList<GovernorRotationFacts> pGovernors,
+            IReadOnlyList<long> pDestinations, int pGovernorIndex,
+            long[] pSelected, int[] pDestinationOwners,
+            bool[] pVisitedDestinations)
         {
-            if (pIndex >= pGovernors.Count) return true;
-            GovernorRotationFacts governor = pGovernors[pIndex];
+            GovernorRotationFacts governor = pGovernors[pGovernorIndex];
             for (int i = 0; i < pDestinations.Count; i++)
             {
                 long destination = pDestinations[i];
-                if (pUsed.Contains(destination) ||
+                if (pVisitedDestinations[i] ||
                     !CanServeCity(governor.NativeCityId,
                         governor.CurrentCityId, destination)) continue;
-                pUsed.Add(destination);
-                pSelected[pIndex] = destination;
-                if (TryAssign(pGovernors, pDestinations, pIndex + 1,
-                        pSelected, pUsed)) return true;
-                pUsed.Remove(destination);
+                pVisitedDestinations[i] = true;
+                int owner = pDestinationOwners[i];
+                if (owner >= 0 && !TryMatch(pGovernors, pDestinations,
+                        owner, pSelected, pDestinationOwners,
+                        pVisitedDestinations)) continue;
+                pDestinationOwners[i] = pGovernorIndex;
+                pSelected[pGovernorIndex] = destination;
+                return true;
             }
             return false;
         }

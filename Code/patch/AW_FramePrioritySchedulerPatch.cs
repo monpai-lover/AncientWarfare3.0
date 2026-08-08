@@ -88,7 +88,7 @@ namespace AncientWarfare3.patch
                 __state = new MapBoxUpdateScope();
                 ArmyRtsTransportService.ObserveFrameClock(
                     Time.realtimeSinceStartupAsDouble,
-                    __instance == null || __instance.isPaused());
+                    World.world == null || World.world.isPaused());
 
                 bool measureHost = AWFrameSchedulerRules.ShouldMeasureHost(
                     runner.RequiresControl,

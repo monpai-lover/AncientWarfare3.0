@@ -1,27 +1,37 @@
 $ErrorActionPreference = 'Stop'
 
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$locales = @{
-    'Locales/cz.json' = @('Shadow', '\u8bca', '\u5f00', '\u5173')
-    'Locales/en.json' = @('diagnostics', 'overhead', 'Keep it off')
-    'Locales/ch.json' = @('Shadow', '\u8a3a', '\u958b', '\u95dc')
+$localePath = Join-Path $repo 'Locales/aw3_config.csv'
+if (-not [IO.File]::Exists($localePath)) {
+    throw 'Locale file is missing: Locales/aw3_config.csv'
 }
-
-foreach ($entry in $locales.GetEnumerator()) {
-    $path = Join-Path $repo $entry.Key
-    if (-not [IO.File]::Exists($path)) {
-        throw "Locale file is missing: $($entry.Key)"
+$rows = @(Import-Csv -Encoding UTF8 $localePath)
+$shadow = $rows | Where-Object {
+    $_.key -eq 'AW3_ENABLE_ASYNC_SHADOW_CHECKS Description'
+}
+if ($null -eq $shadow) {
+    throw 'Shadow description is missing from aw3_config.csv'
+}
+foreach ($language in @('cz', 'en', 'ch')) {
+    if ([string]::IsNullOrWhiteSpace([string]$shadow.$language)) {
+        throw "Shadow description is missing for language: $language"
     }
-    $json = Get-Content -Raw -Encoding UTF8 $path | ConvertFrom-Json
-    $property = $json.PSObject.Properties |
-        Where-Object { $_.Name -eq 'AW3_ENABLE_ASYNC_SHADOW_CHECKS Description' }
-    if ($null -eq $property) {
-        throw "Shadow description is missing: $($entry.Key)"
-    }
-    foreach ($word in $entry.Value) {
-        if (-not [regex]::IsMatch([string]$property.Value, $word,
-                [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
-            throw "Shadow description lacks '$word': $($entry.Key)"
+}
+$requiredWords = @{
+    cz = @(
+        [string]([char]0x8BCA + [char]0x65AD),
+        [string]([char]0x5F00 + [char]0x542F),
+        [string]([char]0x5173 + [char]0x95ED))
+    en = @('diagnostics', 'overhead', 'Keep it off')
+    ch = @(
+        [string]([char]0x8A3A + [char]0x65B7),
+        [string]([char]0x958B + [char]0x555F),
+        [string]([char]0x95DC + [char]0x9589))
+}
+foreach ($language in $requiredWords.Keys) {
+    foreach ($word in $requiredWords[$language]) {
+        if (-not ([string]$shadow.$language).Contains($word)) {
+            throw "Shadow description lacks '$word': $language"
         }
     }
 }

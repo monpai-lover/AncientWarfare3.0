@@ -1,5 +1,7 @@
 using AncientWarfare3.core.performance;
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.lineage;
+using System.Reflection;
 
 internal static class RuntimePerformanceBudgetRulesTests
 {
@@ -22,6 +24,107 @@ internal static class RuntimePerformanceBudgetRulesTests
             "the follower cursor advances over a bounded recovery window");
         Equal(24, AWPathLifecycleRules.MaximumSmoothPathStepsPerUpdate,
             "custom path smoothing cannot consume an unbounded frame slice");
+        LogisticsBudgetLimitsEmptyKingdomScansAndArmyUpdates();
+        PreparationReserveScansRemainBounded();
+        DeferredBudgetLimitsAuthorityWorkToOneItem();
+        SharedPathWorkerBudgetUsesCultiwayFormula();
+    }
+
+    private static void LogisticsBudgetLimitsEmptyKingdomScansAndArmyUpdates()
+    {
+        Equal(0, InvokeIntRule(typeof(RuntimePerformanceBudgetRules),
+                "ResolveLogisticsKingdomScansPerFrame", 0),
+            "the logistics scanner remains idle without pending kingdoms");
+        Equal(1, InvokeIntRule(typeof(RuntimePerformanceBudgetRules),
+                "ResolveLogisticsKingdomScansPerFrame", 64),
+            "empty active kingdoms cannot all be scanned in one frame");
+        Equal(0, InvokeIntRule(typeof(RuntimePerformanceBudgetRules),
+                "ResolveLogisticsArmiesPerFrame", 0),
+            "the logistics updater remains idle without pending armies");
+        Equal(8, InvokeIntRule(typeof(RuntimePerformanceBudgetRules),
+                "ResolveLogisticsArmiesPerFrame", 64),
+            "the logistics updater retains its bounded Army batch");
+    }
+
+    private static void DeferredBudgetLimitsAuthorityWorkToOneItem()
+    {
+        Equal(0, InvokeIntRule(typeof(DeferredRuntimeWorkRules),
+                "ResolveItemsPerAuthorityFrame", 0),
+            "the deferred queue remains idle without pending work");
+        Equal(1, InvokeIntRule(typeof(DeferredRuntimeWorkRules),
+                "ResolveItemsPerAuthorityFrame", 64),
+            "a deferred backlog cannot execute several Actions in one authority frame");
+        Equal(true, InvokeBoolRule(typeof(DeferredRuntimeWorkRules),
+                "ShouldStartFrameDrain", -1, 321),
+            "the first deferred drain is admitted for a render frame");
+        Equal(false, InvokeBoolRule(typeof(DeferredRuntimeWorkRules),
+                "ShouldStartFrameDrain", 321, 321),
+            "the deferred queue cannot drain twice during the same render frame");
+        Equal(true, InvokeBoolRule(typeof(DeferredRuntimeWorkRules),
+                "ShouldStartFrameDrain", 321, 322),
+            "the deferred queue resumes on the next render frame");
+        Equal(true, DeferredRuntimeWorkRules.ShouldStopDrain(
+                pProcessed: 1, pMaxItems: 1, pElapsedTicks: 0,
+                pBudgetTicks: long.MaxValue),
+            "the deferred drain yields immediately after its one-item budget");
+    }
+
+    private static void PreparationReserveScansRemainBounded()
+    {
+        Equal(CityReservePoolRules.PeaceActorBudget,
+            CityReservePoolRules.ActorBudget(false),
+            "peace reserve maintenance keeps its actor scan budget");
+        Equal(CityReservePoolRules.PreparationActorBudget,
+            CityReservePoolRules.ActorBudget(true),
+            "war preparation reserve maintenance cannot scan an entire city in one frame");
+    }
+
+    private static void SharedPathWorkerBudgetUsesCultiwayFormula()
+    {
+        Equal(1, AWFrameSchedulerRules.PathfindingWorkerCount(3),
+            "a one-slot parallel budget still retains one shared path worker");
+        Equal(4, AWFrameSchedulerRules.PathfindingWorkerCount(14),
+            "path workers use the cultiway share of the parallel budget");
+        Equal(12, AWFrameSchedulerRules.PathfindingWorkerCount(128),
+            "path workers have a bounded twelve-worker ceiling");
+
+        AWPathWorkerAllocation allocation =
+            AWFrameSchedulerRules.AllocateWorkers(14);
+        Equal(4, allocation.ActorPathWorkers,
+            "the shared finder receives the whole path worker budget");
+        Equal(0, allocation.ArmyRouteWorkers,
+            "RTS does not reserve a second dedicated path worker pool");
+    }
+
+    private static int InvokeIntRule(Type pType, string pMethodName,
+        int pArgument)
+    {
+        MethodInfo method = pType.GetMethod(pMethodName,
+            BindingFlags.Public | BindingFlags.Static);
+        if (method == null)
+            throw new InvalidOperationException(
+                "missing frame-budget rule " + pType.FullName + "." +
+                pMethodName);
+        object value = method.Invoke(null, new object[] { pArgument });
+        if (value is int result) return result;
+        throw new InvalidOperationException(
+            "frame-budget rule must return an integer: " + pMethodName);
+    }
+
+    private static bool InvokeBoolRule(Type pType, string pMethodName,
+        int pFirstArgument, int pSecondArgument)
+    {
+        MethodInfo method = pType.GetMethod(pMethodName,
+            BindingFlags.Public | BindingFlags.Static);
+        if (method == null)
+            throw new InvalidOperationException(
+                "missing frame-budget rule " + pType.FullName + "." +
+                pMethodName);
+        object value = method.Invoke(null,
+            new object[] { pFirstArgument, pSecondArgument });
+        if (value is bool result) return result;
+        throw new InvalidOperationException(
+            "frame-budget rule must return a Boolean: " + pMethodName);
     }
 
     private static void Equal<T>(T expected, T actual, string name)

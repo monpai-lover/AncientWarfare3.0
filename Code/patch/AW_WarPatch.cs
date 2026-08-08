@@ -102,6 +102,7 @@ namespace AncientWarfare3.patch
                     ZhuluWarDeclarationScope.CurrentDefenderId);
                 WarRecordWriter.OnWarStart(__result);
                 RecordNativeZhuluStart(__result);
+                WarScoreService.StartWar(__result);
                 return;
             }
             WarRecordWriter.OnWarStart(__result);
@@ -139,8 +140,6 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(War), nameof(War.increaseDeathsAttackers))]
         public static void IncreaseDeathsAttackers_Postfix(War __instance)
         {
-            if (ZhuluWarService.IsZhuluWar(__instance,
-                    requireActive: false)) return;
             WarScoreService.RecordDeath(__instance,
                 casualtyWasAttacker: true);
         }
@@ -149,8 +148,6 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(War), nameof(War.increaseDeathsDefenders))]
         public static void IncreaseDeathsDefenders_Postfix(War __instance)
         {
-            if (ZhuluWarService.IsZhuluWar(__instance,
-                    requireActive: false)) return;
             WarScoreService.RecordDeath(__instance,
                 casualtyWasAttacker: false);
         }

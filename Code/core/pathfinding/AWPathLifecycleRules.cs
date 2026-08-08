@@ -1,6 +1,8 @@
 // Derived from Cultiway-Reborn pathfinding (MIT, Copyright (c) 2025 Inmny).
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace AncientWarfare3.core.pathfinding
 {
@@ -310,7 +312,22 @@ namespace AncientWarfare3.core.pathfinding
         public static bool ShouldPollEverySimulationPass(bool schedulerActive,
             bool customPathOwned)
         {
+            // The large scheduler owns movement cadence. Its Actors must
+            // observe ready segments on the next simulation pass instead of
+            // waiting for a wall-clock retry timer.
             return schedulerActive && customPathOwned;
+        }
+
+        public static bool ShouldResetActorAfterPathSubmission(
+            bool accepted, bool reused, bool wasMoving)
+        {
+            return accepted && !reused && !wasMoving;
+        }
+
+        public static bool ShouldClearPreviousPathAfterSubmission(
+            bool accepted, bool reused)
+        {
+            return accepted && !reused;
         }
 
         public static bool HasUsableMovementBatch(bool actorExists,
@@ -357,6 +374,27 @@ namespace AncientWarfare3.core.pathfinding
         {
             return regionLimit > 0 && currentTileId >= 0 &&
                    targetTileId >= 0 && currentTileId != targetTileId;
+        }
+
+        public static int ResolveEmittedStepCount(bool segmented,
+            int regionLimit, int plannedStepCount, int segmentTargetSteps)
+        {
+            int planned = Math.Max(0, plannedStepCount);
+            if (!segmented || regionLimit <= 0) return planned;
+            return Math.Min(planned, Math.Max(1, segmentTargetSteps));
+        }
+
+        public static bool AcceptTraversalRevision(long requestRevision,
+            long currentRevision)
+        {
+            return requestRevision == currentRevision;
+        }
+
+        public static bool ShouldContinuePathSegment(int currentTileId,
+            int targetTileId)
+        {
+            return currentTileId >= 0 && targetTileId >= 0 &&
+                   currentTileId != targetTileId;
         }
 
         public static bool ShouldKeepMovementOwnership(AWPathPollKind pPollKind,
@@ -415,12 +453,189 @@ namespace AncientWarfare3.core.pathfinding
 
     public sealed class AWPathOwnershipIndex
     {
-        private readonly HashSet<long> _actorIds = new HashSet<long>();
+        private readonly ConcurrentDictionary<long, byte> _actorIds =
+            new ConcurrentDictionary<long, byte>();
 
         public int Count => _actorIds.Count;
-        public bool Contains(long pActorId) => _actorIds.Contains(pActorId);
-        public bool Add(long pActorId) => pActorId >= 0 && _actorIds.Add(pActorId);
-        public bool Remove(long pActorId) => _actorIds.Remove(pActorId);
+        public bool Contains(long pActorId) => _actorIds.ContainsKey(pActorId);
+        public bool Add(long pActorId) =>
+            pActorId >= 0 && _actorIds.TryAdd(pActorId, 0);
+        public bool Remove(long pActorId) =>
+            _actorIds.TryRemove(pActorId, out _);
         public void Clear() => _actorIds.Clear();
+    }
+
+    public sealed class AWPathActorGateLease : IDisposable
+    {
+        private AWPathActorGateIndex _owner;
+        private readonly object _state;
+
+        internal AWPathActorGateLease(AWPathActorGateIndex pOwner,
+            object pState, object pGate)
+        {
+            _owner = pOwner;
+            _state = pState;
+            Gate = pGate;
+        }
+
+        internal object State => _state;
+        internal object Gate { get; }
+
+        public void Retire()
+        {
+            Volatile.Read(ref _owner)?.Retire(this);
+        }
+
+        public void Dispose()
+        {
+            AWPathActorGateIndex owner = Interlocked.Exchange(ref _owner, null);
+            owner?.Release(this);
+        }
+    }
+
+    public sealed class AWPathActorGateIndex
+    {
+        private sealed class GateState
+        {
+            internal GateState(long pActorId)
+            {
+                ActorId = pActorId;
+            }
+
+            internal readonly long ActorId;
+            internal readonly object Gate = new object();
+            internal readonly object MetadataGate = new object();
+            internal int ActiveLeases;
+            internal int Retired;
+        }
+
+        private readonly ConcurrentDictionary<long, GateState> _gates =
+            new ConcurrentDictionary<long, GateState>();
+        private int _clearing;
+        private int _activeAdmissions;
+        private int _activeLeases;
+
+        public int Count => _gates.Count;
+
+        public bool TryAcquire(long pActorId,
+            out AWPathActorGateLease pLease)
+        {
+            pLease = null;
+            if (pActorId < 0L || Volatile.Read(ref _clearing) != 0)
+                return false;
+
+            Interlocked.Increment(ref _activeAdmissions);
+            GateState state = null;
+            bool reserved = false;
+            try
+            {
+                while (true)
+                {
+                    if (Volatile.Read(ref _clearing) != 0) return false;
+                    state = _gates.GetOrAdd(pActorId,
+                        id => new GateState(id));
+                    bool retry = false;
+                    lock (state.MetadataGate)
+                    {
+                        if (Volatile.Read(ref _clearing) != 0)
+                            return false;
+                        if (state.Retired != 0)
+                        {
+                            if (state.ActiveLeases == 0)
+                            {
+                                RemoveRetiredGate(state);
+                                retry = true;
+                            }
+                            else
+                            {
+                                Volatile.Write(ref state.Retired, 0);
+                            }
+                        }
+                        if (!retry)
+                        {
+                            state.ActiveLeases++;
+                            Interlocked.Increment(ref _activeLeases);
+                            reserved = true;
+                        }
+                    }
+                    if (!retry) break;
+                }
+
+                Monitor.Enter(state.Gate);
+                pLease = new AWPathActorGateLease(this, state,
+                    state.Gate);
+                reserved = false;
+                return true;
+            }
+            catch
+            {
+                if (reserved) ReleaseReservedLease(state);
+                throw;
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeAdmissions);
+            }
+        }
+
+        public bool BeginClear()
+        {
+            if (Interlocked.CompareExchange(ref _clearing, 1, 0) != 0)
+                return false;
+
+            SpinWait wait = new SpinWait();
+            while (Volatile.Read(ref _activeAdmissions) != 0 ||
+                   Volatile.Read(ref _activeLeases) != 0)
+                wait.SpinOnce();
+
+            _gates.Clear();
+            return true;
+        }
+
+        public void EndClear()
+        {
+            Volatile.Write(ref _clearing, 0);
+        }
+
+        internal void Retire(AWPathActorGateLease pLease)
+        {
+            if (!(pLease?.State is GateState state)) return;
+            lock (state.MetadataGate)
+            {
+                Volatile.Write(ref state.Retired, 1);
+                RemoveRetiredGate(state);
+            }
+        }
+
+        internal void Release(AWPathActorGateLease pLease)
+        {
+            if (!(pLease?.State is GateState state)) return;
+            Monitor.Exit(state.Gate);
+            lock (state.MetadataGate)
+            {
+                if (state.ActiveLeases > 0) state.ActiveLeases--;
+                RemoveRetiredGate(state);
+            }
+            Interlocked.Decrement(ref _activeLeases);
+        }
+
+        private void ReleaseReservedLease(GateState pState)
+        {
+            lock (pState.MetadataGate)
+            {
+                if (pState.ActiveLeases > 0) pState.ActiveLeases--;
+                RemoveRetiredGate(pState);
+            }
+            Interlocked.Decrement(ref _activeLeases);
+        }
+
+        private void RemoveRetiredGate(GateState pState)
+        {
+            if (Volatile.Read(ref pState.Retired) == 0 ||
+                pState.ActiveLeases != 0)
+                return;
+            ((ICollection<KeyValuePair<long, GateState>>)_gates).Remove(
+                new KeyValuePair<long, GateState>(pState.ActorId, pState));
+        }
     }
 }

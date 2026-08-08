@@ -1,0 +1,223 @@
+using System;
+using System.Collections.Generic;
+
+internal static class KingdomAtlasLiveTerrainRulesTests
+{
+    public static void Run()
+    {
+        LiveTerrainIsRetainedWhenAtlasFiltersOwners();
+        OnlyVisibleOwnerBoundariesAreDrawn();
+        VisibleOwnerTintUsesHistoricalColor();
+        HistoricalOwnersAreProjectedByCityId();
+        CaptureRowsMapToBottomUpRaster();
+        CaptureColumnsKeepWorldXOrientation();
+        ArchivedGeometryCannotPaintNonGround();
+        VisibleOwnerUsesExactHistoricalColor();
+        TerrainPixelsAreOpaque();
+        OwnerOverlayPreservesTerrainAtOriginalAlpha();
+        BoundaryUsesOwnerSecondaryColor();
+    }
+
+    private static void HistoricalOwnersAreProjectedByCityId()
+    {
+        var cityIds = new long[] { 7L, 99L, -1L, 7L };
+        var water = new[] { false, false, false, true };
+        var historicalOwners = new Dictionary<long, long>
+        {
+            [7L] = 42L
+        };
+
+        long[] owners = AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            ProjectHistoricalOwners(cityIds, water, historicalOwners);
+
+        Equal(42L, owners[0], "existing city uses replayed historical owner");
+        Equal(-1L, owners[1], "city absent at node remains unowned");
+        Equal(-1L, owners[2], "terrain without city remains unowned");
+        Equal(-1L, owners[3], "city-zone water remains unowned");
+    }
+
+    private static void TerrainPixelsAreOpaque()
+    {
+        Equal((byte)255,
+            AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules
+                .NormalizeRasterAlpha(new AncientWarfare3.core.atlas.
+                    KingdomAtlasColor(12, 34, 56, 0)).Alpha,
+            "atlas terrain pixels cover the live world layer");
+    }
+
+    private static void LiveTerrainIsRetainedWhenAtlasFiltersOwners()
+    {
+        var terrain = new[]
+        {
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(12, 34, 56),
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(78, 90, 102),
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(120, 130, 140),
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(150, 160, 170)
+        };
+        var owners = new long[] { 7L, 7L, 99L, 99L };
+        var visible = new HashSet<long> { 7L };
+        var colors = new Dictionary<long,
+            AncientWarfare3.core.atlas.KingdomAtlasColor>();
+
+        byte[] rgba = AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            ComposeRgba(4, 1, terrain, owners, visible, colors,
+                new AncientWarfare3.core.atlas.KingdomAtlasColor(245, 245, 225));
+
+        Equal((byte)12, rgba[0], "visible tile keeps live red channel");
+        Equal((byte)150, rgba[12], "hidden tile keeps live red channel");
+        Equal((byte)160, rgba[13], "hidden tile keeps live green channel");
+    }
+
+    private static void OnlyVisibleOwnerBoundariesAreDrawn()
+    {
+        var terrain = new[]
+        {
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(12, 34, 56),
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(78, 90, 102),
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(120, 130, 140)
+        };
+        var owners = new long[] { 7L, 99L, 100L };
+        var visible = new HashSet<long> { 7L };
+        var colors = new Dictionary<long,
+            AncientWarfare3.core.atlas.KingdomAtlasColor>();
+        var boundary = new AncientWarfare3.core.atlas.KingdomAtlasColor(
+            245, 245, 225);
+
+        byte[] rgba = AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            ComposeRgba(3, 1, terrain, owners, visible, colors, boundary);
+
+        Equal(boundary.Red, rgba[0], "visible edge receives boundary color");
+        Equal(boundary.Red, rgba[4], "visible side of boundary is marked");
+        Equal((byte)120, rgba[8],
+            "hidden-to-hidden boundary does not receive a marker");
+    }
+
+    private static void VisibleOwnerTintUsesHistoricalColor()
+    {
+        var terrain = new[]
+        {
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(80, 80, 80)
+        };
+        var owners = new long[] { 7L };
+        var visible = new HashSet<long> { 7L };
+        var colors = new Dictionary<long,
+            AncientWarfare3.core.atlas.KingdomAtlasColor>
+        {
+            [7L] = new AncientWarfare3.core.atlas.KingdomAtlasColor(240, 0, 0)
+        };
+
+        byte[] rgba = AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            ComposeRgba(1, 1, terrain, owners, visible, colors,
+                new AncientWarfare3.core.atlas.KingdomAtlasColor(245, 245, 225));
+
+        Equal((byte)240, rgba[0],
+            "historical kingdom main color is exact red");
+        Equal((byte)0, rgba[1],
+            "historical kingdom main color is exact green");
+    }
+
+    private static void CaptureRowsMapToBottomUpRaster()
+    {
+        Equal(3, AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            MapOutputYToCaptureY(0, 4, 4),
+            "bottom raster row samples capture top row in top-down snapshot");
+        Equal(0, AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            MapOutputYToCaptureY(3, 4, 4),
+            "top raster row samples capture bottom row in top-down snapshot");
+    }
+
+    private static void ArchivedGeometryCannotPaintNonGround()
+    {
+        True(!AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            ShouldOverlayArchivedOwner(true, false, 7L),
+            "archived land cannot paint a current non-ground destination");
+        True(!AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            ShouldOverlayArchivedOwner(false, true, 7L),
+            "archived non-ground cannot paint a destination");
+        True(AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            ShouldOverlayArchivedOwner(false, false, 7L),
+            "archived land can paint a current land destination");
+    }
+
+    private static void CaptureColumnsKeepWorldXOrientation()
+    {
+        Equal(0, AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            MapOutputXToCaptureX(0, 4, 4),
+            "left raster column samples left capture column");
+        Equal(3, AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            MapOutputXToCaptureX(3, 4, 4),
+            "right raster column samples right capture column");
+    }
+
+    private static void VisibleOwnerUsesExactHistoricalColor()
+    {
+        var terrain = new AncientWarfare3.core.atlas.KingdomAtlasColor(
+            80, 80, 80);
+        var visible = new HashSet<long> { 7L };
+        var historical = new Dictionary<long,
+            AncientWarfare3.core.atlas.KingdomAtlasColor>
+        {
+            [7L] = new AncientWarfare3.core.atlas.KingdomAtlasColor(
+                240, 0, 0)
+        };
+        Equal(historical[7L],
+            AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+                ResolveOwnerColor(terrain, 7L, visible, historical),
+            "visible owner uses exact historical mapmode color");
+    }
+
+    private static void OwnerOverlayPreservesTerrainAtOriginalAlpha()
+    {
+        var terrain = new AncientWarfare3.core.atlas.KingdomAtlasColor(
+            80, 100, 120, 255);
+        var overlay = new AncientWarfare3.core.atlas.KingdomAtlasColor(
+            200, 40, 20, 170);
+        Equal(new AncientWarfare3.core.atlas.KingdomAtlasColor(
+                160, 60, 53, 255),
+            AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+                CompositeOwnerColor(terrain, overlay),
+            "original kingdom overlay alpha preserves terrain detail");
+    }
+
+    private static void BoundaryUsesOwnerSecondaryColor()
+    {
+        var terrain = new[]
+        {
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(80, 80, 80),
+            new AncientWarfare3.core.atlas.KingdomAtlasColor(40, 50, 60)
+        };
+        var owners = new long[] { 7L, -1L };
+        var visible = new HashSet<long> { 7L };
+        var fills = new Dictionary<long,
+            AncientWarfare3.core.atlas.KingdomAtlasColor>
+        {
+            [7L] = new AncientWarfare3.core.atlas.KingdomAtlasColor(
+                200, 40, 20, 170)
+        };
+        var borders = new Dictionary<long,
+            AncientWarfare3.core.atlas.KingdomAtlasColor>
+        {
+            [7L] = new AncientWarfare3.core.atlas.KingdomAtlasColor(
+                10, 20, 30, 255)
+        };
+        byte[] rgba = AncientWarfare3.core.atlas.KingdomAtlasLiveTerrainRules.
+            ComposeRgba(2, 1, terrain, owners, visible, fills, borders,
+                new AncientWarfare3.core.atlas.KingdomAtlasColor(
+                    245, 245, 225));
+        Equal((byte)10, rgba[0], "country edge uses secondary red");
+        Equal((byte)20, rgba[1], "country edge uses secondary green");
+        Equal((byte)30, rgba[2], "country edge uses secondary blue");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+
+    private static void True(bool pCondition, string pName)
+    {
+        if (!pCondition) throw new InvalidOperationException(pName);
+    }
+}

@@ -27,6 +27,12 @@ namespace AncientWarfare3.core.lineage
                 : 0;
         }
 
+        public static bool ShouldUseSyntheticWarReplenishment(
+            ArmyMobilizationPhase phase, bool targetArmyExists)
+        {
+            return phase == ArmyMobilizationPhase.War && targetArmyExists;
+        }
+
         public static bool ShouldRunRecruitmentWorkItem(bool emergencyActive,
             int completedWorkItems, int scannedCandidates, int recruitedActors)
         {
@@ -269,7 +275,14 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldKeepPreparationRecruitmentCity(
             bool cityScanComplete, int recruitedActors)
         {
-            return !cityScanComplete && recruitedActors > 0;
+            return !cityScanComplete;
+        }
+
+        public static bool IsPreparationScanExhausted(
+            int scannedSincePass, int residentCount)
+        {
+            return residentCount <= 0 ||
+                   System.Math.Max(0, scannedSincePass) >= residentCount;
         }
 
         public static bool ShouldDirectCasualtyRecoveryToArmy(

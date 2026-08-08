@@ -146,8 +146,9 @@ namespace AncientWarfare3.core.performance
         public static int PathfindingWorkerCount(int pProcessorCount)
         {
             int total = TotalParallelBudget(pProcessorCount);
-            if (total <= 1) return 0;
-            return Math.Min(4, Math.Max(1, total / 4));
+            return Math.Min(
+                AncientWarfare3.core.pathfinding.AWPathfindingConfig.MaximumWorkerCount,
+                Math.Max(1, (total + 2) / 3));
         }
 
         public static int ForegroundParallelism(int pProcessorCount)
@@ -167,8 +168,8 @@ namespace AncientWarfare3.core.performance
         {
             int total = TotalParallelBudget(pProcessorCount);
             int pathWorkers = PathfindingWorkerCount(pProcessorCount);
-            int armyRouteWorkers = pathWorkers >= 2 ? 1 : 0;
-            int actorPathWorkers = pathWorkers - armyRouteWorkers;
+            int armyRouteWorkers = 0;
+            int actorPathWorkers = pathWorkers;
             int foregroundParallelism = total - pathWorkers;
             return new AWPathWorkerAllocation(total, actorPathWorkers,
                 armyRouteWorkers, foregroundParallelism);

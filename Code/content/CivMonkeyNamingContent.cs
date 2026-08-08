@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.content
@@ -94,6 +95,38 @@ namespace AncientWarfare3.content
             }
 
             return "";
+        }
+
+        internal static bool EnsureActorFamilyIdentity(Actor pActor)
+        {
+            if (pActor?.data == null ||
+                !CivMonkeyNamingRules.IsCivilizedMonkey(pActor.asset?.id))
+                return false;
+
+            CivMonkeyLineageIdentity identity = ResolveLineageIdentity(
+                ResolveInheritedFamily(pActor), pActor.data.id);
+            string family = identity.FamilyName;
+            pActor.data.get(AWNameDataKeys.GivenName, out string given, "");
+            if (string.IsNullOrWhiteSpace(given))
+                pActor.data.get(LineageKeys.GIVEN_NAME, out given, "");
+            if (string.IsNullOrWhiteSpace(given)) given = pActor.getName();
+            given = CivMonkeyNamingRules.NormalizeGivenName(family, given);
+            if (string.IsNullOrWhiteSpace(given))
+                given = CivMonkeyNamingRules.PickGivenName(ActorSeed(
+                    pActor.data.id), (int)MetaType.Unit);
+
+            pActor.data.set(LineageKeys.FAMILY_NAME, family);
+            pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, family);
+            pActor.data.set(AWNameDataKeys.FamilyComponent, family);
+            pActor.data.set(LineageKeys.GIVEN_NAME, given);
+            pActor.data.set(AWNameDataKeys.GivenName, given);
+            string display = family + given;
+            pActor.data.set(AWNameDataKeys.ChineseName, display);
+            pActor.data.set("display_name", display);
+            if (!string.Equals(pActor.data.name, display,
+                    StringComparison.Ordinal))
+                pActor.setName(display);
+            return true;
         }
 
         private static string ReadFamily(Actor pActor)

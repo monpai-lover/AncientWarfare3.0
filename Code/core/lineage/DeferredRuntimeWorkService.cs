@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using AncientWarfare3.core.policy;
+using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -34,6 +35,7 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<string, LinkedListNode<WorkItem>>(StringComparer.Ordinal);
         private static int _consecutiveCriticalRuntimeWork;
         private static int _consecutiveRuntimeWork;
+        private static int _lastDrainFrame = -1;
 
         public static int PendingCount => PersistentQueue.Count +
                                           RuntimeQueue.Count +
@@ -78,6 +80,10 @@ namespace AncientWarfare3.core.lineage
         public static void DrainFrame(double pMilliseconds = 1.5, int pMaxItems = 1)
         {
             if (PendingCount == 0) return;
+            int frame = Time.frameCount;
+            if (!DeferredRuntimeWorkRules.ShouldStartFrameDrain(
+                    _lastDrainFrame, frame)) return;
+            _lastDrainFrame = frame;
             long start = Stopwatch.GetTimestamp();
             long budget = MillisecondsToTicks(pMilliseconds);
             int processed = 0;
@@ -111,6 +117,7 @@ namespace AncientWarfare3.core.lineage
             Coalesced.Clear();
             _consecutiveCriticalRuntimeWork = 0;
             _consecutiveRuntimeWork = 0;
+            _lastDrainFrame = -1;
         }
 
         private static void Execute(WorkItem pItem)

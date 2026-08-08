@@ -162,11 +162,10 @@ namespace AncientWarfare3.core.pathfinding
             bool traversalGenerationReady, int dedicatedWorkerCount,
             bool sharedFinderReady)
         {
+            _ = dedicatedWorkerCount;
             if (!aw3Mode) return ArmyRouteProviderBackend.Vanilla;
             if (!traversalGenerationReady)
                 return ArmyRouteProviderBackend.VanillaFallback;
-            if (dedicatedWorkerCount > 0)
-                return ArmyRouteProviderBackend.Aw3Dedicated;
             return sharedFinderReady
                 ? ArmyRouteProviderBackend.Aw3Shared
                 : ArmyRouteProviderBackend.VanillaFallback;
@@ -412,10 +411,14 @@ namespace AncientWarfare3.core.pathfinding
                     AWPathWorkClass.Operational,
                     AWPathfindingBootstrap.Cache.SourceRevision,
                     AWAsyncRuntime.WorldGeneration,
-                    captain.is_inside_boat);
+                    captain.is_inside_boat,
+                    AWDockTransportService.TryResolveRoute(
+                        captain.current_tile, target, out _));
                 bool accepted = _finder.Request(pathRequest,
                     out AWPathSubmissionDisposition disposition);
                 bool reused = disposition == AWPathSubmissionDisposition.Reused;
+                if (reused)
+                    AWPathfindingBootstrap.PathDiagnostics.OnRtsSharedRouteReuse();
                 if (!accepted)
                     return ArmyRouteHandle.Rejected(request.ArmyId,
                         "finder_rejected");

@@ -336,7 +336,9 @@ namespace AncientWarfare3.api.multiplayer
         CancelArmyOrder = 25,
         SubmitCivilServiceRanking = 26,
         RenameSurname = 27,
-        GrantVirtualNobleTitle = 28
+        GrantVirtualNobleTitle = 28,
+        EditVirtualNobleTitle = 29,
+        DeleteVirtualNobleTitle = 30
     }
 
     public enum AW3CommandStatus : byte
@@ -595,10 +597,23 @@ namespace AncientWarfare3.api.multiplayer
             text: DisplayText(familyName, nameof(familyName)));
 
         public static AW3CommandRequest GrantVirtualNobleTitle(
-            long countryId, long actorId, string titleText) => Create(
+            long countryId, long actorId, string titleText,
+            bool hereditary = true) => Create(
             AW3CommandKind.GrantVirtualNobleTitle, countryId,
             actorId: Positive(actorId, nameof(actorId)),
+            text: DisplayText(titleText, nameof(titleText)),
+            boolValue: hereditary);
+
+        public static AW3CommandRequest EditVirtualNobleTitle(
+            long countryId, long titleId, string titleText) => Create(
+            AW3CommandKind.EditVirtualNobleTitle, countryId,
+            secondaryId: Positive(titleId, nameof(titleId)),
             text: DisplayText(titleText, nameof(titleText)));
+
+        public static AW3CommandRequest DeleteVirtualNobleTitle(
+            long countryId, long titleId) => Create(
+            AW3CommandKind.DeleteVirtualNobleTitle, countryId,
+            secondaryId: Positive(titleId, nameof(titleId)));
 
         public static AW3CommandRequest ChangeEra(long countryId,
             string eraName) => Create(AW3CommandKind.ChangeEra, countryId,

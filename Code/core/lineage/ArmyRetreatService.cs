@@ -190,9 +190,24 @@ namespace AncientWarfare3.core.lineage
                 WriteLegacyRetreatPersistence(pArmy, persistence);
             if (LegacyRetreatIndex.TryGet(pArmy.id, pTargetCity.id,
                     out _, out _)) return;
+            pArmy.data.get(LineageKeys.AW_ARMY_RETREAT_BASELINE,
+                out int storedBaseline, 0);
+            if (storedBaseline > 0)
+            {
+                LegacyRetreatIndex.BeginTarget(pArmy.id, pTargetCity.id,
+                    storedBaseline);
+                pArmy.data.set(LineageKeys.AW_ARMY_RETREAT_TARGET_CITY_ID,
+                    pTargetCity.id);
+                return;
+            }
+
             int baseline;
             try { baseline = Math.Max(0, pArmy.countUnits()); }
             catch { return; }
+            pArmy.data.get(LineageKeys.AW_RTS_LIFECYCLE_BASELINE,
+                out int formalWarBaseline, 0);
+            if (formalWarBaseline > 0)
+                baseline = formalWarBaseline;
             LegacyRetreatIndex.BeginTarget(pArmy.id, pTargetCity.id,
                 baseline);
             pArmy.data.set(LineageKeys.AW_ARMY_RETREAT_BASELINE, baseline);

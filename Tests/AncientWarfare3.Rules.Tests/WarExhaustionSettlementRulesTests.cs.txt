@@ -1,0 +1,46 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarExhaustionSettlementRulesTests
+{
+    public static void Run()
+    {
+        Equal(97, WarScoreRules.NonNegotiableWarExhaustion(
+                39, 0, 100),
+            "a non-negotiable war is not duration-exhausted before year forty");
+        Equal(100, WarScoreRules.NonNegotiableWarExhaustion(
+                40, 0, 100),
+            "a non-negotiable war reaches duration exhaustion at year forty");
+        Equal(30, WarScoreRules.WarExhaustion(10, 0, 100),
+            "the ordinary-war exhaustion formula remains unchanged");
+
+        False(WarExhaustionSettlementRules.CanForceSettlement(100, 99),
+            "one-sided maximum exhaustion cannot force settlement");
+        True(WarExhaustionSettlementRules.CanForceSettlement(100, 100),
+            "both sides at maximum exhaustion can force settlement");
+        True(WarExhaustionSettlementRules.RespectsOrdinarySettlementBlock(
+                ordinarySettlementBlocked: true,
+                automaticExhaustionSettlement: false),
+            "player and ordinary AI negotiation remain blocked");
+        False(WarExhaustionSettlementRules.RespectsOrdinarySettlementBlock(
+                ordinarySettlementBlocked: true,
+                automaticExhaustionSettlement: true),
+            "the dedicated automatic exhaustion path can pass the block");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal(int pExpected, int pActual, string pMessage)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pMessage +
+                $" (expected {pExpected}, got {pActual})");
+    }
+}

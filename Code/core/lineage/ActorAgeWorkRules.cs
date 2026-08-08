@@ -17,25 +17,27 @@ namespace AncientWarfare3.core.lineage
         public static ActorAgeWorkStage Resolve(ActorAgeWorkState pPrevious,
             ActorAgeWorkState pCurrent, bool force)
         {
-            if (force) return ActorAgeWorkStage.All;
-
             bool annualFallback = pPrevious.YearBucket !=
                                   pCurrent.YearBucket;
             ActorAgeWorkStage result = ActorAgeWorkStage.None;
 
-            if (annualFallback || pPrevious.IsAdult != pCurrent.IsAdult ||
+            if ((annualFallback && pCurrent.DynasticEligible) ||
+                pPrevious.IsAdult != pCurrent.IsAdult ||
                 pPrevious.DynasticEligible != pCurrent.DynasticEligible)
                 result |= ActorAgeWorkStage.DynasticTitle;
 
-            if (annualFallback ||
+            if ((annualFallback &&
+                 pCurrent.NeedsAnnualReproductionRecovery) ||
                 pPrevious.Profession != pCurrent.Profession ||
                 pPrevious.InPermanentArmy != pCurrent.InPermanentArmy ||
                 pPrevious.AtWar != pCurrent.AtWar ||
                 pPrevious.ShouldUsePeacetimeJob !=
-                pCurrent.ShouldUsePeacetimeJob)
+                pCurrent.ShouldUsePeacetimeJob ||
+                pPrevious.NeedsAnnualReproductionRecovery !=
+                pCurrent.NeedsAnnualReproductionRecovery)
                 result |= ActorAgeWorkStage.StandingArmyJob;
 
-            if (annualFallback ||
+            if ((annualFallback && pCurrent.ShouldReleaseMilitaryRole) ||
                 pPrevious.Profession != pCurrent.Profession ||
                 pPrevious.InPermanentArmy != pCurrent.InPermanentArmy ||
                 pPrevious.AtWar != pCurrent.AtWar ||
@@ -44,6 +46,17 @@ namespace AncientWarfare3.core.lineage
                 pCurrent.ShouldReleaseMilitaryRole)
                 result |= ActorAgeWorkStage.MilitaryRoleRelease;
 
+            if (!force) return result;
+
+            result = ActorAgeWorkStage.None;
+            if (pCurrent.DynasticEligible)
+                result |= ActorAgeWorkStage.DynasticTitle;
+            if (pCurrent.InPermanentArmy ||
+                pCurrent.ShouldUsePeacetimeJob ||
+                pCurrent.NeedsAnnualReproductionRecovery)
+                result |= ActorAgeWorkStage.StandingArmyJob;
+            if (pCurrent.ShouldReleaseMilitaryRole)
+                result |= ActorAgeWorkStage.MilitaryRoleRelease;
             return result;
         }
     }

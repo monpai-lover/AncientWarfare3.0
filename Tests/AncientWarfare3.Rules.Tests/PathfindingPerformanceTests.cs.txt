@@ -9,6 +9,7 @@ internal static class PathfindingPerformanceTests
         RequestKeysMatchWithoutAllocating();
         LatestActorSlotKeepsOneQueuedNode();
         OwnershipIndexUsesSingleHotLookup();
+        MovementOwnershipStateIsConcurrentLikeCultiway();
         IsUsingPathHotPathOnlyChecksOwnership();
         RecoveryUsesCultiwayReasonResetAndBackoff();
         FoodAccessSurvivesDecorativePathFailure();
@@ -18,8 +19,293 @@ internal static class PathfindingPerformanceTests
         BranchingSearchCannotFillTheSparseLabelTable();
         BoundedMilitaryWaterCrossingIsEnforced();
         RegionLimitedPathReturnsABoundedSegment();
+        LongPathEmitsOneCompletePlan();
+        RegionWaypointDoesNotCompleteFinalTarget();
+        RegionWaypointCacheKeepsContinuation();
+        TraversalRevisionMustMatchBeforeConsumption();
+        StaleTraversalRequestIsRejectedBeforeSearch();
+        RegionRouteCacheReusesOnlyMatchingSnapshotVersion();
+        RetainAfterDisposeDoesNotResurrectSnapshot();
+        RegionTopologyUsesDeclaredHeightForPartialChunkArrays();
+        FastSwimmingProfileChangesSpeedAndStaminaCost();
         InitialTraversalPublicationCannotStarveOnLiveDirtyChunks();
+        InitialConnectivityBuildUsesTraversalWorker();
         LargeSchedulerPathProgressRules();
+        UnboundedPathsDoNotRepeatFullSearchForEachSegment();
+        ShortSafePathUsesDirectFastPath();
+        ReusedPathSubmissionPreservesActorMovement();
+        ActorPathConsumptionDoesNotTakeTheGlobalRequestGate();
+        ActorPathLifecycleDoesNotTakeAGlobalSessionMapGate();
+        WorkerConsumesOneSignalBeforeEachDequeue();
+        CancellingSecondSegmentKeepsRequestAliveUntilWorkerReturns();
+        BridgeHotPathDoesNotUseActorLifecycleGates();
+        ActorLifecycleGateClosesIngressAndReclaimsRetiredActors();
+        ActorGateHotPathDoesNotUseGlobalLifecycleLock();
+        PathfinderSubmissionDoesNotUseGlobalLifecycleLock();
+        PathfinderStopLinearizesAgainstNewSubmissions();
+        ConcurrentDisposeWaitsForTheActiveDrain();
+        RecoveryStateSupportsIndependentActorWorkers();
+    }
+
+    private static void ActorPathConsumptionDoesNotTakeTheGlobalRequestGate()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        int consumeStart = finder.IndexOf(
+            "private bool Consume(long pActorId, PathfindingTask pExpectedTask)",
+            StringComparison.Ordinal);
+        int cancelStart = finder.IndexOf("public void Cancel(long pActorId",
+            consumeStart, StringComparison.Ordinal);
+        Assert(consumeStart >= 0 && cancelStart > consumeStart,
+            "pathfinder consume hot path is present");
+        string consume = finder.Substring(consumeStart,
+            cancelStart - consumeStart);
+        Assert(!consume.Contains("_requestGate"),
+            "Actor path consumption must not contend on the global request gate");
+        Assert(consume.Contains("lock (record.Gate)"),
+            "Actor path consumption synchronizes only its own path session");
+    }
+
+    private static void ActorPathLifecycleDoesNotTakeAGlobalSessionMapGate()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(!finder.Contains("_sessionMapGate"),
+            "Actor path submit, cancel, and terminal cleanup must use the " +
+            "concurrent session map plus per-session gates like Cultiway");
+        Assert(finder.Contains(
+                "ConcurrentDictionary<long, PathSessionRecord> _sessions"),
+            "the path session map supports independent Actor lifecycle work");
+        Assert(finder.Contains(
+                "Remove(new KeyValuePair<long, PathSessionRecord>"),
+            "terminal cleanup removes only the matching Actor session");
+    }
+
+    private static void WorkerConsumesOneSignalBeforeEachDequeue()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        int workerStart = finder.IndexOf("private void WorkerLoop()",
+            StringComparison.Ordinal);
+        int disposeStart = finder.IndexOf("private static void ApplySegmentResult",
+            workerStart, StringComparison.Ordinal);
+        Assert(workerStart >= 0 && disposeStart > workerStart,
+            "path worker loop is present");
+        string worker = finder.Substring(workerStart,
+            disposeStart - workerStart);
+        int wait = worker.IndexOf("_queueSignal.Wait();",
+            StringComparison.Ordinal);
+        int dequeue = worker.IndexOf("TryTakeWork(",
+            StringComparison.Ordinal);
+        Assert(wait >= 0 && dequeue > wait,
+            "each queued path item consumes its semaphore permit before dequeue");
+        Assert(!worker.Contains("_queueSignal.Wait(50)"),
+            "empty path queues block instead of burning accumulated permits");
+    }
+
+    private static void CancellingSecondSegmentKeepsRequestAliveUntilWorkerReturns()
+    {
+        var generator = new BlockingSecondSegmentGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+        AWTraversalGeneration generation = LinearLandGeneration(4);
+        var request = new AWPathRequest(99, 0, 3,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        generation.Dispose();
+
+        Assert(finder.Request(request, out bool _),
+            "multi-segment request is accepted");
+        Assert(generator.SecondSegmentStarted.Wait(TimeSpan.FromSeconds(2)),
+            "the second segment starts on the path worker");
+        finder.Cancel(99, AWPathFailureReason.CancelledByNewRequest);
+        generator.AllowSecondSegment.Set();
+        Assert(generator.SecondSegmentFinished.Wait(TimeSpan.FromSeconds(2)),
+            "the cancelled second segment returns");
+        Assert(!generator.GenerationDisposedWhileRunning,
+            "cancelling a later segment cannot dispose its request while the worker uses it");
+    }
+
+    private static void BridgeHotPathDoesNotUseActorLifecycleGates()
+    {
+        string bridge = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs"));
+        Assert(!bridge.Contains("AWPathActorGateIndex ActorStateGates") &&
+               !bridge.Contains("ActorStateGates.TryAcquire(") &&
+               !bridge.Contains("ActorStateGates.BeginClear()"),
+            "Cultiway-style Actor hooks cannot touch a shared gate index");
+        Assert(bridge.Contains("internal static int ActorGateCount => 0;"),
+            "runtime diagnostics prove the removed gate path stays inactive");
+
+        string runner = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWCooperativeBatchRunner.cs"));
+        Assert(runner.Contains(
+                "TryRunNextMainThreadBatch(RunnerStage.Post)") &&
+               runner.Contains("case RunnerStage.Post:"),
+            "Actor path hooks remain in the scheduler main-thread post stage");
+    }
+
+    private static void ActorLifecycleGateClosesIngressAndReclaimsRetiredActors()
+    {
+        var gates = new AWPathActorGateIndex();
+        Assert(gates.TryAcquire(41, out AWPathActorGateLease lease),
+            "an open lifecycle gate accepts Actor work");
+        Assert(gates.Count == 1,
+            "one Actor publishes one lifecycle gate");
+        lease.Retire();
+        Assert(gates.TryAcquire(41, out AWPathActorGateLease replacement),
+            "a new task reuses the retiring Actor gate instead of being lost");
+        Assert(gates.Count == 1,
+            "retargeting cannot create a second gate for the same Actor");
+        replacement.Retire();
+        replacement.Dispose();
+        lease.Dispose();
+        Assert(gates.Count == 0,
+            "the last retired Actor lease removes its lifecycle gate");
+
+        Assert(gates.BeginClear(),
+            "world clear closes lifecycle ingress once");
+        Assert(!gates.TryAcquire(42, out _),
+            "no Actor state can enter while world clear owns the barrier");
+        gates.EndClear();
+        Assert(gates.TryAcquire(42, out AWPathActorGateLease afterClear),
+            "a new world can enter after the clear barrier reopens");
+        afterClear.Retire();
+        afterClear.Dispose();
+    }
+
+    private static void ActorGateHotPathDoesNotUseGlobalLifecycleLock()
+    {
+        string lifecycle = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathLifecycleRules.cs"));
+        Assert(lifecycle.Contains(
+                "ConcurrentDictionary<long, GateState> _gates"),
+            "Actor gates use a concurrent index like Cultiway");
+
+        int acquireStart = lifecycle.IndexOf("public bool TryAcquire(",
+            StringComparison.Ordinal);
+        int clearStart = lifecycle.IndexOf("public bool BeginClear(",
+            acquireStart, StringComparison.Ordinal);
+        Assert(acquireStart >= 0 && clearStart > acquireStart,
+            "Actor gate acquire implementation is present");
+        string acquire = lifecycle.Substring(acquireStart,
+            clearStart - acquireStart);
+        Assert(!acquire.Contains("lock (_lifecycleGate)"),
+            "Actor gate acquisition must not take a global lifecycle lock");
+
+        int releaseStart = lifecycle.IndexOf("internal void Release(",
+            StringComparison.Ordinal);
+        int reservationStart = lifecycle.IndexOf(
+            "private void ReleaseReservedLease(", releaseStart,
+            StringComparison.Ordinal);
+        Assert(releaseStart >= 0 && reservationStart > releaseStart,
+            "Actor gate release implementation is present");
+        string release = lifecycle.Substring(releaseStart,
+            reservationStart - releaseStart);
+        Assert(!release.Contains("lock (_lifecycleGate)"),
+            "Actor gate release must not take a global lifecycle lock");
+    }
+
+    private static void PathfinderSubmissionDoesNotUseGlobalLifecycleLock()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        int dispositionStart = finder.IndexOf(
+            "out AWPathSubmissionDisposition pDisposition)",
+            StringComparison.Ordinal);
+        int requestStart = dispositionStart < 0
+            ? -1
+            : finder.LastIndexOf("public bool Request(", dispositionStart,
+                StringComparison.Ordinal);
+        int requestBodyStart = finder.IndexOf("private bool RequestLocked(",
+            requestStart, StringComparison.Ordinal);
+        Assert(requestStart >= 0 && requestBodyStart > requestStart,
+            "pathfinder submission implementation is present");
+        string request = finder.Substring(requestStart,
+            requestBodyStart - requestStart);
+        Assert(!request.Contains("lock (_lifecycleGate)"),
+            "pathfinder submission must not serialize independent Actors");
+        Assert(!finder.Contains("lock (_queueGate)"),
+            "path workers must dequeue concurrently without a global queue lock");
+    }
+
+    private static void PathfinderStopLinearizesAgainstNewSubmissions()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(finder.Contains("private int _requestAdmissions") &&
+               finder.Contains("TryEnterRequestAdmission()"),
+            "pathfinder tracks lock-free request admissions");
+        Assert(finder.Contains("Interlocked.CompareExchange(") &&
+               finder.Contains("ref _stopping, 1, 0") &&
+               finder.Contains("WaitForRequestAdmissions()"),
+            "stop atomically closes admission and drains entered submissions");
+        Assert(finder.Contains("_drained.Wait()") &&
+               finder.Contains("_drained.Set()"),
+            "concurrent stop and dispose calls join one drain lifecycle");
+    }
+
+    private static void ConcurrentDisposeWaitsForTheActiveDrain()
+    {
+        var generator = new BlockingStopGenerator();
+        var finder = new AWPathFinder(generator);
+        finder.Start(1);
+        AWPathRequest Request(long actorId)
+        {
+            AWTraversalGeneration generation = LinearLandGeneration(3);
+            try
+            {
+                return new AWPathRequest(actorId, 0, 2,
+                    AWPathRequestOptions.Default,
+                    AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+                    generation, 0d);
+            }
+            finally
+            {
+                generation.Dispose();
+            }
+        }
+
+        AWPathRequest request = Request(404);
+        Assert(finder.Request(request, out bool _),
+            "the shutdown test request is accepted");
+        Assert(generator.Started.Wait(TimeSpan.FromSeconds(2)),
+            "the shutdown test occupies the worker");
+
+        System.Threading.Tasks.Task first =
+            System.Threading.Tasks.Task.Run(() => finder.StopAndDrain());
+        Assert(SpinUntil(() => !finder.Request(Request(405), out bool _)),
+            "stopping closes request admission before draining workers");
+        System.Threading.Tasks.Task second =
+            System.Threading.Tasks.Task.Run(() => finder.Dispose());
+        bool secondReturnedBeforeWorker = second.Wait(100);
+
+        generator.Release.Set();
+        Assert(first.Wait(TimeSpan.FromSeconds(3)),
+            "the first drain completes after the worker returns");
+        Assert(second.Wait(TimeSpan.FromSeconds(3)),
+            "a concurrent disposer joins the completed drain");
+        Assert(!secondReturnedBeforeWorker,
+            "a second dispose cannot release worker resources before drain completes");
+    }
+
+    private static void RecoveryStateSupportsIndependentActorWorkers()
+    {
+        string recovery = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathRecoveryManager.cs"));
+        Assert(recovery.Contains(
+                "ConcurrentDictionary<long, RecoveryState> _states"),
+            "different Actor lifecycle gates cannot corrupt recovery state");
     }
 
     private static void RuntimeSubmittersClassifyPathWorkExplicitly()
@@ -48,6 +334,11 @@ internal static class PathfindingPerformanceTests
             "RuntimePerformanceDiagnostic.cs"));
         Assert(diagnostics.Contains("path_operational_requests="),
             "performance logs break path pressure down by work class");
+        Assert(diagnostics.Contains("actor_path_gates="),
+            "performance logs expose whether Actor path lifecycle gates accumulate");
+        Assert(diagnostics.Contains("path_owner_state=") &&
+               diagnostics.Contains("actor_path_workers="),
+            "performance logs prove whether the custom finder is active");
         Assert(diagnostics.Contains("city_threat_cache_hits="),
             "performance logs expose RTS city-threat cache effectiveness");
         Assert(diagnostics.Contains("rts_async_rejected_stale="),
@@ -76,6 +367,18 @@ internal static class PathfindingPerformanceTests
         Assert(AWPathLifecycleRules.NormalizeMovementElapsed(
                 elapsed: 0f, fallback: 0.02f, schedulerActive: false) == 0f,
             "native paused movement must not be invented by the bridge");
+    }
+
+    private static void UnboundedPathsDoNotRepeatFullSearchForEachSegment()
+    {
+        Assert(AWPathLifecycleRules.ResolveEmittedStepCount(
+                segmented: true, regionLimit: 0, plannedStepCount: 96,
+                segmentTargetSteps: 24) == 96,
+            "an unrestricted path emits its complete plan instead of repeating a full search every segment");
+        Assert(AWPathLifecycleRules.ResolveEmittedStepCount(
+                segmented: true, regionLimit: 2, plannedStepCount: 96,
+                segmentTargetSteps: 24) == 24,
+            "a region-bounded path retains its bounded continuation segment");
     }
 
     private static void WorkClassesPreserveOperationalCapacityWithFairness()
@@ -440,7 +743,270 @@ internal static class PathfindingPerformanceTests
                request.Stream.Count == 1 &&
                request.Stream.TryTake(out AWPathStep step) &&
                step.TileId == 1,
-            "a one-region request returns the first bounded march segment");
+               "a one-region request returns the first bounded march segment");
+    }
+
+    private static void LongPathEmitsOneCompletePlan()
+    {
+        using var generation = LinearLandGeneration(64);
+        var config = new AWPathfindingConfig
+        {
+            SegmentTargetSteps = 8,
+            ShortRangeTiles = 4,
+            MaxNodesShort = 512,
+            MaxNodesLong = 2048
+        };
+        using var request = new AWPathRequest(9, 0, 63,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        new AWStreamingPathGenerator(config).Generate(request,
+            CancellationToken.None);
+
+        Assert(request.Stream.State == AWPathRequestState.Succeeded &&
+                request.Stream.Count == 63 &&
+                request.Stream.TryTake(out AWPathStep step) && step.TileId == 1,
+            "an unrestricted long path emits one complete plan without re-running search for each segment");
+    }
+
+    private static void TraversalRevisionMustMatchBeforeConsumption()
+    {
+        Assert(AWPathLifecycleRules.AcceptTraversalRevision(17L, 17L),
+            "a path from the current terrain revision is consumable");
+        Assert(!AWPathLifecycleRules.AcceptTraversalRevision(17L, 18L),
+            "a path from an older terrain revision is rejected");
+        Assert(AWPathLifecycleRules.ShouldContinuePathSegment(4, 9) &&
+               !AWPathLifecycleRules.ShouldContinuePathSegment(9, 9),
+            "a streamed segment continues only while the final target remains ahead");
+    }
+
+    private static void MovementOwnershipStateIsConcurrentLikeCultiway()
+    {
+        string lifecycle = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathLifecycleRules.cs"));
+        int ownershipStart = lifecycle.IndexOf(
+            "public sealed class AWPathOwnershipIndex",
+            StringComparison.Ordinal);
+        Assert(ownershipStart >= 0,
+            "path ownership index is present");
+        string ownership = lifecycle.Substring(ownershipStart);
+        Assert(ownership.Contains("ConcurrentDictionary<long, byte>"),
+            "Actor ownership uses Cultiway-style concurrent lookup state");
+        Assert(!ownership.Contains("HashSet<long>"),
+            "Actor workers never race on a mutable HashSet ownership index");
+
+        string bridge = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs"));
+        Assert(bridge.Contains(
+                "ConcurrentDictionary<long, RetryContext> RetryContexts"),
+            "path retry state is safe across parallel Actor batches");
+        Assert(bridge.Contains(
+                "ConcurrentDictionary<long, AWPathPollResult> TerminalPolls"),
+            "terminal path state is safe across parallel Actor batches");
+        Assert(bridge.Contains(
+                "ConcurrentDictionary<long, TransportContext> TransportContexts"),
+            "transport path state is safe across parallel Actor batches");
+    }
+
+    private static void ShortSafePathUsesDirectFastPath()
+    {
+        using var generation = LinearLandGeneration(8);
+        var request = new AWPathRequest(93, 0, 7,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        AWPathGenerationResult result = new AWStreamingPathGenerator(
+            new AWPathfindingConfig { ShortRangeTiles = 24 })
+            .GenerateSegment(request, CancellationToken.None, 16);
+        Assert(result.Succeeded && result.ReachedTarget && result.Steps.Count == 7 &&
+               (result.Steps[0].Hazards & AWHazardFlags.Direct) != 0,
+            "a short unobstructed route uses the Cultiway direct fast path");
+        request.Dispose();
+    }
+
+    private static void ReusedPathSubmissionPreservesActorMovement()
+    {
+        Assert(!AWPathLifecycleRules.ShouldClearPreviousPathAfterSubmission(
+                accepted: true, reused: true),
+            "a reused path does not clear the actor's existing path");
+        Assert(!AWPathLifecycleRules.ShouldResetActorAfterPathSubmission(
+                accepted: true, reused: true, wasMoving: true),
+            "a reused path does not stop an actor already moving");
+        Assert(AWPathLifecycleRules.ShouldResetActorAfterPathSubmission(
+                accepted: true, reused: false, wasMoving: false),
+            "a newly accepted path initializes an idle actor");
+    }
+
+    private static void InitialConnectivityBuildUsesTraversalWorker()
+    {
+        Assert(AWTraversalBuildRules.ShouldScheduleInitialAsync(
+                asyncTraversalEnabled: true, buildScheduled: false,
+                tileCaptureComplete: true, pendingDirtyChunkCount: 0),
+            "a captured initial snapshot schedules its connectivity build on the traversal worker");
+        Assert(!AWTraversalBuildRules.ShouldScheduleInitialAsync(
+                asyncTraversalEnabled: true, buildScheduled: true,
+                tileCaptureComplete: true, pendingDirtyChunkCount: 0),
+            "an active initial connectivity build is never duplicated");
+        Assert(!AWTraversalBuildRules.ShouldScheduleInitialAsync(
+                asyncTraversalEnabled: false, buildScheduled: false,
+                tileCaptureComplete: true, pendingDirtyChunkCount: 0),
+            "synchronous mode retains its explicit fallback path");
+        Assert(!AWTraversalBuildRules.ShouldPublishInitialSynchronously(
+                asyncTraversalEnabled: true, buildScheduled: false),
+            "an async queue rejection never performs the full initial build on the main thread");
+        Assert(AWTraversalBuildRules.ShouldPublishInitialSynchronously(
+                asyncTraversalEnabled: false, buildScheduled: false),
+            "the explicit synchronous mode retains the initial-build fallback");
+
+        string cache = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        Assert(!cache.Contains("_initialChunks = AWOceanConnectivityRules.Apply",
+                StringComparison.Ordinal),
+            "initial connectivity is not computed inline on the simulation thread");
+    }
+
+    private static void RegionWaypointDoesNotCompleteFinalTarget()
+    {
+        using var generation = LinearRegionLandGeneration(16);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 1,
+            RegionCorridorLookaheadTiles = 1,
+            MaxNodesLong = 256
+        };
+        using var request = new AWPathRequest(91, 0, 15,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        AWPathGenerationResult result = new AWStreamingPathGenerator(config)
+            .GenerateSegment(request, CancellationToken.None, 16);
+
+        Assert(result.Succeeded && !result.ReachedTarget &&
+               result.EndTileId == 1,
+            "a regional lookahead endpoint schedules a continuation instead of completing the final target");
+    }
+
+    private static void RegionWaypointCacheKeepsContinuation()
+    {
+        using var generation = LinearRegionLandGeneration(20);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 1,
+            RegionCorridorLookaheadTiles = 8,
+            MaxNodesLong = 256
+        };
+        using var request = new AWPathRequest(92, 0, 19,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        var generator = new AWStreamingPathGenerator(config);
+
+        AWPathGenerationResult first = generator.GenerateSegment(request,
+            CancellationToken.None, 2);
+        request.AdvanceStartTile(first.EndTileId);
+        AWPathGenerationResult cached = generator.GenerateSegment(request,
+            CancellationToken.None, 16);
+
+        Assert(first.Succeeded && !first.ReachedTarget &&
+               cached.Succeeded && !cached.ReachedTarget,
+            "draining a cached waypoint route still requires the final-target continuation");
+    }
+
+    private static void StaleTraversalRequestIsRejectedBeforeSearch()
+    {
+        using var generation = LinearLandGeneration(8);
+        using var request = new AWPathRequest(10, 0, 7,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d, pTerrainRevision: 17L);
+
+        new AWStreamingPathGenerator(null, _ => false).Generate(request,
+            CancellationToken.None);
+
+        Assert(request.Stream.State == AWPathRequestState.Failed &&
+               request.Stream.FailureReason == AWPathFailureReason.StaleTraversal,
+            "a stale snapshot is rejected before worker search expands tiles");
+    }
+
+    private static void RegionRouteCacheReusesOnlyMatchingSnapshotVersion()
+    {
+        using var firstGeneration = LinearRegionLandGeneration(16);
+        var cache = new AWRegionRouteCache(4);
+        int[] first = cache.GetOrBuild(firstGeneration, 0, 15, 0);
+        int[] same = cache.GetOrBuild(firstGeneration, 0, 15, 0);
+        Assert(first != null && first.Length > 0 &&
+               ReferenceEquals(first, same),
+            "a region route is reused for the same immutable generation");
+
+        using var secondGeneration = LinearRegionLandGeneration(16);
+        int[] changed = cache.GetOrBuild(secondGeneration, 0, 15, 0);
+        Assert(changed != null && !ReferenceEquals(first, changed),
+            "a new traversal generation cannot reuse an old region route");
+    }
+
+    private static void FastSwimmingProfileChangesSpeedAndStaminaCost()
+    {
+        var start = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: new[] { 1 });
+        var water = new AWTileTraversalSnapshot(1, 1, 0, liquid: true,
+            ocean: true, pNeighbors: new[] { 0 });
+        var options = new AWPathRequestOptions(true, false, false, 0);
+        var normal = new AWActorTraversalProfile(false, false, false, false,
+            false, false, true, false, false, false,
+            100f, 100f, 100f, 100f, 5f, 2f, 0f);
+        var fast = new AWActorTraversalProfile(false, false, false, false,
+            false, false, true, false, false, false,
+            100f, 100f, 100f, 100f, 5f, 2f, 0f,
+            pHasFastSwimming: true);
+
+        AWTraversalEstimate normalEstimate = AWTraversalRules.Estimate(
+            start, water, normal, options);
+        AWTraversalEstimate fastEstimate = AWTraversalRules.Estimate(
+            start, water, fast, options);
+        Assert(fastEstimate.TimeSeconds < normalEstimate.TimeSeconds &&
+               fastEstimate.StaminaCost < normalEstimate.StaminaCost,
+               "fast swimming improves speed and reduces water stamina cost");
+    }
+
+    private static void RetainAfterDisposeDoesNotResurrectSnapshot()
+    {
+        var generation = LinearLandGeneration(2);
+        generation.Dispose();
+        bool threw = false;
+        try
+        {
+            generation.Retain();
+        }
+        catch (ObjectDisposedException)
+        {
+            threw = true;
+        }
+
+        Assert(threw && generation.ReferenceCount == 0,
+            "retaining a released traversal snapshot cannot resurrect its reference count");
+    }
+
+    private static void RegionTopologyUsesDeclaredHeightForPartialChunkArrays()
+    {
+        const int width = 3;
+        const int height = 3;
+        const int chunkSize = 2;
+        var chunks = new AWTileTraversalSnapshot[3][];
+        for (int i = 0; i < chunks.Length; i++)
+            chunks[i] = new AWTileTraversalSnapshot[chunkSize * chunkSize];
+
+        chunks[2][0] = new AWTileTraversalSnapshot(6, 0, 2,
+            ground: true, regionId: 42);
+        AWRegionTopologySnapshot topology = AWRegionTopologySnapshot.Build(
+            chunks, width, height, chunkSize);
+
+        Assert(topology.TryGetRegion(42, out _),
+            "region topology honors the declared map height when chunk storage is partial");
     }
 
     private static AWTraversalGeneration LinearWaterGeneration(int waterTiles)
@@ -476,6 +1042,22 @@ internal static class PathfindingPerformanceTests
             length, 1, tiles);
     }
 
+    private static AWTraversalGeneration LinearRegionLandGeneration(int length)
+    {
+        var tiles = new AWTileTraversalSnapshot[length];
+        for (int i = 0; i < length; i++)
+        {
+            var neighbors = new List<int>(2);
+            if (i > 0) neighbors.Add(i - 1);
+            if (i + 1 < length) neighbors.Add(i + 1);
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                ground: true, regionId: i,
+                pNeighbors: neighbors.ToArray());
+        }
+        return AWTraversalGeneration.FromTiles(800 + length,
+            length, 1, tiles);
+    }
+
     private static AWActorTraversalProfile Walker(float health,
         float stamina, float waterDamage)
     {
@@ -485,7 +1067,93 @@ internal static class PathfindingPerformanceTests
             waterDamage, 0f);
     }
 
+    private sealed class BlockingSecondSegmentGenerator :
+        IAWPathSegmentGenerator
+    {
+        private int _calls;
+        private int _generationDisposedWhileRunning;
+
+        internal ManualResetEventSlim SecondSegmentStarted { get; } =
+            new ManualResetEventSlim(false);
+        internal ManualResetEventSlim AllowSecondSegment { get; } =
+            new ManualResetEventSlim(false);
+        internal ManualResetEventSlim SecondSegmentFinished { get; } =
+            new ManualResetEventSlim(false);
+        internal bool GenerationDisposedWhileRunning =>
+            Volatile.Read(ref _generationDisposedWhileRunning) != 0;
+
+        public void Generate(AWPathRequest pRequest,
+            CancellationToken pCancellation)
+        {
+            throw new NotSupportedException();
+        }
+
+        public AWPathGenerationResult GenerateSegment(AWPathRequest pRequest,
+            CancellationToken pCancellation, int pMaximumSteps)
+        {
+            if (Interlocked.Increment(ref _calls) == 1)
+                return AWPathGenerationResult.Success(1,
+                    pReachedTarget: false, Array.Empty<AWPathStep>());
+
+            SecondSegmentStarted.Set();
+            AllowSecondSegment.Wait(TimeSpan.FromSeconds(2));
+            try
+            {
+                AWTraversalGeneration retained = pRequest.Generation.Retain();
+                retained.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+                Volatile.Write(ref _generationDisposedWhileRunning, 1);
+            }
+            finally
+            {
+                SecondSegmentFinished.Set();
+            }
+            return AWPathGenerationResult.Success(pRequest.TargetTileId,
+                pReachedTarget: true, Array.Empty<AWPathStep>());
+        }
+    }
+
+    private sealed class BlockingStopGenerator : IAWPathGenerator
+    {
+        internal ManualResetEventSlim Started { get; } = new(false);
+        internal ManualResetEventSlim Release { get; } = new(false);
+
+        public void Generate(AWPathRequest pRequest,
+            CancellationToken pCancellation)
+        {
+            Started.Set();
+            Release.Wait(TimeSpan.FromSeconds(3));
+            pRequest.Stream.Complete();
+        }
+    }
+
     private static bool Near(float left, float right) => Math.Abs(left - right) < 0.0001f;
+
+    private static bool SpinUntil(Func<bool> condition)
+    {
+        var timeout = System.Diagnostics.Stopwatch.StartNew();
+        while (timeout.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            if (condition()) return true;
+            Thread.Sleep(1);
+        }
+        return false;
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        int count = 0;
+        int offset = 0;
+        while ((offset = source.IndexOf(value, offset,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += value.Length;
+        }
+        return count;
+    }
 
     private static void Assert(bool condition, string message)
     {

@@ -26,3 +26,20 @@ aw_central_power,中央权力,Central Authority,中央權力
 aw_feudatories,藩国总览,Feudatories,藩國總覽
 aw_diplomacy_conversations,外交,Diplomacy,外交
 aw_diplomatic_war_declaration,宣战,Declare War,宣戰
+aw_kingdom_atlas,王国舆图,Kingdom Atlas,王國輿圖
+aw_kingdom_atlas Title,王国舆图,Kingdom Atlas,王國輿圖
+aw_kingdom_atlas_desc,查看由历史事件生成的领土变迁舆图,Review territorial changes generated from historical events,查看由歷史事件生成的領土變遷輿圖
+aw_kingdom_atlas_empty,暂无已归档的领土事件,No archived territorial events.,暫無已歸檔的領土事件
+aw_kingdom_atlas_ready,已就绪：{0} 个节点,Ready: {0} nodes,已就緒：{0} 個節點
+aw_kingdom_atlas_png,导出 PNG,Export PNG,匯出 PNG
+aw_kingdom_atlas_gif,导出 GIF,Export GIF,匯出 GIF
+aw_kingdom_atlas_generating,正在生成 0%,Generating 0%,正在生成 0%
+aw_kingdom_atlas_generating_progress,正在生成 {0}%,Generating {0}%,正在生成 {0}%
+aw_kingdom_atlas_generated,已生成 {0} 张 PNG,Generated {0} PNG node(s),已生成 {0} 張 PNG
+aw_kingdom_atlas_export_path,导出路径：{0},Export path: {0},匯出路徑：{0}
+aw_kingdom_atlas_failed,舆图生成失败,Atlas generation failed.,輿圖生成失敗
+aw_kingdom_atlas_cancelling,正在取消舆图生成,Cancelling atlas generation...,正在取消輿圖生成
+aw_kingdom_atlas_no_nodes,暂无节点,No nodes,暫無節點
+aw_kingdom_atlas_node,节点 {0}/{1},Node {0}/{1},節點 {0}/{1}
+aw_kingdom_atlas_vassal_gained,获得附庸,Obtained Vassal,獲得附庸
+aw_kingdom_atlas_vassal_lost,失去附庸,Lost Vassal,失去附庸

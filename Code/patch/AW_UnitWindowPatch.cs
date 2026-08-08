@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
@@ -24,22 +25,17 @@ namespace AncientWarfare3.patch
             ArmyRtsOperationRowRefreshAdapter.Clear(__instance);
             var actor = __instance.actor;
             if (actor == null || actor.data == null) return;
-            string appellation = "";
             Kingdom actorKingdom = actor.kingdom;
-            if (actorKingdom?.data != null && actorKingdom.king == actor)
-                appellation = RulerAppellationService.GetFullLivingAppellation(
-                    actorKingdom);
-            else
-                appellation = RulerAppellationService.GetPosthumousAppellation(
-                    actor.data.id);
-            if (!string.IsNullOrEmpty(appellation))
-                ShowRawRow(__instance, "aw_ruler_appellation", appellation);
+            string appellation = CeremonialTitleResolver.Resolve(actor);
+            if (!string.IsNullOrWhiteSpace(appellation))
+            {
+                string kingdomColor = actorKingdom?.getColor()?.color_text ?? "";
+                KeyValueField row = __instance.showStatRow(
+                    "aw_ruler_appellation", appellation, kingdomColor);
+                MoveRowToTop(__instance, row);
+            }
             if (actorKingdom?.king != actor)
             {
-                string virtualTitle = VirtualNobleTitleService.GetPrimaryTitle(actor);
-                if (!string.IsNullOrWhiteSpace(virtualTitle))
-                    ShowRawRow(__instance, "aw_virtual_noble_title",
-                        virtualTitle);
                 string dynasticTitle =
                     DynasticTitleService.ResolveLivingTitle(actor);
                 if (!string.IsNullOrEmpty(dynasticTitle))
@@ -136,6 +132,16 @@ namespace AncientWarfare3.patch
         private static KeyValueField ShowRawRow(UnitWindow pWindow, string pId, string pValue)
         {
             return pWindow.showStatRow(pId, pValue);
+        }
+
+        private static void MoveRowToTop(UnitWindow pWindow, KeyValueField pRow)
+        {
+            if (pWindow == null || pRow == null) return;
+            pRow.transform.SetAsFirstSibling();
+            List<KeyValueField> rows = pWindow.stats_rows_container?.stats_rows;
+            if (rows == null) return;
+            rows.Remove(pRow);
+            rows.Insert(0, pRow);
         }
 
         private static void ShowArmyRtsOperationRow(UnitWindow pWindow,

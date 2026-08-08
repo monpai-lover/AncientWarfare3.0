@@ -13,13 +13,19 @@ namespace AncientWarfare3.core.court
 
         public static string[] CentralOfficeIdsFor(Kingdom pKingdom)
         {
+            return OfficeIdsForLayer(pKingdom, CourtOfficeLayer.Central);
+        }
+
+        public static string[] OfficeIdsForLayer(Kingdom pKingdom,
+            string pLayer)
+        {
             ICourtProfile profile = For(pKingdom);
-            if (profile == null) return Array.Empty<string>();
+            if (profile == null || string.IsNullOrEmpty(pLayer))
+                return Array.Empty<string>();
             string institution = CourtInstitutionService.GetInstitution(
                 pKingdom);
             return profile.OfficeIdsForInstitution(institution)
-                .Where(p => profile.FindOffice(p)?.Layer ==
-                            CourtOfficeLayer.Central)
+                .Where(p => profile.FindOffice(p)?.Layer == pLayer)
                 .ToArray();
         }
 

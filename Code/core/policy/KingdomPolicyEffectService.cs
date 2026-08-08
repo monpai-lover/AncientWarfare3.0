@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.policy
@@ -56,7 +57,7 @@ namespace AncientWarfare3.core.policy
                     StringComparison.Ordinal) &&
                 string.Equals(cached.CompletedTechs, completedTechs,
                     StringComparison.Ordinal))
-                return cached.Effects;
+                return ApplyActiveCourtOfficeEffects(pKingdom, cached.Effects);
 
             var completed = new List<string>();
             AddCompleted(completed, completedPolicies);
@@ -72,7 +73,23 @@ namespace AncientWarfare3.core.policy
                 CompletedTechs = completedTechs,
                 Effects = effects
             };
-            return effects;
+            return ApplyActiveCourtOfficeEffects(pKingdom, effects);
+        }
+
+        private static KingdomPolicyEffects ApplyActiveCourtOfficeEffects(
+            Kingdom pKingdom, KingdomPolicyEffects pEffects)
+        {
+            if (pKingdom?.data == null ||
+                KingdomPolicyService.GetPolicyProfile(pKingdom) !=
+                    KingdomPolicyProfileId.WesternGeneral)
+                return pEffects;
+            var officeIds = new List<string>();
+            foreach (CourtOfficerView officer in CourtService.GetActiveOfficers(
+                         pKingdom, 96))
+                if (!string.IsNullOrEmpty(officer?.office_id))
+                    officeIds.Add(officer.office_id);
+            return pEffects.WithWesternCourtOfficeEffects(
+                WesternCourtOfficeEffectRules.Resolve(officeIds));
         }
 
         public static void Invalidate(Kingdom pKingdom)

@@ -259,56 +259,9 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
-            long worldDay = CurrentWorldDay();
-            bool worldDayChanged = worldDay != LastMaintenanceWorldDay;
-            if (!worldDayChanged) return;
-            LastMaintenanceWorldDay = worldDay;
-
-            if (RestoreValidationPending &&
-                worldDay >= RestoreValidationDueWorldDay)
-            {
-                RebuildRuntime(validatePersistedMembers: true);
-                return;
-            }
-
-            List<Kingdom> kingdoms = World.world?.kingdoms?.list;
-            int kingdomCount = kingdoms?.Count ?? 0;
-            if (kingdomCount <= 0) return;
-            if (KingdomCursor < 0 || KingdomCursor >= kingdomCount)
-                KingdomCursor = 0;
-            Kingdom kingdom = kingdoms[KingdomCursor++];
-            if (KingdomCursor >= kingdomCount) KingdomCursor = 0;
-            if (!IsLivingKingdom(kingdom) || kingdom.cities == null ||
-                kingdom.cities.Count == 0) return;
-            KingdomPoolState state = State(kingdom);
-            bool lawReconciliation =
-                state.LawReconciliationCityIds.Count > 0;
-            if (!CityReservePoolRules.CanMaintain(state.Frozen,
-                    worldDayChanged) && !lawReconciliation) return;
-            bool preparation = WarNoticeService.HasActiveNotice(kingdom) &&
-                               !state.Frozen;
-            int cityBudget = CityReservePoolRules.CityBudget(preparation);
-            int actorBudget = CityReservePoolRules.ActorBudget(preparation);
-            for (int i = 0; i < cityBudget && kingdom.cities.Count > 0; i++)
-            {
-                bool explicitLawWork = TryNextLawReconciliationCity(state,
-                    out long cityId);
-                City city;
-                if (explicitLawWork)
-                    city = ResolveCity(cityId);
-                else
-                {
-                    if (state.CityCursor < 0 ||
-                        state.CityCursor >= kingdom.cities.Count)
-                        state.CityCursor = 0;
-                    city = kingdom.cities[state.CityCursor++];
-                }
-                bool complete = MaintainCity(kingdom, city, state,
-                    actorBudget, explicitLawWork && state.Frozen);
-                ReconcileLedger(city, state);
-                if (explicitLawWork && complete)
-                    state.LawReconciliationCityIds.Remove(cityId);
-            }
+            // Resident eligibility is evaluated only during an active Notice
+            // recruitment batch. The reserve ledger is integer-only at
+            // runtime and must not maintain a world-wide actor index.
         }
 
         internal static void OnWarStarted(War war)
@@ -345,107 +298,38 @@ namespace AncientWarfare3.core.lineage
 
         internal static void OnActorBecameAdult(Actor actor)
         {
-            City city = actor?.city;
-            Kingdom kingdom = actor?.kingdom;
-            if (actor?.data == null || city?.data == null ||
-                kingdom?.data == null || city.kingdom != kingdom) return;
-
-            KingdomPoolState state = State(kingdom);
-            CityPool pool = Pool(state, city.id);
-            if (!IndexEligibleActor(actor, kingdom, city, pool)) return;
-            ReconcilePool(kingdom, city, state, pool,
-                allowFrozenAddition: false, additionBudget: 1);
-            MarkCityDirty(city);
         }
 
         internal static void OnActorReturnedToCivilian(Actor actor)
         {
-            OnActorBecameAdult(actor);
+            return;
         }
 
         internal static void OnActorInvalidated(Actor actor)
         {
-            City city = actor?.city;
-            RemoveActorFromIndexes(actor, actor?.kingdom, city);
-            MarkCityDirty(city);
         }
 
         internal static void OnActorCityChanged(Actor actor,
             City previousCity)
         {
-            if (actor?.data == null || actor.city == previousCity) return;
-            if (ShouldDeferPersistedInvalidation(actor)) return;
-            RemoveActorFromIndexes(actor, previousCity?.kingdom,
-                previousCity);
-            MarkCityDirty(previousCity);
-            OnActorReturnedToCivilian(actor);
         }
 
         internal static void OnActorKingdomChanged(Actor actor,
             Kingdom previousKingdom)
         {
-            if (actor?.data == null || actor.kingdom == previousKingdom)
-                return;
-            if (ShouldDeferPersistedInvalidation(actor)) return;
-            RemoveActorFromIndexes(actor, previousKingdom, actor.city);
-            OnActorReturnedToCivilian(actor);
         }
 
         internal static void OnActorEnlisted(Actor actor)
         {
-            if (ShouldDeferPersistedInvalidation(actor)) return;
-            City city = actor?.city;
-            RemoveActorFromIndexes(actor, actor?.kingdom, city);
-            MarkCityDirty(city);
         }
 
         internal static void OnActorProfessionChanged(Actor actor)
         {
-            City city = actor?.city;
-            Kingdom kingdom = actor?.kingdom;
-            if (ShouldDeferPersistedInvalidation(actor)) return;
-            if (actor?.data != null && city?.data != null &&
-                kingdom?.data != null && city.kingdom == kingdom &&
-                TemporaryLevyService.CanRegisterReserve(kingdom, city,
-                    actor))
-            {
-                OnActorReturnedToCivilian(actor);
-                return;
-            }
-            RemoveActorFromIndexes(actor, kingdom, city);
-            MarkCityDirty(city);
         }
 
         internal static void OnConscriptionLawChanged(Kingdom kingdom,
             CourtConscriptionLaw previousLaw, CourtConscriptionLaw nextLaw)
         {
-            if (kingdom?.data == null || previousLaw == nextLaw) return;
-            KingdomPoolState state = State(kingdom);
-            state.CityCursor = 0;
-            state.ActorCursors.Clear();
-            state.ValidationAfterActorIds.Clear();
-            int previousPercent = CourtConscriptionLawRules.ReservePercent(
-                previousLaw);
-            int nextPercent = CourtConscriptionLawRules.ReservePercent(
-                nextLaw);
-            foreach (KeyValuePair<long, CityPool> entry in state.Cities)
-            {
-                City city = ResolveCity(entry.Key);
-                ReconcilePool(kingdom, city, state, entry.Value,
-                    allowFrozenAddition: false, additionBudget: 0);
-            }
-            if (nextPercent > previousPercent && kingdom.cities != null)
-                for (int i = 0; i < kingdom.cities.Count; i++)
-                {
-                    City city = kingdom.cities[i];
-                    if (city?.data != null && city.kingdom == kingdom)
-                        state.LawReconciliationCityIds.Add(city.id);
-                }
-            if (!CityReservePoolRules.ShouldAddForLawChange(state.Frozen,
-                    previousPercent, nextPercent) && state.Frozen)
-                state.LawReconciliationCityIds.Clear();
-            state.LawReconciliationAfterCityId = -1L;
-            LastMaintenanceWorldDay = -1L;
         }
 
         internal static void OnCityKingdomChanged(City city,
@@ -455,15 +339,8 @@ namespace AncientWarfare3.core.lineage
                 previousKingdom == currentKingdom ||
                 !States.TryGetValue(previousKingdom.id,
                     out KingdomPoolState state) ||
-                !state.Cities.TryGetValue(city.id, out CityPool pool))
+                !state.Cities.ContainsKey(city.id))
                 return;
-            long[] actorIds = new long[pool.ActorIds.Count];
-            pool.ActorIds.CopyTo(actorIds);
-            for (int i = 0; i < actorIds.Length; i++)
-            {
-                Actor actor = ResolveActor(actorIds[i]);
-                if (actor?.data != null) ClearFields(actor);
-            }
             state.Cities.Remove(city.id);
             state.LawReconciliationCityIds.Remove(city.id);
             RemoveEmptyState(previousKingdom.id, state);
@@ -475,11 +352,6 @@ namespace AncientWarfare3.core.lineage
             if (city?.data == null || city.isRekt() ||
                 !IsLivingKingdom(kingdom)) return;
             KingdomPoolState state = State(kingdom);
-            CityPool pool = Pool(state, city.id);
-            int budget = CityReservePoolRules.FullReconciliationBudget(
-                city.units?.Count ?? 0, pool.ActorIds.Count);
-            MaintainCity(kingdom, city, state, budget,
-                allowFrozenAddition: true);
             ReconcileLedger(city, state);
             if (state.Frozen)
                 OpenCityWarReserve(city, state, state.EmergencyId);
@@ -495,14 +367,13 @@ namespace AncientWarfare3.core.lineage
             long count = 0L;
             foreach (KeyValuePair<long, CityPool> entry in state.Cities)
             {
-                if (formalWar)
-                {
-                    City city = ResolveCity(entry.Key);
-                    ReconcileLedger(city, state);
-                    count += CountAvailable(city, state);
-                }
-                else
-                    count += entry.Value.ActorIds.Count;
+                CityPool pool = entry.Value;
+                count += formalWar
+                    ? CityManpowerRules.WarReserveAvailable(
+                        pool.WarReserveCapacity, pool.WarReserveConsumed)
+                    : CityManpowerRules.NoticeHeadroom(
+                        pool.AuthenticPopulation,
+                        pool.ActiveCitySourcedMilitary);
                 if (count >= int.MaxValue) return int.MaxValue;
             }
             return (int)count;
@@ -516,10 +387,13 @@ namespace AncientWarfare3.core.lineage
                     out KingdomPoolState state) ||
                 !state.Cities.TryGetValue(city.id, out CityPool pool))
                 return 0;
-            if (ResolveMobilizationPhase(kingdom) !=
-                ArmyMobilizationPhase.War) return pool.ActorIds.Count;
-            ReconcileLedger(city, state);
-            return CountAvailable(city, state);
+            return ResolveMobilizationPhase(kingdom) ==
+                   ArmyMobilizationPhase.War
+                ? CityManpowerRules.WarReserveAvailable(
+                    pool.WarReserveCapacity, pool.WarReserveConsumed)
+                : CityManpowerRules.NoticeHeadroom(
+                    pool.AuthenticPopulation,
+                    pool.ActiveCitySourcedMilitary);
         }
 
         internal static bool IsFrozen(Kingdom kingdom)

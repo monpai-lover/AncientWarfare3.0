@@ -9,6 +9,8 @@ namespace AncientWarfare3.core.performance
         public const int MaximumWatchdogArmiesPerFrame = 2;
         public const int MaximumFollowerChecksPerArmy = 3;
         public const int FollowerScanMultiplier = 8;
+        public const int MaximumLogisticsKingdomScansPerFrame = 1;
+        public const int MaximumLogisticsArmiesPerFrame = 8;
 
         public static int ResolveWatchdogArmiesPerFrame(int pendingArmies)
         {
@@ -26,6 +28,22 @@ namespace AncientWarfare3.core.performance
         {
             int checks = ResolveFollowerChecksPerArmy(requestedChecks);
             return checks <= 0 ? 0 : checks * FollowerScanMultiplier;
+        }
+
+        public static int ResolveLogisticsKingdomScansPerFrame(
+            int pPendingKingdoms)
+        {
+            if (pPendingKingdoms <= 0) return 0;
+            return Math.Min(MaximumLogisticsKingdomScansPerFrame,
+                pPendingKingdoms);
+        }
+
+        public static int ResolveLogisticsArmiesPerFrame(
+            int pPendingArmies)
+        {
+            if (pPendingArmies <= 0) return 0;
+            return Math.Min(MaximumLogisticsArmiesPerFrame,
+                pPendingArmies);
         }
     }
 }

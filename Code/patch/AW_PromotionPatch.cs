@@ -1,5 +1,6 @@
 using AncientWarfare3.core.court;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.content;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.naming;
 using HarmonyLib;
@@ -70,6 +71,8 @@ namespace AncientWarfare3.patch
                 .ResolveForActorReadOnly(pActor).Profile;
             bool actorIsActualKing = pActor != null &&
                                      __instance?.king == pActor;
+            if (actorIsActualKing && profile == NamingProfileId.Monkey)
+                CivMonkeyNamingContent.EnsureActorFamilyIdentity(pActor);
             if (actorIsActualKing)
                 WesternLineageMigrationService.Request();
             if (!WesternLineageAdmissionRules.ShouldRunKingAdmission(

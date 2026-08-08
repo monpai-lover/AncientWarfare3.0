@@ -1,0 +1,78 @@
+using AncientWarfare3.core.court;
+
+internal static class OfficialCirculationRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, OfficialCirculationRules.IsRotatingCityOffice(
+                CourtOfficeId.Governor, xiaCirculationUnlocked: true),
+            "Xia Governor keeps its existing circulation behavior");
+        Equal(false, OfficialCirculationRules.IsRotatingCityOffice(
+                CourtOfficeId.Governor, xiaCirculationUnlocked: false),
+            "Xia Governor still requires the Xia circulation institution");
+        Equal(true, OfficialCirculationRules.IsRotatingCityOffice(
+                CourtOfficeId.WestMayor, xiaCirculationUnlocked: false),
+            "Western Mayor circulation is independent of the Xia institution");
+        Equal(false, OfficialCirculationRules.IsRotatingCityOffice(
+                CourtOfficeId.WestCount, xiaCirculationUnlocked: true),
+            "Western Count never enters Mayor circulation");
+
+        var facts = new[]
+        {
+            new GovernorRotationFacts(30, 300, 100, 110),
+            new GovernorRotationFacts(10, 100, 200, 110),
+            new GovernorRotationFacts(20, 200, 300, 110)
+        };
+        Equal(true, OfficialCirculationRules.TryBuildRotationPlan(
+                facts, out IReadOnlyList<GovernorRotationAssignment> first),
+            "eligible officials form a complete rotation ring");
+        Equal(true, OfficialCirculationRules.TryBuildRotationPlan(
+                facts.Reverse().ToArray(),
+                out IReadOnlyList<GovernorRotationAssignment> second),
+            "input order does not prevent a complete ring");
+        Sequence(first, second,
+            "rotation ring is deterministic regardless of input order");
+        foreach (GovernorRotationAssignment assignment in first)
+        {
+            GovernorRotationFacts source = facts.Single(p =>
+                p.ActorId == assignment.ActorId);
+            Equal(false, assignment.DestinationCityId == source.NativeCityId,
+                "rotation excludes each official's native city");
+            Equal(false, assignment.DestinationCityId == source.CurrentCityId,
+                "rotation excludes the immediately preceding city");
+        }
+
+        GovernorRotationFacts[] largeSharedCycle = Enumerable.Range(1, 9)
+            .Select(index => new GovernorRotationFacts(index, index,
+                nativeCityId: -1, termEndYear: 110))
+            .ToArray();
+        Equal(true, OfficialCirculationRules.TryBuildRotationPlan(
+                largeSharedCycle,
+                out IReadOnlyList<GovernorRotationAssignment> largePlan),
+            "all Mayors in a shared cycle can rotate beyond the Xia annual budget");
+        Equal(9, largePlan.Count,
+            "a shared Mayor cycle is never partially rotated");
+    }
+
+    private static void Sequence(
+        IReadOnlyList<GovernorRotationAssignment> expected,
+        IReadOnlyList<GovernorRotationAssignment> actual, string message)
+    {
+        Equal(expected.Count, actual.Count, message + " count");
+        for (int index = 0; index < expected.Count; index++)
+        {
+            Equal(expected[index].ActorId, actual[index].ActorId,
+                message + " actor " + index);
+            Equal(expected[index].DestinationCityId,
+                actual[index].DestinationCityId,
+                message + " destination " + index);
+        }
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

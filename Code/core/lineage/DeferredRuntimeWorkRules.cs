@@ -4,6 +4,22 @@ namespace AncientWarfare3.core.lineage
     {
         public const int MaximumConsecutiveCriticalRuntimeWork = 3;
         public const int MaximumConsecutiveRuntimeWork = 3;
+        public const int MaximumItemsPerAuthorityFrame = 1;
+
+        public static int ResolveItemsPerAuthorityFrame(
+            int pPendingCount)
+        {
+            return pPendingCount <= 0
+                ? 0
+                : MaximumItemsPerAuthorityFrame;
+        }
+
+        public static bool ShouldStartFrameDrain(int pLastDrainFrame,
+            int pCurrentFrame)
+        {
+            return pCurrentFrame >= 0 &&
+                   pLastDrainFrame != pCurrentFrame;
+        }
 
         public static bool ShouldPrioritizeCriticalRuntimeWork(
             bool pCriticalRuntimePending, bool pRuntimePending,

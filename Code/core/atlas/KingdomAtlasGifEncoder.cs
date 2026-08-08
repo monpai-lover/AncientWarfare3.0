@@ -36,7 +36,20 @@ namespace AncientWarfare3.core.atlas
         private static byte[] Index(KingdomAtlasRaster pRaster)
         {
             var pixels = new byte[pRaster.Width * pRaster.Height];
-            for (int i = 0; i < pixels.Length; i++) { int o = i * 4; pixels[i] = (byte)(((pRaster.Rgba[o] >> 5) << 5) | ((pRaster.Rgba[o + 1] >> 5) << 2) | (pRaster.Rgba[o + 2] >> 6)); }
+            int stride = pRaster.Width * 4;
+            for (int fileY = 0; fileY < pRaster.Height; fileY++)
+            {
+                int rasterY = pRaster.Height - 1 - fileY;
+                int rasterOffset = rasterY * stride;
+                int fileOffset = fileY * pRaster.Width;
+                for (int x = 0; x < pRaster.Width; x++)
+                {
+                    int o = rasterOffset + x * 4;
+                    pixels[fileOffset + x] = (byte)(((pRaster.Rgba[o] >> 5) << 5) |
+                        ((pRaster.Rgba[o + 1] >> 5) << 2) |
+                        (pRaster.Rgba[o + 2] >> 6));
+                }
+            }
             return pixels;
         }
 
