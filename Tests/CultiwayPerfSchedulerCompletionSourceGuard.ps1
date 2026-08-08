@@ -103,6 +103,20 @@ foreach ($boundary in @(
     }
 }
 
+foreach ($method in @(
+        'private static bool PrepareBuildingPresentationFrame(',
+        'private static bool PreparePresentationFrame(')) {
+    $body = Get-MethodBlock $schedulerPatch $method
+    Require-Contains $body @'
+if (!AWPerformanceSettings.EnableFramePriorityScheduler &&
+                !runner.Active &&
+                !runner.HasMutatingPresentationWorkInFlight)
+'@ "$method must keep read-boundary protection until active and mutating work finishes."
+    Forbid-Contains $body @'
+if (!AWPerformanceSettings.EnableFramePriorityScheduler)
+'@ "$method must not return to native presentation while scheduler work is active."
+}
+
 $boatPatch = Read-Source 'Code\patch\AW_ActorBoatLifecyclePatch.cs'
 foreach ($method in @(
         'private static void EmbarkIntoPostfix(Actor __instance)',

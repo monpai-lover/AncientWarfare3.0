@@ -601,13 +601,15 @@ namespace AncientWarfare3.patch
         private static bool PrepareBuildingPresentationFrame(
             BuildingManager __instance)
         {
-            if (!AWPerformanceSettings.EnableFramePriorityScheduler)
+            AWCooperativeSimulationRunner runner =
+                AWCooperativeSimulationRunner.Instance;
+            if (!AWPerformanceSettings.EnableFramePriorityScheduler &&
+                !runner.Active &&
+                !runner.HasMutatingPresentationWorkInFlight)
             {
                 return true;
             }
 
-            AWCooperativeSimulationRunner runner =
-                AWCooperativeSimulationRunner.Instance;
             if (runner.HasMutatingPresentationWorkInFlight)
             {
                 EnsureBuildingReadBoundary("building.presentation_prepare");
@@ -640,13 +642,15 @@ namespace AncientWarfare3.patch
         private static bool PreparePresentationFrame(
             ActorManager __instance)
         {
-            if (!AWPerformanceSettings.EnableFramePriorityScheduler)
+            AWCooperativeSimulationRunner runner =
+                AWCooperativeSimulationRunner.Instance;
+            if (!AWPerformanceSettings.EnableFramePriorityScheduler &&
+                !runner.Active &&
+                !runner.HasMutatingPresentationWorkInFlight)
             {
                 return true;
             }
 
-            AWCooperativeSimulationRunner runner =
-                AWCooperativeSimulationRunner.Instance;
             if (runner.HasMutatingPresentationWorkInFlight)
             {
                 EnsureActorReadBoundary("actor.presentation_prepare");
