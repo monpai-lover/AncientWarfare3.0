@@ -379,6 +379,19 @@ namespace AncientWarfare3.core.lineage
             return !HasGuardResidue(pKingdom, pActor);
         }
 
+        public static bool ReleaseForAccession(Kingdom pKingdom,
+            Actor pActor)
+        {
+            if (pKingdom?.data == null || pActor?.data == null) return false;
+            if (IsRoyalGuard(pActor)) DismissGuard(pActor, "became_king");
+            RemoveGuardFromRoster(pKingdom, pActor);
+            if (pActor.kingdom?.data != null && pActor.kingdom != pKingdom)
+                RemoveGuardFromRoster(pActor.kingdom, pActor);
+            ClearStaleGuardIdentity(pActor);
+            RemoveFromAnyArmy(pActor);
+            return !HasGuardResidue(pKingdom, pActor);
+        }
+
         public static void StripGuardsFromNormalArmy(Army pArmy)
         {
             if (pArmy == null) return;

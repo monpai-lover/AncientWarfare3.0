@@ -21,5 +21,13 @@ namespace AncientWarfare3.core.lineage
                    pKingLivesInCapital && !pMonarchyEstablished &&
                    !pIsRepublic && !pIsRepublicLeader;
         }
+
+        public static int ResolveDeferredRetryDelay(int pAttempts)
+        {
+            if (pAttempts <= 0) return 1;
+            int shift = pAttempts - 1;
+            if (shift > 5) shift = 5;
+            return 1 << shift;
+        }
     }
 }
