@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -27,7 +28,7 @@ namespace AncientWarfare3.core.lineage
 
             List<SurnameRelationNode> relations = LoadArchivedRelations(
                 pRootActorId);
-            MergeLivingRelations(relations);
+            MergeLivingRelations(relations, pRootActorId);
             IReadOnlyList<long> ids =
                 VisibleSurnameRenameRules.CollectPatrilinealRenameIds(
                     pRootActorId, relations);
@@ -58,19 +59,35 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static void MergeLivingRelations(
-            List<SurnameRelationNode> pRelations)
+            List<SurnameRelationNode> pRelations, long pRootActorId)
         {
             if (pRelations == null || World.world?.units == null) return;
             var known = new HashSet<long>();
             for (int i = 0; i < pRelations.Count; i++)
                 known.Add(pRelations[i].ActorId);
 
-            foreach (Actor actor in World.world.units)
+            var pending = new Queue<Actor>();
+            Actor root = FindActor(pRootActorId);
+            if (root?.data != null && !root.isRekt()) pending.Enqueue(root);
+            var visited = new HashSet<long>();
+            while (pending.Count > 0 &&
+                   visited.Count < VisibleSurnameRenameRules.MaxRenameActors)
             {
+                Actor actor = pending.Dequeue();
                 if (actor?.data == null || actor.isRekt() ||
-                    !known.Add(actor.data.id)) continue;
-                pRelations.Add(new SurnameRelationNode(actor.data.id,
-                    actor.isSexMale(), ResolveLivingFatherId(actor)));
+                    !visited.Add(actor.data.id)) continue;
+                if (known.Add(actor.data.id))
+                    pRelations.Add(new SurnameRelationNode(actor.data.id,
+                        actor.isSexMale(), ResolveLivingFatherId(actor)));
+                if (!actor.isSexMale()) continue;
+                try
+                {
+                    foreach (Actor child in actor.getChildren(
+                                 pOnlyCurrentFamily: false))
+                        if (child?.data != null && !child.isRekt())
+                            pending.Enqueue(child);
+                }
+                catch { }
             }
         }
 
@@ -99,7 +116,9 @@ namespace AncientWarfare3.core.lineage
             {
                 live.data.set(LineageKeys.FAMILY_NAME, pFamilyName);
                 live.data.set(LineageKeys.CHINESE_FAMILY_NAME, pFamilyName);
-                LineageService.ApplyDisplayName(live);
+                live.data.set(AWNameDataKeys.FamilyComponent, pFamilyName);
+                ActorManualRenameService.ApplyInheritedFamily(live,
+                    pFamilyName);
                 LineageService.ArchiveActor(live, pAlive: live.isAlive());
                 try { live.clearGraphicsFully(); } catch { }
                 changed = true;

@@ -12,6 +12,7 @@ namespace AncientWarfare3.Tests
             FullScanWritesRouteThroughRetryQueue();
             MigrationDoesNotFabricateHumanGenerators();
             ManualActorNameIsProtectedAcrossProjectionAndRestore();
+            ManualRenameServiceOwnsStructuredPersistence();
         }
 
         private static void ActorReadPathOnlyProjectsStoredIdentity()
@@ -71,11 +72,32 @@ namespace AncientWarfare3.Tests
                 "lineage recomposition must respect authored names");
         }
 
+        private static void ManualRenameServiceOwnsStructuredPersistence()
+        {
+            string path = PathFor("Code", "core", "naming",
+                "ActorManualRenameService.cs");
+            AssertEx.True(File.Exists(path),
+                "manual actor rename service must exist");
+            string compact = Compact(File.ReadAllText(path));
+            AssertEx.True(compact.Contains("custom_name") &&
+                          compact.Contains("AWNameDataKeys.NativeName") &&
+                          compact.Contains("AWNameDataKeys.ChineseName") &&
+                          compact.Contains("LineageService.ArchiveActor") &&
+                          compact.Contains(
+                              "AWLocalizedNameMigrationService.Enqueue"),
+                "manual rename service must own every persistence boundary");
+        }
+
         private static string Read(params string[] pParts)
+        {
+            return File.ReadAllText(PathFor(pParts));
+        }
+
+        private static string PathFor(params string[] pParts)
         {
             string path = Environment.CurrentDirectory;
             foreach (string part in pParts) path = Path.Combine(path, part);
-            return File.ReadAllText(path);
+            return path;
         }
 
         private static string Compact(string pSource)

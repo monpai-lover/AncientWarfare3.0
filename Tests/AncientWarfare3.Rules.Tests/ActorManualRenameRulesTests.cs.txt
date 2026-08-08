@@ -1,0 +1,35 @@
+using AncientWarfare3.core.naming;
+
+internal static class ActorManualRenameRulesTests
+{
+    public static void Run()
+    {
+        ActorManualBranchPlan plan = ActorManualRenameRules.PlanBranchChange(
+            10L, "Ji", "Jiang", new long[] { 10L, 11L, 12L });
+        Sequence(new long[] { 10L, 11L, 12L }, plan.ActorIds,
+            "surname change targets root and patrilineal descendants");
+        Equal(true, plan.RequiresBranchFork,
+            "changed branch identity forks");
+
+        Equal(false, ActorManualRenameRules.PlanBranchChange(
+            10L, "Jiang", "Jiang", new long[] { 10L, 11L })
+            .RequiresBranchFork, "resubmitting surname is idempotent");
+    }
+
+    private static void Sequence(IReadOnlyList<long> expected,
+        IReadOnlyList<long> actual, string name)
+    {
+        if (expected.Count != actual.Count)
+            throw new InvalidOperationException(name + " count mismatch");
+        for (int i = 0; i < expected.Count; i++)
+            if (expected[i] != actual[i])
+                throw new InvalidOperationException(name + " order mismatch");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

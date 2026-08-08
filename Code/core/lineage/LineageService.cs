@@ -1798,6 +1798,42 @@ namespace AncientWarfare3.core.lineage
             return moved;
         }
 
+        internal static bool TryForkManualNameBranch(Actor pFounder,
+            string pBranchName, out long pNewShiId)
+        {
+            pNewShiId = -1L;
+            if (pFounder?.data == null || pFounder.isRekt() ||
+                string.IsNullOrWhiteSpace(pBranchName) ||
+                LineageArchiveManager.Instance?.OperatingDB == null)
+                return false;
+            pFounder.data.get(LineageKeys.LINEAGE_ID, out long lineageId,
+                -1L);
+            pFounder.data.get(LineageKeys.SHI_ID, out long oldShiId, -1L);
+            if (lineageId < 0L || oldShiId < 0L) return false;
+            pFounder.data.get(LineageKeys.CLAN_NAME, out string oldBranch,
+                string.Empty);
+            string branchName = pBranchName.Trim();
+            if (string.Equals(oldBranch, branchName,
+                    StringComparison.Ordinal))
+            {
+                pNewShiId = oldShiId;
+                return true;
+            }
+
+            long newShiId = LineageIdAllocator.NextShiId();
+            if (newShiId < 0L) return false;
+            InsertShiBranch(newShiId, lineageId, branchName, pFounder,
+                "manual_rename", oldShiId);
+            pFounder.data.set(LineageKeys.SHI_ID, newShiId);
+            pFounder.data.set(LineageKeys.CLAN_NAME, branchName);
+            pFounder.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, newShiId);
+            MoveExistingDescendantsToBranch(pFounder, lineageId, oldShiId,
+                newShiId, branchName, pDeferProjection: true,
+                out bool allWritesAccepted);
+            pNewShiId = newShiId;
+            return allWritesAccepted;
+        }
+
         private static int MoveDescendantToBranchRecursive(long pActorId,
             long pLineageId, long pOldShiId, long pNewShiId,
             string pClanName, HashSet<long> pVisited,
