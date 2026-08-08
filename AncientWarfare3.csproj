@@ -115,4 +115,9 @@
 			<HintPath>$(WorldBoxManaged)\Newtonsoft.Json.dll</HintPath>
 		</Reference>
 	</ItemGroup>
+
+	<Target Name="CultiwayPerfSchedulerCompletionSourceGuard"
+		BeforeTargets="Build">
+		<Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\Tests\CultiwayPerfSchedulerCompletionSourceGuard.ps1&quot;" />
+	</Target>
 </Project>

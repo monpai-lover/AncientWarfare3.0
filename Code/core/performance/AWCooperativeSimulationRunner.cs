@@ -339,9 +339,11 @@ namespace AncientWarfare3.core.performance
                     }
 
                     bool actorBackgroundPending =
-                        _actorRunner.WaitingForBackgroundWork;
+                        _actorRunner.WaitingForBackgroundWork &&
+                        !_actorRunner.IsBackgroundWorkCompleted;
                     bool buildingBackgroundPending =
-                        _buildingRunner.WaitingForBackgroundWork;
+                        _buildingRunner.WaitingForBackgroundWork &&
+                        !_buildingRunner.IsBackgroundWorkCompleted;
                     if (actorBackgroundPending || buildingBackgroundPending)
                     {
                         string awaitPhase = actorBackgroundPending

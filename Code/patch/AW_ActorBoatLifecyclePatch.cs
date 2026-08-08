@@ -5,8 +5,8 @@ namespace AncientWarfare3.patch
 {
     /// <summary>
     /// Keeps the AW3 boat index in sync with the native actor transport
-    /// lifecycle. Native mode remains untouched so the original scheduler
-    /// owns all boat checks when the large scheduler is disabled.
+    /// lifecycle. The index remains warm in native mode, while the original
+    /// scheduler owns boat checks until the large scheduler is enabled.
     /// </summary>
     [HarmonyPatch]
     internal static class AW_ActorBoatLifecyclePatch
@@ -93,40 +93,28 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.embarkInto))]
         private static void EmbarkIntoPostfix(Actor __instance)
         {
-            if (AWPerformanceSettings.EnableFramePriorityScheduler)
-            {
-                AWInsideBoatActorIndex.Notify(__instance, true);
-            }
+            AWInsideBoatActorIndex.Notify(__instance, true);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.exitBoat))]
         private static void ExitBoatPostfix(Actor __instance)
         {
-            if (AWPerformanceSettings.EnableFramePriorityScheduler)
-            {
-                AWInsideBoatActorIndex.Notify(__instance, false);
-            }
+            AWInsideBoatActorIndex.Notify(__instance, false);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.clearManagers))]
         private static void ClearManagersPostfix(Actor __instance)
         {
-            if (AWPerformanceSettings.EnableFramePriorityScheduler)
-            {
-                AWInsideBoatActorIndex.Notify(__instance, false);
-            }
+            AWInsideBoatActorIndex.Notify(__instance, false);
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.Dispose))]
         private static void DisposePrefix(Actor __instance)
         {
-            if (AWPerformanceSettings.EnableFramePriorityScheduler)
-            {
-                AWInsideBoatActorIndex.Notify(__instance, false);
-            }
+            AWInsideBoatActorIndex.Notify(__instance, false);
         }
 
         [HarmonyPrefix]

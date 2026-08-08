@@ -300,7 +300,8 @@ namespace AncientWarfare3.patch
                 return false;
             }
 
-            if (!AWPerformanceSettings.EnableFramePriorityScheduler)
+            if (!AWPerformanceSettings.EnableFramePriorityScheduler &&
+                !runner.Active)
             {
                 ResetSchedulerState(pUnbindSimulationTime: false);
                 __state = true;
@@ -318,7 +319,8 @@ namespace AncientWarfare3.patch
             {
                 _schedulerLifecycleOwned = true;
                 EnsureSimulationTimeBound(__instance);
-                runner.RunFrame(__instance);
+                runner.RunFrame(__instance,
+                    AWPerformanceSettings.EnableFramePriorityScheduler);
             }
             catch (Exception error)
             {
