@@ -111,5 +111,14 @@ namespace AncientWarfare3.core.lineage
         {
             return pBasicValid && !pVassalIsRebel && !pSuzerainIsRebel && !pCycleDetected;
         }
+
+        public static bool CanSetAdministrativeEnfeoffment(bool pBasicValid,
+            bool pVassalIsRebel, bool pSuzerainIsRebel,
+            bool pSuzerainTitleAboveVassal,
+            bool pCycleDetected)
+        {
+            return pBasicValid && !pVassalIsRebel && !pSuzerainIsRebel &&
+                   pSuzerainTitleAboveVassal && !pCycleDetected;
+        }
     }
 }

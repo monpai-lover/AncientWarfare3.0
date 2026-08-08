@@ -662,6 +662,20 @@ namespace AncientWarfare3.core.lineage
                 cycleDetected);
         }
 
+        internal static bool CanSetAdministrativeEnfeoffment(
+            Kingdom pVassal, Kingdom pSuzerain)
+        {
+            bool basicValid = HasValidVassalParticipants(pVassal, pSuzerain);
+            if (!basicValid) return false;
+            return VassalRelationRules.CanSetAdministrativeEnfeoffment(
+                basicValid,
+                MandateRebelService.IsRebelKingdom(pVassal),
+                MandateRebelService.IsRebelKingdom(pSuzerain),
+                KingdomTitleService.GetTitle(pSuzerain) >
+                    KingdomTitleService.GetTitle(pVassal),
+                WouldCreateCycle(pVassal, pSuzerain));
+        }
+
         internal static bool WouldCreateVassalCycle(Kingdom pVassal,
             Kingdom pSuzerain)
         {
@@ -700,8 +714,29 @@ namespace AncientWarfare3.core.lineage
             long pWarId = -1, bool pEnforceWarVictory = false,
             int pContractTier = VassalContractTierRules.Outer)
         {
+            return SetVassalInternal(pVassal, pSuzerain, pReason, pWarId,
+                pEnforceWarVictory, pContractTier,
+                pAdministrativeEnfeoffment: false);
+        }
+
+        internal static bool SetVassalByAdministrativeEnfeoffment(
+            Kingdom pVassal, Kingdom pSuzerain, string pReason)
+        {
+            return SetVassalInternal(pVassal, pSuzerain, pReason,
+                pWarId: -1, pEnforceWarVictory: false,
+                pContractTier: VassalContractTierRules.Outer,
+                pAdministrativeEnfeoffment: true);
+        }
+
+        private static bool SetVassalInternal(Kingdom pVassal,
+            Kingdom pSuzerain, string pReason, long pWarId,
+            bool pEnforceWarVictory, int pContractTier,
+            bool pAdministrativeEnfeoffment)
+        {
             int contractTier = VassalContractTierRules.NormalizeTier(pContractTier);
-            bool allowed = pEnforceWarVictory
+            bool allowed = pAdministrativeEnfeoffment
+                ? CanSetAdministrativeEnfeoffment(pVassal, pSuzerain)
+                : pEnforceWarVictory
                 ? CanEnforceVassalWarVictory(pVassal, pSuzerain)
                 : VassalContractTierRules.IsLooseTributary(contractTier)
                     ? CanSetTributary(pVassal, pSuzerain)

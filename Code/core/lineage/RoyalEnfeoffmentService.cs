@@ -39,8 +39,8 @@ namespace AncientWarfare3.core.lineage
 
                 candidate.joinCity(pSeat);
                 newKingdom.setCapital(pSeat);
-                if (!VassalService.SetVassal(newKingdom, originalKingdom,
-                        Reason))
+                if (!VassalService.SetVassalByAdministrativeEnfeoffment(
+                        newKingdom, originalKingdom, Reason))
                 {
                     pReason = "vassal_creation_failed";
                     Rollback(newKingdom, originalKingdom, pSeat, candidate);

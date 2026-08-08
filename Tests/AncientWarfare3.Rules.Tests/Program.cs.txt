@@ -3584,6 +3584,27 @@ Equal(false, VassalRelationRules.CanEnforceWarVictory(
         pSuzerainIsRebel: false,
         pCycleDetected: true),
     "war settlement never creates a vassal cycle");
+True(VassalRelationRules.CanSetAdministrativeEnfeoffment(
+        pBasicValid: true,
+        pVassalIsRebel: false,
+        pSuzerainIsRebel: false,
+        pSuzerainTitleAboveVassal: true,
+        pCycleDetected: false),
+    "an internal royal enfeoffment does not wait for adjacency refresh");
+Equal(false, VassalRelationRules.CanSetAdministrativeEnfeoffment(
+        pBasicValid: true,
+        pVassalIsRebel: false,
+        pSuzerainIsRebel: false,
+        pSuzerainTitleAboveVassal: false,
+        pCycleDetected: false),
+    "an administrative enfeoffment requires a suzerain title at least one rank higher");
+Equal(false, VassalRelationRules.CanSetAdministrativeEnfeoffment(
+        pBasicValid: true,
+        pVassalIsRebel: false,
+        pSuzerainIsRebel: false,
+        pSuzerainTitleAboveVassal: true,
+        pCycleDetected: true),
+    "an administrative enfeoffment never creates a vassal cycle");
 
 True(VassalWarSupportRules.ShouldLeaveForIndependence(
         isIndependenceWar: false,
@@ -7923,6 +7944,7 @@ if (recruitmentPriorityRule != null)
 }
 
 PathfindingPerformanceTests.Run();
+SimulationWorkerPoolTests.Run();
 PathfindingMigrationRulesTests.Run();
 AWPathSessionTests.Run();
 AWDockRouteRegistryTests.Run();
