@@ -67,18 +67,34 @@ function Get-MethodBlock([string]$source, [string]$signature) {
 
 $runner = Read-Source `
     'Code\core\performance\AWCooperativeSimulationRunner.cs'
+
+$coordinator = Read-Source `
+    'Code\core\performance\AWSimulationCoordinatorThread.cs'
+Require-Contains $coordinator 'private long _completedOperations' `
+    'Coordinator must retain completed operation count for scheduler diagnostics.'
+Require-Contains $coordinator 'private long _completedWallTicks' `
+    'Coordinator must retain completed wall time for scheduler diagnostics.'
+Require-Contains $coordinator 'private long _completedWaitTicks' `
+    'Coordinator must retain main-thread wait time for scheduler diagnostics.'
+Require-Contains $coordinator 'internal string GetDiagnostics()' `
+    'Coordinator must expose diagnostics like the Cultiway perf baseline.'
+Require-Contains $coordinator 'Interlocked.Increment(ref _completedOperations)' `
+    'Coordinator must record completed operations.'
+Require-Contains $coordinator 'Interlocked.Add(ref _completedWallTicks' `
+    'Coordinator must record completed wall time.'
+Require-Contains $coordinator 'Interlocked.Add(ref _completedWaitTicks' `
+    'Coordinator must record main-thread wait time.'
+
+$runtimeDiagnostic = Read-Source `
+    'Code\core\policy\RuntimePerformanceDiagnostic.cs'
+Require-Contains $runtimeDiagnostic 'AWSimulationCoordinatorThread.Instance.GetDiagnostics()' `
+    'Runtime performance diagnostics must include coordinator wait statistics.'
 $runFrame = Get-MethodBlock $runner `
     'public void RunFrame(MapBox pMap, bool pAllowNewCycles = true)'
-Require-Contains $runFrame @'
-bool actorBackgroundPending =
-                        _actorRunner.WaitingForBackgroundWork &&
-                        !_actorRunner.IsBackgroundWorkCompleted;
-'@ 'Completed Actor post work must return to Step() for consumption.'
-Require-Contains $runFrame @'
-bool buildingBackgroundPending =
-                        _buildingRunner.WaitingForBackgroundWork &&
-                        !_buildingRunner.IsBackgroundWorkCompleted;
-'@ 'Completed building background work must return to Step() for consumption.'
+Require-Match $runFrame 'bool\s+actorBackgroundPending\s*=\s*_actorRunner\.WaitingForBackgroundWork\s*&&\s*!_actorRunner\.IsBackgroundWorkCompleted' `
+    'Completed Actor post work must return to Step() for consumption.'
+Require-Match $runFrame 'bool\s+buildingBackgroundPending\s*=\s*_buildingRunner\.WaitingForBackgroundWork\s*&&\s*!_buildingRunner\.IsBackgroundWorkCompleted' `
+    'Completed building background work must return to Step() for consumption.'
 
 $batchRunner = Read-Source `
     'Code\core\performance\AWCooperativeBatchRunner.cs'
@@ -111,14 +127,10 @@ $schedulerPatch = Read-Source `
     'Code\patch\AW_FramePrioritySchedulerPatch.cs'
 $takeOver = Get-MethodBlock $schedulerPatch `
     'private static bool TakeOverMainSimulation(MapBox __instance,'
-Require-Contains $takeOver @'
-if (!AWPerformanceSettings.EnableFramePriorityScheduler &&
-                !runner.Active)
-'@ 'Disabling the scheduler may release control only at a cycle boundary.'
-Require-Contains $takeOver @'
-runner.RunFrame(__instance,
-                    AWPerformanceSettings.EnableFramePriorityScheduler);
-'@ 'The scheduler setting must control new-cycle admission, not an active cycle.'
+Require-Match $takeOver '!AWPerformanceSettings\.EnableFramePriorityScheduler\s*&&\s*!runner\.Active' `
+    'Disabling the scheduler may release control only at a cycle boundary.'
+Require-Match $takeOver 'runner\.RunFrame\(__instance,\s*AWPerformanceSettings\.EnableFramePriorityScheduler\)' `
+    'The scheduler setting must control new-cycle admission, not an active cycle.'
 Forbid-Contains $takeOver 'runner.RunFrame(__instance);' `
     'TakeOverMainSimulation must pass the new-cycle admission decision explicitly.'
 
@@ -146,11 +158,7 @@ foreach ($method in @(
         'private static bool PrepareBuildingPresentationFrame(',
         'private static bool PreparePresentationFrame(')) {
     $body = Get-MethodBlock $schedulerPatch $method
-    Require-Contains $body @'
-if (!AWPerformanceSettings.EnableFramePriorityScheduler &&
-                !runner.Active &&
-                !runner.HasMutatingPresentationWorkInFlight)
-'@ "$method must keep read-boundary protection until active and mutating work finishes."
+    Require-Match $body '!AWPerformanceSettings\.EnableFramePriorityScheduler\s*&&\s*!runner\.Active\s*&&\s*!runner\.HasMutatingPresentationWorkInFlight' "$method must keep read-boundary protection until active and mutating work finishes."
     Forbid-Contains $body @'
 if (!AWPerformanceSettings.EnableFramePriorityScheduler)
 '@ "$method must not return to native presentation while scheduler work is active."
@@ -201,10 +209,7 @@ Require-Contains $actorParallel `
 
 $beforeMapUpdate = Get-MethodBlock $schedulerPatch `
     'private static void BeforeMapBoxUpdate(MapBox __instance,'
-Require-Contains $beforeMapUpdate @'
-EnsureActorReadBoundary("mapbox.frame_begin");
-                    EnsureBuildingReadBoundary("mapbox.frame_begin");
-'@ 'Frame visibility refresh must follow Actor and Building read barriers.'
+Require-Match $beforeMapUpdate 'EnsureActorReadBoundary\("mapbox\.frame_begin"\);\s*EnsureBuildingReadBoundary\("mapbox\.frame_begin"\);' 'Frame visibility refresh must follow Actor and Building read barriers.'
 Require-Contains $beforeMapUpdate `
     'AWCooperativeActorParallelJobRunner.RefreshFrameVisibility();' `
     'MapBox frame start must refresh Actor visibility before timer workers consume it.'

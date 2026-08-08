@@ -470,6 +470,8 @@ namespace AncientWarfare3.core.policy
                 AWDeferredPathRequestBatch.GetDiagnostics();
             string spatialMembershipDiagnostics =
                 AWParallelSimObjectZoneUnits.GetDiagnostics();
+            string coordinatorDiagnostics =
+                AWSimulationCoordinatorThread.Instance.GetDiagnostics();
             long intervalFrames = RuntimePerformanceDiagnosticRules.
                 IntervalFrameCount(_intervalFrameStarted, _frame);
             double averageFps = RuntimePerformanceDiagnosticRules.
@@ -575,6 +577,7 @@ namespace AncientWarfare3.core.policy
                 " enemy_presence={" + enemyPresenceDiagnostics + "}" +
                 " deferred_path={" + deferredPathDiagnostics + "}" +
                 " spatial_membership={" + spatialMembershipDiagnostics + "}" +
+                " coordinator={" + coordinatorDiagnostics + "}" +
                 " actor_ai_ms=" + Milliseconds(_actorAiTicks) +
                 " actor_ai_calls=" + _actorAiCalls +
                 " actor_task=" + actorTaskId +

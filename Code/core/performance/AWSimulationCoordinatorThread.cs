@@ -27,6 +27,10 @@ namespace AncientWarfare3.core.performance
         private long _operationCompletedAt;
         private long _operationWaitTicks;
 
+        private long _completedOperations;
+        private long _completedWallTicks;
+        private long _completedWaitTicks;
+
         private AWSimulationCoordinatorThread()
         {
             _thread = new Thread(CoordinatorLoop)
@@ -174,8 +178,34 @@ namespace AncientWarfare3.core.performance
                 _operationWaitTicks = 0L;
             }
 
+            Interlocked.Increment(ref _completedOperations);
+            Interlocked.Add(ref _completedWallTicks, result.WallTicks);
+            Interlocked.Add(ref _completedWaitTicks, result.WaitTicks);
             exception?.Throw();
             return result;
+        }
+
+        internal string GetDiagnostics()
+        {
+            long operations = Interlocked.Read(ref _completedOperations);
+            long wallTicks = Interlocked.Read(ref _completedWallTicks);
+            long waitTicks = Interlocked.Read(ref _completedWaitTicks);
+            bool active;
+            string activeName;
+            lock (_gate)
+            {
+                active = _operationActive;
+                activeName = _operationName;
+            }
+
+            return string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "ops={0} wall={1:0.0}ms wait={2:0.0}ms active={3} name={4}",
+                operations,
+                TicksToMilliseconds(wallTicks),
+                TicksToMilliseconds(waitTicks),
+                active,
+                activeName ?? "none");
         }
 
         internal void WaitAndDiscard(WorkTicket pTicket)
@@ -252,6 +282,11 @@ namespace AncientWarfare3.core.performance
                 pTicket.Generation != _activeGeneration)
                 throw new InvalidOperationException(
                     "Simulation coordinator ticket is no longer active.");
+        }
+
+        private static double TicksToMilliseconds(long pTicks)
+        {
+            return pTicks * 1000d / Stopwatch.Frequency;
         }
 
         internal readonly struct WorkTicket
