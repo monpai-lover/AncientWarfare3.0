@@ -107,10 +107,10 @@ namespace AncientWarfare3.core.lineage
                     stored = null;
                 else
                 {
-                    string operation = BuildOperation(stored);
-                    if (!ProcessingKeys.Add(operation)) return false;
+                    string storedOperation = BuildOperation(stored);
+                    if (!ProcessingKeys.Add(storedOperation)) return false;
                     try { return ResumeTransaction(target, stored); }
-                    finally { ProcessingKeys.Remove(operation); }
+                    finally { ProcessingKeys.Remove(storedOperation); }
                 }
             }
 
