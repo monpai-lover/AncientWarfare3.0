@@ -52,7 +52,8 @@ internal static class PathfindingPerformanceTests
         ActorRunnerSupportsSpecializedPostAndParallelStages();
         ActorParallelJobsUseOneWorkerLayer();
         ActorPostPipelineKeepsEnemySearchOrdered();
-        EnemySearchUsesVanillaChunkLocalCacheOnly();
+        ActorPostPipelineHasCompleteOrderedStages();
+        EnemyPresenceCacheMatchesPreparationLifecycle();
         EmptyEnemySearchUsesCultiwayBackoff();
         PresentationVisibilitySignatureIsSharedPerFrame();
         CustomNameplatesReuseVisibleZoneCandidates();
@@ -70,31 +71,109 @@ internal static class PathfindingPerformanceTests
                diagnostic.Contains("actor_post_commit_ms") &&
                diagnostic.Contains("enemy_search_calls") &&
                diagnostic.Contains("enemy_search_candidates") &&
-               diagnostic.Contains("enemy_search_empty"),
+               diagnostic.Contains("enemy_search_empty") &&
+               diagnostic.Contains("GetEnemyFinderDiagnostics()") &&
+               diagnostic.Contains("AWEnemyPresenceCache.GetDiagnostics()"),
             "AW3 PERF separates Actor post worker and commit costs");
         Assert(diagnostic.Contains("TakeDiagnostics()"),
             "runtime diagnostics consume Actor post metrics");
     }
 
-    private static void EnemySearchUsesVanillaChunkLocalCacheOnly()
+    private static void ActorPostPipelineHasCompleteOrderedStages()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string postRunner = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        string[] stages =
+        {
+            "Idle", "BeforeDeadCheck", "BeforeTileAction",
+            "ScheduleTileAction", "AwaitTileAction", "CommitTileAction",
+            "BeforeFrozenCheck", "BeforeUpdateEligibility",
+            "BeforeEnemySearch", "PrepareEnemySearch",
+            "ScheduleEnemySearch", "AwaitEnemySearch", "CommitEnemySearch",
+            "BeforePathMovement", "SchedulePathMovement",
+            "AwaitPathMovement", "CommitPathMovement", "AfterPathMovement",
+            "ScheduleSmoothMovement", "AwaitSmoothMovement",
+            "CommitSmoothMovement", "AfterSmoothMovement", "Finish"
+        };
+        int stagePosition = postRunner.IndexOf("private enum PostStage",
+            StringComparison.Ordinal);
+        foreach (string stage in stages)
+        {
+            int next = postRunner.IndexOf(stage, stagePosition + 1,
+                StringComparison.Ordinal);
+            Assert(next > stagePosition,
+                "Actor post stage order includes " + stage);
+            stagePosition = next;
+        }
+
+        Assert(postRunner.Contains("TaskVerifierJobId") &&
+               postRunner.Contains("RunTaskVerifierJobs()") &&
+               postRunner.Contains("AWEnemyPresenceCache.BeginPreparation()") &&
+               postRunner.Contains("AWEnemyPresenceCache.EndPreparation()"),
+            "Actor post stages preserve task-verifier and enemy preparation boundaries");
+        int endPreparation = postRunner.IndexOf(
+            "AWEnemyPresenceCache.EndPreparation()",
+            postRunner.IndexOf("case PostStage.PrepareEnemySearch:",
+                StringComparison.Ordinal), StringComparison.Ordinal);
+        int scheduleSearch = postRunner.IndexOf(
+            "case PostStage.ScheduleEnemySearch:", endPreparation,
+            StringComparison.Ordinal);
+        Assert(endPreparation >= 0 && scheduleSearch > endPreparation,
+            "Enemy cache preparation ends before concurrent search workers start");
+        Assert(!postRunner.Contains("DeferredPathRequestBatch") &&
+               !postRunner.Contains("isFlying()") &&
+               !postRunner.Contains("Cultivation") &&
+               !postRunner.Contains("Portal") &&
+               !postRunner.Contains("Train"),
+            "Task 4 does not import path batching or Cultiway content branches");
+    }
+
+    private static void EnemyPresenceCacheMatchesPreparationLifecycle()
     {
         string root = Directory.GetCurrentDirectory();
         string cachePath = Path.Combine(root, "Code", "core",
             "performance", "AWEnemyPresenceCache.cs");
         string patchPath = Path.Combine(root, "Code", "patch",
             "AW_EnemyFinderCachePatch.cs");
-        Assert(!File.Exists(cachePath) && !File.Exists(patchPath),
-            "AW3 does not replace vanilla chunk-local enemy caching with a world scan");
+        Assert(File.Exists(cachePath) && File.Exists(patchPath),
+            "AW3 ports the preparation-scoped enemy presence cache and patch");
 
-        string postRunner = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "performance", "AWCooperativeActorPostRunner.cs"));
-        Assert(postRunner.Contains("EnemiesFinder.findEnemiesFrom(") &&
-               postRunner.Contains(
-                   "pActor.current_tile, pActor.kingdom)") &&
-               !postRunner.Contains("AWEnemyPresenceCache") &&
-               !postRunner.Contains("World.world.kingdoms_wild") &&
-               !postRunner.Contains("World.world.kingdoms"),
-            "Actor post preparation delegates spatial lookup to vanilla's kingdom/chunk/range cache");
+        string cache = File.ReadAllText(cachePath);
+        Assert(cache.Contains("[ThreadStatic]") &&
+               cache.Contains("private static bool _preparationActive") &&
+               cache.Contains("internal static void BeginPreparation()") &&
+               cache.Contains("internal static void EndPreparation()"),
+            "enemy preparation scope is isolated from concurrent worker threads");
+        Assert(cache.Contains("_cache.Clear();") &&
+               cache.Contains("_preparationActive = true;") &&
+               cache.Contains("_preparationActive = false;") &&
+               cache.Contains("_negativeKeys.Remove(pKingdom);") &&
+               cache.Contains("_negativeKeys.Clear();"),
+            "enemy cache supports per-cycle invalidation, selective negative clearing, and world reset");
+        Assert(cache.Contains("World.world.kingdoms") &&
+               cache.Contains("World.world.kingdoms_wild") &&
+               cache.Contains("pMainKingdom.isEnemy(candidate)") &&
+               cache.Contains("candidate.units.Count == 0") &&
+               cache.Contains("candidate.buildings.Count == 0"),
+            "no-war cache only skips searches when no populated enemy kingdom exists");
+        Assert(cache.Contains("Randy.randomChance(0.8f)") &&
+               cache.Contains("pRange != 0"),
+            "new negative chunk keys preserve vanilla random advancement");
+
+        string patch = File.ReadAllText(patchPath);
+        int containerLookup = patch.IndexOf("__instance.dict_data.TryGetValue(",
+            StringComparison.Ordinal);
+        int negativeLookup = patch.IndexOf(
+            "AWEnemyPresenceCache.TryGetNegativeResult(",
+            StringComparison.Ordinal);
+        Assert(containerLookup >= 0 && negativeLookup > containerLookup,
+            "enemy finder preserves native container ordering before negative reuse");
+        Assert(patch.Contains("nameof(EnemyFinderContainer.clear)") &&
+               patch.Contains("ClearNegativeKeys(") &&
+               patch.Contains("nameof(EnemiesFinder.clear)") &&
+               patch.Contains("AWEnemyPresenceCache.Clear();"),
+            "enemy cache lifecycle clears one kingdom container or the whole world explicitly");
     }
 
     private static void EmptyEnemySearchUsesCultiwayBackoff()
@@ -110,7 +189,8 @@ internal static class PathfindingPerformanceTests
         Assert(postRunner.Contains("applyBackoff") &&
                postRunner.Contains("ResolveTimeout(") &&
                postRunner.Contains("CaptureDiagnostics") &&
-               postRunner.Contains("if (captureDiagnostics)"),
+               postRunner.Contains(
+                   "bool collectDiagnostics = CaptureDiagnostics"),
             "Actor post search applies empty-result backoff and does not collect diagnostics on every search while diagnostics are disabled");
     }
 
@@ -188,15 +268,15 @@ internal static class PathfindingPerformanceTests
             "Actor scheduler injects the ordered post-stage runner");
 
         string postRunner = File.ReadAllText(postRunnerPath);
-        int before = postRunner.IndexOf("RunPostRange(pBatch, 0,",
+        int before = postRunner.IndexOf("case PostStage.BeforeDeadCheck:",
             StringComparison.Ordinal);
-        int prepare = postRunner.IndexOf("PrepareEnemySearchJob(pBatch)",
+        int prepare = postRunner.IndexOf("PrepareEnemySearchClassifications()",
             before, StringComparison.Ordinal);
-        int schedule = postRunner.IndexOf("ScheduleEnemySearch()",
+        int schedule = postRunner.IndexOf("case PostStage.ScheduleEnemySearch:",
             prepare, StringComparison.Ordinal);
-        int commit = postRunner.IndexOf("CommitEnemySearchGroup()",
+        int commit = postRunner.IndexOf("case PostStage.CommitEnemySearch:",
             schedule, StringComparison.Ordinal);
-        int after = postRunner.IndexOf("RunPostRange(pBatch,",
+        int after = postRunner.IndexOf("case PostStage.BeforePathMovement:",
             commit, StringComparison.Ordinal);
         Assert(before >= 0 && prepare > before && schedule > prepare &&
                commit > schedule && after > commit,
@@ -204,7 +284,7 @@ internal static class PathfindingPerformanceTests
 
         int workerStart = postRunner.IndexOf("private void SearchWorkItemAt(",
             StringComparison.Ordinal);
-        int commitStart = postRunner.IndexOf("private bool CommitEnemySearchGroup(",
+        int commitStart = postRunner.IndexOf("private bool TryCommitNextGroup(",
             StringComparison.Ordinal);
         Assert(workerStart >= 0 && commitStart > workerStart,
             "Actor enemy worker and commit phases are isolated");

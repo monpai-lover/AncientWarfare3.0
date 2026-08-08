@@ -212,8 +212,13 @@ namespace AncientWarfare3.core.performance
                         continue;
                     case RunnerStage.Finish:
                         if (_collectJobBenchmarks)
+                        {
                             AWSimulationTickBenchmark.RecordBatchJobs<TBatch,
                                 TObject>(_manager.benchmark_id, _batches);
+                            if (typeof(TBatch) == typeof(BatchActors))
+                                AWSimulationTickBenchmark.RecordActorPostBatchJobs<
+                                    TBatch, TObject>(_batches);
+                        }
                         Reset();
                         return true;
                     default:

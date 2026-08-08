@@ -461,6 +461,10 @@ namespace AncientWarfare3.core.policy
                 : Math.Max(0L, intervalEnded - _intervalStarted);
             AWActorPostDiagnosticSnapshot actorPostDiagnostics =
                 AWCooperativeActorPostRunner.TakeDiagnostics();
+            string enemyFinderDiagnostics =
+                AWCooperativeActorPostRunner.GetEnemyFinderDiagnostics();
+            string enemyPresenceDiagnostics =
+                AWEnemyPresenceCache.GetDiagnostics();
             long intervalFrames = RuntimePerformanceDiagnosticRules.
                 IntervalFrameCount(_intervalFrameStarted, _frame);
             double averageFps = RuntimePerformanceDiagnosticRules.
@@ -551,6 +555,8 @@ namespace AncientWarfare3.core.policy
                 " enemy_search_candidates=" +
                 actorPostDiagnostics.Candidates +
                 " enemy_search_empty=" + actorPostDiagnostics.Empty +
+                " enemy_finder={" + enemyFinderDiagnostics + "}" +
+                " enemy_presence={" + enemyPresenceDiagnostics + "}" +
                 " actor_ai_ms=" + Milliseconds(_actorAiTicks) +
                 " actor_ai_calls=" + _actorAiCalls +
                 " actor_task=" + actorTaskId +
