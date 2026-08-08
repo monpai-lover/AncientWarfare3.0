@@ -8,6 +8,22 @@
 
 **Tech Stack:** C# 11 targeting .NET Framework 4.8, Unity/WorldBox, Harmony, `ConcurrentDictionary`, dedicated simulation threads, existing AW3 rules executable and PowerShell source guards.
 
+## Execution Status (2026-08-08)
+
+- Tasks 1-4 are implemented and verified. Commits: `96d168d`, `fc5800f`,
+  `dad171a`, `ce020d7`, `3c1980b`, `0684420`.
+- Task 5 is implemented with bounded per-cycle Actor request capture,
+  stable latest-request replacement, next-frame main-thread submission, and
+  capacity fallback. Commit: `07a2858`.
+- Task 7 semantic fixes are implemented: vanilla float status decrement and
+  admitted-cycle RTS owner snapshot. Commit: `07a2858`.
+- Task 6 currently provides generation/version guarded redundant
+  `checkUnits` suppression, dirty actor tracking, chunk/island snapshots, and
+  full-clear fallback. It does not yet replace vanilla `ChunkObjectContainer`
+  mutation with Cultiway's complete incremental reconciliation algorithm.
+- Task 8 static verification is passing; runtime acceptance on a live save,
+  deployment, merge, and push remain pending.
+
 ---
 
 ## Porting Boundaries
