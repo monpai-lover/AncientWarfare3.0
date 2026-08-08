@@ -191,11 +191,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorBornWithParents(Actor pBaby, Actor pParent1,
             Actor pParent2, bool pUseFullPath)
         {
-            if (!pUseFullPath)
-            {
-                TryInheritLightweightWesternSurname(pBaby, pParent1, pParent2);
-                return;
-            }
+            if (!pUseFullPath) return;
 
             ArchiveTraceableActor(pParent1, pAlive: true);
             ArchiveTraceableActor(pParent2, pAlive: true);
