@@ -17,6 +17,18 @@ function Require-Contains(
     }
 }
 
+function Require-Match(
+    [string]$text,
+    [string]$pattern,
+    [string]$message) {
+    if (-not [Text.RegularExpressions.Regex]::IsMatch(
+            $text,
+            $pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        $failures.Add($message)
+    }
+}
+
 function Forbid-Contains(
     [string]$text,
     [string]$needle,
@@ -180,6 +192,72 @@ if ($visibilityRefreshIndex -lt 0 -or
     $visibilityRefreshIndex -lt $actorBoundaryIndex) {
     $failures.Add(
         'Actor visibility refresh must run after the frame-start Actor read barrier.')
+}
+
+$workerPoolPath = Join-Path $root `
+    'Code\core\performance\AWSimulationWorkerPool.cs'
+if (-not [IO.File]::Exists($workerPoolPath)) {
+    $failures.Add('AW3 must own a persistent simulation worker pool.')
+}
+else {
+    $workerPool = [IO.File]::ReadAllText(
+        $workerPoolPath, [Text.Encoding]::UTF8)
+    foreach ($contract in @(
+            'internal WorkResult RunIndexed(',
+            'internal WorkTicket BeginIndexed(',
+            'internal bool TryAssistActiveOperation()',
+            'private void WorkerLoop(',
+            'if (_operationActive)',
+            'IsBackground = true')) {
+        Require-Contains $workerPool $contract `
+            "Simulation worker pool is missing contract: $contract"
+    }
+
+    $workerDiscard = Get-MethodBlock $workerPool `
+        'internal void WaitAndDiscard(WorkTicket pTicket)'
+    Require-Contains $workerDiscard 'TryWait(pTicket,' `
+        'Worker-pool teardown must use bounded diagnostic waits.'
+    Require-Contains $workerDiscard 'catch (Exception error)' `
+        'Worker-pool teardown must retain the discarded operation error.'
+    Require-Contains $workerDiscard 'ModClass.LogInfo(' `
+        'Worker-pool teardown must report stalls and discarded errors.'
+}
+
+$coordinator = Read-Source `
+    'Code\core\performance\AWSimulationCoordinatorThread.cs'
+Require-Match $coordinator `
+    'AWSimulationWorkerPool\.Instance\s*\.TryAssistActiveOperation\(\)' `
+    'Coordinator waits must assist unfinished persistent-worker items.'
+$coordinatorDiscard = Get-MethodBlock $coordinator `
+    'internal void WaitAndDiscard(WorkTicket pTicket)'
+Require-Contains $coordinatorDiscard 'TryWait(pTicket,' `
+    'Coordinator teardown must use bounded diagnostic waits.'
+Require-Contains $coordinatorDiscard 'catch (Exception error)' `
+    'Coordinator teardown must retain the discarded operation error.'
+Require-Contains $coordinatorDiscard 'ModClass.LogInfo(' `
+    'Coordinator teardown must report stalls and discarded errors.'
+$coordinatorTryWait = Get-MethodBlock $coordinator `
+    'internal bool TryWait(WorkTicket pTicket,'
+Require-Contains $coordinatorTryWait `
+    'TryAssistActiveOperationUntil(deadline)' `
+    'Coordinator timed waits must not overrun their assistance deadline.'
+
+$actorPost = Read-Source `
+    'Code\core\performance\AWCooperativeActorPostRunner.cs'
+Require-Contains $actorPost `
+    'AWSimulationWorkerPool.Instance.BeginIndexed(' `
+    'Actor enemy search must be admitted directly to the simulation pool.'
+Forbid-Contains $actorPost 'AWSimulationCoordinatorThread' `
+    'Actor post work must not consume the presentation coordinator.'
+
+foreach ($relativePath in @(
+        'Code\core\performance\AWCooperativeBatchRunner.cs',
+        'Code\core\performance\AWCooperativeActorParallelJobRunner.cs',
+        'Code\core\performance\AWCooperativeActorPostRunner.cs',
+        'Code\core\performance\AWCooperativeWorldMaintenanceRunner.cs')) {
+    $schedulerSource = Read-Source $relativePath
+    Forbid-Contains $schedulerSource 'Parallel.For(' `
+        "$relativePath must use the persistent simulation worker pool instead of TPL."
 }
 
 if ($failures.Count -gt 0) {

@@ -95,7 +95,7 @@ namespace AncientWarfare3.core.performance
             _activePaused = World.world != null && World.world.isPaused();
             try
             {
-                Parallel.For(0, rangeCount, pParallelOptions,
+                AWSimulationWorkerPool.Instance.RunIndexed(0, rangeCount,
                     RunTimerRange);
             }
             finally

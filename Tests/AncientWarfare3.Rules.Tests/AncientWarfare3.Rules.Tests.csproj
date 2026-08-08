@@ -47,6 +47,8 @@
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
+    <Compile Include="SimulationWorkerPoolTests.cs.txt" />
+    <Compile Include="..\..\Code\core\performance\AWSimulationWorkerPool.cs" Link="Production\AWSimulationWorkerPool.cs" />
     <Compile Include="ActorScalePerformanceRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\ActorScalePerformanceRules.cs" Link="Production\ActorScalePerformanceRules.cs" />
     <Compile Include="PathMovementExecutorRulesTests.cs.txt" />

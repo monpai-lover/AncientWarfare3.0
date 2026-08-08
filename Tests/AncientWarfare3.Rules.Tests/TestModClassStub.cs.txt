@@ -5,5 +5,9 @@ namespace AncientWarfare3
         internal static void LogWarning(string message)
         {
         }
+
+        internal static void LogInfo(string message)
+        {
+        }
     }
 }

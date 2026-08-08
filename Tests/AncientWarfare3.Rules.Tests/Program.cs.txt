@@ -7897,6 +7897,7 @@ if (recruitmentPriorityRule != null)
 }
 
 PathfindingPerformanceTests.Run();
+SimulationWorkerPoolTests.Run();
 PathfindingMigrationRulesTests.Run();
 AWPathSessionTests.Run();
 AWDockRouteRegistryTests.Run();

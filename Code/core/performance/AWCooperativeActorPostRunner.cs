@@ -27,11 +27,10 @@ namespace AncientWarfare3.core.performance
             new List<SearchWorkItem>();
         private readonly List<SearchWorkItem> _workItemPool =
             new List<SearchWorkItem>();
-        private readonly Action _runEnemySearch;
         private List<BatchActors> _batches;
         private ParallelOptions _parallelOptions;
         private PostStage _stage;
-        private AWSimulationCoordinatorThread.WorkTicket _searchTicket;
+        private AWSimulationWorkerPool.WorkTicket _searchTicket;
         private float _elapsed;
         private int _enemySearchJobIndex;
         private int _batchIndex;
@@ -48,17 +47,12 @@ namespace AncientWarfare3.core.performance
             AWPerformanceSettings.EnablePerformanceDiagnostics ||
             Bench.bench_enabled || AWSimulationTickBenchmark.IsCapturing;
 
-        internal AWCooperativeActorPostRunner()
-        {
-            _runEnemySearch = RunEnemySearch;
-        }
-
         public bool WaitingForBackgroundWork =>
             _stage == PostStage.AwaitEnemySearch && _searchTicket.IsValid;
 
         public bool IsBackgroundWorkCompleted =>
             WaitingForBackgroundWork &&
-            AWSimulationCoordinatorThread.Instance.IsCompleted(_searchTicket);
+            AWSimulationWorkerPool.Instance.IsCompleted(_searchTicket);
 
         public void Start(List<BatchActors> pActiveBatches, float pElapsed,
             ParallelOptions pParallelOptions)
@@ -120,14 +114,14 @@ namespace AncientWarfare3.core.performance
         public bool TryJoinBackgroundWork(double pMaximumMilliseconds)
         {
             return !WaitingForBackgroundWork ||
-                   AWSimulationCoordinatorThread.Instance.TryWait(
+                   AWSimulationWorkerPool.Instance.TryWait(
                        _searchTicket, pMaximumMilliseconds);
         }
 
         public void WaitForBackgroundWork()
         {
             if (WaitingForBackgroundWork)
-                AWSimulationCoordinatorThread.Instance.Wait(_searchTicket);
+                AWSimulationWorkerPool.Instance.Wait(_searchTicket);
         }
 
         public bool Step()
@@ -153,13 +147,13 @@ namespace AncientWarfare3.core.performance
                         ScheduleEnemySearch();
                         continue;
                     case PostStage.AwaitEnemySearch:
-                        if (!AWSimulationCoordinatorThread.Instance
+                        if (!AWSimulationWorkerPool.Instance
                                 .IsCompleted(_searchTicket))
                             return false;
-                        AWSimulationCoordinatorThread.Instance.Wait(
+                        AWSimulationWorkerPool.Instance.Wait(
                             _searchTicket);
-                        AWSimulationCoordinatorThread.WorkResult result =
-                            AWSimulationCoordinatorThread.Instance.Complete(
+                        AWSimulationWorkerPool.WorkResult result =
+                            AWSimulationWorkerPool.Instance.Complete(
                                 _searchTicket);
                         _searchTicket = default;
                         if (CaptureDiagnostics)
@@ -195,7 +189,7 @@ namespace AncientWarfare3.core.performance
         public void Abort()
         {
             if (_searchTicket.IsValid)
-                AWSimulationCoordinatorThread.Instance.WaitAndDiscard(
+                AWSimulationWorkerPool.Instance.WaitAndDiscard(
                     _searchTicket);
             ResetCycle();
         }
@@ -342,15 +336,9 @@ namespace AncientWarfare3.core.performance
                 _stage = PostStage.CommitEnemySearch;
                 return;
             }
-            _searchTicket = AWSimulationCoordinatorThread.Instance.Begin(
-                "vanilla.actors.post.enemy.search", _runEnemySearch);
+            _searchTicket = AWSimulationWorkerPool.Instance.BeginIndexed(0,
+                _workItems.Count, SearchWorkItemAt);
             _stage = PostStage.AwaitEnemySearch;
-        }
-
-        private void RunEnemySearch()
-        {
-            Parallel.For(0, _workItems.Count, _parallelOptions,
-                SearchWorkItemAt);
         }
 
         private void SearchWorkItemAt(int pIndex)

@@ -238,10 +238,11 @@ internal static class PathfindingPerformanceTests
         string actorRunner = File.ReadAllText(actorRunnerPath);
         Assert(actorRunner.Contains("private const int TimerRangeSize = 128"),
             "Actor timer work is grouped into 128-actor ranges");
-        Assert(actorRunner.Contains("Parallel.For(0, rangeCount,"),
-            "Actor timer ranges use the existing AW worker layer");
-        Assert(actorRunner.Contains("pParallelOptions"),
-            "Actor timer ranges inherit the cycle ParallelOptions");
+        Assert(actorRunner.Contains(
+                "AWSimulationWorkerPool.Instance.RunIndexed(0, rangeCount,"),
+            "Actor timer ranges use the persistent simulation worker pool");
+        Assert(!actorRunner.Contains("Parallel.For("),
+            "Actor timer ranges do not allocate nested TPL work");
         Assert(!actorRunner.Contains("AWSimulationCoordinatorThread.Instance.Begin"),
             "Actor timer ranges do not nest coordinator tickets");
     }
