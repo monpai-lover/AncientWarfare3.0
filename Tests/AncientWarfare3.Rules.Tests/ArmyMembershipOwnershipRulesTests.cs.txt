@@ -34,6 +34,12 @@ internal static class ArmyMembershipOwnershipRulesTests
                 actorValid: true, backlinkMatches: true,
                 ArmyMembershipOwnershipDecision.Keep),
             "a valid two-sided same-kingdom membership is retained");
+        Equal(true, ArmyMembershipOwnershipRules.ShouldAcceptRosterCommit(
+                actorArmyMatches: true, armyListContainsActor: true),
+            "a roster commit requires both membership directions");
+        Equal(false, ArmyMembershipOwnershipRules.ShouldAcceptRosterCommit(
+                actorArmyMatches: true, armyListContainsActor: false),
+            "an actor backlink alone is not a committed army roster entry");
         Equal(true, ArmyMembershipOwnershipRules.ShouldReleaseRosterEntry(
                 actorValid: true, backlinkMatches: true,
                 ArmyMembershipOwnershipDecision.Release),

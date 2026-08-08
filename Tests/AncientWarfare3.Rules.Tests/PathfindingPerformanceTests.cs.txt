@@ -34,6 +34,7 @@ internal static class PathfindingPerformanceTests
         LargeSchedulerPathProgressRules();
         UnboundedPathsDoNotRepeatFullSearchForEachSegment();
         ShortSafePathUsesDirectFastPath();
+        MasterBaselineCarriesPlannedTerrainToMovement();
         ReusedPathSubmissionPreservesActorMovement();
         ActorPathConsumptionDoesNotTakeTheGlobalRequestGate();
         ActorPathLifecycleDoesNotTakeAGlobalSessionMapGate();
@@ -1302,6 +1303,34 @@ internal static class PathfindingPerformanceTests
         Assert(AWPathLifecycleRules.ShouldResetActorAfterPathSubmission(
                 accepted: true, reused: false, wasMoving: false),
             "a newly accepted path initializes an idle actor");
+    }
+
+    private static void MasterBaselineCarriesPlannedTerrainToMovement()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string types = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "pathfinding", "AWPathTypes.cs"));
+        string generator = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "pathfinding", "AWStreamingPathGenerator.cs"));
+        string bridge = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "pathfinding", "AWPathMovementBridge.cs"));
+
+        Assert(types.Contains("PlannedTileFlags"),
+            "path steps retain Cultiway master planned terrain flags");
+        Assert(types.Contains("if (pTile.HasType) flags |= AWPathTileFlags.HasType;"),
+            "planned terrain does not confuse an existing tile with a published tile type");
+        Assert(generator.Contains("AWPathTileFlagsExtensions.FromSnapshot("),
+            "the worker records planned terrain from its immutable traversal snapshot");
+        Assert(bridge.Contains("HasPathRelevantTerrainChanged("),
+            "movement rejects a path step when live terrain changed after planning");
+        Assert(bridge.Contains("AWPathTileFlagsExtensions.RuntimeRelevant"),
+            "stale-step comparison is limited to Cultiway master runtime terrain semantics");
+        Assert(bridge.Contains("AWArmyMarchService.OnLeaderPathStep("),
+            "master terrain validation preserves AW3 RTS route callbacks");
+        Assert(bridge.Contains("AWDockTransportService.TryResolveRoute("),
+            "master terrain validation preserves AW3 dock transport");
+        Assert(bridge.Contains("OwnedActors.Add(actorId)"),
+            "master terrain validation preserves AW3 path ownership");
     }
 
     private static void InitialConnectivityBuildUsesTraversalWorker()

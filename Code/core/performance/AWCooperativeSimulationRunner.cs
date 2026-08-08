@@ -183,6 +183,9 @@ namespace AncientWarfare3.core.performance
         private long _actorPresentationOverlapWaitTicks;
         private long _lastActorPresentationOverlapWallTicks;
         private long _lastActorPresentationOverlapWaitTicks;
+        private long _actorPresentationReadOnlyBoundaries;
+        private long _actorPresentationReadOnlyForcedWaits;
+        private long _actorPresentationReadOnlyWaitTicks;
         private string _lastActorPresentationBoundaryReason = "none";
         private long _buildingPresentationOverlapLaunches;
         private long _buildingPresentationOverlapEagerLaunches;
@@ -245,6 +248,10 @@ namespace AncientWarfare3.core.performance
 
         public void RunFrame(MapBox pMap, bool pAllowNewCycles = true)
         {
+            long schedulerStarted =
+                AWSchedulerStageDiagnostics.BeginSchedulerFrame();
+            try
+            {
             if (pMap == null)
             {
                 // Teardown can race the final scheduler callback. Cancel the
@@ -436,6 +443,12 @@ namespace AncientWarfare3.core.performance
                 Abort();
                 throw;
             }
+            }
+            finally
+            {
+                AWSchedulerStageDiagnostics.EndSchedulerFrame(
+                    schedulerStarted);
+            }
         }
 
         public bool TryBeginActorPresentationOverlap()
@@ -547,13 +560,34 @@ namespace AncientWarfare3.core.performance
 
         public bool EnsureActorReadBoundary(string pReason)
         {
-            if (!_actorRunner.HasParallelPresentationWorkInFlight)
-                return false;
+            bool reachedBoundary = false;
+            if (_actorRunner.HasParallelPresentationWorkInFlight)
+            {
+                reachedBoundary = true;
+                bool completedBeforeWait =
+                    _actorRunner.IsBackgroundWorkCompleted;
+                CompleteActorPresentationWork(completedBeforeWait, pReason);
+            }
 
-            bool completedBeforeWait =
+            if (!_actorRunner.WaitingForBackgroundWork)
+                return reachedBoundary;
+
+            reachedBoundary = true;
+            bool readOnlyCompleted =
                 _actorRunner.IsBackgroundWorkCompleted;
-            CompleteActorPresentationWork(completedBeforeWait, pReason);
-            return true;
+            long waitStartedAt = Stopwatch.GetTimestamp();
+            _actorRunner.WaitForBackgroundWork();
+            long waitTicks = Stopwatch.GetTimestamp() - waitStartedAt;
+            Interlocked.Increment(ref _actorPresentationReadOnlyBoundaries);
+            if (!readOnlyCompleted)
+                Interlocked.Increment(
+                    ref _actorPresentationReadOnlyForcedWaits);
+            Interlocked.Add(ref _actorPresentationReadOnlyWaitTicks,
+                waitTicks);
+            _lastActorPresentationBoundaryReason =
+                (string.IsNullOrEmpty(pReason) ? "unknown" : pReason) +
+                ".readonly";
+            return reachedBoundary;
         }
 
         public bool EnsureBuildingReadBoundary(string pReason)
@@ -644,8 +678,9 @@ namespace AncientWarfare3.core.performance
                 "launch={0}(eager={1},sync={2}) complete={3} " +
                 "fallback={4} forced_join={5} wall={6:0.0}ms " +
                 "wait={7:0.0}ms last={8:0.00}/{9:0.00}ms " +
-                "estimate={10:0.00}ms boundary={11} dispatch_wait={12} " +
-                "inflight={13}",
+                "readonly={10}/{11}/{12:0.0}ms " +
+                "estimate={13:0.00}ms boundary={14} dispatch_wait={15} " +
+                "inflight={16}",
                 Interlocked.Read(ref _actorPresentationOverlapLaunches),
                 Interlocked.Read(
                     ref _actorPresentationOverlapEagerLaunches),
@@ -665,6 +700,10 @@ namespace AncientWarfare3.core.performance
                     ref _lastActorPresentationOverlapWallTicks)),
                 TicksToMilliseconds(Interlocked.Read(
                     ref _lastActorPresentationOverlapWaitTicks)),
+                Interlocked.Read(ref _actorPresentationReadOnlyBoundaries),
+                Interlocked.Read(ref _actorPresentationReadOnlyForcedWaits),
+                TicksToMilliseconds(Interlocked.Read(
+                    ref _actorPresentationReadOnlyWaitTicks)),
                 _actorParallelStageEstimateMilliseconds,
                 _lastActorPresentationBoundaryReason,
                 _actorRunner.WaitingForPresentationDispatch,
@@ -1062,6 +1101,20 @@ namespace AncientWarfare3.core.performance
 
         private void ExecuteCurrentStageCore()
         {
+            AWSchedulerStageBucket bucket = GetDiagnosticBucket(_stage);
+            long started = AWSchedulerStageDiagnostics.Begin(bucket);
+            try
+            {
+                ExecuteCurrentStageCoreUnmeasured();
+            }
+            finally
+            {
+                AWSchedulerStageDiagnostics.End(bucket, started);
+            }
+        }
+
+        private void ExecuteCurrentStageCoreUnmeasured()
+        {
             switch (_stage)
             {
                 case SimulationStage.DirtyCleanup:
@@ -1324,6 +1377,51 @@ namespace AncientWarfare3.core.performance
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        private static AWSchedulerStageBucket GetDiagnosticBucket(
+            SimulationStage pStage)
+        {
+            switch (pStage)
+            {
+                case SimulationStage.DirtyCleanup:
+                case SimulationStage.Maintenance:
+                    return AWSchedulerStageBucket.Maintenance;
+                case SimulationStage.MapChunks:
+                case SimulationStage.MapLayersUpdate:
+                case SimulationStage.MapLayersDraw:
+                case SimulationStage.MapModules:
+                    return AWSchedulerStageBucket.Map;
+                case SimulationStage.Cities:
+                    return AWSchedulerStageBucket.Cities;
+                case SimulationStage.ActorsStart:
+                case SimulationStage.Actors:
+                    return AWSchedulerStageBucket.Actors;
+                case SimulationStage.BuildingsStart:
+                case SimulationStage.Buildings:
+                    return AWSchedulerStageBucket.Buildings;
+                case SimulationStage.Armies:
+                    return AWSchedulerStageBucket.Armies;
+                case SimulationStage.Kingdoms:
+                    return AWSchedulerStageBucket.Kingdoms;
+                case SimulationStage.Statuses:
+                    return AWSchedulerStageBucket.Statuses;
+                case SimulationStage.Aw3Authority:
+                    return AWSchedulerStageBucket.Aw3Authority;
+                case SimulationStage.Explosions:
+                case SimulationStage.CityZones:
+                case SimulationStage.NutritionTimer:
+                case SimulationStage.WorldTime:
+                case SimulationStage.Taxi:
+                case SimulationStage.MetaHistory:
+                case SimulationStage.AnimationTime:
+                case SimulationStage.EnemyCache:
+                case SimulationStage.ControllableUnit:
+                case SimulationStage.Heat:
+                    return AWSchedulerStageBucket.World;
+                default:
+                    return AWSchedulerStageBucket.OtherVanilla;
             }
         }
 

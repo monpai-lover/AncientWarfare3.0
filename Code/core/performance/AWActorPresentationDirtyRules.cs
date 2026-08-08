@@ -23,5 +23,17 @@ namespace AncientWarfare3.core.performance
         {
             return total <= 0 || visited >= total;
         }
+
+    }
+
+    public static class AWActorSpriteInitializationRules
+    {
+        public static bool ShouldDeferHeadCheck(bool dirtyHead,
+            bool frameDataReady, bool animationHeadsReady, bool textureReady)
+        {
+            return dirtyHead &&
+                   (!frameDataReady || !animationHeadsReady ||
+                    !textureReady);
+        }
     }
 }

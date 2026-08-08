@@ -63,12 +63,5 @@ namespace AncientWarfare3.patch
                 AWActorZoneDirtyKind.CityEligibility);
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(Actor), "dispose")]
-        private static void Dispose_Prefix(Actor __instance)
-        {
-            AWActorZoneMembershipDirtyIndex.Mark(__instance,
-                AWActorZoneDirtyKind.Spatial | AWActorZoneDirtyKind.ChunkMetadata);
-        }
     }
 }

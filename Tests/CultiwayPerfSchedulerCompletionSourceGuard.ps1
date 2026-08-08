@@ -80,6 +80,33 @@ bool buildingBackgroundPending =
                         !_buildingRunner.IsBackgroundWorkCompleted;
 '@ 'Completed building background work must return to Step() for consumption.'
 
+$batchRunner = Read-Source `
+    'Code\core\performance\AWCooperativeBatchRunner.cs'
+Require-Contains $batchRunner `
+    'private int FindNextMainThreadBatchIndex(RunnerStage pJobStage)' `
+    'Batch phase naming must identify the next concrete main-thread batch.'
+Require-Contains $batchRunner `
+    '".batch_group." + nextBatchIndex' `
+    'Batch phase naming must identify the concrete parallel job group.'
+Require-Contains $batchRunner `
+    '".parallel.batch." +' `
+    'Native batch phase naming must identify the concrete batch index.'
+
+$actorReadBoundary = Get-MethodBlock $runner `
+    'public bool EnsureActorReadBoundary(string pReason)'
+Require-Contains $actorReadBoundary @'
+if (_actorRunner.HasParallelPresentationWorkInFlight)
+'@ 'Actor read boundaries must commit mutating presentation work.'
+Require-Contains $actorReadBoundary @'
+if (!_actorRunner.WaitingForBackgroundWork)
+'@ 'Actor read boundaries must also inspect Actor post worker work.'
+Require-Contains $actorReadBoundary @'
+_actorRunner.WaitForBackgroundWork();
+'@ 'Actor read boundaries must wait for Actor post worker work before live reads.'
+Require-Contains $actorReadBoundary @'
+Stopwatch.GetTimestamp() - waitStartedAt;
+'@ 'Actor post read-boundary waits must remain observable in diagnostics.'
+
 $schedulerPatch = Read-Source `
     'Code\patch\AW_FramePrioritySchedulerPatch.cs'
 $takeOver = Get-MethodBlock $schedulerPatch `
@@ -259,6 +286,40 @@ foreach ($contract in @(
         "Actor post path batching is missing lifecycle contract: $contract"
 }
 
+$stageDiagnostics = Read-Source `
+    'Code\core\performance\AWSchedulerStageDiagnostics.cs'
+foreach ($contract in @(
+        'internal enum AWSchedulerStageBucket',
+        'internal static long BeginSchedulerFrame()',
+        'internal static void EndSchedulerFrame(long pStarted)',
+        'internal static long Begin(',
+        'internal static void BeginFrame(bool pSampling)',
+        'internal static void End(',
+        'internal static AWSchedulerStageDiagnosticSnapshot TakeSnapshot()',
+        'internal long TotalTicks',
+        'internal long UnaccountedTicks')) {
+    Require-Contains $stageDiagnostics $contract `
+        "Scheduler stage diagnostics are missing contract: $contract"
+}
+Require-Contains $runner 'AWSchedulerStageDiagnostics.Begin(' `
+    'Each cooperative scheduler stage must enter an exclusive wall-time bucket.'
+Require-Contains $runner 'AWSchedulerStageDiagnostics.End(' `
+    'Each cooperative scheduler stage must close its exclusive wall-time bucket.'
+
+$runtimeDiagnostics = Read-Source `
+    'Code\core\policy\RuntimePerformanceDiagnostic.cs'
+Require-Contains $runtimeDiagnostics `
+    'AWSchedulerStageDiagnostics.BeginFrame(_sampling);' `
+    'Exclusive scheduler buckets must share the sampled-frame boundary.'
+foreach ($contract in @(
+        'scheduler_wall_ms=',
+        'scheduler_stage_ms={',
+        'scheduler_stage_unaccounted_ms=',
+        'host_unaccounted_ms=')) {
+    Require-Contains $runtimeDiagnostics $contract `
+        "Runtime diagnostics are missing exclusive-stage output: $contract"
+}
+
 $deferredPathBatch = Read-Source `
     'Code\core\performance\AWDeferredPathRequestBatch.cs'
 foreach ($contract in @(
@@ -308,6 +369,77 @@ Require-Contains $spatialSource 'HasPending' `
 Require-Match $spatialPatch `
     '!AWActorZoneMembershipDirtyIndex\.HasPending\(\)' `
     'Redundant checkUnits suppression must require an empty dirty index.'
+
+$chunkMembership = Read-Source `
+    'Code\core\performance\AWIncrementalChunkActorMembership.cs'
+$changeKingdom = Get-MethodBlock $chunkMembership `
+    'internal static void ChangeKingdom('
+Require-Contains $changeKingdom 'RemoveActorFromKingdomLists(' `
+    'ChangeKingdom must remove stale and duplicate kingdom memberships before insertion.'
+Require-Contains $changeKingdom 'EnsureKingdom(' `
+    'ChangeKingdom must recreate a missing destination kingdom list.'
+Require-Contains $changeKingdom 'InsertActorAtRank(' `
+    'ChangeKingdom must preserve deterministic World.units rank ordering.'
+Forbid-Contains $changeKingdom 'throw new InvalidOperationException' `
+    'ChangeKingdom must not pause the simulation for a recoverable stale membership.'
+$removeKingdomMembership = Get-MethodBlock $chunkMembership `
+    'private static int RemoveActorFromKingdomLists('
+Require-Contains $removeKingdomMembership 'oldKingdomId' `
+    'Kingdom migration must use the old kingdom as the fast-path lookup.'
+$removeActorReferences = Get-MethodBlock $chunkMembership `
+    'private static int RemoveActorReferences('
+Require-Contains $removeActorReferences 'ReferenceEquals(' `
+    'Stale kingdom membership cleanup must remove by Actor identity.'
+Require-Contains $removeActorReferences 'RemoveAt(' `
+    'Stale kingdom membership cleanup must remove every duplicate entry.'
+
+$pathMovement = Read-Source `
+    'Code\core\pathfinding\AWPathMovementBridge.cs'
+foreach ($contract in @(
+        'internal enum AWParallelPathMovementResult',
+        'internal static AWParallelPathMovementResult',
+        'TryRunParallelSafePathMovement(',
+        'CommitPreparedPathMovement(',
+        'TryRunParallelSafeSmoothMovement(',
+        'CommitPreparedSmoothMovement(')) {
+    Require-Contains $pathMovement $contract `
+        "Path movement bridge is missing Cultiway prepare/commit contract: $contract"
+}
+$setMoveStepTile = Get-MethodBlock $pathMovement `
+    'private static bool SetMoveStepTile('
+Require-Contains $setMoveStepTile 'SetCurrentTile(pActor, pTile)' `
+    'Path movement must route direct tile changes through the Cultiway tile helper.'
+$setCurrentTile = Get-MethodBlock $pathMovement `
+    'private static void SetCurrentTile('
+Require-Contains $setCurrentTile 'AWActorZoneMembershipDirtyIndex.Mark(' `
+    'Tile changes must publish spatial dirty state after committing.'
+
+$actorPostPath = Get-MethodBlock $actorPost `
+    'private void CommitPathMovementWorkItem(int index)'
+Require-Contains $actorPostPath 'work.Fallback' `
+    'Path movement commit must use the fallback only for dirty/unpartitioned containers.'
+Require-Contains $actorPostPath 'CommitPreparedPathMovement(' `
+    'Path movement commit must apply prepared worker results on the simulation thread.'
+Forbid-Contains $actorPostPath 'job.job_updater();' `
+    'Path movement commit must not rerun the entire vanilla job after worker preparation.'
+
+$actorPostSmooth = Get-MethodBlock $actorPost `
+    'private void CommitSmoothMovementWorkItem(int index)'
+Require-Contains $actorPostSmooth 'CommitPreparedSmoothMovement(' `
+    'Smooth movement commit must apply prepared worker results on the simulation thread.'
+Forbid-Contains $actorPostSmooth 'job.job_updater();' `
+    'Smooth movement commit must not rerun the entire vanilla job after worker preparation.'
+
+foreach ($relativePath in @(
+        'Code\core\performance\AWDirtyMetaActorIndex.cs',
+        'Code\core\performance\AWActorPresentationSnapshot.cs')) {
+    $parallelSource = Read-Source $relativePath
+    Forbid-Contains $parallelSource 'Parallel.For(' `
+        "$relativePath must use the persistent simulation worker pool."
+    Require-Contains $parallelSource 'AWSimulationWorkerPool.Instance.RunIndexed(' `
+        "$relativePath is missing persistent worker-pool admission."
+}
+
 $actorSpatialPatch = Read-Source `
     'Code\patch\AW_ActorSpatialMembershipPatch.cs'
 $setTilePrefix = Get-MethodBlock $actorSpatialPatch `
@@ -320,6 +452,8 @@ Require-Contains $setTilePostfix 'ReferenceEquals(__state, pTile)' `
     'Spatial dirty tracking must only mark an actual tile change.'
 Forbid-Contains $actorSpatialPatch 'setCurrentTilePosition' `
     'setCurrentTilePosition must not dirty spatial membership for same-tile movement.'
+Forbid-Contains $actorSpatialPatch '[HarmonyPatch(typeof(Actor), "dispose")]' `
+    'Actor spatial membership must not target the unavailable Actor.dispose method.'
 
 foreach ($relativePath in @(
         'Code\core\performance\AWCooperativeBatchRunner.cs',

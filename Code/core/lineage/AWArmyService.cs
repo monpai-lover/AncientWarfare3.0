@@ -273,7 +273,7 @@ namespace AncientWarfare3.core.lineage
                     if (!pArmy.units.Contains(pActor))
                     {
                         pArmy.listUnit(pActor);
-                        armyListChanged = true;
+                        armyListChanged = pArmy.units.Contains(pActor);
                     }
                 }
                 catch { }
@@ -300,7 +300,7 @@ namespace AncientWarfare3.core.lineage
                 if (!pArmy.units.Contains(pActor))
                 {
                     pArmy.listUnit(pActor);
-                    currentArmyListChanged = true;
+                    currentArmyListChanged = pArmy.units.Contains(pActor);
                 }
             }
             catch { }
@@ -308,6 +308,17 @@ namespace AncientWarfare3.core.lineage
                     actorArmyChanged: true, currentArmyListChanged))
                 ArmyRtsControllerService.OnArmyRosterChanged(pArmy);
             EnsureOrdinaryNativeName(pArmy, pActor.kingdom, pActor.city);
+        }
+
+        internal static bool IsArmyRosterCommitted(Actor pActor,
+            Army pArmy)
+        {
+            if (pActor?.data == null || pArmy?.data == null) return false;
+            bool listed;
+            try { listed = pArmy.units?.Contains(pActor) == true; }
+            catch { listed = false; }
+            return ArmyMembershipOwnershipRules.ShouldAcceptRosterCommit(
+                ReferenceEquals(pActor.army, pArmy), listed);
         }
 
         public static bool TryRemoveEmptyArmy(Army pArmy,

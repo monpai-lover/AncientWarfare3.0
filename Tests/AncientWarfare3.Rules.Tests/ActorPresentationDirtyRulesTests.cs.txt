@@ -55,6 +55,25 @@ internal static class ActorPresentationDirtyRulesTests
         Equal(true, AWActorPresentationDirtyRules.InitialCaptureComplete(
                 visited: 10, total: 10),
             "initial capture completes only after every ID is visited");
+
+        Equal(true, AWActorSpriteInitializationRules.ShouldDeferHeadCheck(
+                dirtyHead: true,
+                frameDataReady: false,
+                animationHeadsReady: false,
+                textureReady: false),
+            "a newborn with incomplete sprite state must remain dirty for vanilla retry");
+        Equal(false, AWActorSpriteInitializationRules.ShouldDeferHeadCheck(
+                dirtyHead: true,
+                frameDataReady: true,
+                animationHeadsReady: true,
+                textureReady: true),
+            "a fully initialized sprite may be handled by the AW head resolver");
+        Equal(false, AWActorSpriteInitializationRules.ShouldDeferHeadCheck(
+                dirtyHead: false,
+                frameDataReady: false,
+                animationHeadsReady: false,
+                textureReady: false),
+            "a clean sprite does not need another head check");
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

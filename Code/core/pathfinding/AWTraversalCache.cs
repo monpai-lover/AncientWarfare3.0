@@ -717,7 +717,8 @@ namespace AncientWarfare3.core.pathfinding
                 oceanComponent: -1,
                 regionId: pTile.region?.id ?? -1,
                 islandId: pTile.region?.island?.id ?? -1,
-                pNeighbors: pNeighbors);
+                pNeighbors: pNeighbors,
+                hasType: type != null);
         }
 
         private int ChunkId(int pX, int pY)
@@ -730,7 +731,8 @@ namespace AncientWarfare3.core.pathfinding
         private static bool Equivalent(AWTileTraversalSnapshot pLeft,
             AWTileTraversalSnapshot pRight)
         {
-            if (pLeft.Id != pRight.Id || pLeft.Ground != pRight.Ground ||
+            if (pLeft.Id != pRight.Id || pLeft.HasType != pRight.HasType ||
+                pLeft.Ground != pRight.Ground ||
                 pLeft.Block != pRight.Block || pLeft.Liquid != pRight.Liquid ||
                 pLeft.Ocean != pRight.Ocean || pLeft.Lava != pRight.Lava ||
                 pLeft.Fire != pRight.Fire || pLeft.DamageUnits != pRight.DamageUnits ||

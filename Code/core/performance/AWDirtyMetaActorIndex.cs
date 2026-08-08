@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace AncientWarfare3.core.performance
 {
@@ -34,12 +33,6 @@ namespace AncientWarfare3.core.performance
 
         private static readonly Action<int> ClassifyWorkItemAction =
             ClassifyWorkItem;
-        private static readonly ParallelOptions ParallelOptions =
-            new ParallelOptions
-            {
-                MaxDegreeOfParallelism =
-                    AWPerformanceSettings.ForegroundParallelism
-            };
         private static readonly object[] Managers = new object[KindCount];
         private static readonly Actor[][] ActorBuffers =
             new Actor[KindCount][];
@@ -134,7 +127,9 @@ namespace AncientWarfare3.core.performance
 
             if (_workItemCount > 1)
             {
-                Parallel.For(0, _workItemCount, ParallelOptions,
+                AWSimulationWorkerPool.Instance.RunIndexed(
+                    0,
+                    _workItemCount,
                     ClassifyWorkItemAction);
             }
             else if (_workItemCount == 1)

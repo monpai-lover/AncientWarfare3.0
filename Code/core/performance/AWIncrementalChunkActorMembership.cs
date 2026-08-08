@@ -129,14 +129,13 @@ internal static class AWIncrementalChunkActorMembership
         Dictionary<long, List<Actor>>
             unitsByKingdom =
                 UnitsByKingdomField(container);
-        if (!unitsByKingdom.TryGetValue(
-                oldKingdomId,
-                out List<Actor> oldUnits) ||
-            !oldUnits.Remove(actor))
-        {
-            throw new InvalidOperationException(
-                "chunk 旧 kingdom 角色表缺少待迁移角色");
-        }
+        // Vanilla can update the kingdom projection before an incremental
+        // dirty record is committed. Treat migration as an idempotent repair:
+        // remove stale/duplicate references, then insert the actor once.
+        RemoveActorFromKingdomLists(
+            unitsByKingdom,
+            oldKingdomId,
+            actor);
 
         List<Actor> newUnits =
             EnsureKingdom(
@@ -147,6 +146,62 @@ internal static class AWIncrementalChunkActorMembership
             actor,
             actorRank,
             actorRanks);
+    }
+
+    private static int RemoveActorFromKingdomLists(
+        Dictionary<long, List<Actor>> unitsByKingdom,
+        long oldKingdomId,
+        Actor actor)
+    {
+        if (unitsByKingdom.TryGetValue(
+                oldKingdomId,
+                out List<Actor> oldUnits))
+        {
+            int removedFromOld =
+                RemoveActorReferences(
+                    oldUnits,
+                    actor);
+            if (removedFromOld > 0)
+            {
+                return removedFromOld;
+            }
+        }
+
+        // The old projection can already be gone after a native mutation;
+        // only that recovery path needs the more expensive global scan.
+        int removed = 0;
+        foreach (List<Actor> units in unitsByKingdom.Values)
+        {
+            removed += RemoveActorReferences(
+                units,
+                actor);
+        }
+
+        return removed;
+    }
+
+    private static int RemoveActorReferences(
+        List<Actor> units,
+        Actor actor)
+    {
+        if (units == null)
+        {
+            return 0;
+        }
+
+        int removed = 0;
+        for (int i = units.Count - 1; i >= 0; i--)
+        {
+            if (!ReferenceEquals(units[i], actor))
+            {
+                continue;
+            }
+
+            units.RemoveAt(i);
+            removed++;
+        }
+
+        return removed;
     }
 
     internal static void Validate(
@@ -233,28 +288,31 @@ internal static class AWIncrementalChunkActorMembership
         Dictionary<long, List<Actor>>
             unitsByKingdom =
                 UnitsByKingdomField(container);
-        if (kingdomSet.Add(kingdomId))
+        if (!unitsByKingdom.TryGetValue(
+                kingdomId,
+                out List<Actor> units))
         {
-            if (!unitsByKingdom.TryGetValue(
-                    kingdomId,
-                    out List<Actor> units))
-            {
-                units = new List<Actor>();
-                unitsByKingdom.Add(
-                    kingdomId,
-                    units);
-                BuildingsByKingdomField(
-                        container)
-                    .Add(
-                        kingdomId,
-                        new List<Building>());
-            }
+            units = new List<Actor>();
+            unitsByKingdom.Add(
+                kingdomId,
+                units);
 
-            container.kingdoms.Add(kingdomId);
-            return units;
+            Dictionary<long, List<Building>> buildingsByKingdom =
+                BuildingsByKingdomField(container);
+            if (!buildingsByKingdom.ContainsKey(kingdomId))
+            {
+                buildingsByKingdom.Add(
+                    kingdomId,
+                    new List<Building>());
+            }
         }
 
-        return unitsByKingdom[kingdomId];
+        if (kingdomSet.Add(kingdomId))
+        {
+            container.kingdoms.Add(kingdomId);
+        }
+
+        return units;
     }
 
     private static void InsertActorAtRank(

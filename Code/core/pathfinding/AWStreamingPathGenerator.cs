@@ -268,7 +268,8 @@ namespace AncientWarfare3.core.pathfinding
                     estimate.Hazards | AWHazardFlags.Direct);
                 result.Add(new AWPathStep(nextId,
                     next.Liquid || next.Ocean ? AWMovementMethod.Swim : AWMovementMethod.Walk,
-                    estimate));
+                    estimate, -1L,
+                    AWPathTileFlagsExtensions.FromSnapshot(next)));
                 currentId = nextId;
             }
             pSteps = result.ToArray();
@@ -400,7 +401,8 @@ namespace AncientWarfare3.core.pathfinding
                         time, stamina, health, risk, g, h,
                         AWNarrowWaterRecoveryRules.NextWaterRun(
                             current.WaterRun, enteringWater),
-                        regionTransitions);
+                        regionTransitions,
+                        AWPathTileFlagsExtensions.FromSnapshot(neighbor));
                     if (!pWorkspace.TryAddLabel(node,
                             pRequest.Options.LimitPathfindingRegions > 0,
                             out int nodeIndex))
@@ -487,7 +489,8 @@ namespace AncientWarfare3.core.pathfinding
             public SearchNode(int pTileId, int pParentIndex, AWMovementMethod pMethod,
                 AWTraversalEstimate pEstimate, float pTime, float pStaminaCost,
                 float pHealthCost, float pRisk, float pG, float pH,
-                int pWaterRun, int pRegionTransitions)
+                int pWaterRun, int pRegionTransitions,
+                AWPathTileFlags pPlannedTileFlags = AWPathTileFlags.None)
             {
                 TileId = pTileId;
                 ParentIndex = pParentIndex;
@@ -501,6 +504,7 @@ namespace AncientWarfare3.core.pathfinding
                 H = pH;
                 WaterRun = Math.Max(0, pWaterRun);
                 RegionTransitions = Math.Max(0, pRegionTransitions);
+                PlannedTileFlags = pPlannedTileFlags;
             }
 
             public int TileId { get; }
@@ -515,6 +519,7 @@ namespace AncientWarfare3.core.pathfinding
             public float H { get; }
             public int WaterRun { get; }
             public int RegionTransitions { get; }
+            public AWPathTileFlags PlannedTileFlags { get; }
             public float F => G + H;
 
             public static SearchNode Start(int pTileId, float pH,
@@ -693,7 +698,8 @@ namespace AncientWarfare3.core.pathfinding
                 while (node.ParentIndex >= 0)
                 {
                     _path[--write] = new AWPathStep(node.TileId,
-                        node.Method, node.Estimate);
+                        node.Method, node.Estimate, -1L,
+                        node.PlannedTileFlags);
                     node = _nodes[node.ParentIndex];
                 }
                 return count;

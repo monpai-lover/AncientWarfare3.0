@@ -145,6 +145,7 @@ namespace AncientWarfare3.core.policy
             _frameAnnualStageTicks = 0L;
             _sampling = RuntimePerformanceDiagnosticRules.ShouldSample(
                 currentMode != 0, _frame);
+            AWSchedulerStageDiagnostics.BeginFrame(_sampling);
             if (_sampling)
             {
                 ResetSample();
@@ -497,6 +498,9 @@ namespace AncientWarfare3.core.policy
             ArmyRtsBenchmarkSnapshot armyRts =
                 ArmyRtsBenchmark.Snapshot();
             long frameTicks = Elapsed(_sampleFrameStarted);
+            AWSchedulerStageDiagnosticSnapshot schedulerStages =
+                AWSchedulerStageDiagnostics.TakeSnapshot()
+                    .WithFrameTicks(frameTicks);
             long exclusivePathStep =
                 RuntimePerformanceDiagnosticRules.ExclusiveTicks(
                     _pathStepTicks, _pathStepNestedTicks);
@@ -540,6 +544,14 @@ namespace AncientWarfare3.core.policy
                 " live_population=" + livePopulation +
                 " army_count=" + armyCount +
                 " frame_ms=" + Milliseconds(frameTicks) +
+                " scheduler_wall_ms=" +
+                Milliseconds(schedulerStages.SchedulerTicks) +
+                " scheduler_stage_ms={" +
+                schedulerStages.FormatMilliseconds() + "}" +
+                " scheduler_stage_unaccounted_ms=" +
+                Milliseconds(schedulerStages.UnaccountedTicks) +
+                " host_unaccounted_ms=" +
+                Milliseconds(schedulerStages.HostUnaccountedTicks) +
                 " worst_frame=" + _worstFrameNumber +
                 " worst_frame_ms=" + Milliseconds(_worstFrameTicks) +
                 " worst_frame_stage=" + _worstFrameStageId +

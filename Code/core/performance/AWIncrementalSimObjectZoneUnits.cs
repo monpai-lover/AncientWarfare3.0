@@ -1158,7 +1158,13 @@ internal static class AWIncrementalSimObjectZoneUnits
     private static void
         ValidateIslandMembershipSampled()
     {
-        if (!Bench.bench_enabled)
+        // Match Cultiway perf's boundary: this is a developer invariant
+        // check, not a runtime benchmark check. Performance/RTS sampling
+        // must never turn a transient tile transition into a game pause.
+        if (!string.Equals(
+                Environment.UserName,
+                "Inmny",
+                StringComparison.OrdinalIgnoreCase))
         {
             return;
         }

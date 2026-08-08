@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
-using System.Threading.Tasks;
 
 using UnityEngine;
 
@@ -270,11 +269,6 @@ internal sealed class AWActorPresentationSnapshot
         Array.Empty<AWResourceThrowPresentationSample>();
     private readonly Dictionary<long, int> indexes = new(4096);
     private readonly Action<int> updateDynamicSampleAt;
-    private readonly ParallelOptions dynamicCaptureParallelOptions = new()
-    {
-        MaxDegreeOfParallelism =
-            AWPerformanceSettings.ForegroundParallelism
-    };
     private int dynamicUpdateCount;
     private int dynamicInvalidCount;
     private int statusCount;
@@ -843,14 +837,11 @@ internal sealed class AWActorPresentationSnapshot
 
         dynamicUpdateCount = source.Count;
         dynamicInvalidCount = 0;
-        if (ActorScalePerformanceRules.ShouldParallelizePresentationCapture(
-                dynamicUpdateCount,
-                dynamicCaptureParallelOptions.MaxDegreeOfParallelism))
+        if (dynamicUpdateCount > 1)
         {
-            Parallel.For(
+            AWSimulationWorkerPool.Instance.RunIndexed(
                 0,
                 dynamicUpdateCount,
-                dynamicCaptureParallelOptions,
                 updateDynamicSampleAt);
         }
         else

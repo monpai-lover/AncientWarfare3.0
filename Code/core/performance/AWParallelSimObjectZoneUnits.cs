@@ -183,7 +183,7 @@ internal static class AWParallelSimObjectZoneUnits
             AWNearbyStatusTargetIndex
                 .NotifyUnitMembershipRebuilt(
                     version,
-                    pFusedIndexPrepared: false);
+                    fusedIndexPrepared: false);
         }
 
         statusIndexRebuildPrepared = false;

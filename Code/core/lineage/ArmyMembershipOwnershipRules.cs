@@ -29,6 +29,12 @@ namespace AncientWarfare3.core.lineage
                    ArmyMembershipOwnershipDecision.Release;
         }
 
+        public static bool ShouldAcceptRosterCommit(bool actorArmyMatches,
+            bool armyListContainsActor)
+        {
+            return actorArmyMatches && armyListContainsActor;
+        }
+
         public static int UnknownOwnerRetryDelayFrames(int attempt)
         {
             int shift = System.Math.Max(0,

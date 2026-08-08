@@ -2259,11 +2259,43 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         }
 
         long startedAt = StartBenchmarkMeasurement();
-        BatchActors batch = batches[index];
-        batch._elapsed = elapsed;
-        batch._cur_container = job.container;
-        int actorsChecked = job.container.Count;
-        job.job_updater();
+        int actorsChecked;
+        if (work.Fallback)
+        {
+            RunPathMovementJob(job.container, out actorsChecked);
+        }
+        else
+        {
+            actorsChecked = work.Checked;
+            Actor[] actors = work.Actors;
+            PathMovementWorkEntry[] entries = work.Entries;
+            int writeIndex = -1;
+            for (int i = 0; i < work.Count; i++)
+            {
+                Actor actor = actors[i];
+                PathMovementWorkEntry entry = entries[i];
+                bool retain = entry.Kind == PathMovementWorkKind.Retain;
+                if (entry.Kind == PathMovementWorkKind.RequiresSerial)
+                {
+                    AWPathMovementBridge.CommitPreparedPathMovement(
+                        actor, entry.Prepared);
+                    actor.skipBehaviour();
+                    retain = false;
+                }
+
+                if (!retain)
+                {
+                    if (writeIndex < 0) writeIndex = i;
+                    continue;
+                }
+
+                if (writeIndex >= 0) actors[writeIndex++] = actor;
+            }
+
+            activeBehaviorActorCounts[index] = writeIndex < 0
+                ? work.Count
+                : writeIndex;
+        }
 
         if (activeBehaviorPartitionsValid[index])
         {
@@ -2383,11 +2415,14 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         }
 
         long startedAt = StartBenchmarkMeasurement();
-        BatchActors batch = batches[index];
-        batch._elapsed = elapsed;
-        batch._cur_container = job.container;
-        int actorsChecked = job.container.Count;
-        job.job_updater();
+        int actorsChecked = work.Checked;
+        Actor[] actors = work.SerialActors;
+        AWPathMovementBridge.AWPreparedSmoothMovement[] entries = work.Entries;
+        for (int i = 0; i < work.SerialCount; i++)
+        {
+            AWPathMovementBridge.CommitPreparedSmoothMovement(
+                actors[i], work.Elapsed, entries[i]);
+        }
 
         if (job.random_tick_skips > 0)
         {
@@ -2403,6 +2438,29 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         }
 
         work.Reset();
+    }
+
+    private void RunPathMovementJob(ObjectContainer<Actor> pContainer,
+        out int pActorsChecked)
+    {
+        pActorsChecked = 0;
+        if (pContainer.Count == 0 && !pContainer.isDirtyContainer())
+            return;
+        pContainer.checkAddRemove();
+        if (World.world.isPaused()) return;
+        Actor[] actors = pContainer.getFastSimpleArray();
+        int count = pContainer.Count;
+        for (int i = 0; i < count; i++)
+        {
+            Actor actor = actors[i];
+            if (actor._update_done || actor._beh_skip) continue;
+            pActorsChecked++;
+            if (AWPathMovementBridge.HasOwnership(actor))
+            {
+                AWPathMovementBridge.Update(actor);
+                actor.skipBehaviour();
+            }
+        }
     }
 
     private void PrepareEnemySearchClassifications()
@@ -3811,6 +3869,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         internal int Checked { get; private set; }
         internal bool Fallback { get; private set; }
         internal bool Skipped { get; private set; }
+        internal PathMovementWorkEntry[] Entries { get; private set; } =
+            Array.Empty<PathMovementWorkEntry>();
 
         internal void ConfigureParallel(
             BatchActors batch,
@@ -3824,6 +3884,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Checked = 0;
             Fallback = false;
             Skipped = false;
+            if (Entries.Length < count)
+                Entries = new PathMovementWorkEntry[Math.Max(
+                    AWPerformanceSettings.SimulationBatchSize, count)];
         }
 
         internal void ConfigureFallback(BatchActors batch, Job<Actor> job)
@@ -3848,30 +3911,82 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         internal void RunParallel()
         {
-            if (!Skipped)
+            if (Skipped || Fallback || Count == 0) return;
+            int checkedActors = 0;
+            for (int i = 0; i < Count; i++)
             {
-                Checked = Count;
+                Actor actor = Actors[i];
+                ref PathMovementWorkEntry entry = ref Entries[i];
+                entry.Prepared = default;
+                if (actor._update_done || actor._beh_skip)
+                {
+                    entry.Kind = PathMovementWorkKind.Inactive;
+                    continue;
+                }
+
+                checkedActors++;
+                AWPathMovementBridge.AWParallelPathMovementResult result =
+                    AWPathMovementBridge.TryRunParallelSafePathMovement(
+                        actor, out AWPathMovementBridge.AWPreparedPathMovement prepared);
+                switch (result)
+                {
+                    case AWPathMovementBridge.AWParallelPathMovementResult.NoPath:
+                        entry.Kind = PathMovementWorkKind.Retain;
+                        break;
+                    case AWPathMovementBridge.AWParallelPathMovementResult.Handled:
+                        actor.skipBehaviour();
+                        entry.Kind = PathMovementWorkKind.Handled;
+                        break;
+                    case AWPathMovementBridge.AWParallelPathMovementResult.RequiresSerial:
+                        entry.Prepared = prepared;
+                        entry.Kind = PathMovementWorkKind.RequiresSerial;
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
             }
+            Checked = checkedActors;
         }
 
         internal void Reset()
         {
+            int previousCount = Count;
             Job = null;
             Actors = null;
             Count = 0;
             Checked = 0;
             Fallback = false;
             Skipped = false;
+            if (previousCount > 0) Array.Clear(Entries, 0, previousCount);
         }
+    }
+
+    private enum PathMovementWorkKind : byte
+    {
+        Inactive,
+        Retain,
+        Handled,
+        RequiresSerial
+    }
+
+    private struct PathMovementWorkEntry
+    {
+        internal PathMovementWorkKind Kind;
+        internal AWPathMovementBridge.AWPreparedPathMovement Prepared;
     }
 
     private sealed class SmoothMovementBatchWork
     {
+        internal Actor[] Actors { get; private set; }
+        internal Actor[] SerialActors { get; private set; } = Array.Empty<Actor>();
         internal Job<Actor> Job { get; private set; }
         internal int Count { get; private set; }
         internal int Checked { get; private set; }
+        internal int SerialCount { get; private set; }
         internal bool Skipped { get; private set; }
         internal float Elapsed { get; private set; }
+        internal AWPathMovementBridge.AWPreparedSmoothMovement[] Entries { get; private set; } =
+            Array.Empty<AWPathMovementBridge.AWPreparedSmoothMovement>();
 
         internal void Configure(
             BatchActors batch,
@@ -3881,10 +3996,18 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             float elapsed)
         {
             Job = job;
+            Actors = actors;
             Count = count;
             Checked = 0;
+            SerialCount = 0;
             Skipped = false;
             Elapsed = elapsed;
+            if (Entries.Length < count)
+            {
+                int capacity = Math.Max(AWPerformanceSettings.SimulationBatchSize, count);
+                SerialActors = new Actor[capacity];
+                Entries = new AWPathMovementBridge.AWPreparedSmoothMovement[capacity];
+            }
         }
 
         internal void ConfigureSkipped(BatchActors batch, Job<Actor> job)
@@ -3894,23 +4017,44 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Checked = 0;
             Skipped = true;
             Elapsed = 0f;
+            Actors = null;
         }
 
         internal void RunParallel()
         {
-            if (!Skipped)
+            if (Skipped || Count == 0) return;
+            int serialCount = 0;
+            for (int i = 0; i < Count; i++)
             {
-                Checked = Count;
+                AWPathMovementBridge.AWParallelSmoothMovementResult result =
+                    AWPathMovementBridge.TryRunParallelSafeSmoothMovement(
+                        Actors[i], Elapsed,
+                        out AWPathMovementBridge.AWPreparedSmoothMovement prepared);
+                if (result == AWPathMovementBridge.AWParallelSmoothMovementResult.RequiresSerial)
+                {
+                    SerialActors[serialCount] = Actors[i];
+                    Entries[serialCount] = prepared;
+                    serialCount++;
+                }
             }
+            Checked = Count;
+            SerialCount = serialCount;
         }
 
         internal void Reset()
         {
             Job = null;
+            Actors = null;
             Count = 0;
             Checked = 0;
             Skipped = false;
             Elapsed = 0f;
+            if (SerialCount > 0)
+            {
+                Array.Clear(SerialActors, 0, SerialCount);
+                Array.Clear(Entries, 0, SerialCount);
+            }
+            SerialCount = 0;
         }
     }
 

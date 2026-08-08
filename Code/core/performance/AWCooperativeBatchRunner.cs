@@ -122,12 +122,64 @@ namespace AncientWarfare3.core.performance
 
         public string GetNextPhaseName()
         {
+            if (!Active)
+                return _phasePrefix + ".idle";
+
             if (HasParallelPresentationWorkInFlight)
                 return _phasePrefix + ".parallel.presentation.await";
             if (WaitingForPresentationDispatch)
                 return _phasePrefix + ".parallel.presentation.dispatch";
+
+            if (_stage == RunnerStage.Parallel)
+            {
+                if (_parallelEnabled)
+                {
+                    int nextJobIndex = _parallelJobIndex;
+                    int nextBatchIndex = _batchIndex;
+                    int jobCount = _batches.Count == 0
+                        ? 0
+                        : _batches[0].jobs_parallel.Count;
+                    while (nextJobIndex < jobCount &&
+                           nextBatchIndex >= _batches.Count)
+                    {
+                        nextJobIndex++;
+                        nextBatchIndex = 0;
+                    }
+
+                    if (nextJobIndex < jobCount)
+                    {
+                        Job<TObject> job = _batches[0]
+                            .jobs_parallel[nextJobIndex];
+                        return _phasePrefix + ".parallel." + job.id +
+                               ".batch_group." + nextBatchIndex;
+                    }
+                }
+                else if (_batchIndex < _batches.Count)
+                {
+                    return _phasePrefix + ".parallel.batch." +
+                           _batchIndex;
+                }
+
+                return _phasePrefix + ".applyparallelresults";
+            }
+
             if (_stage == RunnerStage.Post && _useCustomPostRunner)
                 return _postRunner.GetNextPhaseName(_phasePrefix);
+
+            if (_stage == RunnerStage.Pre || _stage == RunnerStage.Post)
+            {
+                int nextBatchIndex = FindNextMainThreadBatchIndex(_stage);
+                if (nextBatchIndex >= 0)
+                {
+                    return _phasePrefix + "." +
+                           _stage.ToString().ToLowerInvariant() +
+                           ".batch." + nextBatchIndex;
+                }
+
+                return _stage == RunnerStage.Pre
+                    ? _phasePrefix + ".clearparallelresults"
+                    : _phasePrefix + ".finish";
+            }
 
             switch (_stage)
             {
@@ -148,6 +200,17 @@ namespace AncientWarfare3.core.performance
                 default:
                     throw new ArgumentOutOfRangeException();
             }
+        }
+
+        private int FindNextMainThreadBatchIndex(RunnerStage pJobStage)
+        {
+            for (int i = _batchIndex; i < _batches.Count; i++)
+            {
+                if (GetJobs(_batches[i], pJobStage).Count > 0)
+                    return i;
+            }
+
+            return -1;
         }
 
         public bool Step()

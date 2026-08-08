@@ -54,11 +54,14 @@ namespace AncientWarfare3.core.lineage
                         throw new InvalidOperationException(
                             "synthetic levy did not become warrior");
                     AWArmyService.AddToArmy(actor, army);
-                    if (actor.army != army)
+                    if (!AWArmyService.IsArmyRosterCommitted(actor, army))
                         throw new InvalidOperationException(
                             "synthetic levy army assignment failed");
                 }
                 CityReservePoolService.OnSyntheticMobilized(city, 1);
+                ArmyStrategicIndexService.OnArmyRosterChanged(army);
+                WarNoticeService.QueueArmyChanged(kingdom, army,
+                    pRosterExpanded: true);
                 return actor;
             }
             catch

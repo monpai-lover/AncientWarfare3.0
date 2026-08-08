@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
 using UnityEngine;
@@ -60,20 +61,43 @@ namespace AncientWarfare3.patch
             if (__instance?.data == null || !LineageService.IsXia(__instance)) return true;
             if (!__instance.dirty_sprite_head) return false;
 
-            __instance.dirty_sprite_head = false;
-            if (__instance.frame_data == null || !__instance.frame_data.show_head) return false;
-            if (__instance.animation_container == null || __instance.animation_container.heads == null ||
-                __instance.animation_container.heads.Length == 0) return false;
-            if (__instance.isEgg()) return false;
-            if (__instance.isBaby() && !__instance.animation_container.render_heads_for_children) return false;
+            if (__instance.frame_data == null) return true;
+            if (!__instance.frame_data.show_head)
+            {
+                __instance.dirty_sprite_head = false;
+                return false;
+            }
+            if (__instance.isEgg())
+            {
+                __instance.dirty_sprite_head = false;
+                return false;
+            }
+            bool animationHeadsReady =
+                __instance.animation_container != null &&
+                __instance.animation_container.heads != null &&
+                __instance.animation_container.heads.Length > 0;
+            if (!animationHeadsReady) return true;
+            if (__instance.isBaby() &&
+                !__instance.animation_container.render_heads_for_children)
+            {
+                __instance.dirty_sprite_head = false;
+                return false;
+            }
 
             ActorTextureSubAsset textureAsset = __instance.getTextureAsset();
-            if (textureAsset == null) return false;
+            if (AWActorSpriteInitializationRules.ShouldDeferHeadCheck(
+                    dirtyHead: true,
+                    frameDataReady: true,
+                    animationHeadsReady,
+                    textureReady: textureAsset != null))
+                return true;
 
             if (!textureAsset.has_advanced_textures)
             {
                 ApplyHeadId(__instance, __instance.animation_container.heads);
                 __instance.cached_sprite_head = __instance.animation_container.heads[__instance.data.head];
+                if (__instance.cached_sprite_head == null) return true;
+                __instance.dirty_sprite_head = false;
                 return false;
             }
 
@@ -115,12 +139,16 @@ namespace AncientWarfare3.patch
             if (specialHead && !string.IsNullOrEmpty(path))
             {
                 __instance.cached_sprite_head = ActorAnimationLoader.getHeadSpecial(path);
+                if (__instance.cached_sprite_head == null) return true;
+                __instance.dirty_sprite_head = false;
                 return false;
             }
 
-            if (listHeads == null || listHeads.Length == 0) return false;
+            if (listHeads == null || listHeads.Length == 0) return true;
             ApplyHeadId(__instance, listHeads);
             __instance.cached_sprite_head = ActorAnimationLoader.getHead(path, __instance.data.head);
+            if (__instance.cached_sprite_head == null) return true;
+            __instance.dirty_sprite_head = false;
             return false;
         }
 

@@ -4,6 +4,43 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.pathfinding
 {
+    [Flags]
+    public enum AWPathTileFlags : ushort
+    {
+        None = 0,
+        Exists = 1 << 0,
+        HasType = 1 << 1,
+        Block = 1 << 2,
+        Lava = 1 << 3,
+        Ocean = 1 << 4,
+        Liquid = 1 << 5,
+        DamageUnits = 1 << 6,
+        Fire = 1 << 7
+    }
+
+    public static class AWPathTileFlagsExtensions
+    {
+        public const AWPathTileFlags RuntimeRelevant =
+            AWPathTileFlags.HasType | AWPathTileFlags.Block |
+            AWPathTileFlags.Lava | AWPathTileFlags.Ocean |
+            AWPathTileFlags.Liquid | AWPathTileFlags.DamageUnits |
+            AWPathTileFlags.Fire;
+
+        public static AWPathTileFlags FromSnapshot(AWTileTraversalSnapshot pTile)
+        {
+            AWPathTileFlags flags = pTile.Exists ? AWPathTileFlags.Exists : AWPathTileFlags.None;
+            if (pTile.HasType) flags |= AWPathTileFlags.HasType;
+            if (pTile.Block) flags |= AWPathTileFlags.Block;
+            if (pTile.Lava) flags |= AWPathTileFlags.Lava;
+            if (pTile.Ocean) flags |= AWPathTileFlags.Ocean;
+            if (pTile.Liquid) flags |= AWPathTileFlags.Liquid;
+            if (pTile.DamageUnits) flags |= AWPathTileFlags.DamageUnits;
+            if (pTile.Fire) flags |= AWPathTileFlags.Fire;
+            return flags;
+        }
+
+    }
+
     public enum AWPathRequestState
     {
         Pending,
@@ -91,12 +128,14 @@ namespace AncientWarfare3.core.pathfinding
     public readonly struct AWPathStep
     {
         public AWPathStep(int pTileId, AWMovementMethod pMethod,
-            AWTraversalEstimate pEstimate = default, long pTransportRequestId = -1L)
+            AWTraversalEstimate pEstimate = default, long pTransportRequestId = -1L,
+            AWPathTileFlags pPlannedTileFlags = AWPathTileFlags.None)
         {
             TileId = pTileId;
             Method = pMethod;
             Estimate = pEstimate;
             TransportRequestId = pTransportRequestId;
+            PlannedTileFlags = pPlannedTileFlags;
         }
 
         public int TileId { get; }
@@ -104,6 +143,7 @@ namespace AncientWarfare3.core.pathfinding
         public AWTraversalEstimate Estimate { get; }
         public AWHazardFlags Hazards => Estimate.Hazards;
         public long TransportRequestId { get; }
+        public AWPathTileFlags PlannedTileFlags { get; }
     }
 
     public readonly struct AWPathPollResult

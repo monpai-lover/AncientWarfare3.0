@@ -49,6 +49,13 @@ namespace AncientWarfare3.core.lineage
             return pNewCaptainId >= 0 && pCurrentCaptainId != pNewCaptainId;
         }
 
+        public static bool ShouldRtsOwnCaptain(string pArmyRole,
+            bool pCaptainRoyalGuard)
+        {
+            return pArmyRole != AWArmyRole.RoyalGuard &&
+                   !pCaptainRoyalGuard;
+        }
+
         public static string DisplayName(string pRole, string pKingdomName, int pIndex)
         {
             string prefix = string.IsNullOrEmpty(pKingdomName) ? "" : pKingdomName + " ";

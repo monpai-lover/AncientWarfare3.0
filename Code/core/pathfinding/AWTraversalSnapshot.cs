@@ -51,9 +51,11 @@ namespace AncientWarfare3.core.pathfinding
             bool block = false, bool liquid = false, bool ocean = false, bool lava = false,
             bool fire = false, bool damageUnits = false, float terrainDamage = 0f,
             float walkMultiplier = 1f, bool goodForBoat = false, int oceanComponent = -1,
-            int regionId = -1, int islandId = -1, int[] pNeighbors = null)
+            int regionId = -1, int islandId = -1, int[] pNeighbors = null,
+            bool hasType = true)
         {
             Exists = pId >= 0;
+            HasType = Exists && hasType;
             Id = pId;
             X = pX;
             Y = pY;
@@ -82,6 +84,7 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         public bool Exists { get; }
+        public bool HasType { get; }
         public int Id { get; }
         public int X { get; }
         public int Y { get; }
@@ -123,7 +126,7 @@ namespace AncientWarfare3.core.pathfinding
             return new AWTileTraversalSnapshot(Id, X, Y, Ground, Block,
                 Liquid, Ocean, Lava, Fire, DamageUnits, TerrainDamage,
                 WalkMultiplier, GoodForBoat, pComponent, RegionId, IslandId,
-                neighbors);
+                neighbors, HasType);
         }
 
         private static int Neighbor(int[] pNeighbors, int pIndex)
