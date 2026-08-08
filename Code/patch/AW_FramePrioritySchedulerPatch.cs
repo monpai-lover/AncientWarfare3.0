@@ -84,6 +84,8 @@ namespace AncientWarfare3.patch
                     EnsureBuildingReadBoundary("mapbox.frame_begin");
                 }
 
+                AWCooperativeActorParallelJobRunner.RefreshFrameVisibility();
+
                 AWPresentationCommandQueue.DrainMainThread();
                 __state = new MapBoxUpdateScope();
                 ArmyRtsTransportService.ObserveFrameClock(
