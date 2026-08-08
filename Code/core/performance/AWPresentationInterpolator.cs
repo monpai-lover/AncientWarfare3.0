@@ -29,7 +29,8 @@ internal static class AWPresentationInterpolator
     public static bool TryApply(Actor actor, out Vector3 result)
     {
         result = default;
-        if (!AWPerformanceSettings.EnableFramePriorityScheduler ||
+        if (!AWPerformanceSettings.EnableActorPresentationSnapshots ||
+            !AWPerformanceSettings.EnableFramePriorityScheduler ||
             actor == null ||
             !AWActorPresentationRenderer.TryGetPreparedSample(
                 actor,

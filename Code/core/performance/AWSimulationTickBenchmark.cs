@@ -55,6 +55,31 @@ namespace AncientWarfare3.core.performance
 
         internal static bool IsCapturing =>
             _current != null && !_current.Cancelled;
+        internal static bool ShouldSplitActorPostJobs => IsCapturing;
+
+        internal static void RecordActorJobMetric(string pId,
+            double pSeconds, long pCounter)
+        {
+            TickCapture capture = _current;
+            if (capture == null || capture.Cancelled || !Bench.bench_enabled)
+                return;
+            AddMetric(capture.ActorJobs, pId, Math.Max(0d, pSeconds), pCounter);
+        }
+
+        internal static void RecordActorBackgroundMetric(string pId,
+            string pPhase, double pWorkerSeconds, double pBackgroundSeconds,
+            long pCounter)
+        {
+            TickCapture capture = _current;
+            if (capture == null || capture.Cancelled || !Bench.bench_enabled)
+                return;
+            double backgroundSeconds = Math.Max(0d, pBackgroundSeconds);
+            capture.TotalSeconds += backgroundSeconds;
+            capture.ActorsSeconds += backgroundSeconds;
+            if (backgroundSeconds > 0d)
+                AddMetric(capture.Phases, pPhase, backgroundSeconds, 1L);
+            AddMetric(capture.ActorJobs, pId, Math.Max(0d, pWorkerSeconds), pCounter);
+        }
 
         internal static void Initialize()
         {

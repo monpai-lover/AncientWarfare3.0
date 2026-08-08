@@ -86,7 +86,25 @@ namespace AncientWarfare3.core.performance
             if (_workCompleted.IsSet) return;
 
             long startedAt = Stopwatch.GetTimestamp();
-            _workCompleted.Wait();
+            int idleSpins = 0;
+            while (!_workCompleted.IsSet)
+            {
+                if (AWSimulationWorkerPool.Instance
+                    .TryAssistActiveOperation())
+                {
+                    idleSpins = 0;
+                    continue;
+                }
+
+                if (idleSpins++ < 64)
+                    Thread.SpinWait(64);
+                else
+                {
+                    Thread.Yield();
+                    idleSpins = 0;
+                }
+            }
+
             Interlocked.Add(ref _operationWaitTicks,
                 Stopwatch.GetTimestamp() - startedAt);
         }
@@ -99,11 +117,34 @@ namespace AncientWarfare3.core.performance
             if (pMaximumMilliseconds <= 0d) return false;
 
             long startedAt = Stopwatch.GetTimestamp();
-            bool completed = _workCompleted.Wait(
-                TimeSpan.FromMilliseconds(pMaximumMilliseconds));
+            long maximumTicks = Math.Max(1L,
+                (long)(pMaximumMilliseconds * Stopwatch.Frequency / 1000d));
+            long deadline = startedAt + maximumTicks;
+            int idleSpins = 0;
+            while (!_workCompleted.IsSet)
+            {
+                if (Stopwatch.GetTimestamp() >= deadline)
+                {
+                    Interlocked.Add(ref _operationWaitTicks,
+                        Stopwatch.GetTimestamp() - startedAt);
+                    return false;
+                }
+
+                if (AWSimulationWorkerPool.Instance
+                    .TryAssistActiveOperationUntil(deadline))
+                    idleSpins = 0;
+                else if (idleSpins++ < 64)
+                    Thread.SpinWait(64);
+                else
+                {
+                    Thread.Yield();
+                    idleSpins = 0;
+                }
+            }
+
             Interlocked.Add(ref _operationWaitTicks,
                 Stopwatch.GetTimestamp() - startedAt);
-            return completed;
+            return true;
         }
 
         internal WorkResult Complete(WorkTicket pTicket)
@@ -140,14 +181,19 @@ namespace AncientWarfare3.core.performance
         internal void WaitAndDiscard(WorkTicket pTicket)
         {
             if (!pTicket.IsValid) return;
-            Wait(pTicket);
+            while (!TryWait(pTicket, 1000d))
+                AncientWarfare3.ModClass.LogInfo(
+                    "AW3 simulation coordinator teardown is still waiting for " +
+                    "ticket " + pTicket.Generation + ".");
             try
             {
                 Complete(pTicket);
             }
-            catch
+            catch (Exception error)
             {
-                // Abort only guarantees that background mutation has stopped.
+                AncientWarfare3.ModClass.LogInfo(
+                    "AW3 simulation coordinator teardown discarded an " +
+                    "operation error: " + error);
             }
         }
 

@@ -82,6 +82,7 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         public bool Exists { get; }
+        public bool HasType { get; }
         public int Id { get; }
         public int X { get; }
         public int Y { get; }

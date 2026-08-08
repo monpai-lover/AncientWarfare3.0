@@ -2,6 +2,7 @@ namespace AncientWarfare3.core.performance
 {
     public static class AWPerformanceSettings
     {
+        public static int ForegroundParallelism => 4;
         public static bool UseAw3ArmyRtsScheduler { get; set; }
         public static bool EnableAiAllianceActions { get; set; } = true;
         public static bool EnableAiVassalActions { get; set; } = true;

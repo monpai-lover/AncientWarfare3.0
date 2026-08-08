@@ -255,7 +255,8 @@ namespace AncientWarfare3.core.performance
                 "(vanilla={5:0.00},aw3={6:0.00}) phase={7}/{8} " +
                 "cycles={9}/{10} speed={11:0.#}x/{12:0.00}x " +
                 "credits={13:0.0} ticks={14}/{15} " +
-                "longest={16}:{17:0.00}ms world={18}:{19}@{20:0.00}",
+                "longest={16}:{17:0.00}ms workers={18}/{19}/{20}" +
+                "(total/fg/path) world={21}:{22}@{23:0.00}",
                 AWPerformanceSettings.Mode.ToString().ToLowerInvariant(),
                 AWPerformanceSettings.TargetRenderFps,
                 _frameBudgetMilliseconds, _baselineP90,
@@ -265,7 +266,11 @@ namespace AncientWarfare3.core.performance
                 runner.RequestedSpeed, runner.ActualSpeed,
                 runner.AdmissionCredits, runner.LogicalTicksAdmitted,
                 runner.LogicalTicksCompleted, _longestPhase,
-                _longestPhaseMilliseconds, AWSimulationTime.BoundWorldSeedId,
+                _longestPhaseMilliseconds,
+                AWPerformanceSettings.TotalParallelBudget,
+                AWPerformanceSettings.ForegroundParallelism,
+                AWPerformanceSettings.PathfindingWorkerCount,
+                AWSimulationTime.BoundWorldSeedId,
                 AWSimulationTime.Generation, AWSimulationTime.DiagnosticTime);
         }
 

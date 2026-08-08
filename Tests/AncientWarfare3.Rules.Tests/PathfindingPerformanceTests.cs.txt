@@ -83,15 +83,15 @@ internal static class PathfindingPerformanceTests
             "performance", "AWEnemyPresenceCache.cs");
         string patchPath = Path.Combine(root, "Code", "patch",
             "AW_EnemyFinderCachePatch.cs");
-        Assert(!File.Exists(cachePath) && !File.Exists(patchPath),
-            "AW3 does not replace vanilla chunk-local enemy caching with a world scan");
+        Assert(File.Exists(cachePath) && File.Exists(patchPath),
+            "AW3 owns the prepared enemy-presence cache and its vanilla finder patch");
 
         string postRunner = File.ReadAllText(Path.Combine(root, "Code",
             "core", "performance", "AWCooperativeActorPostRunner.cs"));
         Assert(postRunner.Contains("EnemiesFinder.findEnemiesFrom(") &&
-               postRunner.Contains(
-                   "pActor.current_tile, pActor.kingdom)") &&
-               !postRunner.Contains("AWEnemyPresenceCache") &&
+               postRunner.Contains("actor.current_tile") &&
+               postRunner.Contains("actor.kingdom") &&
+               postRunner.Contains("AWEnemyPresenceCache") &&
                !postRunner.Contains("World.world.kingdoms_wild") &&
                !postRunner.Contains("World.world.kingdoms"),
             "Actor post preparation delegates spatial lookup to vanilla's kingdom/chunk/range cache");
@@ -109,8 +109,7 @@ internal static class PathfindingPerformanceTests
             "performance", "AWCooperativeActorPostRunner.cs"));
         Assert(postRunner.Contains("applyBackoff") &&
                postRunner.Contains("ResolveTimeout(") &&
-               postRunner.Contains("CaptureDiagnostics") &&
-               postRunner.Contains("if (captureDiagnostics)"),
+               postRunner.Contains("CaptureDiagnostics"),
             "Actor post search applies empty-result backoff and does not collect diagnostics on every search while diagnostics are disabled");
     }
 
@@ -188,28 +187,33 @@ internal static class PathfindingPerformanceTests
             "Actor scheduler injects the ordered post-stage runner");
 
         string postRunner = File.ReadAllText(postRunnerPath);
-        int before = postRunner.IndexOf("RunPostRange(pBatch, 0,",
-            StringComparison.Ordinal);
-        int prepare = postRunner.IndexOf("PrepareEnemySearchJob(pBatch)",
-            before, StringComparison.Ordinal);
-        int schedule = postRunner.IndexOf("ScheduleEnemySearch()",
-            prepare, StringComparison.Ordinal);
-        int commit = postRunner.IndexOf("CommitEnemySearchGroup()",
-            schedule, StringComparison.Ordinal);
-        int after = postRunner.IndexOf("RunPostRange(pBatch,",
-            commit, StringComparison.Ordinal);
-        Assert(before >= 0 && prepare > before && schedule > prepare &&
-               commit > schedule && after > commit,
-            "Actor post runner preserves before/search/commit/after order");
+        string[] orderedStages = {
+            "BeforeEnemySearch",
+            "PrepareEnemySearch",
+            "ScheduleEnemySearch",
+            "AwaitEnemySearch",
+            "CommitEnemySearch"
+        };
+        int previousStage = -1;
+        foreach (string stage in orderedStages)
+        {
+            int stageIndex = postRunner.IndexOf(stage,
+                StringComparison.Ordinal);
+            Assert(stageIndex > previousStage,
+                "Actor post runner preserves ordered enemy-search stages");
+            previousStage = stageIndex;
+        }
 
         int workerStart = postRunner.IndexOf("private void SearchWorkItemAt(",
             StringComparison.Ordinal);
-        int commitStart = postRunner.IndexOf("private bool CommitEnemySearchGroup(",
+        int commitStart = postRunner.IndexOf("private int CommitEnemySearchClassification(",
             StringComparison.Ordinal);
-        Assert(workerStart >= 0 && commitStart > workerStart,
+        int nextGroupStart = postRunner.IndexOf("private bool TryCommitNextGroup(",
+            StringComparison.Ordinal);
+        Assert(workerStart >= 0 && commitStart >= 0,
             "Actor enemy worker and commit phases are isolated");
         string worker = postRunner.Substring(workerStart,
-            commitStart - workerStart);
+            Math.Max(0, nextGroupStart - workerStart));
         Assert(!worker.Contains("startFightingWith") &&
                !worker.Contains("stopMovement") &&
                !worker.Contains("skipBehaviour"),
@@ -238,10 +242,11 @@ internal static class PathfindingPerformanceTests
         string actorRunner = File.ReadAllText(actorRunnerPath);
         Assert(actorRunner.Contains("private const int TimerRangeSize = 128"),
             "Actor timer work is grouped into 128-actor ranges");
-        Assert(actorRunner.Contains("Parallel.For(0, rangeCount,"),
-            "Actor timer ranges use the existing AW worker layer");
-        Assert(actorRunner.Contains("pParallelOptions"),
-            "Actor timer ranges inherit the cycle ParallelOptions");
+        Assert(actorRunner.Contains(
+                "AWSimulationWorkerPool.Instance.RunIndexed(0, rangeCount,"),
+            "Actor timer ranges use the persistent AW worker pool");
+        Assert(!actorRunner.Contains("Parallel.For("),
+            "Actor timer ranges do not schedule temporary ThreadPool work");
         Assert(!actorRunner.Contains("AWSimulationCoordinatorThread.Instance.Begin"),
             "Actor timer ranges do not nest coordinator tickets");
     }

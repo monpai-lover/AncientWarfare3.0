@@ -339,9 +339,11 @@ namespace AncientWarfare3.core.performance
                     }
 
                     bool actorBackgroundPending =
-                        _actorRunner.WaitingForBackgroundWork;
+                        _actorRunner.WaitingForBackgroundWork &&
+                        !_actorRunner.IsBackgroundWorkCompleted;
                     bool buildingBackgroundPending =
-                        _buildingRunner.WaitingForBackgroundWork;
+                        _buildingRunner.WaitingForBackgroundWork &&
+                        !_buildingRunner.IsBackgroundWorkCompleted;
                     if (actorBackgroundPending || buildingBackgroundPending)
                     {
                         string awaitPhase = actorBackgroundPending
@@ -438,7 +440,11 @@ namespace AncientWarfare3.core.performance
 
         public bool TryBeginActorPresentationOverlap()
         {
-            if (!RequiresControl ||
+            if (!AWPerformanceSettings.EnableActorPresentationSnapshots)
+                return false;
+
+            if (!AWPerformanceSettings.EnableActorPresentationSnapshots ||
+                !RequiresControl ||
                 !AWActorPresentationSnapshots.HasPublishedSnapshot ||
                 _stage != SimulationStage.Actors ||
                 !_actorRunner.BeginParallelPresentationWork())
@@ -451,7 +457,11 @@ namespace AncientWarfare3.core.performance
 
         public bool TryBeginBuildingPresentationOverlap()
         {
-            if (!RequiresControl ||
+            if (!AWPerformanceSettings.EnableWorldObjectPresentationSnapshots)
+                return false;
+
+            if (!AWPerformanceSettings.EnableWorldObjectPresentationSnapshots ||
+                !RequiresControl ||
                 !AWActorPresentationSnapshots.HasPublishedSnapshot ||
                 _stage != SimulationStage.Buildings ||
                 !_buildingRunner.BeginParallelPresentationWork())
@@ -466,6 +476,11 @@ namespace AncientWarfare3.core.performance
         {
             if (_stage == SimulationStage.Actors)
             {
+                if (!AWPerformanceSettings.EnableActorPresentationSnapshots)
+                {
+                    return _actorRunner.BeginParallelPresentationWork();
+                }
+
                 if (!AWActorPresentationSnapshots.HasPublishedSnapshot ||
                     CanRunDeferredParallelWorkSynchronously(
                         _actorParallelStageEstimateMilliseconds))
@@ -490,6 +505,11 @@ namespace AncientWarfare3.core.performance
             }
 
             if (_stage != SimulationStage.Buildings) return false;
+            if (!AWPerformanceSettings.EnableWorldObjectPresentationSnapshots)
+            {
+                return _buildingRunner.BeginParallelPresentationWork();
+            }
+
             if (!AWActorPresentationSnapshots.HasPublishedSnapshot ||
                 CanRunDeferredParallelWorkSynchronously(
                     _buildingParallelStageEstimateMilliseconds))
@@ -1333,8 +1353,11 @@ namespace AncientWarfare3.core.performance
                     SimGlobals.m.interval_nutrition_decay;
 
             AWSimulationTime.CompleteTick(_world);
-            AWActorPresentationSnapshots.CaptureIfRequested(
-                _world, _logicalTicksCompleted + 1);
+            if (AWPerformanceSettings.EnableActorPresentationSnapshots)
+            {
+                AWActorPresentationSnapshots.CaptureIfRequested(
+                    _world, _logicalTicksCompleted + 1);
+            }
             AWSimulationTickBenchmark.MarkTickCompleted();
             _simulatedSecondsCompleted += _cycleElapsed;
             _mapLayers.Clear();

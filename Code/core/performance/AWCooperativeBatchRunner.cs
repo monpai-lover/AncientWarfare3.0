@@ -411,8 +411,8 @@ namespace AncientWarfare3.core.performance
                 }
                 else if (_parallelEnabled &&
                          _activeParallelBatchCount > 1)
-                    Parallel.For(0, _activeParallelBatchCount,
-                        _parallelOptions, _parallelJobAction);
+                    AWSimulationWorkerPool.Instance.RunIndexed(0,
+                        _activeParallelBatchCount, _parallelJobAction);
                 else
                     for (int i = 0;
                          i < _activeParallelBatchCount;

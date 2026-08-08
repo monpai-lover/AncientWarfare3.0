@@ -84,6 +84,8 @@ namespace AncientWarfare3.patch
                     EnsureBuildingReadBoundary("mapbox.frame_begin");
                 }
 
+                AWCooperativeActorParallelJobRunner.RefreshFrameVisibility();
+
                 AWPresentationCommandQueue.DrainMainThread();
                 __state = new MapBoxUpdateScope();
                 ArmyRtsTransportService.ObserveFrameClock(
@@ -106,6 +108,7 @@ namespace AncientWarfare3.patch
                 if (Config.game_loaded &&
                     !SmoothLoader.isLoading() &&
                     AWPerformanceSettings.EnableFramePriorityScheduler &&
+                    AWPerformanceSettings.EnableActorPresentationSnapshots &&
                     runner.RequiresControl &&
                     !replicaSession)
                 {
@@ -300,7 +303,8 @@ namespace AncientWarfare3.patch
                 return false;
             }
 
-            if (!AWPerformanceSettings.EnableFramePriorityScheduler)
+            if (!AWPerformanceSettings.EnableFramePriorityScheduler &&
+                !runner.Active)
             {
                 ResetSchedulerState(pUnbindSimulationTime: false);
                 __state = true;
@@ -318,7 +322,8 @@ namespace AncientWarfare3.patch
             {
                 _schedulerLifecycleOwned = true;
                 EnsureSimulationTimeBound(__instance);
-                runner.RunFrame(__instance);
+                runner.RunFrame(__instance,
+                    AWPerformanceSettings.EnableFramePriorityScheduler);
             }
             catch (Exception error)
             {
@@ -599,13 +604,24 @@ namespace AncientWarfare3.patch
         private static bool PrepareBuildingPresentationFrame(
             BuildingManager __instance)
         {
-            if (!AWPerformanceSettings.EnableFramePriorityScheduler)
+            AWCooperativeSimulationRunner runner =
+                AWCooperativeSimulationRunner.Instance;
+            if (!AWPerformanceSettings.EnableWorldObjectPresentationSnapshots)
             {
+                if (runner.HasMutatingPresentationWorkInFlight)
+                {
+                    EnsureBuildingReadBoundary("building.presentation_native");
+                }
+
                 return true;
             }
 
-            AWCooperativeSimulationRunner runner =
-                AWCooperativeSimulationRunner.Instance;
+            if (!AWPerformanceSettings.EnableFramePriorityScheduler &&
+                !runner.Active &&
+                !runner.HasMutatingPresentationWorkInFlight)
+            {
+                return true;
+            }
             if (runner.HasMutatingPresentationWorkInFlight)
             {
                 EnsureBuildingReadBoundary("building.presentation_prepare");
@@ -638,13 +654,24 @@ namespace AncientWarfare3.patch
         private static bool PreparePresentationFrame(
             ActorManager __instance)
         {
-            if (!AWPerformanceSettings.EnableFramePriorityScheduler)
+            AWCooperativeSimulationRunner runner =
+                AWCooperativeSimulationRunner.Instance;
+            if (!AWPerformanceSettings.EnableActorPresentationSnapshots)
             {
+                if (runner.HasMutatingPresentationWorkInFlight)
+                {
+                    EnsureActorReadBoundary("actor.presentation_native");
+                }
+
                 return true;
             }
 
-            AWCooperativeSimulationRunner runner =
-                AWCooperativeSimulationRunner.Instance;
+            if (!AWPerformanceSettings.EnableFramePriorityScheduler &&
+                !runner.Active &&
+                !runner.HasMutatingPresentationWorkInFlight)
+            {
+                return true;
+            }
             if (runner.HasMutatingPresentationWorkInFlight)
             {
                 EnsureActorReadBoundary("actor.presentation_prepare");
@@ -676,6 +703,13 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawUnits")]
         private static void UseSnapshotUnitCount(out int __state)
         {
+            if (!AWPerformanceSettings.EnableActorPresentationSnapshots)
+            {
+                EnsureActorReadBoundary("quantum.actors.native");
+                __state = -1;
+                return;
+            }
+
             try
             {
                 AWCooperativeSimulationRunner.Instance
@@ -1238,6 +1272,11 @@ namespace AncientWarfare3.patch
             Actor __instance,
             ref Vector3 __result)
         {
+            if (!AWPerformanceSettings.EnableActorPresentationSnapshots)
+            {
+                return true;
+            }
+
             if (!AWPresentationInterpolator.TryApply(
                     __instance,
                     out Vector3 position))
@@ -1260,6 +1299,11 @@ namespace AncientWarfare3.patch
             Actor __instance,
             ref Vector3 __result)
         {
+            if (!AWPerformanceSettings.EnableActorPresentationSnapshots)
+            {
+                return true;
+            }
+
             if (!AWActorPresentationRenderer.TryGetPreparedSample(
                     __instance,
                     out AWActorPresentationSample sample))

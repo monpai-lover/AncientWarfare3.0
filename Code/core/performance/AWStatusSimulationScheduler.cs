@@ -98,6 +98,7 @@ namespace AncientWarfare3.core.performance
         private static long _timingWheelDeferred;
 
         internal static bool Enabled =>
+            AWPerformanceSettings.EnableStatusSimulationScheduler &&
             AWPerformanceSettings.EnableFramePriorityScheduler &&
             Config.game_loaded &&
             !SmoothLoader.isLoading() &&

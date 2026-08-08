@@ -1,0 +1,141 @@
+using AncientWarfare3.core.performance;
+
+internal static class SimulationWorkerPoolTests
+{
+    internal static void Run()
+    {
+        ExecutesEveryIndexExactlyOnce();
+        WaitingThreadCanAssistAsynchronousWork();
+        RejectsConcurrentOperations();
+        PropagatesWorkerExceptionsAndRemainsReusable();
+    }
+
+    private static void ExecutesEveryIndexExactlyOnce()
+    {
+        const int count = 4096;
+        int[] visits = new int[count];
+        AWSimulationWorkerPool.WorkResult result =
+            AWSimulationWorkerPool.Instance.RunIndexed(0, count,
+                index => Interlocked.Increment(ref visits[index]));
+
+        Equal(count, result.ScheduledItems,
+            "worker pool reports every scheduled index");
+        Equal(count, result.ExecutedItems,
+            "worker pool reports every executed index");
+        True(result.WallSeconds >= 0d &&
+             result.ParticipantBusySeconds >= 0d &&
+             result.MainWaitSeconds >= 0d,
+            "worker results expose scheduler benchmark durations");
+        for (int index = 0; index < visits.Length; index++)
+            Equal(1, visits[index],
+                "worker pool executes each index exactly once");
+    }
+
+    private static void WaitingThreadCanAssistAsynchronousWork()
+    {
+        using var backgroundEntered = new ManualResetEventSlim(false);
+        using var releaseBackground = new ManualResetEventSlim(false);
+        int assistantItems = 0;
+        AWSimulationWorkerPool.WorkTicket ticket =
+            AWSimulationWorkerPool.Instance.BeginIndexed(0, 256, index =>
+            {
+                if ((Thread.CurrentThread.Name ?? string.Empty)
+                    .StartsWith("AW3 Simulation Worker ",
+                        StringComparison.Ordinal))
+                {
+                    backgroundEntered.Set();
+                    releaseBackground.Wait();
+                    return;
+                }
+
+                Interlocked.Increment(ref assistantItems);
+            });
+
+        True(backgroundEntered.Wait(TimeSpan.FromSeconds(2)),
+            "background simulation workers begin asynchronous work");
+        bool assisted = AWSimulationWorkerPool.Instance
+            .TryAssistActiveOperation();
+        releaseBackground.Set();
+        AWSimulationWorkerPool.Instance.Wait(ticket);
+        AWSimulationWorkerPool.WorkResult result =
+            AWSimulationWorkerPool.Instance.Complete(ticket);
+
+        True(assisted && result.Assisted && assistantItems > 0,
+            "waiting thread claims unfinished asynchronous work");
+        Equal(result.ScheduledItems, result.ExecutedItems,
+            "assisted asynchronous operation remains complete");
+    }
+
+    private static void RejectsConcurrentOperations()
+    {
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        AWSimulationWorkerPool.WorkTicket ticket =
+            AWSimulationWorkerPool.Instance.BeginIndexed(0, 32, _ =>
+            {
+                entered.Set();
+                release.Wait();
+            });
+
+        True(entered.Wait(TimeSpan.FromSeconds(2)),
+            "first asynchronous operation starts");
+        bool rejected = false;
+        try
+        {
+            AWSimulationWorkerPool.Instance.BeginIndexed(0, 1, _ => { });
+        }
+        catch (InvalidOperationException)
+        {
+            rejected = true;
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        AWSimulationWorkerPool.Instance.Wait(ticket);
+        AWSimulationWorkerPool.Instance.Complete(ticket);
+        True(rejected,
+            "worker pool rejects a second active operation");
+    }
+
+    private static void PropagatesWorkerExceptionsAndRemainsReusable()
+    {
+        bool propagated = false;
+        try
+        {
+            AWSimulationWorkerPool.Instance.RunIndexed(0, 64, index =>
+            {
+                if (index == 3) throw new MarkerException();
+            });
+        }
+        catch (MarkerException)
+        {
+            propagated = true;
+        }
+
+        True(propagated,
+            "worker pool propagates the original operation exception");
+        int executed = 0;
+        AWSimulationWorkerPool.Instance.RunIndexed(0, 8,
+            _ => Interlocked.Increment(ref executed));
+        Equal(8, executed,
+            "worker pool remains reusable after an operation exception");
+    }
+
+    private static void True(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal(int expected, int actual, string message)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(
+                message + $" (expected {expected}, actual {actual})");
+    }
+
+    private sealed class MarkerException : Exception
+    {
+    }
+}

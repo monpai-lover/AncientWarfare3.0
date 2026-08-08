@@ -17,11 +17,14 @@ namespace AncientWarfare3.core.performance
         private float _activeElapsed;
         private bool _activePaused;
 
+        private static int lastVisibilityFrame = -1;
         private static long _timerBatches;
         private static long _timerActors;
         private static long _timerRangesProcessed;
         private static long _prepareJobsSkipped;
         private static long _visibilityJobsSkipped;
+        private static long _visibilityFrames;
+        private static long _visibilityActors;
 
         public bool TrySkipAllBatches(Job<Actor> pJob, int pBatchCount,
             float pElapsed)
@@ -92,7 +95,7 @@ namespace AncientWarfare3.core.performance
             _activePaused = World.world != null && World.world.isPaused();
             try
             {
-                Parallel.For(0, rangeCount, pParallelOptions,
+                AWSimulationWorkerPool.Instance.RunIndexed(0, rangeCount,
                     RunTimerRange);
             }
             finally
@@ -113,6 +116,43 @@ namespace AncientWarfare3.core.performance
             return false;
         }
 
+        internal static void RefreshFrameVisibility()
+        {
+            if (!AWPerformanceSettings.EnableFramePriorityScheduler ||
+                !Config.game_loaded ||
+                SmoothLoader.isLoading() ||
+                lastVisibilityFrame == UnityEngine.Time.frameCount)
+                return;
+
+            ActorManager manager = World.world?.units;
+            if (manager == null) return;
+
+            lastVisibilityFrame = UnityEngine.Time.frameCount;
+            manager.checkContainer();
+            manager.prepareArray();
+            Actor[] actors = manager.getSimpleArray();
+            int count = manager.Count;
+            bool renderGameplay = MapBox.isRenderGameplay();
+            int updated = 0;
+            for (int i = 0; i < count; i++)
+            {
+                Actor actor = actors[i];
+                ActorAsset asset = actor.asset;
+                if (!asset.has_sprite_renderer) continue;
+
+                if (actor.isInMagnet() || actor.isInsideSomething())
+                    actor.is_visible = false;
+                else if (renderGameplay)
+                    actor.is_visible = actor.current_tile.zone.visible;
+                else
+                    actor.is_visible = asset.visible_on_minimap;
+                updated++;
+            }
+
+            Interlocked.Increment(ref _visibilityFrames);
+            Interlocked.Add(ref _visibilityActors, updated);
+        }
+
         internal static string GetDiagnostics()
         {
             return "timer_batches=" + Interlocked.Read(ref _timerBatches) +
@@ -122,7 +162,11 @@ namespace AncientWarfare3.core.performance
                    " prepare_skipped=" +
                    Interlocked.Read(ref _prepareJobsSkipped) +
                    " visibility_skipped=" +
-                   Interlocked.Read(ref _visibilityJobsSkipped);
+                   Interlocked.Read(ref _visibilityJobsSkipped) +
+                   " visibility_frames=" +
+                   Interlocked.Read(ref _visibilityFrames) +
+                   " visibility_actors=" +
+                   Interlocked.Read(ref _visibilityActors);
         }
 
         private void RunTimerRange(int pRangeIndex)
@@ -186,7 +230,12 @@ namespace AncientWarfare3.core.performance
             if (pActor.actor_scale != pActor.target_scale)
                 pActor.updateChangeScale(elapsed);
             if (!pActor.is_immovable && pActor.is_moving)
-                pActor.precalcMovementSpeed();
+            {
+                if (pActor._precalc_movement_speed_skips > 0)
+                    pActor._precalc_movement_speed_skips--;
+                else
+                    pActor.precalcMovementSpeed();
+            }
         }
 
         private void EnsureTimerRangeCapacity(int pCapacity)

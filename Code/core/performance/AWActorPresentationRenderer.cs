@@ -54,7 +54,8 @@ internal static class AWActorPresentationRenderer
         ActorManager manager,
         AWActorPresentationSnapshot snapshot)
     {
-        if (!AWPerformanceSettings.EnableFramePriorityScheduler ||
+        if (!AWPerformanceSettings.EnableActorPresentationSnapshots ||
+            !AWPerformanceSettings.EnableFramePriorityScheduler ||
             manager == null ||
             snapshot == null ||
             !snapshot.MatchesCurrentWorld ||
@@ -168,6 +169,7 @@ internal static class AWActorPresentationRenderer
     {
         previousCount = 0;
         if (manager == null ||
+            !AWPerformanceSettings.EnableActorPresentationSnapshots ||
             !AWPerformanceSettings.EnableFramePriorityScheduler ||
             lastPreparedFrame != Time.frameCount ||
             preparedSnapshot == null ||
@@ -365,6 +367,7 @@ internal static class AWActorPresentationRenderer
     }
 
     internal static AWActorPresentationSnapshot PreparedSnapshot =>
+        AWPerformanceSettings.EnableActorPresentationSnapshots &&
         AWPerformanceSettings.EnableFramePriorityScheduler &&
         lastPreparedFrame == Time.frameCount &&
         preparedSnapshot?.MatchesCurrentWorld == true

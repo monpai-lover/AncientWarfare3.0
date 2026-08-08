@@ -847,10 +847,9 @@ internal sealed class AWActorPresentationSnapshot
                 dynamicUpdateCount,
                 dynamicCaptureParallelOptions.MaxDegreeOfParallelism))
         {
-            Parallel.For(
+            AWSimulationWorkerPool.Instance.RunIndexed(
                 0,
                 dynamicUpdateCount,
-                dynamicCaptureParallelOptions,
                 updateDynamicSampleAt);
         }
         else

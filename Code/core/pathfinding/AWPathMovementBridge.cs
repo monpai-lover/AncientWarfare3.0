@@ -477,6 +477,310 @@ namespace AncientWarfare3.core.pathfinding
             return OwnedActors.Contains(pActorId);
         }
 
+        internal enum AWParallelPathMovementResult
+        {
+            NoPath,
+            Handled,
+            RequiresSerial
+        }
+
+        internal enum AWParallelSmoothMovementResult
+        {
+            Handled,
+            RequiresSerial
+        }
+
+        internal enum AWPreparedSmoothMovementKind : byte
+        {
+            None,
+            Calibration,
+            VanillaPath,
+            CustomPath,
+            StopMovement
+        }
+
+        internal readonly struct AWPreparedPathMovement
+        {
+            internal AWPreparedPathMovement(bool pVanilla)
+            {
+                Vanilla = pVanilla;
+                Poll = default;
+                Cursor = default;
+            }
+
+            internal AWPreparedPathMovement(AWPathPollResult pPoll,
+                AWPathFinder.ReadyPathCursor pCursor)
+            {
+                Vanilla = false;
+                Poll = pPoll;
+                Cursor = pCursor;
+            }
+
+            internal bool Vanilla { get; }
+            internal AWPathPollResult Poll { get; }
+            internal AWPathFinder.ReadyPathCursor Cursor { get; }
+        }
+
+        internal readonly struct AWPreparedSmoothMovement
+        {
+            internal AWPreparedSmoothMovement(
+                AWPreparedSmoothMovementKind pKind,
+                float pWalkedDistance = 0f,
+                AWPathPollResult pPoll = default,
+                AWPathFinder.ReadyPathCursor pCursor = default)
+            {
+                Kind = pKind;
+                WalkedDistance = pWalkedDistance;
+                Poll = pPoll;
+                Cursor = pCursor;
+            }
+
+            internal AWPreparedSmoothMovementKind Kind { get; }
+            internal float WalkedDistance { get; }
+            internal AWPathPollResult Poll { get; }
+            internal AWPathFinder.ReadyPathCursor Cursor { get; }
+        }
+
+        internal static AWParallelPathMovementResult
+            TryRunParallelSafePathMovement(Actor pActor,
+                out AWPreparedPathMovement pPrepared)
+        {
+            pPrepared = default;
+            if (pActor == null || pActor.data == null)
+                return AWParallelPathMovementResult.NoPath;
+            // AW3 army marching updates a shared, non-thread-safe formation
+            // ledger from OnLeaderPathStep. Keep military actors on the
+            // ordered simulation commit path; civilians retain Cultiway's
+            // parallel-safe movement path.
+            if (HasArmyMarchState(pActor))
+            {
+                pPrepared = new AWPreparedPathMovement(pVanilla: true);
+                return AWParallelPathMovementResult.RequiresSerial;
+            }
+            if (pActor.isFollowingLocalPath() ||
+                pActor.current_path_global != null)
+            {
+                pPrepared = new AWPreparedPathMovement(pVanilla: true);
+                return AWParallelPathMovementResult.RequiresSerial;
+            }
+
+            AWPathFinder finder = AWPathfindingBootstrap.Finder;
+            if (finder == null)
+                return AWParallelPathMovementResult.NoPath;
+            AWPathPollResult poll = finder.OpenReadyCursor(
+                pActor.data.id,
+                out AWPathFinder.ReadyPathCursor cursor);
+            if (poll.Kind != AWPathPollKind.StepReady &&
+                poll.Kind != AWPathPollKind.Waiting)
+                return AWParallelPathMovementResult.NoPath;
+
+            if (poll.Kind == AWPathPollKind.StepReady &&
+                !CanRunPathStepInParallel(pActor, poll.Step))
+            {
+                pPrepared = new AWPreparedPathMovement(poll, cursor);
+                return AWParallelPathMovementResult.RequiresSerial;
+            }
+
+            HandlePoll(pActor, poll, ref cursor,
+                pHandleNoRequest: true);
+            return AWParallelPathMovementResult.Handled;
+        }
+
+        internal static bool CommitPreparedPathMovement(Actor pActor,
+            AWPreparedPathMovement pPrepared)
+        {
+            if (pActor == null || pActor.data == null)
+                return false;
+            if (pPrepared.Vanilla)
+            {
+                pActor.updatePathMovement();
+                return true;
+            }
+
+            AWPathFinder.ReadyPathCursor cursor = pPrepared.Cursor;
+            HandlePoll(pActor, pPrepared.Poll, ref cursor,
+                pHandleNoRequest: true);
+            return true;
+        }
+
+        internal static AWParallelSmoothMovementResult
+            TryRunParallelSafeSmoothMovement(Actor pActor, float pElapsed,
+                out AWPreparedSmoothMovement pPrepared)
+        {
+            pPrepared = default;
+            if (pActor == null || pActor.data == null ||
+                pActor._update_done || pActor.is_immovable)
+                return AWParallelSmoothMovementResult.Handled;
+            if (HasArmyMarchState(pActor))
+            {
+                pPrepared = new AWPreparedSmoothMovement(
+                    AWPreparedSmoothMovementKind.VanillaPath);
+                return AWParallelSmoothMovementResult.RequiresSerial;
+            }
+
+            float movementBudget =
+                pActor._current_combined_movement_speed * pElapsed;
+            bool canFlip = pActor.asset.can_flip && pActor.checkFlip();
+            float walkedDistance = 0f;
+            AWPathFinder.ReadyPathCursor cursor = default;
+            for (int i = 0; i < AWPathLifecycleRules.MaximumSmoothPathStepsPerUpdate; i++)
+            {
+                Vector2 current = pActor.current_position;
+                Vector2 target = pActor.next_step_position;
+                if (canFlip)
+                    pActor.setFlip(current.x < target.x);
+                float delta = Math.Max(0f, movementBudget - walkedDistance);
+                float dx = target.x - current.x;
+                float dy = target.y - current.y;
+                float distanceSquared = dx * dx + dy * dy;
+                if (distanceSquared >= delta * delta)
+                {
+                    if (delta > 0f && distanceSquared > 0f)
+                    {
+                        float scale = delta / Mathf.Sqrt(distanceSquared);
+                        pActor.current_position = new Vector2(
+                            current.x + dx * scale, current.y + dy * scale);
+                    }
+                    return AWParallelSmoothMovementResult.Handled;
+                }
+
+                pActor.current_position = target;
+                walkedDistance += BoundaryDistance(distanceSquared);
+                if (!TryContinueSmoothMovementInParallel(
+                        pActor, ref cursor, walkedDistance, out pPrepared))
+                    return AWParallelSmoothMovementResult.RequiresSerial;
+                if (!pActor.is_moving)
+                    return AWParallelSmoothMovementResult.Handled;
+            }
+
+            return AWParallelSmoothMovementResult.Handled;
+        }
+
+        internal static void CommitPreparedSmoothMovement(Actor pActor,
+            float pElapsed, AWPreparedSmoothMovement pPrepared)
+        {
+            if (pActor == null || pActor.data == null) return;
+            switch (pPrepared.Kind)
+            {
+                case AWPreparedSmoothMovementKind.VanillaPath:
+                    pActor.updatePathMovement();
+                    break;
+                case AWPreparedSmoothMovementKind.CustomPath:
+                    {
+                        AWPathFinder.ReadyPathCursor cursor = pPrepared.Cursor;
+                        if (!HandlePoll(pActor, pPrepared.Poll, ref cursor,
+                                pHandleNoRequest: false))
+                            pActor.stopMovement();
+                        break;
+                    }
+                case AWPreparedSmoothMovementKind.StopMovement:
+                    pActor.stopMovement();
+                    return;
+                case AWPreparedSmoothMovementKind.None:
+                    return;
+            }
+
+            if (pActor.is_moving)
+                UpdateSmoothMovementCore(pActor, pElapsed,
+                    pPrepared.WalkedDistance);
+        }
+
+        private static bool TryContinueSmoothMovementInParallel(Actor pActor,
+            ref AWPathFinder.ReadyPathCursor pCursor, float pWalkedDistance,
+            out AWPreparedSmoothMovement pPrepared)
+        {
+            if (pActor.isFollowingLocalPath() ||
+                pActor.current_path_global != null)
+            {
+                pPrepared = new AWPreparedSmoothMovement(
+                    AWPreparedSmoothMovementKind.VanillaPath,
+                    pWalkedDistance);
+                return false;
+            }
+            if (pActor.tile_target == null)
+            {
+                pPrepared = new AWPreparedSmoothMovement(
+                    AWPreparedSmoothMovementKind.StopMovement,
+                    pWalkedDistance);
+                return false;
+            }
+
+            AWPathFinder finder = AWPathfindingBootstrap.Finder;
+            AWPathPollResult poll;
+            if (pCursor.IsValid)
+            {
+                poll = pCursor.Poll();
+            }
+            else if (finder != null)
+            {
+                poll = finder.OpenReadyCursor(
+                    pActor.data.id, out pCursor);
+            }
+            else
+            {
+                pPrepared = new AWPreparedSmoothMovement(
+                    AWPreparedSmoothMovementKind.StopMovement,
+                    pWalkedDistance);
+                return false;
+            }
+            if (poll.Kind == AWPathPollKind.StepReady)
+            {
+                if (!CanRunPathStepInParallel(pActor, poll.Step))
+                {
+                    pPrepared = new AWPreparedSmoothMovement(
+                        AWPreparedSmoothMovementKind.CustomPath,
+                        pWalkedDistance, poll, pCursor);
+                    return false;
+                }
+                HandlePoll(pActor, poll, ref pCursor,
+                    pHandleNoRequest: false);
+                pPrepared = default;
+                return true;
+            }
+            if (poll.Kind == AWPathPollKind.Waiting)
+            {
+                HandlePoll(pActor, poll, ref pCursor,
+                    pHandleNoRequest: false);
+                pPrepared = default;
+                return true;
+            }
+
+            pPrepared = new AWPreparedSmoothMovement(
+                AWPreparedSmoothMovementKind.CustomPath,
+                pWalkedDistance, poll, pCursor);
+            return false;
+        }
+
+        private static bool CanRunPathStepInParallel(Actor pActor,
+            AWPathStep pStep)
+        {
+            if (pActor?.data == null || pActor.asset == null ||
+                pActor.current_tile == null || pActor.asset.is_boat ||
+                (pStep.Method != AWMovementMethod.Walk &&
+                 pStep.Method != AWMovementMethod.Swim))
+                return false;
+            WorldTile tile = World.world?.tiles_list == null ||
+                pStep.TileId < 0 ||
+                pStep.TileId >= World.world.tiles_list.Length
+                ? null : World.world.tiles_list[pStep.TileId];
+            if (tile?.Type == null || tile.Type.damaged_when_walked)
+                return false;
+            return (pStep.Hazards & AWHazardFlags.Fire) != 0 ||
+                   GetFastMoveBlockReason(tile) == SlowMoveReason.None;
+        }
+
+        private static bool HasArmyMarchState(Actor pActor)
+        {
+            try
+            {
+                return pActor?.army?.data != null;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
         public static bool ShouldUseCustomSmoothMovement(Actor pActor)
         {
             if (pActor?.data == null) return false;
@@ -620,6 +924,8 @@ namespace AncientWarfare3.core.pathfinding
             if (pStep.Method == AWMovementMethod.Transport)
                 return StartTransport(pActor, tile);
             if ((pStep.Hazards & AWHazardFlags.Direct) == 0 &&
+                HasPathRelevantTerrainChanged(pStep, tile)) return false;
+            if ((pStep.Hazards & AWHazardFlags.Direct) == 0 &&
                 Toolbox.SquaredDistTile(pActor.current_tile, tile) > 2) return false;
             if (pActor.asset.is_boat && !tile.isGoodForBoat()) return false;
             if (tile.Type.block && !pActor.ignoresBlocks()) return false;
@@ -743,12 +1049,64 @@ namespace AncientWarfare3.core.pathfinding
 
             pActor._next_step_tile = pTile;
             if (pAdjacentStep)
-                pActor.current_tile = pTile;
+                SetCurrentTile(pActor, pTile);
             else if (Toolbox.SquaredDistTile(pActor.current_tile, pTile) > 4f)
                 pActor.dirty_current_tile = true;
             else
-                pActor.current_tile = pTile;
+                SetCurrentTile(pActor, pTile);
+
             return true;
+        }
+
+        private static bool HasPathRelevantTerrainChanged(AWPathStep pStep,
+            WorldTile pTile)
+        {
+            AWPathTileFlags current = CaptureRuntimeTileFlags(pTile) &
+                                      AWPathTileFlagsExtensions.RuntimeRelevant;
+            AWPathTileFlags planned = pStep.PlannedTileFlags &
+                                      AWPathTileFlagsExtensions.RuntimeRelevant;
+            return current != planned;
+        }
+
+        private static AWPathTileFlags CaptureRuntimeTileFlags(WorldTile pTile)
+        {
+            if (pTile?.data == null) return AWPathTileFlags.None;
+            AWPathTileFlags flags = AWPathTileFlags.Exists;
+            TileTypeBase type = pTile.Type;
+            if (type != null)
+            {
+                flags |= AWPathTileFlags.HasType;
+                if (type.block) flags |= AWPathTileFlags.Block;
+                if (type.lava) flags |= AWPathTileFlags.Lava;
+                if (type.ocean) flags |= AWPathTileFlags.Ocean;
+                if (type.liquid) flags |= AWPathTileFlags.Liquid;
+                if (type.damage_units) flags |= AWPathTileFlags.DamageUnits;
+            }
+            try
+            {
+                if (pTile.isOnFire()) flags |= AWPathTileFlags.Fire;
+            }
+            catch
+            {
+                // World teardown may make the live fire collection unavailable.
+            }
+            return flags;
+        }
+
+        private static void SetCurrentTile(
+            Actor pActor,
+            WorldTile pTile)
+        {
+            WorldTile previousTile = pActor.current_tile;
+            if (ReferenceEquals(previousTile, pTile))
+            {
+                return;
+            }
+
+            pActor.current_tile = pTile;
+            AWActorZoneMembershipDirtyIndex.Mark(
+                pActor,
+                AWActorZoneDirtyKind.Spatial);
         }
 
         private static void ApplyStepActionForCurrentTile(Actor pActor)

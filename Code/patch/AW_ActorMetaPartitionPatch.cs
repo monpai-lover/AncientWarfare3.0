@@ -23,6 +23,13 @@ namespace AncientWarfare3.patch
                 __instance,
                 __state,
                 pValue);
+            if (__state != pValue)
+            {
+                AWActorZoneMembershipDirtyIndex.Mark(
+                    __instance,
+                    AWActorZoneDirtyKind.Spatial |
+                    AWActorZoneDirtyKind.CityEligibility);
+            }
         }
 
         [HarmonyPrefix, HarmonyPatch(typeof(Actor), "setKingdom")]
@@ -33,6 +40,13 @@ namespace AncientWarfare3.patch
             AWActorMetaPartitionVersion.MarkKingdomChange(
                 __instance,
                 pKingdomToSet);
+            if (!ReferenceEquals(__instance.kingdom, pKingdomToSet))
+            {
+                AWActorZoneMembershipDirtyIndex.Mark(
+                    __instance,
+                    AWActorZoneDirtyKind.ChunkMetadata |
+                    AWActorZoneDirtyKind.CityEligibility);
+            }
         }
     }
 }

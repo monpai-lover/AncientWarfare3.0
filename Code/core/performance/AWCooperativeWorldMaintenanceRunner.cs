@@ -464,8 +464,8 @@ namespace AncientWarfare3.core.performance
 
         private void RunDirtyManagersParallel()
         {
-            Parallel.For(0, _metaManagers.Count, _parallelOptions,
-                _dirtyManagerWorkItemAction);
+            AWSimulationWorkerPool.Instance.RunIndexed(0,
+                _metaManagers.Count, _dirtyManagerWorkItemAction);
         }
 
         private void RunDirtyManagerAt(int pManagerIndex)
@@ -498,8 +498,8 @@ namespace AncientWarfare3.core.performance
 
             if (_actorMetaWorkCount > 1)
             {
-                Parallel.For(0, _actorMetaWorkCount, _parallelOptions,
-                    _classifyActorMetaWorkItemAction);
+                AWSimulationWorkerPool.Instance.RunIndexed(0,
+                    _actorMetaWorkCount, _classifyActorMetaWorkItemAction);
             }
             else if (_actorMetaWorkCount == 1)
             {
@@ -540,8 +540,8 @@ namespace AncientWarfare3.core.performance
 
             if (_actorMetaWorkCount > 1)
             {
-                Parallel.For(0, _actorMetaWorkCount, _parallelOptions,
-                    _scatterActorMetaWorkItemAction);
+                AWSimulationWorkerPool.Instance.RunIndexed(0,
+                    _actorMetaWorkCount, _scatterActorMetaWorkItemAction);
             }
             else if (_actorMetaWorkCount == 1)
             {
