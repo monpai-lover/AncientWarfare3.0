@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $window = Get-Content -Raw (Join-Path $root 'Code/ui/windows/CourtWindow.cs')
 $kingdom = Get-Content -Raw (Join-Path $root 'Code/patch/AW_KingdomTabPatch.cs')
+$kingdomAddition = Get-Content -Raw (Join-Path $root 'Code/ui/windows/KingdomWindowAddition.cs')
 $locale = Get-Content -Raw (Join-Path $root 'Locales/aw3_court.csv')
 
 foreach ($needle in @('WideWindowChrome.Attach',
@@ -14,7 +15,16 @@ foreach ($needle in @('WideWindowChrome.Attach',
 foreach ($needle in @('AW_KingdomTitleHoldersButton', 'AW_KingdomAtlasButton')) {
     if (-not $kingdom.Contains($needle)) { throw "missing kingdom court sidebar contract: $needle" }
 }
+foreach ($needle in @('CourtProfileId.Western',
+                      'aw_court_button_western_primitive',
+                      'aw_court_button_western_official')) {
+    if (-not $kingdomAddition.Contains($needle)) {
+        throw "missing western kingdom court button contract: $needle"
+    }
+}
 foreach ($key in @('aw_court_title_western',
+                   'aw_court_button_western_primitive',
+                   'aw_court_button_western_official',
                    'aw_court_tier_western_bureaucratic',
                    'aw_court_tier_western_feudal_bureaucratic',
                    'aw_court_institution_western_bureaucratic',

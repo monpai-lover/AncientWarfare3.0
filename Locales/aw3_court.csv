@@ -185,6 +185,8 @@ aw_hist_civil_service_first_appointment_office_mid,资格初授, and received a 
 aw_hist_civil_service_first_appointment_suffix,，正式入仕。,.,，正式入仕。
 aw_court_button_primitive,东周六卿,Eastern Zhou Six Ministers,東周六卿
 aw_court_button_official,百家官场,Hundred Schools Court,百家官場
+aw_court_button_western_primitive,家臣议事,Household Council,家臣議事
+aw_court_button_western_official,西方宫廷,Western Court,西方宮廷
 aw_court_button_locked,官场未启用,Court Locked,官場未啟用
 aw_court_title,百家官场,Court of the Hundred Schools,百家官場
 aw_court_title_western,西方宫廷,Western Court,西方宮廷

@@ -698,11 +698,19 @@ namespace AncientWarfare3.ui.windows
             if (pKingdom?.data == null) return;
             bool policyEnabled = KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom);
             bool officialCourt = policyEnabled && CourtService.HasOfficialCourt(pKingdom);
+            bool western = CourtProfileRegistry.For(pKingdom)?.Id ==
+                           CourtProfileId.Western;
             string title = !policyEnabled
                 ? AW_L10n.Text("aw_court_button_locked", "\u5B98\u573A\u672A\u542F\u7528")
-                : officialCourt
-                    ? AW_L10n.Text("aw_court_button_official", "\u767E\u5BB6\u5B98\u573A")
-                    : AW_L10n.Text("aw_court_button_primitive", "\u539F\u59CB\u671D\u4F1A");
+                : western
+                    ? officialCourt
+                        ? AW_L10n.Text("aw_court_button_western_official",
+                            "Western Court")
+                        : AW_L10n.Text("aw_court_button_western_primitive",
+                            "Household Council")
+                    : officialCourt
+                        ? AW_L10n.Text("aw_court_button_official", "\u767E\u5BB6\u5B98\u573A")
+                        : AW_L10n.Text("aw_court_button_primitive", "\u539F\u59CB\u671D\u4F1A");
 
             if (_courtText != null)
             {
