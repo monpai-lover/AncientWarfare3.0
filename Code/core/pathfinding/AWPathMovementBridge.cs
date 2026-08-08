@@ -705,10 +705,24 @@ namespace AncientWarfare3.core.pathfinding
                 return false;
             }
 
-            AWPathPollResult poll = pCursor.IsValid
-                ? pCursor.Poll()
-                : AWPathfindingBootstrap.Finder.OpenReadyCursor(
+            AWPathFinder finder = AWPathfindingBootstrap.Finder;
+            AWPathPollResult poll;
+            if (pCursor.IsValid)
+            {
+                poll = pCursor.Poll();
+            }
+            else if (finder != null)
+            {
+                poll = finder.OpenReadyCursor(
                     pActor.data.id, out pCursor);
+            }
+            else
+            {
+                pPrepared = new AWPreparedSmoothMovement(
+                    AWPreparedSmoothMovementKind.StopMovement,
+                    pWalkedDistance);
+                return false;
+            }
             if (poll.Kind == AWPathPollKind.StepReady)
             {
                 if (!CanRunPathStepInParallel(pActor, poll.Step))
