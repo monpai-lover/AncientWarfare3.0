@@ -12,6 +12,13 @@ HistoricalWriteModeRulesTests.Run();
 KingdomPolicyInheritanceDiagnosticRulesTests.Run();
 VirtualNobleTitleRulesTests.Run();
 
+if (args.Length == 1 && args[0] == "--actor-manual-name-rules")
+{
+    ActorManualNameRulesTests.Run();
+    Console.WriteLine("Actor manual name rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--empty-city-resettlement")
 {
     EmptyCityResettlementRulesTests.Run();

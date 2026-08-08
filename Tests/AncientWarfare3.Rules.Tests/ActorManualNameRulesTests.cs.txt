@@ -1,0 +1,32 @@
+using AncientWarfare3.core.naming;
+
+internal static class ActorManualNameRulesTests
+{
+    public static void Run()
+    {
+        ActorManualNameDraft xia = ActorManualNameRules.CreateDraft(
+            ActorManualNameMode.Xia, "Ji", "Fa");
+        Equal("JiFa", xia.DisplayName,
+            "Xia family or shi precedes given name");
+
+        ActorManualNameDraft nonXia = ActorManualNameRules.CreateDraft(
+            ActorManualNameMode.NonXia, "Louis", "de Lyon");
+        Equal("Louis de Lyon", nonXia.DisplayName,
+            "non-Xia given name precedes family name");
+
+        Equal(false, ActorManualNameRules.CreateDraft(
+            ActorManualNameMode.Xia, "Ji", " ").IsValid,
+            "given name is required");
+
+        Equal("Ji Fa", ActorManualNameRules.CreateDisplayName(
+            ActorManualNameMode.NonXia, "Ji", "Fa"),
+            "non-Xia display uses a separator");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

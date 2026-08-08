@@ -9,6 +9,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="ActorManualNameRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\naming\ActorManualNameRules.cs" Link="Production\ActorManualNameRules.cs" />
     <Compile Include="PathfindingMigrationRulesTests.cs.txt" />
     <Compile Include="AWPathSessionTests.cs.txt" />
     <Compile Include="AWDockRouteRegistryTests.cs.txt" />
