@@ -53,18 +53,41 @@ namespace AncientWarfare3.core.lineage
         public static int Aggregate(
             IReadOnlyList<ArmyAbstractBattleParticipant> pParticipants)
         {
-            if (pParticipants == null || pParticipants.Count == 0)
-                return 0;
+            IReadOnlyList<ArmyAbstractBattleParticipant> participants =
+                Deduplicate(pParticipants);
+            if (participants.Count == 0) return 0;
             long total = 0L;
-            for (int i = 0; i < pParticipants.Count; i++)
+            for (int i = 0; i < participants.Count; i++)
             {
-                ArmyAbstractBattleParticipant participant = pParticipants[i];
-                if (participant == null) continue;
+                ArmyAbstractBattleParticipant participant = participants[i];
                 total += AdjustedCardValue(participant.UnitCount,
                     participant.CommanderStrength);
                 if (total >= int.MaxValue) return int.MaxValue;
             }
             return (int)Math.Max(0L, total);
+        }
+
+        public static IReadOnlyList<ArmyAbstractBattleParticipant> Deduplicate(
+            IReadOnlyList<ArmyAbstractBattleParticipant> pParticipants)
+        {
+            if (pParticipants == null || pParticipants.Count == 0)
+                return Array.Empty<ArmyAbstractBattleParticipant>();
+
+            var unique = new Dictionary<ArmyAbstractBattleCardIdentity,
+                ArmyAbstractBattleParticipant>();
+            for (int i = 0; i < pParticipants.Count; i++)
+            {
+                ArmyAbstractBattleParticipant participant = pParticipants[i];
+                if (participant == null || participant.UnitCount <= 0 ||
+                    !participant.HasCardIdentity) continue;
+                if (!unique.ContainsKey(participant.CardIdentity))
+                    unique.Add(participant.CardIdentity, participant);
+            }
+
+            var ordered = new List<ArmyAbstractBattleParticipant>(
+                unique.Values);
+            ordered.Sort(CompareCanonicalParticipants);
+            return ordered;
         }
 
         public static int AdjustedCardValue(int pUnitCount,
@@ -82,12 +105,17 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyList<ArmyAbstractBattleParticipant> pAttackers)
         {
             ArmyAbstractBattleParticipant selected = null;
-            if (pAttackers == null) return null;
-            for (int i = 0; i < pAttackers.Count; i++)
+            var attackerCards = new List<ArmyAbstractBattleParticipant>();
+            if (pAttackers != null)
+                for (int i = 0; i < pAttackers.Count; i++)
+                    if (pAttackers[i]?.IsAttacker == true)
+                        attackerCards.Add(pAttackers[i]);
+            IReadOnlyList<ArmyAbstractBattleParticipant> attackers =
+                Deduplicate(attackerCards);
+            for (int i = 0; i < attackers.Count; i++)
             {
-                ArmyAbstractBattleParticipant candidate = pAttackers[i];
-                if (candidate == null || !candidate.IsAttacker ||
-                    candidate.UnitCount <= 0) continue;
+                ArmyAbstractBattleParticipant candidate = attackers[i];
+                if (!candidate.IsAttacker) continue;
                 if (selected == null ||
                     IsPrimaryBefore(candidate, selected)) selected = candidate;
             }
@@ -104,7 +132,8 @@ namespace AncientWarfare3.core.lineage
                 pSelected.CommanderStrength);
             return candidateValue > selectedValue ||
                    (candidateValue == selectedValue &&
-                    pCandidate.ArmyId < pSelected.ArmyId);
+                    pCandidate.CardIdentity.CompareTo(
+                        pSelected.CardIdentity) < 0);
         }
 
         private static ArmyAbstractBattleOutcome ResolveNonEmpty(int pAttack,
@@ -143,16 +172,8 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyList<ArmyAbstractBattleParticipant> pParticipants,
             bool pAttacker)
         {
-            var ordered = new List<ArmyAbstractBattleParticipant>();
-            if (pParticipants != null)
-                for (int i = 0; i < pParticipants.Count; i++)
-                    if (pParticipants[i] != null) ordered.Add(pParticipants[i]);
-            ordered.Sort((pLeft, pRight) =>
-            {
-                int id = pLeft.ArmyId.CompareTo(pRight.ArmyId);
-                if (id != 0) return id;
-                return pLeft.ActorId.CompareTo(pRight.ActorId);
-            });
+            IReadOnlyList<ArmyAbstractBattleParticipant> ordered =
+                Deduplicate(pParticipants);
             Mix(ref pHash, pAttacker ? 1L : 2L);
             Mix(ref pHash, ordered.Count);
             for (int i = 0; i < ordered.Count; i++)
@@ -166,6 +187,17 @@ namespace AncientWarfare3.core.lineage
                 Mix(ref pHash, participant.IsSynthetic ? 1L : 0L);
                 Mix(ref pHash, participant.IsProtectedCivilAuthority ? 1L : 0L);
             }
+        }
+
+        private static int CompareCanonicalParticipants(
+            ArmyAbstractBattleParticipant pLeft,
+            ArmyAbstractBattleParticipant pRight)
+        {
+            int identity = pLeft.CardIdentity.CompareTo(pRight.CardIdentity);
+            if (identity != 0) return identity;
+            int army = pLeft.ArmyId.CompareTo(pRight.ArmyId);
+            if (army != 0) return army;
+            return pLeft.ActorId.CompareTo(pRight.ActorId);
         }
 
         private static void Mix(ref ulong pHash, long pValue)

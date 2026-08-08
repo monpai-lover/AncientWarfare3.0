@@ -55,6 +55,94 @@ internal static class ArmyAbstractBattleRulesTests
         Equal(160, aggregate.DefenseValue,
             "one-to-many battle aggregates all defender cards");
 
+        ArmyAbstractBattleFacts duplicateFacts = new ArmyAbstractBattleFacts
+        {
+            WarId = 6,
+            TargetCityId = 9,
+            ResolutionSequence = 2,
+            Attackers = new[]
+            {
+                Participant(301, 100, 0, true),
+                Participant(301, 999, 0, true),
+                Participant(-1, 75, 0, true, actorId: 401),
+                Participant(-1, 50, 0, true, actorId: 401),
+                Participant(302, 0, 0, true),
+                null
+            },
+            Defenders = new[]
+            {
+                Participant(401, 60, 0, false),
+                Participant(402, 40, 50, false),
+                Participant(402, 999, 0, false),
+                Participant(-1, 40, 0, false, actorId: 501),
+                Participant(-1, 20, 0, false, actorId: 501),
+                Participant(403, -1, 0, false)
+            }
+        };
+        ArmyAbstractBattleResult duplicate =
+            ArmyAbstractBattleRules.Resolve(duplicateFacts);
+        Equal(175, duplicate.AttackValue,
+            "duplicate army and fallback actor cards count once");
+        Equal(160, duplicate.DefenseValue,
+            "duplicate defender army and fallback actor cards count once");
+
+        ArmyAbstractBattleResult namespaced = ArmyAbstractBattleRules.Resolve(
+            new ArmyAbstractBattleFacts
+            {
+                Attackers = new[]
+                {
+                    Participant(5, 10, 0, true),
+                    Participant(-1, 20, 0, true, actorId: 5),
+                    Participant(0, 30, 0, true),
+                    Participant(-1, 40, 0, true, actorId: 0)
+                },
+                Defenders = Array.Empty<ArmyAbstractBattleParticipant>()
+            });
+        Equal(100, namespaced.AttackValue,
+            "army and actor card namespaces do not collide, including zero IDs");
+
+        Equal(7L, ArmyAbstractBattleRules.SelectPrimaryAttacker(
+            new[]
+            {
+                Participant(7, 100, 0, false),
+                Participant(7, 90, 0, true)
+            }).ArmyId,
+            "primary attacker filters mixed-side records before deduplication");
+
+        ArmyAbstractBattleFacts reorderedFacts = new ArmyAbstractBattleFacts
+        {
+            WarId = duplicateFacts.WarId,
+            TargetCityId = duplicateFacts.TargetCityId,
+            ResolutionSequence = duplicateFacts.ResolutionSequence,
+            Attackers = new[]
+            {
+                duplicateFacts.Attackers[0],
+                duplicateFacts.Attackers[2],
+                duplicateFacts.Attackers[4],
+                duplicateFacts.Attackers[1],
+                duplicateFacts.Attackers[3],
+                duplicateFacts.Attackers[5]
+            },
+            Defenders = new[]
+            {
+                duplicateFacts.Defenders[0],
+                duplicateFacts.Defenders[1],
+                duplicateFacts.Defenders[3],
+                duplicateFacts.Defenders[2],
+                duplicateFacts.Defenders[4],
+                duplicateFacts.Defenders[5]
+            }
+        };
+        ArmyAbstractBattleResult reordered =
+            ArmyAbstractBattleRules.Resolve(reorderedFacts);
+        Equal(duplicate.AttackValue, reordered.AttackValue,
+            "participant aggregation is independent of source ordering");
+        Equal(duplicate.DefenseValue, reordered.DefenseValue,
+            "defender aggregation is independent of source ordering");
+        Equal(ArmyAbstractBattleRules.ParticipantHash(duplicateFacts),
+            ArmyAbstractBattleRules.ParticipantHash(reorderedFacts),
+            "participant hash is stable after canonical sorting");
+
         ArmyAbstractBattleResult commanderBuff =
             ArmyAbstractBattleRules.Resolve(OneSided(100, 100,
                 attackerCommander: 50, defenderCommander: 0));
@@ -107,11 +195,12 @@ internal static class ArmyAbstractBattleRulesTests
     }
 
     private static ArmyAbstractBattleParticipant Participant(long pArmyId,
-        int pCount, int pCommander, bool pAttacker)
+        int pCount, int pCommander, bool pAttacker, long actorId = -1L)
     {
         return new ArmyAbstractBattleParticipant
         {
             ArmyId = pArmyId,
+            ActorId = actorId,
             UnitCount = pCount,
             CommanderStrength = pCommander,
             IsAttacker = pAttacker

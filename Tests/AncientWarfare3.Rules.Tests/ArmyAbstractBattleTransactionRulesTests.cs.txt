@@ -1,0 +1,101 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyAbstractBattleTransactionRulesTests
+{
+    public static void Run()
+    {
+        ArmyAbstractBattleTransactionSnapshot prepared =
+            ArmyAbstractBattleTransactionRules.Prepare(
+                warId: 7L,
+                targetCityId: 8L,
+                transferredCityId: 9L,
+                sequence: 10L,
+                outcome: ArmyAbstractBattleOutcome.AttackVictory,
+                receiverKingdomId: 11L,
+                primaryAttackerArmyId: 12L,
+                participantHash: 0xF00DUL,
+                participantArmyIds: new[] { 22L, 12L, 22L },
+                participantActorIds: new[] { 302L, 301L },
+                loserArmyIds: new[] { 90L, 30L, 90L },
+                loserActorIds: new[] { 901L, 301L, 901L });
+
+        Equal(ArmyAbstractBattlePhase.Prepared, prepared.Phase,
+            "a prepared transaction starts in Prepared phase");
+        Equal(new[] { 30L, 90L }, prepared.LoserArmyIds.ToArray(),
+            "loser army IDs are sorted and deduplicated");
+        Equal(new[] { 301L, 901L }, prepared.LoserActorIds.ToArray(),
+            "loser actor IDs are sorted and deduplicated");
+
+        string encoded = ArmyAbstractBattleTransactionRules.Encode(prepared);
+        ArmyAbstractBattleTransactionSnapshot decoded =
+            ArmyAbstractBattleTransactionRules.Decode(encoded);
+        Equal(prepared.WarId, decoded.WarId,
+            "snapshot preserves war identity");
+        Equal(prepared.TargetCityId, decoded.TargetCityId,
+            "snapshot preserves target city identity");
+        Equal(prepared.TransferredCityId, decoded.TransferredCityId,
+            "snapshot preserves transfer city identity");
+        Equal(prepared.Outcome, decoded.Outcome,
+            "snapshot preserves outcome");
+        Equal(prepared.ReceiverKingdomId, decoded.ReceiverKingdomId,
+            "snapshot preserves receiver kingdom");
+        Equal(prepared.PrimaryAttackerArmyId, decoded.PrimaryAttackerArmyId,
+            "snapshot preserves primary attacker");
+        Equal(prepared.ParticipantHash, decoded.ParticipantHash,
+            "snapshot preserves participant hash");
+        Equal(prepared.LoserArmyIds.ToArray(), decoded.LoserArmyIds.ToArray(),
+            "round-trip preserves sorted loser armies");
+        Equal(prepared.LoserActorIds.ToArray(), decoded.LoserActorIds.ToArray(),
+            "round-trip preserves sorted loser actors");
+
+        ArmyAbstractBattleTransactionSnapshot transferred =
+            ArmyAbstractBattleTransactionRules.Advance(
+                prepared, ArmyAbstractBattlePhase.Transferred);
+        ArmyAbstractBattleTransactionSnapshot demobilizing =
+            ArmyAbstractBattleTransactionRules.Advance(
+                transferred, ArmyAbstractBattlePhase.Demobilizing);
+        ArmyAbstractBattleTransactionSnapshot complete =
+            ArmyAbstractBattleTransactionRules.Advance(
+                demobilizing, ArmyAbstractBattlePhase.Complete);
+        Equal(ArmyAbstractBattlePhase.Transferred, transferred.Phase,
+            "Prepared advances to Transferred");
+        Equal(ArmyAbstractBattlePhase.Demobilizing, demobilizing.Phase,
+            "Transferred advances to Demobilizing");
+        Equal(ArmyAbstractBattlePhase.Complete, complete.Phase,
+            "Demobilizing advances to Complete");
+        ArmyAbstractBattleTransactionSnapshot noRegression =
+            ArmyAbstractBattleTransactionRules.Advance(
+                complete, ArmyAbstractBattlePhase.Prepared);
+        Equal(ArmyAbstractBattlePhase.Complete, noRegression.Phase,
+            "completed transactions cannot move backwards");
+
+        ArmyAbstractBattleTransactionSnapshot advanced =
+            ArmyAbstractBattleTransactionRules.Advance(prepared);
+        Equal(ArmyAbstractBattlePhase.Transferred, advanced.Phase,
+            "default advance moves one phase");
+        Equal(prepared.ParticipantHash, advanced.ParticipantHash,
+            "advancing never changes participant hash");
+        Equal(prepared.Outcome, advanced.Outcome,
+            "advancing never rerolls outcome");
+        Equal(prepared.LoserArmyIds.ToArray(), advanced.LoserArmyIds.ToArray(),
+            "advancing never changes loser army roster");
+        Equal(prepared.LoserActorIds.ToArray(), advanced.LoserActorIds.ToArray(),
+            "advancing never changes loser actor roster");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (expected is Array expectedArray && actual is Array actualArray)
+        {
+            if (!expectedArray.Cast<object>().SequenceEqual(
+                    actualArray.Cast<object>()))
+                throw new InvalidOperationException(message);
+            return;
+        }
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $" (expected {expected}, actual {actual})");
+    }
+}
