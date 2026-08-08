@@ -17,12 +17,31 @@
   capacity fallback. Commit: `07a2858`.
 - Task 7 semantic fixes are implemented: vanilla float status decrement and
   admitted-cycle RTS owner snapshot. Commit: `07a2858`.
-- Task 6 currently provides generation/version guarded redundant
-  `checkUnits` suppression, dirty actor tracking, chunk/island snapshots, and
-  full-clear fallback. It does not yet replace vanilla `ChunkObjectContainer`
-  mutation with Cultiway's complete incremental reconciliation algorithm.
-- Task 8 static verification is passing; runtime acceptance on a live save,
-  deployment, merge, and push remain pending.
+- Task 6 is statically complete: generation/version guarded redundant
+  `checkUnits` suppression, deterministic worker-backed chunk/island rebuilds,
+  incremental `ChunkObjectContainer` reconciliation, dirty actor lifecycle
+  hooks, and full-clear fallback are wired. Cultiway's
+  `NearbyStatusTargetIndex` consumer remains intentionally excluded because
+  AW3 has no corresponding status-target consumer; an AW-compatible no-op
+  lifecycle shim preserves the rebuild contract.
+- Task 8 static verification is complete: Cultiway symbol audit, source guard,
+  rules, RTS simulation, Release build, and diff check pass. A startup-level
+  runtime smoke test also passed with the deployed DLL: the mod loaded, Harmony
+  patches applied, and no AW3 exception was emitted. The smoke save had only
+  four live actors and no armies, so the full large-map/war/save-load matrix is
+  still pending before merge and release.
+
+### Runtime Smoke Evidence (2026-08-08)
+
+- Installed DLL SHA-256 matches the Release build:
+  `CF1728FA92DF0D226D3889D1C959792387BBD27AD775D658444541EB19E9E4B4`.
+- WorldBox PID `51552` remained alive after loading a world; Player.log showed
+  `Harmony patch OK` and periodic AW3 performance records without AW3
+  `NullReferenceException`, `MissingMethodException`, or worker faults.
+- Observed smoke metrics: `live_population=4`, `army_count=0`,
+  `actor_ms=0.096-0.146`, `actor_parallel_stage_wall_ms=0.058-0.086`,
+  `path_queue=0`, and `worker backlog=0`. These values are not a substitute
+  for the required multi-kingdom and active-war acceptance runs.
 
 ---
 

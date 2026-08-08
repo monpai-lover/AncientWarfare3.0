@@ -301,6 +301,25 @@ Require-Contains $spatialPatch 'TrySkipRedundantCheckUnits' `
     'SimObjectsZones must skip only a validated current membership rebuild.'
 Require-Contains $spatialPatch 'fullClear' `
     'Spatial membership must invalidate on full world clear.'
+Require-Contains $spatialPatch 'HasPending' `
+    'SimObjectsZones skip must reject pending actor spatial dirty records.'
+Require-Contains $spatialSource 'HasPending' `
+    'Actor spatial dirty index must expose a non-consuming pending check.'
+Require-Match $spatialPatch `
+    '!AWActorZoneMembershipDirtyIndex\.HasPending\(\)' `
+    'Redundant checkUnits suppression must require an empty dirty index.'
+$actorSpatialPatch = Read-Source `
+    'Code\patch\AW_ActorSpatialMembershipPatch.cs'
+$setTilePrefix = Get-MethodBlock $actorSpatialPatch `
+    'private static void SetCurrentTile_Prefix('
+Require-Contains $setTilePrefix 'out WorldTile __state' `
+    'Spatial dirty tracking must capture the previous tile before setCurrentTile.'
+$setTilePostfix = Get-MethodBlock $actorSpatialPatch `
+    'private static void SetCurrentTile_Postfix('
+Require-Contains $setTilePostfix 'ReferenceEquals(__state, pTile)' `
+    'Spatial dirty tracking must only mark an actual tile change.'
+Forbid-Contains $actorSpatialPatch 'setCurrentTilePosition' `
+    'setCurrentTilePosition must not dirty spatial membership for same-tile movement.'
 
 foreach ($relativePath in @(
         'Code\core\performance\AWCooperativeBatchRunner.cs',

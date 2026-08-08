@@ -65,6 +65,20 @@ namespace AncientWarfare3.core.performance
             return pTarget.Count;
         }
 
+        internal static bool HasPending()
+        {
+            foreach (Dictionary<Actor, AWActorZoneDirtyKind> bucket in
+                     DirtyByThread.Values)
+            {
+                if (bucket.Count != 0)
+                {
+                    return true;
+                }
+            }
+
+            return Merged.Count != 0;
+        }
+
         internal static void Clear()
         {
             Merged.Clear();
