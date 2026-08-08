@@ -39,6 +39,17 @@ namespace AncientWarfare3.core.lineage
                    pProfile == NamingProfileId.OrcNomadic;
         }
 
+        public static bool ShouldProcessMigration(bool archiveOperational)
+        {
+            return archiveOperational;
+        }
+
+        public static bool ShouldDeferKingdomMigration(bool hasKing,
+            bool hasActorCity)
+        {
+            return hasKing && !hasActorCity;
+        }
+
         public static bool IsRoleAdmission(bool ruler, bool heir,
             bool noble, bool official)
         {
@@ -51,10 +62,12 @@ namespace AncientWarfare3.core.lineage
         {
             bool supported = pProfile == NamingProfileId.Western ||
                              pProfile == NamingProfileId.OrcNomadic;
-            if (!ruler || !supported)
+            if (!supported)
                 return WesternOriginalClanSyncAction.None;
             if (hasActorClan)
                 return WesternOriginalClanSyncAction.RenameExisting;
+            if (!ruler)
+                return WesternOriginalClanSyncAction.None;
             return hasMatchingFamilyClan
                 ? WesternOriginalClanSyncAction.BindFamilyClan
                 : WesternOriginalClanSyncAction.CreateClan;

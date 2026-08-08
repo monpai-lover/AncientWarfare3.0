@@ -1,4 +1,6 @@
 key,cz,en,ch
+aw_war_peace_army_strength,军队：{0},Army: {0},軍隊：{0}
+aw_war_peace_casualties,伤亡：{0},Casualties: {0},傷亡：{0}
 aw_war_peace_score_total,战争分数：{0},War score: {0},戰爭分數：{0}
 aw_war_peace_score_decisive,决定性胜利,Decisive,決定性勝利
 aw_war_peace_demand_gross,索取：{0}/100,Demands: {0}/100,索取：{0}/100

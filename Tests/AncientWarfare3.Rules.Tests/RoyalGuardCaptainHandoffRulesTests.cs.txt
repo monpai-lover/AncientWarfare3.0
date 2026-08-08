@@ -48,6 +48,19 @@ internal static class RoyalGuardCaptainHandoffRulesTests
             "a stable guard with both jobs bound is not force-reset");
 
         Check(failures,
+            !AWArmyRoleRules.ShouldRtsOwnCaptain(
+                AWArmyRole.RoyalGuard, pCaptainRoyalGuard: true),
+            "RTS must never replace a Royal Guard captain's protect-king task");
+        Check(failures,
+            !AWArmyRoleRules.ShouldRtsOwnCaptain(
+                AWArmyRole.RoyalGuard, pCaptainRoyalGuard: false),
+            "a Royal Guard role army remains outside RTS captain ownership");
+        Check(failures,
+            AWArmyRoleRules.ShouldRtsOwnCaptain(
+                "", pCaptainRoyalGuard: false),
+            "ordinary army captains remain eligible for RTS ownership");
+
+        Check(failures,
             RoyalGuardMaintenanceRules.ShouldRefreshGuardInMaintenancePass(
                 pIsCaptain: false,
                 pIsNewlyAppointed: false,
@@ -73,6 +86,8 @@ internal static class RoyalGuardCaptainHandoffRulesTests
             "lineage", "AWArmyService.cs"));
         string guardService = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "RoyalGuardService.cs"));
+        string rtsService = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "ArmyRtsControllerService.cs"));
         string armySafetyPatch = File.ReadAllText(Path.Combine(root, "Code", "patch",
             "AW_ArmySafetyPatch.cs"));
         Check(failures,
@@ -98,6 +113,14 @@ internal static class RoyalGuardCaptainHandoffRulesTests
             guardService.Contains("pActor.setCitizenJob(GuardContent.KingGuardJob)") &&
             guardService.Contains("pActor.ai.setJob(GuardContent.ACTOR_JOB_KING_GUARD)"),
             "job drift repair clears stale movement/tasks and rebinds citizen and actor jobs");
+        int rtsGuardOwnershipChecks = rtsService.Split(
+            "AWArmyRoleRules.ShouldRtsOwnCaptain(").Length - 1;
+        Check(failures,
+            rtsGuardOwnershipChecks >= 2 &&
+            rtsService.Contains("RoyalGuardService.EnsureProtectKingTask(pActor)") &&
+            guardService.Contains("internal static void EnsureProtectKingTask(Actor pActor)") &&
+            guardService.Contains("pActor.ai.setTask(GuardContent.TASK_FOLLOW_KING)"),
+            "every RTS task write and release path preserves the Royal Guard protect-king task");
 
         if (failures.Count > 0)
             throw new InvalidOperationException(string.Join(Environment.NewLine, failures));

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.core.lineage
@@ -52,6 +53,8 @@ namespace AncientWarfare3.core.lineage
             if (pBudget <= 0 || World.world == null ||
                 !_pending && _actors == null &&
                 PendingKingdomIds.Count == 0) return;
+            if (!WesternLineageAdmissionRules.ShouldProcessMigration(
+                    LineageArchiveManager.Instance.IsOperational)) return;
             int remaining = pBudget;
             while (remaining > 0)
             {
@@ -84,7 +87,8 @@ namespace AncientWarfare3.core.lineage
 
         private static bool TryBeginPendingKingdom()
         {
-            while (PendingKingdomIds.Count > 0)
+            int available = PendingKingdomIds.Count;
+            while (available-- > 0 && PendingKingdomIds.Count > 0)
             {
                 long kingdomId = PendingKingdomIds.Dequeue();
                 QueuedKingdomIds.Remove(kingdomId);
@@ -106,6 +110,14 @@ namespace AncientWarfare3.core.lineage
                     pKingdom.culture);
             if (naming.Profile != NamingProfileId.Western &&
                 naming.Profile != NamingProfileId.OrcNomadic) return;
+            if (naming.Profile == NamingProfileId.Western &&
+                WesternLineageAdmissionRules.ShouldDeferKingdomMigration(
+                    pKingdom.king?.data != null,
+                    pKingdom.king?.city?.data != null))
+            {
+                Request(pKingdom);
+                return;
+            }
 
             _kingdom = pKingdom;
             _kingId = pKingdom.king?.data?.id ?? -1L;

@@ -138,6 +138,14 @@ namespace AncientWarfare3.ui
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconPeace"));
             Register(groups, AWLineageTabLayoutRules.Administration, vassalRemoveButton);
 
+            PowerButton royalEnfeoffmentButton =
+                PowerButtonCreator.CreateGodPowerButton(
+                    content.GodPowerLibrary.ROYAL_ENFEOFFMENT,
+                    SpriteTextureLoader.getSprite("ui/wars/war_vassal")
+                    ?? SpriteTextureLoader.getSprite("ui/icons/iconKings"));
+            Register(groups, AWLineageTabLayoutRules.Administration,
+                royalEnfeoffmentButton);
+
             PowerButton settingsButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_settings_btn",
                 () => OpenSettings(),

@@ -15,6 +15,7 @@ namespace AncientWarfare3.content
         public const string SPAWN_XIA = XiaRace.ID;
         public const string VASSAL_SET = "aw_vassal_set";
         public const string VASSAL_REMOVE = "aw_vassal_remove";
+        public const string ROYAL_ENFEOFFMENT = "aw_royal_enfeoffment";
         public const string GRANT_MANDATE = "aw_grant_mandate";
 
         private static Kingdom _pendingVassal;
@@ -51,6 +52,7 @@ namespace AncientWarfare3.content
             AWMapModeMetaLibrary.Init();
             RegisterMapModeNameplates();
             RegisterVassalPowers();
+            RegisterRoyalEnfeoffmentPower();
             RegisterMandateGrantPower();
         }
 
@@ -863,6 +865,22 @@ namespace AncientWarfare3.content
             }
         }
 
+        private static void RegisterRoyalEnfeoffmentPower()
+        {
+            if (AssetManager.powers.get(ROYAL_ENFEOFFMENT) != null) return;
+            AssetManager.powers.add(new GodPower
+            {
+                id = ROYAL_ENFEOFFMENT,
+                name = ROYAL_ENFEOFFMENT,
+                path_icon = "ui/wars/war_vassal",
+                force_map_mode = MetaType.City,
+                unselect_when_window = true,
+                allow_unit_selection = false,
+                click_special_action = new PowerActionWithID(
+                    RoyalEnfeoffmentClick)
+            });
+        }
+
         private static void RegisterMandateGrantPower()
         {
             if (AssetManager.powers.get(GRANT_MANDATE) != null) return;
@@ -949,6 +967,31 @@ namespace AncientWarfare3.content
             }
 
             Tip(clicked.name + " \u5DF2\u8131\u79BB\u9644\u5EB8\u5173\u7CFB");
+            return true;
+        }
+
+        private static bool RoyalEnfeoffmentClick(WorldTile pTile,
+            string pPowerID)
+        {
+            City city = pTile?.zone?.city;
+            if (city?.data == null || city.isRekt() || !city.isAlive())
+            {
+                Tip(AW_L10n.Text("aw_royal_enfeoffment_failure",
+                    "Select a living civilized city."));
+                return false;
+            }
+
+            if (!RoyalEnfeoffmentService.TryCreate(city,
+                    out string reason))
+            {
+                Tip(AW_L10n.Text("aw_royal_enfeoffment_failure_" + reason,
+                    AW_L10n.Text("aw_royal_enfeoffment_failure",
+                        "Royal enfeoffment failed.")));
+                return false;
+            }
+
+            Tip(AW_L10n.Text("aw_royal_enfeoffment_success",
+                "A royal clansman now rules the new vassal kingdom."));
             return true;
         }
 

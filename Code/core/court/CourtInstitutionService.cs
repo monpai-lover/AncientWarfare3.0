@@ -17,7 +17,8 @@ namespace AncientWarfare3.core.court
             if (CourtInstitutionRules.IsKnown(institution) &&
                 InstitutionMatchesProfile(profile, institution) &&
                 (profile.Id != CourtProfileId.Western ||
-                 CourtInstitutionRules.IsCanonicalWestern(institution)))
+                 CourtInstitutionRules.IsCanonicalWestern(institution) &&
+                 institution != CourtInstitutionId.WesternPrimitive))
                 return institution;
             return Refresh(pKingdom, pRecordHistory: false);
         }

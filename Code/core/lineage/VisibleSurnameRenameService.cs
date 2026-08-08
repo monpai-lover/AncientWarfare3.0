@@ -114,9 +114,6 @@ namespace AncientWarfare3.core.lineage
             Actor live = FindActor(pActorId);
             if (live?.data != null && !live.isRekt())
             {
-                live.data.set(LineageKeys.FAMILY_NAME, pFamilyName);
-                live.data.set(LineageKeys.CHINESE_FAMILY_NAME, pFamilyName);
-                live.data.set(AWNameDataKeys.FamilyComponent, pFamilyName);
                 ActorManualRenameService.ApplyInheritedFamily(live,
                     pFamilyName);
                 LineageService.ArchiveActor(live, pAlive: live.isAlive());
@@ -135,6 +132,8 @@ namespace AncientWarfare3.core.lineage
                         SimpleColumnConstraint.CreateEq("ID", pActorId)
                     },
                     ColumnVal.Create("FAMILY_NAME", pFamilyName),
+                    ColumnVal.Create("CLAN_NAME", pFamilyName),
+                    ColumnVal.Create("NAME_INTEGRATED", 1),
                     ColumnVal.Create("DISPLAY_NAME", displayName)));
             return true;
         }
@@ -146,8 +145,8 @@ namespace AncientWarfare3.core.lineage
             if (string.IsNullOrEmpty(given)) given = pRow?.display_name ?? "";
             if (string.IsNullOrEmpty(given)) return "";
             return LineageDisplayNameRules.Build(given, pFamilyName,
-                pRow?.clan_name ?? "", pRow?.status == LineageStatus.NOBLE,
-                pRow?.sex == 0, pRow?.name_integrated != 0);
+                pFamilyName, pRow?.status == LineageStatus.NOBLE,
+                pRow?.sex == 0, isNameIntegrated: true);
         }
 
         private static Actor FindActor(long pActorId)

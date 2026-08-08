@@ -51,7 +51,7 @@ namespace AncientWarfare3.core.court
 
         public CourtProfileId Id => CourtProfileId.Western;
         public string DefaultInstitutionId =>
-            CourtInstitutionId.WesternPrimitive;
+            CourtInstitutionId.WesternBureaucratic;
         public IReadOnlyList<CourtOfficeDefinition> Offices => Definitions;
 
         public CourtOfficeDefinition FindOffice(string officeId)
@@ -72,8 +72,6 @@ namespace AncientWarfare3.core.court
         public string ResolveInstitution(bool officeSystemUnlocked,
             bool advancedOfficeSystemUnlocked)
         {
-            if (!officeSystemUnlocked)
-                return CourtInstitutionId.WesternPrimitive;
             return advancedOfficeSystemUnlocked
                 ? CourtInstitutionId.WesternFeudalBureaucratic
                 : CourtInstitutionId.WesternBureaucratic;

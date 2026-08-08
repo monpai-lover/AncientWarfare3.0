@@ -97,9 +97,29 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return false;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
-            return UsesAwLineageSystem(pActor) ||
-                   (IsNativeXiaCultureActor(pActor) &&
-                    (lineageId >= 0 || HasOriginalClan(pActor)));
+            if (UsesAwLineageSystem(pActor)) return true;
+            if (IsNativeXiaCultureActor(pActor) &&
+                (lineageId >= 0 || HasOriginalClan(pActor))) return true;
+
+            NamingProfileId profile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pActor).Profile;
+            if (profile != NamingProfileId.Western &&
+                profile != NamingProfileId.OrcNomadic) return false;
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string family,
+                string.Empty);
+            pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME,
+                out string chineseFamily, string.Empty);
+            pActor.data.get(AWNameDataKeys.FamilyComponent,
+                out string familyComponent, string.Empty);
+            if (!string.IsNullOrWhiteSpace(family) ||
+                   !string.IsNullOrWhiteSpace(chineseFamily) ||
+                   !string.IsNullOrWhiteSpace(familyComponent)) return true;
+
+            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(
+                pActor.data.id);
+            return row != null &&
+                   (!string.IsNullOrWhiteSpace(row.family_name) ||
+                    !string.IsNullOrWhiteSpace(row.clan_name));
         }
 
         public static bool UsesAwLineageSystem(Actor pActor)
@@ -1177,6 +1197,16 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnNobleChildFounding(Actor pChild)
         {
+            NamingProfileId namingProfile = AWCultureNamingTraditionService
+                .ResolveForActorReadOnly(pChild).Profile;
+            if (namingProfile == NamingProfileId.Western ||
+                namingProfile == NamingProfileId.OrcNomadic)
+            {
+                WesternLineageAdmissionService.TryEnsure(pChild,
+                    pRuler: false, pHeir: false, pNoble: true,
+                    pOfficial: true, pSourceType: "enfeoffed");
+                return;
+            }
             if (!IsXia(pChild) && !UsesAwLineageSystem(pChild)) return;
 
             pChild.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);

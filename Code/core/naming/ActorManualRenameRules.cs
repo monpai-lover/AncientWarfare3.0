@@ -16,8 +16,48 @@ namespace AncientWarfare3.core.naming
         internal bool RequiresBranchFork { get; }
     }
 
+    internal sealed class ActorManualFamilyWritePlan
+    {
+        internal ActorManualFamilyWritePlan(string pFamilyName)
+        {
+            FamilyName = pFamilyName;
+            ChineseFamilyName = pFamilyName;
+            ClanName = pFamilyName;
+            LocalizedFamilyComponent = pFamilyName;
+            NameIntegrated = pFamilyName.Length > 0;
+        }
+
+        internal string FamilyName { get; }
+        internal string ChineseFamilyName { get; }
+        internal string ClanName { get; }
+        internal string LocalizedFamilyComponent { get; }
+        internal bool NameIntegrated { get; }
+    }
+
     internal static class ActorManualRenameRules
     {
+        internal static string ResolveFamilyIdentity(
+            ActorManualNameMode pMode, string clanName, string familyName,
+            string chineseFamilyName, string localizedFamilyComponent)
+        {
+            string clan = Normalize(clanName);
+            string family = Normalize(familyName);
+            string chineseFamily = Normalize(chineseFamilyName);
+            string localizedFamily = Normalize(localizedFamilyComponent);
+            if (pMode == ActorManualNameMode.Xia && clan.Length > 0)
+                return clan;
+            if (family.Length > 0) return family;
+            if (clan.Length > 0) return clan;
+            if (chineseFamily.Length > 0) return chineseFamily;
+            return localizedFamily;
+        }
+
+        internal static ActorManualFamilyWritePlan PlanIntegratedFamilyWrite(
+            string pFamilyName)
+        {
+            return new ActorManualFamilyWritePlan(Normalize(pFamilyName));
+        }
+
         internal static ActorManualBranchPlan PlanBranchChange(long pRootId,
             string pCurrentFamily, string pRequestedFamily,
             IEnumerable<long> pPatrilinealIds)

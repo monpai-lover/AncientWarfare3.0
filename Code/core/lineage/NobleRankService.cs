@@ -641,6 +641,141 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        internal static VirtualNobleTitleEditResult TryEditTitleName(
+            long pGrantId, long pKingdomId, string pText)
+        {
+            if (!Ready) return VirtualNobleTitleEditResult.NotReady;
+            if (!VirtualNobleTitleRules.IsValidTitle(pText))
+                return VirtualNobleTitleEditResult.InvalidText;
+            string title = VirtualNobleTitleRules.NormalizeTitle(pText);
+            try
+            {
+                long actorId = -1L;
+                string oldTitle = string.Empty;
+                using (SQLiteCommand read = new SQLiteCommand(DB))
+                {
+                    read.CommandText = "SELECT ACTOR_ID,TITLE_NAME FROM " +
+                        EnfeoffmentTableItem.GetTableName() +
+                        " WHERE GRANT_ID=@id AND KINGDOM_ID=@kingdom " +
+                        "AND ACTIVE=1 LIMIT 1";
+                    read.Parameters.AddWithValue("@id", pGrantId);
+                    read.Parameters.AddWithValue("@kingdom", pKingdomId);
+                    using SQLiteDataReader reader = read.ExecuteReader();
+                    if (!reader.Read())
+                        return VirtualNobleTitleEditResult.NotFound;
+                    actorId = reader.GetInt64(0);
+                    oldTitle = reader.IsDBNull(1) ? string.Empty :
+                        reader.GetString(1);
+                }
+
+                using (SQLiteCommand duplicate = new SQLiteCommand(DB))
+                {
+                    duplicate.CommandText = "SELECT GRANT_ID FROM " +
+                        EnfeoffmentTableItem.GetTableName() +
+                        " WHERE KINGDOM_ID=@kingdom AND TITLE_NAME=@title " +
+                        "AND ACTIVE=1 AND GRANT_ID<>@id LIMIT 1";
+                    duplicate.Parameters.AddWithValue("@kingdom", pKingdomId);
+                    duplicate.Parameters.AddWithValue("@title", title);
+                    duplicate.Parameters.AddWithValue("@id", pGrantId);
+                    if (duplicate.ExecuteScalar() != null)
+                        return VirtualNobleTitleEditResult.Duplicate;
+                }
+
+                using (SQLiteCommand update = new SQLiteCommand(DB))
+                {
+                    update.CommandText = "UPDATE " +
+                        EnfeoffmentTableItem.GetTableName() +
+                        " SET TITLE_NAME=@title WHERE GRANT_ID=@id " +
+                        "AND KINGDOM_ID=@kingdom AND ACTIVE=1";
+                    update.Parameters.AddWithValue("@title", title);
+                    update.Parameters.AddWithValue("@id", pGrantId);
+                    update.Parameters.AddWithValue("@kingdom", pKingdomId);
+                    if (update.ExecuteNonQuery() != 1)
+                        return VirtualNobleTitleEditResult.NotFound;
+                }
+
+                Actor actor = World.world?.units?.get(actorId);
+                if (actor?.data != null && !actor.isRekt())
+                {
+                    actor.data.set(LineageKeys.NOBLE_TITLE_NAME, title);
+                    try { LineageService.ArchiveActor(actor, pAlive: true); }
+                    catch { }
+                    ChronicleEvents.OnNobleTitleRenamed(
+                        FindKingdom(pKingdomId), actor, oldTitle, title);
+                }
+                return VirtualNobleTitleEditResult.Success;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Noble title edit failed: " +
+                                    error.Message);
+                return VirtualNobleTitleEditResult.PersistenceFailed;
+            }
+        }
+
+        internal static VirtualNobleTitleEditResult TryDeleteTitle(
+            long pGrantId, long pKingdomId)
+        {
+            if (!Ready) return VirtualNobleTitleEditResult.NotReady;
+            try
+            {
+                long actorId = -1L;
+                string oldTitle = string.Empty;
+                using (SQLiteCommand read = new SQLiteCommand(DB))
+                {
+                    read.CommandText = "SELECT ACTOR_ID,TITLE_NAME FROM " +
+                        EnfeoffmentTableItem.GetTableName() +
+                        " WHERE GRANT_ID=@id AND KINGDOM_ID=@kingdom " +
+                        "AND ACTIVE=1 LIMIT 1";
+                    read.Parameters.AddWithValue("@id", pGrantId);
+                    read.Parameters.AddWithValue("@kingdom", pKingdomId);
+                    using SQLiteDataReader reader = read.ExecuteReader();
+                    if (!reader.Read())
+                        return VirtualNobleTitleEditResult.NotFound;
+                    actorId = reader.GetInt64(0);
+                    oldTitle = reader.IsDBNull(1) ? string.Empty :
+                        reader.GetString(1);
+                }
+
+                using (SQLiteCommand close = new SQLiteCommand(DB))
+                {
+                    close.CommandText = "UPDATE " +
+                        EnfeoffmentTableItem.GetTableName() +
+                        " SET ACTIVE=0,END_YEAR=@year,END_TIME=@time," +
+                        "END_REASON='manual_deleted' WHERE GRANT_ID=@id " +
+                        "AND KINGDOM_ID=@kingdom AND ACTIVE=1";
+                    close.Parameters.AddWithValue("@year", SafeYear());
+                    close.Parameters.AddWithValue("@time",
+                        LineageService.CurTime());
+                    close.Parameters.AddWithValue("@id", pGrantId);
+                    close.Parameters.AddWithValue("@kingdom", pKingdomId);
+                    if (close.ExecuteNonQuery() != 1)
+                        return VirtualNobleTitleEditResult.NotFound;
+                }
+
+                Actor actor = World.world?.units?.get(actorId);
+                if (actor?.data != null && !actor.isRekt())
+                {
+                    NobleTitleSnapshot current = ReadHot(actor);
+                    if (current.GrantId == pGrantId)
+                    {
+                        ClearProjection(actor);
+                        try { LineageService.ArchiveActor(actor, pAlive: true); }
+                        catch { }
+                    }
+                    ChronicleEvents.OnNobleTitleDeleted(
+                        FindKingdom(pKingdomId), actor, oldTitle);
+                }
+                return VirtualNobleTitleEditResult.Success;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Noble title delete failed: " +
+                                    error.Message);
+                return VirtualNobleTitleEditResult.PersistenceFailed;
+            }
+        }
+
         public static void OnActorDying(Actor pHolder)
         {
             if (!Ready || pHolder?.data == null) return;

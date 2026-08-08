@@ -74,7 +74,7 @@ namespace AncientWarfare3.ui.windows
                 -score.DecisiveScore);
             session.Presentation = new WarPeaceNegotiationPresentation(
                 war.name,
-                Party(pRequester), Party(pResponder), requesterBreakdown,
+                Party(pRequester, war), Party(pResponder, war), requesterBreakdown,
                 responderBreakdown, terms,
                 new WarPeaceAcceptanceContext(0, resolve,
                     responderExhaustion, Math.Max(0, score.Score)), "",
@@ -223,9 +223,9 @@ namespace AncientWarfare3.ui.windows
             int responderExhaustion = pCurrent.ResponderExhaustion;
             string disabledReason = string.Empty;
             WarPeacePartyPresentation requesterParty =
-                Party(session.Requester);
+                Party(session.Requester, session.War);
             WarPeacePartyPresentation responderParty =
-                Party(session.Responder);
+                Party(session.Responder, session.War);
             bool partyChanged = WarPeaceNegotiationLiveStateRules
                 .HasPartyChanged(pCurrent.Requester, pCurrent.Responder,
                     requesterParty, responderParty);
@@ -435,13 +435,34 @@ namespace AncientWarfare3.ui.windows
             return null;
         }
 
-        private static WarPeacePartyPresentation Party(Kingdom pKingdom)
+        private static WarPeacePartyPresentation Party(Kingdom pKingdom,
+            War pWar)
         {
             Actor ruler = pKingdom?.king;
+            int armyStrength = 0;
+            int casualties = 0;
+            try
+            {
+                if (pWar?.data != null && pKingdom?.data != null)
+                {
+                    if (pWar.isAttacker(pKingdom))
+                    {
+                        armyStrength = pWar.countAttackersWarriors();
+                        casualties = pWar.getDeadAttackers();
+                    }
+                    else if (pWar.isDefender(pKingdom))
+                    {
+                        armyStrength = pWar.countDefendersWarriors();
+                        casualties = pWar.getDeadDefenders();
+                    }
+                }
+            }
+            catch { }
             return new WarPeacePartyPresentation(pKingdom?.id ?? -1L,
                 SuccessionDisputeService.GetDisplayName(pKingdom),
                 ruler?.data?.id ?? -1L,
-                ruler?.getName() ?? "", CountLiveCities(pKingdom));
+                ruler?.getName() ?? "", CountLiveCities(pKingdom),
+                armyStrength, casualties);
         }
 
         private static int CountLiveCities(Kingdom pKingdom)

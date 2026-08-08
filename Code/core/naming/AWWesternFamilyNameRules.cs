@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Text;
 
 namespace AncientWarfare3.core.naming
@@ -59,6 +61,25 @@ namespace AncientWarfare3.core.naming
             }
 
             return particle + origin;
+        }
+
+        public static string ResolveFamilyStem(long seed,
+            WesternNamingTradition tradition, string originCity,
+            IReadOnlyList<string> dictionaryWords)
+        {
+            if ((seed & 1L) == 0L && dictionaryWords != null &&
+                dictionaryWords.Count > 0)
+            {
+                ulong stableSeed = seed == long.MinValue
+                    ? (ulong)long.MaxValue + 1UL
+                    : (ulong)Math.Abs(seed);
+                string selected = dictionaryWords[
+                    (int)((stableSeed / 2UL) % (ulong)dictionaryWords.Count)];
+                if (!string.IsNullOrWhiteSpace(selected))
+                    return NormalizeWhitespace(selected);
+            }
+
+            return BuildFamilyStem(tradition, originCity);
         }
 
         private static string NormalizeWhitespace(string pValue)

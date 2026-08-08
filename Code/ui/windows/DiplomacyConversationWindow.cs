@@ -2383,6 +2383,8 @@ namespace AncientWarfare3.ui.windows
         {
             var result = new List<Kingdom>();
             pCapitalDistances = new Dictionary<long, long>();
+            var relationPriorities =
+                new Dictionary<long, DiplomacyPrimaryRelation>();
             if (World.world?.kingdoms == null) return result;
             foreach (Kingdom kingdom in World.world.kingdoms)
                 if (kingdom?.data != null && !kingdom.isRekt() &&
@@ -2391,12 +2393,44 @@ namespace AncientWarfare3.ui.windows
                     result.Add(kingdom);
                     pCapitalDistances[kingdom.id] =
                         CapitalDistanceSquared(pBase, kingdom);
+                    bool atWar = false;
+                    bool allied = false;
+                    try
+                    {
+                        atWar = pBase.isEnemy(kingdom);
+                        allied = Alliance.isSame(pBase.getAlliance(),
+                            kingdom.getAlliance());
+                    }
+                    catch { }
+                    relationPriorities[kingdom.id] =
+                        DiplomacyConversationRules.ResolvePrimaryRelation(
+                            atWar,
+                            baseIsVassal: VassalService.GetSuzerain(pBase) ==
+                                kingdom,
+                            otherIsVassal: VassalService.GetSuzerain(kingdom) ==
+                                pBase,
+                            baseIsTributary:
+                                VassalService.GetTributarySuzerain(pBase) ==
+                                kingdom,
+                            otherIsTributary:
+                                VassalService.GetTributarySuzerain(kingdom) ==
+                                pBase,
+                            allied: allied);
                 }
             Dictionary<long, long> distances = pCapitalDistances;
+            Dictionary<long, DiplomacyPrimaryRelation> priorities =
+                relationPriorities;
             result.Sort((pLeft, pRight) =>
-                DiplomacyConversationRules.CompareCapitalDistance(
-                    distances[pLeft.id], pLeft.id,
-                    distances[pRight.id], pRight.id));
+            {
+                int relation =
+                    DiplomacyConversationRules.CompareRelationPriority(
+                        priorities[pLeft.id], priorities[pRight.id]);
+                return relation != 0
+                    ? relation
+                    : DiplomacyConversationRules.CompareCapitalDistance(
+                        distances[pLeft.id], pLeft.id,
+                        distances[pRight.id], pRight.id);
+            });
             return result;
         }
 

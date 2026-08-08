@@ -112,8 +112,7 @@ namespace AncientWarfare3.core.lineage
                 DisplayStem = identity.DisplayStem,
                 SourceType = pSourceType ?? "western_admission",
                 OriginKingdomId = pActor.kingdom?.id ?? -1L,
-                OriginCityId = pActor.city?.data?.id ??
-                               pActor.kingdom?.capital?.data?.id ?? -1L,
+                OriginCityId = pActor.city?.data?.id ?? -1L,
                 OriginOriginalClanId = pActor.clan?.data?.id ?? -1L,
                 CreatedTime = World.world?.getCurWorldTime() ?? 0d
             };
@@ -129,6 +128,8 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME,
                 identity.DisplayStem);
             pActor.data.set(LineageKeys.CLAN_NAME, identity.DisplayStem);
+            pActor.data.set(AWNameDataKeys.FamilyComponent,
+                identity.DisplayStem);
             pActor.data.set(LineageKeys.NAMING_PROFILE,
                 identity.PersistedNamingProfile);
             pActor.data.set(LineageKeys.WESTERN_NAMING_TRADITION,
@@ -221,7 +222,9 @@ namespace AncientWarfare3.core.lineage
             }
             catch { return false; }
             if (!string.Equals(clan.data.name, heading,
-                    StringComparison.Ordinal)) return false;
+                        StringComparison.Ordinal)) return false;
+
+            if (!pRuler) return true;
 
             Kingdom kingdom = pActor.kingdom;
             if (kingdom?.data == null ||
@@ -305,7 +308,10 @@ namespace AncientWarfare3.core.lineage
                 ? AWLocalizedNameService.GenerateValue(
                     AWOrcNomadicNamingRules.FamilyStemGeneratorId,
                     pActor.data.id, pActor.culture?.getID() ?? -1L, null)
-                : string.Empty;
+                : AWWesternFamilyNameRules.ResolveFamilyStem(
+                    pActor.data.id, pNaming.WesternTradition, origin,
+                    AWWordLibraryManager.Instance.GetWords(
+                        "\u4e2d\u6b27\u59d3\u6c0f"));
             if (pNaming.Profile == NamingProfileId.OrcNomadic &&
                 string.IsNullOrWhiteSpace(rawStem))
                 rawStem = pActor.clan?.data?.name ?? string.Empty;
@@ -391,13 +397,9 @@ namespace AncientWarfare3.core.lineage
 
         private static string ResolveOriginCityChineseName(Actor pActor)
         {
-            City city = pActor?.city ?? pActor?.kingdom?.capital;
+            City city = pActor?.city;
             if (city?.data == null) return string.Empty;
-            city.data.get(AWNameDataKeys.ChineseName, out string name,
-                string.Empty);
-            return !string.IsNullOrWhiteSpace(name)
-                ? name.Trim()
-                : (city.data.name ?? string.Empty).Trim();
+            return (city.name ?? string.Empty).Trim();
         }
     }
 }

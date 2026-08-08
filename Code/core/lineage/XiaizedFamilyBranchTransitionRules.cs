@@ -12,6 +12,17 @@ namespace AncientWarfare3.core.lineage
                    pProfile == NamingProfileId.OrcNomadic;
         }
 
+        public static bool ShouldRegeneratePersonalName(
+            bool protectedAuthoredName)
+        {
+            return !protectedAuthoredName;
+        }
+
+        public static bool NeedsSourceLineage(long lineageId, long shiId)
+        {
+            return lineageId < 0L || shiId < 0L;
+        }
+
         public static string ResolveFamily(string pChineseFamily,
             string pLocalizedFamilyComponent, string pFallback)
         {

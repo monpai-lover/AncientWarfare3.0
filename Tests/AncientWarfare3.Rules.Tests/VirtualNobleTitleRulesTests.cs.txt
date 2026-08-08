@@ -21,6 +21,15 @@ internal static class VirtualNobleTitleRulesTests
             "virtual title is primary without formal hereditary title");
         False(VirtualNobleTitleRules.ShouldBePrimary(true, true),
             "formal hereditary title remains primary");
+        True(VirtualNobleTitleRules.ShouldExposeInRoster(
+                formalTitle: true, virtualTitle: false),
+            "formal noble titles are editable in the title-holder roster");
+        True(VirtualNobleTitleRules.ShouldExposeInRoster(
+                formalTitle: false, virtualTitle: true),
+            "virtual noble titles remain editable in the title-holder roster");
+        False(VirtualNobleTitleRules.ShouldExposeInRoster(
+                formalTitle: false, virtualTitle: false),
+            "untitled actors are not exposed as editable title rows");
 
         var first = new VirtualNobleTitleCandidate(9L, "次子", 20L);
         var second = new VirtualNobleTitleCandidate(4L, "长子", 10L);

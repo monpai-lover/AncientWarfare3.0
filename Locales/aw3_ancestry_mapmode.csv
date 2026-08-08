@@ -1,4 +1,11 @@
 key,cz,en,ch
+aw_royal_enfeoffment,分封建藩,Royal Enfeoffment,分封建藩
+aw_royal_enfeoffment Description,点击本国城市建立一城附庸并派宗族成员为王,Click a home city to create a one-city vassal ruled by a royal clansman,點擊本國城市建立一城附庸並派宗族成員為王
+aw_royal_enfeoffment_success,已建立附庸王国,A vassal kingdom has been established,已建立附庸王國
+aw_royal_enfeoffment_failure,分封建藩失败,Royal enfeoffment failed,分封建藩失敗
+aw_royal_enfeoffment_failure_invalid_city,请选择有效的文明城市,Select a valid civilized city,請選擇有效的文明城市
+aw_royal_enfeoffment_failure_no_royal_candidate,没有合格的宗族成员,No eligible royal clansman exists,沒有合格的宗族成員
+aw_royal_enfeoffment_failure_vassal_creation_failed,附庸关系建立失败,Vassal relation creation failed,附庸關係建立失敗
 aw3_hierarchical_vassal_map_option_country,国家,Country,國家
 aw3_hierarchical_vassal_map_option_city,城市,City,城市
 aw_tech_level_mapmode,科技地图,Technology Map,科技地圖

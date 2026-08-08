@@ -8,6 +8,38 @@ namespace AncientWarfare3.core.naming
         NonXia
     }
 
+    internal enum ActorManualNameEditorState
+    {
+        Display,
+        Editing
+    }
+
+    internal enum ActorManualNameEditorEvent
+    {
+        NameSelected,
+        FocusChanged,
+        WindowClosed
+    }
+
+    internal static class ActorManualNameEditorRules
+    {
+        internal static ActorManualNameEditorState Resolve(
+            ActorManualNameEditorState pCurrent,
+            ActorManualNameEditorEvent pEvent,
+            bool anyEditorFieldFocused)
+        {
+            if (pEvent == ActorManualNameEditorEvent.NameSelected)
+                return ActorManualNameEditorState.Editing;
+            if (pEvent == ActorManualNameEditorEvent.WindowClosed)
+                return ActorManualNameEditorState.Display;
+            if (pEvent == ActorManualNameEditorEvent.FocusChanged &&
+                pCurrent == ActorManualNameEditorState.Editing &&
+                !anyEditorFieldFocused)
+                return ActorManualNameEditorState.Display;
+            return pCurrent;
+        }
+    }
+
     internal sealed class ActorManualNameDraft
     {
         internal ActorManualNameDraft(bool pIsValid, string pGivenName,

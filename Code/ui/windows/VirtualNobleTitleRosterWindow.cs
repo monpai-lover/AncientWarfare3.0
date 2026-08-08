@@ -32,17 +32,19 @@ namespace AncientWarfare3.ui.windows
         private sealed class RosterEntry
         {
             internal RosterEntry(Actor pActor, string pDisplayTitle,
-                bool pIsVirtual, long pTitleId)
+                bool pIsVirtual, bool pIsFormal, long pTitleId)
             {
                 Actor = pActor;
                 DisplayTitle = pDisplayTitle ?? "";
                 IsVirtual = pIsVirtual;
+                IsFormal = pIsFormal;
                 TitleId = pTitleId;
             }
 
             internal Actor Actor { get; }
             internal string DisplayTitle { get; }
             internal bool IsVirtual { get; }
+            internal bool IsFormal { get; }
             internal long TitleId { get; }
         }
 
@@ -88,7 +90,14 @@ namespace AncientWarfare3.ui.windows
                     if (!IsLiveActor(actor)) continue;
                     string formalTitle = NobleRankService.GetDisplayTitle(actor);
                     if (!string.IsNullOrWhiteSpace(formalTitle))
-                        rows.Add(new RosterEntry(actor, formalTitle, false, -1L));
+                    {
+                        NobleTitleSnapshot formal = NobleRankService.ReadHot(
+                            actor);
+                        if (VirtualNobleTitleRules.ShouldExposeInRoster(
+                                formalTitle: true, virtualTitle: false))
+                            rows.Add(new RosterEntry(actor, formalTitle,
+                                false, true, formal.GrantId));
+                    }
                 }
             }
             catch { }
@@ -98,7 +107,8 @@ namespace AncientWarfare3.ui.windows
             {
                 Actor actor = World.world?.units?.get(title.ActorId);
                 if (!IsLiveActor(actor)) continue;
-                rows.Add(new RosterEntry(actor, title.Text, true, title.TitleId));
+                rows.Add(new RosterEntry(actor, title.Text, true, false,
+                    title.TitleId));
             }
 
             string kingdomColor = kingdom.getColor()?.color_text ?? "";
@@ -196,12 +206,6 @@ namespace AncientWarfare3.ui.windows
                     ActionLibrary.openUnitWindow(pEntry.Actor);
             });
 
-            if (!pEntry.IsVirtual)
-            {
-                _rows.Add(row);
-                return;
-            }
-
             Text inputLabel = CreateText(row.transform, "TitleLabel", 8,
                 TextAnchor.MiddleLeft, ResolveKingdomTextColor(pKingdomColor));
             inputLabel.text = AW_L10n.Text("aw_ruler_appellation", "礼制称呼");
@@ -213,7 +217,7 @@ namespace AncientWarfare3.ui.windows
             {
                 AW3MultiplayerCommandFacade.DispatchFromUi(
                     AW3CommandRequest.EditVirtualNobleTitle(pKingdomId,
-                        pEntry.TitleId, input.text));
+                        pEntry.TitleId, input.text, pEntry.IsFormal));
                 Refresh();
             });
             SetRect(edit, 310f, 24f, 48f, 21f);
@@ -222,7 +226,7 @@ namespace AncientWarfare3.ui.windows
             {
                 AW3MultiplayerCommandFacade.DispatchFromUi(
                     AW3CommandRequest.DeleteVirtualNobleTitle(pKingdomId,
-                        pEntry.TitleId));
+                        pEntry.TitleId, pEntry.IsFormal));
                 Refresh();
             });
             SetRect(delete, 364f, 24f, 52f, 21f);

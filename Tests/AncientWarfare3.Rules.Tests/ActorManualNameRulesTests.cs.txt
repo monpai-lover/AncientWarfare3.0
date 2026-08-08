@@ -21,6 +21,31 @@ internal static class ActorManualNameRulesTests
         Equal("Ji Fa", ActorManualNameRules.CreateDisplayName(
             ActorManualNameMode.NonXia, "Ji", "Fa"),
             "non-Xia display uses a separator");
+
+        Equal(ActorManualNameEditorState.Editing,
+            ActorManualNameEditorRules.Resolve(
+                ActorManualNameEditorState.Display,
+                ActorManualNameEditorEvent.NameSelected,
+                anyEditorFieldFocused: true),
+            "selecting the displayed name expands the structured editor");
+        Equal(ActorManualNameEditorState.Editing,
+            ActorManualNameEditorRules.Resolve(
+                ActorManualNameEditorState.Editing,
+                ActorManualNameEditorEvent.FocusChanged,
+                anyEditorFieldFocused: true),
+            "moving between structured fields keeps the editor expanded");
+        Equal(ActorManualNameEditorState.Display,
+            ActorManualNameEditorRules.Resolve(
+                ActorManualNameEditorState.Editing,
+                ActorManualNameEditorEvent.FocusChanged,
+                anyEditorFieldFocused: false),
+            "leaving both structured fields restores the complete name");
+        Equal(ActorManualNameEditorState.Display,
+            ActorManualNameEditorRules.Resolve(
+                ActorManualNameEditorState.Editing,
+                ActorManualNameEditorEvent.WindowClosed,
+                anyEditorFieldFocused: true),
+            "closing the actor window restores display state");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

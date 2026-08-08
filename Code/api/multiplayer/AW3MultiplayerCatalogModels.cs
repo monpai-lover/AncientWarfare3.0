@@ -605,15 +605,18 @@ namespace AncientWarfare3.api.multiplayer
             boolValue: hereditary);
 
         public static AW3CommandRequest EditVirtualNobleTitle(
-            long countryId, long titleId, string titleText) => Create(
+            long countryId, long titleId, string titleText,
+            bool formalTitle = false) => Create(
             AW3CommandKind.EditVirtualNobleTitle, countryId,
             secondaryId: Positive(titleId, nameof(titleId)),
-            text: DisplayText(titleText, nameof(titleText)));
+            text: DisplayText(titleText, nameof(titleText)),
+            boolValue: formalTitle);
 
         public static AW3CommandRequest DeleteVirtualNobleTitle(
-            long countryId, long titleId) => Create(
+            long countryId, long titleId, bool formalTitle = false) => Create(
             AW3CommandKind.DeleteVirtualNobleTitle, countryId,
-            secondaryId: Positive(titleId, nameof(titleId)));
+            secondaryId: Positive(titleId, nameof(titleId)),
+            boolValue: formalTitle);
 
         public static AW3CommandRequest ChangeEra(long countryId,
             string eraName) => Create(AW3CommandKind.ChangeEra, countryId,

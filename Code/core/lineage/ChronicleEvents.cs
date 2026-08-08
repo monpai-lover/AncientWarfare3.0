@@ -212,6 +212,29 @@ namespace AncientWarfare3.core.lineage
                 "feudatory_established", city, HistoryTarget.Actor(pPrince));
         }
 
+        public static void OnRoyalEnfeoffment(Kingdom pSuzerain,
+            Kingdom pVassal, City pSeat, Actor pKing)
+        {
+            if (pSuzerain?.data == null || pVassal?.data == null ||
+                pSeat?.data == null || pKing?.data == null) return;
+            HistoryText text = HistoryText.Kingdom(pSuzerain) +
+                               H("aw_hist_royal_enfeoffment_granted") +
+                               HistoryText.City(pSeat, pVassal) +
+                               H("aw_hist_royal_enfeoffment_as") +
+                               HistoryText.Kingdom(pVassal) +
+                               H("aw_hist_royal_enfeoffment_king") +
+                               HistoryText.Actor(pKing);
+            HistoryWriter.RecordKingdom(pSuzerain,
+                "royal_enfeoffment", text, HistoryTarget.Actor(pKing));
+            HistoryWriter.RecordKingdom(pVassal,
+                "royal_enfeoffment", text, HistoryTarget.Actor(pKing));
+            HistoryWriter.RecordCity(pSeat, pVassal,
+                "royal_enfeoffment", text, HistoryTarget.Actor(pKing));
+            HistoryWriter.RecordPerson(pKing.data.id, pVassal,
+                pKing.getName(), "royal_enfeoffment", text,
+                ChronicleCategory.HONOR, HistoryTarget.City(pSeat));
+        }
+
         public static void OnFeudatoryInherited(Kingdom pKingdom,
             Actor pOldPrince, Actor pNewPrince, City pSeat, string pReason)
         {
@@ -2216,6 +2239,38 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Actor(pLastHolder));
             HistoryWriter.RecordPerson(pLastHolder.data.id, pKingdom,
                 pLastHolder.getName(), "virtual_noble_title_extinct", content,
+                ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnNobleTitleRenamed(Kingdom pKingdom,
+            Actor pHolder, string pOldTitle, string pNewTitle)
+        {
+            if (pKingdom?.data == null || pHolder?.data == null ||
+                string.IsNullOrWhiteSpace(pNewTitle)) return;
+            HistoryText content = HistoryText.Actor(pHolder) +
+                                  H("aw_hist_noble_title_renamed") +
+                                  HistoryText.PlainText(pNewTitle) +
+                                  H("aw_hist_noble_title_renamed_from") +
+                                  HistoryText.PlainText(pOldTitle ?? "");
+            HistoryWriter.RecordKingdom(pKingdom, "noble_title_renamed",
+                content, HistoryTarget.Actor(pHolder));
+            HistoryWriter.RecordPerson(pHolder.data.id, pKingdom,
+                pHolder.getName(), "noble_title_renamed", content,
+                ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnNobleTitleDeleted(Kingdom pKingdom,
+            Actor pHolder, string pTitle)
+        {
+            if (pKingdom?.data == null || pHolder?.data == null ||
+                string.IsNullOrWhiteSpace(pTitle)) return;
+            HistoryText content = HistoryText.Actor(pHolder) +
+                                  H("aw_hist_noble_title_deleted") +
+                                  HistoryText.PlainText(pTitle);
+            HistoryWriter.RecordKingdom(pKingdom, "noble_title_deleted",
+                content, HistoryTarget.Actor(pHolder));
+            HistoryWriter.RecordPerson(pHolder.data.id, pKingdom,
+                pHolder.getName(), "noble_title_deleted", content,
                 ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
         }
     }

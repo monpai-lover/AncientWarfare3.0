@@ -100,11 +100,13 @@ namespace AncientWarfare3.Tests
                     "AW_ActorManualNameSecondInput") &&
                 compact.Contains("ActorManualRenameService") &&
                 compact.Contains("ActorManualNameMode.Xia") &&
-                compact.Contains("ActorManualNameMode.NonXia") &&
                 compact.Contains("onEndEdit.RemoveAllListeners") &&
                 compact.Contains("pFirst.can_be_empty=xiaMode") &&
-                compact.Contains("pState.Second.can_be_empty=!xiaMode"),
-                "split editor must replace vanilla listener and support both orders");
+                compact.Contains("pState.Second.can_be_empty=!xiaMode") &&
+                compact.Contains("ActorManualNameEditorState.Display") &&
+                compact.Contains("EnterEditing") &&
+                compact.Contains("CommitAndCollapse"),
+                "split editor must replace vanilla listener, support both orders, and expand only while editing");
         }
 
         private static string Read(params string[] pParts)

@@ -2162,6 +2162,13 @@ namespace AncientWarfare3.core.lineage
         public static void ReleaseActor(Actor pActor)
         {
             if (pActor?.data == null || pActor.ai == null) return;
+            if (!AWArmyRoleRules.ShouldRtsOwnCaptain(
+                    AWArmyService.GetRole(pActor.army),
+                    RoyalGuardService.IsRoyalGuard(pActor)))
+            {
+                RoyalGuardService.EnsureProtectKingTask(pActor);
+                return;
+            }
             try
             {
                 string jobId = pActor.ai.job?.id ?? "";
@@ -3642,6 +3649,14 @@ namespace AncientWarfare3.core.lineage
         private static void SetJob(Actor pActor, string pJobId,
             string pTaskId = null, bool pForceReassert = false)
         {
+            if (pActor?.data != null &&
+                !AWArmyRoleRules.ShouldRtsOwnCaptain(
+                    AWArmyService.GetRole(pActor.army),
+                    RoyalGuardService.IsRoyalGuard(pActor)))
+            {
+                RoyalGuardService.EnsureProtectKingTask(pActor);
+                return;
+            }
             bool captainJob = (pJobId == ArmyRtsContent.CaptainJobId ||
                                pJobId == ArmyRtsContent.HoldJobId) &&
                               IsCaptain(pActor, pActor?.army);

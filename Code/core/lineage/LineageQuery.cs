@@ -296,7 +296,7 @@ namespace AncientWarfare3.core.lineage
 
             if (pOverview.origin_city_id < 0 && city?.data != null) pOverview.origin_city_id = city.data.id;
             if (string.IsNullOrEmpty(pOverview.origin_city_name) && city?.data != null)
-                pOverview.origin_city_name = city.data.name ?? "";
+                pOverview.origin_city_name = city.name ?? "";
         }
 
         private static void ResolveKingdomArchive(long pKingdomId, out string pName, out string pColor)
@@ -1042,7 +1042,7 @@ namespace AncientWarfare3.core.lineage
                 pShi.origin_kingdom_color = HistoryColors.FromKingdom(kingdom);
             if (pShi.origin_city_id < 0 && city?.data != null) pShi.origin_city_id = city.data.id;
             if (string.IsNullOrEmpty(pShi.origin_city_name) && city?.data != null)
-                pShi.origin_city_name = city.data.name ?? "";
+                pShi.origin_city_name = city.name ?? "";
         }
 
         private static void FillShiOriginFromMemberArchive(ShiBranchInfo pShi)
@@ -1737,7 +1737,7 @@ namespace AncientWarfare3.core.lineage
                 city = World.world?.cities?.get(pLive.data.cityID);
 
             if (city?.data != null)
-                return city.data.name ?? "";
+                return city.name ?? "";
 
             return pRow?.city_name ?? "";
         }

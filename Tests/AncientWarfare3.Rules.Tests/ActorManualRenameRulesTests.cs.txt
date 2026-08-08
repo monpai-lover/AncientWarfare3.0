@@ -14,6 +14,30 @@ internal static class ActorManualRenameRulesTests
         Equal(false, ActorManualRenameRules.PlanBranchChange(
             10L, "Jiang", "Jiang", new long[] { 10L, 11L })
             .RequiresBranchFork, "resubmitting surname is idempotent");
+
+        Equal("Lu", ActorManualRenameRules.ResolveFamilyIdentity(
+                ActorManualNameMode.NonXia, clanName: "",
+                familyName: "", chineseFamilyName: " Lu ",
+                localizedFamilyComponent: "Fallback"),
+            "the editor falls back to the saved Chinese family identity");
+        Equal("Fallback", ActorManualRenameRules.ResolveFamilyIdentity(
+                ActorManualNameMode.NonXia, clanName: "",
+                familyName: "", chineseFamilyName: "",
+                localizedFamilyComponent: " Fallback "),
+            "the editor falls back to the localized family component");
+
+        ActorManualFamilyWritePlan integrated =
+            ActorManualRenameRules.PlanIntegratedFamilyWrite("  Lu  ");
+        Equal("Lu", integrated.FamilyName,
+            "manual surname writes the family name");
+        Equal("Lu", integrated.ChineseFamilyName,
+            "manual surname writes the merged surname");
+        Equal("Lu", integrated.ClanName,
+            "manual surname writes the merged clan name");
+        Equal("Lu", integrated.LocalizedFamilyComponent,
+            "manual surname writes the localized family component");
+        Equal(true, integrated.NameIntegrated,
+            "manual surname directly marks surname-clan integration");
     }
 
     private static void Sequence(IReadOnlyList<long> expected,

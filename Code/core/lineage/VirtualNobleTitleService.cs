@@ -226,16 +226,21 @@ namespace AncientWarfare3.core.lineage
             string key = VirtualNobleTitleRules.NormalizeTitleKey(title);
             try
             {
-                using SQLiteCommand command = new SQLiteCommand(DB);
-                command.CommandText = "SELECT KINGDOM_ID FROM " + Table +
-                    " WHERE TITLE_ID=@id AND ACTIVE=1 LIMIT 1";
-                Add(command, "@id", pTitleId);
-                object owner = command.ExecuteScalar();
-                if (owner == null) return VirtualNobleTitleEditResult.NotFound;
-                if (Convert.ToInt64(owner) != pKingdomId)
-                    return VirtualNobleTitleEditResult.NotFound;
-
-                long actorId = FindActiveActorId(pTitleId, pKingdomId);
+                long actorId;
+                string oldTitle;
+                using (SQLiteCommand command = new SQLiteCommand(DB))
+                {
+                    command.CommandText = "SELECT KINGDOM_ID,CURRENT_ACTOR_ID,TITLE_TEXT FROM " + Table +
+                        " WHERE TITLE_ID=@id AND ACTIVE=1 LIMIT 1";
+                    Add(command, "@id", pTitleId);
+                    using SQLiteDataReader reader = command.ExecuteReader();
+                    if (!reader.Read()) return VirtualNobleTitleEditResult.NotFound;
+                    if (reader.GetInt64(0) != pKingdomId)
+                        return VirtualNobleTitleEditResult.NotFound;
+                    actorId = reader.GetInt64(1);
+                    oldTitle = reader.IsDBNull(2) ? string.Empty :
+                        reader.GetString(2);
+                }
 
                 using SQLiteCommand duplicate = new SQLiteCommand(DB);
                 duplicate.CommandText = "SELECT TITLE_ID FROM " + Table +
@@ -259,6 +264,14 @@ namespace AncientWarfare3.core.lineage
                 if (update.ExecuteNonQuery() != 1)
                     return VirtualNobleTitleEditResult.NotFound;
                 Invalidate(pKingdomId, actorId);
+                Actor actor = World.world?.units?.get(actorId);
+                if (actor?.data != null && !actor.isRekt())
+                {
+                    ChronicleEvents.OnNobleTitleRenamed(
+                        ResolveKingdom(pKingdomId), actor, oldTitle, title);
+                    try { LineageService.ArchiveActor(actor, pAlive: true); }
+                    catch { }
+                }
                 return VirtualNobleTitleEditResult.Success;
             }
             catch (Exception error)
@@ -276,6 +289,16 @@ namespace AncientWarfare3.core.lineage
             {
                 long actorId = FindActiveActorId(pTitleId, pKingdomId);
                 if (actorId < 0) return VirtualNobleTitleEditResult.NotFound;
+                string oldTitle = string.Empty;
+                foreach (VirtualNobleTitleSnapshot title in
+                         GetActiveForActor(actorId))
+                {
+                    if (title.TitleId == pTitleId)
+                    {
+                        oldTitle = title.Text;
+                        break;
+                    }
+                }
                 using SQLiteCommand command = new SQLiteCommand(DB);
                 command.CommandText = "UPDATE " + Table +
                     " SET ACTIVE=0,SUCCESSION_STATE='extinct'," +
@@ -288,6 +311,14 @@ namespace AncientWarfare3.core.lineage
                 if (command.ExecuteNonQuery() != 1)
                     return VirtualNobleTitleEditResult.NotFound;
                 Invalidate(pKingdomId, actorId);
+                Actor actor = World.world?.units?.get(actorId);
+                if (actor?.data != null && !actor.isRekt())
+                {
+                    ChronicleEvents.OnNobleTitleDeleted(
+                        ResolveKingdom(pKingdomId), actor, oldTitle);
+                    try { LineageService.ArchiveActor(actor, pAlive: true); }
+                    catch { }
+                }
                 return VirtualNobleTitleEditResult.Success;
             }
             catch (Exception error)

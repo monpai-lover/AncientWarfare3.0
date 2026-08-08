@@ -397,7 +397,7 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 City city = pCityId < 0 ? null : World.world?.cities?.get(pCityId);
-                if (!string.IsNullOrEmpty(city?.data?.name)) return city.data.name;
+                if (!string.IsNullOrEmpty(city?.name)) return city.name;
             }
             catch { }
             return pArchivedName ?? "";

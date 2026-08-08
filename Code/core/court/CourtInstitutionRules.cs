@@ -166,12 +166,14 @@ namespace AncientWarfare3.core.court
         {
             switch (pInstitution ?? "")
             {
-                case CourtInstitutionId.WesternPrimitive:
                 case CourtInstitutionId.WesternBureaucratic:
                 case CourtInstitutionId.WesternFeudalBureaucratic:
                     return pInstitution;
+                case CourtInstitutionId.WesternPrimitive:
                 case CourtInstitutionId.WesternFeudal:
-                    return CourtInstitutionId.WesternFeudalBureaucratic;
+                    return pInstitution == CourtInstitutionId.WesternFeudal
+                        ? CourtInstitutionId.WesternFeudalBureaucratic
+                        : CourtInstitutionId.WesternBureaucratic;
                 case CourtInstitutionId.WesternRoyalDirect:
                     return feudalRetainersUnlocked
                         ? CourtInstitutionId.WesternFeudalBureaucratic
@@ -180,7 +182,7 @@ namespace AncientWarfare3.core.court
                 case CourtInstitutionId.WesternElective:
                     return CourtInstitutionId.WesternBureaucratic;
                 default:
-                    return CourtInstitutionId.WesternPrimitive;
+                    return CourtInstitutionId.WesternBureaucratic;
             }
         }
 

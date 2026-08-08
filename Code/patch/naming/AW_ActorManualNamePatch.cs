@@ -4,6 +4,7 @@ using AncientWarfare3.core.naming;
 using AncientWarfare3.ui;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace AncientWarfare3.patch.naming
@@ -30,9 +31,10 @@ namespace AncientWarfare3.patch.naming
 
             EditorState state = States.GetOrCreateValue(__instance);
             EnsureSecondInput(first, state);
-            if (state.Second == null) return;
-            Layout(first, state);
-            Bind(__instance, actor, first, state);
+            EnsureTrigger(__instance, first, state);
+            if (state.Second == null || state.Trigger == null) return;
+            state.ActorId = actor.data.id;
+            ShowDisplay(__instance, first, state);
         }
 
         private static void EnsureSecondInput(NameInput pFirst,
@@ -56,6 +58,79 @@ namespace AncientWarfare3.patch.naming
             pState.LayoutCaptured = true;
         }
 
+        private static void EnsureTrigger(UnitWindow pWindow,
+            NameInput pFirst, EditorState pState)
+        {
+            GameObject target = pFirst.inputField?.gameObject;
+            if (target == null) return;
+            if (pState.Trigger == null)
+                pState.Trigger = target.GetComponent<
+                                         ActorManualNameEditTrigger>() ??
+                                 target.AddComponent<
+                                     ActorManualNameEditTrigger>();
+            pState.Trigger.Clicked = () =>
+                EnterEditing(pWindow, pFirst, pState);
+            pState.Trigger.IsAnyEditorFieldFocused = () =>
+                pFirst.inputField != null && pFirst.inputField.isFocused ||
+                pState.Second?.inputField != null &&
+                pState.Second.inputField.isFocused;
+            pState.Trigger.FocusLost = () =>
+                CommitAndCollapse(pWindow, pFirst, pState);
+            pState.Trigger.Disabled = () =>
+                CloseEditor(pWindow, pFirst, pState);
+        }
+
+        private static void ShowDisplay(UnitWindow pWindow,
+            NameInput pFirst, EditorState pState)
+        {
+            if (!pState.LayoutCaptured || pState.Second == null) return;
+            Actor actor = pWindow?.actor;
+            RectTransform first = pFirst.GetComponent<RectTransform>();
+            if (actor?.data == null || first == null) return;
+
+            pState.Suppress = true;
+            try
+            {
+                pState.State = ActorManualNameEditorState.Display;
+                pFirst.inputField.onEndEdit.RemoveAllListeners();
+                pState.Second.inputField.onEndEdit.RemoveAllListeners();
+                first.sizeDelta = pState.OriginalSize;
+                first.anchoredPosition = pState.OriginalPosition;
+                pFirst.can_be_empty = false;
+                pFirst.setText(actor.getName().Trim());
+                SetLabelVisible(pFirst, false);
+                SetLabelVisible(pState.Second, false);
+                pState.Second.gameObject.SetActive(false);
+                if (actor.data.custom_name) pFirst.SetOutline();
+            }
+            finally
+            {
+                pState.Suppress = false;
+            }
+        }
+
+        private static void EnterEditing(UnitWindow pWindow,
+            NameInput pFirst, EditorState pState)
+        {
+            Actor actor = pWindow?.actor;
+            if (pState.Suppress || actor?.data == null || actor.isRekt() ||
+                actor.data.id != pState.ActorId) return;
+            ActorManualNameEditorState next = ActorManualNameEditorRules
+                .Resolve(pState.State,
+                    ActorManualNameEditorEvent.NameSelected,
+                    anyEditorFieldFocused: true);
+            if (pState.State == next) return;
+            pState.State = next;
+            Layout(pFirst, pState);
+            PopulateEditing(pWindow, actor, pFirst, pState);
+            try
+            {
+                pFirst.inputField.Select();
+                pFirst.inputField.ActivateInputField();
+            }
+            catch { }
+        }
+
         private static void Layout(NameInput pFirst, EditorState pState)
         {
             if (!pState.LayoutCaptured || pState.Second == null) return;
@@ -75,45 +150,35 @@ namespace AncientWarfare3.patch.naming
             second.anchoredPosition = pState.OriginalPosition +
                                       Vector2.right * offset;
             second.localScale = pFirst.transform.localScale;
-            second.gameObject.SetActive(true);
+            pState.Second.gameObject.SetActive(true);
         }
 
-        private static void Bind(UnitWindow pWindow, Actor pActor,
-            NameInput pFirst, EditorState pState)
+        private static void PopulateEditing(UnitWindow pWindow,
+            Actor pActor, NameInput pFirst, EditorState pState)
         {
             pState.Suppress = true;
             try
             {
                 pFirst.inputField.onEndEdit.RemoveAllListeners();
                 pState.Second.inputField.onEndEdit.RemoveAllListeners();
-                ActorManualNameMode mode = ActorManualRenameService
-                    .ResolveMode(pActor);
-                bool xiaMode = mode switch
-                {
-                    ActorManualNameMode.Xia => true,
-                    ActorManualNameMode.NonXia => false,
-                    _ => false
-                };
+                pState.Mode = ActorManualRenameService.ResolveMode(pActor);
+                bool xiaMode = pState.Mode == ActorManualNameMode.Xia;
                 ActorManualNameDraft draft = ActorManualRenameService
                     .Capture(pActor);
-                string firstValue = xiaMode
-                    ? draft.FamilyOrClanName
-                    : draft.GivenName;
-                string secondValue = xiaMode
-                    ? draft.GivenName
-                    : draft.FamilyOrClanName;
                 pFirst.can_be_empty = xiaMode;
                 pState.Second.can_be_empty = !xiaMode;
-                pFirst.setText(firstValue);
-                pState.Second.setText(secondValue);
+                pFirst.setText(xiaMode
+                    ? draft.FamilyOrClanName
+                    : draft.GivenName);
+                pState.Second.setText(xiaMode
+                    ? draft.GivenName
+                    : draft.FamilyOrClanName);
                 SetFieldLabel(pFirst, xiaMode
                     ? "aw_actor_name_family_or_shi"
                     : "aw_actor_name_given");
-                SetFieldLabel(pState.Second,
-                    xiaMode
-                        ? "aw_actor_name_given"
-                        : "aw_actor_name_family_or_shi");
-                pState.ActorId = pActor.data.id;
+                SetFieldLabel(pState.Second, xiaMode
+                    ? "aw_actor_name_given"
+                    : "aw_actor_name_family_or_shi");
                 if (pActor.data.custom_name)
                 {
                     pFirst.SetOutline();
@@ -126,31 +191,73 @@ namespace AncientWarfare3.patch.naming
             }
 
             pFirst.inputField.onEndEdit.AddListener(_ =>
-                Commit(pWindow, pFirst, pState));
+                ScheduleFocusCheck(pState));
             pState.Second.inputField.onEndEdit.AddListener(_ =>
-                Commit(pWindow, pFirst, pState));
+                ScheduleFocusCheck(pState));
         }
 
-        private static void Commit(UnitWindow pWindow, NameInput pFirst,
-            EditorState pState)
+        private static void ScheduleFocusCheck(EditorState pState)
         {
-            if (pState.Suppress) return;
+            if (pState.Suppress ||
+                pState.State != ActorManualNameEditorState.Editing) return;
+            pState.Trigger?.ScheduleFocusCheck();
+        }
+
+        private static void CommitAndCollapse(UnitWindow pWindow,
+            NameInput pFirst, EditorState pState)
+        {
+            if (pState.Suppress ||
+                pState.State != ActorManualNameEditorState.Editing) return;
             Actor actor = pWindow?.actor;
             if (actor?.data == null || actor.data.id != pState.ActorId)
+            {
+                pState.State = ActorManualNameEditorState.Display;
                 return;
-            string firstValue = pFirst.inputField.text;
-            string secondValue = pState.Second.inputField.text;
-            if (!ActorManualRenameService.TryCommit(actor, firstValue,
-                    secondValue, out string error))
+            }
+
+            ActorManualNameEditorState next = ActorManualNameEditorRules
+                .Resolve(pState.State,
+                    ActorManualNameEditorEvent.FocusChanged,
+                    anyEditorFieldFocused: false);
+            if (next != ActorManualNameEditorState.Display) return;
+            if (!ActorManualRenameService.TryCommit(actor,
+                    pFirst.inputField.text,
+                    pState.Second.inputField.text, out string error))
             {
                 if (!string.IsNullOrEmpty(error))
                     WorldTip.showNow(AW_L10n.Text(
-                        "aw_actor_name_invalid",
-                        "Given name cannot be empty"),
+                            "aw_actor_name_invalid",
+                            "Given name cannot be empty"),
                         pTranslate: false, "top");
+                FocusGivenField(pFirst, pState);
                 return;
             }
-            Bind(pWindow, actor, pFirst, pState);
+            ShowDisplay(pWindow, pFirst, pState);
+        }
+
+        private static void CloseEditor(UnitWindow pWindow,
+            NameInput pFirst, EditorState pState)
+        {
+            if (pState.Suppress ||
+                pState.State != ActorManualNameEditorState.Editing) return;
+            CommitAndCollapse(pWindow, pFirst, pState);
+            pState.State = ActorManualNameEditorRules.Resolve(pState.State,
+                ActorManualNameEditorEvent.WindowClosed,
+                anyEditorFieldFocused: false);
+        }
+
+        private static void FocusGivenField(NameInput pFirst,
+            EditorState pState)
+        {
+            NameInput given = pState.Mode == ActorManualNameMode.Xia
+                ? pState.Second
+                : pFirst;
+            try
+            {
+                given.inputField.Select();
+                given.inputField.ActivateInputField();
+            }
+            catch { }
         }
 
         private static void SetFieldLabel(NameInput pInput, string pKey)
@@ -177,18 +284,63 @@ namespace AncientWarfare3.patch.naming
                 rect.anchoredPosition = new Vector2(2f, 1f);
                 rect.sizeDelta = new Vector2(-4f, 14f);
             }
+            label.gameObject.SetActive(true);
             label.text = text;
             label.color = pInput.textField.color;
+        }
+
+        private static void SetLabelVisible(NameInput pInput, bool pVisible)
+        {
+            Transform label = pInput?.transform.Find(LabelName);
+            if (label != null) label.gameObject.SetActive(pVisible);
         }
 
         private sealed class EditorState
         {
             internal NameInput Second;
+            internal ActorManualNameEditTrigger Trigger;
             internal Vector2 OriginalSize;
             internal Vector2 OriginalPosition;
             internal bool LayoutCaptured;
             internal bool Suppress;
             internal long ActorId = -1L;
+            internal ActorManualNameMode Mode;
+            internal ActorManualNameEditorState State =
+                ActorManualNameEditorState.Display;
+        }
+    }
+
+    internal sealed class ActorManualNameEditTrigger : MonoBehaviour,
+        IPointerClickHandler
+    {
+        internal Action Clicked;
+        internal Func<bool> IsAnyEditorFieldFocused;
+        internal Action FocusLost;
+        internal Action Disabled;
+        private bool _focusCheckPending;
+
+        public void OnPointerClick(PointerEventData pEventData)
+        {
+            Clicked?.Invoke();
+        }
+
+        internal void ScheduleFocusCheck()
+        {
+            _focusCheckPending = true;
+        }
+
+        private void LateUpdate()
+        {
+            if (!_focusCheckPending) return;
+            _focusCheckPending = false;
+            bool isFocused = IsAnyEditorFieldFocused?.Invoke() ?? false;
+            if (!isFocused) FocusLost?.Invoke();
+        }
+
+        private void OnDisable()
+        {
+            _focusCheckPending = false;
+            Disabled?.Invoke();
         }
     }
 }

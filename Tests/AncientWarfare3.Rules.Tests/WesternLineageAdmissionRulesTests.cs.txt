@@ -119,6 +119,22 @@ internal static class WesternLineageAdmissionRulesTests
                 NamingProfileId.Western),
             "a rejected setKing candidate is never admitted");
 
+        Equal(false, WesternLineageAdmissionRules.ShouldProcessMigration(
+                archiveOperational: false),
+            "western king migration waits while the lineage archive is unavailable");
+        Equal(true, WesternLineageAdmissionRules.ShouldProcessMigration(
+                archiveOperational: true),
+            "western king migration resumes after the lineage archive is ready");
+        Equal(true, WesternLineageAdmissionRules.ShouldDeferKingdomMigration(
+                hasKing: true, hasActorCity: false),
+            "a western king waits for actor.city before deriving a family stem");
+        Equal(false, WesternLineageAdmissionRules.ShouldDeferKingdomMigration(
+                hasKing: true, hasActorCity: true),
+            "a western king with actor.city can be admitted");
+        Equal(false, WesternLineageAdmissionRules.ShouldDeferKingdomMigration(
+                hasKing: false, hasActorCity: false),
+            "an empty kingdom is not retried forever");
+
         foreach (NamingProfileId profile in new[]
                  {
                      NamingProfileId.Western,
@@ -141,16 +157,16 @@ internal static class WesternLineageAdmissionRulesTests
                     hasMatchingFamilyClan: false),
                 $"{profile} creates a vanilla clan when none exists");
 
-            Equal(WesternOriginalClanSyncAction.None,
+            Equal(WesternOriginalClanSyncAction.RenameExisting,
                 WesternLineageAdmissionRules.ResolveOriginalClanSync(
-                    profile, ruler: false, hasActorClan: false,
+                    profile, ruler: false, hasActorClan: true,
                     hasMatchingFamilyClan: false),
-                $"{profile} heirs, officials, and ordinary nobles never create a vanilla clan");
-            Equal(WesternOriginalClanSyncAction.None,
+                $"{profile} heirs, officials, and ordinary nobles rename an existing vanilla clan");
+            Equal(WesternOriginalClanSyncAction.RenameExisting,
                 WesternLineageAdmissionRules.ResolveOriginalClanSync(
                     profile, ruler: false, hasActorClan: true,
                     hasMatchingFamilyClan: true),
-                $"{profile} heirs, officials, and ordinary nobles never rename a vanilla clan");
+                $"{profile} heirs, officials, and ordinary nobles rename a vanilla clan");
         }
 
         foreach (NamingProfileId profile in new[]
@@ -170,6 +186,26 @@ internal static class WesternLineageAdmissionRulesTests
         Equal("orc_nomadic_family_stem",
             AWOrcNomadicNamingRules.FamilyStemGeneratorId,
             "orc family creation exposes the suffix-free generator id");
+
+        Equal(WesternOriginalClanSyncAction.RenameExisting,
+            WesternLineageAdmissionRules.ResolveOriginalClanSync(
+                NamingProfileId.Western, ruler: false, hasActorClan: true,
+                hasMatchingFamilyClan: false),
+            "western officials keep their surname synchronized to the vanilla clan");
+
+        Equal("Miller",
+            AWWesternFamilyNameRules.ResolveFamilyStem(
+                seed: 2L, tradition: WesternNamingTradition.Von,
+                originCity: "Ravenna",
+                dictionaryWords: new[] { "Baker", "Miller" }),
+            "dictionary surnames are used without a western particle");
+        Equal(AWWesternFamilyNameRules.BuildFamilyStem(
+                WesternNamingTradition.Von, "Ravenna"),
+            AWWesternFamilyNameRules.ResolveFamilyStem(
+                seed: 3L, tradition: WesternNamingTradition.Von,
+                originCity: "Ravenna",
+                dictionaryWords: new[] { "Baker", "Miller" }),
+            "the other half of western surnames comes from the actor city");
     }
 
     private static WesternLineageAdmissionAction Resolve(

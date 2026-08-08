@@ -30,6 +30,21 @@ internal static class XiaizedFamilyBranchTransitionRulesTests
         Equal("赵", XiaizedFamilyBranchTransitionRules.ResolveClan(
             "姬城", "姬", "赵"),
             "Shi falls back when the city initial equals the surname");
+        Equal(true, XiaizedFamilyBranchTransitionRules.ShouldRegeneratePersonalName(
+            protectedAuthoredName: false),
+            "ordinary western actors receive a fresh Xia personal name");
+        Equal(false, XiaizedFamilyBranchTransitionRules.ShouldRegeneratePersonalName(
+            protectedAuthoredName: true),
+            "authored names remain protected during Xiaization");
+        Equal(true, XiaizedFamilyBranchTransitionRules.NeedsSourceLineage(
+            lineageId: -1L, shiId: 12L),
+            "a missing lineage must be admitted before Xia branch transition");
+        Equal(true, XiaizedFamilyBranchTransitionRules.NeedsSourceLineage(
+            lineageId: 12L, shiId: -1L),
+            "a missing Shi must be admitted before Xia branch transition");
+        Equal(false, XiaizedFamilyBranchTransitionRules.NeedsSourceLineage(
+            lineageId: 12L, shiId: 13L),
+            "a complete western identity can transition directly");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

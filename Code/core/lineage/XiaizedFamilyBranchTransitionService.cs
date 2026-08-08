@@ -31,7 +31,19 @@ namespace AncientWarfare3.core.lineage
             bool biologicalXia = LineageService.IsXia(pActor);
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             pActor.data.get(LineageKeys.SHI_ID, out long oldShiId, -1L);
-            if (lineageId < 0L || oldShiId < 0L) return true;
+            if (XiaizedFamilyBranchTransitionRules.NeedsSourceLineage(
+                    lineageId, oldShiId))
+            {
+                bool ruler = kingdom?.king == pActor;
+                if (!WesternLineageAdmissionService.TryEnsure(
+                        pActor, pRuler: ruler, pHeir: false, pNoble: true,
+                        pOfficial: false, pSourceType: "xiaization_preparation"))
+                    return false;
+                pActor.data.get(LineageKeys.LINEAGE_ID, out lineageId, -1L);
+                pActor.data.get(LineageKeys.SHI_ID, out oldShiId, -1L);
+                if (XiaizedFamilyBranchTransitionRules.NeedsSourceLineage(
+                        lineageId, oldShiId)) return false;
+            }
 
             ShiBranchInfo oldBranch = LineageQuery.GetShiBranchInfo(oldShiId);
             NamingProfileId oldProfile =
@@ -221,8 +233,13 @@ namespace AncientWarfare3.core.lineage
                 actor.data.set(LineageKeys.WESTERN_NAMING_TRADITION,
                     string.Empty);
                 actor.data.set(LineageKeys.NAME_INTEGRATED, true);
-                if (!LineageService.HasProtectedAuthoredName(actor))
+                bool protectedName = LineageService.HasProtectedAuthoredName(
+                    actor);
+                if (XiaizedFamilyBranchTransitionRules
+                        .ShouldRegeneratePersonalName(protectedName))
                 {
+                    AWLocalizedNameService.ResetGeneratedActorIdentity(actor);
+                    AWLocalizedNameService.ProjectActor(actor);
                     LineageService.ApplyDisplayName(actor);
                     AWLocalizedNameService.CommitChineseName(actor.data,
                         actor.data.name, "Unit", actor.data.id);
@@ -245,7 +262,7 @@ namespace AncientWarfare3.core.lineage
                 string.Empty);
             return !string.IsNullOrWhiteSpace(chinese)
                 ? chinese.Trim()
-                : (city.data.name ?? string.Empty).Trim();
+                : (city.name ?? string.Empty).Trim();
         }
 
         private static string RandomShiDifferentFrom(string pFamily)

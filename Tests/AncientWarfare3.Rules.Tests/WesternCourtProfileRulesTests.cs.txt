@@ -66,12 +66,16 @@ internal static class WesternCourtProfileRulesTests
                 CourtOfficeId.WestTreasurer),
             "canonical office ids remain unchanged");
 
-        Equal(CourtInstitutionId.WesternPrimitive,
+        Equal(CourtInstitutionId.WesternBureaucratic,
             western.ResolveInstitution(false, false),
-            "office system gates the Western court");
+            "Western kingdoms begin with the basic bureaucratic court");
         Equal(CourtInstitutionId.WesternBureaucratic,
             western.ResolveInstitution(true, false),
             "office system opens the bureaucratic court");
+
+        Equal(CourtInstitutionId.WesternBureaucratic,
+            western.DefaultInstitutionId,
+            "the Western default institution has formal offices");
         Equal(CourtInstitutionId.WesternFeudalBureaucratic,
             western.ResolveInstitution(true, true),
             "feudal retainers open the cumulative advanced court");
@@ -95,6 +99,11 @@ internal static class WesternCourtProfileRulesTests
                 CourtInstitutionId.WesternElective,
                 feudalRetainersUnlocked: false),
             "elective government migrates to basic bureaucracy");
+        Equal(CourtInstitutionId.WesternBureaucratic,
+            CourtInstitutionRules.MigrateWesternLegacy(
+                CourtInstitutionId.WesternPrimitive,
+                feudalRetainersUnlocked: false),
+            "legacy primitive courts migrate to basic bureaucracy");
         Equal(CourtInstitutionId.WesternFeudalBureaucratic,
             CourtInstitutionRules.MigrateWesternLegacy(
                 CourtInstitutionId.WesternFeudal,

@@ -207,7 +207,23 @@ if ($babyName -notmatch
 }
 if ($unitTab -notmatch
     'showFamily\s*=\s*hasActor\s*&&\s*LineageService\.HasTraceableFamily\(actor\)') {
-    throw 'Lightweight edges alone must not expose the family-tree button.'
+    throw 'Unit tab must use the traceable-family gate.'
+}
+$familyStart = $lineage.IndexOf(
+    'public static bool HasTraceableFamily',
+    [System.StringComparison]::Ordinal)
+$usesAwStart = $lineage.IndexOf(
+    'public static bool UsesAwLineageSystem',
+    $familyStart, [System.StringComparison]::Ordinal)
+if ($familyStart -lt 0 -or $usesAwStart -lt $familyStart) {
+    throw 'The traceable-family rule could not be located.'
+}
+$familyBody = $lineage.Substring($familyStart,
+    $usesAwStart - $familyStart)
+if ($familyBody -notmatch 'LineageKeys\.FAMILY_NAME' -or
+    $familyBody -notmatch 'AWNameDataKeys\.FamilyComponent' -or
+    $familyBody -notmatch 'LineageArchiveReader\.ReadRow') {
+    throw 'A persisted western surname must expose the family-tree entry.'
 }
 $fullBirthStart = $lineage.IndexOf(
     'public static void OnActorBornWithParents',

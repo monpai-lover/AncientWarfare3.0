@@ -267,6 +267,10 @@ if ($parentClanMatch.Value -match 'LineageArchiveReader|ActorArchive') {
 if ($service -notmatch '(?s)TryCommit\s*\(.*?if\s*\(\s*!result\.Success\s*\)\s*return false;.*?pActor\.data\.set') {
     throw 'Actor hot identity must be published only after persistence succeeds.'
 }
+if ($service -notmatch
+        'pActor\.data\.set\(AWNameDataKeys\.FamilyComponent,\s*identity\.DisplayStem\)') {
+    throw 'Western admission must publish the localized family component with the lineage surname.'
+}
 foreach ($entry in @(
     'OnActorPromoted'
     'EnsureRoyalHeirLineage'

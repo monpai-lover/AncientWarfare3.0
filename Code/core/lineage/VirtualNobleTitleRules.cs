@@ -49,6 +49,12 @@ namespace AncientWarfare3.core.lineage
             return !pHasFormalHereditaryTitle && pHasActiveVirtualTitle;
         }
 
+        public static bool ShouldExposeInRoster(bool formalTitle,
+            bool virtualTitle)
+        {
+            return formalTitle || virtualTitle;
+        }
+
         public static long SelectPrimaryId(
             System.Collections.Generic.IReadOnlyList<
                 VirtualNobleTitleCandidate> pCandidates)

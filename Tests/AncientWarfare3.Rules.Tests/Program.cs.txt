@@ -6349,6 +6349,18 @@ Equal(-1, DiplomacyConversationRules.CompareCapitalDistance(
         leftDistanceSquared: 25L, leftKingdomId: 2L,
         rightDistanceSquared: 25L, rightKingdomId: 9L),
     "equal capital distances use kingdom id as a stable tie breaker");
+Equal(-1, DiplomacyConversationRules.CompareRelationPriority(
+        DiplomacyPrimaryRelation.OurVassal,
+        DiplomacyPrimaryRelation.Alliance),
+    "vassals sort before allies regardless of distance");
+Equal(-1, DiplomacyConversationRules.CompareRelationPriority(
+        DiplomacyPrimaryRelation.Alliance,
+        DiplomacyPrimaryRelation.War),
+    "allies sort before wartime relations regardless of distance");
+Equal(0, DiplomacyConversationRules.CompareRelationPriority(
+        DiplomacyPrimaryRelation.OurSuzerain,
+        DiplomacyPrimaryRelation.OurTributary),
+    "all subject relations share the subject sorting tier");
 Equal(5, DiplomacyConversationRules.DisplayCapitalDistance(25L),
     "the diplomacy list displays the rounded capital distance");
 True(DiplomacyConversationRules.IsAutomaticWarSettlementTruce(

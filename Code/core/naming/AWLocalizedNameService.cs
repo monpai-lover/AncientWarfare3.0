@@ -32,9 +32,18 @@ namespace AncientWarfare3.core.naming
                     PersistActorGeneratedComponents(pActor, pGenerated,
                         pSelectedName), pGenerated =>
                     AWActorInitialNameRules.ResolveGeneratedName(
-                        pGenerated.Name, pGenerated.Components,
+                    pGenerated.Name, pGenerated.Components,
                         CivMonkeyNamingRules.IsCivilizedMonkey(
                             pActor.asset?.id)));
+        }
+
+        internal static void ResetGeneratedActorIdentity(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.removeString(AWNameDataKeys.ChineseName);
+            pActor.data.removeString(AWNameDataKeys.GivenName);
+            pActor.data.removeString(AWNameDataKeys.FamilyComponent);
+            pActor.data.removeString(LineageKeys.GIVEN_NAME);
         }
 
         private static bool TryProjectHistoricalFigure(Actor pActor,

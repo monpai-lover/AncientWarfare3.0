@@ -327,12 +327,22 @@ namespace AncientWarfare3.ui.windows
 
         public WarPeacePartyPresentation(long kingdomId, string kingdomName,
             long rulerActorId, string rulerName, int cityCount)
+            : this(kingdomId, kingdomName, rulerActorId, rulerName,
+                cityCount, 0, 0)
+        {
+        }
+
+        public WarPeacePartyPresentation(long kingdomId, string kingdomName,
+            long rulerActorId, string rulerName, int cityCount,
+            int armyStrength, int casualties)
         {
             KingdomId = kingdomId;
             KingdomName = kingdomName ?? string.Empty;
             RulerActorId = rulerActorId;
             RulerName = rulerName ?? string.Empty;
             CityCount = Math.Max(-1, cityCount);
+            ArmyStrength = Math.Max(0, armyStrength);
+            Casualties = Math.Max(0, casualties);
         }
 
         public long KingdomId { get; private set; }
@@ -340,6 +350,8 @@ namespace AncientWarfare3.ui.windows
         public long RulerActorId { get; private set; }
         public string RulerName { get; private set; }
         public int CityCount { get; private set; }
+        public int ArmyStrength { get; private set; }
+        public int Casualties { get; private set; }
     }
 
     public sealed class WarPeaceTermPresentation

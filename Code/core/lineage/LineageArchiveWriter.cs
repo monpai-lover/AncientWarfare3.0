@@ -721,7 +721,7 @@ namespace AncientWarfare3.core.lineage
                 city = World.world?.cities?.get(pActor.data.cityID);
 
             if (city?.data != null)
-                return (city.data.id, city.data.name ?? "");
+                return (city.data.id, city.name ?? "");
 
             if (previous != null && (previous.city_id >= 0 || !string.IsNullOrEmpty(previous.city_name)))
                 return (previous.city_id, previous.city_name ?? "");

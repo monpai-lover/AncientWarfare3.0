@@ -267,6 +267,8 @@ aw_court_tier_western_elective,选举官制,Elective Offices,選舉官制
 aw_court_tier_western_feudal,封建宫廷,Feudal Court,封建宮廷
 aw_court_tier_western_royal_direct,王室直辖官署,Royal Administration,王室直轄官署
 aw_court_institution_effect_western_primitive,尚未建立正式官职体系,No formal office system,尚未建立正式官職體系
+aw_court_institution_effect_western_bureaucratic,建立常设王廷与地方官职,Standing royal and local offices,建立常設王廷與地方官職
+aw_court_institution_effect_western_feudal_bureaucratic,中央、军事与领地官署扩充,Expanded central offices · military offices · territorial offices,中央、軍事與領地官署擴充
 aw_court_institution_effect_western_base,建立常设王廷与地方官职,Standing royal and local offices,建立常設王廷與地方官職
 aw_court_institution_effect_western_elective,官员任期六年 · 空缺通过选举补任,Six-year terms · vacancies filled by election,官員任期六年 · 空缺通過選舉補任
 aw_court_institution_effect_western_feudal,地方贵族与受教育家臣优先任官,Landed nobles and educated retainers favored,地方貴族與受教育家臣優先任官

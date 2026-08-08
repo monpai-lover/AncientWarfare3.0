@@ -137,16 +137,22 @@ namespace AncientWarfare3.core.multiplayer.commands
         private static AW3CommandResult EditVirtualNobleTitle(
             Kingdom kingdom, AW3CommandRequest request)
         {
-            VirtualNobleTitleEditResult result = VirtualNobleTitleService.
-                TryEdit(request.SecondaryId, kingdom.id, request.Text);
+            VirtualNobleTitleEditResult result = request.BoolValue
+                ? NobleRankService.TryEditTitleName(request.SecondaryId,
+                    kingdom.id, request.Text)
+                : VirtualNobleTitleService.TryEdit(request.SecondaryId,
+                    kingdom.id, request.Text);
             return MapVirtualTitleEditResult(result, request.SecondaryId);
         }
 
         private static AW3CommandResult DeleteVirtualNobleTitle(
             Kingdom kingdom, AW3CommandRequest request)
         {
-            VirtualNobleTitleEditResult result = VirtualNobleTitleService.
-                TryDelete(request.SecondaryId, kingdom.id);
+            VirtualNobleTitleEditResult result = request.BoolValue
+                ? NobleRankService.TryDeleteTitle(request.SecondaryId,
+                    kingdom.id)
+                : VirtualNobleTitleService.TryDelete(request.SecondaryId,
+                    kingdom.id);
             return MapVirtualTitleEditResult(result, request.SecondaryId);
         }
 

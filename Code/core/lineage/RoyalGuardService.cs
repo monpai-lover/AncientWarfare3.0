@@ -520,6 +520,23 @@ namespace AncientWarfare3.core.lineage
                 RoyalGuardActionRules.NoThreatWaitMax));
         }
 
+        internal static void EnsureProtectKingTask(Actor pActor)
+        {
+            if (!IsRoyalGuard(pActor) || pActor.ai == null ||
+                pActor.isRekt() || !pActor.isAlive()) return;
+
+            if (!IsKingGuardJob(pActor) || !IsKingGuardActorJob(pActor))
+                RebindGuardJob(pActor);
+
+            if (pActor.isTask(GuardContent.TASK_PROTECT_KING) ||
+                pActor.isTask(GuardContent.TASK_FOLLOW_KING)) return;
+            try
+            {
+                pActor.ai.setTask(GuardContent.TASK_FOLLOW_KING);
+            }
+            catch { }
+        }
+
         public static bool IsValidThreatForGuard(Actor pGuard, Actor pTarget)
         {
             if (!IsRoyalGuard(pGuard)) return false;

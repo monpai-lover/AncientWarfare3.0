@@ -160,6 +160,32 @@ namespace AncientWarfare3.core.lineage
                 : leftKingdomId.CompareTo(rightKingdomId);
         }
 
+        public static int CompareRelationPriority(
+            DiplomacyPrimaryRelation pLeft,
+            DiplomacyPrimaryRelation pRight)
+        {
+            return RelationPriority(pLeft).CompareTo(
+                RelationPriority(pRight));
+        }
+
+        private static int RelationPriority(DiplomacyPrimaryRelation pRelation)
+        {
+            switch (pRelation)
+            {
+                case DiplomacyPrimaryRelation.OurSuzerain:
+                case DiplomacyPrimaryRelation.OurVassal:
+                case DiplomacyPrimaryRelation.OurTributarySuzerain:
+                case DiplomacyPrimaryRelation.OurTributary:
+                    return 0;
+                case DiplomacyPrimaryRelation.Alliance:
+                    return 1;
+                case DiplomacyPrimaryRelation.War:
+                    return 2;
+                default:
+                    return 3;
+            }
+        }
+
         public static int DisplayCapitalDistance(long pDistanceSquared)
         {
             if (pDistanceSquared < 0 || pDistanceSquared == long.MaxValue)

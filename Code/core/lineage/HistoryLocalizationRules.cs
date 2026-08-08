@@ -121,6 +121,9 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_label_succession_dispute_war", "宗室争位", "Dynastic Succession War", "宗室爭位"),
             new Entry("aw_hist_label_coup_restoration_war", "勤王复统战争", "Loyalist Restoration War", "勤王復統戰爭"),
             new Entry("aw_hist_event_feudatory_established", "建立藩国", "Feudatory Established", "建立藩國"),
+            new Entry("aw_hist_royal_enfeoffment_granted", "分封宗室于", "enfeoffed a royal clansman at ", "分封宗室於"),
+            new Entry("aw_hist_royal_enfeoffment_as", "，建立附庸国", ", establishing the vassal realm ", "，建立附庸國"),
+            new Entry("aw_hist_royal_enfeoffment_king", "，命", ", appointing ", "，命"),
             new Entry("aw_hist_event_feudatory_inherited", "藩国承袭", "Feudatory Inherited", "藩國承襲"),
             new Entry("aw_hist_event_feudatory_abolished", "绝嗣除国", "Feudatory Abolished", "絕嗣除國"),
             new Entry("aw_hist_event_feudatory_favor", "推恩削藩", "Favor Order Applied", "推恩削藩"),
@@ -172,6 +175,9 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_virtual_title_inherited", "继承虚爵：", " inherited the virtual title: ", "繼承虛爵："),
             new Entry("aw_hist_virtual_title_previous_holder", "，前任为", "; previous holder: ", "，前任為"),
             new Entry("aw_hist_virtual_title_extinct", "虚爵绝嗣：", " virtual title became extinct: ", "虛爵絕嗣："),
+            new Entry("aw_hist_noble_title_renamed", "的爵位改为", " changed the noble title to ", "的爵位改為"),
+            new Entry("aw_hist_noble_title_renamed_from", "（原为", " (formerly ", "（原為"),
+            new Entry("aw_hist_noble_title_deleted", "的爵位被除去：", " had the noble title removed: ", "的爵位被除去："),
 
             // Event labels
             new Entry("aw_hist_event_war_claim_created", "制造宣称", "Claim Fabricated", "製造宣稱"),

@@ -71,6 +71,8 @@ namespace AncientWarfare3.ui.windows
             public UiUnitAvatarElement Avatar;
             public Text KingdomName;
             public Text RulerName;
+            public Text ArmyStrength;
+            public Text Casualties;
             public Text Score;
             public Text ScoreDetail;
         }
@@ -652,6 +654,12 @@ namespace AncientWarfare3.ui.windows
             panel.RulerName = CreateText(panel.Root, "RulerName", 8,
                 TextAnchor.MiddleLeft);
             panel.RulerName.color = new Color(.78f, .74f, .66f, 1f);
+            panel.ArmyStrength = CreateText(panel.Root, "ArmyStrength", 7,
+                TextAnchor.MiddleLeft);
+            panel.ArmyStrength.color = new Color(.84f, .81f, .74f, 1f);
+            panel.Casualties = CreateText(panel.Root, "Casualties", 7,
+                TextAnchor.MiddleLeft);
+            panel.Casualties.color = new Color(.84f, .72f, .64f, 1f);
             panel.Score = CreateText(panel.Root, "WarScore", 18,
                 TextAnchor.MiddleRight);
             panel.ScoreDetail = CreateText(panel.Root, "ScoreDetail", 7,
@@ -845,6 +853,12 @@ namespace AncientWarfare3.ui.windows
             pPanel.Root.gameObject.SetActive(true);
             pPanel.KingdomName.text = pParty.KingdomName;
             pPanel.RulerName.text = pParty.RulerName;
+            pPanel.ArmyStrength.text = string.Format(AW_L10n.Text(
+                "aw_war_peace_army_strength", "Army: {0}"),
+                pParty.ArmyStrength);
+            pPanel.Casualties.text = string.Format(AW_L10n.Text(
+                "aw_war_peace_casualties", "Casualties: {0}"),
+                pParty.Casualties);
             pPanel.Score.text = Signed(pScore.Total);
             pPanel.Score.color = ScoreColor(pScore.Total);
             pPanel.ScoreDetail.text =
@@ -1075,9 +1089,13 @@ namespace AncientWarfare3.ui.windows
                 Math.Max(45f, pWidth - 158f), 23f);
             Layout(pPanel.RulerName.rectTransform, 101f, 28f,
                 Math.Max(45f, pWidth - 158f), 19f);
+            Layout(pPanel.ArmyStrength.rectTransform, 101f, 47f,
+                Math.Max(45f, pWidth - 158f), 14f);
+            Layout(pPanel.Casualties.rectTransform, 101f, 61f,
+                Math.Max(45f, pWidth - 158f), 14f);
             Layout(pPanel.Score.rectTransform, pWidth - 55f, 4f, 49f, 43f);
-            Layout(pPanel.ScoreDetail.rectTransform, 8f, 60f,
-                pWidth - 16f, 22f);
+            Layout(pPanel.ScoreDetail.rectTransform, 8f, 76f,
+                pWidth - 16f, 10f);
         }
 
         private void LayoutSummary(float pWidth, float pHeight)
