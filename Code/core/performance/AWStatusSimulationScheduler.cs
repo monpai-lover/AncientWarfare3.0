@@ -433,10 +433,8 @@ namespace AncientWarfare3.core.performance
 
         private static long CountTimerTicks(float pTimer)
         {
-            if (float.IsNaN(pTimer) || pTimer <= 0f) return 0L;
-            if (float.IsPositiveInfinity(pTimer)) return Never;
-            return Math.Max(0L, (long)Math.Ceiling(pTimer /
-                AWFrameSchedulerRules.FixedSimulationStepSeconds));
+            return AWStatusTimerRules.CountTimerDecrementTicks(pTimer,
+                AWFrameSchedulerRules.FixedSimulationStepSeconds);
         }
 
         private static void RestoreActionTimer(Entry pEntry)

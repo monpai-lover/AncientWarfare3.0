@@ -249,6 +249,58 @@ Require-Contains $actorPost `
     'Actor enemy search must be admitted directly to the simulation pool.'
 Forbid-Contains $actorPost 'AWSimulationCoordinatorThread' `
     'Actor post work must not consume the presentation coordinator.'
+foreach ($contract in @(
+        'AWDeferredPathRequestBatch.StartCycle();',
+        'AWDeferredPathRequestBatch.BeginCapture();',
+        'AWDeferredPathRequestBatch.EndCapture();',
+        'AWDeferredPathRequestBatch.CompleteCycle();',
+        'AWDeferredPathRequestBatch.AbortCycle();')) {
+    Require-Contains $actorPost $contract `
+        "Actor post path batching is missing lifecycle contract: $contract"
+}
+
+$deferredPathBatch = Read-Source `
+    'Code\core\performance\AWDeferredPathRequestBatch.cs'
+foreach ($contract in @(
+        'DefaultCapacity',
+        'PendingSlots',
+        'internal static bool TryCapture(',
+        'internal static int FlushAtFrameStart()',
+        'AWPathMovementBridge.Submit(')) {
+    Require-Contains $deferredPathBatch $contract `
+        "Deferred path batching is missing contract: $contract"
+}
+$pathPatch = Read-Source 'Code\patch\AW_GlobalPathfindingPatch.cs'
+Require-Contains $pathPatch 'AWDeferredPathRequestBatch.TryCapture(' `
+    'Actor.goTo must use deferred path capture while a scheduler cycle owns it.'
+$frameStart = Get-MethodBlock $schedulerPatch `
+    'private static void BeforeMapBoxUpdate(MapBox __instance,'
+$frameBarrier = $frameStart.IndexOf(
+    'EnsureActorReadBoundary("mapbox.frame_begin");',
+    [StringComparison]::Ordinal)
+$pathFlush = $frameStart.IndexOf(
+    'AWDeferredPathRequestBatch.FlushAtFrameStart();',
+    [StringComparison]::Ordinal)
+if ($frameBarrier -lt 0 -or $pathFlush -le $frameBarrier) {
+    $failures.Add(
+        'Deferred path requests must flush after the frame-start read barrier.')
+}
+
+$spatialPatch = Read-Source 'Code\patch\AW_SimObjectsZonesPatch.cs'
+foreach ($relativePath in @(
+        'Code\core\performance\AWActorZoneMembershipDirtyIndex.cs',
+        'Code\core\performance\AWIncrementalChunkActorMembership.cs',
+        'Code\core\performance\AWParallelIslandActorMembership.cs',
+        'Code\core\performance\AWParallelSimObjectZoneUnits.cs',
+        'Code\core\performance\AWIncrementalSimObjectZoneUnits.cs')) {
+    $spatialSource = Read-Source $relativePath
+    Require-Contains $spatialSource 'AW' `
+        "Spatial membership source is missing: $relativePath"
+}
+Require-Contains $spatialPatch 'TrySkipRedundantCheckUnits' `
+    'SimObjectsZones must skip only a validated current membership rebuild.'
+Require-Contains $spatialPatch 'fullClear' `
+    'Spatial membership must invalidate on full world clear.'
 
 foreach ($relativePath in @(
         'Code\core\performance\AWCooperativeBatchRunner.cs',

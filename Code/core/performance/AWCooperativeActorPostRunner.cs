@@ -205,6 +205,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         float cycleElapsed,
         ParallelOptions pParallelOptions)
     {
+        AWDeferredPathRequestBatch.StartCycle();
+        AWDeferredPathRequestBatch.BeginCapture();
         AWEnemyPresenceCache.EndPreparation();
         batches = activeBatches;
         elapsed = cycleElapsed;
@@ -994,6 +996,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     stage = PostStage.Finish;
                     continue;
                 case PostStage.Finish:
+                    AWDeferredPathRequestBatch.EndCapture();
+                    AWDeferredPathRequestBatch.CompleteCycle();
                     ResetCycleReferences(
                         clearPendingWork: false);
                     stage = PostStage.Idle;
@@ -1006,6 +1010,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     public void Abort()
     {
+        AWDeferredPathRequestBatch.AbortCycle();
         if (tileActionTicket.IsValid)
         {
             AWSimulationWorkerPool.Instance.WaitAndDiscard(

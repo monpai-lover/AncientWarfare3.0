@@ -39,9 +39,23 @@ namespace AncientWarfare3.patch
                 RuntimePerformanceDiagnostic.BeginActorRaceScope(__instance);
             try
             {
-                __result = AWPathMovementBridge.Submit(__instance, pTile,
-                    pPathOnWater, pWalkOnBlocks, pWalkOnLava,
-                    pLimitPathfindingRegions);
+                if (AWDeferredPathRequestBatch.TryCapture(
+                        __instance, pTile, pPathOnWater, pWalkOnBlocks,
+                        pWalkOnLava, pLimitPathfindingRegions))
+                {
+                    __instance.setTileTarget(pTile);
+                    __instance.next_step_position =
+                        __instance.current_tile?.posV3 ??
+                        __instance.next_step_position;
+                    __instance.setNotMoving();
+                    __result = ExecuteEvent.True;
+                }
+                else
+                {
+                    __result = AWPathMovementBridge.Submit(__instance, pTile,
+                        pPathOnWater, pWalkOnBlocks, pWalkOnLava,
+                        pLimitPathfindingRegions);
+                }
             }
             finally
             {
@@ -258,6 +272,7 @@ namespace AncientWarfare3.patch
         private static void ClearWorld_Postfix()
         {
             CalibrationStates.Clear();
+            AWDeferredPathRequestBatch.Clear();
             AWPathMovementBridge.Clear();
             AWPathfindingBootstrap.ClearWorld();
         }

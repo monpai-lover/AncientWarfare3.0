@@ -60,6 +60,11 @@ internal static class PathfindingPerformanceTests
         VassalPowerTraversalUsesRelationIndex();
         WarAiDistantCandidatesUseABoundedNearestWindow();
         ActorPostDiagnosticsExposeWorkerAndCommitCosts();
+        DeferredPathBatchRulesBoundAdmissionAndReplacement();
+        DeferredPathBatchSourceUsesFrameStartFlush();
+        StatusTimerUsesVanillaDecrementLoop();
+        RtsOwnerIsFrozenPerAdmittedCycle();
+        SpatialMembershipLifecycleIsGuarded();
     }
 
     private static void ActorPostDiagnosticsExposeWorkerAndCommitCosts()
@@ -121,12 +126,108 @@ internal static class PathfindingPerformanceTests
             StringComparison.Ordinal);
         Assert(endPreparation >= 0 && scheduleSearch > endPreparation,
             "Enemy cache preparation ends before concurrent search workers start");
-        Assert(!postRunner.Contains("DeferredPathRequestBatch") &&
-               !postRunner.Contains("isFlying()") &&
+        Assert(!postRunner.Contains("isFlying()") &&
                !postRunner.Contains("Cultivation") &&
                !postRunner.Contains("Portal") &&
                !postRunner.Contains("Train"),
-            "Task 4 does not import path batching or Cultiway content branches");
+            "Actor post runner does not import Cultiway content branches");
+    }
+
+    private static void DeferredPathBatchRulesBoundAdmissionAndReplacement()
+    {
+        Assert(AWDeferredPathRequestBatchRules.CanCapture(0, 2, true),
+            "deferred path batch accepts the first request in an active cycle");
+        Assert(!AWDeferredPathRequestBatchRules.CanCapture(2, 2, true),
+            "deferred path batch rejects a new actor at hard capacity");
+        Assert(!AWDeferredPathRequestBatchRules.CanCapture(0, 2, false),
+            "deferred path batch falls back when capture is closed");
+        var slots = new Dictionary<long, int> { [42L] = 3 };
+        Assert(AWDeferredPathRequestBatchRules.ReplaceSlotForActor(slots, 42L) == 3,
+            "deferred path batch replaces an existing actor slot in place");
+        Assert(AWDeferredPathRequestBatchRules.ReplaceSlotForActor(slots, 7L) < 0,
+            "deferred path batch preserves stable order for a new actor");
+    }
+
+    private static void DeferredPathBatchSourceUsesFrameStartFlush()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string batch = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWDeferredPathRequestBatch.cs"));
+        string patch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_GlobalPathfindingPatch.cs"));
+        string scheduler = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_FramePrioritySchedulerPatch.cs"));
+        Assert(batch.Contains("DefaultCapacity") &&
+               batch.Contains("PendingSlots") &&
+               batch.Contains("FlushAtFrameStart()") &&
+               batch.Contains("AWPathMovementBridge.Submit("),
+            "deferred path batch owns bounded pending requests and main-thread submission");
+        Assert(patch.Contains("AWDeferredPathRequestBatch.TryCapture(") &&
+               patch.Contains("setTileTarget(pTile)"),
+            "Actor.goTo captures only after validation and preserves vanilla target setup");
+        int barrier = scheduler.IndexOf("EnsureActorReadBoundary(\"mapbox.frame_begin\")",
+            StringComparison.Ordinal);
+        int flush = scheduler.IndexOf("AWDeferredPathRequestBatch.FlushAtFrameStart()",
+            StringComparison.Ordinal);
+        Assert(barrier >= 0 && flush > barrier,
+            "deferred path requests flush after frame-start read barriers");
+    }
+
+    private static void StatusTimerUsesVanillaDecrementLoop()
+    {
+        Assert(AWStatusTimerRules.CountTimerDecrementTicks(0f, 0.02f) == 0L,
+            "status timer with no remaining time is immediately due");
+        Assert(AWStatusTimerRules.CountTimerDecrementTicks(0.021f, 0.02f) == 2L,
+            "status timer counts native float decrements rather than truncating");
+        Assert(AWStatusTimerRules.CountTimerDecrementTicks(float.PositiveInfinity,
+            0.02f) == long.MaxValue,
+            "infinite status timers remain unscheduled");
+        string source = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+            "Code", "core", "performance", "AWStatusSimulationScheduler.cs"));
+        Assert(source.Contains("AWStatusTimerRules.CountTimerDecrementTicks") &&
+               !source.Contains("Math.Ceiling(pTimer"),
+            "status scheduler uses the Cultiway-equivalent float decrement semantics");
+    }
+
+    private static void RtsOwnerIsFrozenPerAdmittedCycle()
+    {
+        string source = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+            "Code", "core", "performance", "ArmyRtsSchedulingService.cs"));
+        Assert(source.Contains("ResolveModeForCycle") &&
+               source.Contains("_admittedCycleToken") &&
+               source.Contains("ProcessCycle(NativeGate") &&
+               source.Contains("ProcessCycle(Aw3Gate"),
+            "RTS scheduler snapshots ownership at cycle admission instead of reading a hot setting in each owner");
+        Assert(source.Contains("if (!pGate.TryEnter(pMode, pOwner,"),
+            "RTS scheduler uses the admitted owner mode for the complete cycle");
+    }
+
+    private static void SpatialMembershipLifecycleIsGuarded()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string parallel = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWParallelSimObjectZoneUnits.cs"));
+        string incremental = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWIncrementalSimObjectZoneUnits.cs"));
+        string dirty = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWActorZoneMembershipDirtyIndex.cs"));
+        string patch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_SimObjectsZonesPatch.cs"));
+        Assert(parallel.Contains("TrySkipRedundantCheckUnits") &&
+               parallel.Contains("NotifyUnitMembershipRebuilt") &&
+               parallel.Contains("AWIncrementalChunkActorMembership.Rebuild") &&
+               parallel.Contains("AWParallelIslandActorMembership.Rebuild"),
+            "spatial membership index captures and reuses stable chunk/island membership");
+        Assert(incremental.Contains("IsCurrent") &&
+               incremental.Contains("Invalidate") &&
+               incremental.Contains("Commit"),
+            "spatial membership index has generation/version identity and full invalidation");
+        Assert(dirty.Contains("ThreadLocal") && dirty.Contains("Consume") &&
+               dirty.Contains("AWActorZoneDirtyKind"),
+            "actor spatial changes merge per-thread dirty records before reconciliation");
+        Assert(patch.Contains("checkUnits") && patch.Contains("fullClear") &&
+               patch.Contains("TrySkipRedundantCheckUnits"),
+            "SimObjectsZones lifecycle keeps a safe native fallback and skips only a current rebuild");
     }
 
     private static void EnemyPresenceCacheMatchesPreparationLifecycle()

@@ -84,6 +84,7 @@ namespace AncientWarfare3.patch
                     EnsureBuildingReadBoundary("mapbox.frame_begin");
                 }
 
+                AWDeferredPathRequestBatch.FlushAtFrameStart();
                 AWCooperativeActorParallelJobRunner.RefreshFrameVisibility();
 
                 AWPresentationCommandQueue.DrainMainThread();

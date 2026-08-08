@@ -60,6 +60,7 @@ namespace AncientWarfare3.patch
         private static void ClearActorKingdomRepairs_Prefix()
         {
             ActorKingdomSafetyService.ClearRuntime();
+            AWParallelSimObjectZoneUnits.Invalidate();
         }
 
         [HarmonyPrefix]
