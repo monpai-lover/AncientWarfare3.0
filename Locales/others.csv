@@ -1,4 +1,7 @@
 key,cz,en,ch
+aw_actor_name_given,名,Given name,名
+aw_actor_name_family_or_shi,姓/氏,Surname / Shi,姓/氏
+aw_actor_name_invalid,名字不能为空,Given name cannot be empty,名字不能為空
 aw_back_to_kingdom,返回国家,Back to Kingdom,返回國家
 status_title_aw_mandate_army_golden,盛世军威,Golden Age Army,盛世軍威
 status_description_aw_mandate_army_golden,天命鼎盛时军队获得小幅数量与战力加成,The army receives a moderate strength bonus while the Mandate flourishes,天命鼎盛時軍隊獲得小幅數量與戰力加成

@@ -13,6 +13,7 @@ namespace AncientWarfare3.Tests
             MigrationDoesNotFabricateHumanGenerators();
             ManualActorNameIsProtectedAcrossProjectionAndRestore();
             ManualRenameServiceOwnsStructuredPersistence();
+            SplitActorNameEditorReplacesVanillaInput();
         }
 
         private static void ActorReadPathOnlyProjectsStoredIdentity()
@@ -86,6 +87,24 @@ namespace AncientWarfare3.Tests
                           compact.Contains(
                               "AWLocalizedNameMigrationService.Enqueue"),
                 "manual rename service must own every persistence boundary");
+        }
+
+        private static void SplitActorNameEditorReplacesVanillaInput()
+        {
+            string path = PathFor("Code", "patch", "naming",
+                "AW_ActorManualNamePatch.cs");
+            AssertEx.True(File.Exists(path),
+                "split actor name editor patch must exist");
+            string compact = Compact(File.ReadAllText(path));
+            AssertEx.True(compact.Contains(
+                    "AW_ActorManualNameSecondInput") &&
+                compact.Contains("ActorManualRenameService") &&
+                compact.Contains("ActorManualNameMode.Xia") &&
+                compact.Contains("ActorManualNameMode.NonXia") &&
+                compact.Contains("onEndEdit.RemoveAllListeners") &&
+                compact.Contains("pFirst.can_be_empty=xiaMode") &&
+                compact.Contains("pState.Second.can_be_empty=!xiaMode"),
+                "split editor must replace vanilla listener and support both orders");
         }
 
         private static string Read(params string[] pParts)
