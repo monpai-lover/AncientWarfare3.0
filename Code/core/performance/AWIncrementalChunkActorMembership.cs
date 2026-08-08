@@ -64,6 +64,70 @@ internal static class AWIncrementalChunkActorMembership
         Actor actor,
         long kingdomId)
     {
+        bool removedFromAll =
+            RemoveActorReferences(container.units_all, actor) > 0;
+
+        Dictionary<long, List<Actor>>
+            unitsByKingdom =
+                UnitsByKingdomField(container);
+        int removedFromKingdom = 0;
+        List<Actor> kingdomUnits = null;
+        if (unitsByKingdom.TryGetValue(
+                kingdomId,
+                out kingdomUnits))
+        {
+            removedFromKingdom =
+                RemoveActorReferences(kingdomUnits, actor);
+        }
+
+        // Vanilla may have already moved the actor before this dirty record
+        // is committed. Repair a stale projection instead of aborting the
+        // simulation pass on an ordering mismatch.
+        if (removedFromKingdom == 0)
+        {
+            foreach (List<Actor> units in
+                     unitsByKingdom.Values)
+            {
+                if (ReferenceEquals(units, kingdomUnits))
+                {
+                    continue;
+                }
+
+                RemoveActorReferences(units, actor);
+            }
+        }
+
+        if (removedFromAll)
+        {
+            ref int totalUnits =
+                ref TotalUnitsField(container);
+            if (totalUnits > 0)
+            {
+                totalUnits--;
+            }
+        }
+    }
+
+    internal static void Add(
+        ChunkObjectContainer container,
+        Actor actor,
+        long kingdomId,
+        int actorRank,
+        Dictionary<Actor, int> actorRanks)
+    {
+        AddLegacy(
+            container,
+            actor,
+            kingdomId,
+            actorRank,
+            actorRanks);
+    }
+
+    internal static void RemoveLegacy(
+        ChunkObjectContainer container,
+        Actor actor,
+        long kingdomId)
+    {
         if (!container.units_all.Remove(actor))
         {
             throw new InvalidOperationException(
@@ -92,7 +156,7 @@ internal static class AWIncrementalChunkActorMembership
         }
     }
 
-    internal static void Add(
+    internal static void AddLegacy(
         ChunkObjectContainer container,
         Actor actor,
         long kingdomId,
