@@ -8,16 +8,17 @@ namespace AncientWarfare3.patch
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SimObjectsZones), "checkUnits")]
-        private static bool CheckUnits_Prefix()
+        private static bool CheckUnits_Prefix(out bool __state)
         {
-            return !AWParallelSimObjectZoneUnits.TrySkipRedundantCheckUnits();
+            __state = AWParallelSimObjectZoneUnits.TrySkipRedundantCheckUnits();
+            return !__state;
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SimObjectsZones), "checkUnits")]
-        private static void CheckUnits_Postfix()
+        private static void CheckUnits_Postfix(bool __state)
         {
-            if (AWPerformanceSettings.EnableFramePriorityScheduler)
+            if (!__state && AWPerformanceSettings.EnableFramePriorityScheduler)
                 AWParallelSimObjectZoneUnits.NotifyUnitMembershipRebuilt();
         }
 
