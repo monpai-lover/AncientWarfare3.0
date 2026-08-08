@@ -290,6 +290,8 @@ namespace AncientWarfare3.core.naming
         internal static string ProjectStored(BaseSystemData pData)
         {
             if (pData == null) return string.Empty;
+            if (pData.custom_name && !string.IsNullOrWhiteSpace(pData.name))
+                return pData.name;
             pData.get(AWNameDataKeys.NativeName, out string nativeName,
                 string.Empty);
             pData.get(AWNameDataKeys.ChineseName, out string chineseName,

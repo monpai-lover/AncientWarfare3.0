@@ -2159,6 +2159,12 @@ namespace AncientWarfare3.core.lineage
                 }
                 return;
             }
+            if (HasProtectedAuthoredName(pActor))
+            {
+                pActor.data.set("display_name", pActor.data.name ??
+                    string.Empty);
+                return;
+            }
             bool cultureIntegrated = UsesXiaPersonalNaming(pActor);
             if (!IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
                     nativeXia: IsNativeXiaCultureActor(pActor),

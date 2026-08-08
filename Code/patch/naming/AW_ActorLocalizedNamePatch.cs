@@ -24,6 +24,12 @@ namespace AncientWarfare3.patch.naming
         private static void GetName_Postfix(Actor __instance,
             ref string __result)
         {
+            if (__instance?.data != null && __instance.data.custom_name &&
+                !string.IsNullOrWhiteSpace(__instance.data.name))
+            {
+                __result = __instance.data.name;
+                return;
+            }
             // Lineage-managed actors already have an authoritative display
             // name assembled from given/family/shi data. Projecting the
             // generic localized slot here would overwrite that name.

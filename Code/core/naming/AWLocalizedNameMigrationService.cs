@@ -171,8 +171,17 @@ namespace AncientWarfare3.core.naming
                     AWLocalizedNameLegacySource.Unknown,
                     AWLocalizedNameService.CurrentLanguage());
             if (decision.DeferredForEvidence) return;
-            identity = identity.WithNamesAndSchema(decision.NativeName,
-                decision.ChineseName, decision.SchemaVersion);
+            if (data.custom_name && !string.IsNullOrWhiteSpace(displayBefore))
+            {
+                string manualName = displayBefore.Trim();
+                identity = identity.WithNamesAndSchema(manualName, manualName,
+                    AWLocalizedNameService.SchemaVersion);
+            }
+            else
+            {
+                identity = identity.WithNamesAndSchema(decision.NativeName,
+                    decision.ChineseName, decision.SchemaVersion);
+            }
             AWLocalizedNamePersistence.Apply(data, identity);
 
             bool generated = false;
