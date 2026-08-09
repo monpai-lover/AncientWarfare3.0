@@ -9,7 +9,7 @@ $expected = @{
     'Code/core/performance/AWCooperativeBatchRunner.cs' =
         '3DA5988A81FD07F0364C5C831B9CE027B06923925DF6E98192C6784F3FC5E667'
     'Code/core/performance/AWCooperativeActorParallelJobRunner.cs' =
-        'A417C19A3F701706949FBC85C7F0AEF4B23B4B47F8008CAFC871E8F5EA34A372'
+        '26D75F158D6289387180DD8802E812E462D754A07D1A412795AD8B157E5A79F2'
     'Code/core/performance/AWFrameSchedulerRules.cs' =
         '07BE0EA942A0AA1A3782C4DD62947517F66364DECFACA557B05EA202CABB041E'
     'Code/core/performance/AWSimulationStepContext.cs' =

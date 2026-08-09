@@ -240,8 +240,13 @@ internal static class PathfindingPerformanceTests
             "Actor scheduler injects the specialized parallel-job runner");
 
         string actorRunner = File.ReadAllText(actorRunnerPath);
-        Assert(actorRunner.Contains("private const int TimerRangeSize = 128"),
-            "Actor timer work is grouped into 128-actor ranges");
+        Assert(!actorRunner.Contains("TimerRangeSize"),
+            "Actor timer work never splits one batch across workers");
+        Assert(actorRunner.Contains(
+                "_timerRanges[rangeCount++] = new TimerRange(actors, 0, count);"),
+            "Each actor batch owns exactly one timer work item");
+        Assert(!actorRunner.Contains("start += TimerRangeSize"),
+            "One batch cannot concurrently mutate its ObjectContainers");
         Assert(actorRunner.Contains(
                 "AWSimulationWorkerPool.Instance.RunIndexed(0, rangeCount,"),
             "Actor timer ranges use the persistent AW worker pool");

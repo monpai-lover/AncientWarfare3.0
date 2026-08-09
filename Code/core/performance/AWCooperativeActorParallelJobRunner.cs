@@ -11,7 +11,6 @@ namespace AncientWarfare3.core.performance
         private const string PrepareJobId = "prepare";
         private const string UpdateTimersJobId = "update_timers";
         private const string UpdateVisibilityJobId = "update_visibility";
-        private const int TimerRangeSize = 128;
 
         private TimerRange[] _timerRanges = Array.Empty<TimerRange>();
         private float _activeElapsed;
@@ -61,7 +60,7 @@ namespace AncientWarfare3.core.performance
 
             int rangeCount = 0;
             int actorCount = 0;
-            EnsureTimerRangeCapacity(pActiveBatchCount * 2);
+            EnsureTimerRangeCapacity(pActiveBatchCount);
             for (int i = 0; i < pActiveBatchCount; i++)
             {
                 BatchActors batch = pBatches[pActiveBatchIndices[i]];
@@ -82,13 +81,7 @@ namespace AncientWarfare3.core.performance
                 batch._array = actors;
                 batch._count = count;
                 actorCount += count;
-                int batchRangeCount =
-                    (count + TimerRangeSize - 1) / TimerRangeSize;
-                EnsureTimerRangeCapacity(rangeCount + batchRangeCount);
-                for (int start = 0; start < count;
-                     start += TimerRangeSize)
-                    _timerRanges[rangeCount++] = new TimerRange(actors,
-                        start, Math.Min(count, start + TimerRangeSize));
+                _timerRanges[rangeCount++] = new TimerRange(actors, 0, count);
             }
 
             _activeElapsed = pElapsed;
