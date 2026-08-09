@@ -352,6 +352,27 @@ namespace AncientWarfare3.core.lineage
             DirtyVassalMap();
         }
 
+        internal static void ClearInvalidMilitaryGovernorateProjection(
+            Kingdom pSubject)
+        {
+            if (pSubject?.data == null) return;
+            long suzerainId = GetSuzerainId(pSubject);
+            pSubject.data.get(LineageKeys.VASSAL_CONTRACT_TIER,
+                out int contractTier, VassalContractTierRules.Outer);
+            Kingdom suzerain = null;
+            try { suzerain = World.world?.kingdoms?.get(suzerainId); }
+            catch { }
+            if (suzerainId >= 0)
+            {
+                if (VassalContractTierRules.CountsAsVassal(contractTier))
+                    AdjustDirectVassalCount(suzerain, -1);
+                else
+                    AdjustDirectTributaryCount(suzerain, -1);
+            }
+            ClearRelationProjection(pSubject);
+            DirtyVassalMap();
+        }
+
         private static List<ActiveVassalRelationIdentity>
             ReadRuntimeProjectionIdentities()
         {

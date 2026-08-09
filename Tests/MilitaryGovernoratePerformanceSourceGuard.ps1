@@ -15,9 +15,11 @@ $tablePath = Join-Path $root `
     'Code\core\db\MilitaryGovernorateStateTableItem.cs'
 $archivePath = Join-Path $root `
     'Code\core\db\LineageArchiveManager.cs'
+$vassalPath = Join-Path $root `
+    'Code\core\lineage\VassalService.cs'
 
 foreach ($path in @($storePath, $pipelinePath, $indexPath, $modelsPath,
-        $coordinatorPath, $tablePath, $archivePath)) {
+        $coordinatorPath, $tablePath, $archivePath, $vassalPath)) {
     if (-not (Test-Path -LiteralPath $path)) {
         throw "Missing military governorate integration source: $path"
     }
@@ -30,6 +32,7 @@ $models = Get-Content -Raw -LiteralPath $modelsPath
 $coordinator = Get-Content -Raw -LiteralPath $coordinatorPath
 $table = Get-Content -Raw -LiteralPath $tablePath
 $archive = Get-Content -Raw -LiteralPath $archivePath
+$vassal = Get-Content -Raw -LiteralPath $vassalPath
 
 foreach ($token in @(
     'private const int RuntimeRestoreBatchLimit',
@@ -125,6 +128,85 @@ if ($restore -match 'World\.world\.units\s*\.' +
 if ($restore -match 'foreach\s*\([^)]*World\.world\.kingdoms' -or
     $restore -match 'foreach\s*\([^)]*World\.world\.cities') {
     throw 'Governorate restore contains a global kingdom or city scan.'
+}
+
+foreach ($token in @(
+    'TryEndWithRelation(pSnapshot.StateId,',
+    'TryEndStateWithActiveMilitaryRelations(',
+    'relation.RelationId != pSnapshot.RelationId',
+    'VassalService.ClearInvalidMilitaryGovernorateProjection(',
+    'WHERE VASSAL_ID=@subject',
+    'AND ACTIVE=1 AND END_TIME<0 AND SUBJECT_KIND=@kind',
+    'bool stateEnded = false;',
+    'stateEnded = true;',
+    'if (!stateEnded && !End(pSnapshot.StateId, pReason))'
+)) {
+    if (-not $restore.Contains($token)) {
+        throw "Missing atomic governorate relation repair: $token"
+    }
+}
+
+$vassalCleanupStart = $vassal.IndexOf(
+    'internal static void ClearInvalidMilitaryGovernorateProjection(',
+    [StringComparison]::Ordinal)
+$vassalCleanupEnd = $vassal.IndexOf(
+    'private static List<ActiveVassalRelationIdentity>',
+    [StringComparison]::Ordinal)
+if ($vassalCleanupStart -lt 0 -or
+    $vassalCleanupEnd -le $vassalCleanupStart) {
+    throw 'Cannot isolate invalid governorate relation projection cleanup.'
+}
+$vassalCleanup = $vassal.Substring($vassalCleanupStart,
+    $vassalCleanupEnd - $vassalCleanupStart)
+if (-not $vassalCleanup.Contains(
+        'World.world?.kingdoms?.get(suzerainId)') -or
+    $vassalCleanup.Contains('FindKingdom(') -or
+    $vassalCleanup -match 'foreach\s*\([^)]*World\.world\.kingdoms') {
+    throw 'Invalid governorate cleanup does not use direct kingdom ID lookup.'
+}
+
+$applyStart = $restore.IndexOf(
+    'public static void ApplyAuthoritativeProjection(',
+    [StringComparison]::Ordinal)
+$retainStart = $restore.IndexOf(
+    'public static void RetainAuthoritativeProjections(',
+    [StringComparison]::Ordinal)
+$processStart = $restore.IndexOf(
+    'private static void ProcessRuntimeRestore()',
+    [StringComparison]::Ordinal)
+if ($applyStart -lt 0 -or $retainStart -le $applyStart -or
+    $processStart -le $retainStart) {
+    throw 'Cannot isolate governorate replica projection cleanup.'
+}
+$applyProjection = $restore.Substring($applyStart,
+    $retainStart - $applyStart)
+$retainProjection = $restore.Substring($retainStart,
+    $processStart - $retainStart)
+foreach ($token in @(
+    'bool trackedReplica = ReplicaSubjectIds.Remove(pSubject.id);',
+    'if (trackedReplica)',
+    'ClearReplicaVassalProjection(pSubject);'
+)) {
+    if (-not $applyProjection.Contains($token)) {
+        throw "Inactive replica cleanup is not ownership-scoped: $token"
+    }
+}
+foreach ($token in @(
+    'foreach (long subjectId in ReplicaSubjectIds)',
+    'ClearReplicaVassalProjection(subject);',
+    'ReplicaSubjectIds.Remove(stale[index]);'
+)) {
+    if (-not $retainProjection.Contains($token)) {
+        throw "Stale replica cleanup does not clear tracked vassal keys: $token"
+    }
+}
+foreach ($token in @(
+    'LineageKeys.VASSAL_RELATION_ID, -1L',
+    'LineageKeys.VASSAL_SUZERAIN_ID, -1L'
+)) {
+    if (-not $restore.Contains($token)) {
+        throw "Replica cleanup leaves an authoritative vassal key: $token"
+    }
 }
 
 $worldStoreStart = $coordinator.IndexOf(
