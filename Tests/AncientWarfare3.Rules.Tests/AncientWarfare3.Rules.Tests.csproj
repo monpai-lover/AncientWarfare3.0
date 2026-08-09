@@ -228,6 +228,7 @@
     <Compile Include="ArmyRtsCombatHandoffRulesTests.cs.txt" />
     <Compile Include="ArmyRtsSyntheticRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAssignmentReconciliationRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsSuccessionRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmySharedPathRecoveryRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyDiagnosticSamplingTests.cs.txt" />
     <Compile Include="ArmyLogisticsSustainmentRulesTests.cs.txt" />
@@ -297,6 +298,7 @@
     <Compile Include="..\..\Code\core\lineage\CityManpowerRules.cs" Link="Production\CityManpowerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SyntheticLevyRules.cs" Link="Production\SyntheticLevyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SyntheticMobilizationRules.cs" Link="Production\SyntheticMobilizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsSuccessionRecoveryRules.cs" Link="Production\ArmyRtsSuccessionRecoveryRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SyntheticLevySpawnScope.cs" Link="Production\SyntheticLevySpawnScope.cs" />
     <Compile Include="..\..\Code\core\lineage\CityReservePoolRules.cs" Link="Production\CityReservePoolRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityReservePoolPersistenceRules.cs" Link="Production\CityReservePoolPersistenceRules.cs" />

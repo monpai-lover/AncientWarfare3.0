@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.performance
             SuccessionDisputePersistence,
             WesternCourtElection,
             AccessionInstallations,
+            ArmyRtsSuccessionRecovery,
             LocalizedNameMigration,
             WesternLineageMigration,
             IntegratedCultureNamingMigration,
@@ -60,6 +61,7 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.succession_dispute_persistence",
             "aw3.authority.western_court_election",
             "aw3.authority.accession_installations",
+            "aw3.authority.army_rts_succession_recovery",
             "aw3.authority.localized_name_migration",
             "aw3.authority.western_lineage_migration",
             "aw3.authority.integrated_culture_naming_migration",
@@ -191,6 +193,7 @@ namespace AncientWarfare3.core.performance
             CivilServiceExamService.ClearRuntime();
             WesternCourtElectionService.Reset();
             AccessionIdentityService.ClearRuntime();
+            ArmyRtsSuccessionRecoveryService.Reset();
             TemporaryMilitaryReturnService.ClearRuntime();
             WarArmyReturnService.ClearRuntime();
             ArmyRtsAssignmentReconciliationService.Reset();
@@ -262,6 +265,9 @@ namespace AncientWarfare3.core.performance
                     break;
                 case CooperativeAuthorityStage.AccessionInstallations:
                     AccessionIdentityService.ProcessDeferredInstallations();
+                    break;
+                case CooperativeAuthorityStage.ArmyRtsSuccessionRecovery:
+                    ArmyRtsSuccessionRecoveryService.ProcessAuthorityCycle();
                     break;
                 case CooperativeAuthorityStage.LocalizedNameMigration:
                     AWLocalizedNameMigrationService.ProcessAuthorityCycle();

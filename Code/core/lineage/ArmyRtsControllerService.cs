@@ -2453,6 +2453,34 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static bool RehydrateAfterAuthorityChange(Army pArmy)
+        {
+            if (!ArmyRtsRuntimeMode.ShouldCommit || pArmy?.data == null ||
+                !Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null) return false;
+            ArmyRtsMission mission = ArmyRtsControllerRules.CopyMission(
+                record.Mission);
+            Controllers.SetState(pArmy.id, ArmyRtsState.Rally);
+            RuntimeByArmy[pArmy.id] = new RuntimeState
+            {
+                InitialRosterCount = SafeUnitCount(pArmy)
+            };
+            MissionIndex.Upsert(mission);
+            ArmyRouteProviderService.Cancel(pArmy.id,
+                ArmyRouteCancelReason.TargetReplaced);
+            AWArmyMarchService.ClearArmy(pArmy.id);
+            ArmyFormationService.RemoveArmy(pArmy.id);
+            ArmyRtsWarLifecycleService.OnMissionAssigned(pArmy, mission);
+            bool corridor = ResolveInitialMissionCorridor(pArmy, mission);
+            ArmyLogisticsService.OnMissionAssigned(pArmy, mission,
+                pConnectedSupply: corridor, pInCorridor: corridor);
+            ArmyStallWatchdogService.OnMissionAssigned(pArmy,
+                pResetState: true);
+            Controllers.Requeue(pArmy.id);
+            return true;
+        }
+
         public static void ClearRuntime()
         {
             Controllers.Clear();

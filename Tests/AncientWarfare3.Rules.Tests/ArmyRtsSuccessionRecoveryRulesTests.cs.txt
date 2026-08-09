@@ -1,0 +1,55 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsSuccessionRecoveryRulesTests
+{
+    internal static void Run()
+    {
+        Assert(ArmyRtsSuccessionRecoveryRules.ShouldEnqueue(
+                kingdomValid: true, kingValid: true, fromLoad: false,
+                currentKingId: 9L, requestedKingId: 9L,
+                completedKingId: -1L),
+            "a committed live succession queues military recovery");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueue(
+                true, true, fromLoad: true, 9L, 9L, -1L),
+            "load-time setKing uses the normal restore pipeline");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueue(
+                true, true, false, 9L, 9L, completedKingId: 9L),
+            "duplicate succession completion is coalesced");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueue(
+                true, true, false, currentKingId: 8L,
+                requestedKingId: 9L, completedKingId: -1L),
+            "a superseded successor cannot rebind military state");
+        SourceBoundariesExist();
+    }
+
+    private static void SourceBoundariesExist()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "ArmyRtsSuccessionRecoveryService.cs"));
+        string accession = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "AccessionIdentityService.cs"));
+        Assert(service.Contains("CopyArmyIdsAfter", StringComparison.Ordinal),
+            "succession recovery uses the kingdom army index");
+        Assert(service.Contains("army.checkCaptainExistence()",
+                StringComparison.Ordinal),
+            "succession recovery reuses vanilla captain maintenance");
+        Assert(service.Contains("RehydrateAfterAuthorityChange",
+                StringComparison.Ordinal),
+            "succession recovery rebuilds one controller without loading");
+        Assert(!service.Contains("World.world.armies",
+                StringComparison.Ordinal),
+            "succession recovery never scans all world armies");
+        Assert(accession.Contains(
+                "ArmyRtsSuccessionRecoveryService.OnKingInstalled(",
+                StringComparison.Ordinal),
+            "committed accession wakes the kingdom military runtime");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

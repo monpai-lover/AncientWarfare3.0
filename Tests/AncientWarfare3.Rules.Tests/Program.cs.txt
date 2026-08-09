@@ -8068,6 +8068,7 @@ ArmyRtsWarLifecycleStateTests.Run();
 ArmyRtsCombatHandoffRulesTests.Run();
 ArmyRtsSyntheticRecoveryRulesTests.Run();
 ArmyRtsAssignmentReconciliationRulesTests.Run();
+ArmyRtsSuccessionRecoveryRulesTests.Run();
 ArmySharedPathRecoveryRulesTests.Run();
 TemporaryLevyDiagnosticSamplingTests.Run();
 RecruitmentLifecycleRemovalRulesTests.Run();
