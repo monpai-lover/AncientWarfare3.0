@@ -17,7 +17,12 @@ namespace AncientWarfare3.patch
             if (!pKingdom.hasKing()) return true;
             Actor king = pKingdom.king;
             if (king?.data == null || king.isAlive()) return true;
-            HeirService.PrepareSuccessionBeforeKingDeath(pKingdom, king);
+            if (!SuccessionPreparationService.TryPublishForNativeSuccession(
+                    pKingdom, king))
+            {
+                __result = BehResult.Continue;
+                return false;
+            }
             if (!AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king))
                 return true;
             __result = BehResult.Continue;

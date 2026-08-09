@@ -147,8 +147,9 @@ namespace AncientWarfare3.patch
                 DyingKingActorId = __instance.data.id;
                 TryRunDeathStage(__instance,
                     ActorDeathPerformanceStage.KingHeirPreparation,
-                    "king succession preparation", () =>
-                    HeirService.PrepareSuccessionBeforeKingDeath(dyingKingdom, __instance));
+                    "king succession capture", () =>
+                    SuccessionPreparationService.CaptureDeath(
+                        dyingKingdom, __instance));
                 TryRunDeathStage(__instance,
                     ActorDeathPerformanceStage.KingChronicle,
                     "king death chronicle", () =>

@@ -12,6 +12,9 @@ internal static class KingSuccessionPreparationRulesTests
         UnchangedHeirSignatureSkipsMaintenance();
         DirtyKingdomsAreCoalescedAndBudgeted();
         SnapshotValidityRequiresMatchingFacts();
+        PublishedCandidateCanBeReadThenConsumed();
+        UnpublishedCaptureCanAdvanceToRebuiltRevision();
+        PublishedSelectionCanBeReplacedByAuthorityChoice();
     }
 
     private static void DuplicateDeathCaptureIsIdempotent()
@@ -122,6 +125,60 @@ internal static class KingSuccessionPreparationRulesTests
                 5L, 5L, 10L, 10L,
                 candidateAlive: true, candidateInRealm: false),
             "foreign candidate invalidates a cached snapshot");
+    }
+
+    private static void PublishedCandidateCanBeReadThenConsumed()
+    {
+        var state = new KingSuccessionPreparationState();
+        var key = new KingSuccessionKey(9L, 31L, 401L);
+        state.TryCapture(key, 12L, 402L);
+        state.Publish(key, 12L, 402L, "registered");
+
+        True(state.TryGetPublished(key, out PreparedSuccession published),
+            "native succession can read a published candidate");
+        Equal(402L, published.CandidateId,
+            "published read returns the prepared candidate");
+        True(state.TryConsumePublished(key,
+                out PreparedSuccession consumed),
+            "successful installation consumes a current publication");
+        Equal(402L, consumed.CandidateId,
+            "consumption returns the installed candidate");
+        Equal(false, state.TryGetPublished(key, out _),
+            "consumed publication cannot be read again");
+    }
+
+    private static void UnpublishedCaptureCanAdvanceToRebuiltRevision()
+    {
+        var state = new KingSuccessionPreparationState();
+        var key = new KingSuccessionKey(9L, 32L, 501L);
+        state.TryCapture(key, 20L, -1L);
+
+        True(state.Contains(key),
+            "pending death context is observable without recapture");
+        True(state.TryRefreshUnpublished(key, 21L, 502L),
+            "rebuilt snapshot advances an unpublished capture revision");
+        state.Publish(key, 21L, 502L, "direct");
+        True(state.TryGetPublished(key, out PreparedSuccession prepared),
+            "refreshed capture accepts the rebuilt snapshot");
+        Equal(502L, prepared.CandidateId,
+            "refreshed capture publishes the rebuilt candidate");
+    }
+
+    private static void PublishedSelectionCanBeReplacedByAuthorityChoice()
+    {
+        var state = new KingSuccessionPreparationState();
+        var key = new KingSuccessionKey(9L, 33L, 601L);
+        state.TryCapture(key, 30L, 602L);
+        state.Publish(key, 30L, 602L, "direct");
+
+        True(state.TryReplacePublished(key, 31L, 603L,
+                "military_acclaim"),
+            "authority choice can replace a published default");
+        True(state.TryConsume(key, 31L,
+                out PreparedSuccession selected),
+            "replacement remains revision-consumable");
+        Equal(603L, selected.CandidateId,
+            "authority replacement becomes the installed candidate");
     }
 
     private static void True(bool value, string name)

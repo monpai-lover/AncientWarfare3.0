@@ -22,9 +22,8 @@ namespace AncientWarfare3.patch
         public static bool GetKingFromRoyalClan_Prefix(Kingdom pKingdom, ref Actor __result)
         {
             if (!UsesManagedSuccession(pKingdom)) return true;
-            __result = pKingdom.hasKing()
-                ? HeirService.GetHeir(pKingdom)
-                : RepublicGovernmentService.ResolveRulerForVacancy(pKingdom);
+            SuccessionPreparationService.TryGetPublishedCandidate(pKingdom,
+                out __result);
             return false;
         }
 
@@ -33,7 +32,15 @@ namespace AncientWarfare3.patch
         public static bool GetKingFromLeaders_Prefix(Kingdom pKingdom, ref Actor __result)
         {
             if (!UsesManagedSuccession(pKingdom)) return true;
-            __result = RepublicGovernmentService.ResolveRulerForVacancy(pKingdom);
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+                __result = RepublicGovernmentService.ResolveRulerForVacancy(
+                    pKingdom);
+            else if (SuccessionPreparationService.TryGetPublishedCandidate(
+                         pKingdom, out Actor published) && published == null &&
+                     HeirService.ShouldUseOrdinaryFallbackSuccession(pKingdom))
+                __result = HeirService.GetLeaderSuccessionCandidate(pKingdom);
+            else
+                __result = null;
             return false;
         }
 
@@ -119,6 +126,8 @@ namespace AncientWarfare3.patch
             HeirService.RecallForSuccession(__instance, king, __state.WasRegisteredHeir);
             InheritanceLawService.EstablishHereditaryBranchAfterAccession(
                 __instance, king, __state.SuccessionSourceMode);
+            SuccessionPreparationService.OnSuccessorInstalled(__instance,
+                king);
             SuccessionDisputeService.OnSuccessorInstalled(__instance, king);
 
             HeirService.ClearHeir(__instance);

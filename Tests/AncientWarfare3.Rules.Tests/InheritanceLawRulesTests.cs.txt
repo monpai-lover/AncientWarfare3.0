@@ -441,8 +441,11 @@ internal static class InheritanceLawRulesTests
         Equal(true, heirServiceSource.Contains("SelectAlternativeFaction"),
             "an empty current faction falls back to another valid faction");
         Equal(true, heirServiceSource.Contains(
-                "IsRegisteredCandidateEligible(formerHeir, pKingdom)"),
-            "the registered heir remains the installed successor at the king's death");
+                "IsRegisteredCandidateEligible(registered, pKingdom)"),
+            "stable-reign preview preserves the registered successor");
+        Equal(false, heirServiceSource.Contains(
+                "PrepareSuccessionBeforeKingDeath"),
+            "king death has no synchronous heir preparation entrypoint");
         string candidateServiceIntegration = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "InheritanceCandidateService.cs"));

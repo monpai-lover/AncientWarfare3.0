@@ -230,6 +230,31 @@ namespace AncientWarfare3.core.lineage
                 referenceKingId, pIncludeRegisteredHeir: false).Actor;
         }
 
+        internal static Actor PreviewSuccessionCandidate(Kingdom pKingdom,
+            Actor pReferenceKing, out string pMode)
+        {
+            pMode = SuccessionMode.NONE;
+            if (pKingdom?.data == null || pReferenceKing?.data == null)
+                return null;
+            Actor registered = PeekStoredHeirForMinimap(pKingdom);
+            if (IsRegisteredCandidateEligible(registered, pKingdom))
+            {
+                pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE,
+                    out pMode, SuccessionMode.NONE);
+                if (string.IsNullOrEmpty(pMode) ||
+                    pMode == SuccessionMode.NONE)
+                    pMode = SuccessionMode.REGISTERED;
+                return registered;
+            }
+
+            long referenceKingId = pReferenceKing.data.id;
+            HeirSelection selection = SelectByEffectiveLaw(pKingdom,
+                pReferenceKing, referenceKingId,
+                pIncludeRegisteredHeir: false);
+            pMode = selection.Mode;
+            return selection.Actor;
+        }
+
         internal static Actor PreviewPrimogenitureCandidate(Kingdom pKingdom,
             Actor pReferenceKing = null)
         {
@@ -281,39 +306,6 @@ namespace AncientWarfare3.core.lineage
         public static bool HasHeir(Kingdom pKingdom)
         {
             return GetHeir(pKingdom) != null;
-        }
-
-        public static void PrepareSuccessionBeforeKingDeath(Kingdom pKingdom, Actor pDyingKing)
-        {
-            if (pKingdom?.data == null || pDyingKing?.data == null) return;
-            if (RepublicGovernmentService.IsRepublic(pKingdom))
-            {
-                RememberPreSuccessionKing(pKingdom, pDyingKing);
-                RepublicGovernmentService.RefreshRepublicSuccessor(pKingdom, pDyingKing);
-                return;
-            }
-            Actor formerHeir = PeekStoredHeirForMinimap(pKingdom);
-            pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE,
-                out string formerHeirMode, SuccessionMode.NONE);
-            RememberPreSuccessionKing(pKingdom, pDyingKing);
-            HeirSelection selection;
-            if (IsRegisteredCandidateEligible(formerHeir, pKingdom))
-            {
-                selection = new HeirSelection(formerHeir,
-                    string.IsNullOrEmpty(formerHeirMode) ||
-                    formerHeirMode == SuccessionMode.NONE
-                        ? SuccessionMode.REGISTERED
-                        : formerHeirMode);
-            }
-            else
-            {
-                selection = SelectByEffectiveLaw(pKingdom,
-                    pDyingKing, pDyingKing.data.id,
-                    pIncludeRegisteredHeir: false);
-            }
-            StoreHeirSelection(pKingdom, selection);
-            SuccessionDisputeService.Prepare(pKingdom, pDyingKing,
-                selection.Actor);
         }
 
         public static bool HasSuccessionCandidate(Kingdom pKingdom)

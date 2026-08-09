@@ -22,6 +22,12 @@ namespace AncientWarfare3.core.lineage
 
     internal static class SuccessionPreparationService
     {
+        private sealed class PublishedContext
+        {
+            internal KingSuccessionKey Key;
+            internal SuccessionPreparationSnapshot Snapshot;
+        }
+
         private static readonly Dictionary<long, long> Revisions =
             new Dictionary<long, long>();
         private static readonly Dictionary<long, SuccessionPreparationSnapshot>
@@ -31,6 +37,8 @@ namespace AncientWarfare3.core.lineage
             new SuccessionDirtyQueue();
         private static readonly KingSuccessionPreparationState Deaths =
             new KingSuccessionPreparationState();
+        private static readonly Dictionary<long, PublishedContext>
+            PublishedByKingdom = new Dictionary<long, PublishedContext>();
 
         internal static long CurrentRevision(long pKingdomId)
         {
@@ -82,6 +90,10 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pKing?.data == null ||
                 pKingdom.id < 0L) return false;
+            var key = new KingSuccessionKey(AWAsyncRuntime.WorldGeneration,
+                pKingdom.id, pKing.data.id);
+            if (Deaths.Contains(key)) return false;
+            CaptureLegitimateIdentity(pKingdom, pKing);
             long revision = CurrentRevision(pKingdom.id);
             if (!Snapshots.TryGetValue(pKingdom.id, out var snapshot) ||
                 snapshot.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
@@ -92,10 +104,100 @@ namespace AncientWarfare3.core.lineage
                 revision = CurrentRevision(pKingdom.id);
                 snapshot = null;
             }
-            var key = new KingSuccessionKey(AWAsyncRuntime.WorldGeneration,
-                pKingdom.id, pKing.data.id);
             return Deaths.TryCapture(key, revision,
                 snapshot?.CandidateId ?? -1L);
+        }
+
+        internal static bool TryPublishForNativeSuccession(Kingdom pKingdom,
+            Actor pKing)
+        {
+            if (pKingdom?.data == null || pKing?.data == null) return false;
+            var key = new KingSuccessionKey(AWAsyncRuntime.WorldGeneration,
+                pKingdom.id, pKing.data.id);
+            if (PublishedByKingdom.TryGetValue(pKingdom.id,
+                    out PublishedContext existing) &&
+                existing.Key.Equals(key) && Deaths.TryGetPublished(key,
+                    out _)) return true;
+
+            CaptureDeath(pKingdom, pKing);
+            if (!TryGetCurrentSnapshot(pKingdom, pKing,
+                    out SuccessionPreparationSnapshot snapshot))
+                return false;
+            Deaths.TryRefreshUnpublished(key, snapshot.Revision,
+                snapshot.CandidateId);
+            Deaths.Publish(key, snapshot.Revision, snapshot.CandidateId,
+                snapshot.Mode);
+            if (!Deaths.TryGetPublished(key, out _)) return false;
+            PublishedByKingdom[pKingdom.id] = new PublishedContext
+            {
+                Key = key,
+                Snapshot = snapshot
+            };
+            pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
+                snapshot.Mode ?? SuccessionMode.NONE);
+            return true;
+        }
+
+        internal static bool TryGetPublishedCandidate(Kingdom pKingdom,
+            out Actor pCandidate)
+        {
+            pCandidate = null;
+            if (pKingdom?.data == null ||
+                !PublishedByKingdom.TryGetValue(pKingdom.id,
+                    out PublishedContext context) ||
+                context.Key.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
+                !Deaths.TryGetPublished(context.Key, out var prepared))
+                return false;
+            if (prepared.CandidateId < 0L) return true;
+            Actor candidate = World.world?.units?.get(prepared.CandidateId);
+            if (candidate?.data == null || !candidate.isAlive() ||
+                candidate.isRekt() || candidate.kingdom != pKingdom)
+            {
+                MarkDirty(pKingdom);
+                return false;
+            }
+            pCandidate = candidate;
+            return true;
+        }
+
+        internal static bool TryOverridePublishedCandidate(Kingdom pKingdom,
+            Actor pPredecessor, Actor pCandidate, string pMode)
+        {
+            if (pKingdom?.data == null || pPredecessor?.data == null ||
+                pCandidate?.data == null || pCandidate.kingdom != pKingdom ||
+                !PublishedByKingdom.TryGetValue(pKingdom.id,
+                    out PublishedContext context) ||
+                context.Key.PredecessorId != pPredecessor.data.id)
+                return false;
+            long revision = CurrentRevision(pKingdom.id);
+            SuccessionDisputePreparationFacts dispute =
+                SuccessionDisputeService.BuildPreparationFacts(pKingdom,
+                    pPredecessor, pCandidate, pMode);
+            context.Snapshot.Revision = revision;
+            context.Snapshot.CandidateId = pCandidate.data.id;
+            context.Snapshot.Mode = pMode ?? SuccessionMode.NONE;
+            context.Snapshot.DisputeFacts = dispute;
+            context.Snapshot.SupportCityIds = dispute?.SupportCityIds ??
+                                               Array.Empty<long>();
+            if (!Deaths.TryReplacePublished(context.Key, revision,
+                    pCandidate.data.id, context.Snapshot.Mode)) return false;
+            pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
+                context.Snapshot.Mode);
+            return true;
+        }
+
+        internal static SuccessionDisputePreparationFacts
+            OnSuccessorInstalled(Kingdom pKingdom, Actor pSuccessor)
+        {
+            if (pKingdom?.data == null || pSuccessor?.data == null ||
+                !PublishedByKingdom.TryGetValue(pKingdom.id,
+                    out PublishedContext context)) return null;
+            long candidateId = context.Snapshot.CandidateId;
+            if (candidateId >= 0L && candidateId != pSuccessor.data.id)
+                return null;
+            if (!Deaths.TryConsumePublished(context.Key, out _)) return null;
+            PublishedByKingdom.Remove(pKingdom.id);
+            return context.Snapshot.DisputeFacts;
         }
 
         internal static bool TryGetCurrentSnapshot(Kingdom pKingdom,
@@ -131,6 +233,7 @@ namespace AncientWarfare3.core.lineage
             Snapshots.Clear();
             DirtyKingdoms.Clear();
             Deaths.Clear();
+            PublishedByKingdom.Clear();
         }
 
         private static bool CanPrepare(Kingdom pKingdom)
@@ -145,15 +248,26 @@ namespace AncientWarfare3.core.lineage
         {
             Actor king = pKingdom.king;
             if (king?.data == null) return null;
-            Actor candidate = HeirService.FindHeirReadOnly(pKingdom);
+            Actor candidate;
+            string mode;
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+            {
+                RepublicGovernmentService.RefreshRepublicSuccessor(
+                    pKingdom, king);
+                candidate = RepublicGovernmentService.
+                    GetRegisteredSuccessor(pKingdom);
+                mode = candidate?.data == null
+                    ? SuccessionMode.NONE
+                    : SuccessionMode.REPUBLIC_ELECTIVE;
+            }
+            else
+            {
+                candidate = HeirService.PreviewSuccessionCandidate(
+                    pKingdom, king, out mode);
+            }
 
             InheritanceLaw law = InheritanceLawService.GetEffectiveLaw(
                 pKingdom);
-            Actor registered = HeirService.PeekStoredHeirForMinimap(pKingdom);
-            pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE,
-                out string registeredMode, SuccessionMode.NONE);
-            string mode = HeirService.ResolveSuccessionModeForCandidate(
-                pKingdom, king, candidate, law, registered, registeredMode);
             SuccessionDisputePreparationFacts dispute = candidate?.data == null
                 ? null
                 : SuccessionDisputeService.BuildPreparationFacts(pKingdom,
@@ -174,6 +288,33 @@ namespace AncientWarfare3.core.lineage
                 SupportCityIds = dispute?.SupportCityIds ?? Array.Empty<long>(),
                 DisputeFacts = dispute
             };
+        }
+
+        private static void CaptureLegitimateIdentity(Kingdom pKingdom,
+            Actor pKing)
+        {
+            pKingdom.data.set(LineageKeys.KINGDOM_PRE_SUCCESSION_KING_ID,
+                pKing.data.id);
+            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID,
+                out long storedLineage, -1L);
+            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID,
+                out long storedShi, -1L);
+            if (storedLineage < 0L)
+            {
+                pKing.data.get(LineageKeys.LINEAGE_ID,
+                    out long lineageId, -1L);
+                if (lineageId >= 0L)
+                    pKingdom.data.set(
+                        LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID,
+                        lineageId);
+            }
+            if (storedShi < 0L)
+            {
+                pKing.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+                if (shiId >= 0L)
+                    pKingdom.data.set(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID,
+                        shiId);
+            }
         }
     }
 }

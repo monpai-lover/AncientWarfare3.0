@@ -122,6 +122,11 @@ namespace AncientWarfare3.core.lineage
 
         public int Count => _entries.Count;
 
+        public bool Contains(KingSuccessionKey pKey)
+        {
+            return _entries.ContainsKey(pKey);
+        }
+
         public bool TryCapture(KingSuccessionKey pKey, long pRevision,
             long pCandidateId)
         {
@@ -148,6 +153,32 @@ namespace AncientWarfare3.core.lineage
             _entries[pKey] = entry;
         }
 
+        public bool TryRefreshUnpublished(KingSuccessionKey pKey,
+            long pRevision, long pCandidateId)
+        {
+            if (!_entries.TryGetValue(pKey, out Entry entry) ||
+                entry.Published) return false;
+            entry.CapturedRevision = pRevision;
+            entry.PublishedRevision = -1L;
+            entry.CandidateId = pCandidateId;
+            entry.Mode = string.Empty;
+            _entries[pKey] = entry;
+            return true;
+        }
+
+        public bool TryReplacePublished(KingSuccessionKey pKey,
+            long pRevision, long pCandidateId, string pMode)
+        {
+            if (!_entries.TryGetValue(pKey, out Entry entry) ||
+                !entry.Published) return false;
+            entry.CapturedRevision = pRevision;
+            entry.PublishedRevision = pRevision;
+            entry.CandidateId = pCandidateId;
+            entry.Mode = pMode ?? string.Empty;
+            _entries[pKey] = entry;
+            return true;
+        }
+
         public bool TryConsume(KingSuccessionKey pKey, long pRevision,
             out PreparedSuccession pPrepared)
         {
@@ -159,6 +190,27 @@ namespace AncientWarfare3.core.lineage
             _entries.Remove(pKey);
             pPrepared = new PreparedSuccession(entry.CandidateId,
                 entry.Mode);
+            return true;
+        }
+
+        public bool TryGetPublished(KingSuccessionKey pKey,
+            out PreparedSuccession pPrepared)
+        {
+            pPrepared = default;
+            if (!_entries.TryGetValue(pKey, out Entry entry) ||
+                !entry.Published ||
+                entry.CapturedRevision != entry.PublishedRevision)
+                return false;
+            pPrepared = new PreparedSuccession(entry.CandidateId,
+                entry.Mode);
+            return true;
+        }
+
+        public bool TryConsumePublished(KingSuccessionKey pKey,
+            out PreparedSuccession pPrepared)
+        {
+            if (!TryGetPublished(pKey, out pPrepared)) return false;
+            _entries.Remove(pKey);
             return true;
         }
 
