@@ -80,6 +80,7 @@ namespace AncientWarfare3.core.performance
             KingdomInstitutionalXiaizationService.Reset();
             ActorDeathArchiveService.Reset();
             SuccessionRelationshipIndex.Reset();
+            ReigningRoyalLineageIndex.Reset();
             SuccessionPreparationService.Reset();
         }
 
@@ -93,6 +94,7 @@ namespace AncientWarfare3.core.performance
             if (!pGate.TryEnter(pCycleToken, allowed)) return;
 
             SuccessionRelationshipIndex.ProcessAuthorityCycle();
+            ReigningRoyalLineageIndex.ProcessAuthorityCycle();
             SuccessionPreparationService.ProcessAuthorityCycle(
                 pKingdomBudget: 1);
             WesternCourtElectionService.ProcessAuthorityCycle();
