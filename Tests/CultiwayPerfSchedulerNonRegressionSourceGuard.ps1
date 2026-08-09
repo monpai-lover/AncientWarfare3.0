@@ -1,24 +1,41 @@
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
+
+function Get-NormalizedTextSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $text = [IO.File]::ReadAllText($Path).
+        Replace("`r`n", "`n").Replace("`r", "`n")
+    $utf8 = New-Object Text.UTF8Encoding($false)
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString(
+            $sha256.ComputeHash($utf8.GetBytes($text))).Replace('-', '')
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
 $expected = @{
     'Code/patch/AW_FramePrioritySchedulerPatch.cs' =
-        '57D6FF4A9E4B7AE65C01DD3E9CAB847944DB6181272737FDA6A9C94513B1F2DF'
+        'FFEB5975322A2FC1DB52958284DC4554C15B9DC67844715D815CB430AC74127D'
     'Code/core/performance/AWCooperativeSimulationRunner.cs' =
-        '816BDD74B747636C997BE053FE8610763BFD7D5F6BD6C88DA6822A55233CACF4'
+        '1B90A35ACC645C5BBFD2D3054F667980834D4EBFA78D0D839E084D9B55ED8A9F'
     'Code/core/performance/AWCooperativeBatchRunner.cs' =
-        '3DA5988A81FD07F0364C5C831B9CE027B06923925DF6E98192C6784F3FC5E667'
+        'D86AE5C98B043F3B95DEA3EE62E36787D94DA4AD9898A28D62ADC5F81A9A767C'
     'Code/core/performance/AWCooperativeActorParallelJobRunner.cs' =
-        '26D75F158D6289387180DD8802E812E462D754A07D1A412795AD8B157E5A79F2'
+        '71C6AF13988F69825D18E111440A4EE6CEB9AA540AA89C62031328767B7075F4'
     'Code/core/performance/AWFrameSchedulerRules.cs' =
-        '07BE0EA942A0AA1A3782C4DD62947517F66364DECFACA557B05EA202CABB041E'
+        '72A165218B11E070E4CD42FDA58B943491294D494BE1011EB489B1AF84189B7D'
     'Code/core/performance/AWSimulationStepContext.cs' =
-        '2809229EC394DD8C5CE9319A4D31AEC63198E7C5265C9246EF0C13F8F17A4E97'
+        'EA57EEEF2DD9BF71362A119F2EFF94FCA19C8B7A672E8FF297392A7A63E47AAA'
 }
 
 foreach ($entry in $expected.GetEnumerator()) {
     $path = Join-Path $projectRoot $entry.Key
-    $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
+    $actual = Get-NormalizedTextSha256 -Path $path
     if ($actual -ne $entry.Value) {
         throw "Protected Cultiway scheduler file changed: $($entry.Key)"
     }
