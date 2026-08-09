@@ -30,6 +30,8 @@
 - Modify `Code/core/lineage/KingdomWarDirectorRules.cs`: attacker/defender alternating priority queue rules.
 - Modify `Code/core/lineage/KingdomWarDirectorService.cs`: publish a valid first mission within two logical pulses.
 - Modify `Code/core/lineage/ArmyRtsControllerService.cs`: persistent cursor coverage for armies above 128 members.
+- Create `Code/core/lineage/ArmyRtsSuccessionRecoveryService.cs`: bounded online military rebind after a king changes.
+- Modify `Code/core/lineage/AccessionIdentityService.cs`: enqueue military rebind only after accession commit completes.
 - Modify `Code/core/performance/ArmyRtsSchedulingMode.cs`: frozen owner and shared exact-once gate.
 - Modify `Code/core/performance/ArmyRtsSchedulingService.cs`: one bounded RTS pulse per logical token.
 - Modify `Code/core/performance/AWCooperativeSimulationRunner.cs`: run RTS pulse on every internal large-step pass.
@@ -462,6 +464,9 @@ git commit -m "fix: demobilize every synthetic levy in bounded batches"
 - Modify: `Code/core/lineage/ArmyRtsWarLifecycleService.cs`
 - Modify: `Code/core/lineage/ArmyRtsAssignmentReconciliationService.cs`
 - Modify: `Code/core/lineage/ArmyRtsControllerService.cs`
+- Create: `Code/core/lineage/ArmyRtsSuccessionRecoveryService.cs`
+- Modify: `Code/core/lineage/AccessionIdentityService.cs`
+- Modify: `Code/core/performance/AWAuthorityCycleService.cs`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/Program.cs.txt`
 
 - [ ] **Step 1: Add failing priority and cursor tests**
@@ -473,6 +478,12 @@ handoff regression where a route failure latches target completion and removes
 watchdog ownership, the director later retains the same strategic mission,
 and online reconciliation must produce the same runnable state as load-time
 `RebuildRuntime` without requiring a save reload.
+
+Add a succession regression with two variants: an ordinary king dies while
+the kingdom has active missions, and the installed heir was the captain of
+one active army. In both cases all viable armies must regain a live captain,
+current director generation, controller queue ownership and watchdog
+registration without invoking any world-load method.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -514,13 +525,36 @@ old controller mission before waiting for the director. This matches the
 state that currently makes armies move again after a load, but performs it
 online at the broken handoff boundary.
 
-- [ ] **Step 6: Replace 128-member truncation with cursors**
+- [ ] **Step 6: Rebind RTS state after king succession**
+
+Create `ArmyRtsSuccessionRecoveryService.OnKingInstalled(Kingdom, Actor)`.
+It snapshots only IDs from `ArmyStrategicIndexService`, processes a bounded
+army batch per authority pulse, and for each army:
+
+```csharp
+if (!AWArmyService.IsCaptainLeaseEligible(army, captain, true))
+    KingdomWarDirectorService.TryRecoverMissingCaptain(kingdom, army);
+ArmyRtsControllerService.RehydrateAfterAuthorityChange(army);
+ArmyRtsAssignmentReconciliationService.Enqueue(army);
+```
+
+`RehydrateAfterAuthorityChange` preserves a legal persisted mission but resets
+route submission, target-completion latch, job cursor, formation cache and
+watchdog state exactly as `RebuildRuntime` does for one army. Invalid missions
+are removed and the director receives a dirty kingdom. Call
+`OnKingInstalled` only after `AccessionIdentityService` reaches its final
+committed stage; duplicate callbacks coalesce by kingdom and new king ID.
+Expose the existing director missing-captain recovery as an internal bounded
+operation, add an explicit reconciliation `Enqueue(Army)` boundary, and run
+one succession-recovery work item from the cooperative authority schedule.
+
+- [ ] **Step 7: Replace 128-member truncation with cursors**
 
 Persist member index and roster version in `ArmyRtsJobAssignmentCursor`.
 Process at most 128 members per work item, retain the army in the queue until
 all members are covered, and restart only when the roster version changes.
 
-- [ ] **Step 7: Run rules and adversarial scenarios**
+- [ ] **Step 8: Run rules and adversarial scenarios**
 
 ```powershell
 dotnet run --project Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tests.csproj -c Release
@@ -530,11 +564,13 @@ dotnet run --project Tests\ArmyRtsAdversarialSimulation\ArmyRtsAdversarialSimula
 Expected: rules pass; scenario settles without a persistent unassigned army.
 The handoff scenario must resume online before its simulated load boundary;
 calling rebuild afterward must not change its movement eligibility.
+The succession scenario must pass for both an ordinary successor and a
+successor removed from captaincy during accession.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```powershell
-git add Code/core/lineage/KingdomWarDirectorRules.cs Code/core/lineage/KingdomWarDirectorService.cs Code/core/lineage/ArmyRtsWarLifecycleService.cs Code/core/lineage/ArmyRtsAssignmentReconciliationService.cs Code/core/lineage/ArmyRtsControllerService.cs Tests/AncientWarfare3.Rules.Tests/Program.cs.txt
+git add Code/core/lineage/KingdomWarDirectorRules.cs Code/core/lineage/KingdomWarDirectorService.cs Code/core/lineage/ArmyRtsWarLifecycleService.cs Code/core/lineage/ArmyRtsAssignmentReconciliationService.cs Code/core/lineage/ArmyRtsControllerService.cs Code/core/lineage/ArmyRtsSuccessionRecoveryService.cs Code/core/lineage/AccessionIdentityService.cs Code/core/performance/AWAuthorityCycleService.cs Tests/AncientWarfare3.Rules.Tests/Program.cs.txt
 git commit -m "fix: issue first RTS orders to both war sides"
 ```
 

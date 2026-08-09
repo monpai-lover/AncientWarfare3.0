@@ -210,6 +210,15 @@ after a handoff clears the completion latch, resets route ownership and
 registers the watchdog exactly as a save/load rehydration does. Therefore an
 army cannot require reloading the save to resume movement.
 
+Ruler succession is also an explicit RTS invalidation boundary. Installing a
+new king schedules a bounded military rebind for that kingdom after accession
+identity is committed. It increments the director generation, repairs any
+army whose former captain became king, revalidates persisted missions, resets
+stale controller route/job state and registers each still-valid mission with
+the stall watchdog. This is the online equivalent of the military rebuild
+that currently occurs on load; a king's death must not require save reload to
+make armies move again.
+
 Formation, movement and roster reconciliation no longer stop permanently at
 the first 128 members. Each army stores a member cursor; every work item
 processes a bounded slice and resumes until all current members have been
@@ -310,6 +319,8 @@ Rules and source guards must prove:
   save/load converge without orphaned synthetic actors;
 - attacker and defender each receive a valid first mission within two logical
   RTS pulses when each has an eligible army;
+- king succession rebinds the affected kingdom's armies in bounded slices,
+  including an army whose captain became the new king, without a save reload;
 - newly created and late-joining armies receive lifecycle records without a
   30-second polling dependency;
 - armies larger than 128 members are fully processed across cursor slices;
