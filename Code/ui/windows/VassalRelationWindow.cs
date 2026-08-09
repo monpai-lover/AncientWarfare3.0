@@ -1,3 +1,4 @@
+using System.Collections;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.items;
 using NeoModLoader.api;
@@ -15,6 +16,25 @@ namespace AncientWarfare3.ui.windows
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.VASSAL_RELATIONS);
             AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.VASSAL_RELATIONS,
                 () => { if (Instance != null) Instance.Refresh(); });
+        }
+
+        public static void OpenKingdomRenameFlow(long pKingdomId)
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(pKingdomId);
+            if (kingdom?.data == null || kingdom.isRekt()) return;
+            MetaType.Kingdom.getAsset().selectAndInspect(kingdom);
+            if (Instance != null)
+                Instance.StartCoroutine(FocusKingdomNameInput());
+        }
+
+        private static IEnumerator FocusKingdomNameInput()
+        {
+            yield return null;
+            yield return null;
+            KingdomWindow window = Object.FindObjectOfType<KingdomWindow>();
+            NameInput input = window?.transform.FindRecursive(
+                "NameInputElement")?.GetComponent<NameInput>();
+            input?.inputField?.ActivateInputField();
         }
 
         protected override void Init()

@@ -26,6 +26,12 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingdomYear(Kingdom pSubject)
         {
             if (!IsActiveSubject(pSubject)) return;
+            EnqueueRecovery(pSubject);
+        }
+
+        private static void EnqueueRecovery(Kingdom pSubject)
+        {
+            if (pSubject?.data == null || pSubject.id < 0) return;
             long subjectId = pSubject.id;
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 RecoveryQueuePrefix + subjectId,
@@ -75,6 +81,49 @@ namespace AncientWarfare3.core.lineage
                 out long actorId, -1L);
             Actor actor = FindActor(actorId);
             return IsLiving(actor) ? actor : null;
+        }
+
+        public static bool CanReplaceGovernorForReadModel(Kingdom pSubject)
+        {
+            if (!IsActiveSubject(pSubject)) return false;
+            pSubject.data.get(
+                LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
+                out bool allowed, false);
+            return allowed;
+        }
+
+        public static bool TryReplaceGovernor(Kingdom pSuzerain,
+            Kingdom pSubject, Actor pGovernor, out string pReason)
+        {
+            pReason = "invalid_governorate";
+            if (!TryReadManagedState(pSuzerain, pSubject,
+                    out MilitaryGovernorateSnapshot state)) return false;
+            if (!CanReplaceGovernorForReadModel(pSubject))
+            {
+                pReason = "replacement_not_allowed";
+                return false;
+            }
+            if (!IsEligibleDesignated(pGovernor, pSubject, pSuzerain))
+            {
+                pReason = "invalid_general";
+                return false;
+            }
+
+            if (!MilitaryGovernorateStore.SetSuccessor(state.StateId,
+                    pGovernor.data.id))
+            {
+                pReason = "persistence_failed";
+                return false;
+            }
+            ProjectSuccessor(pSubject, pGovernor.data.id);
+            if (!Commit(pSubject, pSuzerain, state, pGovernor))
+            {
+                EnqueueRecovery(pSubject);
+                pReason = "replacement_pending";
+                return false;
+            }
+            pReason = "ok";
+            return true;
         }
 
         private static void Process(long pKingdomId, long pRulerActorId)
@@ -235,6 +284,9 @@ namespace AncientWarfare3.core.lineage
                 pState.StateId, pSuccessor.data.id);
             if (!stateSaved) return false;
             ProjectSuccessor(pSubject, -1L);
+            pSubject.data.set(
+                LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
+                false);
             try { WorldLog.logNewKing(pSubject); }
             catch { }
             return true;

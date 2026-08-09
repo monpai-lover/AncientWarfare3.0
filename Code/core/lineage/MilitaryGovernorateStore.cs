@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.lineage
         public string CommandName = "";
         public int CreatedYear = -1;
         public int SuccessionState;
+        public bool ReplacementAllowed;
     }
 
     internal static class MilitaryGovernorateStore
@@ -78,10 +79,11 @@ namespace AncientWarfare3.core.lineage
                         " (STATE_ID,RELATION_ID,SUBJECT_KINGDOM_ID," +
                         "SUZERAIN_KINGDOM_ID,SEAT_CITY_ID,GOVERNOR_ACTOR_ID," +
                         "SUCCESSOR_ACTOR_ID,EXPEDITIONARY_ARMY_ID," +
-                        "COMMAND_NAME,CREATED_YEAR,SUCCESSION_STATE,ACTIVE," +
+                        "COMMAND_NAME,CREATED_YEAR,SUCCESSION_STATE," +
+                        "REPLACEMENT_ALLOWED,ACTIVE," +
                         "END_TIME,END_REASON) VALUES (@state,@relation," +
                         "@subject,@suzerain,@seat,@governor,-1,-1,@name," +
-                        "@year,0,1,-1,'')";
+                        "@year,0,0,1,-1,'')";
                     insert.Parameters.AddWithValue("@state", pStateId);
                     insert.Parameters.AddWithValue("@relation", pRelationId);
                     insert.Parameters.AddWithValue("@subject", pSubject.id);
@@ -100,7 +102,7 @@ namespace AncientWarfare3.core.lineage
                 }
 
                 transaction.Commit();
-                Project(pSubject, pStateId, -1L);
+                Project(pSubject, pStateId, -1L, false);
                 return true;
             }
             catch (Exception error)
@@ -135,7 +137,8 @@ namespace AncientWarfare3.core.lineage
                 if (!reader.Read()) return false;
                 pSnapshot = Read(reader);
                 Project(pSubject, pSnapshot.StateId,
-                    pSnapshot.SuccessorActorId);
+                    pSnapshot.SuccessorActorId,
+                    pSnapshot.ReplacementAllowed);
                 return true;
             }
             catch (Exception error)
@@ -207,6 +210,35 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static bool SetReplacementAllowed(long pStateId,
+            bool pAllowed)
+        {
+            return UpdateInt(pStateId, "REPLACEMENT_ALLOWED",
+                pAllowed ? 1 : 0);
+        }
+
+        public static bool SetCommandName(long pStateId, string pCommandName)
+        {
+            if (!Ready || pStateId < 0 ||
+                string.IsNullOrWhiteSpace(pCommandName)) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " +
+                    MilitaryGovernorateStateTableItem.GetTableName() +
+                    " SET COMMAND_NAME=@name WHERE STATE_ID=@state AND ACTIVE=1";
+                command.Parameters.AddWithValue("@name", pCommandName.Trim());
+                command.Parameters.AddWithValue("@state", pStateId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Military governorate rename failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
         public static bool CommitSuccession(long pStateId, long pGovernorId)
         {
             if (!Ready || pStateId < 0 || pGovernorId < 0) return false;
@@ -222,7 +254,8 @@ namespace AncientWarfare3.core.lineage
                 command.CommandText = "UPDATE " +
                     MilitaryGovernorateStateTableItem.GetTableName() +
                     " SET GOVERNOR_ACTOR_ID=@governor,SUCCESSOR_ACTOR_ID=-1," +
-                    "SUCCESSION_STATE=0 WHERE STATE_ID=@state AND ACTIVE=1";
+                    "SUCCESSION_STATE=0,REPLACEMENT_ALLOWED=0 " +
+                    "WHERE STATE_ID=@state AND ACTIVE=1";
                 command.Parameters.AddWithValue("@governor", pGovernorId);
                 command.Parameters.AddWithValue("@state", pStateId);
                 if (command.ExecuteNonQuery() != 1)
@@ -390,7 +423,8 @@ namespace AncientWarfare3.core.lineage
             if (TryGetActive(pSubject, out MilitaryGovernorateSnapshot snapshot))
             {
                 Project(pSubject, snapshot.StateId,
-                    snapshot.SuccessorActorId);
+                    snapshot.SuccessorActorId,
+                    snapshot.ReplacementAllowed);
                 return true;
             }
             ClearProjection(pSubject);
@@ -424,11 +458,35 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        private static bool UpdateInt(long pStateId, string pColumn,
+            int pValue)
+        {
+            if (!Ready || pStateId < 0 ||
+                pColumn != "REPLACEMENT_ALLOWED") return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " +
+                    MilitaryGovernorateStateTableItem.GetTableName() +
+                    " SET " + pColumn + "=@value WHERE STATE_ID=@state" +
+                    " AND ACTIVE=1";
+                command.Parameters.AddWithValue("@value", pValue);
+                command.Parameters.AddWithValue("@state", pStateId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Military governorate integer update failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
         private const string SelectColumns =
             "SELECT STATE_ID,RELATION_ID,SUBJECT_KINGDOM_ID," +
             "SUZERAIN_KINGDOM_ID,SEAT_CITY_ID,GOVERNOR_ACTOR_ID," +
             "SUCCESSOR_ACTOR_ID,EXPEDITIONARY_ARMY_ID,COMMAND_NAME," +
-            "CREATED_YEAR,SUCCESSION_STATE";
+            "CREATED_YEAR,SUCCESSION_STATE,REPLACEMENT_ALLOWED";
 
         private static MilitaryGovernorateSnapshot Read(SQLiteDataReader pReader)
         {
@@ -444,12 +502,14 @@ namespace AncientWarfare3.core.lineage
                 ExpeditionaryArmyId = pReader.GetInt64(7),
                 CommandName = pReader.IsDBNull(8) ? "" : pReader.GetString(8),
                 CreatedYear = pReader.GetInt32(9),
-                SuccessionState = pReader.GetInt32(10)
+                SuccessionState = pReader.GetInt32(10),
+                ReplacementAllowed = !pReader.IsDBNull(11) &&
+                                     pReader.GetInt32(11) != 0
             };
         }
 
         private static void Project(Kingdom pSubject, long pStateId,
-            long pSuccessorActorId)
+            long pSuccessorActorId, bool pReplacementAllowed)
         {
             if (pSubject == null) return;
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
@@ -459,6 +519,9 @@ namespace AncientWarfare3.core.lineage
             pSubject.data.set(
                 LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID,
                 pSuccessorActorId);
+            pSubject.data.set(
+                LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
+                pReplacementAllowed);
         }
 
         private static void ClearProjection(Kingdom pSubject)
@@ -469,6 +532,9 @@ namespace AncientWarfare3.core.lineage
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_STATE_ID, -1L);
             pSubject.data.set(
                 LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID, -1L);
+            pSubject.data.set(
+                LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
+                false);
         }
 
         private static Kingdom FindKingdom(long pKingdomId)

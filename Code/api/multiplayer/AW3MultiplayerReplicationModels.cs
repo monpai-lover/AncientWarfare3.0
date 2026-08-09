@@ -19,7 +19,7 @@ namespace AncientWarfare3.api.multiplayer
 
     public static class AW3MultiplayerReplicationMetadata
     {
-        public const int CatalogVersion = 1;
+        public const int CatalogVersion = 2;
     }
 
     public sealed class AW3MultiplayerArchiveCaptureResult

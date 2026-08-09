@@ -1176,6 +1176,21 @@ namespace AncientWarfare3.core.lineage
             if (type == "independence_war")
                 EndIndependenceSuspension(pWar, attacker);
 
+            if (type == "independence_war" &&
+                pWinner == WarWinner.Defenders &&
+                GetSubjectKind(attacker) ==
+                VassalSubjectKind.MilitaryGovernorate &&
+                GetSuzerain(attacker) == defender &&
+                MilitaryGovernorateStore.TryGetActive(attacker,
+                    out MilitaryGovernorateSnapshot governorateState) &&
+                MilitaryGovernorateStore.SetReplacementAllowed(
+                    governorateState.StateId, true))
+            {
+                attacker.data.set(
+                    LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
+                    true);
+            }
+
             if (!hasExplicitGoal && type == "vassal_war" &&
                 pWinner == WarWinner.Attackers)
             {
@@ -1560,6 +1575,14 @@ namespace AncientWarfare3.core.lineage
                 Kingdom target = FindKingdom(row.kingdom_id);
                 row.can_absorb_by_context = CanAbsorbVassalByDecision(pContext, target, out string reason);
                 row.absorb_reason = reason ?? "";
+                bool directGovernorate = target?.data != null &&
+                    row.subject_kind == VassalSubjectKind.MilitaryGovernorate &&
+                    GetSuzerain(target) == pContext;
+                row.can_designate_governorate_successor = directGovernorate;
+                row.can_replace_governorate_governor = directGovernorate &&
+                    MilitaryGovernorateSuccessionService.
+                        CanReplaceGovernorForReadModel(target);
+                row.can_rename_governorate = directGovernorate;
             }
         }
 
@@ -1606,6 +1629,7 @@ namespace AncientWarfare3.core.lineage
                 row.suzerain_color = relation.suzerain_color;
                 row.relation_type = relation.relation_type;
                 row.contract_tier = relation.contract_tier;
+                row.subject_kind = relation.subject_kind;
                 row.is_tributary = VassalContractTierRules.IsLooseTributary(relation.contract_tier);
                 row.relation_reason_label = VassalGetReasonLabel(relation.relation_type);
                 row.autonomy = effective.Autonomy;
@@ -1614,6 +1638,27 @@ namespace AncientWarfare3.core.lineage
                 row.start_time = relation.start_time;
                 row.years = YearsSince(relation.start_time);
                 row.relation_subject_name = relationKingdom?.name ?? "";
+
+                if (row.subject_kind ==
+                        VassalSubjectKind.MilitaryGovernorate &&
+                    relationKingdom?.data != null &&
+                    MilitaryGovernorateStore.TryGetActive(relationKingdom,
+                        out MilitaryGovernorateSnapshot state))
+                {
+                    City seat = FindCity(state.SeatCityId);
+                    Actor governor = FindActor(state.GovernorActorId);
+                    Actor successor = FindActor(state.SuccessorActorId);
+                    row.governorate_seat_id = state.SeatCityId;
+                    row.governorate_seat_name = seat?.data?.name ?? "";
+                    row.governorate_governor_id = state.GovernorActorId;
+                    row.governorate_governor_name = governor?.data == null
+                        ? ""
+                        : governor.getName();
+                    row.governorate_successor_id = state.SuccessorActorId;
+                    row.governorate_successor_name = successor?.data == null
+                        ? ""
+                        : successor.getName();
+                }
             }
 
             return row;
@@ -2382,6 +2427,9 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MILITARY_GOVERNORATE_STATE_ID, -1L);
             pKingdom.data.set(
                 LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID, -1L);
+            pKingdom.data.set(
+                LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
+                false);
         }
 
         private static void InvalidateRelationPresentation(Kingdom pKingdom)
@@ -2470,6 +2518,20 @@ namespace AncientWarfare3.core.lineage
             foreach (Kingdom kingdom in World.world.kingdoms)
                 if (kingdom?.data != null && kingdom.id == pId) return kingdom;
             return null;
+        }
+
+        private static City FindCity(long pId)
+        {
+            if (pId < 0) return null;
+            try { return World.world?.cities?.get(pId); }
+            catch { return null; }
+        }
+
+        private static Actor FindActor(long pId)
+        {
+            if (pId < 0) return null;
+            try { return World.world?.units?.get(pId); }
+            catch { return null; }
         }
 
         private static string GetWarType(War pWar)

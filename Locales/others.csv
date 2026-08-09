@@ -112,6 +112,29 @@ aw_army_short,军,Army,軍
 aw_military_governorate_ruler,将军,General,將軍
 aw_military_governorate_marker,军镇,Military governorate,軍鎮
 aw_military_governorate_marker_short,军,M,軍
+aw_military_governorate_label_suzerain,宗主：,Suzerain:,宗主：
+aw_military_governorate_label_seat,驻地：,Seat:,駐地：
+aw_military_governorate_label_governor,将军：,General:,將軍：
+aw_military_governorate_label_successor,留后：,Successor:,留後：
+aw_military_governorate_designate_successor,指定留后,Designate successor,指定留後
+aw_military_governorate_replace_governor,更换主将,Replace governor,更換主將
+aw_military_governorate_clear_successor,清除留后,Clear successor,清除留後
+aw_military_governorate_rename,改军号,Rename command,改軍號
+aw_military_governorate_designate_successor_short,留,S,留
+aw_military_governorate_replace_governor_short,易,R,易
+aw_military_governorate_rename_short,名,N,名
+aw_military_governorate_confirm,确认,Confirm,確認
+aw_military_governorate_command_active,领军中,Commanding,領軍中
+aw_military_governorate_command_idle,可调任,Available,可調任
+aw_military_governorate_general_stats_command,功绩 {0}  忠诚 {1}  野心 {2}  {3},Merit {0}  Loyalty {1}  Ambition {2}  {3},功績 {0}  忠誠 {1}  野心 {2}  {3}
+aw_military_governorate_success_designated,已指定留后,Successor designated,已指定留後
+aw_military_governorate_success_replaced,已更换主将,Governor replaced,已更換主將
+aw_military_governorate_failure_invalid_governorate,该国并非可管理的军镇,This realm is not a manageable military governorate,該國並非可管理的軍鎮
+aw_military_governorate_failure_replacement_not_allowed,仅在平定军镇叛乱后可以更换主将,The governor can only be replaced after a failed revolt,僅在平定軍鎮叛亂後可以更換主將
+aw_military_governorate_failure_invalid_successor,该留后人选不可任用,This successor is not eligible,該留後人選不可任用
+aw_military_governorate_failure_persistence_failed,军镇状态写入失败,Failed to persist governorate state,軍鎮狀態寫入失敗
+aw_military_governorate_failure_replacement_failed,更换主将失败,Failed to replace governor,更換主將失敗
+aw_military_governorate_failure_replacement_pending,主将更换已进入恢复队列,Governor replacement is pending recovery,主將更換已進入恢復佇列
 aw_vassal_years_short,臣,Vassal years,臣
 aw_vassal_count_short,附,Vassals,附
 aw_vassal_role,身份:,Role:,身份：

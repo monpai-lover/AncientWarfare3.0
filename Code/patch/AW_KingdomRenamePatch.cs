@@ -34,6 +34,12 @@ namespace AncientWarfare3.patch
                                    pName ?? "";
             KingdomRenameSyncService.OnKingdomNameChanged(kingdom, __state,
                 committedName, pTrack);
+            if (!string.Equals(__state, committedName,
+                    StringComparison.Ordinal) &&
+                MilitaryGovernorateStore.TryGetActive(kingdom,
+                    out MilitaryGovernorateSnapshot governorateState))
+                MilitaryGovernorateStore.SetCommandName(
+                    governorateState.StateId, committedName);
             if (AWLocalizedNameProjectionChangeRules.ShouldInvalidate(
                     __state, committedName) &&
                 AWLocalizedNameProjectionRefreshScope.

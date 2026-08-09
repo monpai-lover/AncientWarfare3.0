@@ -24,6 +24,7 @@ foreach ($token in @(
     'RecoveryQueuePrefix + subjectId',
     'OnRulerDied(Kingdom pSubject, long pRulerActorId)',
     'TryDesignate(Kingdom pSuzerain,',
+    'EnqueueRecovery(Kingdom pSubject)',
     'OnKingdomYear(',
     'MilitaryGovernorateSuccessionRules.CandidateLimit',
     'GeneralService.GetActiveGeneralsForReadModel(',
@@ -35,6 +36,10 @@ foreach ($token in @(
     'ChronicleEvents.TryRecordMilitaryGovernorateSucceeded('
 )) {
     if (-not $service.Contains($token)) { throw "Missing succession token: $token" }
+}
+if ($service.Contains('Actor pSuccessor,`r`n            out string pReason') -or
+    $service.Contains('Actor pSuccessor,`n            out string pReason')) {
+    throw 'Governor replacement still exposes combined successor designation.'
 }
 $stableStart = $service.IndexOf(
     'private static bool IsSuzerainStable(', [StringComparison]::Ordinal)
@@ -50,7 +55,6 @@ if (-not $stableMethod.Contains(
 }
 foreach ($token in @(
     'TryDesignateSuccessor(',
-    'TryReplaceGovernor(',
     'ResolveIndependenceOutcome('
 )) {
     if ($service.Contains($token)) {
@@ -61,7 +65,7 @@ foreach ($token in @(
     'public static bool CommitSuccession(',
     'BeginTransaction(IsolationLevel.Serializable)',
     'GOVERNOR_ACTOR_ID=@governor,SUCCESSOR_ACTOR_ID=-1,',
-    'SUCCESSION_STATE=0'
+    'SUCCESSION_STATE=0,REPLACEMENT_ALLOWED=0'
 )) {
     if (-not $store.Contains($token)) { throw "Missing store token: $token" }
 }
@@ -75,8 +79,15 @@ if (-not $death.Contains(
     -not $death.Contains('__state.DyingKingActorId')) {
     throw 'Ruler death does not enqueue governorate succession.'
 }
-if ($vassal.Contains('MilitaryGovernorateSuccessionService.')) {
-    throw 'VassalService duplicates governorate independence handling.'
+$allowedVassalSuccessionCall =
+    'MilitaryGovernorateSuccessionService.CanReplaceGovernorForReadModel'
+$vassalSuccessionCalls = [regex]::Matches($vassal,
+    'MilitaryGovernorateSuccessionService\.[A-Za-z0-9_]+') |
+    ForEach-Object { $_.Value } | Sort-Object -Unique
+foreach ($call in $vassalSuccessionCalls) {
+    if ($call -ne $allowedVassalSuccessionCall) {
+        throw "VassalService contains disallowed succession call: $call"
+    }
 }
 $deathStart = $service.IndexOf(
     'public static void OnRulerDied(', [StringComparison]::Ordinal)

@@ -18,6 +18,8 @@ namespace AncientWarfare3.core.db
         public string command_name = "";
         public int created_year = -1;
         public int succession_state = 0;
+        [TableItemDef(pDefaultValue: "0")]
+        public int replacement_allowed = 0;
         public int active = 1;
         public double end_time = -1;
         public string end_reason = "";

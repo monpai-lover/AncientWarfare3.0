@@ -340,7 +340,9 @@ namespace AncientWarfare3.api.multiplayer
         GrantVirtualNobleTitle = 28,
         EditVirtualNobleTitle = 29,
         DeleteVirtualNobleTitle = 30,
-        CreateMilitaryGovernorate = 31
+        CreateMilitaryGovernorate = 31,
+        DesignateMilitaryGovernorateSuccessor = 32,
+        ReplaceMilitaryGovernorateGovernor = 33
     }
 
     public enum AW3CommandStatus : byte
@@ -625,6 +627,20 @@ namespace AncientWarfare3.api.multiplayer
             AW3CommandKind.CreateMilitaryGovernorate, countryId,
             cityId: Positive(cityId, nameof(cityId)),
             actorId: Positive(actorId, nameof(actorId)));
+
+        public static AW3CommandRequest DesignateMilitaryGovernorateSuccessor(
+            long countryId, long subjectCountryId, long actorId) => Create(
+            AW3CommandKind.DesignateMilitaryGovernorateSuccessor, countryId,
+            targetCountryId: Positive(subjectCountryId,
+                nameof(subjectCountryId)),
+            actorId: Positive(actorId, nameof(actorId)));
+
+        public static AW3CommandRequest ReplaceMilitaryGovernorateGovernor(
+            long countryId, long subjectCountryId, long governorActorId) => Create(
+            AW3CommandKind.ReplaceMilitaryGovernorateGovernor, countryId,
+            targetCountryId: Positive(subjectCountryId,
+                nameof(subjectCountryId)),
+            actorId: Positive(governorActorId, nameof(governorActorId)));
 
         public static AW3CommandRequest ChangeEra(long countryId,
             string eraName) => Create(AW3CommandKind.ChangeEra, countryId,

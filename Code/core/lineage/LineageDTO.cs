@@ -117,6 +117,7 @@ namespace AncientWarfare3.core.lineage
         public int military_obligation = 50;
         public int contract_tier = VassalContractTierRules.Outer;
         public bool is_tributary;
+        public VassalSubjectKind subject_kind = VassalSubjectKind.Ordinary;
         public double start_time = -1;
         public int years = -1;
         public int cities;
@@ -127,6 +128,15 @@ namespace AncientWarfare3.core.lineage
         public long context_kingdom_id = -1;
         public bool can_absorb_by_context;
         public string absorb_reason = "";
+        public long governorate_seat_id = -1;
+        public string governorate_seat_name = "";
+        public long governorate_governor_id = -1;
+        public string governorate_governor_name = "";
+        public long governorate_successor_id = -1;
+        public string governorate_successor_name = "";
+        public bool can_designate_governorate_successor;
+        public bool can_replace_governorate_governor;
+        public bool can_rename_governorate;
     }
 
     internal sealed class CentralPowerVassalInfo

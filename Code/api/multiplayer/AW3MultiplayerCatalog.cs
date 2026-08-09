@@ -214,6 +214,14 @@ namespace AncientWarfare3.api.multiplayer
                 Command(AW3CommandKind.CreateMilitaryGovernorate,
                     AW3WindowCategory.Realm, Country() |
                     AW3WindowContextRequirement.City |
+                    AW3WindowContextRequirement.Actor),
+                Command(AW3CommandKind.DesignateMilitaryGovernorateSuccessor,
+                    AW3WindowCategory.Realm, Country() |
+                    AW3WindowContextRequirement.TargetCountry |
+                    AW3WindowContextRequirement.Actor),
+                Command(AW3CommandKind.ReplaceMilitaryGovernorateGovernor,
+                    AW3WindowCategory.Realm, Country() |
+                    AW3WindowContextRequirement.TargetCountry |
                     AW3WindowContextRequirement.Actor)
             });
 
