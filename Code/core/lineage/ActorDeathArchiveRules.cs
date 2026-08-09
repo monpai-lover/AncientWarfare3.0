@@ -39,9 +39,10 @@ namespace AncientWarfare3.core.lineage
             return !writerReady || !queueAccepted;
         }
 
-        public static bool ShouldAttemptSynchronousWrite(bool queueAccepted)
+        public static bool ShouldAttemptSynchronousWrite(bool writerReady,
+            bool queueAccepted)
         {
-            return !queueAccepted;
+            return !writerReady && !queueAccepted;
         }
 
         public static bool ShouldQueueDeathInMemory(bool alive,

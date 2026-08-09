@@ -64,7 +64,11 @@ namespace AncientWarfare3.patch
                 TemporarySlaveVanguardService.OnMemberInvalidated(__instance);
                 SlavePopulationIndexService.Deactivate(__instance);
                 DynasticLivingSonIndexService.OnActorDying(__instance);
+                SuccessionRelationshipIndex.OnDying(__instance);
                 HeirService.MarkSuccessionDirtyForActor(__instance);
+                if (!__instance.isKing())
+                    SuccessionPreparationService.MarkDirty(
+                        __instance.kingdom);
                 NobleRemarriageService.MarkDirtyForPartnerDeath(__instance);
             }
             finally
@@ -143,8 +147,9 @@ namespace AncientWarfare3.patch
                 DyingKingActorId = __instance.data.id;
                 TryRunDeathStage(__instance,
                     ActorDeathPerformanceStage.KingHeirPreparation,
-                    "king succession preparation", () =>
-                    HeirService.PrepareSuccessionBeforeKingDeath(dyingKingdom, __instance));
+                    "king succession capture", () =>
+                    SuccessionPreparationService.CaptureDeath(
+                        dyingKingdom, __instance));
                 TryRunDeathStage(__instance,
                     ActorDeathPerformanceStage.KingChronicle,
                     "king death chronicle", () =>

@@ -337,6 +337,8 @@ namespace AncientWarfare3.core.lineage
                         else
                             FamilyTreeProjectionPendingStore.PublishDeferred(
                                 id, sequence, writeAccepted: true);
+                        ActorDeathArchiveService.OnWriteAccepted(id, sequence,
+                            replacedSequence);
                     }, sequence =>
                     {
                         ActorArchivePendingStore.Complete(id, sequence);
@@ -344,8 +346,14 @@ namespace AncientWarfare3.core.lineage
                                 id, sequence,
                                 out FamilyTreeProjectionChange committed))
                             AdvanceProjectionAfterCommit(committed);
+                        ActorDeathArchiveService.OnWriteCommitted(id,
+                            sequence);
                     }, (sequence, error) =>
-                        OnAsyncWriteFailed(id, sequence),
+                    {
+                        OnAsyncWriteFailed(id, sequence);
+                        ActorDeathArchiveService.OnWriteFailed(id, sequence,
+                            error);
+                    },
                     out long queuedSequence, out _)) return false;
             return true;
         }
@@ -356,42 +364,70 @@ namespace AncientWarfare3.core.lineage
             bool pFinalizeProjection,
             System.TimeSpan? pOrderingTimeout = null)
         {
-            if (pSnapshot == null) return false;
-            var db = LineageArchiveManager.Instance.OperatingDB;
-            if (db == null ||
-                !LineageArchiveManager.Instance.InitializeSuccessful)
-                return false;
-            if (!HistoricalWriteService.FlushForSynchronousFallback(
-                    pOrderingTimeout ?? System.TimeSpan.FromSeconds(5),
-                    out _)) return false;
+            return WriteCapturedDeathSynchronously(pSnapshot,
+                pProjectionChange, pFinalizeProjection, pOrderingTimeout,
+                out _);
+        }
 
-            string table = ActorArchiveTableItem.GetTableName();
-            bool exists = db.CheckKeyExist(table,
-                SimpleColumnConstraint.CreateEq("ID", pSnapshot.id));
-            ColumnVal[] values = SnapshotColumnValues(pSnapshot,
-                pIncludeId: !exists);
-            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
-                () =>
-                {
-                    if (exists)
-                        db.UpdateValue(table,
-                            new List<SimpleColumnConstraint>
-                            {
-                                SimpleColumnConstraint.CreateEq("ID",
-                                    pSnapshot.id)
-                            }, values);
-                    else
-                        db.Insert(table, values);
-                });
-            if (pFinalizeProjection)
+        internal static bool WriteCapturedDeathSynchronously(
+            ActorArchiveTableItem pSnapshot,
+            FamilyTreeProjectionChange pProjectionChange,
+            bool pFinalizeProjection,
+            System.TimeSpan? pOrderingTimeout,
+            out string pError)
+        {
+            pError = string.Empty;
+            if (pSnapshot == null)
             {
-                FamilyTreeProjectionChange committed =
-                    FamilyTreeProjectionPendingStore.FinalizeSynchronous(
-                        pSnapshot.id, pProjectionChange,
-                        finalWriteSucceeded: true);
-                AdvanceProjectionAfterCommit(committed);
+                pError = "actor death snapshot is unavailable";
+                return false;
             }
-            return true;
+            try
+            {
+                var db = LineageArchiveManager.Instance.OperatingDB;
+                if (db == null ||
+                    !LineageArchiveManager.Instance.InitializeSuccessful)
+                {
+                    pError = "lineage archive is unavailable";
+                    return false;
+                }
+                if (!HistoricalWriteService.FlushForSynchronousFallback(
+                        pOrderingTimeout ?? System.TimeSpan.FromSeconds(5),
+                        out pError)) return false;
+
+                string table = ActorArchiveTableItem.GetTableName();
+                bool exists = db.CheckKeyExist(table,
+                    SimpleColumnConstraint.CreateEq("ID", pSnapshot.id));
+                ColumnVal[] values = SnapshotColumnValues(pSnapshot,
+                    pIncludeId: !exists);
+                HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                    () =>
+                    {
+                        if (exists)
+                            db.UpdateValue(table,
+                                new List<SimpleColumnConstraint>
+                                {
+                                    SimpleColumnConstraint.CreateEq("ID",
+                                        pSnapshot.id)
+                                }, values);
+                        else
+                            db.Insert(table, values);
+                    });
+                if (pFinalizeProjection)
+                {
+                    FamilyTreeProjectionChange committed =
+                        FamilyTreeProjectionPendingStore.FinalizeSynchronous(
+                            pSnapshot.id, pProjectionChange,
+                            finalWriteSucceeded: true);
+                    AdvanceProjectionAfterCommit(committed);
+                }
+                return true;
+            }
+            catch (System.Exception error)
+            {
+                pError = error.Message;
+                return false;
+            }
         }
 
         private static FamilyTreeProjectionChange ResolveIdentityProjectionChange(

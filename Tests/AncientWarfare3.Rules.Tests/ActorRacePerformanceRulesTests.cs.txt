@@ -41,6 +41,24 @@ internal static class ActorRacePerformanceRulesTests
             ActorDeathPerformanceRules.Id(
                 ActorDeathPerformanceStage.KingCivilService),
             "king civil-service reshuffle has an independent diagnostic id");
+        Equal("king_succession_death_capture",
+            KingSuccessionPerformanceStage.DeathCapture,
+            "king death capture has a stable diagnostic id");
+        Equal("king_succession_candidate_snapshot",
+            KingSuccessionPerformanceStage.CandidateSnapshot,
+            "stable-reign candidate work has a stable diagnostic id");
+        Equal("king_succession_dispute_facts",
+            KingSuccessionPerformanceStage.DisputeFacts,
+            "dispute fact capture has a stable diagnostic id");
+        Equal("king_succession_dispute_enqueue",
+            KingSuccessionPerformanceStage.DisputeEnqueue,
+            "dispute persistence enqueue has a stable diagnostic id");
+        Equal("king_civil_service_lookup",
+            KingSuccessionPerformanceStage.CivilLookup,
+            "civil-service ruler-death lookup has a stable diagnostic id");
+        Equal("king_civil_service_enqueue",
+            KingSuccessionPerformanceStage.CivilEnqueue,
+            "civil-service ruler-death persistence has a stable diagnostic id");
         Equal("unknown",
             ActorDeathPerformanceRules.Id(
                 (ActorDeathPerformanceStage)ActorDeathPerformanceRules.StageCount),

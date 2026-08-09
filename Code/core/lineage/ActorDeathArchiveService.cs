@@ -16,6 +16,8 @@ namespace AncientWarfare3.core.lineage
             public bool FinalizeProjection;
             public int Attempts;
             public long ReadyFrame;
+            public long InFlightSequence;
+            public string LastError = string.Empty;
         }
 
         private const int Capacity = 8192;
@@ -23,6 +25,7 @@ namespace AncientWarfare3.core.lineage
         private static readonly Dictionary<long, PendingLineageDeath> Pending =
             new Dictionary<long, PendingLineageDeath>();
         private static long _frame;
+        private static int _inFlightCount;
 
         internal static int PendingCount => Pending.Count;
 
@@ -40,9 +43,14 @@ namespace AncientWarfare3.core.lineage
                 FinalizeProjection = pFinalizeProjection,
                 ReadyFrame = _frame
             };
-            if (Pending.ContainsKey(actorId))
+            if (Pending.TryGetValue(actorId,
+                    out PendingLineageDeath existing))
             {
-                Pending[actorId] = item;
+                if (existing.InFlightSequence <= 0L)
+                {
+                    item.Attempts = existing.Attempts;
+                    Pending[actorId] = item;
+                }
                 FamilyTreeProjectionRevision.Advance(pProjectionChange);
                 return true;
             }
@@ -66,21 +74,96 @@ namespace AncientWarfare3.core.lineage
         internal static bool FlushForSave(TimeSpan pTimeout,
             out string pError)
         {
+            string persistenceError = string.Empty;
+            if (HistoricalWriteModeRules.ShouldRecoverRequiredWorker(
+                    AWAsyncRuntime.DatabaseEnabled, Pending.Count,
+                    HistoricalWriteService.Ready) &&
+                !HistoricalWriteService.EnsureRequiredWorker(
+                    out persistenceError))
+            {
+                // The synchronous fallback can still preserve the archive.
+                // Keep the recovery error for the final diagnostic if it fails.
+            }
+
             long deadline = Stopwatch.GetTimestamp() +
                 Math.Max(1L, (long)(Stopwatch.Frequency *
                     Math.Max(0.01, pTimeout.TotalSeconds)));
             while (Pending.Count > 0 && Stopwatch.GetTimestamp() < deadline)
             {
-                int before = Pending.Count;
-                Process(pMilliseconds: 4.0, pMaxItems: 256,
+                bool progressed = Process(pMilliseconds: 4.0,
+                    pMaxItems: 256,
                     pIgnoreBackoff: true);
-                if (Pending.Count < before) continue;
-                if (!TryWriteOneSynchronously()) break;
+                HistoricalWriteService.DrainCompletions(256);
+                if (Pending.Count == 0) break;
+                if (progressed) continue;
+
+                TimeSpan remaining = Remaining(deadline);
+                if (remaining <= TimeSpan.Zero) break;
+                if (_inFlightCount > 0)
+                {
+                    int pendingBeforeFlush = Pending.Count;
+                    int inFlightBeforeFlush = _inFlightCount;
+                    if (!HistoricalWriteService.FlushForSave(remaining,
+                            out persistenceError)) break;
+                    HistoricalWriteService.DrainCompletions(int.MaxValue);
+                    if (Pending.Count >= pendingBeforeFlush &&
+                        _inFlightCount >= inFlightBeforeFlush)
+                    {
+                        persistenceError =
+                            "completion_no_progress after historical flush";
+                        break;
+                    }
+                    continue;
+                }
+
+                if (!TryWriteOneSynchronously(remaining,
+                        out persistenceError)) break;
             }
             bool ready = ActorDeathArchiveRules.ReadyForSave(Pending.Count,
-                running: 0, retries: 0, completions: 0);
-            pError = ready ? string.Empty : DescribePendingForSave();
+                running: _inFlightCount, retries: 0, completions: 0);
+            pError = ready
+                ? string.Empty
+                : DescribePendingForSave(persistenceError);
             return ready;
+        }
+
+        internal static void OnWriteAccepted(long pActorId, long pSequence,
+            long pReplacedSequence)
+        {
+            if (pSequence <= 0L ||
+                !Pending.TryGetValue(pActorId,
+                    out PendingLineageDeath item)) return;
+            if (item.WorldGeneration != AWAsyncRuntime.WorldGeneration)
+                return;
+            if (item.InFlightSequence <= 0L) _inFlightCount++;
+            item.InFlightSequence = pSequence;
+            item.LastError = string.Empty;
+        }
+
+        internal static void OnWriteCommitted(long pActorId, long pSequence)
+        {
+            if (!Pending.TryGetValue(pActorId,
+                    out PendingLineageDeath item) ||
+                item.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
+                item.InFlightSequence != pSequence) return;
+            Pending.Remove(pActorId);
+            if (_inFlightCount > 0) _inFlightCount--;
+        }
+
+        internal static void OnWriteFailed(long pActorId, long pSequence,
+            string pError)
+        {
+            if (!Pending.TryGetValue(pActorId,
+                    out PendingLineageDeath item) ||
+                item.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
+                item.InFlightSequence != pSequence) return;
+            item.InFlightSequence = 0L;
+            if (_inFlightCount > 0) _inFlightCount--;
+            item.Attempts++;
+            item.ReadyFrame = _frame +
+                ActorDeathArchiveRules.RetryDelayFrames(item.Attempts);
+            item.LastError = pError ?? string.Empty;
+            Order.Enqueue(pActorId);
         }
 
         internal static void Reset()
@@ -88,13 +171,15 @@ namespace AncientWarfare3.core.lineage
             Pending.Clear();
             Order.Clear();
             _frame = 0L;
+            _inFlightCount = 0;
         }
 
-        private static void Process(double pMilliseconds, int pMaxItems,
+        private static bool Process(double pMilliseconds, int pMaxItems,
             bool pIgnoreBackoff)
         {
             if (_frame < long.MaxValue) _frame++;
-            if (pMaxItems <= 0 || Pending.Count == 0) return;
+            if (pMaxItems <= 0 || Pending.Count == 0) return false;
+            bool progressed = false;
             long deadline = Stopwatch.GetTimestamp() +
                 Math.Max(1L, (long)(Stopwatch.Frequency *
                     Math.Max(0.01, pMilliseconds) / 1000.0));
@@ -108,8 +193,10 @@ namespace AncientWarfare3.core.lineage
                 if (item.WorldGeneration != AWAsyncRuntime.WorldGeneration)
                 {
                     Pending.Remove(actorId);
+                    progressed = true;
                     continue;
                 }
+                if (item.InFlightSequence > 0L) continue;
                 if (!pIgnoreBackoff && item.ReadyFrame > _frame)
                 {
                     Order.Enqueue(actorId);
@@ -120,28 +207,34 @@ namespace AncientWarfare3.core.lineage
                         item.ProjectionChange, item.FinalizeProjection);
                 if (queueAccepted)
                 {
-                    Pending.Remove(actorId);
+                    progressed = true;
                     continue;
                 }
+                string writeError = string.Empty;
                 if (ActorDeathArchiveRules.ShouldAttemptSynchronousWrite(
-                        queueAccepted) &&
+                        HistoricalWriteService.Ready, queueAccepted) &&
                     LineageArchiveWriter.WriteCapturedDeathSynchronously(
                         item.Snapshot, item.ProjectionChange,
                         item.FinalizeProjection,
-                        TimeSpan.FromMilliseconds(25)))
+                        TimeSpan.FromMilliseconds(25), out writeError))
                 {
                     Pending.Remove(actorId);
+                    progressed = true;
                     continue;
                 }
                 item.Attempts++;
                 item.ReadyFrame = _frame +
                     ActorDeathArchiveRules.RetryDelayFrames(item.Attempts);
+                item.LastError = writeError ?? string.Empty;
                 Order.Enqueue(actorId);
             }
+            return progressed;
         }
 
-        private static bool TryWriteOneSynchronously()
+        private static bool TryWriteOneSynchronously(TimeSpan pTimeout,
+            out string pError)
         {
+            pError = string.Empty;
             int scan = Order.Count;
             while (scan-- > 0 && Order.Count > 0)
             {
@@ -153,10 +246,13 @@ namespace AncientWarfare3.core.lineage
                     Pending.Remove(actorId);
                     continue;
                 }
+                if (item.InFlightSequence > 0L) continue;
                 if (!LineageArchiveWriter.WriteCapturedDeathSynchronously(
                         item.Snapshot, item.ProjectionChange,
-                        item.FinalizeProjection))
+                        item.FinalizeProjection, pTimeout, out pError))
                 {
+                    item.Attempts++;
+                    item.LastError = pError ?? string.Empty;
                     Order.Enqueue(actorId);
                     return false;
                 }
@@ -166,7 +262,16 @@ namespace AncientWarfare3.core.lineage
             return Pending.Count == 0;
         }
 
-        private static string DescribePendingForSave()
+        private static TimeSpan Remaining(long pDeadline)
+        {
+            long ticks = pDeadline - Stopwatch.GetTimestamp();
+            return ticks <= 0L
+                ? TimeSpan.Zero
+                : TimeSpan.FromSeconds((double)ticks /
+                    Stopwatch.Frequency);
+        }
+
+        private static string DescribePendingForSave(string pWriterError)
         {
             long firstActorId = -1L;
             int firstAttempts = 0;
@@ -176,10 +281,26 @@ namespace AncientWarfare3.core.lineage
                         out PendingLineageDeath item)) continue;
                 firstActorId = actorId;
                 firstAttempts = item.Attempts;
+                if (string.IsNullOrWhiteSpace(pWriterError))
+                    pWriterError = item.LastError;
                 break;
             }
-            return ActorDeathArchiveRules.DescribePendingForSave(
-                Pending.Count, firstActorId, firstAttempts);
+            if (firstActorId < 0L)
+                foreach (KeyValuePair<long, PendingLineageDeath> pair in
+                         Pending)
+                {
+                    firstActorId = pair.Key;
+                    firstAttempts = pair.Value.Attempts;
+                    if (string.IsNullOrWhiteSpace(pWriterError))
+                        pWriterError = pair.Value.LastError;
+                    break;
+                }
+            string detail = ActorDeathArchiveRules.DescribePendingForSave(
+                Pending.Count, firstActorId, firstAttempts) +
+                " in_flight=" + Math.Max(0, _inFlightCount);
+            return string.IsNullOrWhiteSpace(pWriterError)
+                ? detail
+                : detail + " writer_error=" + pWriterError;
         }
     }
 }

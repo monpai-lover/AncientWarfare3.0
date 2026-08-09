@@ -399,8 +399,11 @@ internal static class InheritanceLawRulesTests
         Equal(false, candidateServiceSource.Contains("getUnits()"),
             "inheritance candidate discovery never scans kingdom population");
         Equal(true, candidateServiceSource.Contains(
+                "SuccessionRelationshipIndex.GetLivingLineageMemberIds"),
+            "collateral discovery uses the bounded runtime relationship index");
+        Equal(false, candidateServiceSource.Contains(
                 "LineageQuery.GetLivingLineageMemberIds"),
-            "collateral discovery uses the bounded lineage archive index");
+            "succession candidate discovery does not query SQLite living members");
         Equal(true, candidateServiceSource.Contains(
                 "InheritanceCandidateRules.MaximumArchiveIds"),
             "runtime discovery consumes the same hard archive cap as pure rules");
@@ -438,8 +441,11 @@ internal static class InheritanceLawRulesTests
         Equal(true, heirServiceSource.Contains("SelectAlternativeFaction"),
             "an empty current faction falls back to another valid faction");
         Equal(true, heirServiceSource.Contains(
-                "IsRegisteredCandidateEligible(formerHeir, pKingdom)"),
-            "the registered heir remains the installed successor at the king's death");
+                "IsRegisteredCandidateEligible(registered, pKingdom)"),
+            "stable-reign preview preserves the registered successor");
+        Equal(false, heirServiceSource.Contains(
+                "PrepareSuccessionBeforeKingDeath"),
+            "king death has no synchronous heir preparation entrypoint");
         string candidateServiceIntegration = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "InheritanceCandidateService.cs"));

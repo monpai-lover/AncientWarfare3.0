@@ -13,6 +13,14 @@ aw_army_rts_state_pursue,追击,Pursuing,追击
 aw_army_rts_state_retreat,撤退,Retreating,撤退
 aw_army_rts_state_regroup,重整,Regrouping,重整
 aw_army_rts_state_replenish,补员,Replenishing,补员
+aw_army_rts_transport_awaiting_pickup,等待登船,Awaiting pickup,等待登船
+aw_army_rts_transport_embarking,正在登船,Embarking,正在登船
+aw_army_rts_transport_sailing,海上航行,Sailing,海上航行
+aw_army_rts_transport_landing,正在登陆,Landing,正在登陸
+task_unit_aw_army_rts_transport_awaiting_pickup,等待运输船接载,Awaiting transport pickup,等待運輸船接載
+task_unit_aw_army_rts_transport_embarking,登上运输船,Embarking on transport,登上運輸船
+task_unit_aw_army_rts_transport_sailing,乘船航行,Sailing aboard transport,乘船航行
+task_unit_aw_army_rts_transport_landing,从运输船登陆,Landing from transport,從運輸船登陸
 aw_army_replenishment_shortage,补员缺口,Replenishment shortage,補員缺口
 aw_army_reserve_supply,可用预备兵,Reserve supply,可用預備兵
 aw_army_rts_role_assault,攻击军,Assault,攻击军

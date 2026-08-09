@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
@@ -39,8 +40,26 @@ namespace AncientWarfare3.core.court
             public int AdmissionQuota;
         }
 
+        private sealed class PendingRulerDeathWrite
+        {
+            internal long WorldGeneration;
+            internal long SessionId;
+            internal long KingdomId;
+            internal long DueWorldDay;
+        }
+
         private static readonly SortedSet<DueSession> DueSessions =
             new SortedSet<DueSession>();
+        private static readonly Dictionary<long, CivilServiceExamSessionRecord>
+            PlayerRankingByKingdom =
+                new Dictionary<long, CivilServiceExamSessionRecord>();
+        private static readonly Dictionary<long, PendingRulerDeathWrite>
+            PendingRulerDeathWrites =
+                new Dictionary<long, PendingRulerDeathWrite>();
+        private static readonly Queue<long> RulerDeathRetryQueue =
+            new Queue<long>();
+        private static readonly HashSet<long> RulerDeathRetrySet =
+            new HashSet<long>();
         // Runtime creation and rebuild both populate DueSessions. Keep one
         // recovery lookup for legacy saves, never poll SQLite while idle.
         private static bool _dueSessionRecoveryPending = true;
@@ -255,6 +274,7 @@ namespace AncientWarfare3.core.court
 
         public static void ProcessAuthorityCycle()
         {
+            RetryRulerDeathWrite();
             if (DB == null) return;
             CivilServiceLegacyTransitionService.ProcessVersionedBackfill();
             CivilServiceQualificationService.ProcessRuntimeRebuild();
@@ -267,6 +287,7 @@ namespace AncientWarfare3.core.court
             {
                 CivilServiceExamPersistence.CancelActiveSession(DB,
                     session.Id, LineageService.CurTime());
+                PlayerRankingByKingdom.Remove(session.KingdomId);
                 return;
             }
 
@@ -287,6 +308,10 @@ namespace AncientWarfare3.core.court
         public static void ClearRuntime()
         {
             DueSessions.Clear();
+            PlayerRankingByKingdom.Clear();
+            PendingRulerDeathWrites.Clear();
+            RulerDeathRetryQueue.Clear();
+            RulerDeathRetrySet.Clear();
             _dueSessionRecoveryPending = true;
             CivilServiceQualificationService.ClearRuntime();
             CivilServiceLegacyTransitionService.ClearRuntime();
@@ -295,6 +320,7 @@ namespace AncientWarfare3.core.court
         public static void RebuildRuntime()
         {
             DueSessions.Clear();
+            PlayerRankingByKingdom.Clear();
             if (DB == null) return;
             foreach (CivilServiceExamSessionRecord session in
                      CivilServiceExamPersistence.LoadActiveSessions(DB))
@@ -305,22 +331,35 @@ namespace AncientWarfare3.core.court
         public static void OnCurrentRulerDied(Kingdom pKingdom)
         {
             if (AW3MultiplayerReplicaScope.IsApplying ||
-                AW3MultiplayerReplicaScope.IsReplicaSession || DB == null ||
+                AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pKingdom?.data == null || pKingdom.id < 0L)
                 return;
+            if (!PlayerRankingByKingdom.TryGetValue(pKingdom.id,
+                    out CivilServiceExamSessionRecord session) ||
+                !IsPlayerRankingPending(session)) return;
             long dueDay = CurrentWorldDay();
-            if (!CivilServiceExamPersistence.
-                    TryRevokePlayerRankingForRulerDeath(DB, pKingdom.id,
-                        dueDay, LineageService.CurTime(),
-                        out long sessionId, out long previousDueDay)) return;
-            DueSessions.Remove(new DueSession(previousDueDay, sessionId));
-            DueSessions.Add(new DueSession(dueDay, sessionId));
+            DueSessions.Remove(new DueSession(session.NextDueWorldDay,
+                session.Id));
+            session.NextDueWorldDay = dueDay;
+            session.PlayerRankingPending = false;
+            PlayerRankingByKingdom.Remove(pKingdom.id);
+            var pending = new PendingRulerDeathWrite
+            {
+                WorldGeneration = AWAsyncRuntime.WorldGeneration,
+                SessionId = session.Id,
+                KingdomId = pKingdom.id,
+                DueWorldDay = dueDay
+            };
+            PendingRulerDeathWrites[session.Id] = pending;
+            if (!TryEnqueueRulerDeathWrite(pending))
+                QueueRulerDeathRetry(session.Id);
         }
 
         public static void OnKingdomDestroying(Kingdom pKingdom)
         {
             if (AW3MultiplayerReplicaScope.IsApplying || DB == null ||
                 pKingdom?.data == null || pKingdom.id < 0L) return;
+            PlayerRankingByKingdom.Remove(pKingdom.id);
             List<CivilServiceExamSessionRecord> active =
                 CivilServiceExamPersistence.LoadActiveSessions(DB);
             int cancelled = CivilServiceExamPersistence.
@@ -400,6 +439,7 @@ namespace AncientWarfare3.core.court
 
             DueSessions.Remove(new DueSession(session.NextDueWorldDay,
                 session.Id));
+            PlayerRankingByKingdom.Remove(pKingdomId);
             RecordCommittedTopRanks(kingdom, session, rankedCandidates,
                 rankings);
             CivilServiceQualificationService.RebuildRuntimeProjections();
@@ -1000,9 +1040,108 @@ namespace AncientWarfare3.core.court
 
         private static void Enqueue(CivilServiceExamSessionRecord pSession)
         {
+            IndexPlayerRankingSession(pSession);
             if (!IsActive(pSession) || pSession.NextDueWorldDay < 0L) return;
             DueSessions.Add(new DueSession(pSession.NextDueWorldDay,
                 pSession.Id));
+        }
+
+        private static void IndexPlayerRankingSession(
+            CivilServiceExamSessionRecord pSession)
+        {
+            if (IsPlayerRankingPending(pSession))
+            {
+                PlayerRankingByKingdom[pSession.KingdomId] = pSession;
+                return;
+            }
+            if (pSession != null &&
+                PlayerRankingByKingdom.TryGetValue(pSession.KingdomId,
+                    out CivilServiceExamSessionRecord indexed) &&
+                indexed.Id == pSession.Id)
+                PlayerRankingByKingdom.Remove(pSession.KingdomId);
+        }
+
+        private static bool IsPlayerRankingPending(
+            CivilServiceExamSessionRecord pSession)
+        {
+            return pSession != null && pSession.KingdomId >= 0L &&
+                   pSession.PlayerRankingPending &&
+                   string.Equals(pSession.Mode, "imperial_exam",
+                       StringComparison.Ordinal) &&
+                   string.Equals(pSession.Stage, "ranking",
+                       StringComparison.Ordinal) &&
+                   string.Equals(pSession.Status, "ranking_pending",
+                       StringComparison.Ordinal);
+        }
+
+        private static bool TryEnqueueRulerDeathWrite(
+            PendingRulerDeathWrite pPending)
+        {
+            if (pPending == null ||
+                pPending.WorldGeneration != AWAsyncRuntime.WorldGeneration)
+                return false;
+            var facts = new CivilServiceRulerDeathWriteFacts(
+                pPending.SessionId, pPending.KingdomId,
+                pPending.DueWorldDay, LineageService.CurTime());
+            string operationKey = "civil-service-ruler-death:v1:" +
+                pPending.WorldGeneration + ":" + pPending.KingdomId + ":" +
+                pPending.SessionId + ":" + pPending.DueWorldDay;
+            return HistoricalWriteService.TryEnqueueCustom(operationKey,
+                (sequence, stamp) =>
+                    new CivilServiceRulerDeathWriteEnvelope(sequence,
+                        operationKey, stamp, facts),
+                (sequence, outcome) => OnRulerDeathWriteCommitted(
+                    pPending, outcome),
+                (sequence, error) => OnRulerDeathWriteFailed(pPending),
+                out _, out _);
+        }
+
+        private static void OnRulerDeathWriteCommitted(
+            PendingRulerDeathWrite pPending, object pOutcome)
+        {
+            if (pPending == null ||
+                pPending.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
+                !PendingRulerDeathWrites.TryGetValue(pPending.SessionId,
+                    out PendingRulerDeathWrite current) ||
+                !ReferenceEquals(current, pPending)) return;
+            PendingRulerDeathWrites.Remove(pPending.SessionId);
+            if (pOutcome is CivilServiceRulerDeathWriteResult result &&
+                result.Accepted)
+            {
+                DueSessions.Add(new DueSession(pPending.DueWorldDay,
+                    pPending.SessionId));
+                return;
+            }
+            _dueSessionRecoveryPending = true;
+        }
+
+        private static void OnRulerDeathWriteFailed(
+            PendingRulerDeathWrite pPending)
+        {
+            if (pPending == null ||
+                pPending.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
+                !PendingRulerDeathWrites.TryGetValue(pPending.SessionId,
+                    out PendingRulerDeathWrite current) ||
+                !ReferenceEquals(current, pPending)) return;
+            QueueRulerDeathRetry(pPending.SessionId);
+        }
+
+        private static void QueueRulerDeathRetry(long pSessionId)
+        {
+            if (pSessionId < 0L || !RulerDeathRetrySet.Add(pSessionId))
+                return;
+            RulerDeathRetryQueue.Enqueue(pSessionId);
+        }
+
+        private static void RetryRulerDeathWrite()
+        {
+            if (RulerDeathRetryQueue.Count == 0) return;
+            long sessionId = RulerDeathRetryQueue.Dequeue();
+            RulerDeathRetrySet.Remove(sessionId);
+            if (!PendingRulerDeathWrites.TryGetValue(sessionId,
+                    out PendingRulerDeathWrite pending)) return;
+            if (!TryEnqueueRulerDeathWrite(pending))
+                QueueRulerDeathRetry(sessionId);
         }
 
         private static bool IsActive(CivilServiceExamSessionRecord pSession)

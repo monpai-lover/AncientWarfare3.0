@@ -193,13 +193,19 @@ internal static class AW3MultiplayerSuccessionRulesTests
         string accession = Read(root, "Code", "patch", "AW_HeirPatch.cs");
 
         int prepare = mandate.IndexOf(
-            "HeirService.PrepareSuccessionBeforeKingDeath(pKingdom, king);",
+            "SuccessionPreparationService.TryPublishForNativeSuccession(",
             StringComparison.Ordinal);
         int defer = mandate.IndexOf(
             "AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king)",
             StringComparison.Ordinal);
         True(prepare >= 0 && defer > prepare,
-            "AW3 prepares its canonical succession before offering a hold");
+            "AW3 publishes its canonical succession before offering a hold");
+        Equal(false, facade.Contains(
+                "PrepareSuccessionBeforeKingDeath"),
+            "multiplayer installation never repeats synchronous preparation");
+        Contains(facade,
+            "SuccessionPreparationService.TryGetPublishedCandidate",
+            "multiplayer offers use the same published default candidate");
         Contains(mandate, "ref BehResult __result",
             "the mandate prefix can return Continue while a player decides");
         Contains(mandate, "__result = BehResult.Continue;",

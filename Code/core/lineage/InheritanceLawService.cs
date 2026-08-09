@@ -49,9 +49,12 @@ namespace AncientWarfare3.core.lineage
                 return false;
             InheritanceLawEvaluation evaluation = Evaluate(pKingdom, year);
             if (evaluation.Changed)
+            {
+                SuccessionPreparationService.MarkDirty(pKingdom);
                 ChronicleEvents.OnInheritanceLawChanged(pKingdom,
                     pKingdom.king, evaluation.Previous,
                     evaluation.Effective);
+            }
             return evaluation.Changed;
         }
 
@@ -216,6 +219,7 @@ namespace AncientWarfare3.core.lineage
                         LineageKeys.INHERITANCE_LAW_LAST_CHANGE_YEAR, year);
                 Evaluate(pKingdom, year);
                 HeirService.RefreshHeir(pKingdom);
+                SuccessionPreparationService.MarkDirty(pKingdom);
                 if (pRecordHistory)
                     ChronicleEvents.OnInheritanceLawChanged(pKingdom,
                         pKingdom.king, previousLock, pRequestedLock);
@@ -248,8 +252,12 @@ namespace AncientWarfare3.core.lineage
         public static void SetTemporaryEffective(Kingdom pKingdom,
             InheritanceLaw pLaw)
         {
-            pKingdom?.data?.set(LineageKeys.INHERITANCE_LAW_EFFECTIVE,
+            if (pKingdom?.data == null) return;
+            InheritanceLaw previous = GetEffectiveLaw(pKingdom);
+            pKingdom.data.set(LineageKeys.INHERITANCE_LAW_EFFECTIVE,
                 (int)pLaw);
+            if (previous != pLaw)
+                SuccessionPreparationService.MarkDirty(pKingdom);
         }
 
         public static bool RestorePrimogenitureForDirectSon(
@@ -260,6 +268,7 @@ namespace AncientWarfare3.core.lineage
             if (!InheritanceLawRules.ShouldRestorePrimogeniture(previous,
                     pHasLivingLegitimateDirectSon)) return false;
             CommitPrimogeniture(pKingdom);
+            SuccessionPreparationService.MarkDirty(pKingdom);
             ChronicleEvents.OnInheritanceLawChanged(pKingdom,
                 pKingdom.king, previous, InheritanceLaw.Primogeniture);
             return true;
@@ -288,6 +297,7 @@ namespace AncientWarfare3.core.lineage
                     shiId);
             InheritanceLaw previous = GetEffectiveLaw(pKingdom);
             CommitPrimogeniture(pKingdom);
+            SuccessionPreparationService.MarkDirty(pKingdom);
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
                 SuccessionMode.DIRECT);
             if (previous != InheritanceLaw.Primogeniture)
@@ -320,6 +330,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(
                 LineageKeys.INHERITANCE_CANDIDATE_REFERENCE_KING_ID,
                 pCandidate?.data == null ? -1L : pReferenceKingId);
+            SuccessionPreparationService.MarkDirty(pKingdom);
         }
 
         public static string ModeForLaw(InheritanceLaw pLaw)

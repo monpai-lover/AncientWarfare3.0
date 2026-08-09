@@ -192,6 +192,7 @@ namespace AncientWarfare3.core.lineage
                                     pActor.data.parent_id_2 == king.data.id;
             if (!registeredHeir && !directRoyalChild) return;
             kingdom.data.set(LineageKeys.KINGDOM_HEIR_SELECTION_DIRTY, true);
+            SuccessionPreparationService.MarkDirty(kingdom);
         }
 
         public static Actor PeekRegisteredHeir(Kingdom pKingdom)
@@ -229,6 +230,31 @@ namespace AncientWarfare3.core.lineage
                 referenceKingId, pIncludeRegisteredHeir: false).Actor;
         }
 
+        internal static Actor PreviewSuccessionCandidate(Kingdom pKingdom,
+            Actor pReferenceKing, out string pMode)
+        {
+            pMode = SuccessionMode.NONE;
+            if (pKingdom?.data == null || pReferenceKing?.data == null)
+                return null;
+            Actor registered = PeekStoredHeirForMinimap(pKingdom);
+            if (IsRegisteredCandidateEligible(registered, pKingdom))
+            {
+                pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE,
+                    out pMode, SuccessionMode.NONE);
+                if (string.IsNullOrEmpty(pMode) ||
+                    pMode == SuccessionMode.NONE)
+                    pMode = SuccessionMode.REGISTERED;
+                return registered;
+            }
+
+            long referenceKingId = pReferenceKing.data.id;
+            HeirSelection selection = SelectByEffectiveLaw(pKingdom,
+                pReferenceKing, referenceKingId,
+                pIncludeRegisteredHeir: false);
+            pMode = selection.Mode;
+            return selection.Actor;
+        }
+
         internal static Actor PreviewPrimogenitureCandidate(Kingdom pKingdom,
             Actor pReferenceKing = null)
         {
@@ -261,7 +287,6 @@ namespace AncientWarfare3.core.lineage
             if (!SuccessionTransitionRules.ShouldOverwriteCachedHeir(pending, referenceKingId >= 0))
                 return PeekRegisteredHeir(pKingdom);
 
-            ClearOldHeirFlag(pKingdom);
             HeirSelection selection = SelectByEffectiveLaw(pKingdom,
                 knownKing, referenceKingId,
                 pIncludeRegisteredHeir: false);
@@ -281,40 +306,6 @@ namespace AncientWarfare3.core.lineage
         public static bool HasHeir(Kingdom pKingdom)
         {
             return GetHeir(pKingdom) != null;
-        }
-
-        public static void PrepareSuccessionBeforeKingDeath(Kingdom pKingdom, Actor pDyingKing)
-        {
-            if (pKingdom?.data == null || pDyingKing?.data == null) return;
-            if (RepublicGovernmentService.IsRepublic(pKingdom))
-            {
-                RememberPreSuccessionKing(pKingdom, pDyingKing);
-                RepublicGovernmentService.RefreshRepublicSuccessor(pKingdom, pDyingKing);
-                return;
-            }
-            Actor formerHeir = PeekStoredHeirForMinimap(pKingdom);
-            pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE,
-                out string formerHeirMode, SuccessionMode.NONE);
-            RememberPreSuccessionKing(pKingdom, pDyingKing);
-            HeirSelection selection;
-            if (IsRegisteredCandidateEligible(formerHeir, pKingdom))
-            {
-                selection = new HeirSelection(formerHeir,
-                    string.IsNullOrEmpty(formerHeirMode) ||
-                    formerHeirMode == SuccessionMode.NONE
-                        ? SuccessionMode.REGISTERED
-                        : formerHeirMode);
-            }
-            else
-            {
-                selection = SelectByEffectiveLaw(pKingdom,
-                    pDyingKing, pDyingKing.data.id,
-                    pIncludeRegisteredHeir: false);
-            }
-            ClearOldHeirFlag(pKingdom);
-            StoreHeirSelection(pKingdom, selection);
-            SuccessionDisputeService.Prepare(pKingdom, pDyingKing,
-                selection.Actor);
         }
 
         public static bool HasSuccessionCandidate(Kingdom pKingdom)
@@ -394,7 +385,8 @@ namespace AncientWarfare3.core.lineage
             if (referenceKingId < 0L || pActor.kingdom != pKingdom ||
                 !IsHeirBaseEligible(pActor, pKingdom, king) ||
                 pActor.data.id == referenceKingId) return false;
-            long ancestor = LineageQuery.NearestCommonAgnaticAncestor(
+            long ancestor = SuccessionRelationshipIndex.
+                NearestCommonAgnaticAncestor(
                 referenceKingId, pActor.data.id, out int kingDepth,
                 out int candidateDepth);
             if (ancestor < 0L) return false;
@@ -434,7 +426,6 @@ namespace AncientWarfare3.core.lineage
         public static void StoreSelectedHeir(Kingdom pKingdom, Actor pHeir, string pMode)
         {
             if (pKingdom?.data == null) return;
-            ClearOldHeirFlag(pKingdom);
             StoreHeirSelection(pKingdom, new HeirSelection(pHeir, pMode));
         }
 
@@ -541,6 +532,27 @@ namespace AncientWarfare3.core.lineage
                 ? null
                 : World.world?.units?.get(previousHeirId);
             Actor heir = pSelection.Actor;
+            long heirId = heir?.data?.id ?? -1L;
+            string mode = heir?.data == null
+                ? SuccessionMode.NONE
+                : pSelection.Mode;
+            long referenceKingId = ResolveReferenceKingId(pKingdom,
+                pKingdom.king);
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_RELATION_ACTOR_ID,
+                out long signedHeirId, -1L);
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID,
+                out long signedKingId, -1L);
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_SELECTION_DIRTY,
+                out bool successionDirty, false);
+            bool currentActorAvailable = previousHeirId < 0L ||
+                previousHeir?.data != null && previousHeir.isAlive();
+            if (currentActorAvailable && signedHeirId == previousHeirId &&
+                HeirSelectionSignatureRules.IsUnchanged(previousHeirId,
+                    previousMode, signedKingId, successionDirty, heirId,
+                    mode, referenceKingId))
+                return previousHeir;
+
+            ClearOldHeirFlag(pKingdom);
             FormerHeirService.ClearSnapshot(heir);
             RoyalAsylumService.RecallForSuccession(heir, pKingdom);
             RecallForeignSelectedHeir(pKingdom, heir);
@@ -556,7 +568,6 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, heir?.data?.id ?? -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
                 heir?.data == null ? SuccessionMode.NONE : pSelection.Mode);
-            long referenceKingId = ResolveReferenceKingId(pKingdom, pKingdom.king);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_ACTOR_ID, heir?.data?.id ?? -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID,
                 heir?.data == null ? -1L : referenceKingId);
@@ -576,10 +587,8 @@ namespace AncientWarfare3.core.lineage
                     pAlive: previousHeir.isAlive());
             if (heir?.data != null)
                 LineageService.ArchiveActor(heir, pAlive: heir.isAlive());
-            long heirId = heir?.data?.id ?? -1L;
-            string mode = heir?.data == null
-                ? SuccessionMode.NONE
-                : pSelection.Mode;
+            heirId = heir?.data?.id ?? -1L;
+            mode = heir?.data == null ? SuccessionMode.NONE : pSelection.Mode;
             if (previousHeirId != heirId || previousMode != mode)
                 FamilyTreeProjectionRevision.Advance(
                     FamilyTreeProjectionChange.Heir);
@@ -763,7 +772,8 @@ namespace AncientWarfare3.core.lineage
 
                 // 同源判定:与国王的最近共同父系祖先(纯 parent 记录,不看 LINEAGE_ID)。
                 // 姓氏合流后姓辨识失效,故按"同源"而非"同姓"判亲缘;无共同父系祖先 = 非同源 → 排除。
-                long anc = LineageQuery.NearestCommonAgnaticAncestor(kingId, candId,
+                long anc = SuccessionRelationshipIndex.
+                    NearestCommonAgnaticAncestor(kingId, candId,
                     out int kingDepth, out int candDepth);
                 if (anc < 0) continue;                 // 非同源 → 严禁入选(不会抓不相干的人)
 
@@ -856,9 +866,11 @@ namespace AncientWarfare3.core.lineage
             var siblingIds = new HashSet<long>();
             try
             {
-                foreach (long childId in LineageQuery.GetChildIds(pParentA))
+                foreach (long childId in SuccessionRelationshipIndex.
+                             GetChildIds(pParentA))
                     if (childId >= 0L) siblingIds.Add(childId);
-                foreach (long childId in LineageQuery.GetChildIds(pParentB))
+                foreach (long childId in SuccessionRelationshipIndex.
+                             GetChildIds(pParentB))
                     if (childId >= 0L) siblingIds.Add(childId);
             }
             catch { }
@@ -883,7 +895,8 @@ namespace AncientWarfare3.core.lineage
             pParentB = -1L;
             try
             {
-                foreach (long parentId in LineageQuery.GetParentIds(pActorId))
+                foreach (long parentId in SuccessionRelationshipIndex.
+                             GetParentIds(pActorId))
                 {
                     if (parentId < 0L || parentId == pParentA ||
                         parentId == pParentB) continue;
@@ -907,7 +920,8 @@ namespace AncientWarfare3.core.lineage
             if (kingId < 0) return null;
             var actors = new Dictionary<long, Actor>();
             var candidates = new List<HeirDirectSonCandidate>();
-            IReadOnlyList<long> indexedChildren = LineageQuery.GetChildIds(kingId);
+            IReadOnlyList<long> indexedChildren =
+                SuccessionRelationshipIndex.GetChildIds(kingId);
             for (int i = 0; i < indexedChildren.Count; i++)
                 AddDirectSonCandidate(World.world?.units?.get(indexedChildren[i]),
                     pKing, actors, candidates);
@@ -1124,7 +1138,8 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.SHI_ID, out long shi, -1L);
             if (lineage != pLegitimateLineage) return false;
 
-            bool agnatic = LineageQuery.IsAgnaticDescendant(pActor.data.id, pLegitimateLineage);
+            bool agnatic = SuccessionRelationshipIndex.IsAgnaticDescendant(
+                pActor.data.id, pLegitimateLineage);
             if (pRequireAgnatic)
                 // 男系同姓即合格,氏(分支)可不同。成年/未成年已由上面的 pRequireAdult 分档,这里传 isAdult:true。
                 return MandateSuccessionRules.IsValidCollateralRestorationCandidate(
@@ -1209,9 +1224,11 @@ namespace AncientWarfare3.core.lineage
 
         private static IEnumerable<long> KinNeighborIds(long pActorId)
         {
-            foreach (long parent in LineageQuery.GetParentIds(pActorId))
+            foreach (long parent in SuccessionRelationshipIndex.
+                         GetParentIds(pActorId))
                 if (parent >= 0) yield return parent;
-            foreach (long child in LineageQuery.GetChildIds(pActorId))
+            foreach (long child in SuccessionRelationshipIndex.
+                         GetChildIds(pActorId))
                 if (child >= 0) yield return child;
         }
 

@@ -52,6 +52,8 @@ $restore = Read-Source 'Code/core/multiplayer/AW3RuntimeRestorePipeline.cs'
 $recent = Read-Source 'Code/core/policy/RecentFeatureBenchmarkRules.cs'
 $age = Read-Source 'Code/core/policy/UpdateAgeBenchmarkRules.cs'
 $chroniclePatch = Read-Source 'Code/patch/AW_ChroniclePatch.cs'
+$rulerDeathPersistence = Read-Source `
+    'Code/core/court/CivilServiceRulerDeathPersistence.cs'
 
 foreach ($required in @(
         'SchoolMembershipTableItem.GetTableName()',
@@ -194,6 +196,32 @@ Require-Text $service 'CancelActiveSessionForKingdom' `
     'kingdom destruction uses a kingdom-scoped cancellation transaction'
 Require-Text $chroniclePatch 'CivilServiceExamService.OnKingdomDestroying(pKingdom);' `
     'kingdom destruction hook reaches the examination service'
+
+$rulerDeathStart = $service.IndexOf(
+    'public static void OnCurrentRulerDied(Kingdom pKingdom)')
+$rulerDeathEnd = $service.IndexOf(
+    'public static void OnKingdomDestroying(Kingdom pKingdom)',
+    $rulerDeathStart)
+$rulerDeathSource = if ($rulerDeathStart -ge 0 -and
+    $rulerDeathEnd -gt $rulerDeathStart) {
+    $service.Substring($rulerDeathStart,
+        $rulerDeathEnd - $rulerDeathStart)
+} else { '' }
+Require-Text $service 'PlayerRankingByKingdom' `
+    'ruler death has no O(1) pending-ranking runtime index'
+Require-Text $rulerDeathSource 'PlayerRankingByKingdom.TryGetValue' `
+    'ruler death does not use the pending-ranking runtime index'
+foreach ($forbidden in @('CivilServiceExamPersistence.', 'SQLiteCommand',
+        'BeginTransaction', 'DB ==', 'LoadSession(')) {
+    Reject-Text $rulerDeathSource $forbidden `
+        "ruler death synchronous database work $forbidden"
+}
+foreach ($required in @("MODE='imperial_exam'", "STAGE='ranking'",
+        "STATUS='ranking_pending'", 'PLAYER_RANKING_PENDING=1',
+        'ID=@id', 'KINGDOM_ID=@kingdom')) {
+    Require-Text $rulerDeathPersistence $required `
+        "ruler death CAS condition $required"
+}
 
 foreach ($required in @(
         'CivilServiceExamAnnualIndex',

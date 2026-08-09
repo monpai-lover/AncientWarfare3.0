@@ -144,6 +144,7 @@ namespace AncientWarfare3.patch
                 EndLeaderCareer(__state, "replaced");
             CityGovernorProjectionRepairService.OnLeaderAssigned(
                 __instance, pActor, pNew);
+            CourtDirectionService.MarkDirty(__instance?.kingdom);
         }
 
         [HarmonyPrefix]
@@ -160,6 +161,7 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (GovernorRotationRuntimeScope.IsActive) return;
             if (__state?.data != null) EndLeaderCareer(__state, "removed");
+            CourtDirectionService.MarkDirty(__state?.kingdom);
         }
 
         private static void EndLeaderCareer(Actor pActor, string pReason)

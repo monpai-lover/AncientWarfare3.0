@@ -187,8 +187,6 @@ namespace AncientWarfare3.api.multiplayer
                 }
                 catch { return AW3SuccessionInstallResult.Failed(); }
 
-                HeirService.PrepareSuccessionBeforeKingDeath(pKingdom,
-                    former);
                 AW3SuccessionOffer current = BuildOffer(pKingdom, former);
                 if (current == null)
                     return AW3SuccessionInstallResult.NoLegalSuccessor();
@@ -212,6 +210,10 @@ namespace AncientWarfare3.api.multiplayer
 
                 HeirService.StoreSelectedHeir(pKingdom, successor,
                     selected.SuccessionMode);
+                if (!SuccessionPreparationService.
+                        TryOverridePublishedCandidate(pKingdom, former,
+                            successor, selected.SuccessionMode))
+                    return AW3SuccessionInstallResult.Failed();
                 pKingdom.setKing(successor);
 
                 bool committed;
@@ -269,8 +271,8 @@ namespace AncientWarfare3.api.multiplayer
         {
             if (pKingdom?.data == null || pFormerRuler?.data == null)
                 return null;
-            Actor defaultActor = HeirService.PeekStoredHeirForMinimap(
-                pKingdom);
+            if (!SuccessionPreparationService.TryGetPublishedCandidate(
+                    pKingdom, out Actor defaultActor)) return null;
             if (!IsLiveCandidate(defaultActor, pKingdom, pFormerRuler))
                 return null;
 

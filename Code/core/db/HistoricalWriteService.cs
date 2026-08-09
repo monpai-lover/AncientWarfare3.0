@@ -35,6 +35,79 @@ namespace AncientWarfare3.core.db
             }
         }
 
+        public static bool EnsureRequiredWorker(out string pError)
+        {
+            if (!AWAsyncRuntime.DatabaseEnabled)
+            {
+                pError = "historical async writer is disabled";
+                return false;
+            }
+
+            lock (LifecycleGate)
+            {
+                lock (Gate)
+                {
+                    if (_worker != null)
+                    {
+                        if (!_worker.TerminalFaulted)
+                        {
+                            pError = string.Empty;
+                            return true;
+                        }
+
+                        pError = "historical async writer is terminally faulted";
+                        return false;
+                    }
+
+                    if (!_eventIdsReady &&
+                        !TrySeedAllocatorLocked(out pError))
+                    {
+                        return false;
+                    }
+                }
+
+                string path = LineageArchiveManager.RuntimeDbPath;
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    pError = "historical archive path is unavailable";
+                    return false;
+                }
+
+                long epoch = LineageArchiveManager.RuntimeDatabaseEpoch;
+                var sink = new HistoricalSqliteBatchSink(
+                    path,
+                    epoch,
+                    () => LineageArchiveManager.RuntimeDatabaseEpoch);
+                var worker = new HistoricalWriteWorker(sink);
+                try
+                {
+                    worker.Start();
+                }
+                catch (Exception error)
+                {
+                    try { worker.Dispose(); }
+                    catch { }
+                    pError = error.Message;
+                    return false;
+                }
+
+                lock (Gate)
+                {
+                    if (_worker != null)
+                    {
+                        worker.Dispose();
+                        pError = string.Empty;
+                        return !_worker.TerminalFaulted;
+                    }
+
+                    _worker = worker;
+                }
+
+                pError = string.Empty;
+                return true;
+            }
+        }
+
         public static int PendingCount
         {
             get { lock (Gate) return _worker?.PendingCount ?? 0; }
@@ -196,24 +269,17 @@ namespace AncientWarfare3.core.db
             lock (Gate) worker = _worker;
             if (worker == null)
             {
+                if (HistoricalWriteModeRules.ShouldRequireWorkerForFlush(
+                        AWAsyncRuntime.DatabaseEnabled,
+                        pWorkerAvailable: false))
+                {
+                    pError = "required historical async writer is unavailable";
+                    return false;
+                }
                 pError = string.Empty;
                 return true;
             }
-            long started = Stopwatch.GetTimestamp();
-            bool flushed = worker.Flush(pTimeout,
-                () => DrainCompletions(64), out pError);
-            if (!flushed)
-            {
-                long elapsedMilliseconds = Math.Max(0L,
-                    (Stopwatch.GetTimestamp() - started) * 1000L /
-                    Stopwatch.Frequency);
-                pError = (pError ?? "historical write flush failed") +
-                    "; pending=" + worker.PendingCount +
-                    "; earliest_uncommitted=" +
-                    worker.EarliestUncommittedSequence +
-                    "; elapsed_ms=" + elapsedMilliseconds;
-            }
-            return flushed;
+            return FlushWorker(worker, pTimeout, out pError);
         }
 
         public static bool TryUpsertState(string pOperationKey,
@@ -395,7 +461,34 @@ namespace AncientWarfare3.core.db
         public static bool FlushForSynchronousFallback(TimeSpan pTimeout,
             out string pError)
         {
-            return FlushForSave(pTimeout, out pError);
+            HistoricalWriteWorker worker;
+            lock (Gate) worker = _worker;
+            if (worker == null)
+            {
+                pError = string.Empty;
+                return true;
+            }
+            return FlushWorker(worker, pTimeout, out pError);
+        }
+
+        private static bool FlushWorker(HistoricalWriteWorker worker,
+            TimeSpan pTimeout, out string pError)
+        {
+            long started = Stopwatch.GetTimestamp();
+            bool flushed = worker.Flush(pTimeout,
+                () => DrainCompletions(64), out pError);
+            if (!flushed)
+            {
+                long elapsedMilliseconds = Math.Max(0L,
+                    (Stopwatch.GetTimestamp() - started) * 1000L /
+                    Stopwatch.Frequency);
+                pError = (pError ?? "historical write flush failed") +
+                    "; pending=" + worker.PendingCount +
+                    "; earliest_uncommitted=" +
+                    worker.EarliestUncommittedSequence +
+                    "; elapsed_ms=" + elapsedMilliseconds;
+            }
+            return flushed;
         }
 
         public static void DrainCompletions(int pMaxBatches)

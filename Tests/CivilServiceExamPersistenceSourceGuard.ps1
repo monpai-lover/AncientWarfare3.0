@@ -45,6 +45,8 @@ $indexes = Read-Source 'Code/core/db/LineageArchiveIndexRules.cs'
 $persistence = Read-Source 'Code/core/court/CivilServiceExamPersistence.cs'
 $service = Read-Source 'Code/core/court/CivilServiceExamService.cs'
 $deathPatch = Read-Source 'Code/patch/AW_ActorDeathPatch.cs'
+$rulerDeathPersistence = Read-Source `
+    'Code/core/court/CivilServiceRulerDeathPersistence.cs'
 
 Require-Text $session '[TableDef("CivilServiceExamSession")]' 'session table'
 foreach ($field in @('kingdom_id', 'kingdom_name', 'mode', 'cycle_year',
@@ -148,16 +150,16 @@ Reject-Text $deathPatch 'CompleteRanking(' `
 
 $handler = Method-Source $service `
     'public static void OnCurrentRulerDied(Kingdom pKingdom)' `
-    'public static bool TrySubmitPlayerRanking(' `
+    'public static void OnKingdomDestroying(Kingdom pKingdom)' `
     'current-ruler death handler'
 foreach ($required in @(
         'AW3MultiplayerReplicaScope.IsApplying ||',
         'AW3MultiplayerReplicaScope.IsReplicaSession',
+        'PlayerRankingByKingdom.TryGetValue',
         'long dueDay = CurrentWorldDay();',
-        'TryRevokePlayerRankingForRulerDeath(DB, pKingdom.id,',
-        'out long sessionId, out long previousDueDay',
-        'DueSessions.Remove(new DueSession(previousDueDay, sessionId));',
-        'DueSessions.Add(new DueSession(dueDay, sessionId));')) {
+        'DueSessions.Remove(new DueSession(session.NextDueWorldDay,',
+        'PendingRulerDeathWrites[session.Id] = pending;',
+        'TryEnqueueRulerDeathWrite(pending)')) {
     Require-Text $handler $required "due-now ranking queue $required"
 }
 foreach ($forbidden in @('CompleteRanking(', 'ProcessFinalRanking(',
@@ -175,24 +177,24 @@ Require-Text $finalizer '__state?.Diagnostic ?? 0L' `
 Reject-Text $finalizer 'CivilServiceExamService.' `
     'exception finalizer never revokes ranking rights'
 
-$deathCas = Method-Source $persistence `
-    'public static bool TryRevokePlayerRankingForRulerDeath(' `
-    'public static bool FinalizeRanking(' `
-    'ruler-death ranking compare-and-set'
 foreach ($required in @(
-        'transaction = pDb.BeginTransaction();',
-        'SELECT ID,NEXT_DUE_WORLD_DAY FROM ',
-        'WHERE KINGDOM_ID=@kingdom AND MODE=''imperial_exam'' AND ',
-        'STAGE=''ranking'' AND STATUS=''ranking_pending'' AND ',
-        'PLAYER_RANKING_PENDING=1 ORDER BY ID LIMIT 1',
-        'SET PLAYER_RANKING_PENDING=0,NEXT_DUE_WORLD_DAY=@due,',
-        'WHERE ID=@id AND KINGDOM_ID=@kingdom AND ',
-        'command.Parameters.AddWithValue("@kingdom", pKingdomId);',
-        'command.Parameters.AddWithValue("@due", pDueWorldDay);',
-        'command.ExecuteNonQuery() != 1')) {
-    Require-Text $deathCas $required "bounded ranking CAS $required"
+        'WHERE ID=@id AND KINGDOM_ID=@kingdom',
+        'MODE=''imperial_exam'' AND STAGE=''ranking''',
+        'STATUS=''ranking_pending''',
+        'PLAYER_RANKING_PENDING=1',
+        'SET PLAYER_RANKING_PENDING=0,',
+        'NEXT_DUE_WORLD_DAY=@due,UPDATED_TIME=@time',
+        'pCommand.Parameters.AddWithValue("@kingdom", pFacts.KingdomId);',
+        'pCommand.Parameters.AddWithValue("@due", pFacts.DueWorldDay);',
+        'command.ExecuteNonQuery() == 1')) {
+    Require-Text $rulerDeathPersistence $required `
+        "bounded worker ranking CAS $required"
 }
-Reject-Text $deathCas 'CandidateTable' `
+Reject-Text $handler 'CivilServiceExamPersistence.' `
+    'ruler-death handler never queries SQLite'
+Reject-Text $persistence 'TryRevokePlayerRankingForRulerDeath' `
+    'legacy synchronous ruler-death transaction is removed'
+Reject-Text $rulerDeathPersistence 'CandidateTable' `
     'ruler-death ranking CAS never scans candidates'
 
 $finalRanking = Method-Source $service `

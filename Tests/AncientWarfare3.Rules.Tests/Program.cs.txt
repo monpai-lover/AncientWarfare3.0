@@ -216,6 +216,8 @@ if (args.Length == 1 && args[0] == "--inheritance-slice")
     HeirFullBrotherRulesTests.Run();
     SuccessionDisputeRulesTests.Run();
     SuccessionDisputeSqlTests.Run();
+    SuccessionDisputePersistenceSqlTests.Run();
+    CivilServiceRulerDeathPersistenceSqlTests.Run();
     Console.WriteLine("AW3 inheritance and succession rules passed.");
     return;
 }
@@ -8004,8 +8006,12 @@ WarScoreBudgetServiceTests.Run();
 OccupiedCityCivilianProtectionRulesTests.Run();
 TitleAtomicSqlTests.Run();
 InheritanceLawRulesTests.Run();
+KingSuccessionPreparationRulesTests.Run();
+SuccessionRelationshipIndexRulesTests.Run();
 SuccessionDisputeRulesTests.Run();
 SuccessionDisputeSqlTests.Run();
+SuccessionDisputePersistenceSqlTests.Run();
+CivilServiceRulerDeathPersistenceSqlTests.Run();
 ConsistencyRegressionRulesTests.Run();
 MandateSuccessionRegressionRulesTests.Run();
 CityArmyReinforcementRulesTests.Run();

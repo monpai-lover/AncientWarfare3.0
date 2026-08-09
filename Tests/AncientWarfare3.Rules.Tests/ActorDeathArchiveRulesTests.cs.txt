@@ -35,10 +35,13 @@ internal static class ActorDeathArchiveRulesTests
                 writerReady: true, queueAccepted: true),
             "accepted asynchronous work needs no fallback");
         Equal(true, ActorDeathArchiveRules.ShouldAttemptSynchronousWrite(
-                queueAccepted: false),
-            "rejected asynchronous death work uses authority fallback");
+                writerReady: false, queueAccepted: false),
+            "a missing writer uses the synchronous authority fallback");
         Equal(false, ActorDeathArchiveRules.ShouldAttemptSynchronousWrite(
-                queueAccepted: true),
+                writerReady: true, queueAccepted: false),
+            "a full live writer is drained instead of blocking per actor");
+        Equal(false, ActorDeathArchiveRules.ShouldAttemptSynchronousWrite(
+                writerReady: true, queueAccepted: true),
             "accepted asynchronous death work is not written twice");
         Equal(true, ActorDeathArchiveRules.ShouldQueueDeathInMemory(
                 alive: false, forceSynchronous: false,

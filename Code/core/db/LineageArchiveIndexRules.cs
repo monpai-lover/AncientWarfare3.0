@@ -246,6 +246,12 @@ namespace AncientWarfare3.core.db
                 Index("idx_CivilServiceExamSession_status_due",
                     CivilServiceExamSessionTableItem.GetTableName(),
                     "STATUS, NEXT_DUE_WORLD_DAY, ID"),
+                Index("idx_CivilServiceExamSession_player_ruler_death",
+                    CivilServiceExamSessionTableItem.GetTableName(),
+                    "KINGDOM_ID, ID",
+                    "MODE='imperial_exam' AND STAGE='ranking' AND " +
+                    "STATUS='ranking_pending' AND " +
+                    "PLAYER_RANKING_PENDING=1"),
                 Index("uq_CivilServiceExamCandidate_session_actor",
                     CivilServiceExamCandidateTableItem.GetTableName(),
                     "SESSION_ID, ACTOR_ID", pUnique: true),
