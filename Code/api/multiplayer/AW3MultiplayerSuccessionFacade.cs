@@ -211,6 +211,8 @@ namespace AncientWarfare3.api.multiplayer
                 HeirService.StoreSelectedHeir(pKingdom, successor,
                     selected.SuccessionMode);
                 pKingdom.setKing(successor);
+                if (pKingdom.king == successor)
+                    NotifyKingInstalled(pKingdom, successor);
 
                 bool committed;
                 lock (Gate)

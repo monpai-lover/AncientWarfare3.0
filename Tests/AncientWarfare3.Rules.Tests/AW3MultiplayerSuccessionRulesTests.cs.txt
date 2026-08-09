@@ -191,6 +191,8 @@ internal static class AW3MultiplayerSuccessionRulesTests
         string mandate = Read(root, "Code", "patch",
             "AW_MandateSuccessionPatch.cs");
         string accession = Read(root, "Code", "patch", "AW_HeirPatch.cs");
+        string identity = Read(root, "Code", "core", "lineage",
+            "AccessionIdentityService.cs");
 
         int prepare = mandate.IndexOf(
             "AuthoritativeSuccessionService.EnsureRegisteredCandidate(",
@@ -221,13 +223,31 @@ internal static class AW3MultiplayerSuccessionRulesTests
         Contains(mandate, "return false;",
             "only an accepted hold skips vanilla installation");
 
+        int facadeSetKing = facade.IndexOf("pKingdom.setKing(successor);",
+            StringComparison.Ordinal);
+        int acknowledgeInstall = facade.IndexOf(
+            "NotifyKingInstalled(pKingdom, successor);", facadeSetKing,
+            StringComparison.Ordinal);
+        int verifyCommit = facade.IndexOf("bool committed;", facadeSetKing,
+            StringComparison.Ordinal);
+        True(facadeSetKing >= 0 && acknowledgeInstall > facadeSetKing &&
+             verifyCommit > acknowledgeInstall,
+            "a deferred identity repair still acknowledges canonical installation");
+
         int commit = accession.IndexOf(
             "AccessionIdentityService.Commit(__instance, king)",
             StringComparison.Ordinal);
-        int notify = accession.IndexOf(
-            "AW3MultiplayerSuccessionFacade.NotifyKingInstalled(__instance, king);",
+        int complete = accession.IndexOf(
+            "AccessionIdentityService.CompleteInstalledKing(",
             StringComparison.Ordinal);
-        True(commit >= 0 && notify > commit,
+        int sharedCompletion = identity.IndexOf(
+            "internal static bool CompleteInstalledKing(",
+            StringComparison.Ordinal);
+        int notify = identity.IndexOf(
+            "AW3MultiplayerSuccessionFacade.NotifyKingInstalled(",
+            sharedCompletion, StringComparison.Ordinal);
+        True(commit >= 0 && complete > commit &&
+             sharedCompletion >= 0 && notify > sharedCompletion,
             "the provider is notified only after canonical AW3 accession");
 
         Contains(accession, "AccessionIdentityService.DeferInstalledKing(__instance,",

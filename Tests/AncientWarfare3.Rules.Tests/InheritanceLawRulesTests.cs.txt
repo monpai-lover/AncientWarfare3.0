@@ -494,8 +494,15 @@ internal static class InheritanceLawRulesTests
             "AW_HeirPatch.cs"));
         Equal(true, heirPatchSource.Contains("SuccessionMode"),
             "setKing context captures the selected succession source");
-        Equal(true, heirPatchSource.Contains(
-                "EstablishHereditaryBranchAfterAccession"),
+        string accessionIdentitySource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AccessionIdentityService.cs"));
+        int establishBranch = accessionIdentitySource.IndexOf(
+            "InheritanceLawService.EstablishHereditaryBranchAfterAccession",
+            StringComparison.Ordinal);
+        int selectNextHeir = accessionIdentitySource.IndexOf(
+            "HeirService.ClearHeir(pKingdom)", StringComparison.Ordinal);
+        Equal(true, establishBranch >= 0 && selectNextHeir > establishBranch,
             "setKing commits the acclaimed branch before selecting its heir");
         string republicServiceSource = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",

@@ -15,6 +15,10 @@ namespace AncientWarfare3.core.lineage
             internal long SuccessorId;
             internal long Revision;
             internal string Mode;
+            internal InheritanceLaw AccessionLaw;
+            internal Actor Predecessor;
+            internal Actor Successor;
+            internal int ResolutionAttempts;
         }
 
         private static readonly Dictionary<long, long> Revisions =
@@ -41,6 +45,14 @@ namespace AncientWarfare3.core.lineage
         internal static void EnqueueInstalledSuccession(Kingdom pKingdom,
             Actor pPredecessor, Actor pSuccessor, string pMode)
         {
+            EnqueueInstalledSuccession(pKingdom, pPredecessor, pSuccessor,
+                pMode, InheritanceLawService.GetEffectiveLaw(pKingdom));
+        }
+
+        internal static void EnqueueInstalledSuccession(Kingdom pKingdom,
+            Actor pPredecessor, Actor pSuccessor, string pMode,
+            InheritanceLaw pAccessionLaw)
+        {
             if (pKingdom?.data == null || pPredecessor?.data == null ||
                 pSuccessor?.data == null || pKingdom.king != pSuccessor ||
                 pKingdom.id < 0L) return;
@@ -52,7 +64,11 @@ namespace AncientWarfare3.core.lineage
                 PredecessorId = pPredecessor.data.id,
                 SuccessorId = pSuccessor.data.id,
                 Revision = revision,
-                Mode = pMode ?? SuccessionMode.NONE
+                Mode = pMode ?? SuccessionMode.NONE,
+                AccessionLaw = pAccessionLaw,
+                Predecessor = pPredecessor,
+                Successor = pSuccessor,
+                ResolutionAttempts = 0
             };
             BuildQueue.MarkDirty(pKingdom.id);
         }
@@ -63,22 +79,44 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyList<long> ids = BuildQueue.Take(1);
             if (ids.Count == 0 || !PendingBuilds.TryGetValue(ids[0],
                     out InstalledSuccessionContext context)) return;
-            PendingBuilds.Remove(ids[0]);
             if (context.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
                 context.Revision != CurrentRevision(context.KingdomId))
+            {
+                PendingBuilds.Remove(context.KingdomId);
                 return;
+            }
 
             Kingdom kingdom = World.world?.kingdoms?.get(context.KingdomId);
-            Actor predecessor = World.world?.units?.get(
-                context.PredecessorId);
-            Actor successor = World.world?.units?.get(context.SuccessorId);
+            Actor predecessor = context.Predecessor;
+            Actor successor = context.Successor;
             if (kingdom?.data == null || successor?.data == null ||
-                predecessor?.data == null || kingdom.king != successor)
+                predecessor?.data == null)
+            {
+                context.ResolutionAttempts++;
+                if (context.ResolutionAttempts <= 8)
+                {
+                    BuildQueue.MarkDirty(context.KingdomId);
+                    return;
+                }
+                ModClass.LogWarning(
+                    "Deferred succession dispute context expired for kingdom " +
+                    context.KingdomId + " predecessor " +
+                    context.PredecessorId + " successor " +
+                    context.SuccessorId);
+                PendingBuilds.Remove(context.KingdomId);
                 return;
+            }
+            if (kingdom.king != successor)
+            {
+                PendingBuilds.Remove(context.KingdomId);
+                return;
+            }
 
             SuccessionDisputePreparationFacts facts =
                 SuccessionDisputeService.BuildPreparationFacts(kingdom,
-                    predecessor, successor, context.Mode);
+                    predecessor, successor, context.Mode,
+                    context.AccessionLaw);
+            PendingBuilds.Remove(context.KingdomId);
             QueueDisputePersistence(facts);
         }
 

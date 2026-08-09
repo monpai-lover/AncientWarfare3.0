@@ -8,30 +8,96 @@ using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
 {
+    public struct AccessionCompletionContext
+    {
+        internal Actor PreviousKing;
+        internal bool WasRegisteredHeir;
+        internal int PreNobleDistance;
+        internal string SuccessionSourceMode;
+        internal InheritanceLaw AccessionLaw;
+        internal bool Captured;
+    }
+
     internal static class AccessionIdentityService
     {
         private const int DeferredInstallationBudget = 4;
         private const int DeferredInstallationMaxAttempts = 8;
+        private const int DeferredInstallationExhaustedRetryDelay = 1024;
         private static string LastPrepareFailureReason = "none";
         private static bool _capitalRepairInProgress;
+        private enum AccessionCompletionStage
+        {
+            Snapshots,
+            Monarchy,
+            LineageBranch,
+            Recall,
+            DisputePersistence,
+            InheritanceBranch,
+            ReigningIndex,
+            DisputeRuntime,
+            ClearHeir,
+            RefreshHeir,
+            Feudatory,
+            Remarriage,
+            Court,
+            Appellation,
+            FamilyProjection,
+            Multiplayer,
+            Complete
+        }
+
+        private sealed class AccessionCompletionProgress
+        {
+            internal long ActorId;
+            internal AccessionCompletionContext Context;
+            internal AccessionCompletionStage Stage;
+        }
+
         private sealed class DeferredInstallation
         {
             internal long KingdomId;
             internal long ActorId;
             internal int Attempts;
             internal int NextEligibleFrame;
+            internal AccessionCompletionContext CompletionContext;
+            internal bool IdentityCommitted;
+            internal bool ExhaustionLogged;
         }
 
         private static readonly Dictionary<long, DeferredInstallation>
             DeferredInstallations = new Dictionary<long, DeferredInstallation>();
+        private static readonly List<long> DeferredInstallationOrder =
+            new List<long>();
+        private static int _deferredInstallationCursor;
+        private static readonly Dictionary<long, AccessionCompletionProgress>
+            CompletionProgressByKingdom =
+                new Dictionary<long, AccessionCompletionProgress>();
 
         internal static void ClearRuntime()
         {
             DeferredInstallations.Clear();
+            DeferredInstallationOrder.Clear();
+            _deferredInstallationCursor = 0;
+            CompletionProgressByKingdom.Clear();
             _capitalRepairInProgress = false;
         }
 
         internal static void DeferInstalledKing(Kingdom pKingdom, Actor pActor)
+        {
+            DeferInstalledKing(pKingdom, pActor, default,
+                pIdentityCommitted: false);
+        }
+
+        internal static void DeferInstalledKing(Kingdom pKingdom, Actor pActor,
+            AccessionCompletionContext pCompletionContext)
+        {
+            DeferInstalledKing(pKingdom, pActor, pCompletionContext,
+                pIdentityCommitted: false);
+        }
+
+        internal static void DeferInstalledKing(Kingdom pKingdom, Actor pActor,
+            AccessionCompletionContext pCompletionContext,
+            bool pIdentityCommitted)
         {
             if (pKingdom?.data == null || pActor?.data == null ||
                 pKingdom.isRekt() || pActor.isRekt() ||
@@ -41,23 +107,36 @@ namespace AncientWarfare3.core.lineage
                 return;
             long kingdomId = pKingdom.data.id;
             long actorId = pActor.data.id;
-            if (DeferredInstallations.TryGetValue(kingdomId,
-                    out DeferredInstallation existing) &&
-                existing.ActorId == actorId)
+            if (CompletionProgressByKingdom.TryGetValue(kingdomId,
+                    out AccessionCompletionProgress progress) &&
+                progress.ActorId != actorId)
+                CompletionProgressByKingdom.Remove(kingdomId);
+            bool alreadyTracked = DeferredInstallations.TryGetValue(kingdomId,
+                out DeferredInstallation existing);
+            if (alreadyTracked && existing.ActorId == actorId)
+            {
+                if (pCompletionContext.Captured)
+                    existing.CompletionContext = pCompletionContext;
+                if (pIdentityCommitted) existing.IdentityCommitted = true;
                 return;
+            }
             DeferredInstallations[kingdomId] = new DeferredInstallation
             {
                 KingdomId = kingdomId,
                 ActorId = actorId,
                 Attempts = 0,
-                NextEligibleFrame = Time.frameCount
+                NextEligibleFrame = Time.frameCount,
+                CompletionContext = pCompletionContext,
+                IdentityCommitted = pIdentityCommitted,
+                ExhaustionLogged = false
             };
+            if (!alreadyTracked) DeferredInstallationOrder.Add(kingdomId);
         }
 
         internal static void ClearDeferredInstalledKing(Kingdom pKingdom)
         {
             long kingdomId = pKingdom?.data?.id ?? -1L;
-            if (kingdomId >= 0) DeferredInstallations.Remove(kingdomId);
+            if (kingdomId >= 0) RemoveDeferredInstallation(kingdomId);
         }
 
         internal static void ProcessDeferredInstallations()
@@ -65,21 +144,37 @@ namespace AncientWarfare3.core.lineage
             if (DeferredInstallations.Count == 0 ||
                 World.world?.kingdoms == null || World.world?.units == null)
                 return;
-            long[] ids = new long[Math.Min(
-                DeferredInstallationBudget, DeferredInstallations.Count)];
-            int index = 0;
-            foreach (long id in DeferredInstallations.Keys)
+            int selectionBudget = Math.Min(DeferredInstallationBudget,
+                DeferredInstallations.Count);
+            long[] ids = new long[selectionBudget];
+            int selected = 0;
+            int inspected = 0;
+            int inspectionBudget = Math.Min(DeferredInstallationOrder.Count,
+                DeferredInstallationBudget * 4);
+            while (selected < selectionBudget &&
+                   inspected < inspectionBudget &&
+                   DeferredInstallationOrder.Count > 0)
             {
-                ids[index++] = id;
-                if (index >= ids.Length) break;
+                if (_deferredInstallationCursor >=
+                    DeferredInstallationOrder.Count)
+                    _deferredInstallationCursor = 0;
+                long id = DeferredInstallationOrder[
+                    _deferredInstallationCursor++];
+                inspected++;
+                if (!DeferredInstallations.TryGetValue(id,
+                        out DeferredInstallation candidate) ||
+                    Time.frameCount < candidate.NextEligibleFrame)
+                    continue;
+                ids[selected++] = id;
             }
 
-            foreach (long kingdomId in ids)
+            for (int selectedIndex = 0;
+                 selectedIndex < selected;
+                 selectedIndex++)
             {
+                long kingdomId = ids[selectedIndex];
                 if (!DeferredInstallations.TryGetValue(kingdomId,
                         out DeferredInstallation pending))
-                    continue;
-                if (Time.frameCount < pending.NextEligibleFrame)
                     continue;
                 Kingdom kingdom = null;
                 Actor actor = null;
@@ -94,16 +189,20 @@ namespace AncientWarfare3.core.lineage
                     kingdom.isRekt() || actor.isRekt() ||
                     kingdom.king != actor)
                 {
-                    DeferredInstallations.Remove(kingdomId);
+                    RemoveDeferredInstallation(kingdomId);
                     continue;
                 }
 
                 pending.Attempts++;
                 LastPrepareFailureReason = "none";
-                if (Prepare(kingdom, actor) && Commit(kingdom, actor))
+                if (!pending.IdentityCommitted && Prepare(kingdom, actor) &&
+                    Commit(kingdom, actor))
+                    pending.IdentityCommitted = true;
+                if (pending.IdentityCommitted &&
+                    CompleteDeferredInstallation(kingdom, actor,
+                        pending.CompletionContext))
                 {
-                    CompleteDeferredInstallation(kingdom, actor);
-                    DeferredInstallations.Remove(kingdomId);
+                    RemoveDeferredInstallation(kingdomId);
                     continue;
                 }
 
@@ -113,28 +212,175 @@ namespace AncientWarfare3.core.lineage
 
                 if (pending.Attempts >= DeferredInstallationMaxAttempts)
                 {
-                    ModClass.LogWarning(
-                        "Deferred king identity repair exhausted for kingdom " +
-                        pending.KingdomId + " actor " + pending.ActorId +
-                        " reason=" + LastPrepareFailureReason);
-                    DeferredInstallations.Remove(kingdomId);
+                    pending.NextEligibleFrame = Time.frameCount +
+                        DeferredInstallationExhaustedRetryDelay;
+                    if (!pending.ExhaustionLogged)
+                    {
+                        pending.ExhaustionLogged = true;
+                        ModClass.LogWarning(
+                            "Deferred king identity repair remains pending for " +
+                            "kingdom " + pending.KingdomId + " actor " +
+                            pending.ActorId + " reason=" +
+                            LastPrepareFailureReason);
+                    }
                 }
             }
         }
 
-        private static void CompleteDeferredInstallation(
-            Kingdom pKingdom, Actor pActor)
+        private static bool CompleteDeferredInstallation(
+            Kingdom pKingdom, Actor pActor,
+            AccessionCompletionContext pCompletionContext)
         {
-            FormerHeirService.ClearSnapshot(pActor);
-            FormerKingService.ClearSnapshot(pActor);
-            HeirService.ClearHeir(pKingdom);
-            HeirService.RefreshHeir(pKingdom);
-            CourtDirectionService.MarkDirty(pKingdom);
-            RulerAppellationService.RefreshLivingProjection(pKingdom);
-            FamilyTreeProjectionRevision.Advance(
-                FamilyTreeProjectionChange.RulerAccession);
-            AW3MultiplayerSuccessionFacade.NotifyKingInstalled(
-                pKingdom, pActor);
+            return CompleteInstalledKing(pKingdom, pActor,
+                pCompletionContext);
+        }
+
+        internal static bool CompleteInstalledKing(Kingdom pKingdom,
+            Actor pActor, AccessionCompletionContext pCompletionContext)
+        {
+            if (pKingdom?.data == null || pActor?.data == null ||
+                pKingdom.king != pActor || pKingdom.isRekt() ||
+                pActor.isRekt()) return false;
+            long kingdomId = pKingdom.id;
+            long actorId = pActor.data.id;
+            if (!CompletionProgressByKingdom.TryGetValue(kingdomId,
+                    out AccessionCompletionProgress progress) ||
+                progress.ActorId != actorId)
+            {
+                progress = new AccessionCompletionProgress
+                {
+                    ActorId = actorId,
+                    Context = pCompletionContext,
+                    Stage = AccessionCompletionStage.Snapshots
+                };
+                CompletionProgressByKingdom[kingdomId] = progress;
+            }
+            else if (pCompletionContext.Captured &&
+                     !progress.Context.Captured)
+                progress.Context = pCompletionContext;
+
+            try
+            {
+                while (progress.Stage != AccessionCompletionStage.Complete)
+                {
+                    switch (progress.Stage)
+                    {
+                        case AccessionCompletionStage.Snapshots:
+                            FormerHeirService.ClearSnapshot(pActor);
+                            FormerKingService.ClearSnapshot(pActor);
+                            progress.Stage = AccessionCompletionStage.Monarchy;
+                            break;
+                        case AccessionCompletionStage.Monarchy:
+                            if (SuccessionTransitionRules
+                                .ShouldMarkMonarchyEstablished(true,
+                                    RepublicGovernmentService.IsRepublic(
+                                        pKingdom),
+                                    RepublicGovernmentService
+                                        .IsRepublicLeader(pActor)))
+                                RepublicGovernmentService
+                                    .MarkMonarchyEstablished(pKingdom);
+                            progress.Stage =
+                                AccessionCompletionStage.LineageBranch;
+                            break;
+                        case AccessionCompletionStage.LineageBranch:
+                            if (progress.Context.Captured)
+                                LineageService.OnKingFoundBranch(pKingdom,
+                                    pActor, progress.Context.PreviousKing,
+                                    progress.Context.WasRegisteredHeir,
+                                    progress.Context.PreNobleDistance,
+                                    progress.Context.SuccessionSourceMode);
+                            progress.Stage = AccessionCompletionStage.Recall;
+                            break;
+                        case AccessionCompletionStage.Recall:
+                            if (progress.Context.Captured)
+                                HeirService.RecallForSuccession(pKingdom,
+                                    pActor,
+                                    progress.Context.WasRegisteredHeir);
+                            progress.Stage =
+                                AccessionCompletionStage.DisputePersistence;
+                            break;
+                        case AccessionCompletionStage.DisputePersistence:
+                            if (progress.Context.Captured)
+                                SuccessionDisputePersistenceService.EnqueueInstalledSuccession(
+                                    pKingdom, progress.Context.PreviousKing,
+                                    pActor,
+                                    progress.Context.SuccessionSourceMode,
+                                    progress.Context.AccessionLaw);
+                            progress.Stage =
+                                AccessionCompletionStage.InheritanceBranch;
+                            break;
+                        case AccessionCompletionStage.InheritanceBranch:
+                            if (progress.Context.Captured)
+                                InheritanceLawService.EstablishHereditaryBranchAfterAccession(
+                                    pKingdom, pActor,
+                                    progress.Context.SuccessionSourceMode);
+                            progress.Stage =
+                                AccessionCompletionStage.ReigningIndex;
+                            break;
+                        case AccessionCompletionStage.ReigningIndex:
+                            ReigningRoyalLineageIndex.OnKingInstalled(
+                                pKingdom, pActor);
+                            progress.Stage =
+                                AccessionCompletionStage.DisputeRuntime;
+                            break;
+                        case AccessionCompletionStage.DisputeRuntime:
+                            SuccessionDisputeService.OnSuccessorInstalled(
+                                pKingdom, pActor);
+                            progress.Stage = AccessionCompletionStage.ClearHeir;
+                            break;
+                        case AccessionCompletionStage.ClearHeir:
+                            HeirService.ClearHeir(pKingdom);
+                            progress.Stage =
+                                AccessionCompletionStage.RefreshHeir;
+                            break;
+                        case AccessionCompletionStage.RefreshHeir:
+                            HeirService.RefreshHeir(pKingdom);
+                            progress.Stage = AccessionCompletionStage.Feudatory;
+                            break;
+                        case AccessionCompletionStage.Feudatory:
+                            FeudatoryService.OnPrinceAccededToEmpire(
+                                pKingdom, pActor);
+                            progress.Stage =
+                                AccessionCompletionStage.Remarriage;
+                            break;
+                        case AccessionCompletionStage.Remarriage:
+                            NobleRemarriageService.MarkDirty(pKingdom);
+                            progress.Stage = AccessionCompletionStage.Court;
+                            break;
+                        case AccessionCompletionStage.Court:
+                            CourtDirectionService.MarkDirty(pKingdom);
+                            progress.Stage =
+                                AccessionCompletionStage.Appellation;
+                            break;
+                        case AccessionCompletionStage.Appellation:
+                            RulerAppellationService.RefreshLivingProjection(
+                                pKingdom);
+                            progress.Stage =
+                                AccessionCompletionStage.FamilyProjection;
+                            break;
+                        case AccessionCompletionStage.FamilyProjection:
+                            FamilyTreeProjectionRevision.Advance(
+                                FamilyTreeProjectionChange.RulerAccession);
+                            progress.Stage =
+                                AccessionCompletionStage.Multiplayer;
+                            break;
+                        case AccessionCompletionStage.Multiplayer:
+                            AW3MultiplayerSuccessionFacade.NotifyKingInstalled(
+                                pKingdom, pActor);
+                            progress.Stage = AccessionCompletionStage.Complete;
+                            break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModClass.LogWarning("Accession completion deferred for kingdom " +
+                                    kingdomId + " actor " + actorId +
+                                    " stage=" + progress.Stage + " error=" +
+                                    ex.GetType().Name);
+                return false;
+            }
+            return true;
         }
 
         public static bool FinalizeDeferredFounding(Kingdom pKingdom)
@@ -173,16 +419,31 @@ namespace AncientWarfare3.core.lineage
 
             if (!Prepare(pKingdom, king) || !Commit(pKingdom, king))
                 return false;
-            RepublicGovernmentService.MarkMonarchyEstablished(pKingdom);
-            FormerHeirService.ClearSnapshot(king);
-            FormerKingService.ClearSnapshot(king);
-            HeirService.ClearHeir(pKingdom);
-            HeirService.RefreshHeir(pKingdom);
-            CourtDirectionService.MarkDirty(pKingdom);
-            RulerAppellationService.RefreshLivingProjection(pKingdom);
-            FamilyTreeProjectionRevision.Advance(
-                FamilyTreeProjectionChange.RulerAccession);
-            return true;
+            AccessionCompletionContext context = default;
+            if (DeferredInstallations.TryGetValue(pKingdom.id,
+                    out DeferredInstallation pending) &&
+                pending.ActorId == king.data.id)
+            {
+                context = pending.CompletionContext;
+                pending.IdentityCommitted = true;
+            }
+            bool completed = CompleteInstalledKing(pKingdom, king, context);
+            if (completed) RemoveDeferredInstallation(pKingdom.id);
+            return completed;
+        }
+
+        private static void RemoveDeferredInstallation(long pKingdomId)
+        {
+            if (!DeferredInstallations.Remove(pKingdomId)) return;
+            int orderIndex = DeferredInstallationOrder.IndexOf(pKingdomId);
+            if (orderIndex < 0) return;
+            DeferredInstallationOrder.RemoveAt(orderIndex);
+            if (orderIndex < _deferredInstallationCursor)
+                _deferredInstallationCursor--;
+            if (_deferredInstallationCursor < 0 ||
+                _deferredInstallationCursor >=
+                    DeferredInstallationOrder.Count)
+                _deferredInstallationCursor = 0;
         }
 
         public static bool Prepare(Kingdom pKingdom, Actor pActor)

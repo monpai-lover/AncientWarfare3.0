@@ -81,7 +81,8 @@ namespace AncientWarfare3.core.lineage
 
         internal static SuccessionDisputePreparationFacts
             BuildPreparationFacts(Kingdom pKingdom, Actor pPredecessor,
-                Actor pInstalledSuccessor, string pSuccessorMode)
+                Actor pInstalledSuccessor, string pSuccessorMode,
+                InheritanceLaw pAccessionLaw)
         {
             if (pKingdom?.data == null || pPredecessor?.data == null ||
                 pInstalledSuccessor?.data == null ||
@@ -140,8 +141,7 @@ namespace AncientWarfare3.core.lineage
                 SuccessorSupport = factionSupport.DesignatedHeirSupport,
                 ClaimantSupport = factionSupport.LeaderSupport,
                 RunnerUpSupport = factionSupport.RunnerUpSupport,
-                AccessionLaw = InheritanceLawService.GetEffectiveLaw(
-                    pKingdom),
+                AccessionLaw = pAccessionLaw,
                 OriginalLineageId = lineageId,
                 OriginalShiId = shiId,
                 OriginalStateName = pKingdom.name ?? string.Empty,
