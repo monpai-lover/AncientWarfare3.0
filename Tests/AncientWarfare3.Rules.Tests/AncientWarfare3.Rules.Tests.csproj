@@ -175,6 +175,7 @@
     <Compile Include="DiplomaticRelationModifierCacheTests.cs.txt" />
     <Compile Include="InheritanceLawRulesTests.cs.txt" />
     <Compile Include="KingSuccessionPreparationRulesTests.cs.txt" />
+    <Compile Include="SuccessionRelationshipIndexRulesTests.cs.txt" />
     <Compile Include="HeirFullBrotherRulesTests.cs.txt" />
     <Compile Include="SuccessionDisputeRulesTests.cs.txt" />
     <Compile Include="SuccessionDisputeSqlTests.cs.txt" />
@@ -687,6 +688,7 @@
     <Compile Include="..\..\Code\core\lineage\ActorBirthAffiliationRules.cs" Link="Production\ActorBirthAffiliationRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDeathPerformanceRules.cs" Link="Production\ActorDeathPerformanceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\KingSuccessionPreparationRules.cs" Link="Production\KingSuccessionPreparationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SuccessionRelationshipIndexState.cs" Link="Production\SuccessionRelationshipIndexState.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDiagnosticSamplingRules.cs" Link="Production\ActorDiagnosticSamplingRules.cs" />
     <Compile Include="..\..\Code\core\policy\RuntimePerformanceDiagnosticRules.cs" Link="Production\RuntimePerformanceDiagnosticRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorAgeWorkState.cs" Link="Production\ActorAgeWorkState.cs" />

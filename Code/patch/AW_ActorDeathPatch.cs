@@ -64,6 +64,7 @@ namespace AncientWarfare3.patch
                 TemporarySlaveVanguardService.OnMemberInvalidated(__instance);
                 SlavePopulationIndexService.Deactivate(__instance);
                 DynasticLivingSonIndexService.OnActorDying(__instance);
+                SuccessionRelationshipIndex.OnDying(__instance);
                 HeirService.MarkSuccessionDirtyForActor(__instance);
                 NobleRemarriageService.MarkDirtyForPartnerDeath(__instance);
             }

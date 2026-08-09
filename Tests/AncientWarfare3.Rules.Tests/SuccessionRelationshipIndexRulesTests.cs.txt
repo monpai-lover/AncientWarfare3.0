@@ -1,0 +1,101 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+internal static class SuccessionRelationshipIndexRulesTests
+{
+    public static void Run()
+    {
+        RebuildMustCompleteBeforeReadsAreAuthoritative();
+        UpsertIndexesParentsLineageAndShi();
+        DeathRemovesEveryReverseMembership();
+        IdentityChangeMovesMembershipWithoutDuplicates();
+    }
+
+    private static void RebuildMustCompleteBeforeReadsAreAuthoritative()
+    {
+        var index = new SuccessionRelationshipIndexState();
+        index.BeginRebuild();
+        Equal(false, index.IsReady,
+            "a partial rebuild is not authoritative");
+        index.CompleteRebuild();
+        True(index.IsReady, "a completed rebuild is authoritative");
+    }
+
+    private static void UpsertIndexesParentsLineageAndShi()
+    {
+        var index = ReadyIndex();
+        index.Upsert(new SuccessionActorFacts(10L, -1L, -1L, -1L,
+            100L, 200L, true));
+        index.Upsert(new SuccessionActorFacts(11L, 10L, 2L, 10L,
+            100L, 201L, true));
+
+        SequenceEqual(new long[] { 11L }, index.ChildrenOf(10L),
+            "a living child is indexed under the father");
+        SequenceEqual(new long[] { 10L, 11L },
+            index.LineageMembers(100L),
+            "living lineage membership is indexed");
+        True(index.TryGetFather(11L, out long fatherId),
+            "the known father is readable without SQL");
+        Equal(10L, fatherId, "the indexed father id is preserved");
+    }
+
+    private static void DeathRemovesEveryReverseMembership()
+    {
+        var index = ReadyIndex();
+        index.Upsert(new SuccessionActorFacts(11L, 10L, 2L, 10L,
+            100L, 201L, true));
+        index.Remove(11L);
+
+        Equal(0, index.ChildrenOf(10L).Count,
+            "a dead actor leaves the parent index");
+        Equal(0, index.LineageMembers(100L).Count,
+            "a dead actor leaves the lineage index");
+        Equal(0, index.ShiMembers(201L).Count,
+            "a dead actor leaves the shi index");
+    }
+
+    private static void IdentityChangeMovesMembershipWithoutDuplicates()
+    {
+        var index = ReadyIndex();
+        index.Upsert(new SuccessionActorFacts(11L, 10L, 2L, 10L,
+            100L, 201L, true));
+        index.Upsert(new SuccessionActorFacts(11L, 10L, 2L, 10L,
+            101L, 202L, true));
+
+        Equal(0, index.LineageMembers(100L).Count,
+            "old lineage membership is removed on upsert");
+        SequenceEqual(new long[] { 11L }, index.LineageMembers(101L),
+            "new lineage membership contains one actor");
+        SequenceEqual(new long[] { 11L }, index.ChildrenOf(10L),
+            "repeated upsert does not duplicate a child edge");
+    }
+
+    private static SuccessionRelationshipIndexState ReadyIndex()
+    {
+        var result = new SuccessionRelationshipIndexState();
+        result.BeginRebuild();
+        result.CompleteRebuild();
+        return result;
+    }
+
+    private static void SequenceEqual(IReadOnlyList<long> expected,
+        IReadOnlyList<long> actual, string name)
+    {
+        Equal(expected.Count, actual.Count, name + " count");
+        for (int i = 0; i < expected.Count; i++)
+            Equal(expected[i], actual[i], name + " item " + i);
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+}

@@ -8005,6 +8005,7 @@ OccupiedCityCivilianProtectionRulesTests.Run();
 TitleAtomicSqlTests.Run();
 InheritanceLawRulesTests.Run();
 KingSuccessionPreparationRulesTests.Run();
+SuccessionRelationshipIndexRulesTests.Run();
 SuccessionDisputeRulesTests.Run();
 SuccessionDisputeSqlTests.Run();
 ConsistencyRegressionRulesTests.Run();

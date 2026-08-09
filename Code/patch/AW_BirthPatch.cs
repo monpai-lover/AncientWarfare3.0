@@ -38,6 +38,7 @@ namespace AncientWarfare3.patch
                 ModClass.LogWarning("Lineage actor birth initialization failed: " +
                                     e.Message);
             }
+            SuccessionRelationshipIndex.OnBorn(__instance);
         }
 
         [HarmonyPostfix]
@@ -122,6 +123,7 @@ namespace AncientWarfare3.patch
                 ModClass.LogWarning("Xia contact birth processing failed: " +
                                     e.Message);
             }
+            SuccessionRelationshipIndex.OnBorn(pBaby, pParent1, pParent2);
         }
     }
 }
