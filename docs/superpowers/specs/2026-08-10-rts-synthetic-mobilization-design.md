@@ -47,6 +47,10 @@ vanilla recruitment.
 ## Mobilization Ledger
 
 Each participating city owns one persisted mobilization record per active war.
+This record is the only runtime ledger for both initial mobilization and
+wartime replacement. `CityReservePoolService` does not continue as a parallel
+reserve ledger; an old reserve snapshot may be read once for migration and is
+then discarded.
 The record contains:
 
 - war, kingdom and source-city IDs;
@@ -197,6 +201,14 @@ new-war fast path creates minimal lifecycle and mission projections before the
 full front refinement completes. The fast path does not invent targets: it
 uses the same legal enemy, territory and reachability rules as normal mission
 planning.
+
+Objective handoff is a transactional state change. The controller may set its
+completion latch and unregister the stall watchdog only after a replacement
+mission is published, or it must invalidate the old controller mission and
+remain in a bounded reassignment queue. Retaining the same strategic mission
+after a handoff clears the completion latch, resets route ownership and
+registers the watchdog exactly as a save/load rehydration does. Therefore an
+army cannot require reloading the save to resume movement.
 
 Formation, movement and roster reconciliation no longer stop permanently at
 the first 128 members. Each army stores a member cursor; every work item
