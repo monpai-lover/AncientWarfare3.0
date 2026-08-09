@@ -1,0 +1,122 @@
+using AncientWarfare3.core.presentation;
+
+internal static class ActorVisualRoleRulesTests
+{
+    public static void Run()
+    {
+        var actor = new Actor(7L);
+        Equal(ActorVisualRole.Warrior,
+            ActorVisualRoleResolver.ResolveFrom(actor,
+                new IActorVisualRoleProvider[]
+                {
+                    new FixedProvider(false, ActorVisualRole.King),
+                    new FixedProvider(true, ActorVisualRole.Warrior),
+                    new FixedProvider(true, ActorVisualRole.Leader)
+                }),
+            "the first accepting provider wins");
+        Equal(ActorVisualRole.Default,
+            ActorVisualRoleResolver.ResolveFrom(actor,
+                Array.Empty<IActorVisualRoleProvider>()),
+            "no provider preserves vanilla presentation");
+        Equal(ActorVisualRole.Leader,
+            ActorVisualRoleResolver.ResolveFrom(actor,
+                new IActorVisualRoleProvider[]
+                {
+                    new ThrowingProvider(),
+                    new FixedProvider(true, ActorVisualRole.Leader)
+                }),
+            "one provider failure falls through to later providers");
+
+        Equal(true, ActorVisualRoleRules.IsWarrior(
+                ActorVisualRole.Warrior, pVanillaWarrior: false),
+            "warrior role enables warrior presentation");
+        Equal(false, ActorVisualRoleRules.IsKing(
+                ActorVisualRole.Warrior, pVanillaKing: true),
+            "warrior role suppresses king presentation");
+        Equal(true, ActorVisualRoleRules.IsKing(
+                ActorVisualRole.Default, pVanillaKing: true),
+            "default preserves vanilla king presentation");
+        Equal(true, ActorVisualRoleRules.IsWarrior(
+                ActorVisualRole.Default, pVanillaWarrior: true),
+            "default preserves vanilla warrior presentation");
+        Equal(false, ActorVisualRoleRules.IsWarrior(
+                ActorVisualRole.Civilian, pVanillaWarrior: true),
+            "civilian role suppresses warrior presentation");
+        Equal(true, ActorVisualRoleRules.IsLeader(
+                ActorVisualRole.Leader, pVanillaLeader: false),
+            "leader role enables leader presentation");
+        Equal(true, ActorVisualRoleRules.IsKing(
+                ActorVisualRole.King, pVanillaKing: false),
+            "king role enables king presentation");
+
+        Equal(ActorVisualRole.Warrior,
+            ActorVisualRoleRules.ResolveMilitaryGovernorateRole(
+                pProjectionActive: true, pActorAlive: true,
+                pActorKingdomMatches: true, pActorId: 11L,
+                pGovernorActorId: 11L, pSuccessorActorId: 12L),
+            "active governor uses warrior presentation");
+        Equal(ActorVisualRole.Warrior,
+            ActorVisualRoleRules.ResolveMilitaryGovernorateRole(
+                pProjectionActive: true, pActorAlive: true,
+                pActorKingdomMatches: true, pActorId: 12L,
+                pGovernorActorId: 11L, pSuccessorActorId: 12L),
+            "designated governorate successor uses warrior presentation");
+        Equal(ActorVisualRole.Default,
+            ActorVisualRoleRules.ResolveMilitaryGovernorateRole(
+                pProjectionActive: false, pActorAlive: true,
+                pActorKingdomMatches: true, pActorId: 11L,
+                pGovernorActorId: 11L, pSuccessorActorId: 12L),
+            "ended governorate preserves vanilla presentation");
+        Equal(ActorVisualRole.Default,
+            ActorVisualRoleRules.ResolveMilitaryGovernorateRole(
+                pProjectionActive: true, pActorAlive: false,
+                pActorKingdomMatches: true, pActorId: 11L,
+                pGovernorActorId: 11L, pSuccessorActorId: 12L),
+            "dead actors are not overridden");
+        Equal(ActorVisualRole.Default,
+            ActorVisualRoleRules.ResolveMilitaryGovernorateRole(
+                pProjectionActive: true, pActorAlive: true,
+                pActorKingdomMatches: false, pActorId: 12L,
+                pGovernorActorId: 11L, pSuccessorActorId: 12L),
+            "stale cross-kingdom successor IDs are ignored");
+        Equal(ActorVisualRole.Default,
+            ActorVisualRoleRules.ResolveMilitaryGovernorateRole(
+                pProjectionActive: true, pActorAlive: true,
+                pActorKingdomMatches: true, pActorId: 13L,
+                pGovernorActorId: 11L, pSuccessorActorId: 12L),
+            "ordinary governorate members preserve vanilla presentation");
+    }
+
+    private sealed class FixedProvider : IActorVisualRoleProvider
+    {
+        private readonly bool _accept;
+        private readonly ActorVisualRole _role;
+
+        public FixedProvider(bool pAccept, ActorVisualRole pRole)
+        {
+            _accept = pAccept;
+            _role = pRole;
+        }
+
+        public bool TryResolve(Actor pActor, out ActorVisualRole pRole)
+        {
+            pRole = _role;
+            return _accept;
+        }
+    }
+
+    private sealed class ThrowingProvider : IActorVisualRoleProvider
+    {
+        public bool TryResolve(Actor pActor, out ActorVisualRole pRole)
+        {
+            throw new InvalidOperationException("test provider failure");
+        }
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

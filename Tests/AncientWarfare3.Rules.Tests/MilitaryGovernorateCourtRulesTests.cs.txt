@@ -1,0 +1,56 @@
+using AncientWarfare3.core.court;
+
+internal static class MilitaryGovernorateCourtRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, MilitaryGovernorateCourtRules.ShouldInclude(
+                pIsDirectVassal: true, pIsMilitaryGovernorate: true,
+                pProjectionActive: true),
+            "active direct military governorate is included");
+        Equal(false, MilitaryGovernorateCourtRules.ShouldInclude(
+                pIsDirectVassal: false, pIsMilitaryGovernorate: true,
+                pProjectionActive: true),
+            "indirect military governorate is excluded");
+        Equal(false, MilitaryGovernorateCourtRules.ShouldInclude(
+                pIsDirectVassal: true, pIsMilitaryGovernorate: false,
+                pProjectionActive: true),
+            "ordinary direct vassal is excluded");
+        Equal(false, MilitaryGovernorateCourtRules.ShouldInclude(
+                pIsDirectVassal: true, pIsMilitaryGovernorate: true,
+                pProjectionActive: false),
+            "stale military governorate projection is excluded");
+
+        Equal(true, MilitaryGovernorateCourtRules.IsSubjectActor(
+                pActorValid: true, pActorKingdomId: 20L,
+                pSubjectKingdomId: 20L),
+            "live actor belonging to the subject is valid");
+        Equal(false, MilitaryGovernorateCourtRules.IsSubjectActor(
+                pActorValid: true, pActorKingdomId: 10L,
+                pSubjectKingdomId: 20L),
+            "suzerain actor cannot fill a subject command node");
+        Equal(false, MilitaryGovernorateCourtRules.IsSubjectActor(
+                pActorValid: false, pActorKingdomId: 20L,
+                pSubjectKingdomId: 20L),
+            "dead subject actor is excluded");
+
+        Equal(MilitaryGovernorateCourtRules.GeneralRank,
+            MilitaryGovernorateCourtRules.GovernorRank,
+            "governor shares the general military row");
+        Equal(true,
+            MilitaryGovernorateCourtRules.SuccessorRank >
+            MilitaryGovernorateCourtRules.GovernorRank,
+            "successor is below the governor");
+        Equal(true,
+            MilitaryGovernorateCourtRules.SuccessorRank <
+            MilitaryGovernorateCourtRules.LocalGovernmentRank,
+            "successor remains in the military rather than local section");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

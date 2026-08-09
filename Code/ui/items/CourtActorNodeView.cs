@@ -96,7 +96,8 @@ namespace AncientWarfare3.ui.items
 
             _button.onClick.RemoveAllListeners();
             bool officeAvailable = CourtService.IsManualOfficeInCurrentTier(
-                pKingdom, pNode.OfficeId);
+                pKingdom, pNode.OfficeId) &&
+                !IsMilitaryGovernorateCommandNode(pNode);
             bool appointmentAllowed = CourtService.CanUseManualAppointment(
                 pKingdom);
             bool canAppoint = CourtManualAppointmentRules.
@@ -118,7 +119,8 @@ namespace AncientWarfare3.ui.items
                     incumbentActorId);
             bool canManageOffice = officeAction != CourtManualOfficeAction.None;
             _manageOfficeObject.SetActive(canManageOffice);
-            bool canDispose = live && !pNode.IsVacancy && !actor.isKing();
+            bool canDispose = live && !pNode.IsVacancy && !actor.isKing() &&
+                              !IsMilitaryGovernorateCommandNode(pNode);
             _dispositionObject.SetActive(canDispose);
             bool constrainedByTwoActions = canDispose && canManageOffice;
             _roles.text = OfficialCareerRankRules.ComposeCardCareerLabel(
@@ -396,6 +398,9 @@ namespace AncientWarfare3.ui.items
                 lines.Add(AW_L10n.Text("aw_court_appointed_year", "Appointed") + ": " + pNode.AppointmentYear);
             if (!string.IsNullOrEmpty(pNode.CityName))
                 lines.Add(AW_L10n.Text("aw_court_city", "City") + ": " + pNode.CityName);
+            if (!string.IsNullOrEmpty(pNode.CommandName))
+                lines.Add(AW_L10n.Text("aw_court_command", "Command") +
+                          ": " + pNode.CommandName);
             if (pNode.Merit > 0)
                 lines.Add(AW_L10n.Text("aw_general_merit", "Merit") + ": " + pNode.Merit);
             if (OfficialCareerRankRules.CanDisplayRankedCareer(
@@ -538,7 +543,8 @@ namespace AncientWarfare3.ui.items
             var labels = new List<string>();
             foreach (string role in pNode.Roles ?? new List<string>())
             {
-                string label = RoleName(role, pNode.CityName, pKingdom);
+                string label = RoleName(role, pNode.CityName,
+                    pNode.CommandName, pKingdom);
                 if (!string.IsNullOrEmpty(label) && !labels.Contains(label)) labels.Add(label);
             }
             if (labels.Count == 0 && !string.IsNullOrEmpty(pNode.OfficeId))
@@ -546,7 +552,8 @@ namespace AncientWarfare3.ui.items
             return string.Join(" / ", labels.ToArray());
         }
 
-        private static string RoleName(string pRole, string pCityName, Kingdom pKingdom)
+        private static string RoleName(string pRole, string pCityName,
+            string pCommandName, Kingdom pKingdom)
         {
             switch (pRole ?? "")
             {
@@ -559,6 +566,14 @@ namespace AncientWarfare3.ui.items
                         KingdomTitleService.IsEmperor(pKingdom) ||
                         MandateService.GetCurrentMandateKingdom() == pKingdom), "Heir");
                 case CourtPyramidRoleId.General: return AW_L10n.Text("aw_court_general", "General");
+                case CourtPyramidRoleId.MilitaryGovernorateGovernor:
+                    return CommandRoleName(AW_L10n.Text(
+                        "aw_court_military_governorate_governor",
+                        "Military Governor"), pCommandName);
+                case CourtPyramidRoleId.MilitaryGovernorateSuccessor:
+                    return CommandRoleName(AW_L10n.Text(
+                        "aw_court_military_governorate_successor",
+                        "Command Successor"), pCommandName);
                 case CourtPyramidRoleId.Governor:
                     return string.IsNullOrEmpty(pCityName)
                         ? OfficeName(pKingdom, CourtOfficeId.Governor)
@@ -566,6 +581,30 @@ namespace AncientWarfare3.ui.items
                           OfficeName(pKingdom, CourtOfficeId.Governor);
                 default: return OfficeName(pKingdom, pRole);
             }
+        }
+
+        private static string CommandRoleName(string pRole,
+            string pCommandName)
+        {
+            return string.IsNullOrEmpty(pCommandName)
+                ? pRole
+                : pRole + " - " + pCommandName;
+        }
+
+        private static bool IsMilitaryGovernorateCommandNode(
+            CourtPyramidNodeModel pNode)
+        {
+            if (pNode == null) return false;
+            return pNode.RoleId ==
+                       CourtPyramidRoleId.MilitaryGovernorateGovernor ||
+                   pNode.RoleId ==
+                       CourtPyramidRoleId.MilitaryGovernorateSuccessor ||
+                   pNode.Roles?.Contains(
+                       CourtPyramidRoleId.MilitaryGovernorateGovernor) ==
+                   true ||
+                   pNode.Roles?.Contains(
+                       CourtPyramidRoleId.MilitaryGovernorateSuccessor) ==
+                   true;
         }
 
         private static string OfficeName(Kingdom pKingdom, string pOfficeId)

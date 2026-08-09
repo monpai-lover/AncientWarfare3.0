@@ -23,6 +23,7 @@ namespace AncientWarfare3.core.court
             List<CourtOfficerView> officers = CourtService.GetActiveOfficers(pKingdom, 96);
             AddOfficersAndVacancies(seeds, pKingdom, officers, tier);
             AddGenerals(seeds, pKingdom);
+            AddMilitaryGovernorates(seeds, pKingdom);
             AddFeudatoryPrinces(seeds, pKingdom);
             AddCityLeaders(seeds, pKingdom);
             List<CourtPyramidNodeModel> result = CourtPyramidRules.BuildLayout(
@@ -159,6 +160,98 @@ namespace AncientWarfare3.core.court
             }
         }
 
+        private static void AddMilitaryGovernorates(
+            List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
+        {
+            List<Kingdom> directSubjects = VassalService.GetVassals(pKingdom)
+                .Where(p => p?.data != null && !p.isRekt())
+                .OrderBy(p => p.id)
+                .ToList();
+            if (directSubjects.Count == 0) return;
+
+            var snapshots = new Dictionary<long,
+                MilitaryGovernorateSnapshot>();
+            foreach (MilitaryGovernorateSnapshot snapshot in
+                     MilitaryGovernorateStore.GetDirectActive(pKingdom, 256))
+            {
+                if (snapshot == null || snapshot.SubjectKingdomId < 0)
+                    continue;
+                if (!snapshots.TryGetValue(snapshot.SubjectKingdomId,
+                        out MilitaryGovernorateSnapshot current) ||
+                    current.StateId < snapshot.StateId)
+                    snapshots[snapshot.SubjectKingdomId] = snapshot;
+            }
+
+            int order = 0;
+            foreach (Kingdom subject in directSubjects)
+            {
+                bool military = VassalService.GetSubjectKind(subject) ==
+                                VassalSubjectKind.MilitaryGovernorate;
+                bool projected =
+                    MilitaryGovernorateStore.TryGetRuntimeProjection(
+                        subject, out long stateId,
+                        out long projectedSuccessorId);
+                bool hasSnapshot = snapshots.TryGetValue(subject.id,
+                    out MilitaryGovernorateSnapshot snapshot) &&
+                    snapshot.SuzerainKingdomId == pKingdom.id &&
+                    snapshot.SubjectKingdomId == subject.id &&
+                    snapshot.StateId == stateId;
+                if (!MilitaryGovernorateCourtRules.ShouldInclude(
+                        pIsDirectVassal: true,
+                        pIsMilitaryGovernorate: military,
+                        pProjectionActive: projected && hasSnapshot))
+                    continue;
+
+                int stableOrder =
+                    MilitaryGovernorateCourtRules.StableOrderBase + order++;
+                Actor governor = subject.king;
+                if (!IsValidSubjectActor(governor, subject) ||
+                    governor.data.id != snapshot.GovernorActorId)
+                    continue;
+                string seatName = FindCityName(subject,
+                    snapshot.SeatCityId);
+                string governorSchool = ActorSchool(governor, "");
+                pSeeds.Add(new CourtPyramidNodeModel(governor.data.id,
+                    CourtPyramidRoleId.MilitaryGovernorateGovernor,
+                    CourtPyramidRoleId.MilitaryGovernorateGovernor,
+                    CourtPyramidRules.MilitaryGovernorateGovernorRank,
+                    stableOrder, false)
+                {
+                    ActorName = SafeActorName(governor),
+                    SchoolId = governorSchool,
+                    SchoolIconPath = RegisteredSchoolIconPath(
+                        governorSchool),
+                    CityId = snapshot.SeatCityId,
+                    CityName = seatName,
+                    CommandName = snapshot.CommandName ?? "",
+                    Influence = SafeStat(governor, "warfare")
+                });
+
+                if (projectedSuccessorId < 0 ||
+                    projectedSuccessorId != snapshot.SuccessorActorId)
+                    continue;
+                Actor successor = World.world?.units?.get(
+                    projectedSuccessorId);
+                if (!IsValidSubjectActor(successor, subject)) continue;
+                string successorSchool = ActorSchool(successor, "");
+                pSeeds.Add(new CourtPyramidNodeModel(successor.data.id,
+                    CourtPyramidRoleId.MilitaryGovernorateSuccessor,
+                    CourtPyramidRoleId.MilitaryGovernorateSuccessor,
+                    CourtPyramidRules.MilitaryGovernorateSuccessorRank,
+                    stableOrder, false)
+                {
+                    ActorName = SafeActorName(successor),
+                    SchoolId = successorSchool,
+                    SchoolIconPath = RegisteredSchoolIconPath(
+                        successorSchool),
+                    CityId = snapshot.SeatCityId,
+                    CityName = seatName,
+                    CommandName = snapshot.CommandName ?? "",
+                    Influence = SafeStat(successor, "warfare")
+                });
+            }
+        }
+
         private static void AddFeudatoryPrinces(
             List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
         {
@@ -218,6 +311,23 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             return CourtAffiliationResolver.CanServe(pActor, pKingdom, layer);
+        }
+
+        private static bool IsValidSubjectActor(Actor pActor,
+            Kingdom pSubject)
+        {
+            bool valid;
+            try
+            {
+                valid = pActor?.data != null && pActor.isAlive() &&
+                        !pActor.isRekt();
+            }
+            catch
+            {
+                valid = false;
+            }
+            return MilitaryGovernorateCourtRules.IsSubjectActor(valid,
+                pActor?.kingdom?.id ?? -1L, pSubject?.id ?? -1L);
         }
 
         private static void AddCachedHeirRole(List<CourtPyramidNodeModel> pNodes, Kingdom pKingdom)

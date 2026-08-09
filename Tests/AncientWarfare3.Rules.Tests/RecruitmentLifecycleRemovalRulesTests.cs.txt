@@ -54,8 +54,9 @@ internal static class RecruitmentLifecycleRemovalRulesTests
         Assert(director.Contains("ArmyReplenishmentOperationService.Ensure",
             StringComparison.Ordinal),
             "depleted armies keep the dedicated replenishment operation");
-        Assert(authority.Contains("ArmyReplenishmentOperationService.ProcessAuthorityCycle",
-            StringComparison.Ordinal),
+        Assert(System.Text.RegularExpressions.Regex.IsMatch(authority,
+                @"ArmyReplenishmentOperationService\s*\.\s*" +
+                @"ProcessAuthorityCycle"),
             "the dedicated replenishment operation remains scheduled");
         Assert(!authority.Contains("KingdomMobilizationIndex",
             StringComparison.Ordinal),

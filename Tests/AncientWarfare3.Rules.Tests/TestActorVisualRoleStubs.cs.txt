@@ -1,0 +1,9 @@
+public sealed class Actor
+{
+    public Actor(long pId)
+    {
+        Id = pId;
+    }
+
+    public long Id { get; }
+}

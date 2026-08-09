@@ -5,6 +5,7 @@ using System.Linq;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.presentation;
 using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 using UnityEngine;
@@ -2435,6 +2436,9 @@ namespace AncientWarfare3.core.lineage
         private static void ClearRelationProjection(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            bool wasMilitaryGovernorate =
+                MilitaryGovernorateStore.TryGetRuntimeProjection(
+                    pKingdom, out _, out long oldSuccessorActorId);
             EnsureDirectVassalIndex();
             RemoveDirectVassalIndex(GetSuzerainId(pKingdom), pKingdom.id);
             pKingdom.data.set(LineageKeys.VASSAL_SUZERAIN_ID, -1L);
@@ -2450,6 +2454,9 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(
                 LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
                 false);
+            if (wasMilitaryGovernorate)
+                MilitaryGovernorateAppearanceService.OnProjectionChanged(
+                    pKingdom, true, oldSuccessorActorId, false, -1L);
         }
 
         private static void InvalidateRelationPresentation(Kingdom pKingdom)
