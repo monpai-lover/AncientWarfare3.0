@@ -22,7 +22,7 @@ $expected = @{
     'Code/patch/AW_FramePrioritySchedulerPatch.cs' =
         'FFEB5975322A2FC1DB52958284DC4554C15B9DC67844715D815CB430AC74127D'
     'Code/core/performance/AWCooperativeSimulationRunner.cs' =
-        '1B90A35ACC645C5BBFD2D3054F667980834D4EBFA78D0D839E084D9B55ED8A9F'
+        '331800987155E9DEB1B615AE1B4F22469B7C938F44CF0ADC53E845F0068FC648'
     'Code/core/performance/AWCooperativeBatchRunner.cs' =
         'D86AE5C98B043F3B95DEA3EE62E36787D94DA4AD9898A28D62ADC5F81A9A767C'
     'Code/core/performance/AWCooperativeActorParallelJobRunner.cs' =
@@ -58,7 +58,7 @@ if ($framePatch -notmatch 'AWAuthorityCycleService\.ProcessNativeCycle\(\)') {
 $runner = Get-Content -Raw -Encoding UTF8 (Join-Path $projectRoot `
     'Code/core/performance/AWCooperativeSimulationRunner.cs')
 if ($runner -notmatch
-    'AWAuthorityCycleService\.ProcessCooperativeCycle\(') {
+    'AWAuthorityCycleService\.ProcessCooperativeStep\(') {
     throw 'Large mode lost the canonical AW authority-cycle entry.'
 }
 
