@@ -185,14 +185,32 @@ namespace AncientWarfare3.core.lineage
             Kingdom kingdom = pActor.kingdom;
             Actor king = kingdom?.king;
             if (kingdom?.data == null || king?.data == null) return;
+            pActor.data.get(LineageKeys.LINEAGE_ID,
+                out long actorLineageId, -1L);
+            kingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID,
+                out long royalLineageId, -1L);
+            if (royalLineageId < 0L)
+                king.data.get(LineageKeys.LINEAGE_ID,
+                    out royalLineageId, -1L);
             kingdom.data.get(LineageKeys.KINGDOM_HEIR_ID,
                 out long heirId, -1L);
             bool registeredHeir = heirId == pActor.data.id;
             bool directRoyalChild = pActor.data.parent_id_1 == king.data.id ||
                                     pActor.data.parent_id_2 == king.data.id;
-            if (!registeredHeir && !directRoyalChild) return;
-            kingdom.data.set(LineageKeys.KINGDOM_HEIR_SELECTION_DIRTY, true);
-            SuccessionPreparationService.MarkDirty(kingdom);
+            bool lineageReignsInThisKingdom =
+                ReigningRoyalLineageIndex.IsRoyalLineageOf(kingdom,
+                    actorLineageId);
+            if (!RoyalSuccessionEventRules.ShouldMarkSelectionDirty(
+                    actorLineageId, royalLineageId,
+                    lineageReignsInThisKingdom, registeredHeir,
+                    directRoyalChild)) return;
+            MarkSelectionDirty(kingdom);
+        }
+
+        public static void MarkSelectionDirty(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.KINGDOM_HEIR_SELECTION_DIRTY, true);
         }
 
         public static Actor PeekRegisteredHeir(Kingdom pKingdom)
