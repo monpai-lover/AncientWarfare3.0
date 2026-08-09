@@ -31,6 +31,8 @@ namespace AncientWarfare3.ui.windows
         private RectTransform _root;
         private RectTransform _leftViewport;
         private RectTransform _leftContent;
+        private ScrollRect _leftScroll;
+        private Scrollbar _leftScrollbar;
         private RectTransform _chatViewport;
         private RectTransform _chatContent;
         private ScrollRect _chatScroll;
@@ -680,7 +682,9 @@ namespace AncientWarfare3.ui.windows
             _root = root.GetComponent<RectTransform>();
 
             CreateScrollArea(_root, "KingdomList", true,
-                out _leftViewport, out _leftContent, out _);
+                out _leftViewport, out _leftContent, out _leftScroll);
+            _leftScrollbar = CreateVerticalScrollbar(_leftViewport,
+                _leftScroll);
             CreateScrollArea(_root, "Conversation", true,
                 out _chatViewport, out _chatContent, out _chatScroll);
             var divider = new GameObject("Divider", typeof(RectTransform),
