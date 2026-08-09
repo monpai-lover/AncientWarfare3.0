@@ -51,6 +51,10 @@ internal static class ArmyRtsFirstOrderRecoveryRulesTests
                director.Contains("TryAssignFirstOrderMission(",
                    StringComparison.Ordinal),
             "the director publishes a bounded first mission before refinement");
+        Assert(director.Contains(
+                "EnqueueFirstOrderForKingdom(pKingdom)",
+                StringComparison.Ordinal),
+            "a newly created army wakes a previously consumed first order");
 
         string lifecycle = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsWarLifecycleService.cs"));

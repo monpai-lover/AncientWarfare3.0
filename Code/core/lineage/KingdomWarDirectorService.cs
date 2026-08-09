@@ -497,6 +497,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnArmyChanged(Kingdom pKingdom)
         {
+            EnqueueFirstOrderForKingdom(pKingdom);
             Schedule(pKingdom);
         }
 
@@ -1581,6 +1582,28 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyList<long> defenders = CollectFirstOrderParticipants(
                 pWar, pAttackers: false);
             FirstOrderQueue.EnqueueWar(pWar.data.id, attackers, defenders);
+        }
+
+        private static void EnqueueFirstOrderForKingdom(Kingdom pKingdom)
+        {
+            if (!IsLiveKingdom(pKingdom) ||
+                ArmyRtsControllerService.
+                    HasActiveMissionForKingdom(pKingdom) ||
+                !WarIdsByKingdom.TryGetValue(pKingdom.id,
+                    out SortedSet<long> warIds)) return;
+            var participant = new[] { pKingdom.id };
+            foreach (long warId in warIds)
+            {
+                War war = FindWar(warId);
+                if (!IsActiveWar(war) || !SafeHasKingdom(war, pKingdom))
+                    continue;
+                bool attacker;
+                try { attacker = war.isAttacker(pKingdom); }
+                catch { continue; }
+                FirstOrderQueue.EnqueueWar(warId,
+                    attacker ? participant : Array.Empty<long>(),
+                    attacker ? Array.Empty<long>() : participant);
+            }
         }
 
         private static IReadOnlyList<long> CollectFirstOrderParticipants(
