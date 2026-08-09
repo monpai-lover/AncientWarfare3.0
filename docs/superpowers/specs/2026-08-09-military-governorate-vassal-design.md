@@ -23,8 +23,11 @@ Military governorates use zero tribute and a fixed military obligation of 100. T
 - relation, subject kingdom, and suzerain kingdom IDs;
 - seat city and command name;
 - governor actor and designated successor actor IDs;
-- requisitioned expeditionary army ID;
 - creation year, succession state, active state, end time, and end reason.
+
+The already-migrated `expeditionary_army_id` column remains as an unused
+compatibility field. No runtime logic, UI control, or recovery work may depend
+on it.
 
 Runtime kingdom data receives a derived subject-kind projection for hot reads. Persistence remains authoritative; runtime projections may be rebuilt after loading.
 
@@ -62,7 +65,11 @@ The engine-level ruler remains a `king` so native kingdom behavior continues to 
 
 The command name is generated once from the seat region and persisted, for example `天平军`. Later city renames do not silently rewrite the command name. The existing kingdom rename flow may explicitly rename it.
 
-The kingdom panel displays its suzerain, seat, general, successor, military obligation, and expeditionary-army state. The existing draggable wide candidate window is reused to select a live general and shows portrait, military merit, loyalty, ambition, and current command.
+Creation keeps the temporary general-candidate window, which lists a bounded
+set of live generals with portrait, military merit, loyalty, ambition, and
+current command. Ongoing military-governorate information and actions are
+integrated into the existing vassal-management window. No separate military-
+governorate management window is added.
 
 Vassal map modes retain the existing hierarchy and add a military-governorate marker and command suffix so same-colored subjects remain distinguishable.
 
@@ -84,19 +91,6 @@ Whenever the suzerain starts or joins a war, every active military governorate j
 
 Peace settlement remains controlled by the suzerain. If settlement transfers governorate cities, its seat and city state are repaired immediately. Losing all cities terminates the governorate relation.
 
-## Expeditionary Army
-
-In addition to mandatory co-belligerence, the suzerain may requisition one active army from each governorate as an expeditionary army.
-
-Army ownership, soldiers, replenishment, and manpower remain with the governorate. Only RTS task publication and wartime command are temporarily delegated to the suzerain. Requisition ends when:
-
-- the relevant war ends;
-- the suzerain cancels requisition;
-- the army is destroyed or becomes invalid;
-- the vassal relation ends.
-
-Army selection uses existing army indexes and bounded candidate reads. It never scans all actors or armies per frame.
-
 ## Succession
 
 Succession uses a dual track:
@@ -112,7 +106,7 @@ A dispatched parent general moves into the governorate only when succession comm
 
 Military governorates may launch an independence rebellion. A successful rebellion:
 
-- ends the military-governorate relation and expeditionary command;
+- ends the military-governorate relation;
 - restores full diplomacy;
 - restores ordinary kingdom ruler and heir titles;
 - generates independent primary and secondary colors.
@@ -130,7 +124,9 @@ No per-frame or annual world scan is introduced.
 - succession is triggered by ruler death and bounded deferred recovery;
 - load repair uses persisted rows and coalesced bounded work.
 
-Invalid seats, dead officeholders, broken relations, and stale expeditionary armies enter repair queues. Opening UI windows performs cached reads and does not scan all actors.
+Invalid seats, dead officeholders, and broken relations enter repair queues.
+Opening the existing vassal-management window performs cached reads and does
+not scan all actors.
 
 ## Verification
 
@@ -142,7 +138,6 @@ Tests must cover:
 - command naming and presentation as `将军`, `留后`, and `军`;
 - creation-time and event-driven primary/secondary color synchronization without affecting ordinary subjects;
 - blocked diplomacy, mandatory two-way war participation, suzerain war leadership, and suzerain-controlled peace;
-- expeditionary requisition, command, return, destruction, and relation-end cleanup;
 - designated and military-elected succession;
 - city loss, total territorial loss, rebellion success, and rebellion failure;
 - save/load projection recovery and source guards against unbounded scans.
