@@ -51,6 +51,7 @@ internal static class PathfindingPerformanceTests
         TraversalTopologyReuseIsExplicitForTerrainOnlyChanges();
         ActorRunnerSupportsSpecializedPostAndParallelStages();
         ActorParallelJobsUseOneWorkerLayer();
+        IncrementalZoneInsertionRepairsStaleTileMembers();
         ActorPostPipelineKeepsEnemySearchOrdered();
         EnemySearchUsesVanillaChunkLocalCacheOnly();
         EmptyEnemySearchUsesCultiwayBackoff();
@@ -254,6 +255,26 @@ internal static class PathfindingPerformanceTests
             "Actor timer ranges do not schedule temporary ThreadPool work");
         Assert(!actorRunner.Contains("AWSimulationCoordinatorThread.Instance.Begin"),
             "Actor timer ranges do not nest coordinator tickets");
+    }
+
+    private static void IncrementalZoneInsertionRepairsStaleTileMembers()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWIncrementalSimObjectZoneUnits.cs"));
+        Assert(source.Contains("RepairTileActorMembers(tileUnits);"),
+            "Incremental tile insertion repairs disposed and unknown members");
+        Assert(source.Contains(
+                "RemoveAllActorReferences(TileUnitsField(tile), actor)"),
+            "Actor disposal removes every stale tile reference");
+        Assert(source.Contains("member?.data == null") &&
+               source.Contains("ActorRanks.TryGetValue(member,"),
+            "Tile repair rejects disposed and rank-unknown actors");
+        Assert(source.Contains("new HashSet<Actor>()") &&
+               source.Contains("seen.Add(member)"),
+            "Tile repair coalesces duplicate actor references");
+        Assert(!source.Contains("ActorRanks[target[middle]]"),
+            "Rank insertion cannot throw on a stale projection member");
     }
 
     private static void ActorRunnerSupportsSpecializedPostAndParallelStages()

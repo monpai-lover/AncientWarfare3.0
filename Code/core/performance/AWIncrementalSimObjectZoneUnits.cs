@@ -789,7 +789,7 @@ internal static class AWIncrementalSimObjectZoneUnits
                 "??????????????");
         }
 
-        if (!TileUnitsField(tile).Remove(actor))
+        if (!RemoveAllActorReferences(TileUnitsField(tile), actor))
         {
             throw new InvalidOperationException(
                 "tile ????????????");
@@ -864,6 +864,7 @@ internal static class AWIncrementalSimObjectZoneUnits
             kingdomId;
         List<Actor> tileUnits =
             TileUnitsField(tile);
+        RepairTileActorMembers(tileUnits);
         InsertActorAtRank(
             tileUnits,
             actor,
@@ -1350,14 +1351,14 @@ internal static class AWIncrementalSimObjectZoneUnits
 
             if (oldAlive && tileChanged)
             {
-                TileUnitsField(oldTile)
-                    .Remove(actor);
+                RemoveAllActorReferences(TileUnitsField(oldTile), actor);
             }
 
             if (newAlive && tileChanged)
             {
                 List<Actor> units =
                     TileUnitsField(newTile);
+                RepairTileActorMembers(units);
                 InsertActorAtRank(
                     units,
                     actor,
@@ -1642,8 +1643,14 @@ internal static class AWIncrementalSimObjectZoneUnits
         {
             int middle =
                 low + (high - low) / 2;
-            int middleRank =
-                ActorRanks[target[middle]];
+            if (!ActorRanks.TryGetValue(target[middle],
+                    out int middleRank))
+            {
+                RepairTileActorMembers(target);
+                low = 0;
+                high = target.Count;
+                continue;
+            }
             if (middleRank < actorRank)
             {
                 low = middle + 1;
@@ -1655,6 +1662,61 @@ internal static class AWIncrementalSimObjectZoneUnits
         }
 
         target.Insert(low, actor);
+    }
+
+    private static bool RemoveAllActorReferences(
+        List<Actor> target,
+        Actor actor)
+    {
+        bool removed = false;
+        for (int i = target.Count - 1; i >= 0; i--)
+        {
+            if (!ReferenceEquals(target[i], actor)) continue;
+            target.RemoveAt(i);
+            removed = true;
+        }
+        return removed;
+    }
+
+    private static void RepairTileActorMembers(List<Actor> target)
+    {
+        bool needsRepair = false;
+        int previousRank = -1;
+        for (int i = 0; i < target.Count; i++)
+        {
+            Actor member = target[i];
+            if (member?.data == null ||
+                !ActorRanks.TryGetValue(member, out int rank) ||
+                rank <= previousRank)
+            {
+                needsRepair = true;
+                break;
+            }
+            previousRank = rank;
+        }
+        if (!needsRepair) return;
+
+        var seen = new HashSet<Actor>();
+        int writeIndex = 0;
+        for (int i = 0; i < target.Count; i++)
+        {
+            Actor member = target[i];
+            if (member?.data == null ||
+                !ActorRanks.TryGetValue(member, out _) ||
+                !seen.Add(member)) continue;
+            target[writeIndex++] = member;
+        }
+        if (writeIndex < target.Count)
+            target.RemoveRange(writeIndex, target.Count - writeIndex);
+        target.Sort(CompareActorsByRank);
+    }
+
+    private static int CompareActorsByRank(Actor left, Actor right)
+    {
+        bool hasLeft = ActorRanks.TryGetValue(left, out int leftRank);
+        bool hasRight = ActorRanks.TryGetValue(right, out int rightRank);
+        if (!hasLeft) return hasRight ? 1 : 0;
+        return !hasRight ? -1 : leftRank.CompareTo(rightRank);
     }
 
     private static int CompareDirtyActors(
