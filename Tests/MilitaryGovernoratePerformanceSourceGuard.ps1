@@ -17,8 +17,11 @@ $archivePath = Join-Path $root `
     'Code\core\db\LineageArchiveManager.cs'
 $vassalPath = Join-Path $root `
     'Code\core\lineage\VassalService.cs'
+$replicaScopePath = Join-Path $root `
+    'Code\api\multiplayer\AW3MultiplayerReplicaScope.cs'
 foreach ($path in @($storePath, $pipelinePath, $indexPath, $modelsPath,
-        $coordinatorPath, $tablePath, $archivePath, $vassalPath)) {
+        $coordinatorPath, $tablePath, $archivePath, $vassalPath,
+        $replicaScopePath)) {
     if (-not (Test-Path -LiteralPath $path)) {
         throw "Missing military governorate integration source: $path"
     }
@@ -32,6 +35,7 @@ $coordinator = Get-Content -Raw -LiteralPath $coordinatorPath
 $table = Get-Content -Raw -LiteralPath $tablePath
 $archive = Get-Content -Raw -LiteralPath $archivePath
 $vassal = Get-Content -Raw -LiteralPath $vassalPath
+$replicaScope = Get-Content -Raw -LiteralPath $replicaScopePath
 
 foreach ($token in @(
     'private const int RuntimeRestoreBatchLimit',
@@ -316,9 +320,11 @@ if (-not $store.Contains(
 foreach ($token in @(
     'private static void EnsureReplicaProjectionWorld()',
     'ReferenceEquals(_replicaProjectionWorld, World.world)',
+    '_replicaProjectionSessionRevision == sessionRevision',
     'ReplicaSubjectIds.Clear();',
     'ReplicaSnapshotsBySubject.Clear();',
-    '_replicaProjectionWorld = World.world;'
+    '_replicaProjectionWorld = World.world;',
+    '_replicaProjectionSessionRevision = sessionRevision;'
 )) {
     if (-not $restore.Contains($token)) {
         throw "Replica governorate ownership is not world-scoped: $token"
@@ -328,6 +334,14 @@ if (-not $store.Contains(
         'Dictionary<long, MilitaryGovernorateSnapshot> ' +
         'ReplicaSnapshotsBySubject')) {
     throw 'Replica governorate read model does not retain full snapshots.'
+}
+foreach ($token in @(
+    'private static long _replicaProjectionSessionRevision;',
+    'long sessionRevision = AW3MultiplayerReplicaScope.SessionRevision;'
+)) {
+    if (-not $store.Contains($token)) {
+        throw "Replica governorate ownership lacks session revision: $token"
+    }
 }
 
 $tryGetStart = $store.IndexOf(
@@ -342,6 +356,7 @@ if ($tryGetStart -lt 0 -or $tryGetEnd -le $tryGetStart) {
 $tryGet = $store.Substring($tryGetStart, $tryGetEnd - $tryGetStart)
 foreach ($token in @(
     'EnsureReplicaProjectionWorld();',
+    'AW3MultiplayerReplicaScope.IsReplicaSession',
     'ReplicaSnapshotsBySubject.TryGetValue(pSubject.id,',
     'out pSnapshot))',
     'Project(pSubject, pSnapshot.StateId,',
@@ -351,11 +366,34 @@ foreach ($token in @(
         throw "Replica governorate read path is incomplete: $token"
     }
 }
-if ($tryGet.IndexOf('ReplicaSnapshotsBySubject.TryGetValue(',
-        [StringComparison]::Ordinal) -gt
+$replicaSessionGate = $tryGet.IndexOf(
+    'AW3MultiplayerReplicaScope.IsReplicaSession',
+    [StringComparison]::Ordinal)
+$replicaLookup = $tryGet.IndexOf(
+    'ReplicaSnapshotsBySubject.TryGetValue(',
+    [StringComparison]::Ordinal)
+if ($replicaSessionGate -lt 0 -or $replicaLookup -lt 0 -or
+    $replicaSessionGate -gt $replicaLookup) {
+    throw 'Governorate replica lookup is not gated by replica session.'
+}
+if ($replicaLookup -gt
     $tryGet.IndexOf('if (!Ready) return false;',
         [StringComparison]::Ordinal)) {
     throw 'Replica governorate read falls through to the local database.'
+}
+
+foreach ($token in @(
+    'private static long _sessionRevision;',
+    'public static long SessionRevision',
+    'lock (Gate) return _sessionRevision;'
+)) {
+    if (-not $replicaScope.Contains($token)) {
+        throw "Replica session revision is not thread-safe: $token"
+    }
+}
+if ([regex]::Matches($replicaScope,
+        'checked\(_sessionRevision \+ 1\)').Count -lt 2) {
+    throw 'Replica session revision does not advance on begin and end.'
 }
 foreach ($token in @(
     'LineageKeys.VASSAL_RELATION_ID, -1L',

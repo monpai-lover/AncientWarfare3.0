@@ -304,6 +304,8 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             "AW3MultiplayerStrategicStateCoordinator.cs");
         string governorateStore = Read(root, "Code", "core", "lineage",
             "MilitaryGovernorateStore.cs");
+        string replicaScope = Read(root, "Code", "api", "multiplayer",
+            "AW3MultiplayerReplicaScope.cs");
         string controller = Read(root, "Code", "core", "lineage",
             "ArmyRtsControllerService.cs");
         string normalizedController = controller.Replace("\r\n", "\n");
@@ -362,6 +364,27 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             "active reads prefer the replica governorate snapshot");
         Contains(governorateStore, "out pSnapshot))",
             "replica governorate read returns the full snapshot");
+        int governorateTryGetStart = governorateStore.IndexOf(
+            "public static bool TryGetActive(Kingdom pSubject,",
+            StringComparison.Ordinal);
+        int governorateLookup = governorateStore.IndexOf(
+            "ReplicaSnapshotsBySubject.TryGetValue(",
+            governorateTryGetStart, StringComparison.Ordinal);
+        int governorateSessionGate = governorateStore.IndexOf(
+            "AW3MultiplayerReplicaScope.IsReplicaSession",
+            governorateTryGetStart, StringComparison.Ordinal);
+        Equal(true, governorateTryGetStart >= 0 &&
+                    governorateSessionGate > governorateTryGetStart &&
+                    governorateSessionGate < governorateLookup,
+            "replica session gate precedes governorate snapshot lookup");
+        Contains(governorateStore,
+            "private static long _replicaProjectionSessionRevision;",
+            "governorate replica ownership includes session revision");
+        Contains(governorateStore,
+            "AW3MultiplayerReplicaScope.SessionRevision",
+            "governorate replica ownership reads current session revision");
+        Contains(replicaScope, "public static long SessionRevision",
+            "replica scope exposes monotonic session revision");
         Contains(normalizedController,
             "if (AW3MultiplayerReplicaScope.IsReplicaSession)\n" +
             "            {\n" +

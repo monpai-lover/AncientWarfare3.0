@@ -7,6 +7,7 @@ namespace AncientWarfare3.api.multiplayer
     {
         private static readonly object Gate = new object();
         private static object _sessionOwner;
+        private static long _sessionRevision;
 
         [ThreadStatic]
         private static int _applyDepth;
@@ -21,6 +22,14 @@ namespace AncientWarfare3.api.multiplayer
 
         public static bool IsApplying => _applyDepth > 0;
 
+        public static long SessionRevision
+        {
+            get
+            {
+                lock (Gate) return _sessionRevision;
+            }
+        }
+
         public static bool Activate(object owner)
         {
             if (owner == null) throw new ArgumentNullException(nameof(owner));
@@ -28,7 +37,9 @@ namespace AncientWarfare3.api.multiplayer
             {
                 if (_sessionOwner == null)
                 {
+                    long nextRevision = checked(_sessionRevision + 1);
                     _sessionOwner = owner;
+                    _sessionRevision = nextRevision;
                     return true;
                 }
                 return ReferenceEquals(_sessionOwner, owner);
@@ -41,7 +52,9 @@ namespace AncientWarfare3.api.multiplayer
             lock (Gate)
             {
                 if (!ReferenceEquals(_sessionOwner, owner)) return false;
+                long nextRevision = checked(_sessionRevision + 1);
                 _sessionOwner = null;
+                _sessionRevision = nextRevision;
                 return true;
             }
         }

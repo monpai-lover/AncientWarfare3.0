@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.lineage
@@ -37,6 +38,7 @@ namespace AncientWarfare3.core.lineage
             Dictionary<long, MilitaryGovernorateSnapshot> ReplicaSnapshotsBySubject =
                 new Dictionary<long, MilitaryGovernorateSnapshot>();
         private static object _replicaProjectionWorld;
+        private static long _replicaProjectionSessionRevision;
 
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
@@ -138,7 +140,8 @@ namespace AncientWarfare3.core.lineage
             pSnapshot = null;
             if (pSubject?.data == null || pSubject.id < 0) return false;
             EnsureReplicaProjectionWorld();
-            if (ReplicaSnapshotsBySubject.TryGetValue(pSubject.id,
+            if (AW3MultiplayerReplicaScope.IsReplicaSession &&
+                ReplicaSnapshotsBySubject.TryGetValue(pSubject.id,
                     out pSnapshot))
             {
                 Project(pSubject, pSnapshot.StateId,
@@ -913,10 +916,13 @@ namespace AncientWarfare3.core.lineage
 
         private static void EnsureReplicaProjectionWorld()
         {
-            if (ReferenceEquals(_replicaProjectionWorld, World.world)) return;
+            long sessionRevision = AW3MultiplayerReplicaScope.SessionRevision;
+            if (ReferenceEquals(_replicaProjectionWorld, World.world) &&
+                _replicaProjectionSessionRevision == sessionRevision) return;
             ReplicaSubjectIds.Clear();
             ReplicaSnapshotsBySubject.Clear();
             _replicaProjectionWorld = World.world;
+            _replicaProjectionSessionRevision = sessionRevision;
         }
 
         private const string AuthoritySelectColumns =
