@@ -152,9 +152,9 @@ internal static class WarForceEliminationRulesTests
             "core", "performance", "AWAuthorityCycleService.cs"));
         string bridge = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "WarScoreRuntimeBridge.cs"));
-        True(authority.Contains(
-                "WarForceEliminationSettlementService." +
-                "ProcessAuthorityCycle"),
+        True(System.Text.RegularExpressions.Regex.IsMatch(authority,
+                @"WarForceEliminationSettlementService\s*\.\s*" +
+                @"ProcessAuthorityCycle"),
             "authority cycle drains monthly war observations");
         True(authority.Contains(
                 "WarForceEliminationSettlementService.ClearRuntime"),
