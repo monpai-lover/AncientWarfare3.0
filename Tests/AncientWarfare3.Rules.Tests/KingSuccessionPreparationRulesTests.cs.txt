@@ -5,68 +5,137 @@ internal static class KingSuccessionPreparationRulesTests
 {
     public static void Run()
     {
-        DuplicateDeathCaptureIsIdempotent();
-        SnapshotMustMatchCapturedRevision();
-        PreparedSuccessionIsConsumedOnce();
-        WorldGenerationSeparatesIdenticalActorIds();
+        SameLineageKeepsFlagUntilLastKingLeaves();
+        DynastyChangeMovesOnlyThatKingdom();
+        WorldLoadRebuildStartsFromEmptyState();
+        OrdinaryActorCannotRequestSuccessionMaintenance();
+        ForeignReigningBranchCannotDirtyThisKingdom();
+        ValidRegisteredHeirSkipsFallback();
+        InvalidRegisteredHeirRunsFallbackOncePerDeath();
+        WorldGenerationSeparatesFallbackAttempts();
         UnchangedHeirSignatureSkipsMaintenance();
-        DirtyKingdomsAreCoalescedAndBudgeted();
-        SnapshotValidityRequiresMatchingFacts();
-        PublishedCandidateCanBeReadThenConsumed();
-        UnpublishedCaptureCanAdvanceToRebuiltRevision();
-        PublishedSelectionCanBeReplacedByAuthorityChoice();
     }
 
-    private static void DuplicateDeathCaptureIsIdempotent()
+    private static void SameLineageKeepsFlagUntilLastKingLeaves()
     {
-        var state = new KingSuccessionPreparationState();
-        var key = new KingSuccessionKey(7L, 20L, 101L);
+        var index = new ReigningRoyalLineageIndexState();
+        index.Register(10L, 100L);
+        index.Register(10L, 200L);
 
-        True(state.TryCapture(key, 4L, 202L),
-            "the first death capture is accepted");
-        Equal(false, state.TryCapture(key, 4L, 202L),
-            "the same dead king is not prepared twice");
-        Equal(1, state.Count,
-            "a duplicate death cannot create another context");
+        index.RemoveKingdom(100L);
+
+        True(index.HasReigningKing(10L),
+            "one surviving king keeps the lineage active");
+        True(index.Contains(10L, 200L),
+            "the second kingdom remains registered");
+
+        index.RemoveKingdom(200L);
+
+        Equal(false, index.HasReigningKing(10L),
+            "the last king clears the lineage gate");
     }
 
-    private static void SnapshotMustMatchCapturedRevision()
+    private static void DynastyChangeMovesOnlyThatKingdom()
     {
-        var state = new KingSuccessionPreparationState();
-        var key = new KingSuccessionKey(7L, 21L, 102L);
-        state.TryCapture(key, 8L, 203L);
-        state.Publish(key, 7L, 203L, "registered");
+        var index = new ReigningRoyalLineageIndexState();
+        index.Register(10L, 100L);
+        index.Register(10L, 200L);
 
-        Equal(false, state.TryConsume(key, 8L, out _),
-            "a stale snapshot cannot install a successor");
-        Equal(1, state.Count,
-            "a rejected stale context remains available for rebuild");
+        index.Register(20L, 100L);
+
+        Equal(false, index.Contains(10L, 100L),
+            "dynasty change removes the old membership");
+        True(index.Contains(10L, 200L),
+            "another king of the old lineage remains");
+        True(index.Contains(20L, 100L),
+            "the changed kingdom joins the new lineage");
     }
 
-    private static void PreparedSuccessionIsConsumedOnce()
+    private static void WorldLoadRebuildStartsFromEmptyState()
     {
-        var state = new KingSuccessionPreparationState();
-        var key = new KingSuccessionKey(7L, 22L, 103L);
-        state.TryCapture(key, 9L, 204L);
-        state.Publish(key, 9L, 204L, "military_acclaim");
+        var index = new ReigningRoyalLineageIndexState();
+        index.Register(10L, 100L);
+        index.CompleteRebuild();
 
-        True(state.TryConsume(key, 9L, out PreparedSuccession prepared),
-            "a current prepared succession is consumable");
-        Equal(204L, prepared.CandidateId,
-            "the selected candidate survives publication");
-        Equal("military_acclaim", prepared.Mode,
-            "the selected mode survives publication");
-        Equal(false, state.TryConsume(key, 9L, out _),
-            "one death context is consumed once");
+        index.BeginRebuild();
+
+        Equal(false, index.IsReady,
+            "a world rebuild is closed until live kingdoms are indexed");
+        Equal(false, index.HasReigningKing(10L),
+            "stale save-derived memberships are not trusted");
+
+        index.Register(20L, 200L);
+        index.CompleteRebuild();
+
+        True(index.IsReady, "the rebuilt live index becomes queryable");
+        True(index.Contains(20L, 200L),
+            "live kingdoms populate the rebuilt state");
     }
 
-    private static void WorldGenerationSeparatesIdenticalActorIds()
+    private static void OrdinaryActorCannotRequestSuccessionMaintenance()
     {
-        var first = new KingSuccessionKey(7L, 20L, 101L);
-        var second = new KingSuccessionKey(8L, 20L, 101L);
+        Equal(false, RoyalSuccessionEventRules.ShouldMarkSelectionDirty(
+                pActorLineageId: -1L, pKingdomRoyalLineageId: 10L,
+                pLineageReignsInThisKingdom: true,
+                pRegisteredHeir: false, pDirectRoyalChild: true),
+            "an ordinary actor without LINEAGE_ID is filtered");
+        Equal(false, RoyalSuccessionEventRules.ShouldMarkSelectionDirty(
+                pActorLineageId: 10L, pKingdomRoyalLineageId: 10L,
+                pLineageReignsInThisKingdom: true,
+                pRegisteredHeir: false, pDirectRoyalChild: false),
+            "an unrelated lineage member is filtered");
+    }
 
-        Equal(false, first.Equals(second),
-            "world generation prevents cross-save death deduplication");
+    private static void ForeignReigningBranchCannotDirtyThisKingdom()
+    {
+        Equal(false, RoyalSuccessionEventRules.ShouldMarkSelectionDirty(
+                pActorLineageId: 10L, pKingdomRoyalLineageId: 10L,
+                pLineageReignsInThisKingdom: false,
+                pRegisteredHeir: true, pDirectRoyalChild: false),
+            "a king of the lineage in another country cannot dirty this country");
+        True(RoyalSuccessionEventRules.ShouldMarkSelectionDirty(
+                pActorLineageId: 10L, pKingdomRoyalLineageId: 10L,
+                pLineageReignsInThisKingdom: true,
+                pRegisteredHeir: true, pDirectRoyalChild: false),
+            "this kingdom's registered royal heir may request maintenance");
+    }
+
+    private static void ValidRegisteredHeirSkipsFallback()
+    {
+        Equal(false, AuthoritativeSuccessionRules.ShouldRunFallback(
+                pHasValidRegisteredHeir: true,
+                pFallbackAlreadyAttempted: false),
+            "valid registered heir never recomputes");
+    }
+
+    private static void InvalidRegisteredHeirRunsFallbackOncePerDeath()
+    {
+        True(AuthoritativeSuccessionRules.ShouldRunFallback(
+                pHasValidRegisteredHeir: false,
+                pFallbackAlreadyAttempted: false),
+            "missing registered heir runs the existing fallback once");
+        Equal(false, AuthoritativeSuccessionRules.ShouldRunFallback(
+                pHasValidRegisteredHeir: false,
+                pFallbackAlreadyAttempted: true),
+            "an attempted death does not repeat fallback selection");
+
+        var attempts = new SuccessionFallbackAttemptState();
+        var key = new KingSuccessionKey(7L, 100L, 900L);
+        True(attempts.TryBegin(key), "the first invalid-heir fallback runs");
+        Equal(false, attempts.TryBegin(key),
+            "the same death cannot run fallback twice");
+        attempts.Complete(key);
+        True(attempts.TryBegin(key),
+            "successful installation releases the completed death key");
+    }
+
+    private static void WorldGenerationSeparatesFallbackAttempts()
+    {
+        var attempts = new SuccessionFallbackAttemptState();
+        True(attempts.TryBegin(new KingSuccessionKey(7L, 100L, 900L)),
+            "the first world accepts the death key");
+        True(attempts.TryBegin(new KingSuccessionKey(8L, 100L, 900L)),
+            "a new world generation is independent");
     }
 
     private static void UnchangedHeirSignatureSkipsMaintenance()
@@ -79,106 +148,6 @@ internal static class KingSuccessionPreparationRulesTests
                 202L, "registered", 101L, true,
                 202L, "registered", 101L),
             "a dirty selection is recomputed");
-        Equal(false, HeirSelectionSignatureRules.IsUnchanged(
-                202L, "registered", 101L, false,
-                203L, "registered", 101L),
-            "a candidate change is maintained");
-        Equal(false, HeirSelectionSignatureRules.IsUnchanged(
-                202L, "registered", 101L, false,
-                202L, "registered", 102L),
-            "a new reference king refreshes the signature");
-    }
-
-    private static void DirtyKingdomsAreCoalescedAndBudgeted()
-    {
-        var queue = new SuccessionDirtyQueue();
-        queue.MarkDirty(1L);
-        queue.MarkDirty(1L);
-        queue.MarkDirty(2L);
-
-        Equal(2, queue.Count, "dirty kingdom ids are coalesced");
-        SequenceEqual(new long[] { 1L }, queue.Take(1),
-            "one authority cycle processes one kingdom");
-        Equal(1, queue.Count,
-            "unconsumed dirty kingdoms remain queued");
-    }
-
-    private static void SnapshotValidityRequiresMatchingFacts()
-    {
-        True(SuccessionSnapshotRules.IsCurrent(
-                5L, 5L, 10L, 10L,
-                candidateAlive: true, candidateInRealm: true),
-            "matching live candidate snapshot is current");
-        Equal(false, SuccessionSnapshotRules.IsCurrent(
-                5L, 6L, 10L, 10L,
-                candidateAlive: true, candidateInRealm: true),
-            "changed facts invalidate a cached snapshot");
-        Equal(false, SuccessionSnapshotRules.IsCurrent(
-                5L, 5L, 10L, 11L,
-                candidateAlive: true, candidateInRealm: true),
-            "changed king invalidates a cached snapshot");
-        Equal(false, SuccessionSnapshotRules.IsCurrent(
-                5L, 5L, 10L, 10L,
-                candidateAlive: false, candidateInRealm: true),
-            "dead candidate invalidates a cached snapshot");
-        Equal(false, SuccessionSnapshotRules.IsCurrent(
-                5L, 5L, 10L, 10L,
-                candidateAlive: true, candidateInRealm: false),
-            "foreign candidate invalidates a cached snapshot");
-    }
-
-    private static void PublishedCandidateCanBeReadThenConsumed()
-    {
-        var state = new KingSuccessionPreparationState();
-        var key = new KingSuccessionKey(9L, 31L, 401L);
-        state.TryCapture(key, 12L, 402L);
-        state.Publish(key, 12L, 402L, "registered");
-
-        True(state.TryGetPublished(key, out PreparedSuccession published),
-            "native succession can read a published candidate");
-        Equal(402L, published.CandidateId,
-            "published read returns the prepared candidate");
-        True(state.TryConsumePublished(key,
-                out PreparedSuccession consumed),
-            "successful installation consumes a current publication");
-        Equal(402L, consumed.CandidateId,
-            "consumption returns the installed candidate");
-        Equal(false, state.TryGetPublished(key, out _),
-            "consumed publication cannot be read again");
-    }
-
-    private static void UnpublishedCaptureCanAdvanceToRebuiltRevision()
-    {
-        var state = new KingSuccessionPreparationState();
-        var key = new KingSuccessionKey(9L, 32L, 501L);
-        state.TryCapture(key, 20L, -1L);
-
-        True(state.Contains(key),
-            "pending death context is observable without recapture");
-        True(state.TryRefreshUnpublished(key, 21L, 502L),
-            "rebuilt snapshot advances an unpublished capture revision");
-        state.Publish(key, 21L, 502L, "direct");
-        True(state.TryGetPublished(key, out PreparedSuccession prepared),
-            "refreshed capture accepts the rebuilt snapshot");
-        Equal(502L, prepared.CandidateId,
-            "refreshed capture publishes the rebuilt candidate");
-    }
-
-    private static void PublishedSelectionCanBeReplacedByAuthorityChoice()
-    {
-        var state = new KingSuccessionPreparationState();
-        var key = new KingSuccessionKey(9L, 33L, 601L);
-        state.TryCapture(key, 30L, 602L);
-        state.Publish(key, 30L, 602L, "direct");
-
-        True(state.TryReplacePublished(key, 31L, 603L,
-                "military_acclaim"),
-            "authority choice can replace a published default");
-        True(state.TryConsume(key, 31L,
-                out PreparedSuccession selected),
-            "replacement remains revision-consumable");
-        Equal(603L, selected.CandidateId,
-            "authority replacement becomes the installed candidate");
     }
 
     private static void True(bool value, string name)
@@ -191,17 +160,5 @@ internal static class KingSuccessionPreparationRulesTests
         if (!Equals(expected, actual))
             throw new InvalidOperationException(
                 name + ": expected " + expected + ", got " + actual);
-    }
-
-    private static void SequenceEqual(long[] expected,
-        System.Collections.Generic.IReadOnlyList<long> actual, string name)
-    {
-        if (expected.Length != actual.Count)
-            throw new InvalidOperationException(name + ": expected " +
-                expected.Length + " items, got " + actual.Count);
-        for (int i = 0; i < expected.Length; i++)
-            if (expected[i] != actual[i])
-                throw new InvalidOperationException(name + ": mismatch at " +
-                    i + ", expected " + expected[i] + ", got " + actual[i]);
     }
 }

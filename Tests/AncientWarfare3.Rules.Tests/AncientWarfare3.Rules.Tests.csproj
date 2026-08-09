@@ -690,6 +690,7 @@
     <Compile Include="..\..\Code\core\lineage\ActorBirthAffiliationRules.cs" Link="Production\ActorBirthAffiliationRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDeathPerformanceRules.cs" Link="Production\ActorDeathPerformanceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\KingSuccessionPreparationRules.cs" Link="Production\KingSuccessionPreparationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ReigningRoyalLineageIndexState.cs" Link="Production\ReigningRoyalLineageIndexState.cs" />
     <Compile Include="..\..\Code\core\lineage\SuccessionRelationshipIndexState.cs" Link="Production\SuccessionRelationshipIndexState.cs" />
     <Compile Include="..\..\Code\core\lineage\SuccessionDisputePersistence.cs" Link="Production\SuccessionDisputePersistence.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceRulerDeathPersistence.cs" Link="Production\CivilServiceRulerDeathPersistence.cs" />
