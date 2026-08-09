@@ -37,8 +37,9 @@ executing native death cleanup.
   war settlement.
 - Do not make Actor, Kingdom, City, Clan, Army, or Unity calls from a worker.
 - Do not replace special AW3 succession laws with native royal-clan semantics.
-- Do not change native succession delay, capital movement, profession changes,
-  royal-clan assignment, new-king logging, or `Kingdom.setKing` behavior.
+- Do not change native succession delay, profession changes, new-king logging,
+  or `Kingdom.setKing` behavior for a realm whose capital and royal clan state
+  are valid. Damaged-realm recovery is defined explicitly below.
 
 ## Confirmed Current Flow
 
@@ -194,6 +195,34 @@ identity, lineage, heir-refresh, dispute, and chronicle stages.
 Diagnostics remain allocation-free unless runtime diagnostics are enabled.
 They are retained until final acceptance so an apparent improvement cannot
 hide a new post-death spike one or two frames later.
+
+### 9. Damaged-Realm Accession Recovery
+
+Managed succession repairs invalid realm identity before returning control to
+native `KingdomBehCheckKing`:
+
+- A dangling `royal_clan_id` is normalized to `-1`; native code must never
+  dereference a missing or destroyed clan.
+- The leaders branch returns a non-null published AW3 candidate. A missing
+  royal clan must not discard a prepared heir or leave the realm permanently
+  kingless.
+- A foreign actor becomes a citizen when selected as the registered heir, not
+  when the old ruler dies. With a valid capital the heir moves there
+  immediately. Without a capital the heir joins a living city owned by the
+  destination realm as a temporary home.
+- A domestic heir may succeed from the heir's current living home city while
+  the realm has no capital. The absence of a capital cannot create a state in
+  which native `setKing` succeeds but AW3 skips succession finalization.
+- When a valid capital later exists, the installed king moves to it and the
+  actor's home projection is refreshed. This relocation is idempotent and must
+  not repeat branch creation, dispute persistence, heir clearing, chronicles,
+  or multiplayer installation notification.
+- If no owned living city exists, native kingship may still complete and home
+  relocation remains deferred. Missing location data cannot pause simulation
+  or veto the ruler.
+- After native `setKing`, a king without a clan uses the native
+  `world.clans.newClan(king, true)` plus `kingdom.trySetRoyalClan()` sequence.
+  Clan creation failure is non-fatal and cannot roll back kingship.
 
 ## Cultiway Perf Scheduler Non-Regression Boundary
 
