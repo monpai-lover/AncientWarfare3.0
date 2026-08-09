@@ -112,6 +112,13 @@ namespace AncientWarfare3.ui
                     Name = "MO",
                     Amount = "10",
                     Date = "2026-08-04"
+                },
+                new SupporterLeaderboardEntry
+                {
+                    Rank = 13,
+                    Name = "Mio",
+                    Amount = "20",
+                    Date = "2026-08-09"
                 }
             };
 
