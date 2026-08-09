@@ -125,7 +125,7 @@ namespace AncientWarfare3.core.lineage
             return new SuccessionDisputePreparationFacts
             {
                 WorldGeneration = AWAsyncRuntime.WorldGeneration,
-                Revision = SuccessionPreparationService.CurrentRevision(
+                Revision = SuccessionDisputePersistenceService.CurrentRevision(
                     pKingdom.id),
                 KingdomId = pKingdom.id,
                 PredecessorActorId = pPredecessor.data.id,

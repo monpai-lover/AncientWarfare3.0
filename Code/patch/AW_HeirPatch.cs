@@ -22,8 +22,7 @@ namespace AncientWarfare3.patch
         public static bool GetKingFromRoyalClan_Prefix(Kingdom pKingdom, ref Actor __result)
         {
             if (!UsesManagedSuccession(pKingdom)) return true;
-            SuccessionPreparationService.TryGetPublishedCandidate(pKingdom,
-                out __result);
+            __result = HeirService.PeekRegisteredHeir(pKingdom);
             return false;
         }
 
@@ -35,8 +34,7 @@ namespace AncientWarfare3.patch
             if (RepublicGovernmentService.IsRepublic(pKingdom))
                 __result = RepublicGovernmentService.ResolveRulerForVacancy(
                     pKingdom);
-            else if (SuccessionPreparationService.TryGetPublishedCandidate(
-                         pKingdom, out Actor published) && published == null &&
+            else if (HeirService.PeekRegisteredHeir(pKingdom) == null &&
                      HeirService.ShouldUseOrdinaryFallbackSuccession(pKingdom))
                 __result = HeirService.GetLeaderSuccessionCandidate(pKingdom);
             else
@@ -94,17 +92,21 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (pFromLoad || __instance?.data == null) return;
             if (!UsesManagedSuccession(__instance)) return;
+            Actor king = pActor ?? __instance.king;
+            bool setKingSucceeded = king?.data != null &&
+                                     (pActor == null ||
+                                      __instance.king == pActor);
+            if (!setKingSucceeded) return;
+            AuthoritativeSuccessionService.OnSuccessorInstalled(__instance,
+                __state.PreviousKing);
             if (!__state.IdentityPrepared)
             {
+                ReigningRoyalLineageIndex.OnKingInstalled(__instance, king);
                 AccessionIdentityService.DeferInstalledKing(__instance,
                     pActor);
                 return;
             }
 
-            Actor king = pActor ?? __instance.king;
-            bool setKingSucceeded = king?.data != null &&
-                                     (pActor == null || __instance.king == pActor);
-            if (!setKingSucceeded) return;
             if (!AccessionIdentityService.Commit(__instance, king))
             {
                 ModClass.LogWarning("Accession identity commit failed for actor " +
@@ -126,8 +128,10 @@ namespace AncientWarfare3.patch
             HeirService.RecallForSuccession(__instance, king, __state.WasRegisteredHeir);
             InheritanceLawService.EstablishHereditaryBranchAfterAccession(
                 __instance, king, __state.SuccessionSourceMode);
-            SuccessionPreparationService.OnSuccessorInstalled(__instance,
-                king);
+            ReigningRoyalLineageIndex.OnKingInstalled(__instance, king);
+            SuccessionDisputePersistenceService.EnqueueInstalledSuccession(
+                __instance, __state.PreviousKing, king,
+                __state.SuccessionSourceMode);
             SuccessionDisputeService.OnSuccessorInstalled(__instance, king);
 
             HeirService.ClearHeir(__instance);
@@ -146,6 +150,8 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             AccessionIdentityService.FinalizeDeferredFounding(__instance);
+            ReigningRoyalLineageIndex.OnKingInstalled(__instance,
+                __instance?.king);
         }
 
         private static bool UsesManagedSuccession(Kingdom pKingdom)
