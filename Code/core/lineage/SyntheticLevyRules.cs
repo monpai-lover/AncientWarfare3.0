@@ -33,8 +33,6 @@ namespace AncientWarfare3.core.lineage
             bool synthetic, bool alive, int militaryMerit)
         {
             if (!alive) return SyntheticLevyDisposition.Ignore;
-            if (militaryMerit > 0)
-                return SyntheticLevyDisposition.PromotePermanent;
             return synthetic
                 ? SyntheticLevyDisposition.RemoveActor
                 : SyntheticLevyDisposition.RestoreCivilian;
@@ -54,7 +52,8 @@ namespace AncientWarfare3.core.lineage
                    task == SyntheticLevyTask.Healing ||
                    task == SyntheticLevyTask.Transport ||
                    task == SyntheticLevyTask.Retreat ||
-                   task == SyntheticLevyTask.Formation;
+                   task == SyntheticLevyTask.Formation ||
+                   task == SyntheticLevyTask.Sleep;
         }
 
         public static bool ShouldClearSyntheticFields(

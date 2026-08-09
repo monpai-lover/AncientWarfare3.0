@@ -25,10 +25,10 @@ internal static class SyntheticLevyRulesTests
             SyntheticLevyRules.ResolveDemobilization(
                 synthetic: true, alive: true, militaryMerit: 0),
             "an unmerited synthetic levy is removed after war");
-        Equal(SyntheticLevyDisposition.PromotePermanent,
+        Equal(SyntheticLevyDisposition.RemoveActor,
             SyntheticLevyRules.ResolveDemobilization(
                 synthetic: true, alive: true, militaryMerit: 1),
-            "military merit promotes a synthetic levy");
+            "military merit never makes a synthetic levy permanent");
         Equal(SyntheticLevyDisposition.Ignore,
             SyntheticLevyRules.ResolveDemobilization(
                 synthetic: true, alive: false, militaryMerit: 10),
@@ -45,6 +45,9 @@ internal static class SyntheticLevyRulesTests
         Equal(true, SyntheticLevyRules.AllowTask(
             synthetic: true, SyntheticLevyTask.Healing),
             "synthetic soldiers may heal");
+        Equal(true, SyntheticLevyRules.AllowTask(
+            synthetic: true, SyntheticLevyTask.Sleep),
+            "synthetic soldiers may rest");
         Equal(false, SyntheticLevyRules.AllowTask(
             synthetic: true, SyntheticLevyTask.Social),
             "synthetic soldiers cannot socialize");
