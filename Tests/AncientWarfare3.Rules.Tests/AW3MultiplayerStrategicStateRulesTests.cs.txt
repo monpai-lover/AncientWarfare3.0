@@ -302,6 +302,8 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             "AW3MultiplayerStrategicStateFacade.cs");
         string coordinator = Read(root, "Code", "core", "multiplayer",
             "AW3MultiplayerStrategicStateCoordinator.cs");
+        string governorateStore = Read(root, "Code", "core", "lineage",
+            "MilitaryGovernorateStore.cs");
         string controller = Read(root, "Code", "core", "lineage",
             "ArmyRtsControllerService.cs");
         string normalizedController = controller.Replace("\r\n", "\n");
@@ -331,6 +333,35 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             "apply installs the typed replica projection");
         Contains(coordinator, "CompleteArmySnapshot(pSnapshot.Armies)",
             "apply replaces the complete replica Army projection set");
+        int governorateApplyStart = coordinator.IndexOf(
+            "public void ApplyMilitaryGovernorate(",
+            StringComparison.Ordinal);
+        int governorateApplyEnd = coordinator.IndexOf(
+            "public void CompleteArmySnapshot(", governorateApplyStart,
+            StringComparison.Ordinal);
+        Equal(true, governorateApplyStart >= 0 &&
+                    governorateApplyEnd > governorateApplyStart,
+            "governorate apply method is isolated");
+        string governorateApply = coordinator.Substring(
+            governorateApplyStart,
+            governorateApplyEnd - governorateApplyStart);
+        Contains(governorateApply, "pGovernorate.SeatCityId",
+            "apply forwards governorate seat");
+        Contains(governorateApply, "pGovernorate.GovernorActorId",
+            "apply forwards governorate ruler");
+        Contains(governorateApply, "pGovernorate.CommandName",
+            "apply forwards governorate command name");
+        Contains(governorateApply, "pGovernorate.SuccessionState",
+            "apply forwards governorate succession state");
+        Contains(governorateStore,
+            "Dictionary<long, MilitaryGovernorateSnapshot> " +
+            "ReplicaSnapshotsBySubject",
+            "replica retains a complete governorate read model");
+        Contains(governorateStore,
+            "ReplicaSnapshotsBySubject.TryGetValue(pSubject.id,",
+            "active reads prefer the replica governorate snapshot");
+        Contains(governorateStore, "out pSnapshot))",
+            "replica governorate read returns the full snapshot");
         Contains(normalizedController,
             "if (AW3MultiplayerReplicaScope.IsReplicaSession)\n" +
             "            {\n" +

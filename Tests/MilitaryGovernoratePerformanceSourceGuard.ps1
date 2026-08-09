@@ -99,7 +99,11 @@ foreach ($token in @(
     'CaptureMilitaryGovernorates()',
     'ApplyMilitaryGovernorate(',
     'CompleteMilitaryGovernorateSnapshot(',
-    'pSnapshot.MilitaryGovernorates'
+    'pSnapshot.MilitaryGovernorates',
+    'pGovernorate.SeatCityId',
+    'pGovernorate.GovernorActorId',
+    'pGovernorate.CommandName',
+    'pGovernorate.SuccessionState'
 )) {
     if (-not $coordinator.Contains($token)) {
         throw "Missing governorate multiplayer integration: $token"
@@ -133,6 +137,10 @@ foreach ($token in @(
     'TryEndWithRelation(pSnapshot.StateId,',
     'TryEndStateAndDowngradeMilitaryRelations(',
     'relation.RelationId != pSnapshot.RelationId',
+    'pRelation.VassalId == pSnapshot.SubjectKingdomId',
+    'pRelation.SuzerainId == pSnapshot.SuzerainKingdomId',
+    'pRelation.VassalId != pSnapshot.SubjectKingdomId',
+    'pRelation.SuzerainId !=',
     'WHERE VASSAL_ID=@subject',
     'SET SUBJECT_KIND=@ordinary',
     'AND ACTIVE=1 AND END_TIME<0 AND SUBJECT_KIND=@military',
@@ -144,6 +152,14 @@ foreach ($token in @(
 )) {
     if (-not $restore.Contains($token)) {
         throw "Missing atomic governorate relation repair: $token"
+    }
+}
+foreach ($token in @(
+    's.SUBJECT_KINGDOM_ID=r.VASSAL_ID',
+    's.SUZERAIN_KINGDOM_ID=r.SUZERAIN_ID'
+)) {
+    if (-not $store.Contains($token)) {
+        throw "Governorate relation end JOIN is not identity-bound: $token"
     }
 }
 foreach ($forbidden in @(
@@ -255,7 +271,7 @@ $retainProjection = $restore.Substring($retainStart,
     $processStart - $retainStart)
 if ($applyProjection.IndexOf('EnsureReplicaProjectionWorld();',
         [StringComparison]::Ordinal) -gt
-    $applyProjection.IndexOf('if (pSubject?.data == null)',
+    $applyProjection.IndexOf('if (pSubject == null)',
         [StringComparison]::Ordinal) -or
     $retainProjection.IndexOf('EnsureReplicaProjectionWorld();',
         [StringComparison]::Ordinal) -gt
@@ -266,8 +282,17 @@ if ($applyProjection.IndexOf('EnsureReplicaProjectionWorld();',
 foreach ($token in @(
     'EnsureReplicaProjectionWorld();',
     'bool trackedReplica = ReplicaSubjectIds.Remove(pSubject.id);',
+    'ReplicaSnapshotsBySubject.Remove(pSubject.id);',
     'if (trackedReplica)',
-    'ClearReplicaVassalProjection(pSubject);'
+    'ClearReplicaVassalProjection(pSubject);',
+    'long pSeatCityId, long pGovernorActorId,',
+    'string pCommandName,',
+    'int pSuccessionState,',
+    'SeatCityId = pSeatCityId',
+    'GovernorActorId = pGovernorActorId',
+    'CommandName = pCommandName ?? ""',
+    'SuccessionState = Math.Max(0, pSuccessionState)',
+    'ReplicaSnapshotsBySubject[pSubject.id] = snapshot;'
 )) {
     if (-not $applyProjection.Contains($token)) {
         throw "Inactive replica cleanup is not ownership-scoped: $token"
@@ -277,6 +302,7 @@ foreach ($token in @(
     'EnsureReplicaProjectionWorld();',
     'foreach (long subjectId in ReplicaSubjectIds)',
     'ClearReplicaVassalProjection(subject);',
+    'ReplicaSnapshotsBySubject.Remove(stale[index]);',
     'ReplicaSubjectIds.Remove(stale[index]);'
 )) {
     if (-not $retainProjection.Contains($token)) {
@@ -291,11 +317,45 @@ foreach ($token in @(
     'private static void EnsureReplicaProjectionWorld()',
     'ReferenceEquals(_replicaProjectionWorld, World.world)',
     'ReplicaSubjectIds.Clear();',
+    'ReplicaSnapshotsBySubject.Clear();',
     '_replicaProjectionWorld = World.world;'
 )) {
     if (-not $restore.Contains($token)) {
         throw "Replica governorate ownership is not world-scoped: $token"
     }
+}
+if (-not $store.Contains(
+        'Dictionary<long, MilitaryGovernorateSnapshot> ' +
+        'ReplicaSnapshotsBySubject')) {
+    throw 'Replica governorate read model does not retain full snapshots.'
+}
+
+$tryGetStart = $store.IndexOf(
+    'public static bool TryGetActive(Kingdom pSubject,',
+    [StringComparison]::Ordinal)
+$tryGetEnd = $store.IndexOf(
+    'public static List<MilitaryGovernorateSnapshot> GetDirectActive(',
+    $tryGetStart, [StringComparison]::Ordinal)
+if ($tryGetStart -lt 0 -or $tryGetEnd -le $tryGetStart) {
+    throw 'Cannot isolate governorate active read path.'
+}
+$tryGet = $store.Substring($tryGetStart, $tryGetEnd - $tryGetStart)
+foreach ($token in @(
+    'EnsureReplicaProjectionWorld();',
+    'ReplicaSnapshotsBySubject.TryGetValue(pSubject.id,',
+    'out pSnapshot))',
+    'Project(pSubject, pSnapshot.StateId,',
+    'if (!Ready) return false;'
+)) {
+    if (-not $tryGet.Contains($token)) {
+        throw "Replica governorate read path is incomplete: $token"
+    }
+}
+if ($tryGet.IndexOf('ReplicaSnapshotsBySubject.TryGetValue(',
+        [StringComparison]::Ordinal) -gt
+    $tryGet.IndexOf('if (!Ready) return false;',
+        [StringComparison]::Ordinal)) {
+    throw 'Replica governorate read falls through to the local database.'
 }
 foreach ($token in @(
     'LineageKeys.VASSAL_RELATION_ID, -1L',
@@ -304,6 +364,62 @@ foreach ($token in @(
     if (-not $restore.Contains($token)) {
         throw "Replica cleanup leaves an authoritative vassal key: $token"
     }
+}
+
+$processEnd = $restore.IndexOf(
+    'private static void RepairAndProject(', $processStart,
+    [StringComparison]::Ordinal)
+if ($processStart -lt 0 -or $processEnd -le $processStart) {
+    throw 'Cannot isolate governorate batch restore loop.'
+}
+$processRestore = $restore.Substring($processStart,
+    $processEnd - $processStart)
+foreach ($token in @(
+    'try',
+    'catch (Exception error)',
+    'finally',
+    'EnqueueRuntimeRestoreRetry(snapshot.StateId);',
+    '_runtimeRestoreCursor = snapshot.StateId;',
+    'remaining--;'
+)) {
+    if (-not $processRestore.Contains($token)) {
+        throw "Governorate batch restore lacks failure isolation: $token"
+    }
+}
+$finallyIndex = $processRestore.IndexOf('finally',
+    [StringComparison]::Ordinal)
+if ($processRestore.IndexOf('_runtimeRestoreCursor = snapshot.StateId;',
+        [StringComparison]::Ordinal) -lt $finallyIndex -or
+    $processRestore.IndexOf('remaining--;',
+        [StringComparison]::Ordinal) -lt $finallyIndex) {
+    throw 'Governorate batch cursor and budget are not advanced in finally.'
+}
+foreach ($token in @(
+    'private static void EnqueueRuntimeRestoreRetry(long pStateId)',
+    'DeferredRuntimeWorkRules.CoalescingKey(',
+    '"military_governorate:runtime_restore_state"',
+    '() => ProcessRuntimeRestoreState(pStateId)',
+    'private static void ProcessRuntimeRestoreState(long pStateId)',
+    'ReadActiveState(pStateId)',
+    'WHERE ACTIVE=1 AND STATE_ID=@state LIMIT 1'
+)) {
+    if (-not $restore.Contains($token)) {
+        throw "Governorate targeted retry is incomplete: $token"
+    }
+}
+$targetStart = $restore.IndexOf(
+    'private static void ProcessRuntimeRestoreState(long pStateId)',
+    [StringComparison]::Ordinal)
+$targetEnd = $restore.IndexOf(
+    'private static MilitaryGovernorateSnapshot ReadActiveState(',
+    $targetStart, [StringComparison]::Ordinal)
+if ($targetStart -lt 0 -or $targetEnd -le $targetStart) {
+    throw 'Cannot isolate governorate targeted retry action.'
+}
+$targetRetry = $restore.Substring($targetStart, $targetEnd - $targetStart)
+if ($targetRetry.Contains('catch (') -or
+    $targetRetry.Contains('EnqueueRuntimeRestoreRetry(')) {
+    throw 'Governorate targeted retry bypasses deferred MaxAttempts.'
 }
 
 $worldStoreStart = $coordinator.IndexOf(

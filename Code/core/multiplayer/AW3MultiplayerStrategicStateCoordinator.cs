@@ -367,7 +367,9 @@ namespace AncientWarfare3.core.multiplayer
             MilitaryGovernorateStore.ApplyAuthoritativeProjection(subject,
                 pGovernorate.StateId, pGovernorate.RelationId,
                 pGovernorate.SuzerainKingdomId,
-                pGovernorate.SuccessorActorId,
+                pGovernorate.SeatCityId, pGovernorate.GovernorActorId,
+                pGovernorate.SuccessorActorId, pGovernorate.CommandName,
+                pGovernorate.SuccessionState,
                 pGovernorate.ReplacementAllowed, pGovernorate.Active);
         }
 

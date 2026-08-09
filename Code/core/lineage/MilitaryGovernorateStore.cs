@@ -33,6 +33,9 @@ namespace AncientWarfare3.core.lineage
         private static long _runtimeRestoreCursor = -1L;
         private static readonly HashSet<long> ReplicaSubjectIds =
             new HashSet<long>();
+        private static readonly
+            Dictionary<long, MilitaryGovernorateSnapshot> ReplicaSnapshotsBySubject =
+                new Dictionary<long, MilitaryGovernorateSnapshot>();
         private static object _replicaProjectionWorld;
 
         private static SQLiteConnection DB =>
@@ -133,7 +136,17 @@ namespace AncientWarfare3.core.lineage
             out MilitaryGovernorateSnapshot pSnapshot)
         {
             pSnapshot = null;
-            if (!Ready || pSubject == null || pSubject.id < 0) return false;
+            if (pSubject?.data == null || pSubject.id < 0) return false;
+            EnsureReplicaProjectionWorld();
+            if (ReplicaSnapshotsBySubject.TryGetValue(pSubject.id,
+                    out pSnapshot))
+            {
+                Project(pSubject, pSnapshot.StateId,
+                    pSnapshot.SuccessorActorId,
+                    pSnapshot.ReplacementAllowed);
+                return true;
+            }
+            if (!Ready) return false;
             try
             {
                 using var command = new SQLiteCommand(DB);
@@ -350,7 +363,9 @@ namespace AncientWarfare3.core.lineage
                         "r.CONTRACT_TIER FROM " +
                         VassalRelationTableItem.GetTableName() + " r JOIN " +
                         MilitaryGovernorateStateTableItem.GetTableName() +
-                        " s ON s.RELATION_ID=r.RELATION_ID WHERE " +
+                        " s ON s.RELATION_ID=r.RELATION_ID AND " +
+                        "s.SUBJECT_KINGDOM_ID=r.VASSAL_ID AND " +
+                        "s.SUZERAIN_KINGDOM_ID=r.SUZERAIN_ID WHERE " +
                         "r.RELATION_ID=@relation AND r.ACTIVE=1 AND " +
                         "r.END_TIME<0 AND s.STATE_ID=@state AND s.ACTIVE=1 " +
                         "LIMIT 1";
@@ -498,24 +513,42 @@ namespace AncientWarfare3.core.lineage
 
         public static void ApplyAuthoritativeProjection(Kingdom pSubject,
             long pStateId, long pRelationId, long pSuzerainKingdomId,
-            long pSuccessorActorId,
+            long pSeatCityId, long pGovernorActorId,
+            long pSuccessorActorId, string pCommandName,
+            int pSuccessionState,
             bool pReplacementAllowed, bool pActive)
         {
             EnsureReplicaProjectionWorld();
-            if (pSubject?.data == null) return;
+            if (pSubject == null) return;
             if (!pActive)
             {
                 bool trackedReplica = ReplicaSubjectIds.Remove(pSubject.id);
-                ClearProjection(pSubject);
+                ReplicaSnapshotsBySubject.Remove(pSubject.id);
+                if (pSubject.data != null) ClearProjection(pSubject);
                 if (trackedReplica)
                     ClearReplicaVassalProjection(pSubject);
                 return;
             }
+            if (pSubject.data == null) return;
+            var snapshot = new MilitaryGovernorateSnapshot
+            {
+                StateId = pStateId,
+                RelationId = pRelationId,
+                SubjectKingdomId = pSubject.id,
+                SuzerainKingdomId = pSuzerainKingdomId,
+                SeatCityId = pSeatCityId,
+                GovernorActorId = pGovernorActorId,
+                SuccessorActorId = pSuccessorActorId,
+                CommandName = pCommandName ?? "",
+                SuccessionState = Math.Max(0, pSuccessionState),
+                ReplacementAllowed = pReplacementAllowed
+            };
             pSubject.data.set(LineageKeys.VASSAL_RELATION_ID, pRelationId);
             pSubject.data.set(LineageKeys.VASSAL_SUZERAIN_ID,
                 pSuzerainKingdomId);
             Project(pSubject, pStateId, pSuccessorActorId,
                 pReplacementAllowed);
+            ReplicaSnapshotsBySubject[pSubject.id] = snapshot;
             ReplicaSubjectIds.Add(pSubject.id);
         }
 
@@ -537,6 +570,7 @@ namespace AncientWarfare3.core.lineage
                 Kingdom subject = FindKingdom(stale[index]);
                 ClearProjection(subject);
                 ClearReplicaVassalProjection(subject);
+                ReplicaSnapshotsBySubject.Remove(stale[index]);
                 ReplicaSubjectIds.Remove(stale[index]);
             }
         }
@@ -557,9 +591,22 @@ namespace AncientWarfare3.core.lineage
                 for (var index = 0; index < batch.Count; index++)
                 {
                     MilitaryGovernorateSnapshot snapshot = batch[index];
-                    RepairAndProject(snapshot);
-                    _runtimeRestoreCursor = snapshot.StateId;
-                    remaining--;
+                    try
+                    {
+                        RepairAndProject(snapshot);
+                    }
+                    catch (Exception error)
+                    {
+                        ModClass.LogWarning(
+                            "Military governorate runtime restore failed for state " +
+                            snapshot.StateId + ": " + error.Message);
+                        EnqueueRuntimeRestoreRetry(snapshot.StateId);
+                    }
+                    finally
+                    {
+                        _runtimeRestoreCursor = snapshot.StateId;
+                        remaining--;
+                    }
                 }
                 if (batch.Count < requested)
                 {
@@ -570,6 +617,44 @@ namespace AncientWarfare3.core.lineage
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 RuntimeRestoreQueueKey, DeferredWorkClass.Runtime,
                 ProcessRuntimeRestore);
+        }
+
+        private static void EnqueueRuntimeRestoreRetry(long pStateId)
+        {
+            if (pStateId < 0) return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                DeferredRuntimeWorkRules.CoalescingKey(
+                    "military_governorate:runtime_restore_state", pStateId),
+                DeferredWorkClass.Runtime,
+                () => ProcessRuntimeRestoreState(pStateId));
+        }
+
+        private static void ProcessRuntimeRestoreState(long pStateId)
+        {
+            MilitaryGovernorateSnapshot snapshot = ReadActiveState(pStateId);
+            if (snapshot == null) return;
+            RepairAndProject(snapshot);
+        }
+
+        private static MilitaryGovernorateSnapshot ReadActiveState(
+            long pStateId)
+        {
+            if (!Ready || pStateId < 0) return null;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = AuthoritySelectColumns + " FROM " +
+                    MilitaryGovernorateStateTableItem.GetTableName() +
+                    " WHERE ACTIVE=1 AND STATE_ID=@state LIMIT 1";
+                command.Parameters.AddWithValue("@state", pStateId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                return reader.Read() ? ReadAuthority(reader) : null;
+            }
+            catch (Exception error)
+            {
+                throw new InvalidOperationException(
+                    "Military governorate active state read failed.", error);
+            }
         }
 
         private static void RepairAndProject(
@@ -660,7 +745,9 @@ namespace AncientWarfare3.core.lineage
                 pRelation.SubjectKind ==
                     VassalSubjectKind.MilitaryGovernorate &&
                 !pRelation.Ambiguous &&
-                pRelation.RelationId == pSnapshot.RelationId)
+                pRelation.RelationId == pSnapshot.RelationId &&
+                pRelation.VassalId == pSnapshot.SubjectKingdomId &&
+                pRelation.SuzerainId == pSnapshot.SuzerainKingdomId)
             {
                 relationEnded = TryEndWithRelation(pSnapshot.StateId,
                     pSnapshot.RelationId, pReason, false,
@@ -677,7 +764,10 @@ namespace AncientWarfare3.core.lineage
             }
             else if (pRelationExists &&
                      (pRelation.Ambiguous ||
-                      pRelation.RelationId != pSnapshot.RelationId))
+                      pRelation.RelationId != pSnapshot.RelationId ||
+                      pRelation.VassalId != pSnapshot.SubjectKingdomId ||
+                      pRelation.SuzerainId !=
+                          pSnapshot.SuzerainKingdomId))
             {
                 if (!TryEndStateAndDowngradeMilitaryRelations(
                         pSnapshot.StateId, pSnapshot.RelationId,
@@ -825,6 +915,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (ReferenceEquals(_replicaProjectionWorld, World.world)) return;
             ReplicaSubjectIds.Clear();
+            ReplicaSnapshotsBySubject.Clear();
             _replicaProjectionWorld = World.world;
         }
 
