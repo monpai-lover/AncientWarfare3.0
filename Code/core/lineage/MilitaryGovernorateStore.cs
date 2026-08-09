@@ -33,6 +33,7 @@ namespace AncientWarfare3.core.lineage
         private static long _runtimeRestoreCursor = -1L;
         private static readonly HashSet<long> ReplicaSubjectIds =
             new HashSet<long>();
+        private static object _replicaProjectionWorld;
 
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
@@ -500,6 +501,7 @@ namespace AncientWarfare3.core.lineage
             long pSuccessorActorId,
             bool pReplacementAllowed, bool pActive)
         {
+            EnsureReplicaProjectionWorld();
             if (pSubject?.data == null) return;
             if (!pActive)
             {
@@ -520,6 +522,7 @@ namespace AncientWarfare3.core.lineage
         public static void RetainAuthoritativeProjections(
             IReadOnlyList<long> pSubjectIds)
         {
+            EnsureReplicaProjectionWorld();
             var retained = new HashSet<long>();
             if (pSubjectIds != null)
                 for (var index = 0; index < pSubjectIds.Count; index++)
@@ -671,10 +674,9 @@ namespace AncientWarfare3.core.lineage
                      (pRelation.Ambiguous ||
                       pRelation.RelationId != pSnapshot.RelationId))
             {
-                if (!TryEndStateWithActiveMilitaryRelations(
+                if (!TryEndStateAndDowngradeMilitaryRelations(
                         pSnapshot.StateId, pSnapshot.RelationId,
-                        pSnapshot.SubjectKingdomId, pReason,
-                        out relationEnded))
+                        pSnapshot.SubjectKingdomId, pReason))
                     throw new InvalidOperationException(
                         "Military governorate mismatched relation repair failed: " +
                         pReason);
@@ -686,17 +688,18 @@ namespace AncientWarfare3.core.lineage
                     "Military governorate invalid-state repair failed: " +
                     pReason);
             if (relationEnded)
-                VassalService.ClearInvalidMilitaryGovernorateProjection(
-                    pSubject);
+            {
+                ClearProjection(pSubject);
+                ClearReplicaVassalProjection(pSubject);
+            }
             else if (stateEnded)
                 ClearProjection(pSubject);
         }
 
-        private static bool TryEndStateWithActiveMilitaryRelations(
+        private static bool TryEndStateAndDowngradeMilitaryRelations(
             long pStateId, long pExpectedRelationId, long pSubjectId,
-            string pReason, out bool pRelationEnded)
+            string pReason)
         {
-            pRelationEnded = false;
             if (!Ready || pStateId < 0 || pExpectedRelationId < 0 ||
                 pSubjectId < 0) return false;
             SQLiteTransaction transaction = null;
@@ -728,15 +731,15 @@ namespace AncientWarfare3.core.lineage
                 {
                     relations.CommandText = "UPDATE " +
                         VassalRelationTableItem.GetTableName() +
-                        " SET END_TIME=@time,ACTIVE=0,ABSORBED=0," +
-                        "END_REASON=@reason WHERE VASSAL_ID=@subject" +
-                        " AND ACTIVE=1 AND END_TIME<0 AND SUBJECT_KIND=@kind";
-                    relations.Parameters.AddWithValue("@time", now);
-                    relations.Parameters.AddWithValue("@reason", pReason ?? "");
+                        " SET SUBJECT_KIND=@ordinary" +
+                        " WHERE VASSAL_ID=@subject" +
+                        " AND ACTIVE=1 AND END_TIME<0 AND SUBJECT_KIND=@military";
+                    relations.Parameters.AddWithValue("@ordinary",
+                        (int)VassalSubjectKind.Ordinary);
                     relations.Parameters.AddWithValue("@subject", pSubjectId);
-                    relations.Parameters.AddWithValue("@kind",
+                    relations.Parameters.AddWithValue("@military",
                         (int)VassalSubjectKind.MilitaryGovernorate);
-                    pRelationEnded = relations.ExecuteNonQuery() > 0;
+                    relations.ExecuteNonQuery();
                 }
                 using (var state = new SQLiteCommand(DB)
                        { Transaction = transaction })
@@ -754,7 +757,6 @@ namespace AncientWarfare3.core.lineage
                     if (state.ExecuteNonQuery() != 1)
                     {
                         transaction.Rollback();
-                        pRelationEnded = false;
                         return false;
                     }
                 }
@@ -768,7 +770,6 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning(
                     "Military governorate mismatched relation end failed: " +
                     error.Message);
-                pRelationEnded = false;
                 return false;
             }
             finally
@@ -818,6 +819,13 @@ namespace AncientWarfare3.core.lineage
             if (pSubject?.data == null) return;
             pSubject.data.set(LineageKeys.VASSAL_RELATION_ID, -1L);
             pSubject.data.set(LineageKeys.VASSAL_SUZERAIN_ID, -1L);
+        }
+
+        private static void EnsureReplicaProjectionWorld()
+        {
+            if (ReferenceEquals(_replicaProjectionWorld, World.world)) return;
+            ReplicaSubjectIds.Clear();
+            _replicaProjectionWorld = World.world;
         }
 
         private const string AuthoritySelectColumns =

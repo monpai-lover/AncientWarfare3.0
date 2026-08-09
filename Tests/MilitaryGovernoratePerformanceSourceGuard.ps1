@@ -17,7 +17,6 @@ $archivePath = Join-Path $root `
     'Code\core\db\LineageArchiveManager.cs'
 $vassalPath = Join-Path $root `
     'Code\core\lineage\VassalService.cs'
-
 foreach ($path in @($storePath, $pipelinePath, $indexPath, $modelsPath,
         $coordinatorPath, $tablePath, $archivePath, $vassalPath)) {
     if (-not (Test-Path -LiteralPath $path)) {
@@ -132,37 +131,28 @@ if ($restore -match 'foreach\s*\([^)]*World\.world\.kingdoms' -or
 
 foreach ($token in @(
     'TryEndWithRelation(pSnapshot.StateId,',
-    'TryEndStateWithActiveMilitaryRelations(',
+    'TryEndStateAndDowngradeMilitaryRelations(',
     'relation.RelationId != pSnapshot.RelationId',
-    'VassalService.ClearInvalidMilitaryGovernorateProjection(',
     'WHERE VASSAL_ID=@subject',
-    'AND ACTIVE=1 AND END_TIME<0 AND SUBJECT_KIND=@kind',
+    'SET SUBJECT_KIND=@ordinary',
+    'AND ACTIVE=1 AND END_TIME<0 AND SUBJECT_KIND=@military',
     'bool stateEnded = false;',
     'stateEnded = true;',
-    'if (!stateEnded && !End(pSnapshot.StateId, pReason))'
+    'if (!stateEnded && !End(pSnapshot.StateId, pReason))',
+    'else if (stateEnded)',
+    'ClearProjection(pSubject);'
 )) {
     if (-not $restore.Contains($token)) {
         throw "Missing atomic governorate relation repair: $token"
     }
 }
-
-$vassalCleanupStart = $vassal.IndexOf(
-    'internal static void ClearInvalidMilitaryGovernorateProjection(',
-    [StringComparison]::Ordinal)
-$vassalCleanupEnd = $vassal.IndexOf(
-    'private static List<ActiveVassalRelationIdentity>',
-    [StringComparison]::Ordinal)
-if ($vassalCleanupStart -lt 0 -or
-    $vassalCleanupEnd -le $vassalCleanupStart) {
-    throw 'Cannot isolate invalid governorate relation projection cleanup.'
-}
-$vassalCleanup = $vassal.Substring($vassalCleanupStart,
-    $vassalCleanupEnd - $vassalCleanupStart)
-if (-not $vassalCleanup.Contains(
-        'World.world?.kingdoms?.get(suzerainId)') -or
-    $vassalCleanup.Contains('FindKingdom(') -or
-    $vassalCleanup -match 'foreach\s*\([^)]*World\.world\.kingdoms') {
-    throw 'Invalid governorate cleanup does not use direct kingdom ID lookup.'
+foreach ($forbidden in @(
+    'TryEndStateWithActiveMilitaryRelations(',
+    'VassalService.ClearInvalidMilitaryGovernorateProjection('
+)) {
+    if ($restore.Contains($forbidden) -or $vassal.Contains($forbidden)) {
+        throw "Over-broad governorate relation cleanup remains: $forbidden"
+    }
 }
 
 $applyStart = $restore.IndexOf(
@@ -182,7 +172,18 @@ $applyProjection = $restore.Substring($applyStart,
     $retainStart - $applyStart)
 $retainProjection = $restore.Substring($retainStart,
     $processStart - $retainStart)
+if ($applyProjection.IndexOf('EnsureReplicaProjectionWorld();',
+        [StringComparison]::Ordinal) -gt
+    $applyProjection.IndexOf('if (pSubject?.data == null)',
+        [StringComparison]::Ordinal) -or
+    $retainProjection.IndexOf('EnsureReplicaProjectionWorld();',
+        [StringComparison]::Ordinal) -gt
+    $retainProjection.IndexOf('var retained =',
+        [StringComparison]::Ordinal)) {
+    throw 'Replica world ownership check runs after projection cleanup starts.'
+}
 foreach ($token in @(
+    'EnsureReplicaProjectionWorld();',
     'bool trackedReplica = ReplicaSubjectIds.Remove(pSubject.id);',
     'if (trackedReplica)',
     'ClearReplicaVassalProjection(pSubject);'
@@ -192,12 +193,27 @@ foreach ($token in @(
     }
 }
 foreach ($token in @(
+    'EnsureReplicaProjectionWorld();',
     'foreach (long subjectId in ReplicaSubjectIds)',
     'ClearReplicaVassalProjection(subject);',
     'ReplicaSubjectIds.Remove(stale[index]);'
 )) {
     if (-not $retainProjection.Contains($token)) {
         throw "Stale replica cleanup does not clear tracked vassal keys: $token"
+    }
+}
+if (-not $store.Contains(
+        'private static object _replicaProjectionWorld;')) {
+    throw 'Replica governorate ownership has no world identity.'
+}
+foreach ($token in @(
+    'private static void EnsureReplicaProjectionWorld()',
+    'ReferenceEquals(_replicaProjectionWorld, World.world)',
+    'ReplicaSubjectIds.Clear();',
+    '_replicaProjectionWorld = World.world;'
+)) {
+    if (-not $restore.Contains($token)) {
+        throw "Replica governorate ownership is not world-scoped: $token"
     }
 }
 foreach ($token in @(
