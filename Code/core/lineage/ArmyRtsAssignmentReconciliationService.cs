@@ -34,6 +34,14 @@ namespace AncientWarfare3.core.lineage
             _cursor = 0;
         }
 
+        public static void Enqueue(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            ArmyRtsControllerService.OnArmyRosterChanged(pArmy);
+            KingdomWarDirectorService.QueueArmyChanged(
+                AWArmyService.GetIntendedKingdom(pArmy));
+        }
+
         private static void ProcessOne(ArmyRtsWarLifecycleRecord pRecord,
             double pNow)
         {

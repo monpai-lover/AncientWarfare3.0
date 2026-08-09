@@ -6,6 +6,24 @@ using HarmonyLib;
 namespace AncientWarfare3.patch
 {
     [HarmonyPatch]
+    internal static class AW_WartimeMilitaryJobPatch
+    {
+        private static MethodBase TargetMethod()
+        {
+            return AccessTools.Method(typeof(AiSystemActor), "setJob");
+        }
+
+        [HarmonyPrefix]
+        private static bool SetJob_Prefix(AiSystemActor __instance,
+            string __0)
+        {
+            Actor actor = __instance?.ai_object;
+            return !SyntheticLevyService.IsSynthetic(actor) ||
+                   SyntheticLevyRules.AllowTaskId(true, __0);
+        }
+    }
+
+    [HarmonyPatch]
     internal static class AW_WartimeMilitaryTaskPatch
     {
         private static MethodBase TargetMethod()
@@ -15,12 +33,15 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         private static bool SetTask_Prefix(AiSystemActor __instance,
-            string pTaskId)
+            string __0)
         {
+            Actor actor = __instance?.ai_object;
+            if (SyntheticLevyService.IsSynthetic(actor))
+                return SyntheticLevyRules.AllowTaskId(true, __0);
             if (!WartimeMilitaryTaskRules.
-                    ShouldEvaluateMilitaryState(pTaskId)) return true;
+                    ShouldEvaluateMilitaryState(__0)) return true;
             return WartimeMilitaryTaskGate.Allows(
-                __instance.ai_object, pTaskId);
+                __instance.ai_object, __0);
         }
     }
 
@@ -36,6 +57,14 @@ namespace AncientWarfare3.patch
         private static bool Update_Prefix(AiSystemActor __instance)
         {
             string taskId = __instance.task?.id;
+            Actor actor = __instance?.ai_object;
+            if (SyntheticLevyService.IsSynthetic(actor) &&
+                !SyntheticLevyRules.AllowTaskId(true, taskId))
+            {
+                try { __instance.setTaskBehFinished(); }
+                catch { }
+                return false;
+            }
             if (!WartimeMilitaryTaskRules.
                     ShouldEvaluateMilitaryState(taskId)) return true;
             if (WartimeMilitaryTaskGate.Allows(

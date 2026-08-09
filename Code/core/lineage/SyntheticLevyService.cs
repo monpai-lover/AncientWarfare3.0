@@ -58,7 +58,8 @@ namespace AncientWarfare3.core.lineage
                         throw new InvalidOperationException(
                             "synthetic levy army assignment failed");
                 }
-                CityReservePoolService.OnSyntheticMobilized(city, 1);
+                SyntheticMobilizationLedgerService.
+                    OnSyntheticMaterialized(actor);
                 return actor;
             }
             catch
@@ -98,20 +99,6 @@ namespace AncientWarfare3.core.lineage
             return created;
         }
 
-        internal static void Promote(Actor actor)
-        {
-            if (actor?.data == null) return;
-            ReleaseLiveLedgerOnce(actor);
-            actor.data.set(LineageKeys.SYNTHETIC_LEVY_PROMOTED, true);
-            actor.data.removeBool(LineageKeys.SYNTHETIC_LEVY);
-            actor.data.removeLong(LineageKeys.SYNTHETIC_LEVY_SOURCE_CITY_ID);
-            actor.data.removeLong(
-                LineageKeys.SYNTHETIC_LEVY_SOURCE_KINGDOM_ID);
-            actor.data.removeLong(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID);
-            actor.data.removeBool(
-                LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED);
-        }
-
         internal static void OnActorDied(Actor actor)
         {
             bool dead;
@@ -122,6 +109,26 @@ namespace AncientWarfare3.core.lineage
             }
             catch { dead = false; }
             if (dead) ReleaseLiveLedgerOnce(actor);
+        }
+
+        internal static void ReconcileLoadedActor(Actor actor)
+        {
+            if (!IsSynthetic(actor)) return;
+            try
+            {
+                Actor lover = actor.lover;
+                if (lover?.lover == actor) lover.lover = null;
+                actor.lover = null;
+            }
+            catch { }
+            try
+            {
+                if (actor.hasStatus("pregnant"))
+                    actor.finishStatusEffect("pregnant");
+            }
+            catch { }
+            SyntheticMobilizationLedgerService.OnSyntheticMaterialized(
+                actor);
         }
 
         internal static void RemoveWithoutPersonalHistory(Actor actor)
@@ -182,8 +189,11 @@ namespace AncientWarfare3.core.lineage
             actor.data.set(LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED,
                 true);
             sourceCity ??= FindSourceCity(actor);
-            if (sourceCity?.data != null)
-                CityReservePoolService.OnSyntheticRemoved(sourceCity, 1);
+            actor.data.get(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID,
+                out long warId, -1L);
+            if (sourceCity?.data != null && warId >= 0L)
+                SyntheticMobilizationLedgerService.OnSyntheticRemoved(
+                    warId, sourceCity.id, actor.data.id, 1);
         }
 
         private static Actor ResolveTemplate(City city, Army army)

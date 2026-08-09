@@ -1,0 +1,106 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsFirstOrderRecoveryRulesTests
+{
+    internal static void Run()
+    {
+        var queue = new KingdomWarFirstOrderQueue();
+        queue.EnqueueWar(7L, new[] { 10L, 11L }, new[] { 20L, 21L });
+        Equal(4, queue.Count,
+            "one first-order item is queued for each participant");
+        Equal(new WarFirstOrderAssignment(7L, 10L,
+                WarFirstOrderSide.Attacker), Take(queue),
+            "the main attacker receives the first pulse");
+        Equal(new WarFirstOrderAssignment(7L, 20L,
+                WarFirstOrderSide.Defender), Take(queue),
+            "the main defender receives the second pulse");
+        Equal(new WarFirstOrderAssignment(7L, 11L,
+                WarFirstOrderSide.Attacker), Take(queue),
+            "additional attackers remain in their lane");
+        Equal(new WarFirstOrderAssignment(7L, 21L,
+                WarFirstOrderSide.Defender), Take(queue),
+            "additional defenders alternate fairly");
+        queue.EnqueueWar(8L, new[] { 30L }, new[] { 40L });
+        queue.EnqueueWar(8L, new[] { 30L }, new[] { 40L });
+        Equal(2, queue.Count,
+            "duplicate war callbacks coalesce first-order work");
+
+        Equal(true, ArmyRtsAssignmentReconciliationRules.
+                MustRehydrateRetainedMission(
+                    handoffLatched: true, watchdogRegistered: false,
+                    sameStrategicIntent: true,
+                    replacementPublished: false),
+            "a retained mission rehydrates the broken online handoff");
+        Equal(false, ArmyRtsAssignmentReconciliationRules.
+                MustRehydrateRetainedMission(
+                    handoffLatched: false, watchdogRegistered: false,
+                    sameStrategicIntent: true,
+                    replacementPublished: false),
+            "an ordinary retained mission does not reset its runtime");
+
+        string root = Directory.GetCurrentDirectory();
+        string director = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "KingdomWarDirectorService.cs"));
+        Assert(director.Contains("FirstOrderQueue",
+                StringComparison.Ordinal) &&
+               director.Contains("CaptureFirstOrder(",
+                   StringComparison.Ordinal) &&
+               director.Contains("TryAssignFirstOrderMission(",
+                   StringComparison.Ordinal),
+            "the director publishes a bounded first mission before refinement");
+        Assert(director.Contains(
+                "EnqueueFirstOrderForKingdom(pKingdom)",
+                StringComparison.Ordinal),
+            "a newly created army wakes a previously consumed first order");
+
+        string lifecycle = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsWarLifecycleService.cs"));
+        int warStart = lifecycle.IndexOf("public static void OnWarStarted(",
+            StringComparison.Ordinal);
+        int missionAssigned = lifecycle.IndexOf(
+            "public static ArmyRtsWarLifecycleRecord OnMissionAssigned(",
+            warStart, StringComparison.Ordinal);
+        string warStartBody = lifecycle.Substring(warStart,
+            missionAssigned - warStart);
+        Assert(!warStartBody.Contains("World.world.armies",
+                StringComparison.Ordinal),
+            "war start cannot scan every world army");
+        Assert(lifecycle.Contains("ProcessAuthorityCycle(",
+                StringComparison.Ordinal) &&
+               lifecycle.Contains(
+                   "ArmyStrategicIndexService.CreateSnapshotCursor(",
+                   StringComparison.Ordinal),
+            "war lifecycle discovery advances through a bounded index cursor");
+
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        Assert(controller.Contains("MustRehydrateRetainedMission(",
+                StringComparison.Ordinal) &&
+               controller.Contains("IsRegistered(",
+                   StringComparison.Ordinal),
+            "retained missions repair route and watchdog state online");
+    }
+
+    private static WarFirstOrderAssignment Take(
+        KingdomWarFirstOrderQueue queue)
+    {
+        if (!queue.TryTake(out WarFirstOrderAssignment item))
+            throw new InvalidOperationException("expected queued work");
+        return item;
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $"; expected={expected}, actual={actual}");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

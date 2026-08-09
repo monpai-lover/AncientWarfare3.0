@@ -303,8 +303,19 @@ namespace AncientWarfare3.core.lineage
 
     public sealed class ArmyRtsJobAssignmentCursor
     {
+        private long _observedRosterVersion = long.MinValue;
+
         public int MemberCursor { get; private set; }
         public bool JobsInitialized { get; private set; }
+
+        public bool ObserveRosterVersion(long rosterVersion)
+        {
+            if (_observedRosterVersion == rosterVersion) return false;
+            bool changed = _observedRosterVersion != long.MinValue;
+            _observedRosterVersion = rosterVersion;
+            Reopen();
+            return changed;
+        }
 
         public void Advance(int processedEnd, int rosterCount)
         {
@@ -459,7 +470,7 @@ namespace AncientWarfare3.core.lineage
 
     internal static class ArmyRtsControllerService
     {
-        private const int MaximumJobMutationsPerController = 8;
+        private const int MaximumJobMutationsPerController = 128;
         private const int MaximumFollowerRouteChecksPerController = 4;
         private const int MaximumRoutePollsPerController = 64;
 
@@ -492,6 +503,7 @@ namespace AncientWarfare3.core.lineage
             internal bool MobilizationStatusCatchupPending;
             internal bool MobilizationStatusSweepHasPendingAssembly;
             internal int FollowerRouteInstallCursor;
+            internal long RosterVersion;
             internal double NextJobOwnershipRepairWorldTime =
                 double.PositiveInfinity;
             internal ArmyRtsState MobilizationStatusState =
@@ -773,6 +785,20 @@ namespace AncientWarfare3.core.lineage
                 };
                 RuntimeByArmy[pArmy.id] = runtime;
             }
+            bool sameStrategicIntent = record.Mission.WarId ==
+                                           pProposal.WarId &&
+                                       record.Mission.TargetCityId ==
+                                           pProposal.TargetCityId &&
+                                       record.Mission.ProposalKind ==
+                                           pProposal.ProposalKind;
+            if (ArmyRtsAssignmentReconciliationRules.
+                    MustRehydrateRetainedMission(
+                        runtime.TargetCompletionLatched,
+                        ArmyStallWatchdogService.IsRegistered(pArmy.id),
+                        sameStrategicIntent,
+                        replacementPublished: false) &&
+                RehydrateAfterAuthorityChange(pArmy))
+                RuntimeByArmy.TryGetValue(pArmy.id, out runtime);
             runtime.DirectorForceReady = pProposal.ForceReady;
             runtime.DirectorFriendlyForce = Math.Max(0,
                 pProposal.FriendlyForce);
@@ -1580,7 +1606,7 @@ namespace AncientWarfare3.core.lineage
                 !Controllers.TryGet(pArmy.id, out _) ||
                 !RuntimeByArmy.TryGetValue(pArmy.id,
                     out RuntimeState runtime)) return;
-            runtime.JobCursor.Reopen();
+            runtime.RosterVersion++;
             runtime.FollowerRouteInstallCursor = 0;
             if (ArmyRtsMobilizationStatusRules.RequiresSpeedStatus(
                     runtime.MobilizationStatusState))
@@ -1984,6 +2010,16 @@ namespace AncientWarfare3.core.lineage
                 !RuntimeByArmy.ContainsKey(pArmyId)) return false;
             Army army = FindArmy(pArmyId);
             return IsLiveArmy(army) && IsMissionValid(army, record.Mission);
+        }
+
+        public static bool HasActiveMissionForKingdom(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            IReadOnlyList<long> armyIds = MissionIndex.SnapshotKingdom(
+                pKingdom.id);
+            for (int i = 0; i < armyIds.Count; i++)
+                if (HasActiveMission(armyIds[i])) return true;
+            return false;
         }
 
         internal static bool HasExpectedCaptainTask(Army pArmy)
@@ -2451,6 +2487,34 @@ namespace AncientWarfare3.core.lineage
                 ArmyStallWatchdogService.OnMissionAssigned(army,
                     pResetState: true);
             }
+        }
+
+        public static bool RehydrateAfterAuthorityChange(Army pArmy)
+        {
+            if (!ArmyRtsRuntimeMode.ShouldCommit || pArmy?.data == null ||
+                !Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null) return false;
+            ArmyRtsMission mission = ArmyRtsControllerRules.CopyMission(
+                record.Mission);
+            Controllers.SetState(pArmy.id, ArmyRtsState.Rally);
+            RuntimeByArmy[pArmy.id] = new RuntimeState
+            {
+                InitialRosterCount = SafeUnitCount(pArmy)
+            };
+            MissionIndex.Upsert(mission);
+            ArmyRouteProviderService.Cancel(pArmy.id,
+                ArmyRouteCancelReason.TargetReplaced);
+            AWArmyMarchService.ClearArmy(pArmy.id);
+            ArmyFormationService.RemoveArmy(pArmy.id);
+            ArmyRtsWarLifecycleService.OnMissionAssigned(pArmy, mission);
+            bool corridor = ResolveInitialMissionCorridor(pArmy, mission);
+            ArmyLogisticsService.OnMissionAssigned(pArmy, mission,
+                pConnectedSupply: corridor, pInCorridor: corridor);
+            ArmyStallWatchdogService.OnMissionAssigned(pArmy,
+                pResetState: true);
+            Controllers.Requeue(pArmy.id);
+            return true;
         }
 
         public static void ClearRuntime()
@@ -3568,6 +3632,8 @@ namespace AncientWarfare3.core.lineage
         private static void EnsureJobs(Army pArmy, RuntimeState pRuntime,
             ArmyRtsMission pMission, ArmyRtsState pState)
         {
+            pRuntime.JobCursor.ObserveRosterVersion(
+                pRuntime.RosterVersion);
             Actor captain = SafeCaptain(pArmy);
             if (IsLiveCombatantActor(captain))
             {
@@ -3792,6 +3858,7 @@ namespace AncientWarfare3.core.lineage
             pRuntime.AlternateTargetTileId = -1;
             pRuntime.PursuitRoute.Reset();
             Controllers.SetState(pArmy.id, ArmyRtsState.Idle);
+            ArmyStallWatchdogService.OnArmyInvalidated(pArmy.id);
             Actor captain = SafeCaptain(pArmy);
             if (captain?.current_tile?.data != null)
                 ArmyFormationService.SetAnchor(pArmy, captain.current_tile);

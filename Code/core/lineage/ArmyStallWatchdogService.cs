@@ -61,6 +61,12 @@ namespace AncientWarfare3.core.lineage
             DiagnosticGate.RemoveArmy(pArmyId);
         }
 
+        public static bool IsRegistered(long pArmyId)
+        {
+            return ActiveArmyIds.Contains(pArmyId) &&
+                   StateByArmy.ContainsKey(pArmyId);
+        }
+
         public static bool IsTargetCoolingDown(long pKingdomId,
             long pTargetCityId)
         {

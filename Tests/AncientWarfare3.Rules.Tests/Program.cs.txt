@@ -518,6 +518,9 @@ if (args.Length == 1 && args[0] == "--ruler-household-only")
 
 if (args.Length == 1 && args[0] == "--army-rts")
 {
+    ArmyRtsSchedulingRulesTests.Run();
+    ArmyRtsFullRosterCursorRulesTests.Run();
+    ArmyRtsFirstOrderRecoveryRulesTests.Run();
     ArmyMobilizationRulesTests.Run();
     CityManpowerRulesTests.Run();
     SyntheticLevyRulesTests.Run();
@@ -8068,9 +8071,14 @@ ArmyRtsWarLifecycleStateTests.Run();
 ArmyRtsCombatHandoffRulesTests.Run();
 ArmyRtsSyntheticRecoveryRulesTests.Run();
 ArmyRtsAssignmentReconciliationRulesTests.Run();
+ArmyRtsSuccessionRecoveryRulesTests.Run();
+ArmyRtsSchedulingRulesTests.Run();
+ArmyRtsFullRosterCursorRulesTests.Run();
+ArmyRtsFirstOrderRecoveryRulesTests.Run();
 ArmySharedPathRecoveryRulesTests.Run();
 TemporaryLevyDiagnosticSamplingTests.Run();
 RecruitmentLifecycleRemovalRulesTests.Run();
+SyntheticMobilizationRulesTests.Run();
 ActorDiagnosticSamplingRulesTests.Run();
 ActorAgeWorkRulesTests.Run();
 ActorDeathArchiveRulesTests.Run();

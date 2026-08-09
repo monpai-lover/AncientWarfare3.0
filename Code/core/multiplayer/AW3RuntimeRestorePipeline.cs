@@ -228,20 +228,16 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("military_emergency",
                     MilitaryEmergencyService.RebuildRuntime),
                 new AW3RestoreStage("city_reserve_pools",
-                    CityReservePoolService.RebuildRuntime),
-                new AW3RestoreStage("city_reserve_pool_snapshot", () =>
+                    CityReservePoolService.ClearRuntime),
+                new AW3RestoreStage("synthetic_mobilization_ledger", () =>
                 {
-                    bool snapshotRestored = false;
+                    bool restored = false;
                     string snapshotError = string.Empty;
                     if (!string.IsNullOrWhiteSpace(directory))
-                        snapshotRestored = CityReservePoolService.
-                            TryRestoreSnapshot(directory,
-                                out snapshotError);
-                    if (!snapshotRestored &&
-                        !string.IsNullOrEmpty(snapshotError))
+                        restored = SyntheticMobilizationLedgerService.
+                            TryRestoreSnapshot(directory, out snapshotError);
+                    if (!restored && !string.IsNullOrEmpty(snapshotError))
                         throw new InvalidOperationException(snapshotError);
-                    CityReservePoolService.FinalizeRuntimeRestore(
-                        snapshotRestored);
                 }),
                 new AW3RestoreStage("army_replenishment_operations",
                     ArmyReplenishmentOperationService.RebuildRuntime),
@@ -394,6 +390,8 @@ namespace AncientWarfare3.core.multiplayer
                     MilitaryEmergencyService.ClearRuntime),
                 new AW3RestoreStage("city_reserve_pools",
                     CityReservePoolService.ClearRuntime),
+                new AW3RestoreStage("synthetic_mobilization_ledger",
+                    SyntheticMobilizationLedgerService.ClearRuntime),
                 new AW3RestoreStage("army_replenishment_operations",
                     ArmyReplenishmentOperationService.ClearRuntime),
                 new AW3RestoreStage("temporary_levies",

@@ -13,6 +13,14 @@ namespace AncientWarfare3.core.lineage
     {
         public const double AssignmentRetryWorldSeconds = 30d;
 
+        public static bool MustRehydrateRetainedMission(
+            bool handoffLatched, bool watchdogRegistered,
+            bool sameStrategicIntent, bool replacementPublished)
+        {
+            return handoffLatched && !watchdogRegistered &&
+                   sameStrategicIntent && !replacementPublished;
+        }
+
         public static bool IsValidWait(string reason, double deadline,
             double now)
         {

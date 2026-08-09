@@ -206,12 +206,16 @@
     <Compile Include="..\..\Code\core\lineage\VirtualNobleTitleRules.cs" Link="Production\VirtualNobleTitleRules.cs" />
     <Compile Include="CityManpowerRulesTests.cs.txt" />
     <Compile Include="SyntheticLevyRulesTests.cs.txt" />
+    <Compile Include="SyntheticMobilizationRulesTests.cs.txt" />
     <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAsyncPlanningRulesTests.cs.txt" />
     <Compile Include="ActorKingdomSafetyRulesTests.cs.txt" />
     <Compile Include="ActorBirthAffiliationRulesTests.cs.txt" />
     <Compile Include="SchedulerLoadSafetyRulesTests.cs.txt" />
     <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
+    <Compile Include="ArmyRtsSchedulingRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsFullRosterCursorRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsFirstOrderRecoveryRulesTests.cs.txt" />
     <Compile Include="TestArmyRoutePollKindStub.cs.txt" />
     <Compile Include="ActorDeathInvocationRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAttackSpeechBubbleRulesTests.cs.txt" />
@@ -227,6 +231,7 @@
     <Compile Include="ArmyRtsCombatHandoffRulesTests.cs.txt" />
     <Compile Include="ArmyRtsSyntheticRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAssignmentReconciliationRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsSuccessionRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmySharedPathRecoveryRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyDiagnosticSamplingTests.cs.txt" />
     <Compile Include="ArmyLogisticsSustainmentRulesTests.cs.txt" />
@@ -295,6 +300,8 @@
     <Compile Include="..\..\Code\core\lineage\ArmyMobilizationRules.cs" Link="Production\ArmyMobilizationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityManpowerRules.cs" Link="Production\CityManpowerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SyntheticLevyRules.cs" Link="Production\SyntheticLevyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SyntheticMobilizationRules.cs" Link="Production\SyntheticMobilizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsSuccessionRecoveryRules.cs" Link="Production\ArmyRtsSuccessionRecoveryRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SyntheticLevySpawnScope.cs" Link="Production\SyntheticLevySpawnScope.cs" />
     <Compile Include="..\..\Code\core\lineage\CityReservePoolRules.cs" Link="Production\CityReservePoolRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityReservePoolPersistenceRules.cs" Link="Production\CityReservePoolPersistenceRules.cs" />
@@ -807,6 +814,7 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ArmyMembershipReconciliationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\HierarchicalVassalOccupationReuseSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\RtsSchedulingPerformanceSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\SyntheticMobilizationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\DiplomacyAiToggleSourceGuard.ps1&quot;" />
   </Target>
   <Target Name="XiaItemDynamicAtlasSourceGuard"

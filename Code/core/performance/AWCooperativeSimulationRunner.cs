@@ -60,6 +60,7 @@ namespace AncientWarfare3.core.performance
             Projectiles,
             Statuses,
             Era,
+            Aw3RtsLogicalPulse,
             DelayedActions,
             Aw3Authority,
             Complete
@@ -117,6 +118,7 @@ namespace AncientWarfare3.core.performance
             "vanilla.projectiles",
             "vanilla.statuses",
             "vanilla.era",
+            "aw3.rts.logical_pulse",
             "vanilla.delayed_actions",
             "aw3.authority",
             "vanilla.complete"
@@ -966,7 +968,8 @@ namespace AncientWarfare3.core.performance
 
         private AWSimulationDomain GetCurrentDomain()
         {
-            return _stage == SimulationStage.Aw3Authority
+            return _stage == SimulationStage.Aw3Authority ||
+                   _stage == SimulationStage.Aw3RtsLogicalPulse
                 ? AWSimulationDomain.Aw3Authority
                 : AWSimulationDomain.Vanilla;
         }
@@ -1316,6 +1319,11 @@ namespace AncientWarfare3.core.performance
                     break;
                 case SimulationStage.Era:
                     _world.era_manager.update(_cycleElapsed);
+                    Advance(SimulationStage.Aw3RtsLogicalPulse);
+                    break;
+                case SimulationStage.Aw3RtsLogicalPulse:
+                    ArmyRtsSchedulingService.ProcessLogicalPass(
+                        _logicalTicksAdmitted, _cyclePaused);
                     Advance(_cycleMode == AWSimulationMode.Large &&
                             _simulationPassesRemaining > 1
                         ? SimulationStage.Complete

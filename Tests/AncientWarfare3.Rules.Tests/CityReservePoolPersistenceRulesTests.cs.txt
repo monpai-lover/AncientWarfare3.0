@@ -41,22 +41,34 @@ internal static class CityReservePoolPersistenceRulesTests
         string savePatch = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "patch",
             "AW_SavePatch.cs"));
-        Equal(true, savePatch.Contains("PrepareForSave") &&
-                    savePatch.Contains("TryWriteSnapshot"),
-            "vanilla saves flush and publish reserve pool state");
+        Equal(false, savePatch.Contains(
+                "CityReservePoolService.TryWriteSnapshot",
+                StringComparison.Ordinal),
+            "saves no longer publish the retired resident pool");
+        Equal(true, savePatch.Contains(
+                "SyntheticMobilizationLedgerService.TryWriteSnapshot",
+                StringComparison.Ordinal),
+            "saves publish the unified synthetic mobilization ledger");
         string restorePipeline = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "multiplayer",
             "AW3RuntimeRestorePipeline.cs"));
-        Equal(true, restorePipeline.Contains("TryRestoreSnapshot") &&
-                    restorePipeline.Contains("city_reserve_pools"),
-            "world loads restore and rebuild reserve pool state");
+        Equal(false, restorePipeline.Contains(
+                "CityReservePoolService.TryRestoreSnapshot",
+                StringComparison.Ordinal),
+            "world loads do not activate the retired resident pool");
+        Equal(true, restorePipeline.Contains(
+                "SyntheticMobilizationLedgerService.",
+                StringComparison.Ordinal) &&
+                    restorePipeline.Contains("TryRestoreSnapshot(",
+                        StringComparison.Ordinal),
+            "world loads restore the unified ledger and migrate legacy data");
         Equal(true, restorePipeline.IndexOf(
                         "new AW3RestoreStage(\"city_reserve_pools\"",
                         StringComparison.Ordinal) <
                     restorePipeline.IndexOf(
-                        "new AW3RestoreStage(\"city_reserve_pool_snapshot\"",
+                        "new AW3RestoreStage(\"synthetic_mobilization_ledger\"",
                         StringComparison.Ordinal),
-            "load rebuilds derived population before applying consumed wartime reserve");
+            "load clears legacy runtime state before restoring the new ledger");
     }
 
     private static void MissingSnapshotFinalizesActorPoolOnTheRestoreFrame()

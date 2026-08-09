@@ -37,14 +37,11 @@ namespace AncientWarfare3.core.lineage
             internal long Generation;
             internal bool Frozen;
             internal long EmergencyId = -1L;
-            internal int CityCursor;
             internal long LawReconciliationAfterCityId = -1L;
         }
 
         private static readonly Dictionary<long, KingdomPoolState> States =
             new Dictionary<long, KingdomPoolState>();
-        private static long LastMaintenanceWorldDay = -1L;
-        private static int KingdomCursor;
         private static bool RestoreValidationPending;
         private static long RestoreValidationDueWorldDay = -1L;
         // Vanilla may finish its loading flag before replaying actor
@@ -438,60 +435,10 @@ namespace AncientWarfare3.core.lineage
             bool allowArmyCreation, List<Actor> destination,
             out bool confirmedExhausted)
         {
-            confirmedExhausted = false;
-            int requestedCount = Math.Max(0, requested);
-            if (requestedCount <= 0 || destination == null ||
-                preferredCity?.data == null || !IsLivingKingdom(kingdom))
-                return 0;
-
-            ArmyMobilizationPhase phase = ResolveMobilizationPhase(kingdom);
-            if (phase != ArmyMobilizationPhase.Notice) return 0;
-            bool realmControlled = IsControlledCity(preferredCity, kingdom) &&
-                                   OccupiedCitySupplyService.CanProvideToRealm(
-                                       preferredCity, kingdom);
-            if (!CityReservePoolRules.CanConsumeForMobilization(phase,
-                    realmControlled, SafePopulation(preferredCity))) return 0;
-
-            bool creating = targetArmy?.data == null;
-            if (creating && (!allowArmyCreation ||
-                             !ArmyMobilizationRules.
-                                 CanCreateOrdinaryArmy(phase)) ||
-                !creating &&
-                (!IsLiveOrdinaryTargetArmy(targetArmy, kingdom) ||
-                 !CityReservePoolRules.MatchesSourceCity(
-                     preferredCity.id,
-                     AWArmyService.GetAnchorCityId(targetArmy)))) return 0;
-
-            KingdomPoolState state = State(kingdom);
-            CityPool pool = Pool(state, preferredCity.id);
-            int reconciliationBudget = CityReservePoolRules.
-                FullReconciliationBudget(
-                    preferredCity.units?.Count ?? 0,
-                    pool.ActorIds.Count);
-            bool reconciliationComplete = MaintainCity(kingdom,
-                preferredCity, state, reconciliationBudget,
-                allowFrozenAddition: false);
-            ReconcileLedger(preferredCity, state);
-            int added = 0;
-            while (added < requestedCount &&
-                   CityReservePoolRules.TryTakeNextActorId(pool.ActorIds,
-                       out long actorId))
-            {
-                Actor actor = ResolveActor(actorId);
-                pool.EligibleActorIds.Remove(actorId);
-                if (!IsValidMember(actor, kingdom, preferredCity,
-                        state.Generation))
-                {
-                    if (actor?.data != null) ClearFields(actor);
-                    continue;
-                }
-                ClearFields(actor);
-                destination.Add(actor);
-                added++;
-            }
-            confirmedExhausted = CityReservePoolRules.CanConfirmExhausted(
-                reconciliationComplete, pool.ActorIds.Count);
-            return added;
+            // AW3 no longer converts resident actors into temporary levies.
+            // Residents remain exclusively under vanilla recruitment.
+            confirmedExhausted = true;
+            return 0;
         }
 
         internal static ArmyMobilizationPhase ResolveMobilizationPhase(
@@ -556,10 +503,8 @@ namespace AncientWarfare3.core.lineage
         internal static bool PrepareWarEntry(Kingdom first,
             Kingdom second = null)
         {
-            if (!EnsureRestoreValidationForWarEntry()) return false;
-            var participantIds = new HashSet<long>();
-            CompletePreWarReconciliation(first, participantIds);
-            CompletePreWarReconciliation(second, participantIds);
+            // Compatibility gate only. AW3 no longer owns a resident reserve
+            // pool, so war entry must never synchronously scan actors.
             return true;
         }
 
@@ -652,40 +597,12 @@ namespace AncientWarfare3.core.lineage
 
         internal static void RebuildRuntime()
         {
-            RebuildRuntime(validatePersistedMembers: false);
+            ClearRuntime();
         }
 
         internal static void FinalizeRuntimeRestore(bool snapshotRestored)
         {
-            bool formalWarActive = false;
-            if (World.world?.kingdoms != null)
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                    if (CountFormalWars(kingdom) > 0)
-                    {
-                        formalWarActive = true;
-                        break;
-                    }
-            CityReservePoolFinalRestoreActions actions =
-                CityReservePoolPersistenceRules.ResolveFinalRestoreActions(
-                    snapshotRestored, actorCallbacksComplete: true,
-                    formalWarActive);
-            if ((actions & CityReservePoolFinalRestoreActions.
-                    ValidateMembers) == 0) return;
-
-            RebuildRuntime(validatePersistedMembers: true);
-            if (World.world?.kingdoms == null) return;
-            var reconciledKingdomIds = new HashSet<long>();
-            foreach (Kingdom kingdom in World.world.kingdoms)
-                CompletePreWarReconciliation(kingdom,
-                    reconciledKingdomIds);
-
-            if ((actions & CityReservePoolFinalRestoreActions.
-                    RestoreWarEmergency) == 0) return;
-            foreach (Kingdom kingdom in World.world.kingdoms)
-            {
-                if (CountFormalWars(kingdom) <= 0) continue;
-                OpenWarEmergency(kingdom, ResolveFirstWarId(kingdom));
-            }
+            ClearRuntime();
         }
 
         private static void RebuildRuntime(bool validatePersistedMembers)
@@ -794,8 +711,6 @@ namespace AncientWarfare3.core.lineage
         internal static void ClearRuntime()
         {
             States.Clear();
-            LastMaintenanceWorldDay = -1L;
-            KingdomCursor = 0;
             RestoreValidationPending = false;
             RestoreValidationDueWorldDay = -1L;
         }

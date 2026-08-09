@@ -67,8 +67,8 @@ internal static class CityReservePoolRulesTests
             "preparation accelerates city maintenance");
         Equal(8, CityReservePoolRules.ActorBudget(preparation: false),
             "peace candidate validation is bounded");
-        Equal(int.MaxValue, CityReservePoolRules.ActorBudget(preparation: true),
-            "preparation scans every resident without using it as an allocation size");
+        Equal(32, CityReservePoolRules.ActorBudget(preparation: true),
+            "legacy preparation work remains bounded during migration");
         Equal(18, CityReservePoolRules.CapacityForPreparation(
             eligibleCivilians: 61, lawPercent: 30, preparation: true),
             "preparation reserve capacity still follows the conscription law");
@@ -283,7 +283,7 @@ internal static class CityReservePoolRulesTests
         WarEntryWaitsForCompleteRestoreValidation();
         WarEntryReconciliationRunsOncePerKingdom();
 
-        PreparationUsesMaintainedActorPool();
+        PreparationDoesNotMaintainActorPool();
     }
 
     private static void CombinedMobilizedAndPoolCountObeysLawCapacity()
@@ -384,11 +384,11 @@ internal static class CityReservePoolRulesTests
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "TemporaryLevyService.cs"));
-        Equal(4, CountOccurrences(source, "RestoreRejectedCandidates("),
-            "four recruitment exits own exactly one rejected-candidate return");
-        Equal(4, CountOccurrences(source,
+        Equal(3, CountOccurrences(source, "RestoreRejectedCandidates("),
+            "only pre-war compatibility exits return real candidates");
+        Equal(3, CountOccurrences(source,
                 "ResolveConfirmedExhaustionAfterReturn("),
-            "every return owner resolves exhaustion from final availability");
+            "each remaining compatibility return resolves availability");
         string reserveHelper = Section(source,
             "internal static int EnlistReserveActors(",
             "private static int DirectedDemand(");
@@ -493,35 +493,32 @@ internal static class CityReservePoolRulesTests
             "war emergency generation uses the idempotent transition rule");
     }
 
-    private static void PreparationUsesMaintainedActorPool()
+    private static void PreparationDoesNotMaintainActorPool()
     {
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "CityReservePoolService.cs"));
-        Equal(true, source.Contains(
-                "int actorBudget = CityReservePoolRules.ActorBudget(preparation);",
+        string warEntry = Section(source,
+            "internal static bool PrepareWarEntry(",
+            "private static bool EnsureRestoreValidationForWarEntry(");
+        Equal(false, warEntry.Contains("CompletePreWarReconciliation(",
                 StringComparison.Ordinal),
-            "daily and notice maintenance must budget actor-index work");
-        Equal(true, source.Contains(
-                "bool complete = MaintainCity(kingdom, city, state,",
+            "war entry must not scan resident actors");
+        string consumption = Section(source,
+            "internal static int TryConsumeForMobilization(",
+            "internal static ArmyMobilizationPhase ResolveMobilizationPhase(");
+        Equal(false, consumption.Contains("TryTakeNextActorId(",
                 StringComparison.Ordinal),
-            "daily and notice maintenance must populate the city actor pool");
-        Equal(true, source.Contains(
-                "if (!IndexEligibleActor(actor, kingdom, city, pool)) return;",
+            "mobilization must not extract real residents");
+        Equal(true, consumption.Contains("confirmedExhausted = true;",
                 StringComparison.Ordinal),
-            "an eligible actor enters the reserve when becoming adult");
-        Equal(true, source.Contains(
-                "CityReservePoolRules.TryTakeNextActorId(pool.ActorIds,",
+            "the retired resident pool reports no AW3 candidates");
+        string rebuild = Section(source,
+            "internal static void RebuildRuntime()",
+            "internal static void FinalizeRuntimeRestore(");
+        Equal(false, rebuild.Contains("RebuildRuntime(validatePersistedMembers",
                 StringComparison.Ordinal),
-            "notice mobilization must consume the law-limited actor pool");
-        Equal(true, source.Contains(
-                "CityReservePoolRules.RestoreRejectedActorId(",
-                StringComparison.Ordinal),
-            "a failed enlistment must restore its actor to the source pool");
-        Equal(true, source.Contains(
-                "foreach (Actor actor in World.world.units)",
-                StringComparison.Ordinal),
-            "load rebuild must reconstruct actor pools from living residents");
+            "load restore must not rebuild a real-actor reserve index");
     }
 
     private static string Section(string source, string start, string end)

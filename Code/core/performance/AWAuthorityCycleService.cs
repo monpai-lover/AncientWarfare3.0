@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.performance
             SuccessionDisputePersistence,
             WesternCourtElection,
             AccessionInstallations,
+            ArmyRtsSuccessionRecovery,
             LocalizedNameMigration,
             WesternLineageMigration,
             IntegratedCultureNamingMigration,
@@ -32,6 +33,7 @@ namespace AncientWarfare3.core.performance
             EmptyCityResettlement,
             TemporaryMilitaryReturn,
             WarArmyReturn,
+            ArmyRtsWarLifecycle,
             ArmyRtsAssignmentReconciliation,
             Pathfinding,
             ArmyRts,
@@ -43,6 +45,7 @@ namespace AncientWarfare3.core.performance
             WarForceEliminationSettlement,
             KingdomDecisionMonthly,
             CityReservePool,
+            SyntheticMobilizationLedger,
             ArmyReplenishment,
             ActorDeathArchive,
             AsyncMainThreadDrain,
@@ -60,6 +63,7 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.succession_dispute_persistence",
             "aw3.authority.western_court_election",
             "aw3.authority.accession_installations",
+            "aw3.authority.army_rts_succession_recovery",
             "aw3.authority.localized_name_migration",
             "aw3.authority.western_lineage_migration",
             "aw3.authority.integrated_culture_naming_migration",
@@ -73,6 +77,7 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.empty_city_resettlement",
             "aw3.authority.temporary_military_return",
             "aw3.authority.war_army_return",
+            "aw3.authority.army_rts_war_lifecycle",
             "aw3.authority.army_rts_assignment_reconciliation",
             "aw3.authority.pathfinding",
             "aw3.authority.army_rts",
@@ -84,6 +89,7 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.war_force_elimination_settlement",
             "aw3.authority.kingdom_decision_monthly",
             "aw3.authority.city_reserve_pool",
+            "aw3.authority.synthetic_mobilization_ledger",
             "aw3.authority.army_replenishment",
             "aw3.authority.actor_death_archive",
             "aw3.authority.async_main_thread_drain",
@@ -191,11 +197,13 @@ namespace AncientWarfare3.core.performance
             CivilServiceExamService.ClearRuntime();
             WesternCourtElectionService.Reset();
             AccessionIdentityService.ClearRuntime();
+            ArmyRtsSuccessionRecoveryService.Reset();
             TemporaryMilitaryReturnService.ClearRuntime();
             WarArmyReturnService.ClearRuntime();
             ArmyRtsAssignmentReconciliationService.Reset();
             AWStatusSimulationScheduler.ClearRuntime();
             CityReservePoolService.ClearRuntime();
+            SyntheticMobilizationLedgerService.ClearRuntime();
             WarForceEliminationSettlementService.ClearRuntime();
             ArmyReplenishmentOperationService.ClearRuntime();
             MonthlyKingdomSnapshotService.Reset();
@@ -263,6 +271,9 @@ namespace AncientWarfare3.core.performance
                 case CooperativeAuthorityStage.AccessionInstallations:
                     AccessionIdentityService.ProcessDeferredInstallations();
                     break;
+                case CooperativeAuthorityStage.ArmyRtsSuccessionRecovery:
+                    ArmyRtsSuccessionRecoveryService.ProcessAuthorityCycle();
+                    break;
                 case CooperativeAuthorityStage.LocalizedNameMigration:
                     AWLocalizedNameMigrationService.ProcessAuthorityCycle();
                     break;
@@ -305,6 +316,9 @@ namespace AncientWarfare3.core.performance
                 case CooperativeAuthorityStage.WarArmyReturn:
                     WarArmyReturnService.ProcessFrame();
                     break;
+                case CooperativeAuthorityStage.ArmyRtsWarLifecycle:
+                    ArmyRtsWarLifecycleService.ProcessAuthorityCycle();
+                    break;
                 case CooperativeAuthorityStage.ArmyRtsAssignmentReconciliation:
                     ArmyRtsAssignmentReconciliationService.
                         ProcessAuthorityCycle();
@@ -314,8 +328,6 @@ namespace AncientWarfare3.core.performance
                         AWPathfindingBootstrap.ProcessFrame);
                     break;
                 case CooperativeAuthorityStage.ArmyRts:
-                    ArmyRtsSchedulingService.ProcessAw3Authority(
-                        pCycleToken, pPaused);
                     break;
                 case CooperativeAuthorityStage.Schools:
                     Measure(RecentFeatureBenchmarkRules.SchoolsIndex,
@@ -351,6 +363,11 @@ namespace AncientWarfare3.core.performance
                 case CooperativeAuthorityStage.CityReservePool:
                     Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                         CityReservePoolService.ProcessAuthorityCycle);
+                    break;
+                case CooperativeAuthorityStage.SyntheticMobilizationLedger:
+                    Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
+                        SyntheticMobilizationLedgerService.
+                            ProcessAuthorityCycle);
                     break;
                 case CooperativeAuthorityStage.ArmyReplenishment:
                     Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,

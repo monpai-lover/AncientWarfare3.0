@@ -176,6 +176,47 @@ namespace AncientWarfare3.core.lineage
                 return IsComplete;
             }
 
+            internal FrontTargetFacts CaptureFirstOrder()
+            {
+                City formalGoal = FindCity(_formalGoalCityId);
+                CaptureFirstOrderCandidate(formalGoal,
+                    formalGoal?.kingdom == _kingdom);
+                CaptureFirstOrderCandidate(_kingdom?.capital,
+                    pFriendly: true);
+
+                int participants = 0;
+                while (participants < KingdomWarDirectorWorkRules.
+                           MaximumFrontParticipantsPerWorkItem &&
+                       MoveNextOpponent())
+                {
+                    participants++;
+                    CaptureFirstOrderCandidate(_currentOpponent?.capital,
+                        pFriendly: false);
+                    City firstCity = null;
+                    try
+                    {
+                        if (_currentOpponent?.cities?.Count > 0)
+                            firstCity = _currentOpponent.cities[0];
+                    }
+                    catch { }
+                    CaptureFirstOrderCandidate(firstCity,
+                        pFriendly: false);
+                }
+                Dispose();
+                int selected = KingdomWarDirectorRules.
+                    SelectBestTargetIndex(_targets);
+                BestTarget = selected >= 0 ? _targets[selected] : null;
+                return BestTarget;
+            }
+
+            private void CaptureFirstOrderCandidate(City pCity,
+                bool pFriendly)
+            {
+                FrontTargetFacts candidate = BuildTargetFacts(pCity,
+                    pFriendly);
+                if (candidate != null) _targets.Add(candidate);
+            }
+
             private bool IsComplete
             {
                 get
@@ -317,6 +358,8 @@ namespace AncientWarfare3.core.lineage
 
         private static readonly KingdomWarDirectorWorkQueue WorkQueue =
             new KingdomWarDirectorWorkQueue();
+        private static readonly KingdomWarFirstOrderQueue FirstOrderQueue =
+            new KingdomWarFirstOrderQueue();
         private static readonly Dictionary<long, PlanningWork> WorkByKingdom =
             new Dictionary<long, PlanningWork>();
         private static readonly Dictionary<long, int> GenerationByKingdom =
@@ -350,6 +393,7 @@ namespace AncientWarfare3.core.lineage
             CityMilitaryThreatFacts.InvalidateWar(pWar);
             ArmyRtsAsyncPlanningService.InvalidateWar(pWar.data.id);
             IReadOnlyList<long> participants = RegisterWar(pWar);
+            EnqueueFirstOrders(pWar);
             ScheduleParticipants(participants);
         }
 
@@ -365,6 +409,7 @@ namespace AncientWarfare3.core.lineage
                 participants.UnionWith(indexed);
             AddParticipantIds(pWar, participants);
             ArmyRtsControllerService.InvalidateWar(warId);
+            FirstOrderQueue.RemoveWar(warId);
             RemoveWar(warId);
             ScheduleParticipants(new List<long>(participants));
         }
@@ -389,9 +434,15 @@ namespace AncientWarfare3.core.lineage
                     out HashSet<long> previous))
                 affected.UnionWith(previous);
             if (IsActiveWar(pWar))
+            {
                 affected.UnionWith(RegisterWar(pWar));
+                EnqueueFirstOrders(pWar);
+            }
             else
+            {
+                FirstOrderQueue.RemoveWar(pWar.data.id);
                 RemoveWar(pWar.data.id);
+            }
             if (pKingdom?.data != null) affected.Add(pKingdom.id);
             ScheduleParticipants(new List<long>(affected));
         }
@@ -446,6 +497,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnArmyChanged(Kingdom pKingdom)
         {
+            EnqueueFirstOrderForKingdom(pKingdom);
             Schedule(pKingdom);
         }
 
@@ -510,6 +562,7 @@ namespace AncientWarfare3.core.lineage
         {
             ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
             if (!ArmyRtsRuntimeModeRules.ShouldPlan(mode)) return;
+            if (TryProcessFirstOrder()) return;
             long worldDay = CurrentWorldDay();
             if (!WorkQueue.TryTake(worldDay, out long kingdomId)) return;
             Kingdom kingdom = FindKingdom(kingdomId);
@@ -551,6 +604,82 @@ namespace AncientWarfare3.core.lineage
             WorkQueue.SchedulePeriodic(kingdomId, worldDay);
         }
 
+        private static bool TryProcessFirstOrder()
+        {
+            if (!FirstOrderQueue.TryTake(
+                    out WarFirstOrderAssignment assignment)) return false;
+            TryAssignFirstOrderMission(assignment);
+            return true;
+        }
+
+        private static bool TryAssignFirstOrderMission(
+            WarFirstOrderAssignment pAssignment)
+        {
+            War war = FindWar(pAssignment.WarId);
+            Kingdom kingdom = FindKingdom(pAssignment.KingdomId);
+            if (!IsActiveWar(war) || !IsLiveKingdom(kingdom) ||
+                !SafeHasKingdom(war, kingdom)) return false;
+            if (ArmyRtsControllerService.
+                    HasActiveMissionForKingdom(kingdom)) return true;
+
+            ArmyStrategicIdCursor cursor = ArmyStrategicIndexService.
+                CreateSnapshotCursor(kingdom);
+            ArmyStrategicSnapshotBatch batch =
+                ArmyStrategicSnapshotService.CaptureNext(kingdom, cursor);
+            ArmyStrategicFacts selected = null;
+            for (int i = 0; i < batch.Armies.Count; i++)
+            {
+                if (!IsEligibleFieldArmy(batch.Armies[i])) continue;
+                selected = batch.Armies[i];
+                break;
+            }
+            if (selected == null) return false;
+            Army army = ArmyStrategicIndexService.ResolveIndexedArmy(
+                selected.ArmyId, kingdom.id);
+            WarPlanWork plan = BuildWarPlan(kingdom, war);
+            if (army?.data == null || plan == null) return false;
+
+            FrontTargetFacts targetFacts;
+            using (var front = new FrontScanWork(kingdom, war,
+                       plan.FormalGoalCityId))
+                targetFacts = front.CaptureFirstOrder();
+            City target = FindCity(targetFacts?.CityId ?? -1L);
+            if (!IsLiveCity(target))
+            {
+                ArmyRtsWarLifecycleService.MarkWaiting(war.data.id, army,
+                    "first_order_target_pending", CurrentWorldTime() +
+                    ArmyRtsAssignmentReconciliationRules.
+                        AssignmentRetryWorldSeconds);
+                return false;
+            }
+
+            bool defend = targetFacts.DefensiveObjective ||
+                          targetFacts.FrozenFriendly;
+            ArmyRtsControllerService.AssignMission(army,
+                new ArmyRtsMission
+                {
+                    ArmyId = army.id,
+                    KingdomId = kingdom.id,
+                    WarId = war.data.id,
+                    FrontId = target.id,
+                    TargetCityId = target.id,
+                    TargetStrength = StandingArmyService.TargetStrength(
+                        army, kingdom),
+                    ProposalKind = defend
+                        ? ArmyRtsProposalKind.Defend
+                        : ArmyRtsProposalKind.Attack,
+                    Role = defend
+                        ? ArmyRtsRole.Defense
+                        : ArmyRtsRole.Assault,
+                    Posture = defend
+                        ? ArmyRtsPosture.Defend
+                        : ArmyRtsPosture.Automatic,
+                    PlayerOrder = false,
+                    IssuedTime = CurrentWorldTime()
+                });
+            return ArmyRtsControllerService.HasActiveMission(army.id);
+        }
+
         public static bool TryGetShadowSnapshot(Kingdom pKingdom,
             out KingdomWarDirectorShadowSnapshot pSnapshot)
         {
@@ -580,6 +709,7 @@ namespace AncientWarfare3.core.lineage
         public static void ClearRuntime()
         {
             WorkQueue.Clear();
+            FirstOrderQueue.Clear();
             foreach (PlanningWork work in WorkByKingdom.Values)
                 work.Dispose();
             WorkByKingdom.Clear();
@@ -1442,6 +1572,67 @@ namespace AncientWarfare3.core.lineage
             if (pKingdomIds == null) return;
             for (int i = 0; i < pKingdomIds.Count; i++)
                 Schedule(FindKingdom(pKingdomIds[i]));
+        }
+
+        private static void EnqueueFirstOrders(War pWar)
+        {
+            if (pWar?.data == null) return;
+            IReadOnlyList<long> attackers = CollectFirstOrderParticipants(
+                pWar, pAttackers: true);
+            IReadOnlyList<long> defenders = CollectFirstOrderParticipants(
+                pWar, pAttackers: false);
+            FirstOrderQueue.EnqueueWar(pWar.data.id, attackers, defenders);
+        }
+
+        private static void EnqueueFirstOrderForKingdom(Kingdom pKingdom)
+        {
+            if (!IsLiveKingdom(pKingdom) ||
+                ArmyRtsControllerService.
+                    HasActiveMissionForKingdom(pKingdom) ||
+                !WarIdsByKingdom.TryGetValue(pKingdom.id,
+                    out SortedSet<long> warIds)) return;
+            var participant = new[] { pKingdom.id };
+            foreach (long warId in warIds)
+            {
+                War war = FindWar(warId);
+                if (!IsActiveWar(war) || !SafeHasKingdom(war, pKingdom))
+                    continue;
+                bool attacker;
+                try { attacker = war.isAttacker(pKingdom); }
+                catch { continue; }
+                FirstOrderQueue.EnqueueWar(warId,
+                    attacker ? participant : Array.Empty<long>(),
+                    attacker ? Array.Empty<long>() : participant);
+            }
+        }
+
+        private static IReadOnlyList<long> CollectFirstOrderParticipants(
+            War pWar, bool pAttackers)
+        {
+            var result = new List<long>(KingdomWarDirectorWorkRules.
+                MaximumFrontParticipantsPerWorkItem);
+            var seen = new HashSet<long>();
+            Kingdom main = pAttackers
+                ? SafeMainAttacker(pWar)
+                : SafeMainDefender(pWar);
+            if (main?.data != null && seen.Add(main.id))
+                result.Add(main.id);
+            try
+            {
+                IEnumerable<Kingdom> participants = pAttackers
+                    ? pWar.getAttackers()
+                    : pWar.getDefenders();
+                if (participants != null)
+                    foreach (Kingdom kingdom in participants)
+                    {
+                        if (result.Count >= KingdomWarDirectorWorkRules.
+                                MaximumFrontParticipantsPerWorkItem) break;
+                        if (kingdom?.data != null && seen.Add(kingdom.id))
+                            result.Add(kingdom.id);
+                    }
+            }
+            catch { }
+            return result;
         }
 
         private static IEnumerator<Kingdom> CreateOpponentEnumerator(

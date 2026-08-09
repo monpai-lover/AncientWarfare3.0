@@ -20,6 +20,8 @@ internal static class RecruitmentLifecycleRemovalRulesTests
             "lineage", "KingdomWarDirectorService.cs"));
         string map = File.ReadAllText(Path.Combine(root, "Code", "core",
             "policy", "HierarchicalVassalMapModeService.cs"));
+        string standingPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_StandingArmyPatch.cs"));
 
         Assert(!authority.Contains("TemporaryLevyService.ProcessPreparationMonth",
             StringComparison.Ordinal),
@@ -61,6 +63,9 @@ internal static class RecruitmentLifecycleRemovalRulesTests
         Assert(!authority.Contains("KingdomMobilizationIndex",
             StringComparison.Ordinal),
             "remaining monthly reserve work must not report as war mobilization");
+        Assert(!standingPatch.Contains("TryToMakeWarrior_Prefix",
+                StringComparison.Ordinal),
+            "AW3 must not globally block vanilla autonomous recruitment");
         Assert(map.Contains("_nativeDrawCacheValid", StringComparison.Ordinal) &&
             map.Contains("CanReuseNativeLabels", StringComparison.Ordinal),
             "native map labels must have an explicit reuse gate");

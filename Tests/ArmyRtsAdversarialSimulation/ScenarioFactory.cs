@@ -1,9 +1,115 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 
 namespace ArmyRtsAdversarialSimulation;
 
+internal sealed class SyntheticMobilizationProbeResult
+{
+    public int Quota { get; init; }
+    public int MaximumLive { get; init; }
+    public int Replacements { get; init; }
+    public int FinalLive { get; init; }
+    public bool RestoredDuringDemobilization { get; init; }
+}
+
+internal sealed class SchedulerEquivalenceProbeResult
+{
+    public int NativeLogicalPasses { get; init; }
+    public int LargeLogicalPasses { get; init; }
+    public int DuplicateLargePasses { get; init; }
+}
+
 internal static class ScenarioFactory
 {
+    public static SyntheticMobilizationProbeResult
+        RunSyntheticMobilizationProbe(int seed)
+    {
+        var random = new Random(seed);
+        int quota = SyntheticMobilizationRules.Quota(
+            cityPopulation: 600, knownSynthetic: 0, lawPercent: 50);
+        int live = 0;
+        int initialCreated = 0;
+        int maximumLive = 0;
+        while (initialCreated < quota)
+        {
+            int batch = SyntheticMobilizationRules.Batch(
+                quota - initialCreated,
+                SyntheticMobilizationRules.SpawnBatchLimit);
+            initialCreated += batch;
+            live += batch;
+            maximumLive = Math.Max(maximumLive, live);
+        }
+
+        int casualties = random.Next(24, 65);
+        live -= casualties;
+        int replacementReserve = quota;
+        int replacements = SyntheticMobilizationRules.ReplacementDemand(
+            quota, live, replacementReserve);
+        int replacementCreated = 0;
+        while (replacementCreated < replacements)
+        {
+            int batch = SyntheticMobilizationRules.Batch(
+                replacements - replacementCreated,
+                SyntheticMobilizationRules.ReplacementBatchLimit);
+            replacementCreated += batch;
+            replacementReserve -= batch;
+            live += batch;
+            maximumLive = Math.Max(maximumLive, live);
+        }
+
+        // City capture starts demobilization. Persist after the first batch,
+        // then resume from the restored live counter.
+        int firstRemoval = SyntheticMobilizationRules.Batch(live,
+            SyntheticMobilizationRules.DemobilizationBatchLimit);
+        live -= firstRemoval;
+        int restoredLive = live;
+        bool restoredDuringDemobilization = restoredLive > 0;
+        while (restoredLive > 0)
+            restoredLive -= SyntheticMobilizationRules.Batch(restoredLive,
+                SyntheticMobilizationRules.DemobilizationBatchLimit);
+
+        return new SyntheticMobilizationProbeResult
+        {
+            Quota = quota,
+            MaximumLive = maximumLive,
+            Replacements = replacementCreated,
+            FinalLive = restoredLive,
+            RestoredDuringDemobilization = restoredDuringDemobilization
+        };
+    }
+
+    public static SchedulerEquivalenceProbeResult
+        RunLargeStepEquivalenceProbe(int seed)
+    {
+        int passes = new Random(seed).Next(32, 97);
+        var native = new ArmyRtsSchedulingGate();
+        native.StartSession(configAw3: false);
+        int nativeAccepted = 0;
+        for (long token = 1L; token <= passes; token++)
+            if (native.TryEnter(ArmyRtsSchedulerOwner.NativeArmyManager,
+                    token, allowed: true)) nativeAccepted++;
+
+        var large = new ArmyRtsSchedulingGate();
+        large.StartSession(configAw3: true);
+        int largeAccepted = 0;
+        int duplicateAccepted = 0;
+        for (long token = 1L; token <= passes; token++)
+        {
+            large.TryEnter(ArmyRtsSchedulerOwner.NativeArmyManager,
+                token, allowed: true);
+            if (large.TryEnter(ArmyRtsSchedulerOwner.Aw3Authority,
+                    token, allowed: true)) largeAccepted++;
+            if (large.TryEnter(ArmyRtsSchedulerOwner.Aw3Authority,
+                    token, allowed: true)) duplicateAccepted++;
+        }
+        return new SchedulerEquivalenceProbeResult
+        {
+            NativeLogicalPasses = nativeAccepted,
+            LargeLogicalPasses = largeAccepted,
+            DuplicateLargePasses = duplicateAccepted
+        };
+    }
+
     public static ScenarioState OracleProbe(int seed)
     {
         ScenarioState state = ScenarioState.CreateSmoke(seed);

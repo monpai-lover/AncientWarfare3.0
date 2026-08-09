@@ -380,6 +380,9 @@ namespace AncientWarfare3.core.lineage
                                     ex.GetType().Name);
                 return false;
             }
+            if (progress.Context.Captured)
+                ArmyRtsSuccessionRecoveryService.OnKingInstalled(
+                    pKingdom, pActor);
             return true;
         }
 

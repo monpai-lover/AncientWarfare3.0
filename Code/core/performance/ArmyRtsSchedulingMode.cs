@@ -34,26 +34,32 @@ namespace AncientWarfare3.core.performance
 
     public sealed class ArmyRtsSchedulingGate
     {
-        private long _lastToken;
-        private bool _hasLastToken;
+        private ArmyRtsSchedulerMode _owner;
+        private bool _ownerFrozen;
+        private long _lastToken = -1L;
 
-        public bool TryEnter(ArmyRtsSchedulerMode pMode,
-            ArmyRtsSchedulerOwner pOwner, long pToken,
-            bool pAuthorityAllowed)
+        public void StartSession(bool configAw3)
         {
-            if (!pAuthorityAllowed ||
-                !ArmyRtsSchedulingRules.ShouldRunOwner(pMode, pOwner) ||
-                (_hasLastToken && _lastToken == pToken))
+            _owner = ArmyRtsSchedulingRules.ResolveStartupMode(configAw3);
+            _ownerFrozen = true;
+            _lastToken = -1L;
+        }
+
+        public bool TryEnter(ArmyRtsSchedulerOwner pOwner, long pToken,
+            bool allowed)
+        {
+            if (!allowed || !_ownerFrozen || pToken <= _lastToken ||
+                !ArmyRtsSchedulingRules.ShouldRunOwner(_owner, pOwner))
                 return false;
             _lastToken = pToken;
-            _hasLastToken = true;
             return true;
         }
 
         public void Reset()
         {
-            _lastToken = 0L;
-            _hasLastToken = false;
+            _owner = default;
+            _ownerFrozen = false;
+            _lastToken = -1L;
         }
     }
 

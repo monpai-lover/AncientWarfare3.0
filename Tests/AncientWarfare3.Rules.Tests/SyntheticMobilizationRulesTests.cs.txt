@@ -1,0 +1,96 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class SyntheticMobilizationRulesTests
+{
+    internal static void Run()
+    {
+        Equal(50, SyntheticMobilizationRules.Quota(100, 0, 50),
+            "a 50 percent law mobilizes half the city population");
+        Equal(40, SyntheticMobilizationRules.Quota(100, 20, 50),
+            "existing synthetic actors cannot inflate real population");
+        Equal(0, SyntheticMobilizationRules.Quota(3, 0, 30),
+            "small-city quotas use floor without a forced minimum");
+        Equal(30, SyntheticMobilizationRules.Quota(100, 0, 30),
+            "the 30 percent law is exact");
+        Equal(70, SyntheticMobilizationRules.Quota(100, 0, 70),
+            "the 70 percent law is exact");
+        Equal(100, SyntheticMobilizationRules.Quota(100, 0, 100),
+            "the 100 percent law is exact");
+        Equal(8, SyntheticMobilizationRules.Batch(23,
+                SyntheticMobilizationRules.SpawnBatchLimit),
+            "initial spawning is bounded");
+        Equal(12, SyntheticMobilizationRules.ReplacementDemand(
+                target: 40, living: 28, remainingReserve: 15),
+            "casualties consume numeric reserve");
+        Equal(15, SyntheticMobilizationRules.ReplacementDemand(
+                target: 40, living: 10, remainingReserve: 15),
+            "replacement demand cannot exceed reserve");
+        Equal(16, SyntheticMobilizationRules.DemobilizationBatch(41),
+            "demobilization removes at most sixteen actors per work item");
+        Equal(9, SyntheticMobilizationRules.DemobilizationBatch(9),
+            "the final demobilization batch removes the remainder");
+        int remaining = 41;
+        int[] expectedBatches = { 16, 16, 9 };
+        for (int i = 0; i < expectedBatches.Length; i++)
+        {
+            int batch = SyntheticMobilizationRules.DemobilizationBatch(
+                remaining);
+            Equal(expectedBatches[i], batch,
+                "demobilization sequence batch " + i);
+            remaining -= batch;
+        }
+        Equal(0, remaining,
+            "bounded demobilization eventually drains every actor");
+
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SyntheticMobilizationLedgerService.cs"));
+        Contains(source, "OnWarStarted(War pWar)",
+            "the ledger observes war creation");
+        Contains(source,
+            "OnKingdomJoinedWar(War pWar, Kingdom pKingdom)",
+            "the ledger observes later participants");
+        Contains(source, "OnWarEnded(War pWar)",
+            "the ledger observes war termination");
+        Contains(source, "ProcessAuthorityCycle()",
+            "ledger work is authority-cycle bounded");
+        Contains(source, "city.getPopulationPeople()",
+            "quota snapshots use the native aggregate population API");
+        DoesNotContain(source, "city.units[",
+            "quota snapshots must not enumerate resident actors");
+        Contains(source, "SortedSet<long> ActorIds",
+            "each city-war record owns stable synthetic actor ids");
+        Contains(source,
+            "SyntheticMobilizationRules.DemobilizationBatch(",
+            "post-war removal is bounded");
+        Contains(source,
+            "SyntheticLevyService.RemoveWithoutPersonalHistory(",
+            "demobilization destroys generated actors without biographies");
+        Contains(source, "OnSyntheticMaterialized(Actor pActor)",
+            "materialization registers actor identity atomically");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                                                expected + ", got " + actual);
+    }
+
+    private static void Contains(string source, string value, string message)
+    {
+        if (!source.Contains(value, StringComparison.Ordinal))
+            throw new InvalidOperationException(message + ": missing " +
+                                                value);
+    }
+
+    private static void DoesNotContain(string source, string value,
+        string message)
+    {
+        if (source.Contains(value, StringComparison.Ordinal))
+            throw new InvalidOperationException(message + ": found " +
+                                                value);
+    }
+}

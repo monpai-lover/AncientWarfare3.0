@@ -35,6 +35,10 @@
              Link="Production\TemporaryLevyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyMobilizationRules.cs"
              Link="Production\ArmyMobilizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SyntheticMobilizationRules.cs"
+             Link="Production\SyntheticMobilizationRules.cs" />
+    <Compile Include="..\..\Code\core\performance\ArmyRtsSchedulingMode.cs"
+             Link="Production\ArmyRtsSchedulingMode.cs" />
     <Compile Include="..\..\Code\core\lineage\CityManpowerRules.cs"
              Link="Production\CityManpowerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WartimeRecruitmentPopulationRules.cs"

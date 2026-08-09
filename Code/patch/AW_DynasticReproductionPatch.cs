@@ -61,16 +61,25 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BabyMaker), nameof(BabyMaker.makeBaby))]
-        private static void MakeBaby_Prefix(Actor pParent1,
-            Actor pParent2, ref ActorSex pForcedSexType)
+        private static bool MakeBaby_Prefix(Actor pParent1,
+            Actor pParent2, ref Actor __result,
+            ref ActorSex pForcedSexType)
         {
+            if (SyntheticLevyService.IsSynthetic(pParent1) ||
+                SyntheticLevyService.IsSynthetic(pParent2))
+            {
+                __result = null;
+                return false;
+            }
             if (pForcedSexType != ActorSex.None ||
                 !NobleHeirPregnancyService.IsActiveLoverHeirBirth(
-                    pParent1, pParent2)) return;
-            pForcedSexType = DynasticLoverConceptionRules.RollMakesMale(
-                Randy.randomInt(0, 100))
-                ? ActorSex.Male
-                : ActorSex.Female;
+                    pParent1, pParent2)) return true;
+            pForcedSexType =
+                DynasticLoverConceptionRules.RollMakesMale(
+                    Randy.randomInt(0, 100))
+                    ? ActorSex.Male
+                    : ActorSex.Female;
+            return true;
         }
 
         [HarmonyPostfix]

@@ -57,13 +57,13 @@ namespace AncientWarfare3.patch
             try
             {
                 if (string.IsNullOrEmpty(pFolder)) return;
-                CityReservePoolService.TryWriteSnapshot(pFolder,
-                    out string reserveSnapshotError);
-                if (!string.IsNullOrEmpty(reserveSnapshotError))
+                SyntheticMobilizationLedgerService.TryWriteSnapshot(pFolder,
+                    out string mobilizationSnapshotError);
+                if (!string.IsNullOrEmpty(mobilizationSnapshotError))
                 {
                     ModClass.LogWarning(
-                        "City reserve pool snapshot write failed");
-                    ModClass.LogWarning(reserveSnapshotError);
+                        "Synthetic mobilization snapshot write failed");
+                    ModClass.LogWarning(mobilizationSnapshotError);
                 }
                 if (!LineageArchiveManager.Instance.TryExportLineageArchive(
                         pFolder, out string error))
@@ -102,7 +102,6 @@ namespace AncientWarfare3.patch
             pCause = null;
             try
             {
-                CityReservePoolService.PrepareForSave();
                 core.lineage.DeferredRuntimeWorkService.FlushPersistent();
                 string deathArchiveError = string.Empty;
                 string asyncWriteError = string.Empty;

@@ -25,10 +25,10 @@ internal static class SyntheticLevyRulesTests
             SyntheticLevyRules.ResolveDemobilization(
                 synthetic: true, alive: true, militaryMerit: 0),
             "an unmerited synthetic levy is removed after war");
-        Equal(SyntheticLevyDisposition.PromotePermanent,
+        Equal(SyntheticLevyDisposition.RemoveActor,
             SyntheticLevyRules.ResolveDemobilization(
                 synthetic: true, alive: true, militaryMerit: 1),
-            "military merit promotes a synthetic levy");
+            "military merit never makes a synthetic levy permanent");
         Equal(SyntheticLevyDisposition.Ignore,
             SyntheticLevyRules.ResolveDemobilization(
                 synthetic: true, alive: false, militaryMerit: 10),
@@ -45,12 +45,36 @@ internal static class SyntheticLevyRulesTests
         Equal(true, SyntheticLevyRules.AllowTask(
             synthetic: true, SyntheticLevyTask.Healing),
             "synthetic soldiers may heal");
+        Equal(true, SyntheticLevyRules.AllowTask(
+            synthetic: true, SyntheticLevyTask.Sleep),
+            "synthetic soldiers may rest");
         Equal(false, SyntheticLevyRules.AllowTask(
             synthetic: true, SyntheticLevyTask.Social),
             "synthetic soldiers cannot socialize");
         Equal(false, SyntheticLevyRules.AllowTask(
             synthetic: true, SyntheticLevyTask.CivilianWork),
             "synthetic soldiers cannot enter civilian work");
+        foreach (SyntheticLevyTask task in Enum.GetValues<
+                     SyntheticLevyTask>())
+        {
+            bool expected = task == SyntheticLevyTask.Military ||
+                            task == SyntheticLevyTask.Food ||
+                            task == SyntheticLevyTask.Healing ||
+                            task == SyntheticLevyTask.Transport ||
+                            task == SyntheticLevyTask.Retreat ||
+                            task == SyntheticLevyTask.Formation ||
+                            task == SyntheticLevyTask.Sleep;
+            Equal(expected, SyntheticLevyRules.AllowTask(true, task),
+                "synthetic task whitelist is exhaustive for " + task);
+        }
+        Equal(true, SyntheticLevyRules.AllowTaskId(true,
+                "aw_army_rts_march"),
+            "RTS marching remains available");
+        Equal(true, SyntheticLevyRules.AllowTaskId(true, "sleep_inside"),
+            "basic rest remains available");
+        Equal(false, SyntheticLevyRules.AllowTaskId(true,
+                "aw_historical_school_lecture"),
+            "unknown civil work is denied by default");
         Equal(true, SyntheticLevyRules.ShouldClearSyntheticFields(
             SyntheticLevyDisposition.PromotePermanent),
             "promotion clears synthetic provenance");
@@ -76,6 +100,40 @@ internal static class SyntheticLevyRulesTests
             "disposing the outer scope restores normal callbacks");
         RuntimeCreationIsAtomicAndImmediatelyMilitary();
         FormalWarReplenishmentUsesSyntheticReserveOnly();
+        SyntheticLifecycleBoundariesArePatched();
+    }
+
+    private static void SyntheticLifecycleBoundariesArePatched()
+    {
+        string root = RepositoryRoot();
+        string tasks = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_WartimeMilitaryTaskPatch.cs"));
+        Equal(true, tasks.Contains(
+                "AccessTools.Method(typeof(AiSystemActor), \"setJob\")",
+                StringComparison.Ordinal),
+            "direct job assignment is intercepted");
+        Equal(true, tasks.Contains(
+                "AccessTools.Method(typeof(AiSystemActor), \"setTask\")",
+                StringComparison.Ordinal),
+            "direct task assignment is intercepted");
+        Equal(true, tasks.Contains(
+                "AccessTools.Method(typeof(AiSystemActor), \"update\")",
+                StringComparison.Ordinal),
+            "an already active forbidden task is intercepted");
+
+        string reproduction = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_DynasticReproductionPatch.cs"));
+        Equal(true, reproduction.Contains(
+                "SyntheticLevyService.IsSynthetic(pParent1)",
+                StringComparison.Ordinal),
+            "the first direct parent cannot be synthetic");
+        Equal(true, reproduction.Contains(
+                "SyntheticLevyService.IsSynthetic(pParent2)",
+                StringComparison.Ordinal),
+            "the second direct parent cannot be synthetic");
+        Equal(true, reproduction.Contains("ref Actor __result",
+                StringComparison.Ordinal),
+            "blocked reproduction returns no child");
     }
 
     private static void RuntimeCreationIsAtomicAndImmediatelyMilitary()
@@ -122,25 +180,34 @@ internal static class SyntheticLevyRulesTests
                 StringComparison.Ordinal),
             "formal-war replenishment materializes the city war reserve");
         Equal(true, source.Contains(
-                "CityReservePoolService.TryReserveWarManpower(",
+                "SyntheticMobilizationLedgerService.TryReserveReplacement(",
                 StringComparison.Ordinal),
-            "formal-war replenishment reserves abstract city manpower");
+            "formal-war replenishment reserves the unified numeric ledger");
         string reservePool = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "CityReservePoolService.cs"));
-        Equal(true, reservePool.Contains(
+        Equal(false, reservePool.Contains(
                 "if (phase != ArmyMobilizationPhase.Notice) return 0;",
                 StringComparison.Ordinal),
-            "preparation recruitment is explicitly limited to Notice");
-        Equal(true, reservePool.Contains(
-                "CityReservePoolRules.TryTakeNextActorId(pool.ActorIds,",
+            "notice preparation no longer converts real residents");
+        Equal(false, reservePool.Contains(
+                "TryTakeNextActorId(pool.ActorIds",
                 StringComparison.Ordinal),
-            "notice preparation consumes real indexed reserve actors");
+            "the old pool no longer extracts real residents");
         string levy = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "TemporaryLevyService.cs"));
         Equal(false, levy.Contains(
                 "bool mobilizationActive = ArmyMobilizationRules.CanConsume(",
                 StringComparison.Ordinal),
             "formal War cannot keep the real-actor preparation plan alive");
+        Equal(false, levy.Contains("SyntheticLevyService.Promote(",
+                StringComparison.Ordinal),
+            "generated wartime soldiers can never become permanent actors");
+        string syntheticLevy = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "SyntheticLevyService.cs"));
+        Equal(false, syntheticLevy.Contains(
+                "internal static void Promote(Actor",
+                StringComparison.Ordinal),
+            "the generated-actor service exposes no promotion boundary");
         int casualty = levy.IndexOf(
             "public static void OnMilitaryCasualty(Actor pActor)",
             StringComparison.Ordinal);
