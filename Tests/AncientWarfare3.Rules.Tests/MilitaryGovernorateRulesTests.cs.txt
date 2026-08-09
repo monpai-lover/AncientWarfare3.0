@@ -41,6 +41,35 @@ internal static class MilitaryGovernorateRulesTests
             "frontier candidate reads stay bounded");
         Equal(32, MilitaryGovernorateRules.GeneralScanBudget,
             "general candidate reads stay bounded");
+
+        VassalEffectiveTerms militaryTerms = VassalContractTierRules.TermsFor(
+            VassalContractTierRules.Outer,
+            VassalSubjectKind.MilitaryGovernorate);
+        Equal(50, militaryTerms.Autonomy,
+            "military governorate preserves local autonomy");
+        Equal(0, militaryTerms.TributeRate,
+            "military governorate does not pay ordinary tribute");
+        Equal(100, militaryTerms.MilitaryObligation,
+            "military governorate has an absolute military obligation");
+
+        VassalEffectiveTerms ordinaryTerms = VassalContractTierRules.TermsFor(
+            VassalContractTierRules.Outer, VassalSubjectKind.Ordinary);
+        Equal(50, ordinaryTerms.Autonomy,
+            "ordinary outer vassal autonomy is unchanged");
+        Equal(10, ordinaryTerms.TributeRate,
+            "ordinary outer vassal tribute is unchanged");
+        Equal(50, ordinaryTerms.MilitaryObligation,
+            "ordinary outer vassal obligation is unchanged");
+
+        Equal(true, VassalRelationRules.CanSetMilitaryGovernorate(
+                true, false, false, false),
+            "valid non-rebel relation may become a military governorate");
+        Equal(false, VassalRelationRules.CanSetMilitaryGovernorate(
+                true, false, false, true),
+            "military governorate relation cannot create a cycle");
+        Equal(false, VassalRelationRules.CanSetMilitaryGovernorate(
+                true, true, false, false),
+            "rebel subject cannot become a military governorate");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

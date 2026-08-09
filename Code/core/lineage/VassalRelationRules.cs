@@ -120,5 +120,13 @@ namespace AncientWarfare3.core.lineage
             return pBasicValid && !pVassalIsRebel && !pSuzerainIsRebel &&
                    pSuzerainTitleAboveVassal && !pCycleDetected;
         }
+
+        public static bool CanSetMilitaryGovernorate(bool pBasicValid,
+            bool pSubjectIsRebel, bool pSuzerainIsRebel,
+            bool pCycleDetected)
+        {
+            return pBasicValid && !pSubjectIsRebel && !pSuzerainIsRebel &&
+                   !pCycleDetected;
+        }
     }
 }

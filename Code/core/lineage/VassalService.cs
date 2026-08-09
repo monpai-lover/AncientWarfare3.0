@@ -15,12 +15,14 @@ namespace AncientWarfare3.core.lineage
     {
         public ActiveVassalRelationIdentity(long pRelationId,
             long pVassalId, long pSuzerainId, int pContractTier,
-            string pRelationType, bool pAmbiguous)
+            VassalSubjectKind pSubjectKind, string pRelationType,
+            bool pAmbiguous)
         {
             RelationId = pRelationId;
             VassalId = pVassalId;
             SuzerainId = pSuzerainId;
             ContractTier = pContractTier;
+            SubjectKind = pSubjectKind;
             RelationType = pRelationType ?? "";
             Ambiguous = pAmbiguous;
         }
@@ -29,6 +31,7 @@ namespace AncientWarfare3.core.lineage
         public long VassalId { get; }
         public long SuzerainId { get; }
         public int ContractTier { get; }
+        public VassalSubjectKind SubjectKind { get; }
         public string RelationType { get; }
         public bool Ambiguous { get; }
         public bool IsTributary =>
@@ -73,6 +76,7 @@ namespace AncientWarfare3.core.lineage
             public int tribute_rate = 10;
             public int military_obligation = 50;
             public int contract_tier = VassalContractTierRules.Outer;
+            public VassalSubjectKind subject_kind = VassalSubjectKind.Ordinary;
             public double start_time = -1;
             public long suzerain_id = -1;
             public string suzerain_name = "";
@@ -82,6 +86,14 @@ namespace AncientWarfare3.core.lineage
         public static bool IsVassalKingdom(Kingdom pKingdom)
         {
             return GetSuzerainId(pKingdom) >= 0;
+        }
+
+        public static VassalSubjectKind GetSubjectKind(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return VassalSubjectKind.Ordinary;
+            pKingdom.data.get(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
+                out int kind, (int)VassalSubjectKind.Ordinary);
+            return NormalizeSubjectKind(kind);
         }
 
         public static bool IsTributaryKingdom(Kingdom pKingdom)
@@ -324,6 +336,12 @@ namespace AncientWarfare3.core.lineage
                     projection.TributarySuzerainId);
                 vassal.data.set(LineageKeys.TRIBUTARY_RELATION_ID,
                     projection.TributaryRelationId);
+                vassal.data.set(
+                    LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
+                    (int)relation.SubjectKind);
+                if (relation.SubjectKind ==
+                    VassalSubjectKind.MilitaryGovernorate)
+                    MilitaryGovernorateStore.RestoreProjection(vassal);
 
                 if (VassalContractTierRules.CountsAsVassal(
                         projection.ContractTier))
@@ -345,7 +363,7 @@ namespace AncientWarfare3.core.lineage
             var appliedVassals = new HashSet<long>();
             using var command = new SQLiteCommand(DB);
             command.CommandText = "SELECT RELATION_ID,VASSAL_ID," +
-                "SUZERAIN_ID,CONTRACT_TIER FROM " +
+                "SUZERAIN_ID,CONTRACT_TIER,SUBJECT_KIND FROM " +
                 VassalRelationTableItem.GetTableName() +
                 " WHERE ACTIVE=1 AND END_TIME<0 ORDER BY VASSAL_ID," +
                 "START_TIME DESC,RELATION_ID DESC";
@@ -365,10 +383,14 @@ namespace AncientWarfare3.core.lineage
                     ? VassalContractTierRules.Outer
                     : VassalContractTierRules.NormalizeTier(
                         (int)reader.GetInt64(3));
+                VassalSubjectKind subjectKind = reader.IsDBNull(4)
+                    ? VassalSubjectKind.Ordinary
+                    : NormalizeSubjectKind(reader.GetInt64(4));
                 if (relationId < 0 || vassalId < 0 || suzerainId < 0 ||
                     !appliedVassals.Add(vassalId)) continue;
                 result.Add(new ActiveVassalRelationIdentity(relationId,
-                    vassalId, suzerainId, contractTier, "", false));
+                    vassalId, suzerainId, contractTier, subjectKind, "",
+                    false));
             }
             return result;
         }
@@ -384,7 +406,8 @@ namespace AncientWarfare3.core.lineage
             {
                 using var command = new SQLiteCommand(DB);
                 command.CommandText = "SELECT RELATION_ID,VASSAL_ID," +
-                    "SUZERAIN_ID,CONTRACT_TIER,RELATION_TYPE FROM " +
+                    "SUZERAIN_ID,CONTRACT_TIER,SUBJECT_KIND," +
+                    "RELATION_TYPE FROM " +
                     VassalRelationTableItem.GetTableName() +
                     " WHERE VASSAL_ID=@vassal AND ACTIVE=1 AND " +
                     "END_TIME<0 ORDER BY START_TIME DESC,RELATION_ID DESC " +
@@ -405,14 +428,17 @@ namespace AncientWarfare3.core.lineage
                     ? VassalContractTierRules.Outer
                     : VassalContractTierRules.NormalizeTier(
                         (int)reader.GetInt64(3));
-                string relationType = reader.IsDBNull(4)
+                VassalSubjectKind subjectKind = reader.IsDBNull(4)
+                    ? VassalSubjectKind.Ordinary
+                    : NormalizeSubjectKind(reader.GetInt64(4));
+                string relationType = reader.IsDBNull(5)
                     ? ""
-                    : reader.GetString(4);
+                    : reader.GetString(5);
                 bool ambiguous = reader.Read();
                 pExists = true;
                 pIdentity = new ActiveVassalRelationIdentity(relationId,
-                    vassalId, suzerainId, contractTier, relationType,
-                    ambiguous);
+                    vassalId, suzerainId, contractTier, subjectKind,
+                    relationType, ambiguous);
                 return true;
             }
             catch (Exception error)
@@ -676,6 +702,17 @@ namespace AncientWarfare3.core.lineage
                 WouldCreateCycle(pVassal, pSuzerain));
         }
 
+        internal static bool CanSetMilitaryGovernorateRelation(
+            Kingdom pSubject, Kingdom pSuzerain)
+        {
+            bool basicValid = HasValidVassalParticipants(pSubject, pSuzerain);
+            return VassalRelationRules.CanSetMilitaryGovernorate(
+                basicValid,
+                basicValid && MandateRebelService.IsRebelKingdom(pSubject),
+                basicValid && MandateRebelService.IsRebelKingdom(pSuzerain),
+                basicValid && WouldCreateCycle(pSubject, pSuzerain));
+        }
+
         internal static bool WouldCreateVassalCycle(Kingdom pVassal,
             Kingdom pSuzerain)
         {
@@ -716,7 +753,8 @@ namespace AncientWarfare3.core.lineage
         {
             return SetVassalInternal(pVassal, pSuzerain, pReason, pWarId,
                 pEnforceWarVictory, pContractTier,
-                pAdministrativeEnfeoffment: false);
+                pAdministrativeEnfeoffment: false,
+                VassalSubjectKind.Ordinary);
         }
 
         internal static bool SetVassalByAdministrativeEnfeoffment(
@@ -725,16 +763,32 @@ namespace AncientWarfare3.core.lineage
             return SetVassalInternal(pVassal, pSuzerain, pReason,
                 pWarId: -1, pEnforceWarVictory: false,
                 pContractTier: VassalContractTierRules.Outer,
-                pAdministrativeEnfeoffment: true);
+                pAdministrativeEnfeoffment: true,
+                VassalSubjectKind.Ordinary);
+        }
+
+        public static bool SetMilitaryGovernorate(Kingdom pSubject,
+            Kingdom pSuzerain, string pReason)
+        {
+            return SetVassalInternal(pSubject, pSuzerain,
+                pReason ?? "military_governorate", pWarId: -1,
+                pEnforceWarVictory: false,
+                pContractTier: VassalContractTierRules.Outer,
+                pAdministrativeEnfeoffment: true,
+                VassalSubjectKind.MilitaryGovernorate);
         }
 
         private static bool SetVassalInternal(Kingdom pVassal,
             Kingdom pSuzerain, string pReason, long pWarId,
             bool pEnforceWarVictory, int pContractTier,
-            bool pAdministrativeEnfeoffment)
+            bool pAdministrativeEnfeoffment,
+            VassalSubjectKind pSubjectKind)
         {
             int contractTier = VassalContractTierRules.NormalizeTier(pContractTier);
-            bool allowed = pAdministrativeEnfeoffment
+            bool allowed = pSubjectKind ==
+                           VassalSubjectKind.MilitaryGovernorate
+                ? CanSetMilitaryGovernorateRelation(pVassal, pSuzerain)
+                : pAdministrativeEnfeoffment
                 ? CanSetAdministrativeEnfeoffment(pVassal, pSuzerain)
                 : pEnforceWarVictory
                 ? CanEnforceVassalWarVictory(pVassal, pSuzerain)
@@ -754,7 +808,8 @@ namespace AncientWarfare3.core.lineage
                 ReadActiveRelationId(pVassal.id) >= 0)
                 if (!EndVassal(pVassal, "replaced")) return false;
 
-            VassalEffectiveTerms baseTerms = VassalContractTierRules.TermsFor(contractTier);
+            VassalEffectiveTerms baseTerms = VassalContractTierRules.TermsFor(
+                contractTier, pSubjectKind);
 
             long relationId = TableIdAllocator.Next(DB, VassalRelationTableItem.GetTableName(), "RELATION_ID");
             double now = LineageService.CurTime();
@@ -771,6 +826,7 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("TRIBUTE_RATE", baseTerms.TributeRate),
                 ColumnVal.Create("MILITARY_OBLIGATION", baseTerms.MilitaryObligation),
                 ColumnVal.Create("CONTRACT_TIER", contractTier),
+                ColumnVal.Create("SUBJECT_KIND", (int)pSubjectKind),
                 ColumnVal.Create("CREATED_BY_WAR_ID", pWarId),
                 ColumnVal.Create("START_TIME", now),
                 ColumnVal.Create("END_TIME", -1.0),
@@ -779,6 +835,8 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("END_REASON", ""));
 
             pVassal.data.set(LineageKeys.VASSAL_CONTRACT_TIER, contractTier);
+            pVassal.data.set(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
+                (int)pSubjectKind);
             if (VassalContractTierRules.CountsAsVassal(contractTier))
             {
                 pVassal.data.set(LineageKeys.VASSAL_SUZERAIN_ID, pSuzerain.id);
@@ -1565,7 +1623,8 @@ namespace AncientWarfare3.core.lineage
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText =
                     $"SELECT RELATION_ID,VASSAL_ID,RELATION_TYPE,AUTONOMY,TRIBUTE_RATE," +
-                    $"MILITARY_OBLIGATION,CONTRACT_TIER,START_TIME,SUZERAIN_ID,SUZERAIN_NAME,SUZERAIN_COLOR " +
+                    $"MILITARY_OBLIGATION,CONTRACT_TIER,SUBJECT_KIND,START_TIME," +
+                    $"SUZERAIN_ID,SUZERAIN_NAME,SUZERAIN_COLOR " +
                     $"FROM {VassalRelationTableItem.GetTableName()} " +
                     "WHERE SUZERAIN_ID=@s AND ACTIVE=1 AND END_TIME<0 ORDER BY START_TIME";
                 cmd.Parameters.AddWithValue("@s", pSuzerain.id);
@@ -1586,10 +1645,13 @@ namespace AncientWarfare3.core.lineage
                         military_obligation = reader.IsDBNull(5) ? 50 : (int)reader.GetInt64(5),
                         contract_tier = reader.IsDBNull(6) ? VassalContractTierRules.Outer :
                             VassalContractTierRules.NormalizeTier((int)reader.GetInt64(6)),
-                        start_time = reader.IsDBNull(7) ? -1 : reader.GetDouble(7),
-                        suzerain_id = reader.IsDBNull(8) ? -1L : reader.GetInt64(8),
-                        suzerain_name = reader.IsDBNull(9) ? "" : reader.GetString(9),
-                        suzerain_color = reader.IsDBNull(10) ? "" : reader.GetString(10)
+                        subject_kind = reader.IsDBNull(7)
+                            ? VassalSubjectKind.Ordinary
+                            : NormalizeSubjectKind(reader.GetInt64(7)),
+                        start_time = reader.IsDBNull(8) ? -1 : reader.GetDouble(8),
+                        suzerain_id = reader.IsDBNull(9) ? -1L : reader.GetInt64(9),
+                        suzerain_name = reader.IsDBNull(10) ? "" : reader.GetString(10),
+                        suzerain_color = reader.IsDBNull(11) ? "" : reader.GetString(11)
                     });
                 }
             }
@@ -1609,7 +1671,8 @@ namespace AncientWarfare3.core.lineage
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText =
                     $"SELECT RELATION_ID,VASSAL_ID,RELATION_TYPE,AUTONOMY,TRIBUTE_RATE," +
-                    $"MILITARY_OBLIGATION,CONTRACT_TIER,START_TIME,SUZERAIN_ID,SUZERAIN_NAME,SUZERAIN_COLOR " +
+                    $"MILITARY_OBLIGATION,CONTRACT_TIER,SUBJECT_KIND,START_TIME," +
+                    $"SUZERAIN_ID,SUZERAIN_NAME,SUZERAIN_COLOR " +
                     $"FROM {VassalRelationTableItem.GetTableName()} " +
                     "WHERE ACTIVE=1 AND END_TIME<0 ORDER BY SUZERAIN_ID,START_TIME";
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
@@ -1629,10 +1692,13 @@ namespace AncientWarfare3.core.lineage
                         military_obligation = reader.IsDBNull(5) ? 50 : (int)reader.GetInt64(5),
                         contract_tier = reader.IsDBNull(6) ? VassalContractTierRules.Outer :
                             VassalContractTierRules.NormalizeTier((int)reader.GetInt64(6)),
-                        start_time = reader.IsDBNull(7) ? -1 : reader.GetDouble(7),
-                        suzerain_id = reader.IsDBNull(8) ? -1L : reader.GetInt64(8),
-                        suzerain_name = reader.IsDBNull(9) ? "" : reader.GetString(9),
-                        suzerain_color = reader.IsDBNull(10) ? "" : reader.GetString(10)
+                        subject_kind = reader.IsDBNull(7)
+                            ? VassalSubjectKind.Ordinary
+                            : NormalizeSubjectKind(reader.GetInt64(7)),
+                        start_time = reader.IsDBNull(8) ? -1 : reader.GetDouble(8),
+                        suzerain_id = reader.IsDBNull(9) ? -1L : reader.GetInt64(9),
+                        suzerain_name = reader.IsDBNull(10) ? "" : reader.GetString(10),
+                        suzerain_color = reader.IsDBNull(11) ? "" : reader.GetString(11)
                     });
                 }
             }
@@ -1718,7 +1784,7 @@ namespace AncientWarfare3.core.lineage
             {
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText =
-                    $"SELECT RELATION_TYPE, AUTONOMY, TRIBUTE_RATE, MILITARY_OBLIGATION, CONTRACT_TIER, START_TIME, " +
+                    $"SELECT RELATION_TYPE, AUTONOMY, TRIBUTE_RATE, MILITARY_OBLIGATION, CONTRACT_TIER, SUBJECT_KIND, START_TIME, " +
                     $"SUZERAIN_ID, SUZERAIN_NAME, SUZERAIN_COLOR FROM {VassalRelationTableItem.GetTableName()} " +
                     "WHERE VASSAL_ID=@v AND ACTIVE=1 AND END_TIME<0 ORDER BY START_TIME DESC LIMIT 1";
                 cmd.Parameters.AddWithValue("@v", pVassalId);
@@ -1734,10 +1800,13 @@ namespace AncientWarfare3.core.lineage
                     military_obligation = reader.IsDBNull(3) ? 50 : (int)reader.GetInt64(3),
                     contract_tier = reader.IsDBNull(4) ? VassalContractTierRules.Outer :
                         VassalContractTierRules.NormalizeTier((int)reader.GetInt64(4)),
-                    start_time = reader.IsDBNull(5) ? -1 : reader.GetDouble(5),
-                    suzerain_id = reader.IsDBNull(6) ? -1 : reader.GetInt64(6),
-                    suzerain_name = reader.IsDBNull(7) ? "" : reader.GetString(7),
-                    suzerain_color = reader.IsDBNull(8) ? "" : reader.GetString(8)
+                    subject_kind = reader.IsDBNull(5)
+                        ? VassalSubjectKind.Ordinary
+                        : NormalizeSubjectKind(reader.GetInt64(5)),
+                    start_time = reader.IsDBNull(6) ? -1 : reader.GetDouble(6),
+                    suzerain_id = reader.IsDBNull(7) ? -1 : reader.GetInt64(7),
+                    suzerain_name = reader.IsDBNull(8) ? "" : reader.GetString(8),
+                    suzerain_color = reader.IsDBNull(9) ? "" : reader.GetString(9)
                 };
             }
             catch { return null; }
@@ -2260,6 +2329,16 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.TRIBUTARY_SUZERAIN_ID, -1L);
             pKingdom.data.set(LineageKeys.TRIBUTARY_RELATION_ID, -1L);
             pKingdom.data.set(LineageKeys.VASSAL_CONTRACT_TIER, VassalContractTierRules.Outer);
+            pKingdom.data.set(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
+                (int)VassalSubjectKind.Ordinary);
+            pKingdom.data.set(LineageKeys.MILITARY_GOVERNORATE_STATE_ID, -1L);
+        }
+
+        private static VassalSubjectKind NormalizeSubjectKind(long pKind)
+        {
+            return pKind == (long)VassalSubjectKind.MilitaryGovernorate
+                ? VassalSubjectKind.MilitaryGovernorate
+                : VassalSubjectKind.Ordinary;
         }
 
         private static double GetRelationStartTime(Kingdom pVassal)

@@ -27,6 +27,14 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static VassalEffectiveTerms TermsFor(int pTier,
+            VassalSubjectKind pSubjectKind)
+        {
+            if (pSubjectKind == VassalSubjectKind.MilitaryGovernorate)
+                return new VassalEffectiveTerms(50, 0, 100);
+            return TermsFor(pTier);
+        }
+
         public static bool IsLooseTributary(int pTier)
         {
             return NormalizeTier(pTier) == Tributary;
