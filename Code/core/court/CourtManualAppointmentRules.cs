@@ -7,6 +7,7 @@ namespace AncientWarfare3.core.court
         Success,
         InvalidKingdom,
         InvalidOffice,
+        AppointmentNotAllowed,
         OfficeOccupied,
         OfficeChanged,
         InvalidActor,
@@ -90,6 +91,30 @@ namespace AncientWarfare3.core.court
             bool officeVacant, bool candidateEligible)
         {
             return officeInCurrentTier && officeVacant && candidateEligible;
+        }
+
+        public static bool CanUseManualAppointment(string pInstitution,
+            bool pRoyalAppointmentsUnlocked)
+        {
+            if (string.Equals(pInstitution,
+                    CourtInstitutionId.WesternBureaucratic,
+                    StringComparison.Ordinal) ||
+                string.Equals(pInstitution,
+                    CourtInstitutionId.WesternFeudalBureaucratic,
+                    StringComparison.Ordinal))
+                return true;
+            if ((pInstitution ?? string.Empty).StartsWith("western_",
+                    StringComparison.Ordinal))
+                return pRoyalAppointmentsUnlocked;
+            return true;
+        }
+
+        public static bool CanOpenVacancyAppointment(bool pIsVacancy,
+            bool pOfficeInCurrentInstitution,
+            bool pManualAppointmentAllowed)
+        {
+            return pIsVacancy && pOfficeInCurrentInstitution &&
+                   pManualAppointmentAllowed;
         }
 
         public static CourtManualOfficeAction ResolveOfficeAction(
