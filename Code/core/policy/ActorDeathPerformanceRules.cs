@@ -1,5 +1,21 @@
 namespace AncientWarfare3.core.policy
 {
+    public static class KingSuccessionPerformanceStage
+    {
+        public const string DeathCapture =
+            "king_succession_death_capture";
+        public const string CandidateSnapshot =
+            "king_succession_candidate_snapshot";
+        public const string DisputeFacts =
+            "king_succession_dispute_facts";
+        public const string DisputeEnqueue =
+            "king_succession_dispute_enqueue";
+        public const string CivilLookup =
+            "king_civil_service_lookup";
+        public const string CivilEnqueue =
+            "king_civil_service_enqueue";
+    }
+
     public enum ActorDeathPerformanceStage
     {
         MilitaryIndexes = 0,
