@@ -1,8 +1,8 @@
 {
     "name": "Ancient Warfare 3",
     "author": "GoatDie#4068",
-    "version": "1.2.0",
-    "description": "Ancient Warfare 3.0 v1.2 - Cultiway-based pathfinding, large-step scheduling, Kingdom Atlas history maps, custom titles, and manual actor renaming.",
+    "version": "1.2.1",
+    "description": "Ancient Warfare 3.0 v1.2.1 - military governorates, authoritative succession, king-death performance fixes, and scheduler stability fixes.",
     "iconPath": "icon.png",
     "RepoUrl": "https://github.com/monpai-lover/AncientWarfare3.0",
     "GUID": "ANCIENTWARFARE3",
