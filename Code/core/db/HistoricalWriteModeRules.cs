@@ -18,5 +18,18 @@ namespace AncientWarfare3.core.db
         {
             return pShadowEnabled && pWriteAccepted;
         }
+
+        public static bool ShouldRecoverRequiredWorker(bool pDatabaseEnabled,
+            int pPendingRequiredWrites, bool pWorkerAvailable)
+        {
+            return pDatabaseEnabled && pPendingRequiredWrites > 0 &&
+                   !pWorkerAvailable;
+        }
+
+        public static bool ShouldRequireWorkerForFlush(bool pDatabaseEnabled,
+            bool pWorkerAvailable)
+        {
+            return pDatabaseEnabled && !pWorkerAvailable;
+        }
     }
 }

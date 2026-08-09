@@ -22,6 +22,20 @@ internal static class HistoricalWriteModeRulesTests
         False(HistoricalWriteModeRules.ShouldCompareShadow(
                 pShadowEnabled: true, pWriteAccepted: false),
             "rejected writes are not shadow-compared");
+        True(HistoricalWriteModeRules.ShouldRecoverRequiredWorker(
+                pDatabaseEnabled: true, pPendingRequiredWrites: 340,
+                pWorkerAvailable: false),
+            "required death writes recover a missing database worker");
+        False(HistoricalWriteModeRules.ShouldRecoverRequiredWorker(
+                pDatabaseEnabled: false, pPendingRequiredWrites: 340,
+                pWorkerAvailable: false),
+            "disabled async database writes keep the synchronous fallback");
+        True(HistoricalWriteModeRules.ShouldRequireWorkerForFlush(
+                pDatabaseEnabled: true, pWorkerAvailable: false),
+            "an enabled but missing worker cannot report a successful flush");
+        False(HistoricalWriteModeRules.ShouldRequireWorkerForFlush(
+                pDatabaseEnabled: false, pWorkerAvailable: false),
+            "disabled async database writes require no worker flush");
     }
 
     private static void True(bool pValue, string pMessage)
