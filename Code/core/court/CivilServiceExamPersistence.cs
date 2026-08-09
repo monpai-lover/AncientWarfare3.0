@@ -490,69 +490,6 @@ namespace AncientWarfare3.core.court
             catch { return false; }
         }
 
-        public static bool TryRevokePlayerRankingForRulerDeath(
-            SQLiteConnection pDb, long pKingdomId, long pDueWorldDay,
-            double pUpdatedTime, out long pSessionId,
-            out long pPreviousDueWorldDay)
-        {
-            pSessionId = -1L;
-            pPreviousDueWorldDay = -1L;
-            if (pDb == null || pKingdomId < 0L || pDueWorldDay < 0L)
-                return false;
-            SQLiteTransaction transaction = null;
-            try
-            {
-                transaction = pDb.BeginTransaction();
-                using (var lookup = new SQLiteCommand(pDb)
-                       { Transaction = transaction })
-                {
-                    lookup.CommandText = "SELECT ID,NEXT_DUE_WORLD_DAY FROM " +
-                        SessionTable + " WHERE KINGDOM_ID=@kingdom AND MODE='imperial_exam' AND " +
-                        "STAGE='ranking' AND STATUS='ranking_pending' AND " +
-                        "PLAYER_RANKING_PENDING=1 ORDER BY ID LIMIT 1";
-                    lookup.Parameters.AddWithValue("@kingdom", pKingdomId);
-                    using SQLiteDataReader reader = lookup.ExecuteReader();
-                    if (!reader.Read())
-                    {
-                        transaction.Rollback();
-                        return false;
-                    }
-                    pSessionId = Convert.ToInt64(reader["ID"]);
-                    pPreviousDueWorldDay = Convert.ToInt64(
-                        reader["NEXT_DUE_WORLD_DAY"]);
-                }
-
-                using var command = new SQLiteCommand(pDb)
-                    { Transaction = transaction };
-                command.CommandText = "UPDATE " + SessionTable +
-                    " SET PLAYER_RANKING_PENDING=0,NEXT_DUE_WORLD_DAY=@due," +
-                    "UPDATED_TIME=@time WHERE ID=@id AND KINGDOM_ID=@kingdom AND " +
-                    "MODE='imperial_exam' AND STAGE='ranking' AND " +
-                    "STATUS='ranking_pending' AND PLAYER_RANKING_PENDING=1";
-                command.Parameters.AddWithValue("@due", pDueWorldDay);
-                command.Parameters.AddWithValue("@time", pUpdatedTime);
-                command.Parameters.AddWithValue("@id", pSessionId);
-                command.Parameters.AddWithValue("@kingdom", pKingdomId);
-                if (command.ExecuteNonQuery() != 1)
-                {
-                    transaction.Rollback();
-                    pSessionId = -1L;
-                    pPreviousDueWorldDay = -1L;
-                    return false;
-                }
-                transaction.Commit();
-                return true;
-            }
-            catch
-            {
-                try { transaction?.Rollback(); } catch { }
-                pSessionId = -1L;
-                pPreviousDueWorldDay = -1L;
-                return false;
-            }
-            finally { transaction?.Dispose(); }
-        }
-
         public static bool FinalizeRanking(SQLiteConnection pDb,
             long pSessionId, long pFinalRulerId,
             IReadOnlyList<CivilServiceExamRanking> pRankings,

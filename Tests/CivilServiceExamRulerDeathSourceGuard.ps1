@@ -42,6 +42,8 @@ function Method-Source([string]$source, [string]$startNeedle,
 $deathPatch = Read-Source 'Code/patch/AW_ActorDeathPatch.cs'
 $service = Read-Source 'Code/core/court/CivilServiceExamService.cs'
 $persistence = Read-Source 'Code/core/court/CivilServiceExamPersistence.cs'
+$rulerDeathPersistence = Read-Source `
+    'Code/core/court/CivilServiceRulerDeathPersistence.cs'
 
 $prefix = Method-Source $deathPatch 'public static void Die_Prefix(' `
     'public static void Die_Postfix(' 'actor death prefix'
@@ -85,33 +87,36 @@ Reject-Text $finalizer 'CivilServiceExamService.' `
 
 $handler = Method-Source $service `
     'public static void OnCurrentRulerDied(Kingdom pKingdom)' `
-    'public static bool TrySubmitPlayerRanking(' `
+    'public static void OnKingdomDestroying(Kingdom pKingdom)' `
     'confirmed ruler-death service handler'
 foreach ($required in @(
         'AW3MultiplayerReplicaScope.IsApplying ||',
         'AW3MultiplayerReplicaScope.IsReplicaSession',
+        'PlayerRankingByKingdom.TryGetValue',
         'long dueDay = CurrentWorldDay();',
-        'TryRevokePlayerRankingForRulerDeath(DB, pKingdom.id,',
-        'DueSessions.Remove(new DueSession(previousDueDay, sessionId));',
-        'DueSessions.Add(new DueSession(dueDay, sessionId));')) {
+        'DueSessions.Remove(new DueSession(session.NextDueWorldDay,',
+        'PendingRulerDeathWrites[session.Id] = pending;',
+        'TryEnqueueRulerDeathWrite(pending)')) {
     Require-Text $handler $required "authority-only due-now scheduling $required"
 }
-
-$cas = Method-Source $persistence `
-    'public static bool TryRevokePlayerRankingForRulerDeath(' `
-    'public static bool FinalizeRanking(' 'ruler-death ranking CAS'
 foreach ($required in @(
-        'SELECT ID,NEXT_DUE_WORLD_DAY FROM ',
-        'WHERE KINGDOM_ID=@kingdom AND MODE=''imperial_exam'' AND ',
-        'STAGE=''ranking'' AND STATUS=''ranking_pending'' AND ',
-        'PLAYER_RANKING_PENDING=1 ORDER BY ID LIMIT 1',
-        'SET PLAYER_RANKING_PENDING=0,NEXT_DUE_WORLD_DAY=@due,',
-        'WHERE ID=@id AND KINGDOM_ID=@kingdom AND ',
-        'command.Parameters.AddWithValue("@kingdom", pKingdomId);',
-        'command.Parameters.AddWithValue("@due", pDueWorldDay);')) {
-    Require-Text $cas $required "bounded parameterized CAS $required"
+        'WHERE ID=@id AND KINGDOM_ID=@kingdom',
+        'MODE=''imperial_exam'' AND STAGE=''ranking''',
+        'STATUS=''ranking_pending''',
+        'PLAYER_RANKING_PENDING=1',
+        'SET PLAYER_RANKING_PENDING=0,',
+        'NEXT_DUE_WORLD_DAY=@due,UPDATED_TIME=@time',
+        'pCommand.Parameters.AddWithValue("@kingdom", pFacts.KingdomId);',
+        'pCommand.Parameters.AddWithValue("@due", pFacts.DueWorldDay);')) {
+    Require-Text $rulerDeathPersistence $required `
+        "bounded worker CAS $required"
 }
-Reject-Text $cas 'CandidateTable' 'ruler-death CAS never scans candidates'
+Reject-Text $handler 'CivilServiceExamPersistence.' `
+    'ruler-death handler never queries SQLite'
+Reject-Text $persistence 'TryRevokePlayerRankingForRulerDeath' `
+    'legacy synchronous ruler-death transaction is removed'
+Reject-Text $rulerDeathPersistence 'CandidateTable' `
+    'ruler-death CAS never scans candidates'
 
 $ranking = Method-Source $service `
     'private static void ProcessFinalRanking(' `

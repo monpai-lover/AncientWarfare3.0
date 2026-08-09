@@ -1,0 +1,109 @@
+using System;
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+
+internal static class CivilServiceRulerDeathPersistenceSqlTests
+{
+    public static void Run()
+    {
+        MatchingPlayerRankingUsesCompareAndSet();
+        NonMatchingSessionIsUntouched();
+    }
+
+    private static void MatchingPlayerRankingUsesCompareAndSet()
+    {
+        using var db = OpenDatabase();
+        Insert(db, 1L, 10L, "imperial_exam", "ranking",
+            "ranking_pending", 1, 900L);
+        var facts = new CivilServiceRulerDeathWriteFacts(1L, 10L,
+            100L, 1234d);
+
+        using (SQLiteTransaction transaction = db.BeginTransaction())
+        {
+            CivilServiceRulerDeathWriteResult result =
+                CivilServiceRulerDeathPersistence.Execute(db, transaction,
+                    facts);
+            Equal(true, result.Accepted,
+                "matching player ranking is revoked");
+            transaction.Commit();
+        }
+        Equal(0L, Scalar(db,
+                "SELECT PLAYER_RANKING_PENDING FROM CivilServiceExamSession WHERE ID=1"),
+            "player ranking flag is cleared");
+        Equal(100L, Scalar(db,
+                "SELECT NEXT_DUE_WORLD_DAY FROM CivilServiceExamSession WHERE ID=1"),
+            "session becomes due on the ruler death day");
+
+        using (SQLiteTransaction transaction = db.BeginTransaction())
+        {
+            CivilServiceRulerDeathWriteResult retry =
+                CivilServiceRulerDeathPersistence.Execute(db, transaction,
+                    facts);
+            Equal(true, retry.Accepted,
+                "same ruler death CAS is idempotent");
+            transaction.Commit();
+        }
+    }
+
+    private static void NonMatchingSessionIsUntouched()
+    {
+        using var db = OpenDatabase();
+        Insert(db, 2L, 20L, "tribute_exam", "ranking",
+            "ranking_pending", 1, 901L);
+        var facts = new CivilServiceRulerDeathWriteFacts(2L, 20L,
+            101L, 1235d);
+        using SQLiteTransaction transaction = db.BeginTransaction();
+        CivilServiceRulerDeathWriteResult result =
+            CivilServiceRulerDeathPersistence.Execute(db, transaction,
+                facts);
+        Equal(false, result.Accepted,
+            "non-imperial session cannot be revoked by ruler death");
+        transaction.Commit();
+        Equal(1L, Scalar(db,
+                "SELECT PLAYER_RANKING_PENDING FROM CivilServiceExamSession WHERE ID=2"),
+            "non-matching session remains pending");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;Pooling=False;");
+        db.Open();
+        using var command = new SQLiteCommand(
+            "CREATE TABLE CivilServiceExamSession(" +
+            "ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER,MODE TEXT," +
+            "STAGE TEXT,STATUS TEXT,PLAYER_RANKING_PENDING INTEGER," +
+            "NEXT_DUE_WORLD_DAY INTEGER,UPDATED_TIME REAL);", db);
+        command.ExecuteNonQuery();
+        return db;
+    }
+
+    private static void Insert(SQLiteConnection db, long id, long kingdom,
+        string mode, string stage, string status, int pending, long due)
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO CivilServiceExamSession VALUES(" +
+            "@id,@kingdom,@mode,@stage,@status,@pending,@due,-1)", db);
+        command.Parameters.AddWithValue("@id", id);
+        command.Parameters.AddWithValue("@kingdom", kingdom);
+        command.Parameters.AddWithValue("@mode", mode);
+        command.Parameters.AddWithValue("@stage", stage);
+        command.Parameters.AddWithValue("@status", status);
+        command.Parameters.AddWithValue("@pending", pending);
+        command.Parameters.AddWithValue("@due", due);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}
