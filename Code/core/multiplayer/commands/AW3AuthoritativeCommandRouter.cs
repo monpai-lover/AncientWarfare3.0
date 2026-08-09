@@ -38,6 +38,7 @@ namespace AncientWarfare3.core.multiplayer.commands
                 case AW3CommandKind.ReclaimFeudatoryCity:
                     return AW3RealmCommandHandler.Dispatch(request);
                 case AW3CommandKind.AbolishFeudatory:
+                case AW3CommandKind.CreateMilitaryGovernorate:
                     return AW3RealmCommandHandler.Dispatch(request);
                 case AW3CommandKind.CreateDiplomacyProposal:
                     return AW3DiplomacyCommandHandler.Dispatch(request);

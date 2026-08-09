@@ -53,8 +53,8 @@ internal static class AW3MultiplayerCatalogRulesTests
         IReadOnlyList<AW3CommandDescriptor> commands =
             AW3MultiplayerCatalog.Commands;
 
-        Equal(31, windows.Count, "current AW3 window count");
-        Equal(31, windows.Select(value => value.WindowId).Distinct(
+        Equal(32, windows.Count, "current AW3 window count");
+        Equal(32, windows.Select(value => value.WindowId).Distinct(
                 StringComparer.Ordinal).Count(),
             "window IDs are unique");
         Equal(Enum.GetValues<AW3WindowKind>().Length, windows.Count,
@@ -156,7 +156,8 @@ internal static class AW3MultiplayerCatalogRulesTests
             AW3CommandRequest.RenameSurname(7, 31, "Jiang"),
             AW3CommandRequest.GrantVirtualNobleTitle(7, 31, "天意公"),
             AW3CommandRequest.EditVirtualNobleTitle(7, 91, "天意公"),
-            AW3CommandRequest.DeleteVirtualNobleTitle(7, 91)
+            AW3CommandRequest.DeleteVirtualNobleTitle(7, 91),
+            AW3CommandRequest.CreateMilitaryGovernorate(7, 19, 31)
         };
 
         Equal(Enum.GetValues<AW3CommandKind>().Length, requests.Length,

@@ -112,6 +112,14 @@ internal static class MilitaryGovernorateRulesTests
             MilitaryGovernorateCreationRules.RollbackFor(
                 MilitaryGovernorateCreationStage.Completed),
             "post-commit side effects never dismantle a committed command");
+        Equal(false, MilitaryGovernorateRules.HasPersistedOverLimit(10, 10),
+            "AI does not create in the first over-limit year");
+        Equal(true, MilitaryGovernorateRules.HasPersistedOverLimit(11, 10),
+            "AI may create after one complete over-limit year");
+        Equal(false, MilitaryGovernorateRules.CanRunAnnualAi(11, 11),
+            "AI evaluates a realm at most once in a year");
+        Equal(true, MilitaryGovernorateRules.CanRunAnnualAi(11, 10),
+            "AI may evaluate when the persisted year is older");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

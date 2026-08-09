@@ -19,6 +19,8 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return Reclaim(request);
                 case AW3CommandKind.AbolishFeudatory:
                     return Abolish(request);
+                case AW3CommandKind.CreateMilitaryGovernorate:
+                    return CreateMilitaryGovernorate(request);
                 default:
                     return Invalid();
             }
@@ -73,9 +75,39 @@ namespace AncientWarfare3.core.multiplayer.commands
                 : Rejected("aw3_feudatory_abolish_rejected");
         }
 
+        private static AW3CommandResult CreateMilitaryGovernorate(
+            AW3CommandRequest request)
+        {
+            Kingdom country = FindKingdom(request.CountryId);
+            City city = FindCity(request.CityId);
+            Actor general = FindActor(request.ActorId);
+            if (country?.data == null || city?.data == null ||
+                general?.data == null || city.kingdom != country ||
+                general.kingdom != country) return NotFound();
+            bool created = MilitaryGovernorateCreationService.TryCreate(
+                city, general, out Kingdom subject, out string reason);
+            return created
+                ? AW3CommandResult.Success(
+                    "aw_military_governorate_success", subject?.id ?? -1L)
+                : Rejected("aw_military_governorate_failure_" +
+                           (reason ?? "creation_failed"));
+        }
+
         private static Kingdom FindKingdom(long id)
         {
             try { return World.world?.kingdoms?.get(id); }
+            catch { return null; }
+        }
+
+        private static City FindCity(long id)
+        {
+            try { return World.world?.cities?.get(id); }
+            catch { return null; }
+        }
+
+        private static Actor FindActor(long id)
+        {
+            try { return World.world?.units?.get(id); }
             catch { return null; }
         }
 

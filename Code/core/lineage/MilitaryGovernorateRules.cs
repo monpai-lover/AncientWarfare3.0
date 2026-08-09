@@ -42,5 +42,18 @@ namespace AncientWarfare3.core.lineage
         {
             return pKind != VassalSubjectKind.MilitaryGovernorate;
         }
+
+        public static bool HasPersistedOverLimit(int pCurrentYear,
+            int pOverLimitSinceYear)
+        {
+            return pOverLimitSinceYear >= 0 &&
+                   pCurrentYear > pOverLimitSinceYear;
+        }
+
+        public static bool CanRunAnnualAi(int pCurrentYear,
+            int pLastEvaluationYear)
+        {
+            return pCurrentYear >= 0 && pLastEvaluationYear < pCurrentYear;
+        }
     }
 }

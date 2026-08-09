@@ -50,6 +50,12 @@ namespace AncientWarfare3.core.lineage
             "aw_military_governorate_subject_kind";
         public const string MILITARY_GOVERNORATE_STATE_ID =
             "aw_military_governorate_state_id";
+        public const string MILITARY_GOVERNORATE_AI_LAST_EVALUATION_YEAR =
+            "aw_military_governorate_ai_last_evaluation_year";
+        public const string MILITARY_GOVERNORATE_OVER_LIMIT_SINCE_YEAR =
+            "aw_military_governorate_over_limit_since_year";
+        public const string MILITARY_GOVERNORATE_CITY_CURSOR =
+            "aw_military_governorate_city_cursor";
         public const string TRIBUTARY_SUZERAIN_ID = "aw_tributary_suzerain_id";
         public const string TRIBUTARY_RELATION_ID = "aw_tributary_relation_id";
         public const string VASSAL_INDEPENDENCE_WAR_ID = "aw_vassal_independence_war_id";

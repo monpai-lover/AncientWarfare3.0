@@ -19,17 +19,43 @@ namespace AncientWarfare3.core.lineage
     {
         public const string Reason = "military_governorate";
 
+        public static bool CanSelectSeat(City pSeat, out string pReason)
+        {
+            pReason = "invalid_city";
+            Kingdom suzerain = pSeat?.kingdom;
+            if (!CanCreateFor(suzerain))
+            {
+                pReason = "realm_not_eligible";
+                return false;
+            }
+            if (!IsEligibleSeat(pSeat, suzerain)) return false;
+            pReason = "";
+            return true;
+        }
+
         public static List<MilitaryGovernorateSeatCandidate>
             GetEligibleSeats(Kingdom pSuzerain, int pLimit = 0)
         {
+            return GetEligibleSeats(pSuzerain, 0, pLimit, out _);
+        }
+
+        public static List<MilitaryGovernorateSeatCandidate>
+            GetEligibleSeats(Kingdom pSuzerain, int pStartIndex,
+                int pLimit, out int pNextCursor)
+        {
             var result = new List<MilitaryGovernorateSeatCandidate>();
-            if (pSuzerain?.data == null || pSuzerain.isRekt()) return result;
+            pNextCursor = 0;
+            if (pSuzerain?.data == null || pSuzerain.isRekt() ||
+                pSuzerain.cities == null || pSuzerain.cities.Count == 0)
+                return result;
             int limit = BoundedLimit(pLimit,
                 MilitaryGovernorateRules.CityScanBudget);
-            int scanned = 0;
-            foreach (City city in pSuzerain.getCities())
+            int cityCount = pSuzerain.cities.Count;
+            int start = Math.Max(0, pStartIndex) % cityCount;
+            int scanCount = Math.Min(limit, cityCount);
+            for (int offset = 0; offset < scanCount; offset++)
             {
-                if (scanned++ >= limit) break;
+                City city = pSuzerain.cities[(start + offset) % cityCount];
                 if (!IsEligibleSeat(city, pSuzerain)) continue;
                 result.Add(new MilitaryGovernorateSeatCandidate
                 {
@@ -38,6 +64,7 @@ namespace AncientWarfare3.core.lineage
                         true, Population(city), Zones(city))
                 });
             }
+            pNextCursor = (start + scanCount) % cityCount;
             result.Sort((left, right) =>
                 MilitaryGovernorateCreationRules.CompareCandidate(
                     left.Score, left.City?.id ?? long.MaxValue,
@@ -82,16 +109,25 @@ namespace AncientWarfare3.core.lineage
         public static bool TryCreate(City pSeat, Actor pGeneral,
             out Kingdom pSubject, out string pReason)
         {
+            Kingdom suzerain = pSeat?.kingdom;
+            List<MilitaryGovernorateGeneralCandidate> candidates =
+                GetGeneralCandidates(suzerain,
+                    MilitaryGovernorateRules.GeneralScanBudget);
+            return TryCreateFromCandidateBatch(pSeat, pGeneral, candidates,
+                out pSubject, out pReason);
+        }
+
+        internal static bool TryCreateFromCandidateBatch(City pSeat,
+            Actor pGeneral,
+            IReadOnlyList<MilitaryGovernorateGeneralCandidate> pCandidates,
+            out Kingdom pSubject, out string pReason)
+        {
             pSubject = null;
             pReason = "invalid_city";
             Kingdom suzerain = pSeat?.kingdom;
-            if (!CanCreateFor(suzerain))
-            {
-                pReason = "realm_not_eligible";
-                return false;
-            }
-            if (!IsEligibleSeat(pSeat, suzerain)) return false;
-            if (!ContainsGeneralCandidate(suzerain, pGeneral))
+            if (!CanSelectSeat(pSeat, out pReason)) return false;
+            if (!ContainsGeneralCandidate(pCandidates, pGeneral) ||
+                !IsEligibleGeneral(pGeneral, suzerain))
             {
                 pReason = "invalid_general";
                 return false;
@@ -208,15 +244,13 @@ namespace AncientWarfare3.core.lineage
                        feudatoryId >= 0, external);
         }
 
-        private static bool ContainsGeneralCandidate(Kingdom pSuzerain,
+        private static bool ContainsGeneralCandidate(
+            IReadOnlyList<MilitaryGovernorateGeneralCandidate> pCandidates,
             Actor pGeneral)
         {
-            if (pGeneral?.data == null) return false;
-            List<MilitaryGovernorateGeneralCandidate> candidates =
-                GetGeneralCandidates(pSuzerain,
-                    MilitaryGovernorateRules.GeneralScanBudget);
-            for (int i = 0; i < candidates.Count; i++)
-                if (candidates[i].Actor == pGeneral) return true;
+            if (pGeneral?.data == null || pCandidates == null) return false;
+            for (int i = 0; i < pCandidates.Count; i++)
+                if (pCandidates[i]?.Actor == pGeneral) return true;
             return false;
         }
 
