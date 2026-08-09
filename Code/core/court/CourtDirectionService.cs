@@ -10,6 +10,7 @@ namespace AncientWarfare3.core.court
         public static void MarkDirty(Kingdom pKingdom)
         {
             pKingdom?.data?.set(LineageKeys.COURT_DIRECTION_DIRTY, true);
+            SuccessionPreparationService.MarkDirty(pKingdom);
         }
 
         public static CourtDirectionSnapshot RecalculateIfDirty(Kingdom pKingdom)

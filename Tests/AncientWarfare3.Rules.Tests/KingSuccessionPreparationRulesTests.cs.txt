@@ -10,6 +10,8 @@ internal static class KingSuccessionPreparationRulesTests
         PreparedSuccessionIsConsumedOnce();
         WorldGenerationSeparatesIdenticalActorIds();
         UnchangedHeirSignatureSkipsMaintenance();
+        DirtyKingdomsAreCoalescedAndBudgeted();
+        SnapshotValidityRequiresMatchingFacts();
     }
 
     private static void DuplicateDeathCaptureIsIdempotent()
@@ -84,6 +86,44 @@ internal static class KingSuccessionPreparationRulesTests
             "a new reference king refreshes the signature");
     }
 
+    private static void DirtyKingdomsAreCoalescedAndBudgeted()
+    {
+        var queue = new SuccessionDirtyQueue();
+        queue.MarkDirty(1L);
+        queue.MarkDirty(1L);
+        queue.MarkDirty(2L);
+
+        Equal(2, queue.Count, "dirty kingdom ids are coalesced");
+        SequenceEqual(new long[] { 1L }, queue.Take(1),
+            "one authority cycle processes one kingdom");
+        Equal(1, queue.Count,
+            "unconsumed dirty kingdoms remain queued");
+    }
+
+    private static void SnapshotValidityRequiresMatchingFacts()
+    {
+        True(SuccessionSnapshotRules.IsCurrent(
+                5L, 5L, 10L, 10L,
+                candidateAlive: true, candidateInRealm: true),
+            "matching live candidate snapshot is current");
+        Equal(false, SuccessionSnapshotRules.IsCurrent(
+                5L, 6L, 10L, 10L,
+                candidateAlive: true, candidateInRealm: true),
+            "changed facts invalidate a cached snapshot");
+        Equal(false, SuccessionSnapshotRules.IsCurrent(
+                5L, 5L, 10L, 11L,
+                candidateAlive: true, candidateInRealm: true),
+            "changed king invalidates a cached snapshot");
+        Equal(false, SuccessionSnapshotRules.IsCurrent(
+                5L, 5L, 10L, 10L,
+                candidateAlive: false, candidateInRealm: true),
+            "dead candidate invalidates a cached snapshot");
+        Equal(false, SuccessionSnapshotRules.IsCurrent(
+                5L, 5L, 10L, 10L,
+                candidateAlive: true, candidateInRealm: false),
+            "foreign candidate invalidates a cached snapshot");
+    }
+
     private static void True(bool value, string name)
     {
         if (!value) throw new InvalidOperationException(name);
@@ -94,5 +134,17 @@ internal static class KingSuccessionPreparationRulesTests
         if (!Equals(expected, actual))
             throw new InvalidOperationException(
                 name + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void SequenceEqual(long[] expected,
+        System.Collections.Generic.IReadOnlyList<long> actual, string name)
+    {
+        if (expected.Length != actual.Count)
+            throw new InvalidOperationException(name + ": expected " +
+                expected.Length + " items, got " + actual.Count);
+        for (int i = 0; i < expected.Length; i++)
+            if (expected[i] != actual[i])
+                throw new InvalidOperationException(name + ": mismatch at " +
+                    i + ", expected " + expected[i] + ", got " + actual[i]);
     }
 }

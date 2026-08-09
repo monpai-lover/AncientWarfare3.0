@@ -124,6 +124,12 @@ namespace AncientWarfare3.patch
                                     e.Message);
             }
             SuccessionRelationshipIndex.OnBorn(pBaby, pParent1, pParent2);
+            SuccessionPreparationService.MarkDirty(pBaby?.kingdom);
+            if (pParent1?.kingdom != pBaby?.kingdom)
+                SuccessionPreparationService.MarkDirty(pParent1?.kingdom);
+            if (pParent2?.kingdom != pBaby?.kingdom &&
+                pParent2?.kingdom != pParent1?.kingdom)
+                SuccessionPreparationService.MarkDirty(pParent2?.kingdom);
         }
     }
 }

@@ -192,6 +192,7 @@ namespace AncientWarfare3.core.lineage
                                     pActor.data.parent_id_2 == king.data.id;
             if (!registeredHeir && !directRoyalChild) return;
             kingdom.data.set(LineageKeys.KINGDOM_HEIR_SELECTION_DIRTY, true);
+            SuccessionPreparationService.MarkDirty(kingdom);
         }
 
         public static Actor PeekRegisteredHeir(Kingdom pKingdom)

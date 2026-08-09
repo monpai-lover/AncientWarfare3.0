@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.naming;
@@ -32,6 +33,32 @@ namespace AncientWarfare3.core.lineage
         public int ClaimGenerationBoundary =
             SuccessionDisputeRules.ReunificationClaimGenerations;
         public bool Materialized;
+    }
+
+    internal sealed class SuccessionDisputePreparationFacts
+    {
+        internal long WorldGeneration;
+        internal long Revision;
+        internal long KingdomId;
+        internal long PredecessorActorId;
+        internal long SuccessorActorId;
+        internal long ClaimantActorId = -1L;
+        internal long LegitimateClaimantId = -1L;
+        internal long MilitaryClaimantId = -1L;
+        internal long CivilClaimantId = -1L;
+        internal string SuccessorMode = SuccessionMode.NONE;
+        internal string ClaimantMode = SuccessionMode.NONE;
+        internal SuccessionClaimantKind ClaimantKind;
+        internal int SuccessorSupport;
+        internal int ClaimantSupport;
+        internal int RunnerUpSupport;
+        internal InheritanceLaw AccessionLaw;
+        internal long OriginalLineageId = -1L;
+        internal long OriginalShiId = -1L;
+        internal string OriginalStateName = string.Empty;
+        internal string OriginalQualifier = string.Empty;
+        internal string RivalQualifier = string.Empty;
+        internal long[] SupportCityIds = Array.Empty<long>();
     }
 
     internal static class SuccessionDisputeService
@@ -206,6 +233,80 @@ namespace AncientWarfare3.core.lineage
             Publish(snapshot);
             pKingdom.data.set(LineageKeys.ACTIVE_SUCCESSION_DISPUTE_ID,
                 disputeId);
+        }
+
+        internal static SuccessionDisputePreparationFacts
+            BuildPreparationFacts(Kingdom pKingdom, Actor pPredecessor,
+                Actor pInstalledSuccessor, string pSuccessorMode)
+        {
+            if (pKingdom?.data == null || pPredecessor?.data == null ||
+                pInstalledSuccessor?.data == null ||
+                pKingdom.countCities() <= 1 ||
+                TryGetCachedByKingdom(pKingdom.id, out _))
+                return null;
+            InheritanceFactionSupport factionSupport =
+                InheritanceCandidateService.ResolveFactionSupport(pKingdom,
+                    pPredecessor, pInstalledSuccessor);
+            Actor claimant = factionSupport.LeaderActor;
+            if (!IsLegalAlternative(claimant, pInstalledSuccessor,
+                    pKingdom)) return null;
+            List<City> cities = SelectSupportCities(pKingdom, claimant,
+                pInstalledSuccessor, factionSupport.LeaderMode,
+                pSuccessorMode, factionSupport);
+            if (!SuccessionDisputeRules.CanFormBalancedTerritorialSplit(
+                    CountLiveCities(pKingdom), cities.Count) ||
+                !SuccessionDisputeRules.CanPrepare(
+                    new SuccessionClaimantFacts(claimant.data.id,
+                        factionSupport.LeaderKind,
+                        factionSupport.LeaderSupport,
+                        factionSupport.RunnerUpSupport,
+                        hasSupportCity: true, hasActiveDispute: false,
+                        hasLivingDirectPaternalAncestor: false)))
+                return null;
+
+            SuccessionDirection rivalDirection = ResolveDirection(
+                pKingdom.capital, cities[0], claimantAccededLater: true);
+            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID,
+                out long lineageId, -1L);
+            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID,
+                out long shiId, -1L);
+            factionSupport.Selections.TryGetValue(
+                InheritanceLaw.Primogeniture, out var legitimate);
+            factionSupport.Selections.TryGetValue(
+                InheritanceLaw.MilitaryAcclaim, out var military);
+            factionSupport.Selections.TryGetValue(
+                InheritanceLaw.CivilAcclaim, out var civil);
+            var cityIds = new long[cities.Count];
+            for (int i = 0; i < cities.Count; i++) cityIds[i] = cities[i].id;
+            return new SuccessionDisputePreparationFacts
+            {
+                WorldGeneration = AWAsyncRuntime.WorldGeneration,
+                Revision = SuccessionPreparationService.CurrentRevision(
+                    pKingdom.id),
+                KingdomId = pKingdom.id,
+                PredecessorActorId = pPredecessor.data.id,
+                SuccessorActorId = pInstalledSuccessor.data.id,
+                ClaimantActorId = claimant.data.id,
+                LegitimateClaimantId = legitimate?.Actor?.data?.id ?? -1L,
+                MilitaryClaimantId = military?.Actor?.data?.id ?? -1L,
+                CivilClaimantId = civil?.Actor?.data?.id ?? -1L,
+                SuccessorMode = pSuccessorMode ?? SuccessionMode.NONE,
+                ClaimantMode = factionSupport.LeaderMode,
+                ClaimantKind = factionSupport.LeaderKind,
+                SuccessorSupport = factionSupport.DesignatedHeirSupport,
+                ClaimantSupport = factionSupport.LeaderSupport,
+                RunnerUpSupport = factionSupport.RunnerUpSupport,
+                AccessionLaw = InheritanceLawService.GetEffectiveLaw(
+                    pKingdom),
+                OriginalLineageId = lineageId,
+                OriginalShiId = shiId,
+                OriginalStateName = pKingdom.name ?? string.Empty,
+                OriginalQualifier = SuccessionDisputeRules.DirectionId(
+                    Opposite(rivalDirection)),
+                RivalQualifier = SuccessionDisputeRules.DirectionId(
+                    rivalDirection),
+                SupportCityIds = cityIds
+            };
         }
 
         public static void OnSuccessorInstalled(Kingdom pKingdom,

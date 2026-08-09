@@ -3,6 +3,54 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
+    public sealed class SuccessionDirtyQueue
+    {
+        private readonly Queue<long> _queue = new Queue<long>();
+        private readonly HashSet<long> _queued = new HashSet<long>();
+
+        public int Count => _queue.Count;
+
+        public void MarkDirty(long pKingdomId)
+        {
+            if (pKingdomId < 0L || !_queued.Add(pKingdomId)) return;
+            _queue.Enqueue(pKingdomId);
+        }
+
+        public IReadOnlyList<long> Take(int pBudget)
+        {
+            if (pBudget <= 0 || _queue.Count == 0)
+                return Array.Empty<long>();
+            int count = Math.Min(pBudget, _queue.Count);
+            var result = new long[count];
+            for (int i = 0; i < count; i++)
+            {
+                long kingdomId = _queue.Dequeue();
+                _queued.Remove(kingdomId);
+                result[i] = kingdomId;
+            }
+            return result;
+        }
+
+        public void Clear()
+        {
+            _queue.Clear();
+            _queued.Clear();
+        }
+    }
+
+    public static class SuccessionSnapshotRules
+    {
+        public static bool IsCurrent(long pSnapshotRevision,
+            long pCurrentRevision, long pSnapshotKingId,
+            long pCurrentKingId, bool candidateAlive,
+            bool candidateInRealm)
+        {
+            return pSnapshotRevision == pCurrentRevision &&
+                   pSnapshotKingId == pCurrentKingId &&
+                   candidateAlive && candidateInRealm;
+        }
+    }
+
     public static class HeirSelectionSignatureRules
     {
         public static bool IsUnchanged(long pStoredCandidateId,

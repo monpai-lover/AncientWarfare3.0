@@ -66,6 +66,9 @@ namespace AncientWarfare3.patch
                 DynasticLivingSonIndexService.OnActorDying(__instance);
                 SuccessionRelationshipIndex.OnDying(__instance);
                 HeirService.MarkSuccessionDirtyForActor(__instance);
+                if (!__instance.isKing())
+                    SuccessionPreparationService.MarkDirty(
+                        __instance.kingdom);
                 NobleRemarriageService.MarkDirtyForPartnerDeath(__instance);
             }
             finally
