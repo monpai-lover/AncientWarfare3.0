@@ -56,6 +56,42 @@ namespace AncientWarfare3.core.lineage
                    task == SyntheticLevyTask.Sleep;
         }
 
+        public static bool AllowTaskId(bool synthetic, string taskOrJobId)
+        {
+            if (!synthetic) return true;
+            if (string.IsNullOrEmpty(taskOrJobId)) return false;
+            string id = taskOrJobId.ToLowerInvariant();
+            if (id.StartsWith("aw_army_rts_",
+                    System.StringComparison.Ordinal) ||
+                id.StartsWith("aw_war_deployment",
+                    System.StringComparison.Ordinal)) return true;
+            if (ContainsAny(id, "sleep", "rest"))
+                return AllowTask(true, SyntheticLevyTask.Sleep);
+            if (ContainsAny(id, "food", "eat", "hunger"))
+                return AllowTask(true, SyntheticLevyTask.Food);
+            if (ContainsAny(id, "heal", "cure", "hospital"))
+                return AllowTask(true, SyntheticLevyTask.Healing);
+            if (ContainsAny(id, "embark", "sail", "landing", "pickup",
+                    "transport", "boat", "ship"))
+                return AllowTask(true, SyntheticLevyTask.Transport);
+            if (ContainsAny(id, "retreat", "flee"))
+                return AllowTask(true, SyntheticLevyTask.Retreat);
+            if (ContainsAny(id, "formation", "rally", "regroup", "hold"))
+                return AllowTask(true, SyntheticLevyTask.Formation);
+            if (ContainsAny(id, "attack", "assault", "pursue", "fight",
+                    "battle", "warrior", "military", "march", "deploy",
+                    "mission"))
+                return AllowTask(true, SyntheticLevyTask.Military);
+            return false;
+        }
+
+        private static bool ContainsAny(string source, params string[] values)
+        {
+            for (int i = 0; i < values.Length; i++)
+                if (source.Contains(values[i])) return true;
+            return false;
+        }
+
         public static bool ShouldClearSyntheticFields(
             SyntheticLevyDisposition disposition)
         {
