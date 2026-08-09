@@ -1,0 +1,52 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MilitaryGovernorateRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, MilitaryGovernorateRules.CanCreate(true, 7, 6),
+            "Xia realm over direct limit may create a governorate");
+        Equal(false, MilitaryGovernorateRules.CanCreate(true, 6, 6),
+            "realm at limit is not over limit");
+        Equal(false, MilitaryGovernorateRules.CanCreate(false, 9, 6),
+            "non-Xia realm cannot create a governorate");
+        Equal(true, MilitaryGovernorateRules.IsEligibleSeat(
+                true, false, false, true),
+            "external frontier is eligible");
+        Equal(false, MilitaryGovernorateRules.IsEligibleSeat(
+                true, true, false, true),
+            "capital is excluded");
+        Equal(false, MilitaryGovernorateRules.IsEligibleSeat(
+                true, false, true, true),
+            "special administration is excluded");
+        Equal("天平军", MilitaryGovernorateRules.CommandName("天平", "军"),
+            "regional command suffix is stable");
+        Equal("天平军", MilitaryGovernorateRules.CommandName("天平军", "军"),
+            "command suffix is not duplicated");
+        Equal(true, MilitaryGovernorateRules.MustJoinSuzerainWar(
+                VassalSubjectKind.MilitaryGovernorate),
+            "military governorate obligation is absolute");
+        Equal(false, MilitaryGovernorateRules.MustJoinSuzerainWar(
+                VassalSubjectKind.Ordinary),
+            "ordinary subjects retain contract decisions");
+        Equal(false, MilitaryGovernorateRules.CanConductStateDiplomacy(
+                VassalSubjectKind.MilitaryGovernorate),
+            "military governorate has no state diplomacy");
+        Equal(true, MilitaryGovernorateRules.CanConductStateDiplomacy(
+                VassalSubjectKind.Ordinary),
+            "ordinary relation does not add a new diplomacy block");
+        Equal(1, MilitaryGovernorateRules.AnnualCreationLimit,
+            "AI creates at most one governorate per realm-year");
+        Equal(16, MilitaryGovernorateRules.CityScanBudget,
+            "frontier candidate reads stay bounded");
+        Equal(32, MilitaryGovernorateRules.GeneralScanBudget,
+            "general candidate reads stay bounded");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

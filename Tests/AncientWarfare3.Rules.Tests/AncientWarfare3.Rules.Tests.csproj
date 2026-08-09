@@ -136,6 +136,7 @@
     <Compile Include="WesternPolicyEffectRulesTests.cs.txt" />
     <Compile Include="WesternPolicyAiRulesTests.cs.txt" />
     <Compile Include="WesternCourtProfileRulesTests.cs.txt" />
+    <Compile Include="MilitaryGovernorateRulesTests.cs.txt" />
     <Compile Include="WesternCourtElectionRulesTests.cs.txt" />
     <Compile Include="WesternCourtOfficeEffectRulesTests.cs.txt" />
     <Compile Include="WesternMayorTermRulesTests.cs.txt" />
@@ -453,6 +454,7 @@
     <Compile Include="..\..\Code\core\lineage\AWArmyRole.cs" Link="Production\AWArmyRole.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalGuardArmyAssignmentRules.cs" Link="Production\RoyalGuardArmyAssignmentRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtManualAppointmentRules.cs" Link="Production\CourtManualAppointmentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MilitaryGovernorateRules.cs" Link="Production\MilitaryGovernorateRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtDispositionRules.cs" Link="Production\CourtDispositionRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtDispositionModels.cs" Link="Production\CourtDispositionModels.cs" />
     <Compile Include="..\..\Code\core\court\CourtDispositionPersistence.cs" Link="Production\CourtDispositionPersistence.cs" />

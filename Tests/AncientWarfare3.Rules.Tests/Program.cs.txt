@@ -8064,6 +8064,7 @@ AWPathRequestReuseRulesTests.Run();
 IdleBehaviourThrottleGateTests.Run();
 LineageBirthArchivePersistenceSqlTests.Run();
 HistoricalWriteRulesTests.Run();
+MilitaryGovernorateRulesTests.Run();
 ReflectionDelegateFactoryTests.Run();
 
 Console.WriteLine("Rule tests passed.");

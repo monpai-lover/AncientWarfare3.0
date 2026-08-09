@@ -1,0 +1,46 @@
+namespace AncientWarfare3.core.lineage
+{
+    public enum VassalSubjectKind
+    {
+        Ordinary = 0,
+        MilitaryGovernorate = 1
+    }
+
+    public static class MilitaryGovernorateRules
+    {
+        public const int AnnualCreationLimit = 1;
+        public const int CityScanBudget = 16;
+        public const int GeneralScanBudget = 32;
+
+        public static bool CanCreate(bool pIsXiaSystem, int pCityCount,
+            int pMaxCities)
+        {
+            return pIsXiaSystem && pCityCount > pMaxCities;
+        }
+
+        public static bool IsEligibleSeat(bool pOwned, bool pCapital,
+            bool pSpecialAdministration,
+            bool pBordersOutsideRootNetwork)
+        {
+            return pOwned && !pCapital && !pSpecialAdministration &&
+                   pBordersOutsideRootNetwork;
+        }
+
+        public static string CommandName(string pRegion, string pSuffix)
+        {
+            return KingdomNameplateSuffixRules.ProjectName(
+                pRegion, pSuffix, true);
+        }
+
+        public static bool MustJoinSuzerainWar(VassalSubjectKind pKind)
+        {
+            return pKind == VassalSubjectKind.MilitaryGovernorate;
+        }
+
+        public static bool CanConductStateDiplomacy(
+            VassalSubjectKind pKind)
+        {
+            return pKind != VassalSubjectKind.MilitaryGovernorate;
+        }
+    }
+}
