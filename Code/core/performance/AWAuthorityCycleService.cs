@@ -44,6 +44,7 @@ namespace AncientWarfare3.core.performance
             WarForceEliminationSettlement,
             KingdomDecisionMonthly,
             CityReservePool,
+            SyntheticMobilizationLedger,
             ArmyReplenishment,
             ActorDeathArchive,
             AsyncMainThreadDrain,
@@ -86,6 +87,7 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.war_force_elimination_settlement",
             "aw3.authority.kingdom_decision_monthly",
             "aw3.authority.city_reserve_pool",
+            "aw3.authority.synthetic_mobilization_ledger",
             "aw3.authority.army_replenishment",
             "aw3.authority.actor_death_archive",
             "aw3.authority.async_main_thread_drain",
@@ -199,6 +201,7 @@ namespace AncientWarfare3.core.performance
             ArmyRtsAssignmentReconciliationService.Reset();
             AWStatusSimulationScheduler.ClearRuntime();
             CityReservePoolService.ClearRuntime();
+            SyntheticMobilizationLedgerService.ClearRuntime();
             WarForceEliminationSettlementService.ClearRuntime();
             ArmyReplenishmentOperationService.ClearRuntime();
             MonthlyKingdomSnapshotService.Reset();
@@ -357,6 +360,11 @@ namespace AncientWarfare3.core.performance
                 case CooperativeAuthorityStage.CityReservePool:
                     Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                         CityReservePoolService.ProcessAuthorityCycle);
+                    break;
+                case CooperativeAuthorityStage.SyntheticMobilizationLedger:
+                    Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
+                        SyntheticMobilizationLedgerService.
+                            ProcessAuthorityCycle);
                     break;
                 case CooperativeAuthorityStage.ArmyReplenishment:
                     Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,

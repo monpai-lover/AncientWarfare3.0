@@ -65,6 +65,14 @@ namespace AncientWarfare3.patch
                         "City reserve pool snapshot write failed");
                     ModClass.LogWarning(reserveSnapshotError);
                 }
+                SyntheticMobilizationLedgerService.TryWriteSnapshot(pFolder,
+                    out string mobilizationSnapshotError);
+                if (!string.IsNullOrEmpty(mobilizationSnapshotError))
+                {
+                    ModClass.LogWarning(
+                        "Synthetic mobilization snapshot write failed");
+                    ModClass.LogWarning(mobilizationSnapshotError);
+                }
                 if (!LineageArchiveManager.Instance.TryExportLineageArchive(
                         pFolder, out string error))
                 {
