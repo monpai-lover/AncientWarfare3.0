@@ -1,0 +1,64 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsFullRosterCursorRulesTests
+{
+    internal static void Run()
+    {
+        var cursor = new ArmyRtsJobAssignmentCursor();
+        cursor.ObserveRosterVersion(1L);
+        Equal(0, cursor.MemberCursor,
+            "a new roster starts at its first member");
+
+        cursor.Advance(128, 300);
+        Equal(128, cursor.MemberCursor,
+            "the first bounded work item covers 128 members");
+        Equal(false, cursor.JobsInitialized,
+            "a 300-member roster remains queued after its first batch");
+
+        cursor.Advance(256, 300);
+        Equal(256, cursor.MemberCursor,
+            "the second work item continues from the persistent cursor");
+        cursor.Advance(300, 300);
+        Equal(300, cursor.MemberCursor,
+            "the final partial batch covers the complete roster");
+        Equal(true, cursor.JobsInitialized,
+            "the cursor completes only after every member is covered");
+
+        Equal(true, cursor.ObserveRosterVersion(2L),
+            "a changed roster version restarts assignment");
+        Equal(0, cursor.MemberCursor,
+            "a changed roster restarts at its first member");
+        Equal(false, cursor.JobsInitialized,
+            "a changed roster is no longer initialized");
+        Equal(false, cursor.ObserveRosterVersion(2L),
+            "observing the same roster version preserves progress");
+
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "ArmyRtsControllerService.cs"));
+        Assert(source.Contains(
+                "MaximumJobMutationsPerController = 128",
+                StringComparison.Ordinal),
+            "each controller work item assigns at most 128 members");
+        Assert(source.Contains("runtime.RosterVersion++",
+                StringComparison.Ordinal),
+            "roster mutation callbacks advance a stable version");
+        Assert(source.Contains("ObserveRosterVersion(",
+                StringComparison.Ordinal),
+            "job assignment observes roster changes before traversal");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $"; expected={expected}, actual={actual}");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

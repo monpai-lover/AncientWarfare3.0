@@ -303,8 +303,19 @@ namespace AncientWarfare3.core.lineage
 
     public sealed class ArmyRtsJobAssignmentCursor
     {
+        private long _observedRosterVersion = long.MinValue;
+
         public int MemberCursor { get; private set; }
         public bool JobsInitialized { get; private set; }
+
+        public bool ObserveRosterVersion(long rosterVersion)
+        {
+            if (_observedRosterVersion == rosterVersion) return false;
+            bool changed = _observedRosterVersion != long.MinValue;
+            _observedRosterVersion = rosterVersion;
+            Reopen();
+            return changed;
+        }
 
         public void Advance(int processedEnd, int rosterCount)
         {
@@ -459,7 +470,7 @@ namespace AncientWarfare3.core.lineage
 
     internal static class ArmyRtsControllerService
     {
-        private const int MaximumJobMutationsPerController = 8;
+        private const int MaximumJobMutationsPerController = 128;
         private const int MaximumFollowerRouteChecksPerController = 4;
         private const int MaximumRoutePollsPerController = 64;
 
@@ -492,6 +503,7 @@ namespace AncientWarfare3.core.lineage
             internal bool MobilizationStatusCatchupPending;
             internal bool MobilizationStatusSweepHasPendingAssembly;
             internal int FollowerRouteInstallCursor;
+            internal long RosterVersion;
             internal double NextJobOwnershipRepairWorldTime =
                 double.PositiveInfinity;
             internal ArmyRtsState MobilizationStatusState =
@@ -1580,7 +1592,7 @@ namespace AncientWarfare3.core.lineage
                 !Controllers.TryGet(pArmy.id, out _) ||
                 !RuntimeByArmy.TryGetValue(pArmy.id,
                     out RuntimeState runtime)) return;
-            runtime.JobCursor.Reopen();
+            runtime.RosterVersion++;
             runtime.FollowerRouteInstallCursor = 0;
             if (ArmyRtsMobilizationStatusRules.RequiresSpeedStatus(
                     runtime.MobilizationStatusState))
@@ -3596,6 +3608,8 @@ namespace AncientWarfare3.core.lineage
         private static void EnsureJobs(Army pArmy, RuntimeState pRuntime,
             ArmyRtsMission pMission, ArmyRtsState pState)
         {
+            pRuntime.JobCursor.ObserveRosterVersion(
+                pRuntime.RosterVersion);
             Actor captain = SafeCaptain(pArmy);
             if (IsLiveCombatantActor(captain))
             {
