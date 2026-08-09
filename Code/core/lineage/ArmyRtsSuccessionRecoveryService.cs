@@ -60,6 +60,7 @@ namespace AncientWarfare3.core.lineage
                 Army army = ArmyStrategicIndexService.ResolveIndexedArmy(
                     armyId, kingdomId);
                 if (army?.data == null) continue;
+                EnsureNonSyntheticCaptain(army, kingdom);
                 try { army.checkCaptainExistence(); }
                 catch { }
                 ArmyRtsControllerService.
@@ -71,6 +72,75 @@ namespace AncientWarfare3.core.lineage
             CompletedKingByKingdom[kingdomId] = work.KingId;
             Pending.Remove(kingdomId);
             KingdomWarDirectorService.QueueArmyChanged(kingdom);
+        }
+
+        private static void EnsureNonSyntheticCaptain(Army pArmy,
+            Kingdom pKingdom)
+        {
+            if (pArmy?.data == null || pKingdom?.data == null) return;
+            Actor current = null;
+            try { current = pArmy.getCaptain(); }
+            catch { }
+            bool currentValid = IsEligibleCaptain(pArmy, pKingdom, current);
+            if (currentValid) return;
+
+            if (current?.data != null &&
+                (SyntheticLevyService.IsSynthetic(current) ||
+                 !currentValid))
+            {
+                using (ArmyCaptainDisposalScope.Open(pArmy))
+                {
+                    try { pArmy.setCaptain(null); }
+                    catch { }
+                }
+            }
+
+            List<GeneralReadModelEntry> generals = GeneralService.
+                GetActiveGeneralsForReadModel(pKingdom,
+                    pAllowUnitFallback: false, pLimit: 8);
+            for (int i = 0; i < generals.Count; i++)
+            {
+                Actor general = generals[i]?.Actor;
+                if (!IsEligibleGeneral(pArmy, pKingdom, general)) continue;
+                if (general.army != null && general.army != pArmy) continue;
+                if (general.army != pArmy)
+                    AWArmyService.AddToArmy(general, pArmy);
+                AWArmyService.SetCaptainIfChanged(pArmy, general);
+                try
+                {
+                    if (pArmy.getCaptain() == general) return;
+                }
+                catch { }
+            }
+        }
+
+        private static bool IsEligibleCaptain(Army pArmy,
+            Kingdom pKingdom, Actor pActor)
+        {
+            try
+            {
+                return pActor?.data != null && pActor.kingdom == pKingdom &&
+                       pActor.isAlive() && !pActor.isRekt() &&
+                       !SyntheticLevyService.IsSynthetic(pActor) &&
+                       AWArmyService.IsCaptainLeaseEligible(pArmy, pActor,
+                           requireMembership: true);
+            }
+            catch { return false; }
+        }
+
+        private static bool IsEligibleGeneral(Army pArmy,
+            Kingdom pKingdom, Actor pActor)
+        {
+            try
+            {
+                return pActor?.data != null && pActor.kingdom == pKingdom &&
+                       pActor.isAlive() && !pActor.isRekt() &&
+                       GeneralService.IsGeneral(pActor) &&
+                       !SyntheticLevyService.IsSynthetic(pActor) &&
+                       AWArmyService.IsCaptainLeaseEligible(pArmy, pActor,
+                           requireMembership: false);
+            }
+            catch { return false; }
         }
 
         internal static void Reset()
