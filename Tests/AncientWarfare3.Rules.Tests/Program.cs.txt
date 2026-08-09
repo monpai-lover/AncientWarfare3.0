@@ -8071,6 +8071,7 @@ ArmyRtsAssignmentReconciliationRulesTests.Run();
 ArmySharedPathRecoveryRulesTests.Run();
 TemporaryLevyDiagnosticSamplingTests.Run();
 RecruitmentLifecycleRemovalRulesTests.Run();
+SyntheticMobilizationRulesTests.Run();
 ActorDiagnosticSamplingRulesTests.Run();
 ActorAgeWorkRulesTests.Run();
 ActorDeathArchiveRulesTests.Run();

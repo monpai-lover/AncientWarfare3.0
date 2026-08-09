@@ -1,0 +1,41 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class SyntheticMobilizationRulesTests
+{
+    internal static void Run()
+    {
+        Equal(50, SyntheticMobilizationRules.Quota(100, 0, 50),
+            "a 50 percent law mobilizes half the city population");
+        Equal(40, SyntheticMobilizationRules.Quota(100, 20, 50),
+            "existing synthetic actors cannot inflate real population");
+        Equal(0, SyntheticMobilizationRules.Quota(3, 0, 30),
+            "small-city quotas use floor without a forced minimum");
+        Equal(30, SyntheticMobilizationRules.Quota(100, 0, 30),
+            "the 30 percent law is exact");
+        Equal(70, SyntheticMobilizationRules.Quota(100, 0, 70),
+            "the 70 percent law is exact");
+        Equal(100, SyntheticMobilizationRules.Quota(100, 0, 100),
+            "the 100 percent law is exact");
+        Equal(8, SyntheticMobilizationRules.Batch(23,
+                SyntheticMobilizationRules.SpawnBatchLimit),
+            "initial spawning is bounded");
+        Equal(12, SyntheticMobilizationRules.ReplacementDemand(
+                target: 40, living: 28, remainingReserve: 15),
+            "casualties consume numeric reserve");
+        Equal(15, SyntheticMobilizationRules.ReplacementDemand(
+                target: 40, living: 10, remainingReserve: 15),
+            "replacement demand cannot exceed reserve");
+        Equal(16, SyntheticMobilizationRules.DemobilizationBatch(41),
+            "demobilization removes at most sixteen actors per work item");
+        Equal(9, SyntheticMobilizationRules.DemobilizationBatch(9),
+            "the final demobilization batch removes the remainder");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                                                expected + ", got " + actual);
+    }
+}

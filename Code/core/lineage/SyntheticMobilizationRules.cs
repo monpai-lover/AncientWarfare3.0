@@ -1,0 +1,39 @@
+using System;
+
+namespace AncientWarfare3.core.lineage
+{
+    public static class SyntheticMobilizationRules
+    {
+        public const int SpawnBatchLimit = 8;
+        public const int ReplacementBatchLimit = 8;
+        public const int DemobilizationBatchLimit = 16;
+
+        public static int Quota(int cityPopulation, int knownSynthetic,
+            int lawPercent)
+        {
+            long realPopulation = Math.Max(0L,
+                (long)Math.Max(0, cityPopulation) -
+                Math.Max(0, knownSynthetic));
+            long percent = Math.Max(0, Math.Min(100, lawPercent));
+            return (int)Math.Min(int.MaxValue,
+                realPopulation * percent / 100L);
+        }
+
+        public static int Batch(int pending, int limit)
+        {
+            return Math.Min(Math.Max(0, pending), Math.Max(0, limit));
+        }
+
+        public static int ReplacementDemand(int target, int living,
+            int remainingReserve)
+        {
+            return Math.Min(Math.Max(0, remainingReserve),
+                Math.Max(0, target - Math.Max(0, living)));
+        }
+
+        public static int DemobilizationBatch(int pending)
+        {
+            return Batch(pending, DemobilizationBatchLimit);
+        }
+    }
+}

@@ -206,6 +206,7 @@
     <Compile Include="..\..\Code\core\lineage\VirtualNobleTitleRules.cs" Link="Production\VirtualNobleTitleRules.cs" />
     <Compile Include="CityManpowerRulesTests.cs.txt" />
     <Compile Include="SyntheticLevyRulesTests.cs.txt" />
+    <Compile Include="SyntheticMobilizationRulesTests.cs.txt" />
     <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAsyncPlanningRulesTests.cs.txt" />
     <Compile Include="ActorKingdomSafetyRulesTests.cs.txt" />
@@ -295,6 +296,7 @@
     <Compile Include="..\..\Code\core\lineage\ArmyMobilizationRules.cs" Link="Production\ArmyMobilizationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityManpowerRules.cs" Link="Production\CityManpowerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SyntheticLevyRules.cs" Link="Production\SyntheticLevyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SyntheticMobilizationRules.cs" Link="Production\SyntheticMobilizationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SyntheticLevySpawnScope.cs" Link="Production\SyntheticLevySpawnScope.cs" />
     <Compile Include="..\..\Code\core\lineage\CityReservePoolRules.cs" Link="Production\CityReservePoolRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityReservePoolPersistenceRules.cs" Link="Production\CityReservePoolPersistenceRules.cs" />
