@@ -50,6 +50,8 @@ namespace AncientWarfare3.core.lineage
             "aw_military_governorate_subject_kind";
         public const string MILITARY_GOVERNORATE_STATE_ID =
             "aw_military_governorate_state_id";
+        public const string MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID =
+            "aw_military_governorate_successor_actor_id";
         public const string MILITARY_GOVERNORATE_AI_LAST_EVALUATION_YEAR =
             "aw_military_governorate_ai_last_evaluation_year";
         public const string MILITARY_GOVERNORATE_OVER_LIMIT_SINCE_YEAR =

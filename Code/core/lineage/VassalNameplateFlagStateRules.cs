@@ -9,6 +9,13 @@ namespace AncientWarfare3.core.lineage
 
     public static class VassalNameplateFlagStateRules
     {
+        public static bool ShouldShowMilitaryGovernorateMarker(
+            bool pFullPlate, bool pKingdomValid,
+            bool pIsMilitaryGovernorate)
+        {
+            return pFullPlate && pKingdomValid && pIsMilitaryGovernorate;
+        }
+
         public static VassalNameplateFlagAction Resolve(bool pFullPlate,
             bool pKingdomValid, long pKingdomId, long pSuzerainId,
             bool pSuzerainValid, long pShownSuzerainId)

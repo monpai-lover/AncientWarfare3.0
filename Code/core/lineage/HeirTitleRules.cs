@@ -57,26 +57,48 @@ namespace AncientWarfare3.core.lineage
 
         internal static string TitleKey(Kingdom pKingdom)
         {
-            if (RepublicGovernmentService.IsRepublic(pKingdom))
-                return GovernmentTitleRules.SuccessorKey(true,
-                    IsImperialOrMandate(pKingdom));
             string successionMode = SuccessionMode.NONE;
             if (pKingdom?.data != null)
                 pKingdom.data.get(LineageKeys.INHERITANCE_CANDIDATE_MODE,
                     out successionMode, SuccessionMode.NONE);
+            return TitleKey(pKingdom, successionMode);
+        }
+
+        internal static string TitleKey(Kingdom pKingdom,
+            string pSuccessionMode)
+        {
+            bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
+                                       VassalSubjectKind.MilitaryGovernorate;
+            if (militaryGovernorate) return LiuhouKey;
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+                return GovernmentTitleRules.SuccessorKey(true,
+                    IsImperialOrMandate(pKingdom));
             return TitleKey(IsImperialOrMandate(pKingdom),
-                successionMode);
+                pSuccessionMode);
         }
 
         internal static string DefaultTitleText(Kingdom pKingdom,
             string pSuccessionMode)
         {
-            return DefaultTitleText(IsImperialOrMandate(pKingdom),
-                pSuccessionMode);
+            bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
+                                       VassalSubjectKind.MilitaryGovernorate;
+            return HeirTitleSelectionRules.DefaultTitleText(
+                IsImperialOrMandate(pKingdom), pSuccessionMode,
+                militaryGovernorate);
         }
 
         internal static string BuildSocialTitle(string pKingdomName, Kingdom pKingdom)
         {
+            bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
+                                       VassalSubjectKind.MilitaryGovernorate;
+            if (militaryGovernorate)
+            {
+                string militaryTitle = DefaultTitleText(pKingdom,
+                    SuccessionMode.NONE);
+                return string.IsNullOrEmpty(pKingdomName)
+                    ? militaryTitle
+                    : pKingdomName + " " + militaryTitle;
+            }
             if (RepublicGovernmentService.IsRepublic(pKingdom))
                 return GovernmentTitleRules.BuildSocialTitle(pKingdomName, pIsHead: false, pIsElder: true);
             string successionMode = SuccessionMode.NONE;

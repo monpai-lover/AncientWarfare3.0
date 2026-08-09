@@ -23,6 +23,56 @@ internal static class MilitaryGovernorateRulesTests
             "regional command suffix is stable");
         Equal("天平军", MilitaryGovernorateRules.CommandName("天平军", "军"),
             "command suffix is not duplicated");
+        Equal("军", KingdomNameplateSuffixRules.Resolve(
+                4, true, true, true, pIsMilitaryGovernorate: true),
+            "active military governorate suffix outranks generic state logic");
+        Equal("天平军", KingdomNameplateSuffixRules.ProjectName(
+                "天平军", "军", pShouldDisplaySuffix: true),
+            "active governorate projection does not duplicate the command suffix");
+        Equal("王国", KingdomNameplateSuffixRules.Resolve(
+                3, false, false, false,
+                pIsMilitaryGovernorate: false),
+            "ordinary and former governorates retain generic state suffixes");
+        Equal(HeirTitleSelectionRules.LiuhouKey,
+            HeirTitleSelectionRules.TitleKey(false,
+                HeirTitleSelectionRules.CivilAcclaimMode,
+                pIsMilitaryGovernorate: true),
+            "active governorate heir is titled liuhou before succession-mode logic");
+        Equal("留后", HeirTitleSelectionRules.DefaultTitleText(false,
+                HeirTitleSelectionRules.CivilAcclaimMode,
+                pIsMilitaryGovernorate: true),
+            "active governorate heir fallback is liuhou");
+        Equal(HeirTitleSelectionRules.SijunKey,
+            HeirTitleSelectionRules.TitleKey(false,
+                HeirTitleSelectionRules.CivilAcclaimMode,
+                pIsMilitaryGovernorate: false),
+            "former governorate heir falls through to existing succession mode");
+        Equal("将军", RulerAppellationRules.LivingMilitaryGovernorate(),
+            "active governorate ruler appellation is general");
+        Equal("将军", RulerAppellationRules.ResolveWindowRulerLabel(
+                pIsMilitaryGovernorate: true, pIsRepublic: true,
+                pIsEmpireRank: true, pIsMandate: true,
+                pLivingAppellation: "皇帝", pRepublicLabel: "元首",
+                pMonarchyLabel: "国王", pEmperorFallbackLabel: "皇帝",
+                pMilitaryGovernorLabel: "将军"),
+            "governorate ruler title outranks republic and imperial logic");
+        Equal("元首", RulerAppellationRules.ResolveWindowRulerLabel(
+                pIsMilitaryGovernorate: false, pIsRepublic: true,
+                pIsEmpireRank: true, pIsMandate: true,
+                pLivingAppellation: "皇帝", pRepublicLabel: "元首",
+                pMonarchyLabel: "国王", pEmperorFallbackLabel: "皇帝",
+                pMilitaryGovernorLabel: "将军"),
+            "former governorate ruler falls through to existing republic logic");
+        Equal(true,
+            VassalNameplateFlagStateRules.ShouldShowMilitaryGovernorateMarker(
+                pFullPlate: true, pKingdomValid: true,
+                pIsMilitaryGovernorate: true),
+            "active governorate full nameplate displays its military marker");
+        Equal(false,
+            VassalNameplateFlagStateRules.ShouldShowMilitaryGovernorateMarker(
+                pFullPlate: true, pKingdomValid: true,
+                pIsMilitaryGovernorate: false),
+            "ordinary kingdom nameplate has no military marker");
         Equal(true, MilitaryGovernorateRules.MustJoinSuzerainWar(
                 VassalSubjectKind.MilitaryGovernorate),
             "military governorate obligation is absolute");

@@ -100,7 +100,7 @@ namespace AncientWarfare3.core.lineage
                 }
 
                 transaction.Commit();
-                Project(pSubject, pStateId);
+                Project(pSubject, pStateId, -1L);
                 return true;
             }
             catch (Exception error)
@@ -134,7 +134,8 @@ namespace AncientWarfare3.core.lineage
                 using SQLiteDataReader reader = command.ExecuteReader();
                 if (!reader.Read()) return false;
                 pSnapshot = Read(reader);
-                Project(pSubject, pSnapshot.StateId);
+                Project(pSubject, pSnapshot.StateId,
+                    pSnapshot.SuccessorActorId);
                 return true;
             }
             catch (Exception error)
@@ -388,7 +389,8 @@ namespace AncientWarfare3.core.lineage
             if (pSubject == null) return false;
             if (TryGetActive(pSubject, out MilitaryGovernorateSnapshot snapshot))
             {
-                Project(pSubject, snapshot.StateId);
+                Project(pSubject, snapshot.StateId,
+                    snapshot.SuccessorActorId);
                 return true;
             }
             ClearProjection(pSubject);
@@ -446,13 +448,17 @@ namespace AncientWarfare3.core.lineage
             };
         }
 
-        private static void Project(Kingdom pSubject, long pStateId)
+        private static void Project(Kingdom pSubject, long pStateId,
+            long pSuccessorActorId)
         {
             if (pSubject == null) return;
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
                 (int)VassalSubjectKind.MilitaryGovernorate);
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_STATE_ID,
                 pStateId);
+            pSubject.data.set(
+                LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID,
+                pSuccessorActorId);
         }
 
         private static void ClearProjection(Kingdom pSubject)
@@ -461,6 +467,8 @@ namespace AncientWarfare3.core.lineage
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
                 (int)VassalSubjectKind.Ordinary);
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_STATE_ID, -1L);
+            pSubject.data.set(
+                LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID, -1L);
         }
 
         private static Kingdom FindKingdom(long pKingdomId)

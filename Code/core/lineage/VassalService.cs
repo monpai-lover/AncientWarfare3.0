@@ -868,6 +868,7 @@ namespace AncientWarfare3.core.lineage
                 pSuzerain.id);
             HierarchicalVassalMapModeService.MarkHierarchyDirty(
                 pVassal, pSuzerain);
+            InvalidateRelationPresentation(pVassal);
             return true;
         }
 
@@ -1003,6 +1004,7 @@ namespace AncientWarfare3.core.lineage
             else if (!CloseRelation(relationId, pReason ?? "ended",
                          absorbed: false)) return false;
             ClearRelationProjection(pVassal);
+            InvalidateRelationPresentation(pVassal);
             RecordVassalEnd(pVassal, suzerain, pReason);
             DiplomacyConversationService.RecordVassalEnded(pVassal,
                 suzerain);
@@ -2378,6 +2380,16 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
                 (int)VassalSubjectKind.Ordinary);
             pKingdom.data.set(LineageKeys.MILITARY_GOVERNORATE_STATE_ID, -1L);
+            pKingdom.data.set(
+                LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID, -1L);
+        }
+
+        private static void InvalidateRelationPresentation(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            RulerAppellationService.RemoveKingdom(pKingdom.id);
+            try { World.world?.nameplate_manager?.clearCaches(); }
+            catch { }
         }
 
         private static VassalSubjectKind NormalizeSubjectKind(long pKind)

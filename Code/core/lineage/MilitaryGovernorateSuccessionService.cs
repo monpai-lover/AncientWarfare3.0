@@ -50,8 +50,31 @@ namespace AncientWarfare3.core.lineage
                 pReason = "persistence_failed";
                 return false;
             }
+            ProjectSuccessor(pSubject, pCandidate.data.id);
+            try
+            {
+                ChronicleEvents.OnHeirDesignated(pSubject, pSubject.king,
+                    pCandidate, HeirTitleSelectionRules.MilitaryAcclaimMode);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "Military governorate designation chronicle failed: " +
+                    error.Message);
+            }
             pReason = "ok";
             return true;
+        }
+
+        public static Actor GetDesignatedSuccessorForReadModel(
+            Kingdom pSubject)
+        {
+            if (!IsActiveSubject(pSubject)) return null;
+            pSubject.data.get(
+                LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID,
+                out long actorId, -1L);
+            Actor actor = FindActor(actorId);
+            return IsLiving(actor) ? actor : null;
         }
 
         private static void Process(long pKingdomId, long pRulerActorId)
@@ -87,7 +110,10 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             if (state.SuccessorActorId >= 0)
+            {
                 MilitaryGovernorateStore.SetSuccessor(state.StateId, -1L);
+                ProjectSuccessor(subject, -1L);
+            }
 
             int year = SafeYear();
             int pendingSinceYear = DecodePendingYear(state.SuccessionState);
@@ -104,7 +130,10 @@ namespace AncientWarfare3.core.lineage
             Actor elected = SelectLocalGeneral(subject, year);
             if (elected != null && MilitaryGovernorateStore.SetSuccessor(
                     state.StateId, elected.data.id))
+            {
+                ProjectSuccessor(subject, elected.data.id);
                 Commit(subject, suzerain, state, elected);
+            }
         }
 
         private static Actor SelectLocalGeneral(Kingdom pSubject, int pYear)
@@ -205,6 +234,7 @@ namespace AncientWarfare3.core.lineage
             bool stateSaved = MilitaryGovernorateStore.CommitSuccession(
                 pState.StateId, pSuccessor.data.id);
             if (!stateSaved) return false;
+            ProjectSuccessor(pSubject, -1L);
             try { WorldLog.logNewKing(pSubject); }
             catch { }
             return true;
@@ -340,6 +370,13 @@ namespace AncientWarfare3.core.lineage
             if (pActorId < 0) return null;
             try { return World.world?.units?.get(pActorId); }
             catch { return null; }
+        }
+
+        private static void ProjectSuccessor(Kingdom pSubject, long pActorId)
+        {
+            pSubject?.data?.set(
+                LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID,
+                pActorId);
         }
     }
 }

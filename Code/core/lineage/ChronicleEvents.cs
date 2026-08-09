@@ -883,8 +883,7 @@ namespace AncientWarfare3.core.lineage
             Actor pHeir, string pMode)
         {
             if (pKingdom?.data == null || pHeir?.data == null) return;
-            string title = T(HeirTitleRules.TitleKey(
-                HeirTitleRules.IsImperialOrMandate(pKingdom), pMode));
+            string title = T(HeirTitleRules.TitleKey(pKingdom, pMode));
             HistoryText ruler = pRuler?.data != null
                 ? HistoryText.Actor(pRuler)
                 : HistoryText.Kingdom(pKingdom);

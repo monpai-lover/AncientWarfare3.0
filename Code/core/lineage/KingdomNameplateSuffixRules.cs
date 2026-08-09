@@ -16,6 +16,15 @@ namespace AncientWarfare3.core.lineage
         public static string Resolve(int pTitle, bool pIsMandateKingdom, bool pIsRebelKingdom,
             bool pIsRepublic)
         {
+            return Resolve(pTitle, pIsMandateKingdom, pIsRebelKingdom,
+                pIsRepublic, pIsMilitaryGovernorate: false);
+        }
+
+        public static string Resolve(int pTitle, bool pIsMandateKingdom,
+            bool pIsRebelKingdom, bool pIsRepublic,
+            bool pIsMilitaryGovernorate)
+        {
+            if (pIsMilitaryGovernorate) return "\u519b";
             if (pIsRebelKingdom) return "\u4e49\u519b";
             if (pIsRepublic) return "\u5171\u548c\u56fd";
             if (pIsMandateKingdom && pTitle == 4) return "\u671d";

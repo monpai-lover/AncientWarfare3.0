@@ -16,8 +16,17 @@ namespace AncientWarfare3.core.lineage
         public static string GetNameplateTitleSuffix(int pTitle, bool pIsMandateKingdom, bool pIsRebelKingdom,
             bool pIsRepublic)
         {
+            return GetNameplateTitleSuffix(pTitle, pIsMandateKingdom,
+                pIsRebelKingdom, pIsRepublic,
+                pIsMilitaryGovernorate: false);
+        }
+
+        public static string GetNameplateTitleSuffix(int pTitle,
+            bool pIsMandateKingdom, bool pIsRebelKingdom,
+            bool pIsRepublic, bool pIsMilitaryGovernorate)
+        {
             return KingdomNameplateSuffixRules.Resolve(pTitle, pIsMandateKingdom, pIsRebelKingdom,
-                pIsRepublic);
+                pIsRepublic, pIsMilitaryGovernorate);
         }
     }
 }

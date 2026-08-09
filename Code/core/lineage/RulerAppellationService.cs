@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -41,6 +42,11 @@ namespace AncientWarfare3.core.lineage
         public static string GetFullLivingAppellation(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return "";
+            bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
+                                       VassalSubjectKind.MilitaryGovernorate;
+            if (militaryGovernorate)
+                return AW_L10n.Text("aw_military_governorate_ruler",
+                    RulerAppellationRules.LivingMilitaryGovernorate());
             bool rebel = MandateRebelService.IsRebelKingdom(pKingdom);
             bool republic = RepublicGovernmentService.IsRepublic(pKingdom);
             RulerRank rank = MapRank(KingdomTitleService.GetTitle(pKingdom));
@@ -243,11 +249,14 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pKingdom.isRekt()) return "";
             string stateName = SuccessionDisputeService.GetDisplayName(
                 pKingdom);
+            bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
+                                       VassalSubjectKind.MilitaryGovernorate;
             bool originalXia = LineageService.IsXiaKingdom(pKingdom);
             bool displaySuffix = XiaizedKingdomNamingRules.
                 ShouldDisplayStateSuffix(originalXia,
                     XiaizationService.GetLevel(pKingdom),
                     XiaizationService.LevelXiaizedDynasty);
+            displaySuffix = militaryGovernorate || displaySuffix;
             if (!displaySuffix)
             {
                 CompactByKingdom.Remove(pKingdom.id);
@@ -258,7 +267,8 @@ namespace AncientWarfare3.core.lineage
                 (int)KingdomTitleService.GetTitle(pKingdom),
                 MandateService.IsRuntimeMandateKingdom(pKingdom),
                 MandateRebelService.IsRebelKingdom(pKingdom),
-                RepublicGovernmentService.IsRepublic(pKingdom));
+                RepublicGovernmentService.IsRepublic(pKingdom),
+                militaryGovernorate);
             if (CompactByKingdom.TryGetValue(pKingdom.id,
                     out LivingProjection cached) &&
                 string.Equals(cached.StateName, stateName,

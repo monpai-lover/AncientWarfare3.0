@@ -781,7 +781,12 @@ namespace AncientWarfare3.ui.windows
             SetPolicyIcon(_inheritanceIcon, "ui/Icons/iconKings");
             pKingdom.data.get(LineageKeys.INHERITANCE_CANDIDATE_MODE,
                 out string mode, SuccessionMode.NONE);
-            Actor heir = HeirService.PeekStoredHeirForMinimap(pKingdom);
+            bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
+                                       VassalSubjectKind.MilitaryGovernorate;
+            Actor heir = militaryGovernorate
+                ? MilitaryGovernorateSuccessionService.
+                    GetDesignatedSuccessorForReadModel(pKingdom)
+                : HeirService.PeekStoredHeirForMinimap(pKingdom);
             string heirTitle = HeirTitleRules.DefaultTitleText(
                 pKingdom, mode);
             string heirName = heir?.getName() ??
@@ -971,6 +976,8 @@ namespace AncientWarfare3.ui.windows
                         bool republic = RepublicGovernmentService.IsRepublic(kingdom);
                         bool mandate = MandateService.IsRuntimeMandateKingdom(kingdom);
                         bool empireRank = KingdomTitleService.IsEmperor(kingdom);
+                        bool militaryGovernorate = VassalService.GetSubjectKind(
+                            kingdom) == VassalSubjectKind.MilitaryGovernorate;
                         bool ceremonialEmperor = empireRank || mandate;
                         string key = GovernmentTitleRules.RulerKey(republic);
                         string monarchyLabel = AW_L10n.Text("aw_label_king", "King");
@@ -978,15 +985,19 @@ namespace AncientWarfare3.ui.windows
                             GovernmentTitleRules.RepublicHeadKey, "Head of State");
                         string mandateFallback = AW_L10n.Text(
                             "aw_mandate_emperor", "Emperor");
-                        string livingAppellation = ceremonialEmperor && !republic
+                        string militaryGovernorLabel = AW_L10n.Text(
+                            "aw_military_governorate_ruler", "General");
+                        string livingAppellation =
+                            (militaryGovernorate || ceremonialEmperor) && !republic
                             ? RulerAppellationService.GetFullLivingAppellation(kingdom)
                             : "";
                         string label = RulerAppellationRules.ResolveWindowRulerLabel(
-                            republic, empireRank, mandate, livingAppellation, republicLabel,
-                            monarchyLabel, mandateFallback);
+                            militaryGovernorate, republic, empireRank, mandate,
+                            livingAppellation, republicLabel, monarchyLabel,
+                            mandateFallback, militaryGovernorLabel);
                         LocalizedText localized = kingLabel.GetComponent<LocalizedText>();
                         Text text = kingLabel.GetComponent<Text>();
-                        if (ceremonialEmperor && !republic)
+                        if (militaryGovernorate || ceremonialEmperor && !republic)
                         {
                             if (localized != null) localized.enabled = false;
                             if (text != null) text.text = label;
@@ -1009,7 +1020,12 @@ namespace AncientWarfare3.ui.windows
             if (_heirCol != null && _heirAvatar != null)
             {
                 _heirCol.SetActive(true);
-                Actor heir = HeirService.FindHeirReadOnly(kingdom);
+                bool militaryGovernorate = VassalService.GetSubjectKind(
+                    kingdom) == VassalSubjectKind.MilitaryGovernorate;
+                Actor heir = militaryGovernorate
+                    ? MilitaryGovernorateSuccessionService.
+                        GetDesignatedSuccessorForReadModel(kingdom)
+                    : HeirService.FindHeirReadOnly(kingdom);
                 bool hasHeir = heir != null && !heir.isRekt();
                 if (hasHeir) { _heirAvatar.gameObject.SetActive(true); _heirAvatar.show(heir); }
                 else _heirAvatar.gameObject.SetActive(false);

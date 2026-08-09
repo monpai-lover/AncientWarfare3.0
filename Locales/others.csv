@@ -109,6 +109,9 @@ aw_vassal_relations,附庸关系,Vassal Relations,附庸關係
 aw_view_vassal_relations,查看该国的附庸体系,View this kingdom's vassal network,查看該國的附庸體系
 aw_city_short,城,City,城
 aw_army_short,军,Army,軍
+aw_military_governorate_ruler,将军,General,將軍
+aw_military_governorate_marker,军镇,Military governorate,軍鎮
+aw_military_governorate_marker_short,军,M,軍
 aw_vassal_years_short,臣,Vassal years,臣
 aw_vassal_count_short,附,Vassals,附
 aw_vassal_role,身份:,Role:,身份：
