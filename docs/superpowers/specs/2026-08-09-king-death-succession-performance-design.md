@@ -195,6 +195,45 @@ Diagnostics remain allocation-free unless runtime diagnostics are enabled.
 They are retained until final acceptance so an apparent improvement cannot
 hide a new post-death spike one or two frames later.
 
+## Cultiway Perf Scheduler Non-Regression Boundary
+
+The already-ported `Cultiway-Reborn-perf` large-step scheduler is a protected
+baseline for this work. Succession preparation is domain maintenance owned by
+AW3; it is not a new simulation stage and must not be inserted into Cultiway's
+fixed-step runner, batch cursor, parallel Actor jobs, presentation clock, save
+barrier, pause transition, or world-clear choreography.
+
+The only scheduler integration is one bounded call from
+`AWAuthorityCycleService.ProcessCycle`, after the existing authority token gate
+has accepted the cycle. `SuccessionPreparationService.ProcessAuthorityCycle(1)`
+therefore runs at most once for a cooperative logical-cycle token and at most
+once for a native-cycle token. It must return immediately when its dirty queue
+is empty and must never wait on a worker, database, lock, or full-world rebuild.
+
+The following scheduler-port files are read-only for this implementation:
+
+- `Code/patch/AW_FramePrioritySchedulerPatch.cs`
+- `Code/core/performance/AWCooperativeSimulationRunner.cs`
+- `Code/core/performance/AWCooperativeBatchRunner.cs`
+- `Code/core/performance/AWCooperativeActorParallelJobRunner.cs`
+- `Code/core/performance/AWFrameSchedulerRules.cs`
+- `Code/core/performance/AWSimulationStepContext.cs`
+
+The implementation branch records their current SHA-256 values in a source
+guard before behavior changes. Final verification compares those values and
+the protected lifecycle invariants against `F:/WorldBox New
+Mod/Cultiway-Reborn-perf`: frame-begin read boundaries, one admitted logical
+cycle at a time, fixed-step context restoration, presentation completion,
+save-time drain, abort-before-clear, and post-world-creation reset. A hash
+change is a hard failure for this plan; a future scheduler upgrade must be a
+separate reviewed change with its own Cultiway baseline.
+
+The new succession indexes and caches contain only main-thread WorldBox object
+lookups and scalar/immutable records. Worker envelopes contain IDs, primitive
+values, and SQL parameters only. Completion callbacks are drained through the
+existing AW authority completion path and revision-check before publishing;
+they do not create another scheduler or independently advance simulation.
+
 ## Failure Handling
 
 - Duplicate death capture returns the existing context.
@@ -226,6 +265,8 @@ Use the same large save and diagnostics configuration that produced the
   lineage members and does not enumerate `World.world.units`.
 - Native and large-step scheduler modes produce the same successor, dispute,
   civil-service, chronicle, mandate, and multiplayer outcomes.
+- All six protected scheduler-port files retain their pre-implementation
+  SHA-256 values and Cultiway lifecycle source guards pass.
 
 ## Test Matrix
 
