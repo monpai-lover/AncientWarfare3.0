@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -39,6 +40,13 @@ namespace AncientWarfare3.core.lineage
             new KingSuccessionPreparationState();
         private static readonly Dictionary<long, PublishedContext>
             PublishedByKingdom = new Dictionary<long, PublishedContext>();
+        private static readonly Dictionary<long,
+                SuccessionDisputePreparationFacts> PendingDisputes =
+            new Dictionary<long, SuccessionDisputePreparationFacts>();
+        private static readonly Dictionary<long, long>
+            DisputePersistenceRevisions = new Dictionary<long, long>();
+        private static readonly SuccessionDirtyQueue DisputeRetryQueue =
+            new SuccessionDirtyQueue();
 
         internal static long CurrentRevision(long pKingdomId)
         {
@@ -59,8 +67,9 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle(int pKingdomBudget = 1)
         {
-            if (pKingdomBudget <= 0 || !SuccessionRelationshipIndex.IsReady)
-                return;
+            if (pKingdomBudget <= 0) return;
+            RetryPendingDispute();
+            if (!SuccessionRelationshipIndex.IsReady) return;
             IReadOnlyList<long> ids = DirtyKingdoms.Take(pKingdomBudget);
             for (int i = 0; i < ids.Count; i++)
             {
@@ -197,6 +206,7 @@ namespace AncientWarfare3.core.lineage
                 return null;
             if (!Deaths.TryConsumePublished(context.Key, out _)) return null;
             PublishedByKingdom.Remove(pKingdom.id);
+            QueueDisputePersistence(context.Snapshot.DisputeFacts);
             return context.Snapshot.DisputeFacts;
         }
 
@@ -234,6 +244,9 @@ namespace AncientWarfare3.core.lineage
             DirtyKingdoms.Clear();
             Deaths.Clear();
             PublishedByKingdom.Clear();
+            PendingDisputes.Clear();
+            DisputePersistenceRevisions.Clear();
+            DisputeRetryQueue.Clear();
         }
 
         private static bool CanPrepare(Kingdom pKingdom)
@@ -315,6 +328,145 @@ namespace AncientWarfare3.core.lineage
                     pKingdom.data.set(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID,
                         shiId);
             }
+        }
+
+        private static void QueueDisputePersistence(
+            SuccessionDisputePreparationFacts pFacts)
+        {
+            if (pFacts == null || pFacts.KingdomId < 0L) return;
+            long revision = DisputePersistenceRevisions.TryGetValue(
+                pFacts.KingdomId, out long current) && current < long.MaxValue
+                ? current + 1L
+                : 1L;
+            DisputePersistenceRevisions[pFacts.KingdomId] = revision;
+            SuccessionDisputePreparationFacts captured = CopyDisputeFacts(
+                pFacts, revision);
+            PendingDisputes[pFacts.KingdomId] = captured;
+            if (!TryEnqueueDispute(captured))
+                DisputeRetryQueue.MarkDirty(pFacts.KingdomId);
+        }
+
+        private static void RetryPendingDispute()
+        {
+            IReadOnlyList<long> ids = DisputeRetryQueue.Take(1);
+            if (ids.Count == 0 || !PendingDisputes.TryGetValue(ids[0],
+                    out SuccessionDisputePreparationFacts facts)) return;
+            if (!TryEnqueueDispute(facts))
+                DisputeRetryQueue.MarkDirty(ids[0]);
+        }
+
+        private static bool TryEnqueueDispute(
+            SuccessionDisputePreparationFacts pFacts)
+        {
+            SuccessionDisputeWriteFacts write = BuildWriteFacts(pFacts);
+            string operationKey = "succession-dispute:v1:" +
+                pFacts.WorldGeneration + ":" + pFacts.KingdomId + ":" +
+                pFacts.PredecessorActorId + ":" + pFacts.SuccessorActorId +
+                ":" + pFacts.Revision;
+            return HistoricalWriteService.TryEnqueueCustom(operationKey,
+                (sequence, stamp) => new SuccessionDisputeWriteEnvelope(
+                    sequence, operationKey, stamp, write),
+                (sequence, outcome) => AcceptDisputeCommit(pFacts, write,
+                    outcome),
+                (sequence, error) => MarkDisputePersistencePending(pFacts),
+                out _, out _);
+        }
+
+        private static void AcceptDisputeCommit(
+            SuccessionDisputePreparationFacts pFacts,
+            SuccessionDisputeWriteFacts pWrite, object pOutcome)
+        {
+            if (!(pOutcome is SuccessionDisputeWriteResult result) ||
+                pFacts == null ||
+                pFacts.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
+                !PendingDisputes.TryGetValue(pFacts.KingdomId,
+                    out SuccessionDisputePreparationFacts pending) ||
+                pending.Revision != pFacts.Revision ||
+                !DisputePersistenceRevisions.TryGetValue(pFacts.KingdomId,
+                    out long revision) || revision != pFacts.Revision)
+                return;
+            Kingdom kingdom = World.world?.kingdoms?.get(pFacts.KingdomId);
+            Actor successor = kingdom?.king;
+            if (kingdom?.data == null || successor?.data == null ||
+                successor.data.id != pFacts.SuccessorActorId) return;
+            PendingDisputes.Remove(pFacts.KingdomId);
+            SuccessionDisputeService.PublishCommitted(pFacts, pWrite,
+                result, kingdom, successor);
+        }
+
+        private static void MarkDisputePersistencePending(
+            SuccessionDisputePreparationFacts pFacts)
+        {
+            if (pFacts == null ||
+                pFacts.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
+                !PendingDisputes.TryGetValue(pFacts.KingdomId,
+                    out SuccessionDisputePreparationFacts pending) ||
+                pending.Revision != pFacts.Revision) return;
+            DisputeRetryQueue.MarkDirty(pFacts.KingdomId);
+        }
+
+        private static SuccessionDisputeWriteFacts BuildWriteFacts(
+            SuccessionDisputePreparationFacts pFacts)
+        {
+            int year = Date.getCurrentYear();
+            return new SuccessionDisputeWriteFacts
+            {
+                OriginalKingdomId = pFacts.KingdomId,
+                PredecessorActorId = pFacts.PredecessorActorId,
+                SuccessorActorId = pFacts.SuccessorActorId,
+                ClaimantActorId = pFacts.ClaimantActorId,
+                OriginalStateName = pFacts.OriginalStateName,
+                OriginalQualifier = pFacts.OriginalQualifier,
+                RivalQualifier = pFacts.RivalQualifier,
+                AccessionLaw = (int)pFacts.AccessionLaw,
+                SuccessorMode = pFacts.SuccessorMode,
+                ClaimantMode = pFacts.ClaimantMode,
+                SuccessorSupport = pFacts.SuccessorSupport,
+                ClaimantSupport = pFacts.ClaimantSupport,
+                PreparedTime = LineageService.CurTime(),
+                PreparedYear = year,
+                DeadlineYear = SuccessionDisputeRules.DeadlineYear(year),
+                Status = (int)SuccessionDisputeStatus.Prepared,
+                OriginalLineageId = pFacts.OriginalLineageId,
+                OriginalShiId = pFacts.OriginalShiId,
+                ClaimGenerationBoundary =
+                    SuccessionDisputeRules.ReunificationClaimGenerations,
+                SupportCityIds = pFacts.SupportCityIds == null
+                    ? Array.Empty<long>()
+                    : (long[])pFacts.SupportCityIds.Clone()
+            };
+        }
+
+        private static SuccessionDisputePreparationFacts CopyDisputeFacts(
+            SuccessionDisputePreparationFacts pFacts, long pRevision)
+        {
+            return new SuccessionDisputePreparationFacts
+            {
+                WorldGeneration = pFacts.WorldGeneration,
+                Revision = pRevision,
+                KingdomId = pFacts.KingdomId,
+                PredecessorActorId = pFacts.PredecessorActorId,
+                SuccessorActorId = pFacts.SuccessorActorId,
+                ClaimantActorId = pFacts.ClaimantActorId,
+                LegitimateClaimantId = pFacts.LegitimateClaimantId,
+                MilitaryClaimantId = pFacts.MilitaryClaimantId,
+                CivilClaimantId = pFacts.CivilClaimantId,
+                SuccessorMode = pFacts.SuccessorMode,
+                ClaimantMode = pFacts.ClaimantMode,
+                ClaimantKind = pFacts.ClaimantKind,
+                SuccessorSupport = pFacts.SuccessorSupport,
+                ClaimantSupport = pFacts.ClaimantSupport,
+                RunnerUpSupport = pFacts.RunnerUpSupport,
+                AccessionLaw = pFacts.AccessionLaw,
+                OriginalLineageId = pFacts.OriginalLineageId,
+                OriginalShiId = pFacts.OriginalShiId,
+                OriginalStateName = pFacts.OriginalStateName,
+                OriginalQualifier = pFacts.OriginalQualifier,
+                RivalQualifier = pFacts.RivalQualifier,
+                SupportCityIds = pFacts.SupportCityIds == null
+                    ? Array.Empty<long>()
+                    : (long[])pFacts.SupportCityIds.Clone()
+            };
         }
     }
 }

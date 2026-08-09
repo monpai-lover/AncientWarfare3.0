@@ -79,162 +79,6 @@ namespace AncientWarfare3.core.lineage
                                      LineageArchiveManager.Instance
                                          .InitializeSuccessful;
 
-        public static void Prepare(Kingdom pKingdom, Actor pPredecessor,
-            Actor pInstalledSuccessor)
-        {
-            if (!Ready || pKingdom?.data == null ||
-                pPredecessor?.data == null ||
-                pInstalledSuccessor?.data == null ||
-                pKingdom.countCities() <= 1 ||
-                TryGetByKingdom(pKingdom.id, out _))
-                return;
-            InheritanceFactionSupport factionSupport =
-                InheritanceCandidateService.ResolveFactionSupport(pKingdom,
-                    pPredecessor, pInstalledSuccessor);
-            Actor claimant = factionSupport.LeaderActor;
-            if (!IsLegalAlternative(claimant, pInstalledSuccessor,
-                    pKingdom))
-                return;
-            pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE,
-                out string successorMode, SuccessionMode.NONE);
-            List<City> cities = SelectSupportCities(pKingdom, claimant,
-                pInstalledSuccessor, factionSupport.LeaderMode,
-                successorMode, factionSupport);
-            int totalCityCount = CountLiveCities(pKingdom);
-            if (!SuccessionDisputeRules.CanFormBalancedTerritorialSplit(
-                    totalCityCount, cities.Count)) return;
-
-            int successorSupport = factionSupport.DesignatedHeirSupport;
-            int claimantSupport = factionSupport.LeaderSupport;
-            if (!SuccessionDisputeRules.CanPrepare(
-                    new SuccessionClaimantFacts(claimant.data.id,
-                        factionSupport.LeaderKind, claimantSupport,
-                        factionSupport.RunnerUpSupport,
-                        hasSupportCity: true, hasActiveDispute: false,
-                        hasLivingDirectPaternalAncestor: false)))
-                return;
-
-            long disputeId = TableIdAllocator.Next(DB,
-                SuccessionDisputeTableItem.GetTableName(), "DISPUTE_ID");
-            if (disputeId < 0) return;
-            int year = Date.getCurrentYear();
-            double now = LineageService.CurTime();
-            SuccessionDirection rivalDirection = ResolveDirection(
-                pKingdom.capital, cities[0], claimantAccededLater: true);
-            SuccessionDirection originalDirection = Opposite(
-                rivalDirection);
-            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID,
-                out long lineageId, -1L);
-            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID,
-                out long shiId, -1L);
-            string stateName = shiId >= 0
-                ? StateNameService.GetBoundStateName(shiId)
-                : "";
-            if (string.IsNullOrEmpty(stateName))
-                stateName = pKingdom.name ?? "";
-
-            SQLiteTransaction transaction = null;
-            try
-            {
-                transaction = DB.BeginTransaction();
-                using (var insert = new SQLiteCommand(DB)
-                       { Transaction = transaction })
-                {
-                    insert.CommandText = "INSERT INTO " +
-                        SuccessionDisputeTableItem.GetTableName() +
-                        "(DISPUTE_ID,ORIGINAL_KINGDOM_ID,RIVAL_KINGDOM_ID," +
-                        "PREDECESSOR_ACTOR_ID,SUCCESSOR_ACTOR_ID," +
-                        "CLAIMANT_ACTOR_ID,ORIGINAL_STATE_NAME," +
-                        "ORIGINAL_QUALIFIER,RIVAL_QUALIFIER,ACCESSION_LAW," +
-                        "SUCCESSOR_MODE,CLAIMANT_MODE,SUCCESSOR_SUPPORT," +
-                        "CLAIMANT_SUPPORT,WAR_ID,PREPARED_TIME,START_TIME," +
-                        "PREPARED_YEAR,DEADLINE_YEAR,STATUS,END_TIME," +
-                        "END_REASON,ORIGINAL_LINEAGE_ID,ORIGINAL_SHI_ID," +
-                        "CLAIM_GENERATION_BOUNDARY) VALUES(" +
-                        "@id,@original,-1,@predecessor,@successor,@claimant," +
-                        "@state,@oq,@rq,@law,@sm,@cm,@ss,@cs,-1,@time,-1," +
-                        "@year,@deadline,@status,-1,'',@lineage,@shi,@claimgen)";
-                    insert.Parameters.AddWithValue("@id", disputeId);
-                    insert.Parameters.AddWithValue("@original", pKingdom.id);
-                    insert.Parameters.AddWithValue("@predecessor",
-                        pPredecessor.data.id);
-                    insert.Parameters.AddWithValue("@successor",
-                        pInstalledSuccessor.data.id);
-                    insert.Parameters.AddWithValue("@claimant",
-                        claimant.data.id);
-                    insert.Parameters.AddWithValue("@state", stateName);
-                    insert.Parameters.AddWithValue("@oq",
-                        SuccessionDisputeRules.DirectionId(
-                            originalDirection));
-                    insert.Parameters.AddWithValue("@rq",
-                        SuccessionDisputeRules.DirectionId(rivalDirection));
-                    insert.Parameters.AddWithValue("@law",
-                        (int)InheritanceLawService.GetEffectiveLaw(pKingdom));
-                    insert.Parameters.AddWithValue("@sm", successorMode);
-                    insert.Parameters.AddWithValue("@cm",
-                        factionSupport.LeaderMode);
-                    insert.Parameters.AddWithValue("@ss", successorSupport);
-                    insert.Parameters.AddWithValue("@cs", claimantSupport);
-                    insert.Parameters.AddWithValue("@time", now);
-                    insert.Parameters.AddWithValue("@year", year);
-                    insert.Parameters.AddWithValue("@deadline",
-                        SuccessionDisputeRules.DeadlineYear(year));
-                    insert.Parameters.AddWithValue("@status",
-                        (int)SuccessionDisputeStatus.Prepared);
-                    insert.Parameters.AddWithValue("@lineage", lineageId);
-                    insert.Parameters.AddWithValue("@shi", shiId);
-                    insert.Parameters.AddWithValue("@claimgen",
-                        SuccessionDisputeRules.ReunificationClaimGenerations);
-                    if (insert.ExecuteNonQuery() != 1)
-                        throw new InvalidOperationException(
-                            "dispute insert returned no row");
-                }
-
-                long entryId = NextId(transaction,
-                    SuccessionDisputeCityTableItem.GetTableName(),
-                    "ENTRY_ID");
-                for (int i = 0; i < cities.Count; i++)
-                {
-                    using var insertCity = new SQLiteCommand(DB)
-                    { Transaction = transaction };
-                    insertCity.CommandText = "INSERT INTO " +
-                        SuccessionDisputeCityTableItem.GetTableName() +
-                        "(ENTRY_ID,DISPUTE_ID,CITY_ID,ORIGINAL_KINGDOM_ID," +
-                        "SIDE,ORDINAL,ACTIVE,ASSIGNED_TIME,END_TIME," +
-                        "END_REASON) VALUES(@entry,@dispute,@city,@original," +
-                        "1,@ordinal,1,@time,-1,'')";
-                    insertCity.Parameters.AddWithValue("@entry", entryId++);
-                    insertCity.Parameters.AddWithValue("@dispute", disputeId);
-                    insertCity.Parameters.AddWithValue("@city", cities[i].id);
-                    insertCity.Parameters.AddWithValue("@original",
-                        pKingdom.id);
-                    insertCity.Parameters.AddWithValue("@ordinal", i);
-                    insertCity.Parameters.AddWithValue("@time", now);
-                    if (insertCity.ExecuteNonQuery() != 1)
-                        throw new InvalidOperationException(
-                            "dispute city insert returned no row");
-                }
-                transaction.Commit();
-            }
-            catch (Exception exception)
-            {
-                try { transaction?.Rollback(); } catch { }
-                ModClass.LogWarning("Succession dispute prepare failed: " +
-                                    exception.Message);
-                return;
-            }
-            finally
-            {
-                try { transaction?.Dispose(); } catch { }
-            }
-
-            SuccessionDisputeSnapshot snapshot = Read(disputeId);
-            if (snapshot == null) return;
-            Publish(snapshot);
-            pKingdom.data.set(LineageKeys.ACTIVE_SUCCESSION_DISPUTE_ID,
-                disputeId);
-        }
-
         internal static SuccessionDisputePreparationFacts
             BuildPreparationFacts(Kingdom pKingdom, Actor pPredecessor,
                 Actor pInstalledSuccessor, string pSuccessorMode)
@@ -331,6 +175,47 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             Enqueue(snapshot.DisputeId);
+        }
+
+        internal static void PublishCommitted(
+            SuccessionDisputePreparationFacts pFacts,
+            SuccessionDisputeWriteFacts pWrite,
+            SuccessionDisputeWriteResult pResult, Kingdom pKingdom,
+            Actor pSuccessor)
+        {
+            if (pFacts == null || pWrite == null || pResult == null ||
+                pKingdom?.data == null || pSuccessor?.data == null ||
+                pKingdom.id != pFacts.KingdomId ||
+                pSuccessor.data.id != pFacts.SuccessorActorId ||
+                pResult.DisputeId < 0L) return;
+            var snapshot = new SuccessionDisputeSnapshot
+            {
+                DisputeId = pResult.DisputeId,
+                OriginalKingdomId = pFacts.KingdomId,
+                RivalKingdomId = -1L,
+                PredecessorActorId = pFacts.PredecessorActorId,
+                SuccessorActorId = pFacts.SuccessorActorId,
+                ClaimantActorId = pFacts.ClaimantActorId,
+                OriginalStateName = pWrite.OriginalStateName ?? string.Empty,
+                OriginalQualifier = pWrite.OriginalQualifier ?? string.Empty,
+                RivalQualifier = pWrite.RivalQualifier ?? string.Empty,
+                AccessionLaw = pFacts.AccessionLaw,
+                SuccessorMode = pWrite.SuccessorMode ?? SuccessionMode.NONE,
+                ClaimantMode = pWrite.ClaimantMode ?? SuccessionMode.NONE,
+                SuccessorSupport = pWrite.SuccessorSupport,
+                ClaimantSupport = pWrite.ClaimantSupport,
+                WarId = -1L,
+                DeadlineYear = pWrite.DeadlineYear,
+                Status = SuccessionDisputeStatus.Prepared,
+                OriginalLineageId = pWrite.OriginalLineageId,
+                OriginalShiId = pWrite.OriginalShiId,
+                ClaimGenerationBoundary = pWrite.ClaimGenerationBoundary,
+                Materialized = false
+            };
+            Publish(snapshot);
+            pKingdom.data.set(LineageKeys.ACTIVE_SUCCESSION_DISPUTE_ID,
+                snapshot.DisputeId);
+            OnSuccessorInstalled(pKingdom, pSuccessor);
         }
 
         public static void OnKingdomYear(Kingdom pKingdom)
@@ -1945,16 +1830,6 @@ namespace AncientWarfare3.core.lineage
                     -1L);
             pKingdom.data.set(
                 LineageKeys.SUCCESSION_REUNIFICATION_GENERATION, -1);
-        }
-
-        private static long NextId(SQLiteTransaction pTransaction,
-            string pTable, string pColumn)
-        {
-            using var command = new SQLiteCommand(DB)
-            { Transaction = pTransaction };
-            command.CommandText = "SELECT IFNULL(MAX(" + pColumn +
-                                  "),0)+1 FROM " + pTable;
-            return Convert.ToInt64(command.ExecuteScalar());
         }
 
         private static string SafeString(SQLiteDataReader pReader,

@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $death = Get-Content -Raw 'Code/patch/AW_ActorDeathPatch.cs'
 $mandate = Get-Content -Raw 'Code/patch/AW_MandateSuccessionPatch.cs'
 $heir = Get-Content -Raw 'Code/patch/AW_HeirPatch.cs'
+$dispute = Get-Content -Raw 'Code/core/lineage/SuccessionDisputeService.cs'
 
 if ($death.Contains('PrepareSuccessionBeforeKingDeath')) {
     throw 'Actor.die must not synchronously prepare succession'
@@ -34,6 +35,9 @@ if (-not $heir.Contains(
 if (-not $heir.Contains(
         'SuccessionPreparationService.OnSuccessorInstalled')) {
     throw 'successful native installation must consume the death context'
+}
+if ($dispute.Contains('public static void Prepare(')) {
+    throw 'legacy synchronous succession dispute preparation remains callable'
 }
 
 Write-Host 'King death succession performance source guard passed.'

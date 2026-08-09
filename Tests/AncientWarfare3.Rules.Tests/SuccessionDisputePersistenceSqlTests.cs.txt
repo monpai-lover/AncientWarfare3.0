@@ -1,0 +1,145 @@
+using System;
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class SuccessionDisputePersistenceSqlTests
+{
+    public static void Run()
+    {
+        WritesDisputeAndCitiesAtomicallyAndIdempotently();
+        RollsBackAllRowsWhenOneCityFails();
+    }
+
+    private static void WritesDisputeAndCitiesAtomicallyAndIdempotently()
+    {
+        using var db = OpenDatabase(requirePositiveCity: false);
+        SuccessionDisputeWriteFacts facts = Facts(100L, 101L);
+        SuccessionDisputeWriteResult first;
+        using (SQLiteTransaction transaction = db.BeginTransaction())
+        {
+            first = SuccessionDisputePersistence.Execute(db, transaction,
+                facts);
+            transaction.Commit();
+        }
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM SuccessionDispute"),
+            "one dispute row is committed");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM SuccessionDisputeCity"),
+            "all support cities share the dispute transaction");
+
+        using (SQLiteTransaction transaction = db.BeginTransaction())
+        {
+            SuccessionDisputeWriteResult duplicate =
+                SuccessionDisputePersistence.Execute(db, transaction,
+                    facts);
+            Equal(first.DisputeId, duplicate.DisputeId,
+                "retry returns the existing active dispute");
+            transaction.Commit();
+        }
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM SuccessionDispute"),
+            "retry does not duplicate the dispute");
+        Equal(2L, Scalar(db,
+                "SELECT COUNT(*) FROM SuccessionDisputeCity"),
+            "retry does not duplicate support cities");
+    }
+
+    private static void RollsBackAllRowsWhenOneCityFails()
+    {
+        using var db = OpenDatabase(requirePositiveCity: true);
+        SuccessionDisputeWriteFacts facts = Facts(100L, -1L);
+        using SQLiteTransaction transaction = db.BeginTransaction();
+        bool failed = false;
+        try
+        {
+            SuccessionDisputePersistence.Execute(db, transaction, facts);
+            transaction.Commit();
+        }
+        catch
+        {
+            failed = true;
+            transaction.Rollback();
+        }
+        Equal(true, failed, "invalid support city aborts the envelope");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM SuccessionDispute"),
+            "failed city insert rolls back the dispute row");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM SuccessionDisputeCity"),
+            "failed city insert leaves no partial city rows");
+    }
+
+    private static SuccessionDisputeWriteFacts Facts(params long[] cityIds)
+    {
+        return new SuccessionDisputeWriteFacts
+        {
+            OriginalKingdomId = 10L,
+            PredecessorActorId = 20L,
+            SuccessorActorId = 21L,
+            ClaimantActorId = 22L,
+            OriginalStateName = "Xia",
+            OriginalQualifier = "east",
+            RivalQualifier = "west",
+            AccessionLaw = 0,
+            SuccessorMode = "direct",
+            ClaimantMode = "military_acclaim",
+            SuccessorSupport = 80,
+            ClaimantSupport = 60,
+            PreparedTime = 1000d,
+            PreparedYear = 100,
+            DeadlineYear = 103,
+            Status = 0,
+            OriginalLineageId = 30L,
+            OriginalShiId = 31L,
+            ClaimGenerationBoundary = 3,
+            SupportCityIds = cityIds
+        };
+    }
+
+    private static SQLiteConnection OpenDatabase(bool requirePositiveCity)
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;Pooling=False;");
+        db.Open();
+        string cityCheck = requirePositiveCity
+            ? " CHECK(CITY_ID>0)"
+            : string.Empty;
+        Execute(db,
+            "CREATE TABLE SuccessionDispute(" +
+            "DISPUTE_ID INTEGER PRIMARY KEY," +
+            "ORIGINAL_KINGDOM_ID INTEGER,RIVAL_KINGDOM_ID INTEGER," +
+            "PREDECESSOR_ACTOR_ID INTEGER,SUCCESSOR_ACTOR_ID INTEGER," +
+            "CLAIMANT_ACTOR_ID INTEGER,ORIGINAL_STATE_NAME TEXT," +
+            "ORIGINAL_QUALIFIER TEXT,RIVAL_QUALIFIER TEXT," +
+            "ACCESSION_LAW INTEGER,SUCCESSOR_MODE TEXT,CLAIMANT_MODE TEXT," +
+            "SUCCESSOR_SUPPORT INTEGER,CLAIMANT_SUPPORT INTEGER," +
+            "WAR_ID INTEGER,PREPARED_TIME REAL,START_TIME REAL," +
+            "PREPARED_YEAR INTEGER,DEADLINE_YEAR INTEGER,STATUS INTEGER," +
+            "END_TIME REAL,END_REASON TEXT,ORIGINAL_LINEAGE_ID INTEGER," +
+            "ORIGINAL_SHI_ID INTEGER,CLAIM_GENERATION_BOUNDARY INTEGER);" +
+            "CREATE TABLE SuccessionDisputeCity(" +
+            "ENTRY_ID INTEGER PRIMARY KEY,DISPUTE_ID INTEGER," +
+            "CITY_ID INTEGER" + cityCheck + "," +
+            "ORIGINAL_KINGDOM_ID INTEGER,SIDE INTEGER,ORDINAL INTEGER," +
+            "ACTIVE INTEGER,ASSIGNED_TIME REAL,END_TIME REAL," +
+            "END_REASON TEXT);");
+        return db;
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}
