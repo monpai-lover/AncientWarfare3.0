@@ -139,7 +139,7 @@ foreach ($token in @(
     'bool stateEnded = false;',
     'stateEnded = true;',
     'if (!stateEnded && !End(pSnapshot.StateId, pReason))',
-    'else if (stateEnded)',
+    'if (!relationEnded && stateEnded)',
     'ClearProjection(pSubject);'
 )) {
     if (-not $restore.Contains($token)) {
@@ -153,6 +153,60 @@ foreach ($forbidden in @(
     if ($restore.Contains($forbidden) -or $vassal.Contains($forbidden)) {
         throw "Over-broad governorate relation cleanup remains: $forbidden"
     }
+}
+
+foreach ($token in @(
+    'out long closedSuzerainId, out int closedContractTier',
+    'VassalService.ClearEndedMilitaryGovernorateRelationProjection(',
+    'pSubject, closedSuzerainId, closedContractTier);'
+)) {
+    if (-not $restore.Contains($token)) {
+        throw "Exact governorate relation cleanup is incomplete: $token"
+    }
+}
+$mismatchStart = $restore.IndexOf(
+    'else if (pRelationExists &&', [StringComparison]::Ordinal)
+$mismatchEnd = $restore.IndexOf(
+    'if (!stateEnded && !End(', $mismatchStart,
+    [StringComparison]::Ordinal)
+if ($mismatchStart -lt 0 -or $mismatchEnd -le $mismatchStart) {
+    throw 'Cannot isolate mismatched governorate relation cleanup.'
+}
+$mismatchRepair = $restore.Substring($mismatchStart,
+    $mismatchEnd - $mismatchStart)
+if ($mismatchRepair.Contains(
+        'ClearEndedMilitaryGovernorateRelationProjection(')) {
+    throw 'Mismatched governorate relation cleanup uses exact-ended cleanup.'
+}
+
+$endedProjectionStart = $vassal.IndexOf(
+    'internal static void ClearEndedMilitaryGovernorateRelationProjection(',
+    [StringComparison]::Ordinal)
+$endedProjectionEnd = $vassal.IndexOf(
+    'public static bool EndVassal(', $endedProjectionStart,
+    [StringComparison]::Ordinal)
+if ($endedProjectionStart -lt 0 -or
+    $endedProjectionEnd -le $endedProjectionStart) {
+    throw 'Cannot isolate exact-ended governorate projection cleanup helper.'
+}
+$endedProjection = $vassal.Substring($endedProjectionStart,
+    $endedProjectionEnd - $endedProjectionStart)
+foreach ($token in @(
+    'World.world?.kingdoms?.get(pClosedSuzerainId)',
+    'VassalContractTierRules.CountsAsVassal(pClosedContractTier)',
+    'AdjustDirectVassalCount(suzerain, -1);',
+    'AdjustDirectTributaryCount(suzerain, -1);',
+    'ClearRelationProjection(pSubject);',
+    'InvalidateRelationPresentation(pSubject);',
+    'DirtyVassalMap();'
+)) {
+    if (-not $endedProjection.Contains($token)) {
+        throw "Exact-ended governorate cleanup misses runtime action: $token"
+    }
+}
+if ($endedProjection.Contains('FindKingdom(') -or
+    $endedProjection -match 'foreach\s*\([^)]*World\.world\.kingdoms') {
+    throw 'Exact-ended governorate cleanup performs a kingdom scan.'
 }
 
 $applyStart = $restore.IndexOf(

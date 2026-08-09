@@ -970,6 +970,25 @@ namespace AncientWarfare3.core.lineage
                 pEnforceWarVictory, VassalContractTierRules.Tributary);
         }
 
+        internal static void ClearEndedMilitaryGovernorateRelationProjection(
+            Kingdom pSubject, long pClosedSuzerainId,
+            int pClosedContractTier)
+        {
+            Kingdom suzerain = null;
+            try
+            {
+                suzerain = World.world?.kingdoms?.get(pClosedSuzerainId);
+            }
+            catch { }
+            if (VassalContractTierRules.CountsAsVassal(pClosedContractTier))
+                AdjustDirectVassalCount(suzerain, -1);
+            else
+                AdjustDirectTributaryCount(suzerain, -1);
+            ClearRelationProjection(pSubject);
+            InvalidateRelationPresentation(pSubject);
+            DirtyVassalMap();
+        }
+
         public static bool EndVassal(Kingdom pVassal, string pReason = "ended")
         {
             if (pVassal?.data == null || !Ready) return false;

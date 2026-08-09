@@ -663,12 +663,15 @@ namespace AncientWarfare3.core.lineage
                 pRelation.RelationId == pSnapshot.RelationId)
             {
                 relationEnded = TryEndWithRelation(pSnapshot.StateId,
-                    pSnapshot.RelationId, pReason, false, out _, out _);
+                    pSnapshot.RelationId, pReason, false,
+                    out long closedSuzerainId, out int closedContractTier);
                 stateEnded = relationEnded;
                 if (!relationEnded)
                     throw new InvalidOperationException(
                         "Military governorate relation repair failed: " +
                         pReason);
+                VassalService.ClearEndedMilitaryGovernorateRelationProjection(
+                    pSubject, closedSuzerainId, closedContractTier);
             }
             else if (pRelationExists &&
                      (pRelation.Ambiguous ||
@@ -687,12 +690,7 @@ namespace AncientWarfare3.core.lineage
                 throw new InvalidOperationException(
                     "Military governorate invalid-state repair failed: " +
                     pReason);
-            if (relationEnded)
-            {
-                ClearProjection(pSubject);
-                ClearReplicaVassalProjection(pSubject);
-            }
-            else if (stateEnded)
+            if (!relationEnded && stateEnded)
                 ClearProjection(pSubject);
         }
 
