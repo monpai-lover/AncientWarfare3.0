@@ -13,12 +13,21 @@ namespace AncientWarfare3.core.multiplayer
         bool IsMainThread { get; }
         IReadOnlyList<AW3MultiplayerArmyProjection> CaptureArmies();
         IReadOnlyList<AW3MultiplayerActorProjection> CaptureActors();
+        IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
+            CaptureMilitaryGovernorates();
         bool HasArmy(long pArmyId);
         bool HasActor(long pActorId);
+        bool CanApplyMilitaryGovernorate(
+            AW3MultiplayerMilitaryGovernorateProjection pGovernorate);
         void ApplyArmy(AW3MultiplayerArmyProjection pArmy);
         void ApplyActor(AW3MultiplayerActorProjection pActor);
+        void ApplyMilitaryGovernorate(
+            AW3MultiplayerMilitaryGovernorateProjection pGovernorate);
         void CompleteArmySnapshot(
             IReadOnlyList<AW3MultiplayerArmyProjection> pArmies);
+        void CompleteMilitaryGovernorateSnapshot(
+            IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
+                pGovernorates);
         void RebuildMilitaryReadModels();
     }
 
@@ -37,7 +46,8 @@ namespace AncientWarfare3.core.multiplayer
             try
             {
                 return new AW3MultiplayerStrategicSnapshot(pTick,
-                    pStore.CaptureArmies(), pStore.CaptureActors());
+                    pStore.CaptureArmies(), pStore.CaptureActors(),
+                    pStore.CaptureMilitaryGovernorates());
             }
             catch (AW3MultiplayerStrategicCaptureException)
             {
@@ -84,6 +94,17 @@ namespace AncientWarfare3.core.multiplayer
                         AW3MultiplayerStrategicError.MissingActor,
                         "Snapshot actor identity does not exist.", id);
             }
+            for (var index = 0;
+                 index < pSnapshot.MilitaryGovernorates.Count; index++)
+            {
+                AW3MultiplayerMilitaryGovernorateProjection governorate =
+                    pSnapshot.MilitaryGovernorates[index];
+                if (!pStore.CanApplyMilitaryGovernorate(governorate))
+                    return AW3MultiplayerStrategicApplyResult.Failure(
+                        AW3MultiplayerStrategicError.InvalidSnapshot,
+                        "Snapshot governorate identities do not exist.",
+                        governorate.StateId);
+            }
 
             try
             {
@@ -95,7 +116,14 @@ namespace AncientWarfare3.core.multiplayer
                     for (var index = 0;
                          index < pSnapshot.Actors.Count; index++)
                         pStore.ApplyActor(pSnapshot.Actors[index]);
+                    for (var index = 0;
+                         index < pSnapshot.MilitaryGovernorates.Count;
+                         index++)
+                        pStore.ApplyMilitaryGovernorate(
+                            pSnapshot.MilitaryGovernorates[index]);
                     pStore.CompleteArmySnapshot(pSnapshot.Armies);
+                    pStore.CompleteMilitaryGovernorateSnapshot(
+                        pSnapshot.MilitaryGovernorates);
                     pStore.RebuildMilitaryReadModels();
                 }
                 return AW3MultiplayerStrategicApplyResult.Success(
@@ -217,6 +245,29 @@ namespace AncientWarfare3.core.multiplayer
             return result;
         }
 
+        public IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
+            CaptureMilitaryGovernorates()
+        {
+            List<MilitaryGovernorateSnapshot> states =
+                MilitaryGovernorateStore.CaptureAuthoritativeState();
+            var result =
+                new List<AW3MultiplayerMilitaryGovernorateProjection>(
+                    states.Count);
+            for (var index = 0; index < states.Count; index++)
+            {
+                MilitaryGovernorateSnapshot state = states[index];
+                result.Add(
+                    new AW3MultiplayerMilitaryGovernorateProjection(
+                        state.StateId, state.RelationId,
+                        state.SubjectKingdomId, state.SuzerainKingdomId,
+                        state.SeatCityId, state.GovernorActorId,
+                        state.SuccessorActorId, state.CommandName,
+                        state.SuccessionState, state.ReplacementAllowed,
+                        active: true));
+            }
+            return result;
+        }
+
         public bool HasArmy(long pArmyId)
         {
             if (pArmyId < 0 || World.world?.armies == null) return false;
@@ -229,6 +280,34 @@ namespace AncientWarfare3.core.multiplayer
             if (pActorId < 0 || World.world?.units == null) return false;
             try { return World.world.units.get(pActorId)?.data != null; }
             catch { return false; }
+        }
+
+        public bool CanApplyMilitaryGovernorate(
+            AW3MultiplayerMilitaryGovernorateProjection pGovernorate)
+        {
+            if (pGovernorate == null ||
+                pGovernorate.SubjectKingdomId < 0) return false;
+            Kingdom subject;
+            try
+            {
+                subject = World.world?.kingdoms?.get(
+                    pGovernorate.SubjectKingdomId);
+            }
+            catch { return false; }
+            if (subject?.data == null) return false;
+            if (!pGovernorate.Active) return true;
+            try
+            {
+                if (World.world?.kingdoms?.get(
+                        pGovernorate.SuzerainKingdomId)?.data == null ||
+                    World.world?.cities?.get(
+                        pGovernorate.SeatCityId)?.data == null)
+                    return false;
+            }
+            catch { return false; }
+            return HasActor(pGovernorate.GovernorActorId) &&
+                   (pGovernorate.SuccessorActorId < 0 ||
+                    HasActor(pGovernorate.SuccessorActorId));
         }
 
         public void ApplyArmy(AW3MultiplayerArmyProjection pArmy)
@@ -269,7 +348,27 @@ namespace AncientWarfare3.core.multiplayer
                 new AWLocalizedNameIdentitySnapshot(pActor.NativeName,
                     pActor.ChineseName, pActor.GivenName,
                     pActor.FamilyComponent, pActor.GeneratorId,
-                    pActor.CultureId, pActor.NamingSchemaVersion));
+                pActor.CultureId, pActor.NamingSchemaVersion));
+        }
+
+        public void ApplyMilitaryGovernorate(
+            AW3MultiplayerMilitaryGovernorateProjection pGovernorate)
+        {
+            Kingdom subject = null;
+            try
+            {
+                subject = World.world?.kingdoms?.get(
+                    pGovernorate.SubjectKingdomId);
+            }
+            catch { }
+            if (subject?.data == null)
+                throw new InvalidOperationException(
+                    "Snapshot governorate subject identity does not exist.");
+            MilitaryGovernorateStore.ApplyAuthoritativeProjection(subject,
+                pGovernorate.StateId, pGovernorate.RelationId,
+                pGovernorate.SuzerainKingdomId,
+                pGovernorate.SuccessorActorId,
+                pGovernorate.ReplacementAllowed, pGovernorate.Active);
         }
 
         public void CompleteArmySnapshot(
@@ -279,6 +378,17 @@ namespace AncientWarfare3.core.multiplayer
             for (var index = 0; index < pArmies.Count; index++)
                 retained[index] = pArmies[index].ArmyId;
             ArmyRtsControllerService.RetainReplicaProjections(retained);
+        }
+
+        public void CompleteMilitaryGovernorateSnapshot(
+            IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
+                pGovernorates)
+        {
+            var retained = new long[pGovernorates.Count];
+            for (var index = 0; index < pGovernorates.Count; index++)
+                retained[index] = pGovernorates[index].SubjectKingdomId;
+            MilitaryGovernorateStore.RetainAuthoritativeProjections(
+                retained);
         }
 
         public void RebuildMilitaryReadModels()

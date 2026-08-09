@@ -183,11 +183,74 @@ namespace AncientWarfare3.api.multiplayer
         public int NamingSchemaVersion { get; }
     }
 
+    public sealed class AW3MultiplayerMilitaryGovernorateProjection
+    {
+        public AW3MultiplayerMilitaryGovernorateProjection(long stateId,
+            long relationId, long subjectKingdomId, long suzerainKingdomId,
+            long seatCityId, long governorActorId, long successorActorId,
+            string commandName, int successionState,
+            bool replacementAllowed, bool active)
+        {
+            AW3MultiplayerStrategicValidation.RequiredId(stateId,
+                nameof(stateId));
+            AW3MultiplayerStrategicValidation.OptionalId(relationId,
+                nameof(relationId));
+            AW3MultiplayerStrategicValidation.OptionalId(subjectKingdomId,
+                nameof(subjectKingdomId));
+            AW3MultiplayerStrategicValidation.OptionalId(suzerainKingdomId,
+                nameof(suzerainKingdomId));
+            AW3MultiplayerStrategicValidation.OptionalId(seatCityId,
+                nameof(seatCityId));
+            AW3MultiplayerStrategicValidation.OptionalId(governorActorId,
+                nameof(governorActorId));
+            AW3MultiplayerStrategicValidation.OptionalId(successorActorId,
+                nameof(successorActorId));
+            if (successionState < 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(successionState));
+
+            StateId = stateId;
+            RelationId = relationId;
+            SubjectKingdomId = subjectKingdomId;
+            SuzerainKingdomId = suzerainKingdomId;
+            SeatCityId = seatCityId;
+            GovernorActorId = governorActorId;
+            SuccessorActorId = successorActorId;
+            CommandName = AW3MultiplayerStrategicValidation.Text(
+                commandName, nameof(commandName));
+            SuccessionState = successionState;
+            ReplacementAllowed = replacementAllowed;
+            Active = active;
+        }
+
+        public long StateId { get; }
+        public long RelationId { get; }
+        public long SubjectKingdomId { get; }
+        public long SuzerainKingdomId { get; }
+        public long SeatCityId { get; }
+        public long GovernorActorId { get; }
+        public long SuccessorActorId { get; }
+        public string CommandName { get; }
+        public int SuccessionState { get; }
+        public bool ReplacementAllowed { get; }
+        public bool Active { get; }
+    }
+
     public sealed class AW3MultiplayerStrategicSnapshot
     {
         public AW3MultiplayerStrategicSnapshot(long authoritativeTick,
             IReadOnlyList<AW3MultiplayerArmyProjection> armies,
             IReadOnlyList<AW3MultiplayerActorProjection> actors)
+            : this(authoritativeTick, armies, actors,
+                Array.Empty<AW3MultiplayerMilitaryGovernorateProjection>())
+        {
+        }
+
+        public AW3MultiplayerStrategicSnapshot(long authoritativeTick,
+            IReadOnlyList<AW3MultiplayerArmyProjection> armies,
+            IReadOnlyList<AW3MultiplayerActorProjection> actors,
+            IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
+                militaryGovernorates)
         {
             if (authoritativeTick < 0)
                 throw new ArgumentOutOfRangeException(
@@ -197,11 +260,15 @@ namespace AncientWarfare3.api.multiplayer
                 armies, value => value.ArmyId, nameof(armies));
             Actors = AW3MultiplayerStrategicValidation.SortUnique(
                 actors, value => value.ActorId, nameof(actors));
+            MilitaryGovernorates = AW3MultiplayerStrategicValidation.
+                SortUnique(militaryGovernorates, value => value.StateId,
+                    nameof(militaryGovernorates));
         }
 
         public long AuthoritativeTick { get; }
         public IReadOnlyList<AW3MultiplayerArmyProjection> Armies { get; }
         public IReadOnlyList<AW3MultiplayerActorProjection> Actors { get; }
+        public IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection> MilitaryGovernorates { get; }
     }
 
     public sealed class AW3MultiplayerStrategicApplyResult

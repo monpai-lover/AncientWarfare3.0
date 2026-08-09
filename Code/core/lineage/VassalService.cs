@@ -339,10 +339,6 @@ namespace AncientWarfare3.core.lineage
                 vassal.data.set(
                     LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
                     (int)relation.SubjectKind);
-                if (relation.SubjectKind ==
-                    VassalSubjectKind.MilitaryGovernorate)
-                    MilitaryGovernorateStore.RestoreProjection(vassal);
-
                 if (VassalContractTierRules.CountsAsVassal(
                         projection.ContractTier))
                 {

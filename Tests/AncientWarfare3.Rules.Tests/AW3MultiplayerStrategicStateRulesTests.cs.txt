@@ -30,11 +30,17 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             Actor(31, true, 20),
             Actor(11, false, 0)
         };
+        var governorates = new[]
+        {
+            Governorate(12, 112),
+            Governorate(3, 103)
+        };
         var snapshot = new AW3MultiplayerStrategicSnapshot(77,
-            armies, actors);
+            armies, actors, governorates);
 
         armies[0] = Army(99, "changed");
         actors[0] = Actor(99, false, 0);
+        governorates[0] = Governorate(99, 199);
 
         Equal(77L, snapshot.AuthoritativeTick, "tick retained");
         Equal(4L, snapshot.Armies[0].ArmyId, "armies sorted by ID");
@@ -63,6 +69,10 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             "player-order ownership retained");
         Equal(31L, snapshot.Actors[1].ActorId,
             "input actor array copied");
+        Equal(3L, snapshot.MilitaryGovernorates[0].StateId,
+            "governorates sorted by state ID");
+        Equal(112L, snapshot.MilitaryGovernorates[1].SubjectKingdomId,
+            "input governorate array copied");
     }
 
     private static void ModelsRejectInvalidIdentityAndTick()
@@ -132,6 +142,7 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         var store = new FakeStore();
         store.CapturedArmies.Add(Army(8, "royal_guard"));
         store.CapturedActors.Add(Actor(9, true, 50));
+        store.CapturedGovernorates.Add(Governorate(5, 105));
         AW3MultiplayerStrategicSnapshot snapshot =
             AW3MultiplayerStrategicStateCoordinator.Capture(12, store);
         Equal(12L, snapshot.AuthoritativeTick, "capture tick");
@@ -141,6 +152,8 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         Equal(27, snapshot.Armies[0].KingdomReserveAvailable,
             "capture retains kingdom reserve supply");
         Equal(9L, snapshot.Actors[0].ActorId, "typed actor captured");
+        Equal(5L, snapshot.MilitaryGovernorates[0].StateId,
+            "authoritative governorate captured");
     }
 
     private static void ApplyPreflightsEveryIdentity()
@@ -162,6 +175,23 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             "failure identifies missing army");
         Equal(0, store.Calls.Count,
             "preflight prevents every partial write");
+
+        var governorateStore = new FakeStore();
+        governorateStore.RejectedGovernorateStateIds.Add(5);
+        var governorateSnapshot = new AW3MultiplayerStrategicSnapshot(2,
+            Array.Empty<AW3MultiplayerArmyProjection>(),
+            Array.Empty<AW3MultiplayerActorProjection>(),
+            new[] { Governorate(5, 105) });
+        AW3MultiplayerStrategicApplyResult governorateResult =
+            AW3MultiplayerStrategicStateCoordinator.Apply(
+                governorateSnapshot, governorateStore);
+        Equal(AW3MultiplayerStrategicError.InvalidSnapshot,
+            governorateResult.Error,
+            "missing governorate identity rejects apply");
+        Equal(5L, governorateResult.FailedIdentityId,
+            "governorate failure identifies state");
+        Equal(0, governorateStore.Calls.Count,
+            "governorate preflight prevents every partial write");
     }
 
     private static void ApplyUsesStableFailuresAndRebuildsAfterWrites()
@@ -181,7 +211,8 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         store.ExistingActors.Add(11);
         var snapshot = new AW3MultiplayerStrategicSnapshot(2,
             new[] { Army(4, "royal_guard") },
-            new[] { Actor(11, true, 42) });
+            new[] { Actor(11, true, 42) },
+            new[] { Governorate(5, 105) });
 
         AW3MultiplayerStrategicApplyResult result =
             AW3MultiplayerStrategicStateCoordinator.Apply(snapshot, store);
@@ -196,7 +227,10 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         Equal(27, store.AppliedArmies[0].KingdomReserveAvailable,
             "apply retains kingdom reserve supply");
         SequenceEqual(new[]
-            { "army:4", "actor:11", "complete-armies:4", "rebuild" },
+            {
+                "army:4", "actor:11", "governorate:5",
+                "complete-armies:4", "complete-governorates:5", "rebuild"
+            },
             store.Calls, "cache rebuild occurs after typed writes");
 
         var failingStore = new FakeStore { ThrowOnApply = true };
@@ -223,7 +257,8 @@ internal static class AW3MultiplayerStrategicStateRulesTests
 
         Equal(true, result.IsSuccess,
             "empty authoritative Army set applies");
-        SequenceEqual(new[] { "complete-armies:", "rebuild" },
+        SequenceEqual(new[]
+            { "complete-armies:", "complete-governorates:", "rebuild" },
             store.Calls,
             "snapshot completion clears omitted replica projections");
     }
@@ -334,6 +369,16 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         return new AW3MultiplayerActorProjection(id, general, merit);
     }
 
+    private static AW3MultiplayerMilitaryGovernorateProjection Governorate(
+        long stateId, long subjectId)
+    {
+        return new AW3MultiplayerMilitaryGovernorateProjection(stateId,
+            relationId: stateId + 1000, subjectKingdomId: subjectId,
+            suzerainKingdomId: 2, seatCityId: 3, governorActorId: 4,
+            successorActorId: 5, commandName: "Northern Command",
+            successionState: 0, replacementAllowed: true, active: true);
+    }
+
     private static string Read(string root, params string[] parts)
     {
         var all = new string[parts.Length + 1];
@@ -396,8 +441,13 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             new List<AW3MultiplayerArmyProjection>();
         public List<AW3MultiplayerActorProjection> CapturedActors { get; } =
             new List<AW3MultiplayerActorProjection>();
+        public List<AW3MultiplayerMilitaryGovernorateProjection>
+            CapturedGovernorates { get; } =
+                new List<AW3MultiplayerMilitaryGovernorateProjection>();
         public HashSet<long> ExistingArmies { get; } = new HashSet<long>();
         public HashSet<long> ExistingActors { get; } = new HashSet<long>();
+        public HashSet<long> RejectedGovernorateStateIds { get; } =
+            new HashSet<long>();
         public List<string> Calls { get; } = new List<string>();
         public List<AW3MultiplayerArmyProjection> AppliedArmies { get; } =
             new List<AW3MultiplayerArmyProjection>();
@@ -412,6 +462,12 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             return CapturedActors;
         }
 
+        public IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
+            CaptureMilitaryGovernorates()
+        {
+            return CapturedGovernorates;
+        }
+
         public bool HasArmy(long armyId)
         {
             return ExistingArmies.Contains(armyId);
@@ -420,6 +476,14 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         public bool HasActor(long actorId)
         {
             return ExistingActors.Contains(actorId);
+        }
+
+        public bool CanApplyMilitaryGovernorate(
+            AW3MultiplayerMilitaryGovernorateProjection governorate)
+        {
+            return governorate != null &&
+                   !RejectedGovernorateStateIds.Contains(
+                       governorate.StateId);
         }
 
         public void ApplyArmy(AW3MultiplayerArmyProjection army)
@@ -435,11 +499,26 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             Calls.Add("actor:" + actor.ActorId);
         }
 
+        public void ApplyMilitaryGovernorate(
+            AW3MultiplayerMilitaryGovernorateProjection governorate)
+        {
+            if (ThrowOnApply) throw new InvalidOperationException("apply");
+            Calls.Add("governorate:" + governorate.StateId);
+        }
+
         public void CompleteArmySnapshot(
             IReadOnlyList<AW3MultiplayerArmyProjection> armies)
         {
             Calls.Add("complete-armies:" + string.Join(",",
                 armies.Select(army => army.ArmyId)));
+        }
+
+        public void CompleteMilitaryGovernorateSnapshot(
+            IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
+                governorates)
+        {
+            Calls.Add("complete-governorates:" + string.Join(",",
+                governorates.Select(value => value.StateId)));
         }
 
         public void RebuildMilitaryReadModels()

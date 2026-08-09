@@ -25,6 +25,14 @@ namespace AncientWarfare3.core.lineage
     internal static class MilitaryGovernorateStore
     {
         private const int MaximumDirectRead = 256;
+        private const int RuntimeRestoreBatchLimit = 16;
+        private const int RuntimeRestoreRepairBudget = 64;
+        private const int MultiplayerSnapshotLimit = 4096;
+        private const string RuntimeRestoreQueueKey =
+            "military_governorate:runtime_restore";
+        private static long _runtimeRestoreCursor = -1L;
+        private static readonly HashSet<long> ReplicaSubjectIds =
+            new HashSet<long>();
 
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
@@ -431,12 +439,283 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
+        public static List<MilitaryGovernorateSnapshot> ReadActiveBatch(
+            long pAfterStateId, int pLimit)
+        {
+            var result = new List<MilitaryGovernorateSnapshot>();
+            if (!Ready || pAfterStateId < -1L || pLimit <= 0) return result;
+            int limit = Math.Min(pLimit, RuntimeRestoreRepairBudget);
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = AuthoritySelectColumns + " FROM " +
+                    MilitaryGovernorateStateTableItem.GetTableName() +
+                    " WHERE ACTIVE=1 AND STATE_ID>@after" +
+                    " ORDER BY STATE_ID LIMIT @limit";
+                command.Parameters.AddWithValue("@after", pAfterStateId);
+                command.Parameters.AddWithValue("@limit", limit);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read()) result.Add(ReadAuthority(reader));
+                return result;
+            }
+            catch (Exception error)
+            {
+                throw new InvalidOperationException(
+                    "Military governorate active batch read failed.", error);
+            }
+        }
+
+        public static void EnqueueRuntimeRestore()
+        {
+            _runtimeRestoreCursor = -1L;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                RuntimeRestoreQueueKey, DeferredWorkClass.Runtime,
+                ProcessRuntimeRestore);
+        }
+
+        public static List<MilitaryGovernorateSnapshot>
+            CaptureAuthoritativeState()
+        {
+            var result = new List<MilitaryGovernorateSnapshot>();
+            long cursor = -1L;
+            while (result.Count < MultiplayerSnapshotLimit)
+            {
+                int remaining = MultiplayerSnapshotLimit - result.Count;
+                List<MilitaryGovernorateSnapshot> batch = ReadActiveBatch(
+                    cursor, Math.Min(RuntimeRestoreRepairBudget, remaining));
+                if (batch.Count == 0) return result;
+                result.AddRange(batch);
+                cursor = batch[batch.Count - 1].StateId;
+                if (batch.Count < Math.Min(RuntimeRestoreRepairBudget,
+                        remaining)) return result;
+            }
+            if (ReadActiveBatch(cursor, 1).Count != 0)
+                throw new InvalidOperationException(
+                    "Military governorate snapshot exceeds its explicit limit.");
+            return result;
+        }
+
+        public static void ApplyAuthoritativeProjection(Kingdom pSubject,
+            long pStateId, long pRelationId, long pSuzerainKingdomId,
+            long pSuccessorActorId,
+            bool pReplacementAllowed, bool pActive)
+        {
+            if (pSubject?.data == null) return;
+            if (!pActive)
+            {
+                ClearProjection(pSubject);
+                ReplicaSubjectIds.Remove(pSubject.id);
+                return;
+            }
+            pSubject.data.set(LineageKeys.VASSAL_RELATION_ID, pRelationId);
+            pSubject.data.set(LineageKeys.VASSAL_SUZERAIN_ID,
+                pSuzerainKingdomId);
+            Project(pSubject, pStateId, pSuccessorActorId,
+                pReplacementAllowed);
+            ReplicaSubjectIds.Add(pSubject.id);
+        }
+
+        public static void RetainAuthoritativeProjections(
+            IReadOnlyList<long> pSubjectIds)
+        {
+            var retained = new HashSet<long>();
+            if (pSubjectIds != null)
+                for (var index = 0; index < pSubjectIds.Count; index++)
+                    if (pSubjectIds[index] >= 0)
+                        retained.Add(pSubjectIds[index]);
+            var stale = new List<long>();
+            foreach (long subjectId in ReplicaSubjectIds)
+                if (!retained.Contains(subjectId)) stale.Add(subjectId);
+            stale.Sort();
+            for (var index = 0; index < stale.Count; index++)
+            {
+                ClearProjection(FindKingdom(stale[index]));
+                ReplicaSubjectIds.Remove(stale[index]);
+            }
+        }
+
+        private static void ProcessRuntimeRestore()
+        {
+            int remaining = RuntimeRestoreRepairBudget;
+            while (remaining > 0)
+            {
+                int requested = Math.Min(RuntimeRestoreBatchLimit, remaining);
+                List<MilitaryGovernorateSnapshot> batch = ReadActiveBatch(
+                    _runtimeRestoreCursor, requested);
+                if (batch.Count == 0)
+                {
+                    _runtimeRestoreCursor = -1L;
+                    return;
+                }
+                for (var index = 0; index < batch.Count; index++)
+                {
+                    MilitaryGovernorateSnapshot snapshot = batch[index];
+                    RepairAndProject(snapshot);
+                    _runtimeRestoreCursor = snapshot.StateId;
+                    remaining--;
+                }
+                if (batch.Count < requested)
+                {
+                    _runtimeRestoreCursor = -1L;
+                    return;
+                }
+            }
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                RuntimeRestoreQueueKey, DeferredWorkClass.Runtime,
+                ProcessRuntimeRestore);
+        }
+
+        private static void RepairAndProject(
+            MilitaryGovernorateSnapshot pSnapshot)
+        {
+            Kingdom subject = FindKingdom(pSnapshot.SubjectKingdomId);
+            if (!IsLiveKingdom(subject))
+            {
+                EndInvalid(pSnapshot.StateId, "missing_subject_kingdom");
+                return;
+            }
+            Kingdom suzerain = FindKingdom(pSnapshot.SuzerainKingdomId);
+            if (!IsLiveKingdom(suzerain) || suzerain == subject)
+            {
+                EndInvalid(pSnapshot.StateId, "missing_suzerain_kingdom");
+                return;
+            }
+            if (!VassalService.TryReadActiveRelationIdentity(
+                    subject.id, out ActiveVassalRelationIdentity relation,
+                    out bool relationExists))
+                throw new InvalidOperationException(
+                    "Military governorate relation repair read failed.");
+            if (!relationExists || relation.Ambiguous ||
+                relation.RelationId != pSnapshot.RelationId ||
+                relation.VassalId != subject.id ||
+                relation.SuzerainId != suzerain.id ||
+                relation.SubjectKind != VassalSubjectKind.MilitaryGovernorate)
+            {
+                EndInvalid(pSnapshot.StateId, "missing_vassal_relation");
+                return;
+            }
+
+            City seat = FindCity(pSnapshot.SeatCityId);
+            if (!IsOwnedLiveCity(seat, subject))
+            {
+                seat = subject.capital;
+                if (!IsOwnedLiveCity(seat, subject))
+                {
+                    EndInvalid(pSnapshot.StateId, "missing_seat_city");
+                    return;
+                }
+                if (!SetSeat(pSnapshot.StateId, seat.id))
+                    throw new InvalidOperationException(
+                        "Military governorate seat repair failed.");
+            }
+
+            Actor governor = FindActor(pSnapshot.GovernorActorId);
+            if (!IsLivingMember(governor, subject) || subject.king != governor)
+            {
+                governor = subject.king;
+                if (!IsLivingMember(governor, subject))
+                {
+                    EndInvalid(pSnapshot.StateId, "missing_governor_actor");
+                    return;
+                }
+                if (!SetGovernor(pSnapshot.StateId, governor.getID()))
+                    throw new InvalidOperationException(
+                        "Military governorate ruler repair failed.");
+            }
+
+            long successorId = pSnapshot.SuccessorActorId;
+            if (successorId >= 0 &&
+                !IsLivingMember(FindActor(successorId), subject))
+            {
+                const string reason = "missing_successor_actor";
+                if (!SetSuccessor(pSnapshot.StateId, -1L))
+                    throw new InvalidOperationException(
+                        "Military governorate " + reason + " repair failed.");
+                successorId = -1L;
+            }
+            Project(subject, pSnapshot.StateId, successorId,
+                pSnapshot.ReplacementAllowed);
+        }
+
+        private static void EndInvalid(long pStateId, string pReason)
+        {
+            if (!End(pStateId, pReason))
+                throw new InvalidOperationException(
+                    "Military governorate invalid-state repair failed: " +
+                    pReason);
+        }
+
+        private static bool SetSeat(long pStateId, long pCityId)
+        {
+            return UpdateId(pStateId, "SEAT_CITY_ID", pCityId);
+        }
+
+        private static bool IsLiveKingdom(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null && !pKingdom.isRekt();
+        }
+
+        private static bool IsOwnedLiveCity(City pCity, Kingdom pKingdom)
+        {
+            return pCity?.data != null && pCity.isAlive() &&
+                   !pCity.isRekt() && pCity.kingdom == pKingdom;
+        }
+
+        private static bool IsLivingMember(Actor pActor, Kingdom pKingdom)
+        {
+            return pActor?.data != null && pActor.isAlive() &&
+                   !pActor.isRekt() && pActor.kingdom == pKingdom;
+        }
+
+        private static City FindCity(long pCityId)
+        {
+            if (pCityId < 0) return null;
+            try { return World.world?.cities?.get(pCityId); }
+            catch { return null; }
+        }
+
+        private static Actor FindActor(long pActorId)
+        {
+            if (pActorId < 0) return null;
+            try { return World.world?.units?.get(pActorId); }
+            catch { return null; }
+        }
+
+        private const string AuthoritySelectColumns =
+            "SELECT STATE_ID,RELATION_ID,SUBJECT_KINGDOM_ID," +
+            "SUZERAIN_KINGDOM_ID,SEAT_CITY_ID,GOVERNOR_ACTOR_ID," +
+            "SUCCESSOR_ACTOR_ID,COMMAND_NAME,CREATED_YEAR," +
+            "SUCCESSION_STATE,REPLACEMENT_ALLOWED";
+
+        private static MilitaryGovernorateSnapshot ReadAuthority(
+            SQLiteDataReader pReader)
+        {
+            return new MilitaryGovernorateSnapshot
+            {
+                StateId = pReader.GetInt64(0),
+                RelationId = pReader.GetInt64(1),
+                SubjectKingdomId = pReader.GetInt64(2),
+                SuzerainKingdomId = pReader.GetInt64(3),
+                SeatCityId = pReader.GetInt64(4),
+                GovernorActorId = pReader.GetInt64(5),
+                SuccessorActorId = pReader.GetInt64(6),
+                CommandName = pReader.IsDBNull(7) ? "" : pReader.GetString(7),
+                CreatedYear = pReader.IsDBNull(8) ? -1 : pReader.GetInt32(8),
+                SuccessionState = pReader.IsDBNull(9)
+                    ? 0
+                    : Math.Max(0, pReader.GetInt32(9)),
+                ReplacementAllowed = !pReader.IsDBNull(10) &&
+                                     pReader.GetInt32(10) != 0
+            };
+        }
+
         private static bool UpdateId(long pStateId, string pColumn,
             long pValue)
         {
             if (!Ready || pStateId < 0 ||
                 (pColumn != "SUCCESSOR_ACTOR_ID" &&
                  pColumn != "GOVERNOR_ACTOR_ID" &&
+                 pColumn != "SEAT_CITY_ID" &&
                  pColumn != "EXPEDITIONARY_ARMY_ID"))
                 return false;
             try
