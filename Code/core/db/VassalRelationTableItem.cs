@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.db
         public int tribute_rate = 10;
         public int military_obligation = 50;
         public int contract_tier = VassalContractTierRules.Outer;
+        [TableItemDef(pDefaultValue: "0")] public int subject_kind = 0;
         public long created_by_war_id = -1;
         public double start_time = 0;
         [TableItemDef(pDefaultValue: "-1")] public double end_time = -1;

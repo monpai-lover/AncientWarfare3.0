@@ -46,6 +46,10 @@ namespace AncientWarfare3.core.lineage
         public const string VASSAL_SUZERAIN_ID = "aw_vassal_suzerain_id";
         public const string VASSAL_RELATION_ID = "aw_vassal_relation_id";
         public const string VASSAL_CONTRACT_TIER = "aw_vassal_contract_tier";
+        public const string MILITARY_GOVERNORATE_SUBJECT_KIND =
+            "aw_military_governorate_subject_kind";
+        public const string MILITARY_GOVERNORATE_STATE_ID =
+            "aw_military_governorate_state_id";
         public const string TRIBUTARY_SUZERAIN_ID = "aw_tributary_suzerain_id";
         public const string TRIBUTARY_RELATION_ID = "aw_tributary_relation_id";
         public const string VASSAL_INDEPENDENCE_WAR_ID = "aw_vassal_independence_war_id";
