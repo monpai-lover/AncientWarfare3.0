@@ -13,6 +13,12 @@ try
         case "rally-recruitment":
             RunRallyRecruitmentProbe(options.Seed);
             break;
+        case "synthetic-mobilization":
+            RunSyntheticMobilizationProbe(options.Seed);
+            break;
+        case "large-step-equivalence":
+            RunLargeStepEquivalenceProbe(options.Seed);
+            break;
         case "battle-10x20":
             RunTenCityTwentyArmyProbe(options.Seed);
             break;
@@ -436,6 +442,34 @@ static void RunRallyRecruitmentProbe(int seed)
         $"losses={result.PartialBattleLosses} " +
         $"recruits={result.PartialBattleRecruits} " +
         $"replacement={result.ReplacementArmyStrength}");
+}
+
+static void RunSyntheticMobilizationProbe(int seed)
+{
+    SyntheticMobilizationProbeResult result =
+        ScenarioFactory.RunSyntheticMobilizationProbe(seed);
+    Check.Equal(result.Quota, result.MaximumLive,
+        "generated soldiers never exceed the city-war quota");
+    Check.Equal(0, result.FinalLive,
+        "all generated soldiers are removed after demobilization");
+    Check.True(result.RestoredDuringDemobilization,
+        "demobilization resumes after a simulated save/load boundary");
+    Console.WriteLine(
+        $"PASS synthetic-mobilization seed={seed} quota={result.Quota} " +
+        $"replacements={result.Replacements} final={result.FinalLive}");
+}
+
+static void RunLargeStepEquivalenceProbe(int seed)
+{
+    SchedulerEquivalenceProbeResult result =
+        ScenarioFactory.RunLargeStepEquivalenceProbe(seed);
+    Check.Equal(result.NativeLogicalPasses, result.LargeLogicalPasses,
+        "native and large-step modes accept the same logical pass count");
+    Check.Equal(0, result.DuplicateLargePasses,
+        "large-step scheduling never accepts a duplicate logical token");
+    Console.WriteLine(
+        $"PASS large-step-equivalence seed={seed} " +
+        $"passes={result.LargeLogicalPasses}");
 }
 
 static void RunTenCityTwentyArmyProbe(int seed)
