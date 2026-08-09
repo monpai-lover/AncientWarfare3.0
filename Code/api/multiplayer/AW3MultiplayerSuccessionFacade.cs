@@ -210,11 +210,9 @@ namespace AncientWarfare3.api.multiplayer
 
                 HeirService.StoreSelectedHeir(pKingdom, successor,
                     selected.SuccessionMode);
-                if (!SuccessionPreparationService.
-                        TryOverridePublishedCandidate(pKingdom, former,
-                            successor, selected.SuccessionMode))
-                    return AW3SuccessionInstallResult.Failed();
                 pKingdom.setKing(successor);
+                if (pKingdom.king == successor)
+                    NotifyKingInstalled(pKingdom, successor);
 
                 bool committed;
                 lock (Gate)
@@ -271,8 +269,8 @@ namespace AncientWarfare3.api.multiplayer
         {
             if (pKingdom?.data == null || pFormerRuler?.data == null)
                 return null;
-            if (!SuccessionPreparationService.TryGetPublishedCandidate(
-                    pKingdom, out Actor defaultActor)) return null;
+            Actor defaultActor = AuthoritativeSuccessionService.EnsureRegisteredCandidate(
+                pKingdom, pFormerRuler);
             if (!IsLiveCandidate(defaultActor, pKingdom, pFormerRuler))
                 return null;
 

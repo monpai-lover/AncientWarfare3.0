@@ -191,21 +191,31 @@ internal static class AW3MultiplayerSuccessionRulesTests
         string mandate = Read(root, "Code", "patch",
             "AW_MandateSuccessionPatch.cs");
         string accession = Read(root, "Code", "patch", "AW_HeirPatch.cs");
+        string identity = Read(root, "Code", "core", "lineage",
+            "AccessionIdentityService.cs");
 
         int prepare = mandate.IndexOf(
-            "SuccessionPreparationService.TryPublishForNativeSuccession(",
+            "AuthoritativeSuccessionService.EnsureRegisteredCandidate(",
             StringComparison.Ordinal);
         int defer = mandate.IndexOf(
             "AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king)",
             StringComparison.Ordinal);
         True(prepare >= 0 && defer > prepare,
-            "AW3 publishes its canonical succession before offering a hold");
+            "AW3 validates its registered heir before offering a hold");
         Equal(false, facade.Contains(
                 "PrepareSuccessionBeforeKingDeath"),
             "multiplayer installation never repeats synchronous preparation");
         Contains(facade,
-            "SuccessionPreparationService.TryGetPublishedCandidate",
-            "multiplayer offers use the same published default candidate");
+            "AuthoritativeSuccessionService.EnsureRegisteredCandidate(",
+            "multiplayer offers use the authoritative registered heir");
+        Equal(false, facade.Contains(
+                "SuccessionPreparationService.TryGetPublishedCandidate",
+                StringComparison.Ordinal),
+            "multiplayer does not read a published candidate snapshot");
+        Equal(false, facade.Contains(
+                "SuccessionPreparationService.TryOverridePublishedCandidate",
+                StringComparison.Ordinal),
+            "multiplayer does not override a second candidate snapshot");
         Contains(mandate, "ref BehResult __result",
             "the mandate prefix can return Continue while a player decides");
         Contains(mandate, "__result = BehResult.Continue;",
@@ -213,13 +223,31 @@ internal static class AW3MultiplayerSuccessionRulesTests
         Contains(mandate, "return false;",
             "only an accepted hold skips vanilla installation");
 
+        int facadeSetKing = facade.IndexOf("pKingdom.setKing(successor);",
+            StringComparison.Ordinal);
+        int acknowledgeInstall = facade.IndexOf(
+            "NotifyKingInstalled(pKingdom, successor);", facadeSetKing,
+            StringComparison.Ordinal);
+        int verifyCommit = facade.IndexOf("bool committed;", facadeSetKing,
+            StringComparison.Ordinal);
+        True(facadeSetKing >= 0 && acknowledgeInstall > facadeSetKing &&
+             verifyCommit > acknowledgeInstall,
+            "a deferred identity repair still acknowledges canonical installation");
+
         int commit = accession.IndexOf(
             "AccessionIdentityService.Commit(__instance, king)",
             StringComparison.Ordinal);
-        int notify = accession.IndexOf(
-            "AW3MultiplayerSuccessionFacade.NotifyKingInstalled(__instance, king);",
+        int complete = accession.IndexOf(
+            "AccessionIdentityService.CompleteInstalledKing(",
             StringComparison.Ordinal);
-        True(commit >= 0 && notify > commit,
+        int sharedCompletion = identity.IndexOf(
+            "internal static bool CompleteInstalledKing(",
+            StringComparison.Ordinal);
+        int notify = identity.IndexOf(
+            "AW3MultiplayerSuccessionFacade.NotifyKingInstalled(",
+            sharedCompletion, StringComparison.Ordinal);
+        True(commit >= 0 && complete > commit &&
+             sharedCompletion >= 0 && notify > sharedCompletion,
             "the provider is notified only after canonical AW3 accession");
 
         Contains(accession, "AccessionIdentityService.DeferInstalledKing(__instance,",
@@ -248,7 +276,7 @@ internal static class AW3MultiplayerSuccessionRulesTests
         Contains(facade, "hold.Installing",
             "an initiated install suppresses duplicate external notification");
         Contains(facade, "BuildOffer(",
-            "default installation recomputes live AW3 eligibility");
+            "default installation validates live AW3 eligibility");
 
         string production = facade + candidates + heir + mandate + accession;
         Equal(false, production.Contains("System.Reflection",

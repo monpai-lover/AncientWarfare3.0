@@ -697,6 +697,7 @@
     <Compile Include="..\..\Code\core\lineage\ActorBirthAffiliationRules.cs" Link="Production\ActorBirthAffiliationRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorDeathPerformanceRules.cs" Link="Production\ActorDeathPerformanceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\KingSuccessionPreparationRules.cs" Link="Production\KingSuccessionPreparationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ReigningRoyalLineageIndexState.cs" Link="Production\ReigningRoyalLineageIndexState.cs" />
     <Compile Include="..\..\Code\core\lineage\SuccessionRelationshipIndexState.cs" Link="Production\SuccessionRelationshipIndexState.cs" />
     <Compile Include="..\..\Code\core\lineage\SuccessionDisputePersistence.cs" Link="Production\SuccessionDisputePersistence.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceRulerDeathPersistence.cs" Link="Production\CivilServiceRulerDeathPersistence.cs" />
@@ -785,6 +786,8 @@
   <Target Name="WartimeMilitaryTaskGatePerformanceSourceGuard"
       BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\CultiwayPerfSchedulerNonRegressionSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\RoyalLineageSuccessionGateSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\KingDeathSuccessionPerformanceSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\ActionLandedPostJobSafetySourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\ReportedLocalizationCoverageSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\FontSettingsSourceGuard.ps1&quot;" />

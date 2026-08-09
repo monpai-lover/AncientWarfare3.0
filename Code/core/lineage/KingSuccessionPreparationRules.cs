@@ -38,19 +38,6 @@ namespace AncientWarfare3.core.lineage
         }
     }
 
-    public static class SuccessionSnapshotRules
-    {
-        public static bool IsCurrent(long pSnapshotRevision,
-            long pCurrentRevision, long pSnapshotKingId,
-            long pCurrentKingId, bool candidateAlive,
-            bool candidateInRealm)
-        {
-            return pSnapshotRevision == pCurrentRevision &&
-                   pSnapshotKingId == pCurrentKingId &&
-                   candidateAlive && candidateInRealm;
-        }
-    }
-
     public static class HeirSelectionSignatureRules
     {
         public static bool IsUnchanged(long pStoredCandidateId,
@@ -103,129 +90,47 @@ namespace AncientWarfare3.core.lineage
         }
     }
 
-    public readonly struct PreparedSuccession
+    public static class AuthoritativeSuccessionRules
     {
-        public PreparedSuccession(long pCandidateId, string pMode)
+        public static bool ShouldRunFallback(bool pHasValidRegisteredHeir,
+            bool pFallbackAlreadyAttempted)
         {
-            CandidateId = pCandidateId;
-            Mode = pMode ?? string.Empty;
+            return !pHasValidRegisteredHeir && !pFallbackAlreadyAttempted;
         }
-
-        public long CandidateId { get; }
-        public string Mode { get; }
     }
 
-    public sealed class KingSuccessionPreparationState
+    public static class RoyalSuccessionEventRules
     {
-        private readonly Dictionary<KingSuccessionKey, Entry> _entries =
-            new Dictionary<KingSuccessionKey, Entry>();
-
-        public int Count => _entries.Count;
-
-        public bool Contains(KingSuccessionKey pKey)
+        public static bool ShouldMarkSelectionDirty(long pActorLineageId,
+            long pKingdomRoyalLineageId,
+            bool pLineageReignsInThisKingdom, bool pRegisteredHeir,
+            bool pDirectRoyalChild)
         {
-            return _entries.ContainsKey(pKey);
+            return pActorLineageId >= 0L &&
+                   pActorLineageId == pKingdomRoyalLineageId &&
+                   pLineageReignsInThisKingdom &&
+                   (pRegisteredHeir || pDirectRoyalChild);
+        }
+    }
+
+    public sealed class SuccessionFallbackAttemptState
+    {
+        private readonly HashSet<KingSuccessionKey> _attempted =
+            new HashSet<KingSuccessionKey>();
+
+        public bool TryBegin(KingSuccessionKey pKey)
+        {
+            return _attempted.Add(pKey);
         }
 
-        public bool TryCapture(KingSuccessionKey pKey, long pRevision,
-            long pCandidateId)
+        public void Complete(KingSuccessionKey pKey)
         {
-            if (_entries.ContainsKey(pKey)) return false;
-            _entries.Add(pKey, new Entry
-            {
-                CapturedRevision = pRevision,
-                PublishedRevision = -1L,
-                CandidateId = pCandidateId,
-                Mode = string.Empty,
-                Published = false
-            });
-            return true;
-        }
-
-        public void Publish(KingSuccessionKey pKey, long pRevision,
-            long pCandidateId, string pMode)
-        {
-            if (!_entries.TryGetValue(pKey, out Entry entry)) return;
-            entry.PublishedRevision = pRevision;
-            entry.CandidateId = pCandidateId;
-            entry.Mode = pMode ?? string.Empty;
-            entry.Published = true;
-            _entries[pKey] = entry;
-        }
-
-        public bool TryRefreshUnpublished(KingSuccessionKey pKey,
-            long pRevision, long pCandidateId)
-        {
-            if (!_entries.TryGetValue(pKey, out Entry entry) ||
-                entry.Published) return false;
-            entry.CapturedRevision = pRevision;
-            entry.PublishedRevision = -1L;
-            entry.CandidateId = pCandidateId;
-            entry.Mode = string.Empty;
-            _entries[pKey] = entry;
-            return true;
-        }
-
-        public bool TryReplacePublished(KingSuccessionKey pKey,
-            long pRevision, long pCandidateId, string pMode)
-        {
-            if (!_entries.TryGetValue(pKey, out Entry entry) ||
-                !entry.Published) return false;
-            entry.CapturedRevision = pRevision;
-            entry.PublishedRevision = pRevision;
-            entry.CandidateId = pCandidateId;
-            entry.Mode = pMode ?? string.Empty;
-            _entries[pKey] = entry;
-            return true;
-        }
-
-        public bool TryConsume(KingSuccessionKey pKey, long pRevision,
-            out PreparedSuccession pPrepared)
-        {
-            pPrepared = default;
-            if (!_entries.TryGetValue(pKey, out Entry entry) ||
-                !entry.Published || entry.CapturedRevision != pRevision ||
-                entry.PublishedRevision != pRevision)
-                return false;
-            _entries.Remove(pKey);
-            pPrepared = new PreparedSuccession(entry.CandidateId,
-                entry.Mode);
-            return true;
-        }
-
-        public bool TryGetPublished(KingSuccessionKey pKey,
-            out PreparedSuccession pPrepared)
-        {
-            pPrepared = default;
-            if (!_entries.TryGetValue(pKey, out Entry entry) ||
-                !entry.Published ||
-                entry.CapturedRevision != entry.PublishedRevision)
-                return false;
-            pPrepared = new PreparedSuccession(entry.CandidateId,
-                entry.Mode);
-            return true;
-        }
-
-        public bool TryConsumePublished(KingSuccessionKey pKey,
-            out PreparedSuccession pPrepared)
-        {
-            if (!TryGetPublished(pKey, out pPrepared)) return false;
-            _entries.Remove(pKey);
-            return true;
+            _attempted.Remove(pKey);
         }
 
         public void Clear()
         {
-            _entries.Clear();
-        }
-
-        private struct Entry
-        {
-            internal long CapturedRevision;
-            internal long PublishedRevision;
-            internal long CandidateId;
-            internal string Mode;
-            internal bool Published;
+            _attempted.Clear();
         }
     }
 }

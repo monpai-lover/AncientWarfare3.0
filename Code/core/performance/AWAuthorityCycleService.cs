@@ -80,7 +80,9 @@ namespace AncientWarfare3.core.performance
             KingdomInstitutionalXiaizationService.Reset();
             ActorDeathArchiveService.Reset();
             SuccessionRelationshipIndex.Reset();
-            SuccessionPreparationService.Reset();
+            ReigningRoyalLineageIndex.Reset();
+            AuthoritativeSuccessionService.Reset();
+            SuccessionDisputePersistenceService.Reset();
         }
 
         private static void ProcessCycle(AWAuthorityCycleGate pGate,
@@ -93,8 +95,8 @@ namespace AncientWarfare3.core.performance
             if (!pGate.TryEnter(pCycleToken, allowed)) return;
 
             SuccessionRelationshipIndex.ProcessAuthorityCycle();
-            SuccessionPreparationService.ProcessAuthorityCycle(
-                pKingdomBudget: 1);
+            ReigningRoyalLineageIndex.ProcessAuthorityCycle();
+            SuccessionDisputePersistenceService.ProcessAuthorityCycle();
             WesternCourtElectionService.ProcessAuthorityCycle();
             AccessionIdentityService.ProcessDeferredInstallations();
             AWLocalizedNameMigrationService.ProcessAuthorityCycle();

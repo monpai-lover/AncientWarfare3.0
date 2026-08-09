@@ -150,9 +150,6 @@ namespace AncientWarfare3.patch
                 __state?.id ?? -1L,
                 (__instance?.kingdom ?? pKingdom)?.id ?? -1L);
             CitySchoolSnapshotService.MarkDirty(__instance);
-            SuccessionPreparationService.MarkDirty(__state);
-            SuccessionPreparationService.MarkDirty(
-                __instance?.kingdom ?? pKingdom);
             HierarchicalVassalMapModeService.MarkCityOwnershipChanged(
                 __instance, __state, __instance?.kingdom ?? pKingdom);
         }
@@ -218,7 +215,6 @@ namespace AncientWarfare3.patch
             if (KingdomIdentityContinuityService.ShouldSuppressNewKingdomEffects(__instance)) return;
             ChronicleEvents.OnKingChanged(__instance, pActor);
             CitySchoolSnapshotService.MarkKingdomDirty(__instance);
-            SuccessionPreparationService.MarkDirty(__instance);
         }
 
         // 建城(newCityEvent 在 City 自身声明,typeof 正确;纯新建城,读档走 loadCity 不经此)。
@@ -233,7 +229,6 @@ namespace AncientWarfare3.patch
             ArmyRetreatService.OnCityControlChanged(__instance, null);
             ChronicleEvents.OnCityFounded(__instance);
             CityTechService.OnCityFounded(__instance);
-            SuccessionPreparationService.MarkDirty(__instance?.kingdom);
             HierarchicalVassalMapModeService.MarkCityOwnershipChanged(
                 __instance, null, __instance?.kingdom);
         }

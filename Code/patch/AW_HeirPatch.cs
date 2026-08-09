@@ -14,6 +14,7 @@ namespace AncientWarfare3.patch
             public bool WasRegisteredHeir;
             public int PreNobleDistance;
             public string SuccessionSourceMode;
+            public InheritanceLaw AccessionLaw;
             public bool IdentityPrepared;
         }
 
@@ -22,8 +23,7 @@ namespace AncientWarfare3.patch
         public static bool GetKingFromRoyalClan_Prefix(Kingdom pKingdom, ref Actor __result)
         {
             if (!UsesManagedSuccession(pKingdom)) return true;
-            SuccessionPreparationService.TryGetPublishedCandidate(pKingdom,
-                out __result);
+            __result = HeirService.PeekRegisteredHeir(pKingdom);
             return false;
         }
 
@@ -35,8 +35,7 @@ namespace AncientWarfare3.patch
             if (RepublicGovernmentService.IsRepublic(pKingdom))
                 __result = RepublicGovernmentService.ResolveRulerForVacancy(
                     pKingdom);
-            else if (SuccessionPreparationService.TryGetPublishedCandidate(
-                         pKingdom, out Actor published) && published == null &&
+            else if (HeirService.PeekRegisteredHeir(pKingdom) == null &&
                      HeirService.ShouldUseOrdinaryFallbackSuccession(pKingdom))
                 __result = HeirService.GetLeaderSuccessionCandidate(pKingdom);
             else
@@ -65,6 +64,8 @@ namespace AncientWarfare3.patch
                 out __state.SuccessionSourceMode, SuccessionMode.NONE);
             pActor.data.get(LineageKeys.IS_HEIR, out bool heirFlag, false);
             __state.WasRegisteredHeir = heirFlag || heirId == pActor.data.id;
+            __state.AccessionLaw =
+                InheritanceLawService.GetEffectiveLaw(__instance);
             bool managedSuccession = UsesManagedSuccession(__instance);
             if (!managedSuccession) return true;
             if (AccessionIdentityRules.ShouldDeferForInitialKingdomCreation(
@@ -94,48 +95,38 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (pFromLoad || __instance?.data == null) return;
             if (!UsesManagedSuccession(__instance)) return;
+            Actor king = pActor ?? __instance.king;
+            bool setKingSucceeded = king?.data != null &&
+                                     (pActor == null ||
+                                      __instance.king == pActor);
+            if (!setKingSucceeded) return;
+            AuthoritativeSuccessionService.OnSuccessorInstalled(__instance,
+                __state.PreviousKing);
             if (!__state.IdentityPrepared)
             {
+                ReigningRoyalLineageIndex.OnKingInstalled(__instance, king);
                 AccessionIdentityService.DeferInstalledKing(__instance,
-                    pActor);
+                    king, CreateCompletionContext(__state));
                 return;
             }
 
-            Actor king = pActor ?? __instance.king;
-            bool setKingSucceeded = king?.data != null &&
-                                     (pActor == null || __instance.king == pActor);
-            if (!setKingSucceeded) return;
             if (!AccessionIdentityService.Commit(__instance, king))
             {
                 ModClass.LogWarning("Accession identity commit failed for actor " +
                                     (king?.data?.id ?? -1L) + " in kingdom " +
                                     (__instance?.id ?? -1L));
+                ReigningRoyalLineageIndex.OnKingInstalled(__instance, king);
+                AccessionIdentityService.DeferInstalledKing(__instance, king,
+                    CreateCompletionContext(__state));
                 return;
             }
             AccessionIdentityService.ClearDeferredInstalledKing(__instance);
-            FormerHeirService.ClearSnapshot(king);
-            FormerKingService.ClearSnapshot(king);
-            if (SuccessionTransitionRules.ShouldMarkMonarchyEstablished(
-                    setKingSucceeded,
-                    RepublicGovernmentService.IsRepublic(__instance),
-                    RepublicGovernmentService.IsRepublicLeader(king)))
-                RepublicGovernmentService.MarkMonarchyEstablished(__instance);
-            LineageService.OnKingFoundBranch(__instance, king, __state.PreviousKing,
-                __state.WasRegisteredHeir, __state.PreNobleDistance,
-                __state.SuccessionSourceMode);
-            HeirService.RecallForSuccession(__instance, king, __state.WasRegisteredHeir);
-            InheritanceLawService.EstablishHereditaryBranchAfterAccession(
-                __instance, king, __state.SuccessionSourceMode);
-            SuccessionPreparationService.OnSuccessorInstalled(__instance,
-                king);
-            SuccessionDisputeService.OnSuccessorInstalled(__instance, king);
-
-            HeirService.ClearHeir(__instance);
-            HeirService.RefreshHeir(__instance);
-            FeudatoryService.OnPrinceAccededToEmpire(__instance, king);
-            NobleRemarriageService.MarkDirty(__instance);
-            CourtDirectionService.MarkDirty(__instance);
-            AW3MultiplayerSuccessionFacade.NotifyKingInstalled(__instance, king);
+            AccessionCompletionContext completionContext =
+                CreateCompletionContext(__state);
+            if (!AccessionIdentityService.CompleteInstalledKing(__instance,
+                    king, completionContext))
+                AccessionIdentityService.DeferInstalledKing(__instance, king,
+                    completionContext, pIdentityCommitted: true);
         }
 
         [HarmonyPostfix]
@@ -146,6 +137,20 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             AccessionIdentityService.FinalizeDeferredFounding(__instance);
+        }
+
+        private static AccessionCompletionContext CreateCompletionContext(
+            KingBranchContext pContext)
+        {
+            return new AccessionCompletionContext
+            {
+                PreviousKing = pContext.PreviousKing,
+                WasRegisteredHeir = pContext.WasRegisteredHeir,
+                PreNobleDistance = pContext.PreNobleDistance,
+                SuccessionSourceMode = pContext.SuccessionSourceMode,
+                AccessionLaw = pContext.AccessionLaw,
+                Captured = true
+            };
         }
 
         private static bool UsesManagedSuccession(Kingdom pKingdom)
