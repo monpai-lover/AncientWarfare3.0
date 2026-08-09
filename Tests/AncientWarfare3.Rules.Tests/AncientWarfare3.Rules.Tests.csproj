@@ -138,6 +138,8 @@
     <Compile Include="WesternCourtProfileRulesTests.cs.txt" />
     <Compile Include="MilitaryGovernorateRulesTests.cs.txt" />
     <Compile Include="MilitaryGovernorateWarRulesTests.cs.txt" />
+    <Compile Include="MilitaryGovernorateSuccessionRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MilitaryGovernorateSuccessionRules.cs" Link="Production\MilitaryGovernorateSuccessionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MilitaryGovernorateWarRules.cs" Link="Production\MilitaryGovernorateWarRules.cs" />
     <Compile Include="WesternCourtElectionRulesTests.cs.txt" />
     <Compile Include="WesternCourtOfficeEffectRulesTests.cs.txt" />

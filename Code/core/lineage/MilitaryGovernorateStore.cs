@@ -178,6 +178,75 @@ namespace AncientWarfare3.core.lineage
             return UpdateId(pStateId, "SUCCESSOR_ACTOR_ID", pActorId);
         }
 
+        public static bool SetGovernor(long pStateId, long pActorId)
+        {
+            return UpdateId(pStateId, "GOVERNOR_ACTOR_ID", pActorId);
+        }
+
+        public static bool SetSuccessionState(long pStateId, int pState)
+        {
+            if (!Ready || pStateId < 0 || pState < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " +
+                    MilitaryGovernorateStateTableItem.GetTableName() +
+                    " SET SUCCESSION_STATE=@value WHERE STATE_ID=@state" +
+                    " AND ACTIVE=1";
+                command.Parameters.AddWithValue("@value", pState);
+                command.Parameters.AddWithValue("@state", pStateId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "Military governorate succession state update failed: " +
+                    error.Message);
+                return false;
+            }
+        }
+
+        public static bool CommitSuccession(long pStateId, long pGovernorId)
+        {
+            if (!Ready || pStateId < 0 || pGovernorId < 0) return false;
+            SQLiteTransaction transaction = null;
+            try
+            {
+                transaction = DB.BeginTransaction(
+                    IsolationLevel.Serializable);
+                using var command = new SQLiteCommand(DB)
+                {
+                    Transaction = transaction
+                };
+                command.CommandText = "UPDATE " +
+                    MilitaryGovernorateStateTableItem.GetTableName() +
+                    " SET GOVERNOR_ACTOR_ID=@governor,SUCCESSOR_ACTOR_ID=-1," +
+                    "SUCCESSION_STATE=0 WHERE STATE_ID=@state AND ACTIVE=1";
+                command.Parameters.AddWithValue("@governor", pGovernorId);
+                command.Parameters.AddWithValue("@state", pStateId);
+                if (command.ExecuteNonQuery() != 1)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+                transaction.Commit();
+                return true;
+            }
+            catch (Exception error)
+            {
+                try { transaction?.Rollback(); }
+                catch { }
+                ModClass.LogWarning(
+                    "Military governorate succession commit failed: " +
+                    error.Message);
+                return false;
+            }
+            finally
+            {
+                transaction?.Dispose();
+            }
+        }
+
         public static bool SetExpeditionaryArmy(long pStateId, long pArmyId)
         {
             return UpdateId(pStateId, "EXPEDITIONARY_ARMY_ID", pArmyId);
@@ -331,6 +400,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (!Ready || pStateId < 0 ||
                 (pColumn != "SUCCESSOR_ACTOR_ID" &&
+                 pColumn != "GOVERNOR_ACTOR_ID" &&
                  pColumn != "EXPEDITIONARY_ARMY_ID"))
                 return false;
             try

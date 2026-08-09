@@ -68,5 +68,11 @@ namespace AncientWarfare3.core.lineage
         {
             return pEndReason == "independence_war";
         }
+
+        public static bool ShouldTransferIndependenceToUpper(
+            VassalSubjectKind pKind)
+        {
+            return pKind != VassalSubjectKind.MilitaryGovernorate;
+        }
     }
 }

@@ -155,6 +155,7 @@ aw_hist_event_feudatory_inherited,藩国承袭,Feudatory Inherited,藩國承襲
 aw_hist_event_feudatory_abolished,绝嗣除国,Feudatory Abolished,絕嗣除國
 aw_hist_feudatory_inherited_person, 承袭, inherited the feudatory seated at , 承襲
 aw_hist_feudatory_inherited_suffix,藩，继任藩王, and succeeded as feudatory prince,藩，繼任藩王
+aw_hist_military_governorate_succession_mid,接掌, assumed command of ,接掌
 aw_hist_feudatory_line_passed,藩承袭：, feudatory succession: ,藩承襲：
 aw_hist_feudatory_line_to,传于, was succeeded by ,傳於
 aw_hist_feudatory_abolished_prefix, 因宗支绝嗣，除, abolished the heirless feudatory of , 因宗支絕嗣，除

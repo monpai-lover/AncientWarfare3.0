@@ -8066,6 +8066,7 @@ LineageBirthArchivePersistenceSqlTests.Run();
 HistoricalWriteRulesTests.Run();
 MilitaryGovernorateRulesTests.Run();
 MilitaryGovernorateWarRulesTests.Run();
+MilitaryGovernorateSuccessionRulesTests.Run();
 ReflectionDelegateFactoryTests.Run();
 
 Console.WriteLine("Rule tests passed.");

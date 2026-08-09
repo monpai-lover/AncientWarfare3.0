@@ -261,6 +261,35 @@ namespace AncientWarfare3.core.lineage
                 ChronicleCategory.WAR, HistoryTarget.Kingdom(pSuzerain));
         }
 
+        public static bool TryRecordMilitaryGovernorateSucceeded(long pStateId,
+            Kingdom pSuzerain, Kingdom pSubject, Actor pGovernor)
+        {
+            if (pStateId < 0 || pSubject?.data == null ||
+                pGovernor?.data == null) return false;
+            HistoryText text = HistoryText.Actor(pGovernor) +
+                               HistoryLocalizationRules.H("aw_hist_military_governorate_succession_mid") +
+                               HistoryText.Kingdom(pSubject);
+            bool subjectRecorded = HistoryWriter.TryRecordKingdom(pSubject,
+                "military_governorate_succession", text,
+                HistoryTarget.Actor(pGovernor),
+                MilitaryGovernorateSuccessionRules.ChronicleProjectionKey(
+                    pStateId, pGovernor.data.id, "subject"));
+            bool personRecorded = HistoryWriter.TryRecordPerson(
+                pGovernor.data.id, pSubject,
+                pGovernor.getName(), "military_governorate_succession", text,
+                ChronicleCategory.WAR, HistoryTarget.Kingdom(pSubject),
+                MilitaryGovernorateSuccessionRules.ChronicleProjectionKey(
+                    pStateId, pGovernor.data.id, "person"));
+            bool suzerainRecorded = true;
+            if (pSuzerain?.data != null)
+                suzerainRecorded = HistoryWriter.TryRecordKingdom(pSuzerain,
+                    "military_governorate_succession", text,
+                    HistoryTarget.Kingdom(pSubject),
+                    MilitaryGovernorateSuccessionRules.ChronicleProjectionKey(
+                        pStateId, pGovernor.data.id, "suzerain"));
+            return subjectRecorded && personRecorded && suzerainRecorded;
+        }
+
         public static void OnFeudatoryInherited(Kingdom pKingdom,
             Actor pOldPrince, Actor pNewPrince, City pSeat, string pReason)
         {

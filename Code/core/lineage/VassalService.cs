@@ -1388,8 +1388,11 @@ namespace AncientWarfare3.core.lineage
         private static void EndIndependenceWar(Kingdom pRebel, Kingdom pOldSuzerain)
         {
             if (pRebel?.data == null) return;
+            VassalSubjectKind subjectKind = GetSubjectKind(pRebel);
             Kingdom upper = GetSuzerain(pOldSuzerain);
-            if (upper?.data != null && !upper.isRekt() && CanSetVassal(pRebel, upper))
+            if (MilitaryGovernorateRules.ShouldTransferIndependenceToUpper(
+                    subjectKind) && upper?.data != null && !upper.isRekt() &&
+                CanSetVassal(pRebel, upper))
             {
                 EndVassal(pRebel, "independence_war_transfer");
                 SetVassal(pRebel, upper, "independence_war_transfer");

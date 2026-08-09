@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pKingdom.isRekt() ||
                 !pKingdom.isCiv() || pKingdom.isNeutral()) return;
+            MilitaryGovernorateSuccessionService.OnKingdomYear(pKingdom);
             int year = SafeYear();
             pKingdom.data.get(
                 LineageKeys.MILITARY_GOVERNORATE_AI_LAST_EVALUATION_YEAR,

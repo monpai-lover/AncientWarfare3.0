@@ -141,6 +141,12 @@ internal static class MilitaryGovernorateRulesTests
         Equal(false, MilitaryGovernorateRules.ShouldRandomizeIndependentColor(
                 "manual"),
             "administrative release does not impersonate a war victory");
+        Equal(false, MilitaryGovernorateRules.ShouldTransferIndependenceToUpper(
+                VassalSubjectKind.MilitaryGovernorate),
+            "a victorious military governorate becomes fully independent");
+        Equal(true, MilitaryGovernorateRules.ShouldTransferIndependenceToUpper(
+                VassalSubjectKind.Ordinary),
+            "ordinary nested vassals retain the existing transfer behavior");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

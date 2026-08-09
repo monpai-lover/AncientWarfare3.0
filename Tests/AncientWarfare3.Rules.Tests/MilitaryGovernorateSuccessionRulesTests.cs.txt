@@ -1,0 +1,79 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MilitaryGovernorateSuccessionRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, MilitaryGovernorateSuccessionRules.UseDesignated(
+                true, true), "valid living designated successor wins");
+        Equal(false, MilitaryGovernorateSuccessionRules.UseDesignated(
+                false, true), "dead designated successor is rejected");
+        Equal(true, MilitaryGovernorateSuccessionRules.CanDesignate(
+                true, true, true, false, true, false),
+            "a valid local general can be designated");
+        Equal(true, MilitaryGovernorateSuccessionRules.CanDesignate(
+                true, true, true, false, false, true),
+            "a valid direct suzerain general can be designated");
+        Equal(false, MilitaryGovernorateSuccessionRules.CanDesignate(
+                true, false, true, false, true, false),
+            "a dead general cannot be designated");
+        Equal(false, MilitaryGovernorateSuccessionRules.CanDesignate(
+                true, true, true, false, false, false),
+            "a foreign general cannot be designated");
+        Equal(false, MilitaryGovernorateSuccessionRules.CanDesignate(
+                false, true, true, false, true, false),
+            "an inactive general cannot be designated");
+        Equal(true, MilitaryGovernorateSuccessionRules.CanCommitDesignated(
+                true, false, true),
+            "a designated native temporary king remains recoverable");
+        Equal(false, MilitaryGovernorateSuccessionRules.CanCommitDesignated(
+                true, false, false),
+            "an unrelated non-general cannot become governor");
+        Equal(true, MilitaryGovernorateSuccessionRules.ShouldMoveAtCommit(
+                20L, 10L),
+            "a dispatched parent general moves only when succession commits");
+        Equal(false, MilitaryGovernorateSuccessionRules.ShouldMoveAtCommit(
+                10L, 10L),
+            "a local general does not require realm migration");
+        Equal(true, MilitaryGovernorateSuccessionRules.ShouldWaitForSuzerain(
+                12, 11, true), "stable suzerain receives a grace period");
+        Equal(false, MilitaryGovernorateSuccessionRules.ShouldWaitForSuzerain(
+                13, 11, true), "two elapsed years trigger election");
+        Equal(false, MilitaryGovernorateSuccessionRules.ShouldWaitForSuzerain(
+                12, 11, false), "weak center triggers immediate election");
+        int veteran = MilitaryGovernorateSuccessionRules.ElectionScore(
+            80, 70, 60, 8);
+        int novice = MilitaryGovernorateSuccessionRules.ElectionScore(
+            80, 70, 60, 1);
+        Equal(true, veteran > novice,
+            "local service contributes to military election priority");
+        Equal(true, MilitaryGovernorateSuccessionRules.ElectionScore(
+                81, 70, 60, 8) > veteran,
+            "military merit contributes to election priority");
+        Equal(true, MilitaryGovernorateSuccessionRules.ElectionScore(
+                80, 71, 60, 8) > veteran,
+            "safe damage and warfare prowess contribute to election priority");
+        Equal(true, MilitaryGovernorateSuccessionRules.ElectionScore(
+                80, 70, 61, 8) > veteran,
+            "personal army support contributes to election priority");
+        Equal(int.MaxValue, MilitaryGovernorateSuccessionRules.ElectionScore(
+                int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue),
+            "extreme safe combat values saturate instead of overflowing");
+        Equal(true, MilitaryGovernorateSuccessionRules.CompareCandidate(
+                veteran, 10L, veteran, 20L) < 0,
+            "actor id is the deterministic election tie break");
+        Equal(false,
+            MilitaryGovernorateSuccessionRules.ChronicleProjectionKey(
+                7L, 10L, "subject") ==
+            MilitaryGovernorateSuccessionRules.ChronicleProjectionKey(
+                7L, 20L, "subject"),
+            "successive governors use distinct chronicle projection keys");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}
