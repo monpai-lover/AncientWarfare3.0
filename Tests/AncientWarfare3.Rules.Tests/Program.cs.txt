@@ -8065,6 +8065,7 @@ IdleBehaviourThrottleGateTests.Run();
 LineageBirthArchivePersistenceSqlTests.Run();
 HistoricalWriteRulesTests.Run();
 MilitaryGovernorateRulesTests.Run();
+MilitaryGovernorateWarRulesTests.Run();
 ReflectionDelegateFactoryTests.Run();
 
 Console.WriteLine("Rule tests passed.");

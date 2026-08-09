@@ -223,6 +223,13 @@ namespace AncientWarfare3.core.lineage
             if (!Ready || pRequester?.data == null ||
                 pResponder?.data == null || pRequester.isRekt() ||
                 pResponder.isRekt() || pRequester == pResponder) return false;
+            if (!MilitaryGovernorateWarRules.CanUseStateProposal(
+                    VassalService.GetSubjectKind(pRequester),
+                    VassalService.GetSubjectKind(pResponder)))
+            {
+                pReason = "military_governorate_no_diplomacy";
+                return false;
+            }
             if (!pPlayerInitiated &&
                 !DiplomacyAiRules.AllowsAiInitiation(pType))
             {
@@ -2383,6 +2390,13 @@ namespace AncientWarfare3.core.lineage
             Kingdom requester = FindKingdom(pProposal.RequesterKingdomId);
             Kingdom responder = FindKingdom(pProposal.ResponderKingdomId);
             if (requester?.data == null || responder?.data == null) return false;
+            if (!MilitaryGovernorateWarRules.CanUseStateProposal(
+                    VassalService.GetSubjectKind(requester),
+                    VassalService.GetSubjectKind(responder)))
+            {
+                pReason = "military_governorate_no_diplomacy";
+                return false;
+            }
             try
             {
                 switch (pProposal.Type)

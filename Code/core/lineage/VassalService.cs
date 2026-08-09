@@ -1918,7 +1918,12 @@ namespace AncientWarfare3.core.lineage
                     }
 
                     bool accepted;
-                    if (pAllowNewDecisions)
+                    if (MilitaryGovernorateRules.MustJoinSuzerainWar(
+                            relation.subject_kind))
+                    {
+                        accepted = true;
+                    }
+                    else if (pAllowNewDecisions)
                     {
                         VassalEffectiveTerms terms = GetEffectiveRelationTerms(
                             relation, effects, institution);

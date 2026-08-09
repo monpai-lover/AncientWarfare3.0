@@ -61,8 +61,17 @@ namespace AncientWarfare3.core.lineage
                 pReason = "non_aggression_pact";
                 return false;
             }
-            if (!CanPassAllianceWarRules(pAttacker, pDefender, type, pSystemWar: false, out pReason)) return false;
             if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
+            Kingdom queueDefender =
+                ResolveMilitaryGovernorateMainDefender(pDefender);
+            if (!CanPassAllianceWarRules(pAttacker, queueDefender, type,
+                    pSystemWar: false, out pReason)) return false;
+            if (queueDefender != pDefender && World.world?.wars?.getWar(
+                    pAttacker, queueDefender, pOnlyMain: false) != null)
+            {
+                pReason = "already_at_war";
+                return false;
+            }
             if (HasValidCasusBelli(pAttacker, pDefender, type)) return true;
 
             pReason = "missing_cb";
@@ -106,14 +115,17 @@ namespace AncientWarfare3.core.lineage
                 pReason = "non_aggression_pact";
                 return false;
             }
-            if (!CanPassAllianceWarRules(pAttacker, pDefender, type,
-                    pSystemWar, out pReason)) return false;
             if (!pSystemWar &&
                 !CanPassVassalWarRules(pAttacker, pDefender, type,
                     out pReason)) return false;
+            Kingdom queueDefender =
+                ResolveMilitaryGovernorateMainDefender(pDefender);
+            if (!CanPassAllianceWarRules(pAttacker, queueDefender, type,
+                    pSystemWar, out pReason)) return false;
             try
             {
-                if (World.world?.wars?.getWar(pAttacker, pDefender, pOnlyMain: false) != null)
+                if (World.world?.wars?.getWar(pAttacker, queueDefender,
+                        pOnlyMain: false) != null)
                 {
                     pReason = "already_at_war";
                     return false;
@@ -317,6 +329,7 @@ namespace AncientWarfare3.core.lineage
                 pFailureReason = "invalid_participants";
                 return null;
             }
+            Kingdom declaredDefender = pDefender;
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
             bool revalidateMutableEligibility =
                 DiplomaticWarDeclarationLedgerRules
@@ -347,12 +360,19 @@ namespace AncientWarfare3.core.lineage
             if (revalidateMutableEligibility && !pSystemWar &&
                 !CanPassVassalWarRules(pAttacker, pDefender, type,
                     out pFailureReason)) return null;
+            Kingdom mainDefender =
+                ResolveMilitaryGovernorateMainDefender(declaredDefender);
+            if (!IsCivilKingdom(mainDefender) || mainDefender == pAttacker)
+            {
+                pFailureReason = "invalid_main_defender";
+                return null;
+            }
             if (revalidateMutableEligibility &&
-                !CanPassAllianceWarRules(pAttacker, pDefender, type,
+                !CanPassAllianceWarRules(pAttacker, mainDefender, type,
                     pSystemWar, out pFailureReason)) return null;
             try
             {
-                if (World.world?.wars?.getWar(pAttacker, pDefender,
+                if (World.world?.wars?.getWar(pAttacker, mainDefender,
                         pOnlyMain: false) != null)
                 {
                     pFailureReason = "already_at_war";
@@ -380,17 +400,19 @@ namespace AncientWarfare3.core.lineage
                         ? ZhuluWarDeclarationScope.Open(pDefender)
                         : null;
                 War war = World.world.diplomacy.startWar(pAttacker,
-                    pDefender, asset);
+                    mainDefender, asset);
                 if (war?.data == null)
                 {
                     pFailureReason = "engine_rejected_start";
                     return null;
                 }
 
-                if (pNoCb) ApplyNoCbPenalty(pAttacker, pDefender);
-                else if (!pSystemWar) ConsumeClaim(pAttacker, pDefender, type);
+                if (pNoCb) ApplyNoCbPenalty(pAttacker, declaredDefender);
+                else if (!pSystemWar)
+                    ConsumeClaim(pAttacker, declaredDefender, type);
 
-                RecordWarDecision(pAttacker, pDefender, type, pReasonKey, pNoCb, pSystemWar);
+                RecordWarDecision(pAttacker, declaredDefender, type,
+                    pReasonKey, pNoCb, pSystemWar);
                 return war;
             }
             catch (Exception e)
@@ -403,6 +425,18 @@ namespace AncientWarfare3.core.lineage
             {
                 _allowWarStartDepth = Mathf.Max(0, _allowWarStartDepth - 1);
             }
+        }
+
+        private static Kingdom ResolveMilitaryGovernorateMainDefender(
+            Kingdom pDeclaredDefender)
+        {
+            if (VassalService.GetSubjectKind(pDeclaredDefender) !=
+                VassalSubjectKind.MilitaryGovernorate)
+                return pDeclaredDefender;
+            Kingdom root = VassalService.GetRootSuzerain(pDeclaredDefender);
+            return root?.data != null && !root.isRekt()
+                ? root
+                : pDeclaredDefender;
         }
 
         private static bool CanPassVassalWarRules(Kingdom pAttacker, Kingdom pDefender, string pWarType,
@@ -423,7 +457,8 @@ namespace AncientWarfare3.core.lineage
                                         .effects.BlocksInternalVassalWar;
             return VassalWarPermissionRules.CanDeclareWar(attackerIsVassal,
                 defenderIsSubject, defenderIsSuzerain, sameRootSuzerain,
-                blockInternalWar, pWarType, out pReason);
+                blockInternalWar, pWarType,
+                VassalService.GetSubjectKind(pDefender), out pReason);
         }
 
         private static bool CanPassAllianceWarRules(Kingdom pAttacker, Kingdom pDefender, string pWarType,
