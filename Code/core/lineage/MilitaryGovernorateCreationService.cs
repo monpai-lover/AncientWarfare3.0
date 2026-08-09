@@ -185,6 +185,8 @@ namespace AncientWarfare3.core.lineage
                 stage = MilitaryGovernorateCreationStage.StateCreated;
 
                 stage = MilitaryGovernorateCreationStage.Completed;
+                MilitaryGovernorateColorService.CopyFromSuzerain(subject,
+                    suzerain);
                 try
                 {
                     GeneralService.RetireForMilitaryGovernorate(pGeneral);

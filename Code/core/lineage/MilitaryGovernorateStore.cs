@@ -219,6 +219,101 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static bool TryEndWithRelation(long pStateId,
+            long pRelationId, string pReason, bool pAbsorbed,
+            out long pSuzerainId, out int pContractTier)
+        {
+            pSuzerainId = -1L;
+            pContractTier = VassalContractTierRules.Outer;
+            if (!Ready || pStateId < 0 || pRelationId < 0) return false;
+            SQLiteTransaction transaction = null;
+            try
+            {
+                transaction = DB.BeginTransaction(
+                    IsolationLevel.Serializable);
+                using (var read = new SQLiteCommand(DB)
+                       { Transaction = transaction })
+                {
+                    read.CommandText = "SELECT r.SUZERAIN_ID," +
+                        "r.CONTRACT_TIER FROM " +
+                        VassalRelationTableItem.GetTableName() + " r JOIN " +
+                        MilitaryGovernorateStateTableItem.GetTableName() +
+                        " s ON s.RELATION_ID=r.RELATION_ID WHERE " +
+                        "r.RELATION_ID=@relation AND r.ACTIVE=1 AND " +
+                        "r.END_TIME<0 AND s.STATE_ID=@state AND s.ACTIVE=1 " +
+                        "LIMIT 1";
+                    read.Parameters.AddWithValue("@relation", pRelationId);
+                    read.Parameters.AddWithValue("@state", pStateId);
+                    using SQLiteDataReader reader = read.ExecuteReader();
+                    if (!reader.Read())
+                    {
+                        transaction.Rollback();
+                        return false;
+                    }
+                    pSuzerainId = reader.GetInt64(0);
+                    pContractTier = reader.IsDBNull(1)
+                        ? VassalContractTierRules.Outer
+                        : VassalContractTierRules.NormalizeTier(
+                            (int)reader.GetInt64(1));
+                }
+
+                double now = LineageService.CurTime();
+                using (var relation = new SQLiteCommand(DB)
+                       { Transaction = transaction })
+                {
+                    relation.CommandText = "UPDATE " +
+                        VassalRelationTableItem.GetTableName() +
+                        " SET END_TIME=@time,ACTIVE=0,ABSORBED=@absorbed," +
+                        "END_REASON=@reason WHERE RELATION_ID=@relation " +
+                        "AND ACTIVE=1 AND END_TIME<0";
+                    relation.Parameters.AddWithValue("@time", now);
+                    relation.Parameters.AddWithValue("@absorbed",
+                        pAbsorbed ? 1 : 0);
+                    relation.Parameters.AddWithValue("@reason", pReason ?? "");
+                    relation.Parameters.AddWithValue("@relation", pRelationId);
+                    if (relation.ExecuteNonQuery() != 1)
+                    {
+                        transaction.Rollback();
+                        return false;
+                    }
+                }
+                using (var state = new SQLiteCommand(DB)
+                       { Transaction = transaction })
+                {
+                    state.CommandText = "UPDATE " +
+                        MilitaryGovernorateStateTableItem.GetTableName() +
+                        " SET ACTIVE=0,END_TIME=@time,END_REASON=@reason " +
+                        "WHERE STATE_ID=@state AND RELATION_ID=@relation " +
+                        "AND ACTIVE=1";
+                    state.Parameters.AddWithValue("@time", now);
+                    state.Parameters.AddWithValue("@reason", pReason ?? "");
+                    state.Parameters.AddWithValue("@state", pStateId);
+                    state.Parameters.AddWithValue("@relation", pRelationId);
+                    if (state.ExecuteNonQuery() != 1)
+                    {
+                        transaction.Rollback();
+                        return false;
+                    }
+                }
+                transaction.Commit();
+                return true;
+            }
+            catch (Exception error)
+            {
+                try { transaction?.Rollback(); }
+                catch { }
+                ModClass.LogWarning(
+                    "Military governorate relation end failed: " +
+                    error.Message);
+                pSuzerainId = -1L;
+                return false;
+            }
+            finally
+            {
+                transaction?.Dispose();
+            }
+        }
+
         public static bool RestoreProjection(Kingdom pSubject)
         {
             if (pSubject == null) return false;

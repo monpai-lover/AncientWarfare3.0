@@ -976,6 +976,9 @@ namespace AncientWarfare3.core.lineage
         public static bool EndVassal(Kingdom pVassal, string pReason = "ended")
         {
             if (pVassal?.data == null || !Ready) return false;
+            bool wasMilitaryGovernorate =
+                MilitaryGovernorateStore.TryGetActive(pVassal,
+                    out MilitaryGovernorateSnapshot governorate);
             long suzerainId = GetSuzerainId(pVassal);
             if (suzerainId < 0) suzerainId = GetTributarySuzerainId(pVassal);
             long relationId = GetRelationId(pVassal);
@@ -983,7 +986,22 @@ namespace AncientWarfare3.core.lineage
             if (relationId < 0) relationId = ReadActiveRelationId(pVassal.id);
             if (relationId < 0) return false;
 
-            if (!CloseRelation(relationId, pReason ?? "ended", absorbed: false)) return false;
+            if (wasMilitaryGovernorate)
+            {
+                if (!MilitaryGovernorateStore.TryEndWithRelation(
+                        governorate.StateId, relationId,
+                        pReason ?? "ended", pAbsorbed: false,
+                        out long closedSuzerainId,
+                        out int closedContractTier)) return false;
+                if (VassalContractTierRules.CountsAsVassal(
+                        closedContractTier))
+                    AdjustDirectVassalCount(FindKingdom(closedSuzerainId), -1);
+                else
+                    AdjustDirectTributaryCount(
+                        FindKingdom(closedSuzerainId), -1);
+            }
+            else if (!CloseRelation(relationId, pReason ?? "ended",
+                         absorbed: false)) return false;
             ClearRelationProjection(pVassal);
             RecordVassalEnd(pVassal, suzerain, pReason);
             DiplomacyConversationService.RecordVassalEnded(pVassal,
@@ -993,6 +1011,13 @@ namespace AncientWarfare3.core.lineage
                 suzerainId);
             HierarchicalVassalMapModeService.MarkHierarchyDirty(
                 pVassal, suzerain);
+            if (wasMilitaryGovernorate)
+            {
+                if (MilitaryGovernorateRules.
+                    ShouldRandomizeIndependentColor(pReason))
+                    KingdomVisualRandomizationService.RerollNewCivVisuals(
+                        pVassal);
+            }
             return true;
         }
 

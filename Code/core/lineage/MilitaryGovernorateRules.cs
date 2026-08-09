@@ -55,5 +55,18 @@ namespace AncientWarfare3.core.lineage
         {
             return pCurrentYear >= 0 && pLastEvaluationYear < pCurrentYear;
         }
+
+        public static bool ShouldSynchronizeColor(bool pDirect,
+            bool pActive, VassalSubjectKind pKind)
+        {
+            return pDirect && pActive &&
+                   pKind == VassalSubjectKind.MilitaryGovernorate;
+        }
+
+        public static bool ShouldRandomizeIndependentColor(
+            string pEndReason)
+        {
+            return pEndReason == "independence_war";
+        }
     }
 }

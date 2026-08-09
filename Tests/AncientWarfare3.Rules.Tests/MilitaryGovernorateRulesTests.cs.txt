@@ -120,6 +120,27 @@ internal static class MilitaryGovernorateRulesTests
             "AI evaluates a realm at most once in a year");
         Equal(true, MilitaryGovernorateRules.CanRunAnnualAi(11, 10),
             "AI may evaluate when the persisted year is older");
+        Equal(true, MilitaryGovernorateRules.ShouldSynchronizeColor(
+                true, true, VassalSubjectKind.MilitaryGovernorate),
+            "direct active military governorates synchronize colors");
+        Equal(false, MilitaryGovernorateRules.ShouldSynchronizeColor(
+                false, true, VassalSubjectKind.MilitaryGovernorate),
+            "indirect military governorates do not synchronize colors");
+        Equal(false, MilitaryGovernorateRules.ShouldSynchronizeColor(
+                true, false, VassalSubjectKind.MilitaryGovernorate),
+            "inactive military governorates do not synchronize colors");
+        Equal(false, MilitaryGovernorateRules.ShouldSynchronizeColor(
+                true, true, VassalSubjectKind.Ordinary),
+            "ordinary subjects retain their own colors");
+        Equal(true, MilitaryGovernorateRules.ShouldRandomizeIndependentColor(
+                "independence_war"),
+            "a successful independence war receives independent colors");
+        Equal(false, MilitaryGovernorateRules.ShouldRandomizeIndependentColor(
+                "independence_war_transfer"),
+            "transfer to an upper suzerain is not independence");
+        Equal(false, MilitaryGovernorateRules.ShouldRandomizeIndependentColor(
+                "manual"),
+            "administrative release does not impersonate a war victory");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

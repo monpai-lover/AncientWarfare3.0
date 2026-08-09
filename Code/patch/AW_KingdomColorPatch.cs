@@ -13,5 +13,16 @@ namespace AncientWarfare3.patch
         {
             KingdomVisualRandomizationService.RerollNewCivVisuals(__instance);
         }
+
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.updateColor))]
+        private static void UpdateColor_Postfix(Kingdom __instance,
+            bool __result)
+        {
+            if (__result)
+                MilitaryGovernorateColorService.OnSuzerainColorChanged(
+                    __instance);
+        }
     }
 }
