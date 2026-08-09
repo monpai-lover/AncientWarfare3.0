@@ -125,25 +125,28 @@ internal static class SyntheticLevyRulesTests
                 StringComparison.Ordinal),
             "formal-war replenishment materializes the city war reserve");
         Equal(true, source.Contains(
-                "CityReservePoolService.TryReserveWarManpower(",
+                "SyntheticMobilizationLedgerService.TryReserveReplacement(",
                 StringComparison.Ordinal),
-            "formal-war replenishment reserves abstract city manpower");
+            "formal-war replenishment reserves the unified numeric ledger");
         string reservePool = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "CityReservePoolService.cs"));
-        Equal(true, reservePool.Contains(
+        Equal(false, reservePool.Contains(
                 "if (phase != ArmyMobilizationPhase.Notice) return 0;",
                 StringComparison.Ordinal),
-            "preparation recruitment is explicitly limited to Notice");
-        Equal(true, reservePool.Contains(
-                "CityReservePoolRules.TryTakeNextActorId(pool.ActorIds,",
+            "notice preparation no longer converts real residents");
+        Equal(false, reservePool.Contains(
+                "TryTakeNextActorId(pool.ActorIds",
                 StringComparison.Ordinal),
-            "notice preparation consumes real indexed reserve actors");
+            "the old pool no longer extracts real residents");
         string levy = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "TemporaryLevyService.cs"));
         Equal(false, levy.Contains(
                 "bool mobilizationActive = ArmyMobilizationRules.CanConsume(",
                 StringComparison.Ordinal),
             "formal War cannot keep the real-actor preparation plan alive");
+        Equal(false, levy.Contains("SyntheticLevyService.Promote(",
+                StringComparison.Ordinal),
+            "generated wartime soldiers can never become permanent actors");
         int casualty = levy.IndexOf(
             "public static void OnMilitaryCasualty(Actor pActor)",
             StringComparison.Ordinal);

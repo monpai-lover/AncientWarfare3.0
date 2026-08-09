@@ -103,6 +103,12 @@ namespace AncientWarfare3.core.lineage
         private static readonly HashSet<string> PendingCityKeys =
             new HashSet<string>(StringComparer.Ordinal);
         private static readonly HashSet<long> EndedWars = new HashSet<long>();
+        private static readonly Dictionary<long, int> LiveSyntheticByCity =
+            new Dictionary<long, int>();
+        private static readonly Queue<string> RecordWork =
+            new Queue<string>();
+        private static readonly HashSet<string> QueuedRecordKeys =
+            new HashSet<string>(StringComparer.Ordinal);
 
         internal static void OnWarStarted(War pWar)
         {
@@ -139,37 +145,67 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
-            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
-                PendingCities.Count == 0) return;
-            PendingCity pending = PendingCities.Dequeue();
-            PendingCityKeys.Remove(Key(pending.WarId, pending.CityId));
-            if (EndedWars.Contains(pending.WarId) ||
-                Records.ContainsKey(Key(pending.WarId, pending.CityId)))
-                return;
+            if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
+            ProcessPendingCity();
+            ProcessRecordWork();
+        }
 
-            Kingdom kingdom = ResolveKingdom(pending.KingdomId);
-            City city = ResolveCity(pending.CityId);
-            if (!IsLivingKingdom(kingdom) || !IsControlledCity(city, kingdom))
-                return;
+        internal static int TryReserveReplacement(long pWarId,
+            long pCityId, int pRequested)
+        {
+            if (pRequested <= 0 || EndedWars.Contains(pWarId) ||
+                !Records.TryGetValue(Key(pWarId, pCityId),
+                    out SyntheticMobilizationRecord record) ||
+                record.Phase == SyntheticMobilizationPhase.Demobilizing ||
+                record.Phase == SyntheticMobilizationPhase.Complete)
+                return 0;
+            int reserved = Math.Min(pRequested,
+                Math.Max(0, record.ReplacementRemaining));
+            record.ReplacementRemaining -= reserved;
+            return reserved;
+        }
 
-            int knownSynthetic = 0;
-            int population = Math.Max(0, city.getPopulationPeople());
-            int percent = CourtConscriptionLawRules.ReservePercent(
-                CourtAuxiliaryLawService.GetConscriptionLaw(kingdom));
-            int quota = SyntheticMobilizationRules.Quota(population,
-                knownSynthetic, percent);
-            Records[Key(pending.WarId, pending.CityId)] =
-                new SyntheticMobilizationRecord
-                {
-                    WarId = pending.WarId,
-                    KingdomId = pending.KingdomId,
-                    CityId = pending.CityId,
-                    PopulationSnapshot = population,
-                    LawPercent = percent,
-                    Quota = quota,
-                    ReplacementRemaining = quota,
-                    Phase = SyntheticMobilizationPhase.Mobilizing
-                };
+        internal static void ConfirmReplacementCreated(long pWarId,
+            long pCityId, int pCreated)
+        {
+            if (pCreated <= 0 || !Records.TryGetValue(
+                    Key(pWarId, pCityId), out SyntheticMobilizationRecord record))
+                return;
+            record.ReplacementCreated = SaturatingAdd(
+                record.ReplacementCreated, pCreated);
+            record.LiveSynthetic = SaturatingAdd(record.LiveSynthetic,
+                pCreated);
+            AddCitySynthetic(pCityId, pCreated);
+        }
+
+        internal static void ReleaseUncreatedReplacement(long pWarId,
+            long pCityId, int pCount)
+        {
+            if (pCount <= 0 || !Records.TryGetValue(
+                    Key(pWarId, pCityId), out SyntheticMobilizationRecord record))
+                return;
+            record.ReplacementRemaining = Math.Min(record.Quota,
+                SaturatingAdd(record.ReplacementRemaining, pCount));
+        }
+
+        internal static int AvailableReplacement(long pWarId, long pCityId)
+        {
+            return Records.TryGetValue(Key(pWarId, pCityId),
+                       out SyntheticMobilizationRecord record) &&
+                   record.Phase != SyntheticMobilizationPhase.Demobilizing &&
+                   record.Phase != SyntheticMobilizationPhase.Complete
+                ? Math.Max(0, record.ReplacementRemaining)
+                : 0;
+        }
+
+        internal static void OnSyntheticRemoved(long pWarId, long pCityId,
+            int pCount)
+        {
+            if (pCount <= 0 || !Records.TryGetValue(
+                    Key(pWarId, pCityId), out SyntheticMobilizationRecord record))
+                return;
+            record.LiveSynthetic = Math.Max(0, record.LiveSynthetic - pCount);
+            AddCitySynthetic(pCityId, -pCount);
         }
 
         internal static bool TryWriteSnapshot(string pDirectory,
@@ -246,6 +282,152 @@ namespace AncientWarfare3.core.lineage
             PendingCities.Clear();
             PendingCityKeys.Clear();
             EndedWars.Clear();
+            LiveSyntheticByCity.Clear();
+            RecordWork.Clear();
+            QueuedRecordKeys.Clear();
+        }
+
+        private static void ProcessPendingCity()
+        {
+            if (PendingCities.Count == 0) return;
+            PendingCity pending = PendingCities.Dequeue();
+            string key = Key(pending.WarId, pending.CityId);
+            PendingCityKeys.Remove(key);
+            if (EndedWars.Contains(pending.WarId) ||
+                Records.ContainsKey(key)) return;
+
+            Kingdom kingdom = ResolveKingdom(pending.KingdomId);
+            City city = ResolveCity(pending.CityId);
+            if (!IsLivingKingdom(kingdom) || !IsControlledCity(city, kingdom))
+                return;
+
+            int knownSynthetic = KnownSyntheticForCity(pending.CityId);
+            int population = Math.Max(0, city.getPopulationPeople());
+            int percent = CourtConscriptionLawRules.ReservePercent(
+                CourtAuxiliaryLawService.GetConscriptionLaw(kingdom));
+            int quota = SyntheticMobilizationRules.Quota(population,
+                knownSynthetic, percent);
+            Records[key] = new SyntheticMobilizationRecord
+            {
+                WarId = pending.WarId,
+                KingdomId = pending.KingdomId,
+                CityId = pending.CityId,
+                PopulationSnapshot = population,
+                LawPercent = percent,
+                Quota = quota,
+                ReplacementRemaining = quota,
+                Phase = quota > 0
+                    ? SyntheticMobilizationPhase.Mobilizing
+                    : SyntheticMobilizationPhase.Active
+            };
+            if (quota > 0) EnqueueRecord(key);
+        }
+
+        private static void ProcessRecordWork()
+        {
+            if (RecordWork.Count == 0) return;
+            string key = RecordWork.Dequeue();
+            QueuedRecordKeys.Remove(key);
+            if (!Records.TryGetValue(key,
+                    out SyntheticMobilizationRecord record) ||
+                record.Phase != SyntheticMobilizationPhase.Mobilizing ||
+                EndedWars.Contains(record.WarId)) return;
+            Kingdom kingdom = ResolveKingdom(record.KingdomId);
+            City city = ResolveCity(record.CityId);
+            if (!IsLivingKingdom(kingdom) || !IsControlledCity(city, kingdom))
+            {
+                record.Phase = SyntheticMobilizationPhase.Demobilizing;
+                record.ReplacementRemaining = 0;
+                return;
+            }
+
+            Army army = ResolveOrBindArmy(record, kingdom, city);
+            if (army?.data == null)
+            {
+                EnqueueRecord(key);
+                return;
+            }
+            int pending = Math.Max(0, record.Quota - record.InitialCreated);
+            int requested = SyntheticMobilizationRules.Batch(pending,
+                SyntheticMobilizationRules.SpawnBatchLimit);
+            int created = SyntheticLevyService.CreateBatch(city, kingdom,
+                army, requested, record.WarId);
+            record.InitialCreated = Math.Min(record.Quota,
+                SaturatingAdd(record.InitialCreated, created));
+            record.LiveSynthetic = SaturatingAdd(record.LiveSynthetic,
+                created);
+            AddCitySynthetic(record.CityId, created);
+            if (created > 0)
+                KingdomWarDirectorService.QueueArmyChanged(kingdom);
+            if (record.InitialCreated >= record.Quota)
+                record.Phase = SyntheticMobilizationPhase.Active;
+            else
+                EnqueueRecord(key);
+        }
+
+        private static Army ResolveOrBindArmy(
+            SyntheticMobilizationRecord pRecord, Kingdom pKingdom,
+            City pCity)
+        {
+            Army army = ResolveArmy(pRecord.ArmyId);
+            if (IsLiveOrdinaryArmy(army, pKingdom)) return army;
+            pRecord.ArmyId = -1L;
+            if (ArmyFieldIndexService.TryGetCityArmy(pCity, out army) &&
+                IsLiveOrdinaryArmy(army, pKingdom))
+            {
+                pRecord.ArmyId = army.id;
+                return army;
+            }
+
+            List<GeneralReadModelEntry> generals = GeneralService.
+                GetActiveGeneralsForReadModel(pKingdom,
+                    pAllowUnitFallback: false, pLimit: 8);
+            for (int i = 0; i < generals.Count; i++)
+            {
+                Actor general = generals[i]?.Actor;
+                if (!IsEligibleGeneral(general, pKingdom)) continue;
+                if (IsLiveOrdinaryArmy(general.army, pKingdom) &&
+                    AWArmyService.GetAnchorCityId(general.army) == pCity.id)
+                {
+                    pRecord.ArmyId = general.army.id;
+                    return general.army;
+                }
+                try { army = World.world?.armies?.newArmy(general, pCity); }
+                catch { army = null; }
+                if (!IsLiveOrdinaryArmy(army, pKingdom)) continue;
+                ArmyStrategicIndexService.OnArmyRegistered(army);
+                AWArmyService.EnsureOrdinaryNativeName(army, pKingdom, pCity);
+                pRecord.ArmyId = army.id;
+                return army;
+            }
+            return null;
+        }
+
+        private static void EnqueueRecord(string pKey)
+        {
+            if (string.IsNullOrEmpty(pKey) || !QueuedRecordKeys.Add(pKey))
+                return;
+            RecordWork.Enqueue(pKey);
+        }
+
+        private static int KnownSyntheticForCity(long pCityId)
+        {
+            return LiveSyntheticByCity.TryGetValue(pCityId, out int total)
+                ? Math.Max(0, total)
+                : 0;
+        }
+
+        private static void AddCitySynthetic(long pCityId, int pDelta)
+        {
+            if (pCityId < 0L || pDelta == 0) return;
+            int current = KnownSyntheticForCity(pCityId);
+            int next = pDelta > 0
+                ? SaturatingAdd(current, pDelta)
+                : (int)Math.Max(0L, (long)current + pDelta);
+            if (next > 0)
+                LiveSyntheticByCity[pCityId] = next;
+            else
+                LiveSyntheticByCity.Remove(pCityId);
         }
 
         private static void EnqueueKingdom(War pWar, Kingdom pKingdom)
@@ -329,8 +511,12 @@ namespace AncientWarfare3.core.lineage
             record.LiveSynthetic = Clamp(pPersisted.live_synthetic,
                 maximumLive);
             Records[Key(record.WarId, record.CityId)] = record;
+            AddCitySynthetic(record.CityId, record.LiveSynthetic);
             if (record.Phase == SyntheticMobilizationPhase.Demobilizing)
                 EndedWars.Add(record.WarId);
+            if (record.Phase == SyntheticMobilizationPhase.Mobilizing ||
+                record.Phase == SyntheticMobilizationPhase.Demobilizing)
+                EnqueueRecord(Key(record.WarId, record.CityId));
         }
 
         private static bool TryImportLegacySnapshot(string pPath,
@@ -371,6 +557,9 @@ namespace AncientWarfare3.core.lineage
                             Phase = SyntheticMobilizationPhase.Active
                         };
                         Records[Key(record.WarId, record.CityId)] = record;
+                        AddCitySynthetic(record.CityId,
+                            record.LiveSynthetic);
+                        EnqueueRecord(Key(record.WarId, record.CityId));
                     }
                 }
                 return Records.Count > 0;
@@ -403,6 +592,59 @@ namespace AncientWarfare3.core.lineage
         {
             try { return World.world?.cities?.get(pCityId); }
             catch { return null; }
+        }
+
+        private static Army ResolveArmy(long pArmyId)
+        {
+            if (pArmyId < 0L) return null;
+            try { return World.world?.armies?.get(pArmyId); }
+            catch { return null; }
+        }
+
+        private static bool IsLiveOrdinaryArmy(Army pArmy,
+            Kingdom pKingdom)
+        {
+            try
+            {
+                Actor captain = pArmy?.getCaptain();
+                return pArmy?.data != null && pArmy.isAlive() &&
+                       !AWArmyService.IsSpecialArmy(pArmy) &&
+                       ArmyNativeNameService.IsOrdinaryArmy(pArmy) &&
+                       AWArmyService.GetIntendedKingdom(pArmy) == pKingdom &&
+                       IsEligibleCaptain(captain, pKingdom);
+            }
+            catch { return false; }
+        }
+
+        private static bool IsEligibleCaptain(Actor pActor,
+            Kingdom pKingdom)
+        {
+            try
+            {
+                return pActor?.data != null && pActor.isAlive() &&
+                       !pActor.isRekt() && pActor.kingdom == pKingdom &&
+                       !SyntheticLevyService.IsSynthetic(pActor);
+            }
+            catch { return false; }
+        }
+
+        private static bool IsEligibleGeneral(Actor pActor,
+            Kingdom pKingdom)
+        {
+            try
+            {
+                return pActor?.data != null && pActor.isAlive() &&
+                       !pActor.isRekt() && pActor.kingdom == pKingdom &&
+                       GeneralService.IsGeneral(pActor) &&
+                       IsEligibleCaptain(pActor, pKingdom);
+            }
+            catch { return false; }
+        }
+
+        private static int SaturatingAdd(int pCurrent, int pDelta)
+        {
+            return (int)Math.Min(int.MaxValue,
+                (long)Math.Max(0, pCurrent) + Math.Max(0, pDelta));
         }
 
         private static bool IsLivingKingdom(Kingdom pKingdom)

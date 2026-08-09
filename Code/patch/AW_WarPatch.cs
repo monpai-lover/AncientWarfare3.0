@@ -108,7 +108,6 @@ namespace AncientWarfare3.patch
             WarRecordWriter.OnWarStart(__result);
             RecordMainBelligerents(__result);
             WarScoreService.StartWar(__result);
-            CityReservePoolService.OnWarStarted(__result);
             SyntheticMobilizationLedgerService.OnWarStarted(__result);
             ArmyRtsWarLifecycleService.OnWarStarted(__result);
             KingdomWarDirectorService.OnWarStarted(__result);
@@ -288,7 +287,6 @@ namespace AncientWarfare3.patch
             WarScoreService.EndWar(pWar, pWinner);
             RoyalAsylumService.OnWarEnded(pWar);
             MilitaryEmergencyService.OnWarEnded(pWar);
-            CityReservePoolService.OnWarEnded(pWar);
             SyntheticMobilizationLedgerService.OnWarEnded(pWar);
             TemporaryLevyService.OnReplenishmentWarEnded(pWar);
             WartimeGarrisonService.OnWarEnded(pWar);
@@ -333,7 +331,6 @@ namespace AncientWarfare3.patch
             ArmyLogisticsService.OnWarParticipantJoined(pWar, pKingdom,
                 pDefender ? false : true);
             WarParticipantCityBaselineService.RegisterParticipant(pWar, pKingdom);
-            CityReservePoolService.OnKingdomJoinedWar(pWar, pKingdom);
             SyntheticMobilizationLedgerService.OnKingdomJoinedWar(pWar,
                 pKingdom);
             MilitaryEmergencyService.OnKingdomJoinedWar(pWar, pKingdom, pDefender);
@@ -421,7 +418,6 @@ namespace AncientWarfare3.patch
             ArmyLogisticsService.OnWarParticipantLeft(pWar, pKingdom);
             WarScoreService.ClearDepartedParticipantControls(pWar, pKingdom);
             MilitaryEmergencyService.OnKingdomLeftWar(pWar, pKingdom);
-            CityReservePoolService.OnKingdomLeftWar(pWar, pKingdom);
             SyntheticMobilizationLedgerService.OnKingdomLeftWar(pWar,
                 pKingdom);
             WartimeGarrisonService.OnKingdomWarStateChanged(pKingdom);

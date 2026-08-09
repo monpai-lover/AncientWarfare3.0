@@ -228,21 +228,7 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("military_emergency",
                     MilitaryEmergencyService.RebuildRuntime),
                 new AW3RestoreStage("city_reserve_pools",
-                    CityReservePoolService.RebuildRuntime),
-                new AW3RestoreStage("city_reserve_pool_snapshot", () =>
-                {
-                    bool snapshotRestored = false;
-                    string snapshotError = string.Empty;
-                    if (!string.IsNullOrWhiteSpace(directory))
-                        snapshotRestored = CityReservePoolService.
-                            TryRestoreSnapshot(directory,
-                                out snapshotError);
-                    if (!snapshotRestored &&
-                        !string.IsNullOrEmpty(snapshotError))
-                        throw new InvalidOperationException(snapshotError);
-                    CityReservePoolService.FinalizeRuntimeRestore(
-                        snapshotRestored);
-                }),
+                    CityReservePoolService.ClearRuntime),
                 new AW3RestoreStage("synthetic_mobilization_ledger", () =>
                 {
                     bool restored = false;

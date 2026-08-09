@@ -58,7 +58,6 @@ namespace AncientWarfare3.core.lineage
                         throw new InvalidOperationException(
                             "synthetic levy army assignment failed");
                 }
-                CityReservePoolService.OnSyntheticMobilized(city, 1);
                 return actor;
             }
             catch
@@ -182,8 +181,11 @@ namespace AncientWarfare3.core.lineage
             actor.data.set(LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED,
                 true);
             sourceCity ??= FindSourceCity(actor);
-            if (sourceCity?.data != null)
-                CityReservePoolService.OnSyntheticRemoved(sourceCity, 1);
+            actor.data.get(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID,
+                out long warId, -1L);
+            if (sourceCity?.data != null && warId >= 0L)
+                SyntheticMobilizationLedgerService.OnSyntheticRemoved(
+                    warId, sourceCity.id, 1);
         }
 
         private static Actor ResolveTemplate(City city, Army army)

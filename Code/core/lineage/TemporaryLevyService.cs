@@ -1729,23 +1729,26 @@ namespace AncientWarfare3.core.lineage
                     confirmedExhausted = true;
                     emergencyId = -1L;
                 }
-                int available = CityReservePoolService.OpenOrReadWarReserve(
-                    city, emergencyId);
+                int available = SyntheticMobilizationLedgerService.
+                    AvailableReplacement(emergencyId, city.id);
                 int requestedSynthetic = TemporaryLevyRules.
                     SyntheticFallbackRequest(
                         ArmyMobilizationPhase.War, demand, available);
-                reserved = CityReservePoolService.TryReserveWarManpower(
-                    city, emergencyId,
-                    requestedSynthetic);
+                reserved = SyntheticMobilizationLedgerService.
+                    TryReserveReplacement(emergencyId, city.id,
+                        requestedSynthetic);
                 recruited = SyntheticLevyService.CreateBatch(
                     city, kingdom, targetArmy, reserved,
                     emergencyId, candidates);
-                CityReservePoolService.ReleaseUnmaterializedWarReservation(
-                    city, emergencyId,
-                    reserved - recruited);
+                SyntheticMobilizationLedgerService.
+                    ConfirmReplacementCreated(emergencyId, city.id,
+                        recruited);
+                SyntheticMobilizationLedgerService.
+                    ReleaseUncreatedReplacement(emergencyId, city.id,
+                        reserved - recruited);
                 confirmedExhausted = recruited <= 0 &&
-                    CityReservePoolService.OpenOrReadWarReserve(
-                        city, emergencyId) <= 0;
+                    SyntheticMobilizationLedgerService.
+                        AvailableReplacement(emergencyId, city.id) <= 0;
             }
             else if (formalWar)
             {
@@ -2690,12 +2693,6 @@ namespace AncientWarfare3.core.lineage
             {
                 ClearFields(pActor);
                 SyntheticLevyService.RemoveWithoutPersonalHistory(pActor);
-                return;
-            }
-            if (disposition == SyntheticLevyDisposition.PromotePermanent)
-            {
-                ClearFields(pActor);
-                SyntheticLevyService.Promote(pActor);
                 return;
             }
             ClearFields(pActor);

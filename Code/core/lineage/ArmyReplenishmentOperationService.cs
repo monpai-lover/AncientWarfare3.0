@@ -165,8 +165,8 @@ namespace AncientWarfare3.core.lineage
             int available;
             if (phase == ArmyMobilizationPhase.War &&
                 TryGetActiveMissionWar(pArmy, kingdom, out War war))
-                available = CityReservePoolService.OpenOrReadWarReserve(
-                    sourceCity, war.data.id);
+                available = SyntheticMobilizationLedgerService.
+                    AvailableReplacement(war.data.id, sourceCity.id);
             else
                 available = CityReservePoolService.CountAvailable(sourceCity);
             if (available > 0)
@@ -328,9 +328,10 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             bool reservesConfirmedExhausted = confirmedExhausted ||
-                deadlineReached && CityReservePoolService.
-                    OpenOrReadWarReserve(preferredCity,
-                        ResolveMissionWarId(army, kingdom)) <= 0;
+                deadlineReached && SyntheticMobilizationLedgerService.
+                    AvailableReplacement(
+                        ResolveMissionWarId(army, kingdom),
+                        preferredCity?.id ?? -1L) <= 0;
             if (ArmyReplenishmentOperationRules.ShouldFinish(
                     liveShortage <= 0, reservesConfirmedExhausted,
                     deadlineReached))
@@ -357,24 +358,21 @@ namespace AncientWarfare3.core.lineage
                 return 0;
 
             long emergencyId = war.data.id;
-            if (ArmyRtsControllerService.TryGetWartimeRecovery(army,
-                    out _, out long recoveryWarId) &&
-                recoveryWarId == emergencyId)
-                return SyntheticLevyService.CreateBatch(sourceCity,
-                    kingdom, army, requested, emergencyId, recruits);
-            int available = CityReservePoolService.OpenOrReadWarReserve(
-                sourceCity, emergencyId);
+            int available = SyntheticMobilizationLedgerService.
+                AvailableReplacement(emergencyId, sourceCity.id);
             int syntheticRequest = TemporaryLevyRules.SyntheticFallbackRequest(
                 ArmyMobilizationPhase.War, requested, available);
-            int reserved = CityReservePoolService.TryReserveWarManpower(
-                sourceCity, emergencyId, syntheticRequest);
+            int reserved = SyntheticMobilizationLedgerService.TryReserveReplacement(
+                emergencyId, sourceCity.id, syntheticRequest);
             int synthetic = SyntheticLevyService.CreateBatch(
                 sourceCity, kingdom, army, reserved, emergencyId, recruits);
-            CityReservePoolService.ReleaseUnmaterializedWarReservation(
-                sourceCity, emergencyId, reserved - synthetic);
+            SyntheticMobilizationLedgerService.ConfirmReplacementCreated(
+                emergencyId, sourceCity.id, synthetic);
+            SyntheticMobilizationLedgerService.ReleaseUncreatedReplacement(
+                emergencyId, sourceCity.id, reserved - synthetic);
             confirmedExhausted = synthetic <= 0 &&
-                                 CityReservePoolService.OpenOrReadWarReserve(
-                                     sourceCity, emergencyId) <= 0;
+                SyntheticMobilizationLedgerService.AvailableReplacement(
+                    emergencyId, sourceCity.id) <= 0;
             return synthetic;
         }
 
