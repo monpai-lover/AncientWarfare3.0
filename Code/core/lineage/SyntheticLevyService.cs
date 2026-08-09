@@ -58,6 +58,8 @@ namespace AncientWarfare3.core.lineage
                         throw new InvalidOperationException(
                             "synthetic levy army assignment failed");
                 }
+                SyntheticMobilizationLedgerService.
+                    OnSyntheticMaterialized(actor);
                 return actor;
             }
             catch
@@ -123,6 +125,26 @@ namespace AncientWarfare3.core.lineage
             if (dead) ReleaseLiveLedgerOnce(actor);
         }
 
+        internal static void ReconcileLoadedActor(Actor actor)
+        {
+            if (!IsSynthetic(actor)) return;
+            try
+            {
+                Actor lover = actor.lover;
+                if (lover?.lover == actor) lover.lover = null;
+                actor.lover = null;
+            }
+            catch { }
+            try
+            {
+                if (actor.hasStatus("pregnant"))
+                    actor.finishStatusEffect("pregnant");
+            }
+            catch { }
+            SyntheticMobilizationLedgerService.OnSyntheticMaterialized(
+                actor);
+        }
+
         internal static void RemoveWithoutPersonalHistory(Actor actor)
         {
             RemoveWithoutPersonalHistory(actor,
@@ -185,7 +207,7 @@ namespace AncientWarfare3.core.lineage
                 out long warId, -1L);
             if (sourceCity?.data != null && warId >= 0L)
                 SyntheticMobilizationLedgerService.OnSyntheticRemoved(
-                    warId, sourceCity.id, 1);
+                    warId, sourceCity.id, actor.data.id, 1);
         }
 
         private static Actor ResolveTemplate(City city, Army army)

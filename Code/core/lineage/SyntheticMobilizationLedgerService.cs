@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.lineage
 
     internal sealed class SyntheticMobilizationRecord
     {
+        internal readonly SortedSet<long> ActorIds = new SortedSet<long>();
         internal long WarId;
         internal long KingdomId;
         internal long CityId;
@@ -57,6 +58,7 @@ namespace AncientWarfare3.core.lineage
         {
             public int version = SnapshotVersion;
             public List<PersistedRecord> records = new List<PersistedRecord>();
+            public List<long> ended_wars = new List<long>();
         }
 
         private sealed class PersistedRecord
@@ -73,6 +75,7 @@ namespace AncientWarfare3.core.lineage
             public int replacement_created;
             public int live_synthetic;
             public int phase;
+            public List<long> actor_ids = new List<long>();
         }
 
         private sealed class LegacySnapshot
@@ -109,6 +112,8 @@ namespace AncientWarfare3.core.lineage
             new Queue<string>();
         private static readonly HashSet<string> QueuedRecordKeys =
             new HashSet<string>(StringComparer.Ordinal);
+        private static readonly List<long> ActorBatch = new List<long>(
+            SyntheticMobilizationRules.DemobilizationBatchLimit);
 
         internal static void OnWarStarted(War pWar)
         {
@@ -173,9 +178,6 @@ namespace AncientWarfare3.core.lineage
                 return;
             record.ReplacementCreated = SaturatingAdd(
                 record.ReplacementCreated, pCreated);
-            record.LiveSynthetic = SaturatingAdd(record.LiveSynthetic,
-                pCreated);
-            AddCitySynthetic(pCityId, pCreated);
         }
 
         internal static void ReleaseUncreatedReplacement(long pWarId,
@@ -198,12 +200,28 @@ namespace AncientWarfare3.core.lineage
                 : 0;
         }
 
+        internal static void OnSyntheticMaterialized(Actor pActor)
+        {
+            if (pActor?.data == null ||
+                !SyntheticLevyService.IsSynthetic(pActor)) return;
+            pActor.data.get(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID,
+                out long warId, -1L);
+            pActor.data.get(LineageKeys.SYNTHETIC_LEVY_SOURCE_CITY_ID,
+                out long cityId, -1L);
+            if (!Records.TryGetValue(Key(warId, cityId),
+                    out SyntheticMobilizationRecord record) ||
+                !record.ActorIds.Add(pActor.data.id)) return;
+            record.LiveSynthetic = SaturatingAdd(record.LiveSynthetic, 1);
+            AddCitySynthetic(cityId, 1);
+        }
+
         internal static void OnSyntheticRemoved(long pWarId, long pCityId,
-            int pCount)
+            long pActorId, int pCount)
         {
             if (pCount <= 0 || !Records.TryGetValue(
                     Key(pWarId, pCityId), out SyntheticMobilizationRecord record))
                 return;
+            if (pActorId >= 0L && !record.ActorIds.Remove(pActorId)) return;
             record.LiveSynthetic = Math.Max(0, record.LiveSynthetic - pCount);
             AddCitySynthetic(pCityId, -pCount);
         }
@@ -220,6 +238,8 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 var snapshot = new PersistedSnapshot();
+                snapshot.ended_wars.AddRange(EndedWars);
+                snapshot.ended_wars.Sort();
                 foreach (SyntheticMobilizationRecord record in Records.Values)
                     snapshot.records.Add(ToPersisted(record));
                 snapshot.records.Sort((first, second) =>
@@ -264,6 +284,10 @@ namespace AncientWarfare3.core.lineage
                     PersistedSnapshot>(File.ReadAllText(path));
                 if (snapshot?.records == null ||
                     snapshot.version != SnapshotVersion) return false;
+                if (snapshot.ended_wars != null)
+                    for (int i = 0; i < snapshot.ended_wars.Count; i++)
+                        if (snapshot.ended_wars[i] >= 0L)
+                            EndedWars.Add(snapshot.ended_wars[i]);
                 for (int i = 0; i < snapshot.records.Count; i++)
                     Restore(snapshot.records[i]);
                 return true;
@@ -285,6 +309,7 @@ namespace AncientWarfare3.core.lineage
             LiveSyntheticByCity.Clear();
             RecordWork.Clear();
             QueuedRecordKeys.Clear();
+            ActorBatch.Clear();
         }
 
         private static void ProcessPendingCity()
@@ -330,7 +355,13 @@ namespace AncientWarfare3.core.lineage
             QueuedRecordKeys.Remove(key);
             if (!Records.TryGetValue(key,
                     out SyntheticMobilizationRecord record) ||
-                record.Phase != SyntheticMobilizationPhase.Mobilizing ||
+                record.Phase == SyntheticMobilizationPhase.Complete) return;
+            if (record.Phase == SyntheticMobilizationPhase.Demobilizing)
+            {
+                ProcessDemobilization(record, key);
+                return;
+            }
+            if (record.Phase != SyntheticMobilizationPhase.Mobilizing ||
                 EndedWars.Contains(record.WarId)) return;
             Kingdom kingdom = ResolveKingdom(record.KingdomId);
             City city = ResolveCity(record.CityId);
@@ -354,15 +385,49 @@ namespace AncientWarfare3.core.lineage
                 army, requested, record.WarId);
             record.InitialCreated = Math.Min(record.Quota,
                 SaturatingAdd(record.InitialCreated, created));
-            record.LiveSynthetic = SaturatingAdd(record.LiveSynthetic,
-                created);
-            AddCitySynthetic(record.CityId, created);
             if (created > 0)
                 KingdomWarDirectorService.QueueArmyChanged(kingdom);
             if (record.InitialCreated >= record.Quota)
                 record.Phase = SyntheticMobilizationPhase.Active;
             else
                 EnqueueRecord(key);
+        }
+
+        private static void ProcessDemobilization(
+            SyntheticMobilizationRecord pRecord, string pKey)
+        {
+            ActorBatch.Clear();
+            int limit = SyntheticMobilizationRules.DemobilizationBatch(
+                pRecord.ActorIds.Count);
+            foreach (long actorId in pRecord.ActorIds)
+            {
+                ActorBatch.Add(actorId);
+                if (ActorBatch.Count >= limit) break;
+            }
+            for (int i = 0; i < ActorBatch.Count; i++)
+            {
+                long actorId = ActorBatch[i];
+                Actor actor = ResolveActor(actorId);
+                if (!MatchesRecord(actor, pRecord))
+                {
+                    if (pRecord.ActorIds.Remove(actorId))
+                    {
+                        pRecord.LiveSynthetic = Math.Max(0,
+                            pRecord.LiveSynthetic - 1);
+                        AddCitySynthetic(pRecord.CityId, -1);
+                    }
+                    continue;
+                }
+                SyntheticLevyService.RemoveWithoutPersonalHistory(actor);
+            }
+            if (pRecord.ActorIds.Count > 0)
+            {
+                EnqueueRecord(pKey);
+                return;
+            }
+            AddCitySynthetic(pRecord.CityId, -pRecord.LiveSynthetic);
+            pRecord.LiveSynthetic = 0;
+            pRecord.Phase = SyntheticMobilizationPhase.Complete;
         }
 
         private static Army ResolveOrBindArmy(
@@ -456,7 +521,10 @@ namespace AncientWarfare3.core.lineage
                     record.KingdomId != pKingdomId.Value) continue;
                 record.ReplacementRemaining = 0;
                 if (record.Phase != SyntheticMobilizationPhase.Complete)
+                {
                     record.Phase = SyntheticMobilizationPhase.Demobilizing;
+                    EnqueueRecord(Key(record.WarId, record.CityId));
+                }
             }
         }
 
@@ -476,7 +544,8 @@ namespace AncientWarfare3.core.lineage
                 replacement_remaining = pRecord.ReplacementRemaining,
                 replacement_created = pRecord.ReplacementCreated,
                 live_synthetic = pRecord.LiveSynthetic,
-                phase = (int)pRecord.Phase
+                phase = (int)pRecord.Phase,
+                actor_ids = new List<long>(pRecord.ActorIds)
             };
         }
 
@@ -510,10 +579,14 @@ namespace AncientWarfare3.core.lineage
                 (long)record.InitialCreated + record.ReplacementCreated);
             record.LiveSynthetic = Clamp(pPersisted.live_synthetic,
                 maximumLive);
+            if (pPersisted.actor_ids != null)
+                for (int i = 0; i < pPersisted.actor_ids.Count; i++)
+                    if (pPersisted.actor_ids[i] >= 0L)
+                        record.ActorIds.Add(pPersisted.actor_ids[i]);
+            record.LiveSynthetic = Math.Min(record.LiveSynthetic,
+                record.ActorIds.Count);
             Records[Key(record.WarId, record.CityId)] = record;
             AddCitySynthetic(record.CityId, record.LiveSynthetic);
-            if (record.Phase == SyntheticMobilizationPhase.Demobilizing)
-                EndedWars.Add(record.WarId);
             if (record.Phase == SyntheticMobilizationPhase.Mobilizing ||
                 record.Phase == SyntheticMobilizationPhase.Demobilizing)
                 EnqueueRecord(Key(record.WarId, record.CityId));
@@ -592,6 +665,24 @@ namespace AncientWarfare3.core.lineage
         {
             try { return World.world?.cities?.get(pCityId); }
             catch { return null; }
+        }
+
+        private static Actor ResolveActor(long pActorId)
+        {
+            try { return World.world?.units?.get(pActorId); }
+            catch { return null; }
+        }
+
+        private static bool MatchesRecord(Actor pActor,
+            SyntheticMobilizationRecord pRecord)
+        {
+            if (pActor?.data == null || pRecord == null ||
+                !SyntheticLevyService.IsSynthetic(pActor)) return false;
+            pActor.data.get(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID,
+                out long warId, -1L);
+            pActor.data.get(LineageKeys.SYNTHETIC_LEVY_SOURCE_CITY_ID,
+                out long cityId, -1L);
+            return warId == pRecord.WarId && cityId == pRecord.CityId;
         }
 
         private static Army ResolveArmy(long pArmyId)

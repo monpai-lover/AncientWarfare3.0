@@ -795,6 +795,7 @@ namespace AncientWarfare3.core.lineage
                 foreach (Actor actor in World.world.units)
                 {
                     if (!HasPersistedFlag(actor)) continue;
+                    SyntheticLevyService.ReconcileLoadedActor(actor);
                     actor.data.get(LineageKeys.TEMPORARY_LEVY_KINGDOM_ID, out long kingdomId, -1L);
                     if (kingdomId < 0)
                     {

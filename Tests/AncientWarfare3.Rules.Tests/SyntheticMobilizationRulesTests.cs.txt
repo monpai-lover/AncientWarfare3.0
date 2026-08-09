@@ -31,6 +31,18 @@ internal static class SyntheticMobilizationRulesTests
             "demobilization removes at most sixteen actors per work item");
         Equal(9, SyntheticMobilizationRules.DemobilizationBatch(9),
             "the final demobilization batch removes the remainder");
+        int remaining = 41;
+        int[] expectedBatches = { 16, 16, 9 };
+        for (int i = 0; i < expectedBatches.Length; i++)
+        {
+            int batch = SyntheticMobilizationRules.DemobilizationBatch(
+                remaining);
+            Equal(expectedBatches[i], batch,
+                "demobilization sequence batch " + i);
+            remaining -= batch;
+        }
+        Equal(0, remaining,
+            "bounded demobilization eventually drains every actor");
 
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
@@ -48,6 +60,16 @@ internal static class SyntheticMobilizationRulesTests
             "quota snapshots use the native aggregate population API");
         DoesNotContain(source, "city.units[",
             "quota snapshots must not enumerate resident actors");
+        Contains(source, "SortedSet<long> ActorIds",
+            "each city-war record owns stable synthetic actor ids");
+        Contains(source,
+            "SyntheticMobilizationRules.DemobilizationBatch(",
+            "post-war removal is bounded");
+        Contains(source,
+            "SyntheticLevyService.RemoveWithoutPersonalHistory(",
+            "demobilization destroys generated actors without biographies");
+        Contains(source, "OnSyntheticMaterialized(Actor pActor)",
+            "materialization registers actor identity atomically");
     }
 
     private static void Equal<T>(T expected, T actual, string message)
