@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SQLite;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.presentation;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -173,6 +174,26 @@ namespace AncientWarfare3.core.lineage
                 pSnapshot = null;
                 return false;
             }
+        }
+
+        public static bool TryGetRuntimeProjection(Kingdom pSubject,
+            out long pStateId, out long pSuccessorActorId)
+        {
+            pStateId = -1L;
+            pSuccessorActorId = -1L;
+            if (pSubject?.data == null || pSubject.isRekt()) return false;
+            pSubject.data.get(
+                LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
+                out int subjectKind, (int)VassalSubjectKind.Ordinary);
+            pSubject.data.get(LineageKeys.MILITARY_GOVERNORATE_STATE_ID,
+                out pStateId, -1L);
+            if (subjectKind != (int)VassalSubjectKind.MilitaryGovernorate ||
+                pStateId < 0)
+                return false;
+            pSubject.data.get(
+                LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID,
+                out pSuccessorActorId, -1L);
+            return true;
         }
 
         public static List<MilitaryGovernorateSnapshot> GetDirectActive(
@@ -722,6 +743,8 @@ namespace AncientWarfare3.core.lineage
                 if (!SetGovernor(pSnapshot.StateId, governor.getID()))
                     throw new InvalidOperationException(
                         "Military governorate ruler repair failed.");
+                MilitaryGovernorateAppearanceService.OnGovernorChanged(
+                    pSnapshot.GovernorActorId, governor.getID());
             }
 
             long successorId = pSnapshot.SuccessorActorId;
@@ -1034,7 +1057,9 @@ namespace AncientWarfare3.core.lineage
         private static void Project(Kingdom pSubject, long pStateId,
             long pSuccessorActorId, bool pReplacementAllowed)
         {
-            if (pSubject == null) return;
+            if (pSubject?.data == null) return;
+            bool wasActive = TryGetRuntimeProjection(pSubject,
+                out long oldStateId, out long oldSuccessorActorId);
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
                 (int)VassalSubjectKind.MilitaryGovernorate);
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_STATE_ID,
@@ -1045,11 +1070,19 @@ namespace AncientWarfare3.core.lineage
             pSubject.data.set(
                 LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
                 pReplacementAllowed);
+            bool isActive = pStateId >= 0;
+            if (wasActive != isActive || oldStateId != pStateId ||
+                oldSuccessorActorId != pSuccessorActorId)
+                MilitaryGovernorateAppearanceService.OnProjectionChanged(
+                    pSubject, wasActive, oldSuccessorActorId, isActive,
+                    pSuccessorActorId);
         }
 
         private static void ClearProjection(Kingdom pSubject)
         {
-            if (pSubject == null) return;
+            if (pSubject?.data == null) return;
+            bool wasActive = TryGetRuntimeProjection(pSubject,
+                out _, out long oldSuccessorActorId);
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
                 (int)VassalSubjectKind.Ordinary);
             pSubject.data.set(LineageKeys.MILITARY_GOVERNORATE_STATE_ID, -1L);
@@ -1058,6 +1091,9 @@ namespace AncientWarfare3.core.lineage
             pSubject.data.set(
                 LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
                 false);
+            if (wasActive)
+                MilitaryGovernorateAppearanceService.OnProjectionChanged(
+                    pSubject, true, oldSuccessorActorId, false, -1L);
         }
 
         private static Kingdom FindKingdom(long pKingdomId)

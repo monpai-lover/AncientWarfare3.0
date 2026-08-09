@@ -64,6 +64,10 @@ namespace AncientWarfare3.core.court
         public const string General = "general";
         public const string Governor = "governor";
         public const string FeudatoryPrince = "feudatory_prince";
+        public const string MilitaryGovernorateGovernor =
+            "military_governorate_governor";
+        public const string MilitaryGovernorateSuccessor =
+            "military_governorate_successor";
     }
 
     public sealed class CourtPyramidNodeModel
@@ -76,6 +80,7 @@ namespace AncientWarfare3.core.court
         public string SchoolIconPath = "";
         public long CityId = -1L;
         public string CityName = "";
+        public string CommandName = "";
         public int AppointmentYear = -1;
         public float Influence;
         public int Merit;
@@ -113,6 +118,7 @@ namespace AncientWarfare3.core.court
                 SchoolIconPath = SchoolIconPath,
                 CityId = CityId,
                 CityName = CityName,
+                CommandName = CommandName,
                 AppointmentYear = AppointmentYear,
                 Influence = Influence,
                 Merit = Merit,
@@ -138,6 +144,10 @@ namespace AncientWarfare3.core.court
         public const int MinistryRank = 20;
         public const int SpecialistRank = 30;
         public const int GeneralRank = 40;
+        public const int MilitaryGovernorateGovernorRank =
+            MilitaryGovernorateCourtRules.GovernorRank;
+        public const int MilitaryGovernorateSuccessorRank =
+            MilitaryGovernorateCourtRules.SuccessorRank;
         public const int GovernorRank = 50;
         public const int LocalColumnLimit = 6;
 

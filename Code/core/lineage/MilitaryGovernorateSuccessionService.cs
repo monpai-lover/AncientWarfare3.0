@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.schools;
+using AncientWarfare3.core.presentation;
 using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
@@ -233,6 +234,7 @@ namespace AncientWarfare3.core.lineage
                     pSuccessor, pSubject, pSuzerain)) return false;
 
             long sourceKingdomId = pSuccessor.kingdom?.id ?? -1L;
+            long oldGovernorActorId = pSubject.king?.data?.id ?? -1L;
             try
             {
                 if (!alreadyKing)
@@ -263,6 +265,8 @@ namespace AncientWarfare3.core.lineage
                         pSubject.king != pSuccessor)
                         pSubject.kingLeftEvent();
                     pSubject.setKing(pSuccessor);
+                    MilitaryGovernorateAppearanceService.OnGovernorChanged(
+                        oldGovernorActorId, pSuccessor.data.id);
                 }
                 pSuccessor.setProfession(UnitProfession.King);
                 if (pSubject.king != pSuccessor) return false;
@@ -426,9 +430,14 @@ namespace AncientWarfare3.core.lineage
 
         private static void ProjectSuccessor(Kingdom pSubject, long pActorId)
         {
+            bool active = MilitaryGovernorateStore.TryGetRuntimeProjection(
+                pSubject, out _, out long oldActorId);
             pSubject?.data?.set(
                 LineageKeys.MILITARY_GOVERNORATE_SUCCESSOR_ACTOR_ID,
                 pActorId);
+            if (active && oldActorId != pActorId)
+                MilitaryGovernorateAppearanceService.OnProjectionChanged(
+                    pSubject, true, oldActorId, true, pActorId);
         }
     }
 }

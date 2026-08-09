@@ -340,3 +340,6 @@ aw_role_emperor,皇帝,Emperor,皇帝
 aw_identity_none,无,None,無
 aw_decision_target_prefix,目标：,Target: ,目標：
 opinion_aw_succession_split,宗统分裂,Dynastic split,宗統分裂
+aw_court_military_governorate_governor,节度使,Military Governor,節度使
+aw_court_military_governorate_successor,留后,Command Successor,留後
+aw_court_command,军镇,Command,軍鎮
