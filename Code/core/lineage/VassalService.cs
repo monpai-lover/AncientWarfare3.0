@@ -971,15 +971,20 @@ namespace AncientWarfare3.core.lineage
         }
 
         internal static void ClearEndedMilitaryGovernorateRelationProjection(
-            Kingdom pSubject, long pClosedSuzerainId,
-            int pClosedContractTier)
+            Kingdom pSubject, long pClosedRelationId,
+            long pClosedSuzerainId, int pClosedContractTier)
         {
+            if (pSubject?.data == null || pSubject.isRekt() ||
+                GetRelationId(pSubject) != pClosedRelationId ||
+                GetSuzerainId(pSubject) != pClosedSuzerainId) return;
             Kingdom suzerain = null;
             try
             {
                 suzerain = World.world?.kingdoms?.get(pClosedSuzerainId);
             }
             catch { }
+            if (suzerain?.data == null || suzerain.isRekt() ||
+                pSubject == suzerain) return;
             if (VassalContractTierRules.CountsAsVassal(pClosedContractTier))
                 AdjustDirectVassalCount(suzerain, -1);
             else

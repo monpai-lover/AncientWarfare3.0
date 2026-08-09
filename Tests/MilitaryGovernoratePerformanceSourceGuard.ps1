@@ -158,7 +158,9 @@ foreach ($forbidden in @(
 foreach ($token in @(
     'out long closedSuzerainId, out int closedContractTier',
     'VassalService.ClearEndedMilitaryGovernorateRelationProjection(',
-    'pSubject, closedSuzerainId, closedContractTier);'
+    'pSubject, pSnapshot.RelationId, closedSuzerainId,',
+    'closedContractTier);',
+    'ClearProjection(pSubject);'
 )) {
     if (-not $restore.Contains($token)) {
         throw "Exact governorate relation cleanup is incomplete: $token"
@@ -192,7 +194,16 @@ if ($endedProjectionStart -lt 0 -or
 $endedProjection = $vassal.Substring($endedProjectionStart,
     $endedProjectionEnd - $endedProjectionStart)
 foreach ($token in @(
+    'long pClosedRelationId,',
+    'long pClosedSuzerainId,',
+    'pSubject?.data == null',
+    'pSubject.isRekt()',
+    'GetRelationId(pSubject) != pClosedRelationId',
+    'GetSuzerainId(pSubject) != pClosedSuzerainId',
     'World.world?.kingdoms?.get(pClosedSuzerainId)',
+    'suzerain?.data == null',
+    'suzerain.isRekt()',
+    'pSubject == suzerain',
     'VassalContractTierRules.CountsAsVassal(pClosedContractTier)',
     'AdjustDirectVassalCount(suzerain, -1);',
     'AdjustDirectTributaryCount(suzerain, -1);',
@@ -202,6 +213,22 @@ foreach ($token in @(
 )) {
     if (-not $endedProjection.Contains($token)) {
         throw "Exact-ended governorate cleanup misses runtime action: $token"
+    }
+}
+$decrementStart = $endedProjection.IndexOf(
+    'if (VassalContractTierRules.CountsAsVassal(',
+    [StringComparison]::Ordinal)
+foreach ($condition in @(
+    'GetRelationId(pSubject) != pClosedRelationId',
+    'GetSuzerainId(pSubject) != pClosedSuzerainId',
+    'suzerain?.data == null',
+    'suzerain.isRekt()',
+    'pSubject == suzerain'
+)) {
+    $conditionIndex = $endedProjection.IndexOf($condition,
+        [StringComparison]::Ordinal)
+    if ($conditionIndex -lt 0 -or $conditionIndex -gt $decrementStart) {
+        throw "Governorate projection condition runs after decrement: $condition"
     }
 }
 if ($endedProjection.Contains('FindKingdom(') -or

@@ -671,7 +671,9 @@ namespace AncientWarfare3.core.lineage
                         "Military governorate relation repair failed: " +
                         pReason);
                 VassalService.ClearEndedMilitaryGovernorateRelationProjection(
-                    pSubject, closedSuzerainId, closedContractTier);
+                    pSubject, pSnapshot.RelationId, closedSuzerainId,
+                    closedContractTier);
+                ClearProjection(pSubject);
             }
             else if (pRelationExists &&
                      (pRelation.Ambiguous ||
