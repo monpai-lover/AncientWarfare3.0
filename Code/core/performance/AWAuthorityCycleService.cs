@@ -323,8 +323,6 @@ namespace AncientWarfare3.core.performance
                         AWPathfindingBootstrap.ProcessFrame);
                     break;
                 case CooperativeAuthorityStage.ArmyRts:
-                    ArmyRtsSchedulingService.ProcessAw3Authority(
-                        pCycleToken, pPaused);
                     break;
                 case CooperativeAuthorityStage.Schools:
                     Measure(RecentFeatureBenchmarkRules.SchoolsIndex,

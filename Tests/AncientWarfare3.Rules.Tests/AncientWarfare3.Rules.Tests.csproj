@@ -213,6 +213,7 @@
     <Compile Include="ActorBirthAffiliationRulesTests.cs.txt" />
     <Compile Include="SchedulerLoadSafetyRulesTests.cs.txt" />
     <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
+    <Compile Include="ArmyRtsSchedulingRulesTests.cs.txt" />
     <Compile Include="TestArmyRoutePollKindStub.cs.txt" />
     <Compile Include="ActorDeathInvocationRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAttackSpeechBubbleRulesTests.cs.txt" />

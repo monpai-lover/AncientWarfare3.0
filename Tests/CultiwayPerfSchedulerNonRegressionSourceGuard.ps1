@@ -22,7 +22,7 @@ $expected = @{
     'Code/patch/AW_FramePrioritySchedulerPatch.cs' =
         'FFEB5975322A2FC1DB52958284DC4554C15B9DC67844715D815CB430AC74127D'
     'Code/core/performance/AWCooperativeSimulationRunner.cs' =
-        '331800987155E9DEB1B615AE1B4F22469B7C938F44CF0ADC53E845F0068FC648'
+        '12DC261FF37E1BB5CDD34D4AD1466725CA88248332D9C21E01C121DF68925EB1'
     'Code/core/performance/AWCooperativeBatchRunner.cs' =
         'D86AE5C98B043F3B95DEA3EE62E36787D94DA4AD9898A28D62ADC5F81A9A767C'
     'Code/core/performance/AWCooperativeActorParallelJobRunner.cs' =

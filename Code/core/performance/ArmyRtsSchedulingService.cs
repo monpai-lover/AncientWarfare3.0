@@ -7,11 +7,10 @@ namespace AncientWarfare3.core.performance
 {
     internal static class ArmyRtsSchedulingService
     {
-        private static readonly ArmyRtsSchedulingGate NativeGate =
-            new ArmyRtsSchedulingGate();
-        private static readonly ArmyRtsSchedulingGate Aw3Gate =
+        private static readonly ArmyRtsSchedulingGate SharedGate =
             new ArmyRtsSchedulingGate();
         private static long _nativeCycleToken;
+        private static bool _sessionStarted;
 
         public static void ProcessNativeArmyUpdate()
         {
@@ -19,35 +18,38 @@ namespace AncientWarfare3.core.performance
                 _nativeCycleToken++;
             bool paused = World.world == null ||
                           World.world.isPaused();
-            ProcessCycle(NativeGate,
-                ArmyRtsSchedulerOwner.NativeArmyManager,
+            ProcessCycle(ArmyRtsSchedulerOwner.NativeArmyManager,
                 _nativeCycleToken, paused);
         }
 
-        public static void ProcessAw3Authority(long pCycleToken,
-            bool pCyclePaused)
+        public static void ProcessLogicalPass(long pCycleToken,
+            bool pPaused)
         {
-            ProcessCycle(Aw3Gate, ArmyRtsSchedulerOwner.Aw3Authority,
-                pCycleToken, pCyclePaused);
+            ProcessCycle(ArmyRtsSchedulerOwner.Aw3Authority,
+                pCycleToken, pPaused);
         }
 
         public static void Reset()
         {
-            NativeGate.Reset();
-            Aw3Gate.Reset();
+            SharedGate.Reset();
+            _sessionStarted = false;
             _nativeCycleToken = 0L;
             CityMilitaryThreatFacts.Reset();
         }
 
-        private static void ProcessCycle(ArmyRtsSchedulingGate pGate,
-            ArmyRtsSchedulerOwner pOwner, long pCycleToken,
-            bool pPaused)
+        private static void ProcessCycle(ArmyRtsSchedulerOwner pOwner,
+            long pCycleToken, bool pPaused)
         {
+            if (!_sessionStarted)
+            {
+                SharedGate.StartSession(
+                    AWPerformanceSettings.UseAw3ArmyRtsScheduler);
+                _sessionStarted = true;
+            }
             bool allowed = AWFrameSchedulerRules.ShouldRunAuthorityCycle(
                 Config.game_loaded, SmoothLoader.isLoading(), pPaused,
                 AW3MultiplayerReplicaScope.IsReplicaSession);
-            if (!pGate.TryEnter(ArmyRtsSchedulingMode.Current, pOwner,
-                    pCycleToken, allowed)) return;
+            if (!SharedGate.TryEnter(pOwner, pCycleToken, allowed)) return;
             CityMilitaryThreatFacts.BeginAuthorityCycle();
             try
             {

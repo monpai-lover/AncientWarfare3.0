@@ -1,0 +1,47 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.performance;
+
+internal static class ArmyRtsSchedulingRulesTests
+{
+    internal static void Run()
+    {
+        var aw3 = new ArmyRtsSchedulingGate();
+        aw3.StartSession(configAw3: true);
+        Assert(!aw3.TryEnter(ArmyRtsSchedulerOwner.NativeArmyManager, 1L,
+                allowed: true), "AW3 mode rejects the native caller");
+        Assert(aw3.TryEnter(ArmyRtsSchedulerOwner.Aw3Authority, 1L,
+                allowed: true), "AW3 mode accepts its first logical token");
+        Assert(!aw3.TryEnter(ArmyRtsSchedulerOwner.Aw3Authority, 1L,
+                allowed: true), "a logical token is consumed exactly once");
+        Assert(aw3.TryEnter(ArmyRtsSchedulerOwner.Aw3Authority, 2L,
+                allowed: true), "the next logical token is accepted");
+        Assert(!aw3.TryEnter(ArmyRtsSchedulerOwner.Aw3Authority, 1L,
+                allowed: true), "an older token cannot replay RTS work");
+
+        var native = new ArmyRtsSchedulingGate();
+        native.StartSession(configAw3: false);
+        Assert(native.TryEnter(ArmyRtsSchedulerOwner.NativeArmyManager, 1L,
+                allowed: true), "native mode accepts the native caller");
+        Assert(!native.TryEnter(ArmyRtsSchedulerOwner.Aw3Authority, 2L,
+                allowed: true),
+            "startup ownership remains frozen for the session");
+
+        string root = Directory.GetCurrentDirectory();
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "ArmyRtsSchedulingService.cs"));
+        Assert(service.Contains("SharedGate", StringComparison.Ordinal),
+            "both entry paths share one gate");
+        Assert(!service.Contains("NativeGate", StringComparison.Ordinal) &&
+               !service.Contains("Aw3Gate", StringComparison.Ordinal),
+            "independent gates cannot duplicate logical work");
+        Assert(service.Contains("ProcessLogicalPass(",
+                StringComparison.Ordinal),
+            "large-step passes expose one RTS pulse boundary");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}
