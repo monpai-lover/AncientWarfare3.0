@@ -260,7 +260,9 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("war_plot_redirect",
                     WarPlotRedirectService.SweepExistingPlots),
                 new AW3RestoreStage("active_war_archive",
-                    WarRecordWriter.BackfillActive)
+                    WarRecordWriter.BackfillActive),
+                new AW3RestoreStage("military_governorates",
+                    MilitaryGovernorateStore.EnqueueRuntimeRestore)
             };
 
             return AW3RuntimeRestoreStageRunner.Run(stages, strict);
@@ -346,7 +348,9 @@ namespace AncientWarfare3.core.multiplayer
                     LineageFamilyArchiveMigrationService.Run,
                     stopOnFailure: true),
                 new AW3RestoreStage("western_lineage_migration", () =>
-                    WesternLineageMigrationService.Request())
+                    WesternLineageMigrationService.Request()),
+                new AW3RestoreStage("military_governorates",
+                    MilitaryGovernorateStore.EnqueueRuntimeRestore)
             };
 
             return AW3RuntimeRestoreStageRunner.Run(stages, strict);

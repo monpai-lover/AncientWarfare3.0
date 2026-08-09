@@ -9,12 +9,29 @@ internal static class AW3MultiplayerReplicationRulesTests
 {
     public static void Run()
     {
+        ReplicaSessionRevisionAdvancesAtSessionBoundaries();
         CaptureRequiresMainThreadAndEmptyDirectory();
         CaptureReturnsImmutableTypedMetadata();
         InstallVerifiesAndRefreshesInOrder();
         InstallFailureNeverRebuildsOrRefreshes();
         RealArchiveInspectionChecksSqliteAndFullHash();
         ProductionFacadeAndArchiveManagerStayTyped();
+    }
+
+    private static void ReplicaSessionRevisionAdvancesAtSessionBoundaries()
+    {
+        var owner = new object();
+        long before = AW3MultiplayerReplicaScope.SessionRevision;
+        Equal(true, AW3MultiplayerReplicaScope.Activate(owner),
+            "replica session begins");
+        long activeRevision = AW3MultiplayerReplicaScope.SessionRevision;
+        Equal(checked(before + 1), activeRevision,
+            "replica session begin advances revision");
+        Equal(true, AW3MultiplayerReplicaScope.Deactivate(owner),
+            "replica session ends");
+        Equal(checked(activeRevision + 1),
+            AW3MultiplayerReplicaScope.SessionRevision,
+            "replica session end advances revision");
     }
 
     private static void CaptureRequiresMainThreadAndEmptyDirectory()

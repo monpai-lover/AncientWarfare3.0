@@ -346,6 +346,7 @@ namespace AncientWarfare3.core.policy
                     RecentFeatureBenchmarkRules.KingdomFeudatoryIndex,
                     recentBenchmark);
             }
+            MilitaryGovernorateAiService.OnKingdomYear(pKingdom);
         }
 
         private static void RunStrategyMandate(Kingdom pKingdom)

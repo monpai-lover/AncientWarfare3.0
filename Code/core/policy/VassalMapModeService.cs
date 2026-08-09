@@ -39,8 +39,15 @@ namespace AncientWarfare3.core.policy
             if (pKingdom?.data == null) return "";
             string header = AW_L10n.Text("aw_vassal_mapmode_tooltip", "\u9644\u5EB8\u5730\u56FE");
             string body = VassalService.BuildTooltip(pKingdom);
+            bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
+                                       VassalSubjectKind.MilitaryGovernorate;
+            string marker = militaryGovernorate
+                ? AW_L10n.Text("aw_military_governorate_marker",
+                    "Military governorate")
+                : "";
             string war = BuildWarSummary(pKingdom);
             string result = string.IsNullOrEmpty(body) ? header : header + "\n" + body;
+            if (!string.IsNullOrEmpty(marker)) result += "\n" + marker;
             return string.IsNullOrEmpty(war) ? result : result + "\n" + war;
         }
 

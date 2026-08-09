@@ -50,7 +50,7 @@ namespace AncientWarfare3.patch
         [HarmonyPrefix]
         [HarmonyPatch(typeof(StatsWindow), "tryToShowActor")]
         public static bool TryToShowActor_Prefix(StatsWindow __instance,
-            ref string pTitle, long pID, Actor pObject)
+            ref string pTitle, long pID, Actor pObject, string pIconPath)
         {
             if (pTitle == "king")
             {
@@ -80,6 +80,22 @@ namespace AncientWarfare3.patch
                 return true;
             }
             if (!HeirTitleRules.ShouldRewriteOriginalHeirTitle(pTitle)) return true; // 只管继承人行
+            Kingdom selectedKingdom = SelectedMetas.selected_kingdom;
+            if (VassalService.GetSubjectKind(selectedKingdom) ==
+                VassalSubjectKind.MilitaryGovernorate)
+            {
+                Actor governorateSuccessor =
+                    MilitaryGovernorateSuccessionService.
+                        GetDesignatedSuccessorForReadModel(selectedKingdom);
+                if (governorateSuccessor?.data == null ||
+                    governorateSuccessor.isRekt()) return false;
+                string title = HeirTitleRules.TitleKey(selectedKingdom);
+                __instance.showStatRow(title,
+                    governorateSuccessor.getName(),
+                    selectedKingdom.getColor().color_text, MetaType.Unit,
+                    governorateSuccessor.data.id, false, pIconPath);
+                return false;
+            }
             Actor actor = pObject != null ? pObject : World.world.units.get(pID);
             if (actor == null || actor.isRekt()) return false; // 无继承人 → 不画空行
             pTitle = HeirTitleRules.TitleKey(actor.kingdom ?? SelectedMetas.selected_kingdom);

@@ -1,0 +1,20 @@
+key,cz,en,ch
+aw_military_governorate,设置节度军镇,Create Military Command,設置節度軍鎮
+aw_military_governorate Description,选择本国边境城市并任命大将建立军镇,Select a frontier city and appoint a general to establish a military command,選擇本國邊境城市並任命大將建立軍鎮
+aw_military_governorate_window,节度军镇,Military Command,節度軍鎮
+aw_military_governorate_choose_general,选择镇守大将,Choose the commanding general,選擇鎮守大將
+aw_military_governorate_general_stats,功绩 {0}  忠诚 {1}  野心 {2},Merit {0}  Loyalty {1}  Ambition {2},功績 {0}  忠誠 {1}  野心 {2}
+aw_military_governorate_appoint,任命,Appoint,任命
+aw_military_governorate_appoint_desc,任命此大将镇守边境军镇,Appoint this general to command the frontier,任命此大將鎮守邊境軍鎮
+aw_military_governorate_no_general,没有可任命的在任大将,No eligible active general is available,沒有可任命的在任大將
+aw_military_governorate_success,军镇已建立,The military command has been established,軍鎮已建立
+aw_military_governorate_failure,无法建立军镇,The military command could not be established,無法建立軍鎮
+aw_military_governorate_failure_invalid_city,请选择非国都的外部边境城市,Choose a non-capital city on the external frontier,請選擇非國都的外部邊境城市
+aw_military_governorate_failure_realm_not_eligible,仅超出直辖上限的夏制国家可设置军镇,Only a Xia-system realm over its direct city limit may establish a command,僅超出直轄上限的夏制國家可設置軍鎮
+aw_military_governorate_failure_invalid_general,所选人物不是可用的在任大将,The selected actor is not an eligible active general,所選人物不是可用的在任大將
+aw_military_governorate_failure_kingdom_creation_failed,新军镇实体创建失败,The new command realm could not be created,新軍鎮實體建立失敗
+aw_military_governorate_failure_city_transfer_failed,边境城市移交失败,The frontier city transfer failed,邊境城市移交失敗
+aw_military_governorate_failure_capital_assignment_failed,军镇治所设置失败,The command seat could not be assigned,軍鎮治所設置失敗
+aw_military_governorate_failure_relation_creation_failed,军镇从属关系建立失败,The command dependency could not be established,軍鎮從屬關係建立失敗
+aw_military_governorate_failure_state_creation_failed,军镇档案写入失败,The command archive could not be persisted,軍鎮檔案寫入失敗
+aw_military_governorate_failure_creation_failed,建立军镇时发生错误,An error occurred while creating the command,建立軍鎮時發生錯誤

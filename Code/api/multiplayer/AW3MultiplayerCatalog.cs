@@ -122,7 +122,11 @@ namespace AncientWarfare3.api.multiplayer
                     "ui/icons/iconKnowledge", AW3WindowCategory.Records),
                 Window(AW3WindowKind.VirtualTitles, "aw_virtual_titles",
                     "ui/icons/iconKings", AW3WindowCategory.Domestic,
-                    AW3WindowContextRequirement.Country)
+                    AW3WindowContextRequirement.Country),
+                Window(AW3WindowKind.MilitaryGovernorate,
+                    "aw_military_governorate_window",
+                    "ui/wars/war_vassal", AW3WindowCategory.Realm,
+                    AW3WindowContextRequirement.City)
             });
 
         private static readonly IReadOnlyList<AW3CommandDescriptor>
@@ -206,7 +210,19 @@ namespace AncientWarfare3.api.multiplayer
                 Command(AW3CommandKind.EditVirtualNobleTitle,
                     AW3WindowCategory.Records, Country()),
                 Command(AW3CommandKind.DeleteVirtualNobleTitle,
-                    AW3WindowCategory.Records, Country())
+                    AW3WindowCategory.Records, Country()),
+                Command(AW3CommandKind.CreateMilitaryGovernorate,
+                    AW3WindowCategory.Realm, Country() |
+                    AW3WindowContextRequirement.City |
+                    AW3WindowContextRequirement.Actor),
+                Command(AW3CommandKind.DesignateMilitaryGovernorateSuccessor,
+                    AW3WindowCategory.Realm, Country() |
+                    AW3WindowContextRequirement.TargetCountry |
+                    AW3WindowContextRequirement.Actor),
+                Command(AW3CommandKind.ReplaceMilitaryGovernorateGovernor,
+                    AW3WindowCategory.Realm, Country() |
+                    AW3WindowContextRequirement.TargetCountry |
+                    AW3WindowContextRequirement.Actor)
             });
 
         public static IReadOnlyList<AW3WindowDescriptor> Windows =>

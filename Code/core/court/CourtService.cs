@@ -1049,11 +1049,15 @@ namespace AncientWarfare3.core.court
         {
             if (pKingdom?.data == null || pKingdom.isRekt())
                 return CourtManualAppointmentResult.InvalidKingdom;
-            if (!CanUseManualAppointment(pKingdom))
+            bool officeAvailable = IsManualOfficeInCurrentTier(
+                pKingdom, pOfficeId);
+            if (!officeAvailable)
                 return CourtManualAppointmentResult.InvalidOffice;
+            if (!CanUseManualAppointment(pKingdom))
+                return CourtManualAppointmentResult.AppointmentNotAllowed;
             Actor incumbent = FindActiveOfficeActor(pKingdom, pOfficeId);
             return CourtManualAppointmentRules.ValidateTarget(
-                IsManualOfficeInCurrentTier(pKingdom, pOfficeId),
+                officeAvailable,
                 pExpectedIncumbentActorId, incumbent?.data?.id ?? -1L);
         }
 
@@ -1241,21 +1245,20 @@ namespace AncientWarfare3.core.court
             string pOfficeId)
         {
             if (string.IsNullOrEmpty(pOfficeId) ||
-                !KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom) ||
-                !CanUseManualAppointment(pKingdom))
+                !KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom))
                 return false;
             return CourtProfileRegistry.IsOfficeAvailableFor(
                 pKingdom, pOfficeId, CourtOfficeLayer.Central);
         }
 
-        private static bool CanUseManualAppointment(Kingdom pKingdom)
+        internal static bool CanUseManualAppointment(Kingdom pKingdom)
         {
+            if (pKingdom?.data == null) return false;
             string institution = CourtInstitutionService.GetInstitution(
                 pKingdom);
-            return !institution.StartsWith("western_",
-                       StringComparison.Ordinal) ||
-                   KingdomPolicyEffectService.Read(pKingdom)
-                       .RoyalAppointmentsUnlocked;
+            return CourtManualAppointmentRules.CanUseManualAppointment(
+                institution, KingdomPolicyEffectService.Read(pKingdom)
+                    .RoyalAppointmentsUnlocked);
         }
 
         private static bool ReplaceOfficer(Actor pIncumbent, Actor pCandidate,

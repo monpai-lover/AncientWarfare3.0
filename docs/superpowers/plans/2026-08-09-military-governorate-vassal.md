@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add real Xia military-governorate vassal kingdoms with frontier creation, mandatory joint warfare, suzerain-controlled diplomacy, expeditionary armies, dual-track succession, synchronized colors, and bounded AI work.
+**Goal:** Add real Xia military-governorate vassal kingdoms with frontier creation, mandatory joint warfare, suzerain-controlled diplomacy, dual-track succession, synchronized colors, existing-vassal-window management, and bounded AI work.
 
 **Architecture:** Extend the existing vassal relation with an explicit subject kind and persist governorate-only state separately. Pure rules own eligibility, naming, permission, war leadership, succession, and budgets; runtime services reuse native kingdom creation, vassal topology, original war APIs, active-general indexes, RTS army commands, and event-driven color/city/death hooks.
 
@@ -136,7 +136,7 @@ public class MilitaryGovernorateStateTableItem :
     public long seat_city_id = -1;
     public long governor_actor_id = -1;
     public long successor_actor_id = -1;
-    public long expeditionary_army_id = -1;
+    public long expeditionary_army_id = -1; // unused compatibility field
     public string command_name = "";
     public int created_year = -1;
     public int succession_state = 0;
@@ -155,7 +155,7 @@ TryCreate(..., out long stateId)
 TryGetActive(Kingdom subject, out MilitaryGovernorateSnapshot snapshot)
 GetDirectActive(Kingdom suzerain, int limit)
 SetSuccessor(long stateId, long actorId)
-SetExpeditionaryArmy(long stateId, long armyId)
+SetExpeditionaryArmy(long stateId, long armyId) // legacy compatibility only
 End(long stateId, string reason)
 RestoreProjection(Kingdom subject)
 ```
@@ -172,7 +172,7 @@ public sealed class MilitaryGovernorateSnapshot
     public long SeatCityId = -1;
     public long GovernorActorId = -1;
     public long SuccessorActorId = -1;
-    public long ExpeditionaryArmyId = -1;
+    public long ExpeditionaryArmyId = -1; // unused compatibility projection
     public string CommandName = "";
     public int CreatedYear = -1;
     public int SuccessionState;
@@ -352,39 +352,7 @@ Peace UI and settlement resolve the root suzerain as controller while cession te
 
 Run war tests and the full rules suite, then commit as `feat: enforce military governorate war obligations`.
 
-### Task 8: Add expeditionary-army requisition
-
-**Files:**
-- Create: `Code/core/lineage/MilitaryGovernorateExpeditionaryRules.cs`
-- Create: `Code/core/lineage/MilitaryGovernorateExpeditionaryService.cs`
-- Modify: `Code/core/lineage/KingdomWarDirectorService.cs`
-- Modify: `Code/core/lineage/AWArmyService.cs`
-- Modify: `Code/core/lineage/VassalService.cs`
-- Test: `Tests/AncientWarfare3.Rules.Tests/MilitaryGovernorateExpeditionaryRulesTests.cs.txt`
-
-- [ ] **Step 1: Add RED lifecycle tests**
-
-Test one active army per governorate, ownership preservation, valid-war requirement, command delegation, cancellation, army destruction, war end, and relation-end cleanup.
-
-- [ ] **Step 2: Implement indexed army selection**
-
-Select from the governorate's existing Army/role indexes with a fixed candidate limit. Reject attached guards, destroyed armies, already requisitioned armies, and armies committed to incompatible missions.
-
-- [ ] **Step 3: Delegate only RTS task authority**
-
-Persist the army ID and expose a director resolver:
-
-```csharp
-Kingdom ResolveCommandKingdom(Army army, Kingdom owner)
-```
-
-Return the suzerain only for a valid active requisition. Do not change `army.kingdom`, actor ownership, replenishment source, or reserve pools.
-
-- [ ] **Step 4: Add event cleanup and verify**
-
-Clear the state from war-end, army-destroyed, relation-ended, and manual-cancel events. Run tests and commit as `feat: add governorate expeditionary armies`.
-
-### Task 9: Implement dual-track succession and independence
+### Task 8: Implement dual-track succession and independence
 
 **Files:**
 - Create: `Code/core/lineage/MilitaryGovernorateSuccessionRules.cs`
@@ -408,13 +376,13 @@ Move a dispatched parent general only at commit, close previous career state, as
 
 - [ ] **Step 4: Handle independence outcomes**
 
-On success end relation/state, cancel expeditionary command, restore normal titles/diplomacy, and generate independent colors. On failure expose replacement of general and successor to the suzerain.
+On success end relation/state, restore normal titles/diplomacy, and generate independent colors. On failure expose replacement of general and successor to the suzerain.
 
 - [ ] **Step 5: Verify and commit**
 
 Run succession/full rules tests and commit as `feat: add governorate succession and independence`.
 
-### Task 10: Project command names, ruler titles, and map identity
+### Task 9: Project command names, ruler titles, and map identity
 
 **Files:**
 - Modify: `Code/core/lineage/KingdomNameplateSuffixRules.cs`
@@ -442,13 +410,13 @@ Keep hierarchy and synchronized native colors. Add only a military-governorate i
 
 Run presentation tests/source guards and commit as `feat: display military governorate identity`.
 
-### Task 11: Build the draggable management UI and localization
+### Task 10: Integrate management into the existing vassal window
 
 **Files:**
-- Create: `Code/ui/windows/MilitaryGovernorateWindow.cs`
-- Create: `Code/ui/items/MilitaryGovernorateGeneralListItem.cs`
-- Modify: `Code/ui/windows/KingdomWindowAddition.cs`
-- Modify: `Code/ui/AW_LineageWindowIds.cs`
+- Modify: `Code/ui/windows/MilitaryGovernorateWindow.cs`
+- Modify: `Code/ui/windows/VassalRelationWindow.cs`
+- Modify: `Code/ui/items/VassalRelationListItem.cs`
+- Modify: `Code/core/lineage/VassalService.cs`
 - Modify: `Locales/others.csv`
 - Modify: `Locales/aw3_diplomacy.csv`
 - Modify: `Locales/aw3_ancestry_mapmode.csv`
@@ -456,21 +424,21 @@ Run presentation tests/source guards and commit as `feat: display military gover
 
 - [ ] **Step 1: Add RED UI source guard**
 
-Require `WideWindowChrome`, bounded general read-model calls, live portrait reuse, localized button/window labels, and no `World.world.units` scan.
+Require the existing `VassalRelationWindow`, bounded general read-model calls, live portrait reuse in the creation candidate window, localized labels, and no `World.world.units` scan.
 
 - [ ] **Step 2: Build the two-stage workflow**
 
-Kingdom-side button enters native city selection. Valid city selection opens the existing draggable wide-window dimensions and lists at most 32 generals with live portrait, merit, loyalty, ambition, and command. Confirmation calls only `MilitaryGovernorateCreationService.TryCreate`.
+Keep the kingdom-side native city selection. A valid city opens the temporary creation candidate window and lists at most 32 generals with live portrait, merit, loyalty, ambition, and command. Confirmation calls only `MilitaryGovernorateCreationService.TryCreate`.
 
 - [ ] **Step 3: Add management controls**
 
-Show suzerain, seat, general, successor, military obligation, and expeditionary army. Commands: designate successor, requisition/cancel expeditionary army, replace officers after failed rebellion, and rename command through the existing kingdom rename flow.
+Extend military-governorate rows and context actions in the existing vassal-management window. Show suzerain, seat, general, successor, and military obligation. Commands: designate successor, replace officers after failed rebellion, and rename command through the existing kingdom rename flow. Do not create a separate management window.
 
 - [ ] **Step 4: Localize and verify**
 
-Add simplified Chinese, English, and traditional Chinese text for all labels, outcomes, failure reasons, `军`, `将军`, and `留后`. Run UI guard and commit as `feat: add military governorate management UI`.
+Add simplified Chinese, English, and traditional Chinese text for all labels, outcomes, failure reasons, `军`, `将军`, and `留后`. Run UI guard and commit as `feat: integrate military governorate vassal management`.
 
-### Task 12: Integrate recovery, benchmarks, and final deployment
+### Task 11: Integrate recovery, benchmarks, and final deployment
 
 **Files:**
 - Modify: `Code/core/multiplayer/AW3RuntimeRestorePipeline.cs`
@@ -485,7 +453,7 @@ Require indexed active-state restoration, coalesced repair, explicit budgets, ev
 
 - [ ] **Step 2: Restore persisted projections and stale state**
 
-On world load, query active governorate rows by index and enqueue bounded repairs for missing kingdoms, seats, rulers, successors, relations, or expeditionary armies. End irrecoverable rows with explicit reasons.
+On world load, query active governorate rows by index and enqueue bounded repairs for missing kingdoms, seats, rulers, successors, or relations. Ignore the unused expeditionary-army compatibility column. End irrecoverable rows with explicit reasons.
 
 - [ ] **Step 3: Run complete verification**
 

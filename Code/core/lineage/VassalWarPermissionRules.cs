@@ -15,6 +15,17 @@ namespace AncientWarfare3.core.lineage
             bool pSameRootSuzerain, bool pBlockInternalWar, string pWarType,
             out string pReason)
         {
+            return CanDeclareWar(pAttackerIsVassal, pDefenderIsSubject,
+                pDefenderIsSuzerain, pSameRootSuzerain,
+                pBlockInternalWar, pWarType, VassalSubjectKind.Ordinary,
+                out pReason);
+        }
+
+        public static bool CanDeclareWar(bool pAttackerIsVassal,
+            bool pDefenderIsSubject, bool pDefenderIsSuzerain,
+            bool pSameRootSuzerain, bool pBlockInternalWar, string pWarType,
+            VassalSubjectKind pDefenderSubjectKind, out string pReason)
+        {
             if (pDefenderIsSuzerain && pWarType == "independence_war")
             {
                 pReason = "";
@@ -23,7 +34,12 @@ namespace AncientWarfare3.core.lineage
 
             _ = pSameRootSuzerain;
             _ = pBlockInternalWar;
-            if (pAttackerIsVassal || pDefenderIsSubject)
+            bool externalGovernorateTarget = !pAttackerIsVassal &&
+                pDefenderIsSubject &&
+                MilitaryGovernorateWarRules.
+                    CanExternalRealmTargetGovernorate(pDefenderSubjectKind);
+            if (pAttackerIsVassal ||
+                pDefenderIsSubject && !externalGovernorateTarget)
             {
                 pReason = "vassal_external_war_blocked";
                 return false;

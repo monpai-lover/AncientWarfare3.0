@@ -146,6 +146,10 @@ namespace AncientWarfare3.api.multiplayer
                     case AW3WindowKind.VirtualTitles:
                         VirtualNobleTitleRosterWindow.Open(request.CountryId);
                         break;
+                    case AW3WindowKind.MilitaryGovernorate:
+                        MilitaryGovernorateWindow.OpenCreation(
+                            FindCity(request.CityId));
+                        break;
                     default:
                         return Result(AW3WindowOpenStatus.Unavailable,
                             request.Kind);

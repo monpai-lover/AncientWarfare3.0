@@ -1,0 +1,208 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MilitaryGovernorateRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, MilitaryGovernorateRules.CanCreate(true, 7, 6),
+            "Xia realm over direct limit may create a governorate");
+        Equal(false, MilitaryGovernorateRules.CanCreate(true, 6, 6),
+            "realm at limit is not over limit");
+        Equal(false, MilitaryGovernorateRules.CanCreate(false, 9, 6),
+            "non-Xia realm cannot create a governorate");
+        Equal(true, MilitaryGovernorateRules.IsEligibleSeat(
+                true, false, false, true),
+            "external frontier is eligible");
+        Equal(false, MilitaryGovernorateRules.IsEligibleSeat(
+                true, true, false, true),
+            "capital is excluded");
+        Equal(false, MilitaryGovernorateRules.IsEligibleSeat(
+                true, false, true, true),
+            "special administration is excluded");
+        Equal("天平军", MilitaryGovernorateRules.CommandName("天平", "军"),
+            "regional command suffix is stable");
+        Equal("天平军", MilitaryGovernorateRules.CommandName("天平军", "军"),
+            "command suffix is not duplicated");
+        Equal("军", KingdomNameplateSuffixRules.Resolve(
+                4, true, true, true, pIsMilitaryGovernorate: true),
+            "active military governorate suffix outranks generic state logic");
+        Equal("天平军", KingdomNameplateSuffixRules.ProjectName(
+                "天平军", "军", pShouldDisplaySuffix: true),
+            "active governorate projection does not duplicate the command suffix");
+        Equal("王国", KingdomNameplateSuffixRules.Resolve(
+                3, false, false, false,
+                pIsMilitaryGovernorate: false),
+            "ordinary and former governorates retain generic state suffixes");
+        Equal(HeirTitleSelectionRules.LiuhouKey,
+            HeirTitleSelectionRules.TitleKey(false,
+                HeirTitleSelectionRules.CivilAcclaimMode,
+                pIsMilitaryGovernorate: true),
+            "active governorate heir is titled liuhou before succession-mode logic");
+        Equal("留后", HeirTitleSelectionRules.DefaultTitleText(false,
+                HeirTitleSelectionRules.CivilAcclaimMode,
+                pIsMilitaryGovernorate: true),
+            "active governorate heir fallback is liuhou");
+        Equal(HeirTitleSelectionRules.SijunKey,
+            HeirTitleSelectionRules.TitleKey(false,
+                HeirTitleSelectionRules.CivilAcclaimMode,
+                pIsMilitaryGovernorate: false),
+            "former governorate heir falls through to existing succession mode");
+        Equal("将军", RulerAppellationRules.LivingMilitaryGovernorate(),
+            "active governorate ruler appellation is general");
+        Equal("将军", RulerAppellationRules.ResolveWindowRulerLabel(
+                pIsMilitaryGovernorate: true, pIsRepublic: true,
+                pIsEmpireRank: true, pIsMandate: true,
+                pLivingAppellation: "皇帝", pRepublicLabel: "元首",
+                pMonarchyLabel: "国王", pEmperorFallbackLabel: "皇帝",
+                pMilitaryGovernorLabel: "将军"),
+            "governorate ruler title outranks republic and imperial logic");
+        Equal("元首", RulerAppellationRules.ResolveWindowRulerLabel(
+                pIsMilitaryGovernorate: false, pIsRepublic: true,
+                pIsEmpireRank: true, pIsMandate: true,
+                pLivingAppellation: "皇帝", pRepublicLabel: "元首",
+                pMonarchyLabel: "国王", pEmperorFallbackLabel: "皇帝",
+                pMilitaryGovernorLabel: "将军"),
+            "former governorate ruler falls through to existing republic logic");
+        Equal(true,
+            VassalNameplateFlagStateRules.ShouldShowMilitaryGovernorateMarker(
+                pFullPlate: true, pKingdomValid: true,
+                pIsMilitaryGovernorate: true),
+            "active governorate full nameplate displays its military marker");
+        Equal(false,
+            VassalNameplateFlagStateRules.ShouldShowMilitaryGovernorateMarker(
+                pFullPlate: true, pKingdomValid: true,
+                pIsMilitaryGovernorate: false),
+            "ordinary kingdom nameplate has no military marker");
+        Equal(true, MilitaryGovernorateRules.MustJoinSuzerainWar(
+                VassalSubjectKind.MilitaryGovernorate),
+            "military governorate obligation is absolute");
+        Equal(false, MilitaryGovernorateRules.MustJoinSuzerainWar(
+                VassalSubjectKind.Ordinary),
+            "ordinary subjects retain contract decisions");
+        Equal(false, MilitaryGovernorateRules.CanConductStateDiplomacy(
+                VassalSubjectKind.MilitaryGovernorate),
+            "military governorate has no state diplomacy");
+        Equal(true, MilitaryGovernorateRules.CanConductStateDiplomacy(
+                VassalSubjectKind.Ordinary),
+            "ordinary relation does not add a new diplomacy block");
+        Equal(1, MilitaryGovernorateRules.AnnualCreationLimit,
+            "AI creates at most one governorate per realm-year");
+        Equal(16, MilitaryGovernorateRules.CityScanBudget,
+            "frontier candidate reads stay bounded");
+        Equal(32, MilitaryGovernorateRules.GeneralScanBudget,
+            "general candidate reads stay bounded");
+
+        VassalEffectiveTerms militaryTerms = VassalContractTierRules.TermsFor(
+            VassalContractTierRules.Outer,
+            VassalSubjectKind.MilitaryGovernorate);
+        Equal(50, militaryTerms.Autonomy,
+            "military governorate preserves local autonomy");
+        Equal(0, militaryTerms.TributeRate,
+            "military governorate does not pay ordinary tribute");
+        Equal(100, militaryTerms.MilitaryObligation,
+            "military governorate has an absolute military obligation");
+
+        VassalEffectiveTerms ordinaryTerms = VassalContractTierRules.TermsFor(
+            VassalContractTierRules.Outer, VassalSubjectKind.Ordinary);
+        Equal(50, ordinaryTerms.Autonomy,
+            "ordinary outer vassal autonomy is unchanged");
+        Equal(10, ordinaryTerms.TributeRate,
+            "ordinary outer vassal tribute is unchanged");
+        Equal(50, ordinaryTerms.MilitaryObligation,
+            "ordinary outer vassal obligation is unchanged");
+
+        Equal(true, VassalRelationRules.CanSetMilitaryGovernorate(
+                true, false, false, false),
+            "valid non-rebel relation may become a military governorate");
+        Equal(false, VassalRelationRules.CanSetMilitaryGovernorate(
+                true, false, false, true),
+            "military governorate relation cannot create a cycle");
+        Equal(false, VassalRelationRules.CanSetMilitaryGovernorate(
+                true, true, false, false),
+            "rebel subject cannot become a military governorate");
+
+        int frontierSeat = MilitaryGovernorateCreationRules.SeatScore(
+            true, 10, 2);
+        int richInteriorSeat = MilitaryGovernorateCreationRules.SeatScore(
+            false, 10000, 1000);
+        Equal(true, frontierSeat > richInteriorSeat,
+            "external frontier always outranks an interior city");
+
+        int trustedGeneral = MilitaryGovernorateCreationRules.GeneralScore(
+            80, 90, 10, 8);
+        int ambitiousGeneral = MilitaryGovernorateCreationRules.GeneralScore(
+            80, 90, 90, 8);
+        Equal(true, trustedGeneral > ambitiousGeneral,
+            "ambition reduces governorate candidate priority");
+        Equal(true, MilitaryGovernorateCreationRules.CompareCandidate(
+                trustedGeneral, 10, trustedGeneral, 20) < 0,
+            "actor id provides a deterministic ascending tie break");
+
+        Equal(MilitaryGovernorateRollbackAction.None,
+            MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.None),
+            "no mutation needs no rollback");
+        Equal(MilitaryGovernorateRollbackAction.RemoveKingdom,
+            MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.KingdomCreated),
+            "created kingdom is removed on rollback");
+        Equal(true, MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.CityTransferred)
+                .HasFlag(MilitaryGovernorateRollbackAction.RestoreCity),
+            "transferred city is restored on rollback");
+        Equal(true, MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.RelationCreated)
+                .HasFlag(MilitaryGovernorateRollbackAction.EndRelation),
+            "created relation is ended on rollback");
+        Equal(true, MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.StateCreated)
+                .HasFlag(MilitaryGovernorateRollbackAction.EndState),
+            "persisted governorate state is ended on rollback");
+        Equal(MilitaryGovernorateRollbackAction.None,
+            MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.Completed),
+            "post-commit side effects never dismantle a committed command");
+        Equal(false, MilitaryGovernorateRules.HasPersistedOverLimit(10, 10),
+            "AI does not create in the first over-limit year");
+        Equal(true, MilitaryGovernorateRules.HasPersistedOverLimit(11, 10),
+            "AI may create after one complete over-limit year");
+        Equal(false, MilitaryGovernorateRules.CanRunAnnualAi(11, 11),
+            "AI evaluates a realm at most once in a year");
+        Equal(true, MilitaryGovernorateRules.CanRunAnnualAi(11, 10),
+            "AI may evaluate when the persisted year is older");
+        Equal(true, MilitaryGovernorateRules.ShouldSynchronizeColor(
+                true, true, VassalSubjectKind.MilitaryGovernorate),
+            "direct active military governorates synchronize colors");
+        Equal(false, MilitaryGovernorateRules.ShouldSynchronizeColor(
+                false, true, VassalSubjectKind.MilitaryGovernorate),
+            "indirect military governorates do not synchronize colors");
+        Equal(false, MilitaryGovernorateRules.ShouldSynchronizeColor(
+                true, false, VassalSubjectKind.MilitaryGovernorate),
+            "inactive military governorates do not synchronize colors");
+        Equal(false, MilitaryGovernorateRules.ShouldSynchronizeColor(
+                true, true, VassalSubjectKind.Ordinary),
+            "ordinary subjects retain their own colors");
+        Equal(true, MilitaryGovernorateRules.ShouldRandomizeIndependentColor(
+                "independence_war"),
+            "a successful independence war receives independent colors");
+        Equal(false, MilitaryGovernorateRules.ShouldRandomizeIndependentColor(
+                "independence_war_transfer"),
+            "transfer to an upper suzerain is not independence");
+        Equal(false, MilitaryGovernorateRules.ShouldRandomizeIndependentColor(
+                "manual"),
+            "administrative release does not impersonate a war victory");
+        Equal(false, MilitaryGovernorateRules.ShouldTransferIndependenceToUpper(
+                VassalSubjectKind.MilitaryGovernorate),
+            "a victorious military governorate becomes fully independent");
+        Equal(true, MilitaryGovernorateRules.ShouldTransferIndependenceToUpper(
+                VassalSubjectKind.Ordinary),
+            "ordinary nested vassals retain the existing transfer behavior");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

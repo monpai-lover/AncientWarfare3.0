@@ -134,6 +134,25 @@ internal static class WesternCourtProfileRulesTests
                 CourtProfileId.Western, CourtInstitutionId.WesternPrimitive,
                 false), "primitive Western courts have no formal city office");
 
+        Equal(true, CourtManualAppointmentRules.CanUseManualAppointment(
+                CourtInstitutionId.WesternBureaucratic, false),
+            "Western bureaucratic offices allow manual appointment");
+        Equal(true, CourtManualAppointmentRules.CanUseManualAppointment(
+                CourtInstitutionId.WesternFeudalBureaucratic, false),
+            "Western feudal bureaucratic offices allow manual appointment");
+        Equal(false, CourtManualAppointmentRules.CanUseManualAppointment(
+                CourtInstitutionId.WesternPrimitive, false),
+            "primitive Western court remains locked");
+        Equal(true, CourtManualAppointmentRules.CanOpenVacancyAppointment(
+                true, true, true),
+            "valid vacancy opens appointment");
+        Equal(false, CourtManualAppointmentRules.CanOpenVacancyAppointment(
+                true, false, true),
+            "office outside the institution stays closed");
+        Equal(false, CourtManualAppointmentRules.CanOpenVacancyAppointment(
+                true, true, false),
+            "institution permission is respected");
+
         ICourtProfile xia = CourtProfileRegistry.For(
             KingdomPolicyProfileId.Xia);
         Equal(CourtProfileId.Xia, xia.Id,

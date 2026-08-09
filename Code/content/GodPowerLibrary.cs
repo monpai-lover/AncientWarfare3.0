@@ -16,6 +16,8 @@ namespace AncientWarfare3.content
         public const string VASSAL_SET = "aw_vassal_set";
         public const string VASSAL_REMOVE = "aw_vassal_remove";
         public const string ROYAL_ENFEOFFMENT = "aw_royal_enfeoffment";
+        public const string MILITARY_GOVERNORATE =
+            "aw_military_governorate";
         public const string GRANT_MANDATE = "aw_grant_mandate";
 
         private static Kingdom _pendingVassal;
@@ -53,6 +55,7 @@ namespace AncientWarfare3.content
             RegisterMapModeNameplates();
             RegisterVassalPowers();
             RegisterRoyalEnfeoffmentPower();
+            RegisterMilitaryGovernoratePower();
             RegisterMandateGrantPower();
         }
 
@@ -881,6 +884,23 @@ namespace AncientWarfare3.content
             });
         }
 
+        private static void RegisterMilitaryGovernoratePower()
+        {
+            if (AssetManager.powers.get(MILITARY_GOVERNORATE) != null)
+                return;
+            AssetManager.powers.add(new GodPower
+            {
+                id = MILITARY_GOVERNORATE,
+                name = MILITARY_GOVERNORATE,
+                path_icon = "ui/wars/war_vassal",
+                force_map_mode = MetaType.City,
+                unselect_when_window = true,
+                allow_unit_selection = false,
+                click_special_action = new PowerActionWithID(
+                    MilitaryGovernorateClick)
+            });
+        }
+
         private static void RegisterMandateGrantPower()
         {
             if (AssetManager.powers.get(GRANT_MANDATE) != null) return;
@@ -992,6 +1012,23 @@ namespace AncientWarfare3.content
 
             Tip(AW_L10n.Text("aw_royal_enfeoffment_success",
                 "A royal clansman now rules the new vassal kingdom."));
+            return true;
+        }
+
+        private static bool MilitaryGovernorateClick(WorldTile pTile,
+            string pPowerID)
+        {
+            City city = pTile?.zone?.city;
+            if (!MilitaryGovernorateCreationService.CanSelectSeat(city,
+                    out string reason))
+            {
+                Tip(AW_L10n.Text(
+                    "aw_military_governorate_failure_" + reason,
+                    AW_L10n.Text("aw_military_governorate_failure",
+                        "This city cannot become a military command.")));
+                return false;
+            }
+            MilitaryGovernorateWindow.OpenCreation(city);
             return true;
         }
 

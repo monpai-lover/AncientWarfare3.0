@@ -32,14 +32,16 @@ namespace AncientWarfare3.core.lineage
             foreach (Kingdom owner in owners)
             {
                 foreach (City city in owner.getCities())
-                    if (city?.data != null && !city.isRekt() && HasExternalLandBorder(city, defender))
+                    if (city?.data != null && !city.isRekt() &&
+                        HasExternalLandBorderForRoot(city, defender))
                         targets.Add(city);
             }
             targets.Sort((left, right) => BorderPriority(right).CompareTo(BorderPriority(left)));
             BorderArmyReanchorService.ReanchorExistingArmies(targets, ownerIds);
         }
 
-        private static bool HasExternalLandBorder(City pCity, Kingdom pDefenderRoot)
+        internal static bool HasExternalLandBorderForRoot(City pCity,
+            Kingdom pDefenderRoot)
         {
             try
             {

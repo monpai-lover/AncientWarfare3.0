@@ -209,6 +209,11 @@ namespace AncientWarfare3.patch
                 "civil-service ranking ruler death", () =>
                 CivilServiceExamService.OnCurrentRulerDied(
                     __state.DyingKingdom));
+            TryRunDeathStage(__instance,
+                ActorDeathPerformanceStage.KingSuccession,
+                "military governorate ruler succession", () =>
+                MilitaryGovernorateSuccessionService.OnRulerDied(
+                    __state.DyingKingdom, __state.DyingKingActorId));
         }
 
         private static void TryRunDeathStage(Actor pActor,

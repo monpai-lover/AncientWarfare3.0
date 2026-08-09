@@ -19,6 +19,12 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return Reclaim(request);
                 case AW3CommandKind.AbolishFeudatory:
                     return Abolish(request);
+                case AW3CommandKind.CreateMilitaryGovernorate:
+                    return CreateMilitaryGovernorate(request);
+                case AW3CommandKind.DesignateMilitaryGovernorateSuccessor:
+                    return DesignateMilitaryGovernorateSuccessor(request);
+                case AW3CommandKind.ReplaceMilitaryGovernorateGovernor:
+                    return ReplaceMilitaryGovernorateGovernor(request);
                 default:
                     return Invalid();
             }
@@ -73,9 +79,81 @@ namespace AncientWarfare3.core.multiplayer.commands
                 : Rejected("aw3_feudatory_abolish_rejected");
         }
 
+        private static AW3CommandResult CreateMilitaryGovernorate(
+            AW3CommandRequest request)
+        {
+            Kingdom country = FindKingdom(request.CountryId);
+            City city = FindCity(request.CityId);
+            Actor general = FindActor(request.ActorId);
+            if (country?.data == null || city?.data == null ||
+                general?.data == null || city.kingdom != country ||
+                general.kingdom != country) return NotFound();
+            bool created = MilitaryGovernorateCreationService.TryCreate(
+                city, general, out Kingdom subject, out string reason);
+            return created
+                ? AW3CommandResult.Success(
+                    "aw_military_governorate_success", subject?.id ?? -1L)
+                : Rejected("aw_military_governorate_failure_" +
+                           (reason ?? "creation_failed"));
+        }
+
+        private static AW3CommandResult DesignateMilitaryGovernorateSuccessor(
+            AW3CommandRequest request)
+        {
+            Kingdom suzerain = FindKingdom(request.CountryId);
+            Kingdom subject = FindKingdom(request.TargetCountryId);
+            Actor candidate = FindActor(request.ActorId);
+            if (suzerain?.data == null || subject?.data == null ||
+                candidate?.data == null) return NotFound();
+            bool changed = MilitaryGovernorateSuccessionService.TryDesignate(
+                suzerain, subject, candidate, out string reason);
+            return changed
+                ? AW3CommandResult.Success(
+                    "aw_military_governorate_success_designated",
+                    candidate.data.id)
+                : Rejected("aw_military_governorate_failure_" +
+                           (reason ?? "designation_failed"));
+        }
+
+        private static AW3CommandResult ReplaceMilitaryGovernorateGovernor(
+            AW3CommandRequest request)
+        {
+            Kingdom suzerain = FindKingdom(request.CountryId);
+            Kingdom subject = FindKingdom(request.TargetCountryId);
+            Actor governor = FindActor(request.ActorId);
+            if (request.TargetActorId >= 0) return Invalid();
+            if (suzerain?.data == null || subject?.data == null ||
+                governor?.data == null)
+                return NotFound();
+            bool changed =
+                MilitaryGovernorateSuccessionService.TryReplaceGovernor(
+                    suzerain, subject, governor, out string reason);
+            if (!changed && reason == "replacement_pending")
+                return AW3CommandResult.Pending(
+                    "aw_military_governorate_failure_replacement_pending");
+            return changed
+                ? AW3CommandResult.Success(
+                    "aw_military_governorate_success_replaced",
+                    governor.data.id)
+                : Rejected("aw_military_governorate_failure_" +
+                           (reason ?? "replacement_failed"));
+        }
+
         private static Kingdom FindKingdom(long id)
         {
             try { return World.world?.kingdoms?.get(id); }
+            catch { return null; }
+        }
+
+        private static City FindCity(long id)
+        {
+            try { return World.world?.cities?.get(id); }
+            catch { return null; }
+        }
+
+        private static Actor FindActor(long id)
+        {
+            try { return World.world?.units?.get(id); }
             catch { return null; }
         }
 

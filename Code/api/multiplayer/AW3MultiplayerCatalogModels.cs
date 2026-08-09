@@ -60,7 +60,8 @@ namespace AncientWarfare3.api.multiplayer
         RulerHousehold = 27,
         HouseholdOffer = 28,
         Supporters = 29,
-        VirtualTitles = 30
+        VirtualTitles = 30,
+        MilitaryGovernorate = 31
     }
 
     public enum AW3WindowOpenStatus : byte
@@ -338,7 +339,10 @@ namespace AncientWarfare3.api.multiplayer
         RenameSurname = 27,
         GrantVirtualNobleTitle = 28,
         EditVirtualNobleTitle = 29,
-        DeleteVirtualNobleTitle = 30
+        DeleteVirtualNobleTitle = 30,
+        CreateMilitaryGovernorate = 31,
+        DesignateMilitaryGovernorateSuccessor = 32,
+        ReplaceMilitaryGovernorateGovernor = 33
     }
 
     public enum AW3CommandStatus : byte
@@ -617,6 +621,26 @@ namespace AncientWarfare3.api.multiplayer
             AW3CommandKind.DeleteVirtualNobleTitle, countryId,
             secondaryId: Positive(titleId, nameof(titleId)),
             boolValue: formalTitle);
+
+        public static AW3CommandRequest CreateMilitaryGovernorate(
+            long countryId, long cityId, long actorId) => Create(
+            AW3CommandKind.CreateMilitaryGovernorate, countryId,
+            cityId: Positive(cityId, nameof(cityId)),
+            actorId: Positive(actorId, nameof(actorId)));
+
+        public static AW3CommandRequest DesignateMilitaryGovernorateSuccessor(
+            long countryId, long subjectCountryId, long actorId) => Create(
+            AW3CommandKind.DesignateMilitaryGovernorateSuccessor, countryId,
+            targetCountryId: Positive(subjectCountryId,
+                nameof(subjectCountryId)),
+            actorId: Positive(actorId, nameof(actorId)));
+
+        public static AW3CommandRequest ReplaceMilitaryGovernorateGovernor(
+            long countryId, long subjectCountryId, long governorActorId) => Create(
+            AW3CommandKind.ReplaceMilitaryGovernorateGovernor, countryId,
+            targetCountryId: Positive(subjectCountryId,
+                nameof(subjectCountryId)),
+            actorId: Positive(governorActorId, nameof(governorActorId)));
 
         public static AW3CommandRequest ChangeEra(long countryId,
             string eraName) => Create(AW3CommandKind.ChangeEra, countryId,

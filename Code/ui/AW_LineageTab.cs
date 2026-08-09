@@ -146,6 +146,14 @@ namespace AncientWarfare3.ui
             Register(groups, AWLineageTabLayoutRules.Administration,
                 royalEnfeoffmentButton);
 
+            PowerButton militaryGovernorateButton =
+                PowerButtonCreator.CreateGodPowerButton(
+                    content.GodPowerLibrary.MILITARY_GOVERNORATE,
+                    SpriteTextureLoader.getSprite("ui/wars/war_vassal")
+                    ?? SpriteTextureLoader.getSprite("ui/icons/iconKings"));
+            Register(groups, AWLineageTabLayoutRules.Administration,
+                militaryGovernorateButton);
+
             PowerButton settingsButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_settings_btn",
                 () => OpenSettings(),

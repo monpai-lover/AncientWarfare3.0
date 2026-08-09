@@ -65,11 +65,35 @@ namespace AncientWarfare3.core.lineage
             return "元首";
         }
 
+        public static string LivingMilitaryGovernorate()
+        {
+            return "将军";
+        }
+
         public static string ResolveWindowRulerLabel(bool pIsRepublic,
             bool pIsEmpireRank, bool pIsMandate, string pLivingAppellation,
             string pRepublicLabel, string pMonarchyLabel,
             string pEmperorFallbackLabel)
         {
+            return ResolveWindowRulerLabel(pIsMilitaryGovernorate: false,
+                pIsRepublic, pIsEmpireRank, pIsMandate,
+                pLivingAppellation, pRepublicLabel, pMonarchyLabel,
+                pEmperorFallbackLabel, LivingMilitaryGovernorate());
+        }
+
+        public static string ResolveWindowRulerLabel(
+            bool pIsMilitaryGovernorate, bool pIsRepublic,
+            bool pIsEmpireRank, bool pIsMandate, string pLivingAppellation,
+            string pRepublicLabel, string pMonarchyLabel,
+            string pEmperorFallbackLabel, string pMilitaryGovernorLabel)
+        {
+            if (pIsMilitaryGovernorate)
+            {
+                string military = Normalize(pMilitaryGovernorLabel);
+                return military.Length > 0
+                    ? military
+                    : LivingMilitaryGovernorate();
+            }
             if (pIsRepublic) return Normalize(pRepublicLabel);
             if (!ShouldUseLivingEmperor(pIsEmpireRank, pIsMandate))
                 return Normalize(pMonarchyLabel);

@@ -391,6 +391,7 @@ aw_court_appointment_action_desc,将此人任命至当前空缺官职,Appoint th
 aw_court_appointment_empty,当前没有符合资格的人物,No eligible actors are available.,當前沒有符合資格的人物
 aw_court_appointment_invalid_kingdom,该王国已不存在,The kingdom no longer exists.,該王國已不存在
 aw_court_appointment_invalid_office,该官职已不属于当前官制,This office is no longer part of the current court.,該官職已不屬於當前官制
+aw_court_appointment_not_allowed,当前官制不允许手动任命,The current institution does not allow manual appointment.,當前官制不允許手動任命
 aw_court_appointment_occupied,该官职已被任命,This office has already been filled.,該官職已被任命
 aw_court_appointment_office_changed,当前官员已经变化 请重新打开官场,The incumbent has changed. Reopen the court.,當前官員已經變化 請重新打開官場
 aw_court_appointment_invalid_actor,该人物已不存在或无法任命,This actor is no longer available.,該人物已不存在或無法任命

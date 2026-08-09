@@ -95,7 +95,13 @@ namespace AncientWarfare3.ui.items
                 : "";
 
             _button.onClick.RemoveAllListeners();
-            bool canAppoint = pNode.IsVacancy && !string.IsNullOrEmpty(pNode.OfficeId);
+            bool officeAvailable = CourtService.IsManualOfficeInCurrentTier(
+                pKingdom, pNode.OfficeId);
+            bool appointmentAllowed = CourtService.CanUseManualAppointment(
+                pKingdom);
+            bool canAppoint = CourtManualAppointmentRules.
+                CanOpenVacancyAppointment(pNode.IsVacancy, officeAvailable,
+                    appointmentAllowed);
             _button.interactable = live || canAppoint;
             if (live)
                 _button.onClick.AddListener(() => ActionLibrary.openUnitWindow(actor));
@@ -108,8 +114,8 @@ namespace AncientWarfare3.ui.items
                 : -1L;
             CourtManualOfficeAction officeAction =
                 CourtManualAppointmentRules.ResolveOfficeAction(
-                    CourtService.IsManualOfficeInCurrentTier(
-                        pKingdom, pNode.OfficeId), incumbentActorId);
+                    officeAvailable && appointmentAllowed,
+                    incumbentActorId);
             bool canManageOffice = officeAction != CourtManualOfficeAction.None;
             _manageOfficeObject.SetActive(canManageOffice);
             bool canDispose = live && !pNode.IsVacancy && !actor.isKing();

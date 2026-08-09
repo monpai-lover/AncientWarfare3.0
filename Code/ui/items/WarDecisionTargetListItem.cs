@@ -13,6 +13,7 @@ namespace AncientWarfare3.ui.items
         public string tooltip_desc = "";
         public string button_text = "";
         public string icon_path = "";
+        public long actor_id = -1;
         public bool is_header;
         public bool dim;
         public bool enabled = true;
@@ -29,6 +30,7 @@ namespace AncientWarfare3.ui.items
         private Text _label;
         private Text _stats;
         private Image _icon;
+        private UiUnitAvatarElement _livePortrait;
         private LayoutElement _layout;
         private TipButton _tip;
         private GameObject _buttonObj;
@@ -50,6 +52,8 @@ namespace AncientWarfare3.ui.items
                 _label.alignment = TextAnchor.MiddleCenter;
                 _label.color = new Color(1f, 0.75f, 0.35f, 1f);
                 _icon.gameObject.SetActive(false);
+                if (_livePortrait != null)
+                    _livePortrait.gameObject.SetActive(false);
                 _stats.gameObject.SetActive(false);
                 _buttonObj.SetActive(false);
                 ApplyHeight(24f);
@@ -63,7 +67,9 @@ namespace AncientWarfare3.ui.items
             _label.color = enabled ? Color.white : new Color(0.68f, 0.68f, 0.68f, 1f);
             _stats.color = enabled ? new Color(0.88f, 0.88f, 0.88f, 1f) : new Color(0.58f, 0.58f, 0.58f, 1f);
             _stats.gameObject.SetActive(true);
-            SetupIcon(pObject, enabled);
+            SetupPortrait(pObject);
+            SetupIcon(pObject, enabled, _livePortrait == null ||
+                !_livePortrait.gameObject.activeSelf);
 
             SetupButton(pObject);
             ApplyHeight(ROW_H);
@@ -161,13 +167,40 @@ namespace AncientWarfare3.ui.items
             _buttonText.resizeTextMaxSize = 8;
         }
 
-        private void SetupIcon(WarDecisionTargetRow pObject, bool pEnabled)
+        private void SetupPortrait(WarDecisionTargetRow pObject)
+        {
+            if (_livePortrait != null) _livePortrait.gameObject.SetActive(false);
+            if (pObject == null || pObject.actor_id < 0) return;
+            Actor actor;
+            try { actor = World.world?.units?.get(pObject.actor_id); }
+            catch { actor = null; }
+            if (actor?.data == null || actor.isRekt()) return;
+            if (_livePortrait == null)
+            {
+                UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
+                if (prefab == null) return;
+                _livePortrait = Instantiate(prefab, _icon.transform.parent);
+                RectTransform rect = _livePortrait.GetComponent<RectTransform>();
+                rect.anchorMin = rect.anchorMax = new Vector2(0f, .5f);
+                rect.pivot = new Vector2(0f, .5f);
+                rect.anchoredPosition = new Vector2(3f, 0f);
+                rect.sizeDelta = new Vector2(24f, 24f);
+            }
+            _livePortrait.gameObject.SetActive(true);
+            _livePortrait.enabled = true;
+            if (_livePortrait.avatarLoader != null)
+                _livePortrait.avatarLoader.enabled = true;
+            _livePortrait.show(actor);
+        }
+
+        private void SetupIcon(WarDecisionTargetRow pObject, bool pEnabled,
+            bool pVisible)
         {
             if (_icon == null) return;
             Sprite sprite = SpriteTextureLoader.getSprite(pObject?.icon_path ?? "")
                             ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy")
                             ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge");
-            _icon.gameObject.SetActive(sprite != null);
+            _icon.gameObject.SetActive(pVisible && sprite != null);
             if (sprite == null) return;
             _icon.sprite = sprite;
             _icon.color = pEnabled ? Color.white : new Color(0.62f, 0.62f, 0.62f, 0.9f);

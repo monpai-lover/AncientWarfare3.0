@@ -235,6 +235,61 @@ namespace AncientWarfare3.core.lineage
                 ChronicleCategory.HONOR, HistoryTarget.City(pSeat));
         }
 
+        public static void OnMilitaryGovernorateCreated(Kingdom pSuzerain,
+            Kingdom pSubject, City pSeat, Actor pGeneral)
+        {
+            if (pSuzerain?.data == null || pSubject?.data == null ||
+                pSeat?.data == null || pGeneral?.data == null) return;
+            HistoryText text = HistoryText.Kingdom(pSuzerain) +
+                               H("aw_hist_military_governorate_created_at") +
+                               HistoryText.City(pSeat, pSubject) +
+                               H("aw_hist_military_governorate_created_as") +
+                               HistoryText.Kingdom(pSubject) +
+                               H("aw_hist_military_governorate_general") +
+                               HistoryText.Actor(pGeneral);
+            HistoryWriter.RecordKingdom(pSuzerain,
+                "military_governorate_created", text,
+                HistoryTarget.Actor(pGeneral));
+            HistoryWriter.RecordKingdom(pSubject,
+                "military_governorate_created", text,
+                HistoryTarget.Kingdom(pSuzerain));
+            HistoryWriter.RecordCity(pSeat, pSubject,
+                "military_governorate_created", text,
+                HistoryTarget.Actor(pGeneral));
+            HistoryWriter.RecordPerson(pGeneral.data.id, pSubject,
+                pGeneral.getName(), "military_governorate_created", text,
+                ChronicleCategory.WAR, HistoryTarget.Kingdom(pSuzerain));
+        }
+
+        public static bool TryRecordMilitaryGovernorateSucceeded(long pStateId,
+            Kingdom pSuzerain, Kingdom pSubject, Actor pGovernor)
+        {
+            if (pStateId < 0 || pSubject?.data == null ||
+                pGovernor?.data == null) return false;
+            HistoryText text = HistoryText.Actor(pGovernor) +
+                               HistoryLocalizationRules.H("aw_hist_military_governorate_succession_mid") +
+                               HistoryText.Kingdom(pSubject);
+            bool subjectRecorded = HistoryWriter.TryRecordKingdom(pSubject,
+                "military_governorate_succession", text,
+                HistoryTarget.Actor(pGovernor),
+                MilitaryGovernorateSuccessionRules.ChronicleProjectionKey(
+                    pStateId, pGovernor.data.id, "subject"));
+            bool personRecorded = HistoryWriter.TryRecordPerson(
+                pGovernor.data.id, pSubject,
+                pGovernor.getName(), "military_governorate_succession", text,
+                ChronicleCategory.WAR, HistoryTarget.Kingdom(pSubject),
+                MilitaryGovernorateSuccessionRules.ChronicleProjectionKey(
+                    pStateId, pGovernor.data.id, "person"));
+            bool suzerainRecorded = true;
+            if (pSuzerain?.data != null)
+                suzerainRecorded = HistoryWriter.TryRecordKingdom(pSuzerain,
+                    "military_governorate_succession", text,
+                    HistoryTarget.Kingdom(pSubject),
+                    MilitaryGovernorateSuccessionRules.ChronicleProjectionKey(
+                        pStateId, pGovernor.data.id, "suzerain"));
+            return subjectRecorded && personRecorded && suzerainRecorded;
+        }
+
         public static void OnFeudatoryInherited(Kingdom pKingdom,
             Actor pOldPrince, Actor pNewPrince, City pSeat, string pReason)
         {
@@ -828,8 +883,7 @@ namespace AncientWarfare3.core.lineage
             Actor pHeir, string pMode)
         {
             if (pKingdom?.data == null || pHeir?.data == null) return;
-            string title = T(HeirTitleRules.TitleKey(
-                HeirTitleRules.IsImperialOrMandate(pKingdom), pMode));
+            string title = T(HeirTitleRules.TitleKey(pKingdom, pMode));
             HistoryText ruler = pRuler?.data != null
                 ? HistoryText.Actor(pRuler)
                 : HistoryText.Kingdom(pKingdom);

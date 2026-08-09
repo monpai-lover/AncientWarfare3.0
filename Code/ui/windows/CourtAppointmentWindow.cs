@@ -540,6 +540,9 @@ namespace AncientWarfare3.ui.windows
                 case CourtManualAppointmentResult.InvalidOffice:
                     return AW_L10n.Text("aw_court_appointment_invalid_office",
                         "This office is no longer part of the current court.");
+                case CourtManualAppointmentResult.AppointmentNotAllowed:
+                    return AW_L10n.Text("aw_court_appointment_not_allowed",
+                        "The current institution does not allow manual appointment.");
                 case CourtManualAppointmentResult.OfficeOccupied:
                     return AW_L10n.Text("aw_court_appointment_occupied",
                         "This office has already been filled.");

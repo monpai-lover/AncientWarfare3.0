@@ -1,0 +1,56 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MilitaryGovernorateWarRulesTests
+{
+    public static void Run()
+    {
+        Equal(true,
+            MilitaryGovernorateWarRules.CanExternalRealmTargetGovernorate(
+                VassalSubjectKind.MilitaryGovernorate),
+            "external realms may target a military governorate");
+        Equal(false,
+            MilitaryGovernorateWarRules.CanExternalRealmTargetGovernorate(
+                VassalSubjectKind.Ordinary),
+            "ordinary subjects remain blocked as direct war targets");
+        Equal(true, VassalWarPermissionRules.CanDeclareWar(
+                false, true, false, false, false, "normal",
+                VassalSubjectKind.MilitaryGovernorate, out string reason),
+            "war permission admits an external military-governorate target");
+        Equal("", reason,
+            "military-governorate target permission has no failure reason");
+        Equal(10L, MilitaryGovernorateWarRules.ResolveMainDefender(
+                20L, 10L, VassalSubjectKind.MilitaryGovernorate),
+            "root suzerain leads a governorate defensive war");
+        Equal(20L, MilitaryGovernorateWarRules.ResolveMainDefender(
+                20L, 10L, VassalSubjectKind.Ordinary),
+            "ordinary targets retain existing defender resolution");
+        Equal(10L, MilitaryGovernorateWarRules.ResolvePeaceController(
+                20L, 10L, VassalSubjectKind.MilitaryGovernorate),
+            "root suzerain controls governorate peace");
+        Equal(true, MilitaryGovernorateRules.MustJoinSuzerainWar(
+                VassalSubjectKind.MilitaryGovernorate),
+            "military governorates always join suzerain wars");
+        Equal(false, MilitaryGovernorateRules.CanConductStateDiplomacy(
+                VassalSubjectKind.MilitaryGovernorate),
+            "military governorates cannot conduct state diplomacy");
+        Equal(false, MilitaryGovernorateWarRules.CanUseStateProposal(
+                VassalSubjectKind.MilitaryGovernorate,
+                VassalSubjectKind.Ordinary),
+            "a governorate cannot send a state proposal");
+        Equal(false, MilitaryGovernorateWarRules.CanUseStateProposal(
+                VassalSubjectKind.Ordinary,
+                VassalSubjectKind.MilitaryGovernorate),
+            "ordinary diplomacy cannot target a governorate directly");
+        Equal(true, MilitaryGovernorateWarRules.CanUseStateProposal(
+                VassalSubjectKind.Ordinary,
+                VassalSubjectKind.Ordinary),
+            "ordinary diplomacy remains unchanged");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}
