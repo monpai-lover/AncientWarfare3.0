@@ -1,0 +1,77 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class KingSuccessionPreparationRulesTests
+{
+    public static void Run()
+    {
+        DuplicateDeathCaptureIsIdempotent();
+        SnapshotMustMatchCapturedRevision();
+        PreparedSuccessionIsConsumedOnce();
+        WorldGenerationSeparatesIdenticalActorIds();
+    }
+
+    private static void DuplicateDeathCaptureIsIdempotent()
+    {
+        var state = new KingSuccessionPreparationState();
+        var key = new KingSuccessionKey(7L, 20L, 101L);
+
+        True(state.TryCapture(key, 4L, 202L),
+            "the first death capture is accepted");
+        Equal(false, state.TryCapture(key, 4L, 202L),
+            "the same dead king is not prepared twice");
+        Equal(1, state.Count,
+            "a duplicate death cannot create another context");
+    }
+
+    private static void SnapshotMustMatchCapturedRevision()
+    {
+        var state = new KingSuccessionPreparationState();
+        var key = new KingSuccessionKey(7L, 21L, 102L);
+        state.TryCapture(key, 8L, 203L);
+        state.Publish(key, 7L, 203L, "registered");
+
+        Equal(false, state.TryConsume(key, 8L, out _),
+            "a stale snapshot cannot install a successor");
+        Equal(1, state.Count,
+            "a rejected stale context remains available for rebuild");
+    }
+
+    private static void PreparedSuccessionIsConsumedOnce()
+    {
+        var state = new KingSuccessionPreparationState();
+        var key = new KingSuccessionKey(7L, 22L, 103L);
+        state.TryCapture(key, 9L, 204L);
+        state.Publish(key, 9L, 204L, "military_acclaim");
+
+        True(state.TryConsume(key, 9L, out PreparedSuccession prepared),
+            "a current prepared succession is consumable");
+        Equal(204L, prepared.CandidateId,
+            "the selected candidate survives publication");
+        Equal("military_acclaim", prepared.Mode,
+            "the selected mode survives publication");
+        Equal(false, state.TryConsume(key, 9L, out _),
+            "one death context is consumed once");
+    }
+
+    private static void WorldGenerationSeparatesIdenticalActorIds()
+    {
+        var first = new KingSuccessionKey(7L, 20L, 101L);
+        var second = new KingSuccessionKey(8L, 20L, 101L);
+
+        Equal(false, first.Equals(second),
+            "world generation prevents cross-save death deduplication");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+}
