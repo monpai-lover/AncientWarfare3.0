@@ -777,6 +777,7 @@ namespace AncientWarfare3.core.performance
             _actorRunner.Abort();
             _buildingRunner.Abort();
             _maintenanceRunner.Abort();
+            AWAuthorityCycleService.AbortCooperativeCycle();
             AWSimulationTime.CancelTick();
             AWActorPresentationSnapshots.Reset();
             AWPresentationCommandQueue.Clear();
@@ -956,6 +957,9 @@ namespace AncientWarfare3.core.performance
                         return "vanilla.world_behaviour." +
                                _worldBehaviours[_listIndex].id;
                     break;
+                case SimulationStage.Aw3Authority:
+                    return AWAuthorityCycleService.
+                        GetCooperativePhaseName();
             }
             return StagePhaseNames[(int)_stage];
         }
@@ -1331,9 +1335,9 @@ namespace AncientWarfare3.core.performance
                     Advance(SimulationStage.Aw3Authority);
                     break;
                 case SimulationStage.Aw3Authority:
-                    AWAuthorityCycleService.ProcessCooperativeCycle(
-                        _logicalTicksAdmitted, _cyclePaused);
-                    Advance(SimulationStage.Complete);
+                    if (AWAuthorityCycleService.ProcessCooperativeStep(
+                            _logicalTicksAdmitted, _cyclePaused))
+                        Advance(SimulationStage.Complete);
                     break;
                 case SimulationStage.Complete:
                     CompleteCycle();
