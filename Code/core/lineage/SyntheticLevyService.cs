@@ -99,20 +99,6 @@ namespace AncientWarfare3.core.lineage
             return created;
         }
 
-        internal static void Promote(Actor actor)
-        {
-            if (actor?.data == null) return;
-            ReleaseLiveLedgerOnce(actor);
-            actor.data.set(LineageKeys.SYNTHETIC_LEVY_PROMOTED, true);
-            actor.data.removeBool(LineageKeys.SYNTHETIC_LEVY);
-            actor.data.removeLong(LineageKeys.SYNTHETIC_LEVY_SOURCE_CITY_ID);
-            actor.data.removeLong(
-                LineageKeys.SYNTHETIC_LEVY_SOURCE_KINGDOM_ID);
-            actor.data.removeLong(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID);
-            actor.data.removeBool(
-                LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED);
-        }
-
         internal static void OnActorDied(Actor actor)
         {
             bool dead;

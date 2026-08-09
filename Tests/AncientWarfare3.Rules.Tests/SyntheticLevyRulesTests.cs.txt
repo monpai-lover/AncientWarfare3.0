@@ -202,6 +202,12 @@ internal static class SyntheticLevyRulesTests
         Equal(false, levy.Contains("SyntheticLevyService.Promote(",
                 StringComparison.Ordinal),
             "generated wartime soldiers can never become permanent actors");
+        string syntheticLevy = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "SyntheticLevyService.cs"));
+        Equal(false, syntheticLevy.Contains(
+                "internal static void Promote(Actor",
+                StringComparison.Ordinal),
+            "the generated-actor service exposes no promotion boundary");
         int casualty = levy.IndexOf(
             "public static void OnMilitaryCasualty(Actor pActor)",
             StringComparison.Ordinal);
