@@ -254,6 +254,7 @@ status_title_aw_army_rts_mobilizing,紧急集结,Emergency Mobilization,緊急�
 status_description_aw_army_rts_mobilizing,正在向部队集结地赶赴，移动速度提高,Moving quickly to rally or replenish an Army,正在向部隊集結地趕赴，移動速度提高
 aw_diplomacy_ai,外交AI,外交AI,外交AI
 aw_diplomacy_ai Description,开启或关闭AW3外交AI，关闭后保留现有战争和玩家外交操作,Enable or disable AW3 diplomacy AI; existing wars and player diplomacy remain active,開啟或關閉AW3外交AI，關閉後保留現有戰爭和玩家外交操作
+aw_diplomacy_ai_description,开启或关闭AW3外交AI，关闭后保留现有战争和玩家外交操作,Enable or disable AW3 diplomacy AI; existing wars and player diplomacy remain active,開啟或關閉AW3外交AI，關閉後保留現有戰爭和玩家外交操作
 task_unit_aw_royal_asylum_roam,避难地闲居,Asylum Residence,避難地閒居
 aw_royal_asylum_host,避难城市,Host City,避難城市
 aw_historical_school_scholar,游学先师,Itinerant Master,遊學先師

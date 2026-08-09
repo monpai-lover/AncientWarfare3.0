@@ -9,6 +9,10 @@ $requirements = [ordered]@{
     'Locales/aw3_mandate.csv' = @(
         'aw_grant_mandate_error_zhulu_unresolved'
     )
+    'Locales/aw3_ancestry_mapmode.csv' = @(
+        'aw_royal_enfeoffment Description'
+        'aw_royal_enfeoffment_description'
+    )
     'Locales/aw3_army_rts.csv' = @(
         'aw_army_rts_transport_awaiting_pickup'
         'aw_army_rts_transport_embarking'
@@ -20,6 +24,8 @@ $requirements = [ordered]@{
         'task_unit_aw_army_rts_transport_landing'
     )
     'Locales/others.csv' = @(
+        'aw_diplomacy_ai Description'
+        'aw_diplomacy_ai_description'
         ([string][char]0x4E00) + ([string][char]0x7C73) + '_' +
         ([string][char]0x4E2D) + ([string][char]0x6587) +
         ([string][char]0x540D)
@@ -27,6 +33,13 @@ $requirements = [ordered]@{
 }
 
 $failures = [System.Collections.Generic.List[string]]::new()
+$rulesProject = Get-Content -Raw -Encoding UTF8 (Join-Path $repoRoot `
+    'Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj')
+if (-not $rulesProject.Contains(
+        'ReportedLocalizationCoverageSourceGuard.ps1')) {
+    $failures.Add(
+        'Reported localization guard is not registered in the rules build')
+}
 foreach ($entry in $requirements.GetEnumerator()) {
     $path = Join-Path $repoRoot $entry.Key
     $rows = Import-Csv -LiteralPath $path -Encoding UTF8

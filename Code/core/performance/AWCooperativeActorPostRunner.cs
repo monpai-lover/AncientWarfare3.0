@@ -15,6 +15,7 @@ namespace AncientWarfare3.core.performance;
 internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunner<BatchActors, Actor>
 {
     private const string EnemySearchJobId = "b3_findEnemyTarget";
+    private const string ActionLandedJobId = "update_action_landed";
     private const string TileActionJobId = "u5_curTileAction";
     private const string DeadCheckJobId = "u4_deadCheck";
     private const string FrozenCheckJobId = "u6_checkFrozen";
@@ -1138,6 +1139,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             actorsChecked = RunInsideBoatJob(batch);
         }
         else if (job.id.Equals(
+                     ActionLandedJobId,
+                     StringComparison.Ordinal))
+        {
+            actorsChecked = RunActionLandedJob(batch, job.container);
+        }
+        else if (job.id.Equals(
                      TileActionJobId,
                      StringComparison.Ordinal))
         {
@@ -1199,6 +1206,39 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         AWInsideBoatActorIndex.RecordProcessed(processed);
         return processed;
+    }
+
+    private static int RunActionLandedJob(
+        BatchActors batch,
+        ObjectContainer<Actor> container)
+    {
+        if (container.Count == 0 && !container.isDirtyContainer())
+        {
+            return 0;
+        }
+
+        container.checkAddRemove();
+        Actor[] actors = container.getFastSimpleArray();
+        int count = container.Count;
+        for (int i = 0; i < count; i++)
+        {
+            Actor actor = actors[i];
+            if (actor == null)
+            {
+                continue;
+            }
+
+            if (actor.data == null ||
+                !ReferenceEquals(actor.batch, batch))
+            {
+                container.Remove(actor);
+                continue;
+            }
+
+            actor.actionLanded();
+        }
+
+        return count;
     }
 
     private void PrepareActiveBehaviorPartitions(int batchCount)
