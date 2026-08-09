@@ -235,6 +235,32 @@ namespace AncientWarfare3.core.lineage
                 ChronicleCategory.HONOR, HistoryTarget.City(pSeat));
         }
 
+        public static void OnMilitaryGovernorateCreated(Kingdom pSuzerain,
+            Kingdom pSubject, City pSeat, Actor pGeneral)
+        {
+            if (pSuzerain?.data == null || pSubject?.data == null ||
+                pSeat?.data == null || pGeneral?.data == null) return;
+            HistoryText text = HistoryText.Kingdom(pSuzerain) +
+                               H("aw_hist_military_governorate_created_at") +
+                               HistoryText.City(pSeat, pSubject) +
+                               H("aw_hist_military_governorate_created_as") +
+                               HistoryText.Kingdom(pSubject) +
+                               H("aw_hist_military_governorate_general") +
+                               HistoryText.Actor(pGeneral);
+            HistoryWriter.RecordKingdom(pSuzerain,
+                "military_governorate_created", text,
+                HistoryTarget.Actor(pGeneral));
+            HistoryWriter.RecordKingdom(pSubject,
+                "military_governorate_created", text,
+                HistoryTarget.Kingdom(pSuzerain));
+            HistoryWriter.RecordCity(pSeat, pSubject,
+                "military_governorate_created", text,
+                HistoryTarget.Actor(pGeneral));
+            HistoryWriter.RecordPerson(pGeneral.data.id, pSubject,
+                pGeneral.getName(), "military_governorate_created", text,
+                ChronicleCategory.WAR, HistoryTarget.Kingdom(pSuzerain));
+        }
+
         public static void OnFeudatoryInherited(Kingdom pKingdom,
             Actor pOldPrince, Actor pNewPrince, City pSeat, string pReason)
         {

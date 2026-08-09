@@ -70,6 +70,48 @@ internal static class MilitaryGovernorateRulesTests
         Equal(false, VassalRelationRules.CanSetMilitaryGovernorate(
                 true, true, false, false),
             "rebel subject cannot become a military governorate");
+
+        int frontierSeat = MilitaryGovernorateCreationRules.SeatScore(
+            true, 10, 2);
+        int richInteriorSeat = MilitaryGovernorateCreationRules.SeatScore(
+            false, 10000, 1000);
+        Equal(true, frontierSeat > richInteriorSeat,
+            "external frontier always outranks an interior city");
+
+        int trustedGeneral = MilitaryGovernorateCreationRules.GeneralScore(
+            80, 90, 10, 8);
+        int ambitiousGeneral = MilitaryGovernorateCreationRules.GeneralScore(
+            80, 90, 90, 8);
+        Equal(true, trustedGeneral > ambitiousGeneral,
+            "ambition reduces governorate candidate priority");
+        Equal(true, MilitaryGovernorateCreationRules.CompareCandidate(
+                trustedGeneral, 10, trustedGeneral, 20) < 0,
+            "actor id provides a deterministic ascending tie break");
+
+        Equal(MilitaryGovernorateRollbackAction.None,
+            MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.None),
+            "no mutation needs no rollback");
+        Equal(MilitaryGovernorateRollbackAction.RemoveKingdom,
+            MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.KingdomCreated),
+            "created kingdom is removed on rollback");
+        Equal(true, MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.CityTransferred)
+                .HasFlag(MilitaryGovernorateRollbackAction.RestoreCity),
+            "transferred city is restored on rollback");
+        Equal(true, MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.RelationCreated)
+                .HasFlag(MilitaryGovernorateRollbackAction.EndRelation),
+            "created relation is ended on rollback");
+        Equal(true, MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.StateCreated)
+                .HasFlag(MilitaryGovernorateRollbackAction.EndState),
+            "persisted governorate state is ended on rollback");
+        Equal(MilitaryGovernorateRollbackAction.None,
+            MilitaryGovernorateCreationRules.RollbackFor(
+                MilitaryGovernorateCreationStage.Completed),
+            "post-commit side effects never dismantle a committed command");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

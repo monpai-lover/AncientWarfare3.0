@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.lineage
         public Actor Actor;
         public int Merit;
         public int Loyalty = 50;
+        public int Ambition = 20;
         public int AppointmentYear = -1;
     }
 
@@ -247,6 +248,14 @@ namespace AncientWarfare3.core.lineage
             EndGeneral(pActor, "civil_office");
         }
 
+        public static void RetireForMilitaryGovernorate(Actor pActor)
+        {
+            if (pActor?.data == null || !IsGeneral(pActor)) return;
+            FiefService.RevokeActorFief(pActor, "military_governorate");
+            EndGeneral(pActor, "military_governorate");
+            pActor.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, -1L);
+        }
+
         public static List<Actor> GetActiveGenerals(Kingdom pKingdom)
         {
             var result = new List<Actor>();
@@ -287,7 +296,9 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT ACTOR_ID, MERIT_SCORE, APPOINTED_TIME, LOYALTY_SCORE FROM " +
+                cmd.CommandText = "SELECT ACTOR_ID,MERIT_SCORE," +
+                                  "APPOINTED_TIME,LOYALTY_SCORE," +
+                                  "AMBITION_SCORE FROM " +
                                   GeneralStateTableItem.GetTableName() +
                                   " WHERE KINGDOM_ID=@k AND ACTIVE=1 ORDER BY MERIT_SCORE DESC, ACTOR_ID" +
                                   (pLimit > 0 ? " LIMIT @limit" : "");
@@ -306,6 +317,8 @@ namespace AncientWarfare3.core.lineage
                         Actor = actor,
                         Merit = reader.IsDBNull(1) ? 0 : Convert.ToInt32(reader.GetValue(1)),
                         Loyalty = reader.IsDBNull(3) ? 50 : Convert.ToInt32(reader.GetValue(3)),
+                        Ambition = reader.IsDBNull(4) ? 20 :
+                            Convert.ToInt32(reader.GetValue(4)),
                         AppointmentYear = appointedTime > 0d ? Date.getYear(appointedTime) : -1
                     });
                 }

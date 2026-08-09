@@ -996,6 +996,19 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        internal static bool RollbackCreatedRelation(Kingdom pSubject)
+        {
+            if (pSubject?.data == null || !Ready) return false;
+            long relationId = GetRelationId(pSubject);
+            if (relationId < 0)
+                relationId = ReadActiveRelationId(pSubject.id);
+            if (relationId < 0 || !CloseRelation(relationId,
+                    "creation_rollback", absorbed: false)) return false;
+            ClearRelationProjection(pSubject);
+            DirtyVassalMap();
+            return true;
+        }
+
         public static bool MarkAbsorbed(Kingdom pVassal, Kingdom pSuzerain)
         {
             return TryAbsorbVassal(pSuzerain, pVassal, "absorbed");

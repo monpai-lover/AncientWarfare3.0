@@ -455,6 +455,7 @@
     <Compile Include="..\..\Code\core\lineage\RoyalGuardArmyAssignmentRules.cs" Link="Production\RoyalGuardArmyAssignmentRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtManualAppointmentRules.cs" Link="Production\CourtManualAppointmentRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MilitaryGovernorateRules.cs" Link="Production\MilitaryGovernorateRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MilitaryGovernorateCreationRules.cs" Link="Production\MilitaryGovernorateCreationRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtDispositionRules.cs" Link="Production\CourtDispositionRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtDispositionModels.cs" Link="Production\CourtDispositionModels.cs" />
     <Compile Include="..\..\Code\core\court\CourtDispositionPersistence.cs" Link="Production\CourtDispositionPersistence.cs" />

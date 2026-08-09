@@ -71,6 +71,14 @@ namespace AncientWarfare3.core.lineage
 
         private static readonly Entry[] Entries =
         {
+            new Entry("aw_hist_military_governorate_created_at",
+                "\u4e8e\u8fb9\u57ce", "established a frontier command at ",
+                "\u65bc\u908a\u57ce"),
+            new Entry("aw_hist_military_governorate_created_as",
+                "\uff0c\u7f6e\u519b\u9547", ", creating the command ",
+                "\uff0c\u7f6e\u8ecd\u93ae"),
+            new Entry("aw_hist_military_governorate_general",
+                "\uff0c\u547d", ", appointing general ", "\uff0c\u547d"),
             new Entry("aw_hist_household_principal_wife_accepted",
                 "\u5165\u5bab\u4e3a\u6b63\u59bb\uff0c\u914d\u4e8e",
                 " entered the court as principal wife of ",
