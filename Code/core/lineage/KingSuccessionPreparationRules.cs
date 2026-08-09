@@ -3,6 +3,20 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
+    public static class HeirSelectionSignatureRules
+    {
+        public static bool IsUnchanged(long pStoredCandidateId,
+            string pStoredMode, long pStoredReferenceKingId, bool pDirty,
+            long pCandidateId, string pMode, long pReferenceKingId)
+        {
+            return !pDirty &&
+                   pStoredCandidateId == pCandidateId &&
+                   string.Equals(pStoredMode ?? string.Empty,
+                       pMode ?? string.Empty, StringComparison.Ordinal) &&
+                   pStoredReferenceKingId == pReferenceKingId;
+        }
+    }
+
     public readonly struct KingSuccessionKey :
         IEquatable<KingSuccessionKey>
     {

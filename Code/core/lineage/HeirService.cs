@@ -261,7 +261,6 @@ namespace AncientWarfare3.core.lineage
             if (!SuccessionTransitionRules.ShouldOverwriteCachedHeir(pending, referenceKingId >= 0))
                 return PeekRegisteredHeir(pKingdom);
 
-            ClearOldHeirFlag(pKingdom);
             HeirSelection selection = SelectByEffectiveLaw(pKingdom,
                 knownKing, referenceKingId,
                 pIncludeRegisteredHeir: false);
@@ -311,7 +310,6 @@ namespace AncientWarfare3.core.lineage
                     pDyingKing, pDyingKing.data.id,
                     pIncludeRegisteredHeir: false);
             }
-            ClearOldHeirFlag(pKingdom);
             StoreHeirSelection(pKingdom, selection);
             SuccessionDisputeService.Prepare(pKingdom, pDyingKing,
                 selection.Actor);
@@ -434,7 +432,6 @@ namespace AncientWarfare3.core.lineage
         public static void StoreSelectedHeir(Kingdom pKingdom, Actor pHeir, string pMode)
         {
             if (pKingdom?.data == null) return;
-            ClearOldHeirFlag(pKingdom);
             StoreHeirSelection(pKingdom, new HeirSelection(pHeir, pMode));
         }
 
@@ -541,6 +538,27 @@ namespace AncientWarfare3.core.lineage
                 ? null
                 : World.world?.units?.get(previousHeirId);
             Actor heir = pSelection.Actor;
+            long heirId = heir?.data?.id ?? -1L;
+            string mode = heir?.data == null
+                ? SuccessionMode.NONE
+                : pSelection.Mode;
+            long referenceKingId = ResolveReferenceKingId(pKingdom,
+                pKingdom.king);
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_RELATION_ACTOR_ID,
+                out long signedHeirId, -1L);
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID,
+                out long signedKingId, -1L);
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_SELECTION_DIRTY,
+                out bool successionDirty, false);
+            bool currentActorAvailable = previousHeirId < 0L ||
+                previousHeir?.data != null && previousHeir.isAlive();
+            if (currentActorAvailable && signedHeirId == previousHeirId &&
+                HeirSelectionSignatureRules.IsUnchanged(previousHeirId,
+                    previousMode, signedKingId, successionDirty, heirId,
+                    mode, referenceKingId))
+                return previousHeir;
+
+            ClearOldHeirFlag(pKingdom);
             FormerHeirService.ClearSnapshot(heir);
             RoyalAsylumService.RecallForSuccession(heir, pKingdom);
             RecallForeignSelectedHeir(pKingdom, heir);
@@ -556,7 +574,6 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, heir?.data?.id ?? -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
                 heir?.data == null ? SuccessionMode.NONE : pSelection.Mode);
-            long referenceKingId = ResolveReferenceKingId(pKingdom, pKingdom.king);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_ACTOR_ID, heir?.data?.id ?? -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID,
                 heir?.data == null ? -1L : referenceKingId);
@@ -576,10 +593,8 @@ namespace AncientWarfare3.core.lineage
                     pAlive: previousHeir.isAlive());
             if (heir?.data != null)
                 LineageService.ArchiveActor(heir, pAlive: heir.isAlive());
-            long heirId = heir?.data?.id ?? -1L;
-            string mode = heir?.data == null
-                ? SuccessionMode.NONE
-                : pSelection.Mode;
+            heirId = heir?.data?.id ?? -1L;
+            mode = heir?.data == null ? SuccessionMode.NONE : pSelection.Mode;
             if (previousHeirId != heirId || previousMode != mode)
                 FamilyTreeProjectionRevision.Advance(
                     FamilyTreeProjectionChange.Heir);
