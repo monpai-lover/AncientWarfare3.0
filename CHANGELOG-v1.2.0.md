@@ -1,54 +1,92 @@
-# Ancient Warfare 3.0 v1.2.0
+# 古代战争 3.0 v1.2.0
 
-## Release Scope
+本次更新集中收拢了近期的性能、RTS、王国历史展示、人物命名和头衔功能，并修复了继位流程中的多类异常状态。
 
-This release combines the current `master` feature set with the validated Cultiway-derived pathfinding and large-step scheduler integration. It is distributed as a source package; no compiled DLL is included.
+## 主要新功能
 
-## New Features
+### 王国舆图
 
-- **Kingdom Atlas / 王国舆图**
-  - Added the Kingdom Atlas entry beneath the Kingdom Chronicle button.
-  - Generates chronological PNG pages from recorded city ownership changes and archived city-zone geometry.
-  - Supports incremental continuation from the last generated event node instead of rebuilding the full history.
-  - Supports PNG-first generation with optional GIF export, selectable output resolution, progress percentage, and saved artifacts in the save directory.
-  - Atlas pages can be zoomed and dragged. Each event node shows the participating kingdoms' chronicle text and renders only the relevant kingdoms, their borders, colors, and map-mode country names.
-  - Vassals use the suzerain color while retaining their own border and country label.
+- 在王国窗口的“王国编年史”按钮下方新增“王国舆图”入口。
+- 根据已经记录的城市归属变化和城市区域档案生成疆域演变图，不在游戏运行过程中持续扫描全图。
+- 每次城市易主形成一个时间节点，可通过翻页查看前后疆域变化。
+- 舆图只绘制事件相关国家的疆域、边界、国家颜色和国名，不绘制军队、人物位置等无关信息。
+- 国名复用新版地图模式的文字生成方式，国家颜色与游戏内实际国家颜色保持一致。
+- 附庸国使用宗主国颜色，同时保留自身边界和国号，便于识别附庸关系。
+- 支持图片缩放与拖动，并在节点旁展示相关国家当年的编年史内容。
+- 支持 PNG 分页输出、分辨率选择、数字百分比进度，以及可选的 GIF 播放输出。
+- 已生成的舆图会保存在存档目录；再次更新时从最后一个节点继续生成，不必从头计算。
 
-- **Custom titles / 自定义头衔**
-  - Added virtual noble-title definitions, title grants, title roster display, localization, and title persistence.
-  - Kingdom/person views can display the resolved social, office, heir, military, and virtual titles together.
+### 自定义头衔
 
-- **Manual actor renaming / 新人物改名器**
-  - Added branch-aware manual actor name editing from the lineage UI.
-  - Manual given names and surnames persist across restore and succession transitions.
-  - Western-family and Xiaized naming paths now retain their intended surname and given-name rules.
+- 新增虚拟贵族头衔的创建、授予、名单展示、本地化和持久化。
+- 人物与王国界面可组合显示继承人、官职、军事身份、社会身份和自定义头衔。
+- 修复虚封头衔、封爵对象和头衔继承相关的显示及状态判断问题。
 
-## Performance and Simulation Fixes
+### 新人物改名器
 
-- **Cultiway-derived pathfinding**
-  - Added path sessions, bounded queues, continuation segments, stale-work rejection, cancellation, traversal snapshots, route caching, and shared worker budgeting.
-  - RTS routes now use the shared pathfinder instead of maintaining a separate high-frequency route loop.
-  - Added physical dock and water-connectivity support for boat transport, passenger scheduling, and dock route reuse.
-  - Added path diagnostics and queue-pressure visibility for runtime diagnosis.
+- 在人物与谱系界面加入新的手动改名流程。
+- 支持分别修改姓氏和名字，并按家族分支提交改名结果。
+- 手动名称可以跨存档读取、王位继承和身份变化保持。
+- 修复西方家族失去实权后姓氏无法继承，以及入夏家族切换夏式命名后的分支身份问题。
 
-- **Large-step scheduler**
-  - Added persistent simulation workers and cooperative actor post-processing.
-  - Moved actor tile actions, enemy searches, path movement, smooth movement, and world-maintenance batches behind bounded worker tickets with main-thread commit barriers.
-  - Added incremental actor/chunk/zone membership indexes, nearby-status target indexing, enemy-presence caching, deferred path-request batches, and free-tile search reuse.
-  - Preserved native presentation paths by default and guarded snapshot presentation behind explicit settings to prevent animation and rendering regressions.
-  - Added scheduler lifecycle, shutdown, stale projection, and worker-pool safety checks.
+## 寻路与调度器升级
 
-- **Succession and identity repair**
-  - Repairs invalid capitals, stale kingdom/city affiliation, royal-guard residue, guest-office state, and delayed accession retries.
-  - Includes exponential retry backoff and idempotent accession installation.
+### Cultiway 衍生寻路
 
-## Validation
+- 引入路径会话、分段续算、队列限流、任务取消、过期任务拒绝和遍历快照。
+- RTS 军队改为复用共享寻路器，减少重复寻路和主线程轮询。
+- 加入路径缓存、队列压力诊断和共享工作线程预算。
+- 补全码头、船运请求、乘客调度、水域连通性和实体码头路径支持。
+- 修复路径任务停止、世界切换和对象销毁期间的过期结果提交问题。
 
-- `dotnet build AncientWarfare3.csproj --no-restore` passed with 0 errors.
-- Accession identity retry rules passed.
-- Presentation snapshot performance source guard passed.
+### 大步长调度器
 
-## Packaging
+- 加入持久化模拟工作线程，避免每轮创建和销毁后台任务。
+- 将人物格子行为、敌人搜索、路径推进、平滑移动和世界维护拆分为有预算的后台批次。
+- 主线程只负责必须由游戏对象执行的提交阶段，并在读取边界等待相关后台写入完成。
+- 新增人物、区块、岛屿和城市区域的增量成员索引，避免反复扫描整张地图。
+- 新增附近状态目标索引、敌人存在缓存、空闲地块查询缓存和延迟路径请求批处理。
+- 默认保留原版人物表现与动画路径；实验性表现快照需要明确开启，避免动画延迟、人物压扁和显示异常。
+- 修复调度器关闭、世界读取、王国归属变化、对象批量删除和后台任务过期时的状态一致性问题。
 
-- Source-only release package.
-- Build outputs, temporary files, logs, databases, worktrees, and local development metadata are excluded.
+## RTS 与战争修复
+
+- 修复军队收到任务后停在原地、长期保持撤退或待命的问题。
+- 修复 RTS 军队把自己的城市错误选为进攻目标的问题。
+- 进攻阶段由 RTS 负责本国城市到敌方城市区域之间的行军；进入敌方城市区域后交回原版战斗逻辑。
+- 兵力损失达到阈值时可由战争导演接管撤退、回城补员和再次进攻。
+- 修复补员生成后军队人数显示不同步，以及生成对象外观初始化不完整的问题。
+- 修复禁卫军统帅没有持续保护国王、军队成员归属异常和城市军队统计滞后的问题。
+
+## 继位与人物状态修复
+
+- 无效首都会从本国存活城市中重新选择首都。
+- 继承人带有禁卫军身份时，会先解除禁卫军、亲卫军和普通军队绑定。
+- 继承人仍属于旧王国时，会完成正式王国迁移。
+- 继承人仍属于旧城市时，会迁往新王国首都。
+- 客卿或官职数据库状态异常时，会通过安全回退路径结束旧职务。
+- 继位提交后仍不一致时会再次校验和迁移，并记录具体失败原因。
+- 延迟继位采用指数退避，同一人物重复入队不会重置尝试次数。
+
+## 其他修复
+
+- 修复死亡人物在族谱中仍被视为存活的问题。
+- 修复保存时为“周”、读取后变为其他姓氏的名称恢复问题。
+- 修复入夏文化、西方家族姓氏继承、汉姓转换和姓氏合流相关问题。
+- 禁止新骷髅生成。
+- 手动联盟继续使用原版联盟工具和其他限制，仅绕过外交距离检查。
+
+## 安装与兼容说明
+
+- 下载 `AncientWarfare3-v1.2.0.zip`。
+- 解压后应得到单一目录 `AncientWarfare3.0`，将其放入 NeoModLoader 的模组目录。
+- 本发行包继续采用源码加载结构，不包含编译后的 `AncientWarfare3.dll`。
+- 建议更新前备份存档和旧版模组目录，避免旧文件残留影响加载。
+
+## 验证结果
+
+- 主项目构建通过，0 个错误。
+- 规则测试项目构建通过，0 个错误。
+- 王国舆图源代码防护测试通过。
+- 继位身份修复专项测试通过。
+- 表现快照和性能边界测试通过。
