@@ -33,6 +33,7 @@ namespace AncientWarfare3.core.performance
             EmptyCityResettlement,
             TemporaryMilitaryReturn,
             WarArmyReturn,
+            ArmyRtsWarLifecycle,
             ArmyRtsAssignmentReconciliation,
             Pathfinding,
             ArmyRts,
@@ -76,6 +77,7 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.empty_city_resettlement",
             "aw3.authority.temporary_military_return",
             "aw3.authority.war_army_return",
+            "aw3.authority.army_rts_war_lifecycle",
             "aw3.authority.army_rts_assignment_reconciliation",
             "aw3.authority.pathfinding",
             "aw3.authority.army_rts",
@@ -313,6 +315,9 @@ namespace AncientWarfare3.core.performance
                     break;
                 case CooperativeAuthorityStage.WarArmyReturn:
                     WarArmyReturnService.ProcessFrame();
+                    break;
+                case CooperativeAuthorityStage.ArmyRtsWarLifecycle:
+                    ArmyRtsWarLifecycleService.ProcessAuthorityCycle();
                     break;
                 case CooperativeAuthorityStage.ArmyRtsAssignmentReconciliation:
                     ArmyRtsAssignmentReconciliationService.

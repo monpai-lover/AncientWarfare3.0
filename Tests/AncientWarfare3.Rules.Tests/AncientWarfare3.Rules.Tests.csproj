@@ -215,6 +215,7 @@
     <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
     <Compile Include="ArmyRtsSchedulingRulesTests.cs.txt" />
     <Compile Include="ArmyRtsFullRosterCursorRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsFirstOrderRecoveryRulesTests.cs.txt" />
     <Compile Include="TestArmyRoutePollKindStub.cs.txt" />
     <Compile Include="ActorDeathInvocationRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAttackSpeechBubbleRulesTests.cs.txt" />

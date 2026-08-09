@@ -785,6 +785,20 @@ namespace AncientWarfare3.core.lineage
                 };
                 RuntimeByArmy[pArmy.id] = runtime;
             }
+            bool sameStrategicIntent = record.Mission.WarId ==
+                                           pProposal.WarId &&
+                                       record.Mission.TargetCityId ==
+                                           pProposal.TargetCityId &&
+                                       record.Mission.ProposalKind ==
+                                           pProposal.ProposalKind;
+            if (ArmyRtsAssignmentReconciliationRules.
+                    MustRehydrateRetainedMission(
+                        runtime.TargetCompletionLatched,
+                        ArmyStallWatchdogService.IsRegistered(pArmy.id),
+                        sameStrategicIntent,
+                        replacementPublished: false) &&
+                RehydrateAfterAuthorityChange(pArmy))
+                RuntimeByArmy.TryGetValue(pArmy.id, out runtime);
             runtime.DirectorForceReady = pProposal.ForceReady;
             runtime.DirectorFriendlyForce = Math.Max(0,
                 pProposal.FriendlyForce);
@@ -1996,6 +2010,16 @@ namespace AncientWarfare3.core.lineage
                 !RuntimeByArmy.ContainsKey(pArmyId)) return false;
             Army army = FindArmy(pArmyId);
             return IsLiveArmy(army) && IsMissionValid(army, record.Mission);
+        }
+
+        public static bool HasActiveMissionForKingdom(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            IReadOnlyList<long> armyIds = MissionIndex.SnapshotKingdom(
+                pKingdom.id);
+            for (int i = 0; i < armyIds.Count; i++)
+                if (HasActiveMission(armyIds[i])) return true;
+            return false;
         }
 
         internal static bool HasExpectedCaptainTask(Army pArmy)
@@ -3834,6 +3858,7 @@ namespace AncientWarfare3.core.lineage
             pRuntime.AlternateTargetTileId = -1;
             pRuntime.PursuitRoute.Reset();
             Controllers.SetState(pArmy.id, ArmyRtsState.Idle);
+            ArmyStallWatchdogService.OnArmyInvalidated(pArmy.id);
             Actor captain = SafeCaptain(pArmy);
             if (captain?.current_tile?.data != null)
                 ArmyFormationService.SetAnchor(pArmy, captain.current_tile);

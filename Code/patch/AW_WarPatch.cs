@@ -324,6 +324,8 @@ namespace AncientWarfare3.patch
         private static void OnKingdomJoinedWar(War pWar, Kingdom pKingdom, bool pDefender)
         {
             WarScoreService.RegisterParticipantMobilization(pWar, pKingdom);
+            ArmyRtsWarLifecycleService.OnWarParticipantChanged(pWar,
+                pKingdom);
             KingdomWarDirectorService.OnWarParticipantChanged(pWar,
                 pKingdom);
             CoalitionWarTaskService.OnWarParticipantChanged(pWar,
@@ -408,6 +410,8 @@ namespace AncientWarfare3.patch
 
         private static void OnKingdomLeftWar(War pWar, Kingdom pKingdom)
         {
+            ArmyRtsWarLifecycleService.OnWarParticipantChanged(pWar,
+                pKingdom);
             WarParticipantEntrySourceService.Instance.TryEndAllActiveSources(
                 pWar?.data?.id ?? -1L, pKingdom?.data?.id ?? -1L,
                 LineageService.CurTime());

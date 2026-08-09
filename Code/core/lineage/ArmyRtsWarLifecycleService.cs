@@ -115,26 +115,86 @@ namespace AncientWarfare3.core.lineage
 #if !AW3_RULES_TESTS
     internal static class ArmyRtsWarLifecycleService
     {
+        private sealed class DiscoveryWork
+        {
+            internal long WarId;
+            internal long KingdomId;
+            internal ArmyStrategicIdCursor Cursor;
+        }
+
+        private const int MaximumDiscoveryArmiesPerCycle = 8;
         private static readonly ArmyRtsWarLifecycleStateStore Store =
             new ArmyRtsWarLifecycleStateStore();
+        private static readonly Dictionary<(long WarId, long KingdomId),
+            DiscoveryWork> DiscoveryByParticipant =
+                new Dictionary<(long WarId, long KingdomId), DiscoveryWork>();
+        private static readonly Queue<(long WarId, long KingdomId)>
+            DiscoveryQueue = new Queue<(long WarId, long KingdomId)>();
+        private static readonly HashSet<(long WarId, long KingdomId)>
+            QueuedDiscovery = new HashSet<(long WarId, long KingdomId)>();
 
         public static void OnWarStarted(War pWar)
         {
-            if (pWar?.data == null || World.world?.armies == null) return;
-            foreach (Army army in World.world.armies)
+            if (pWar?.data == null) return;
+            try
             {
-                Kingdom kingdom = AWArmyService.GetIntendedKingdom(army);
-                bool participant;
-                try
+                foreach (Kingdom kingdom in pWar.getAttackers())
+                    EnqueueDiscovery(pWar, kingdom);
+                foreach (Kingdom kingdom in pWar.getDefenders())
+                    EnqueueDiscovery(pWar, kingdom);
+            }
+            catch { }
+            EnqueueDiscovery(pWar, SafeMainAttacker(pWar));
+            EnqueueDiscovery(pWar, SafeMainDefender(pWar));
+        }
+
+        public static void OnWarParticipantChanged(War pWar,
+            Kingdom pKingdom)
+        {
+            if (pWar?.data == null || pKingdom?.data == null) return;
+            bool participant;
+            try
+            {
+                participant = !pWar.hasEnded() && pWar.hasKingdom(pKingdom);
+            }
+            catch { participant = false; }
+            if (participant) EnqueueDiscovery(pWar, pKingdom);
+        }
+
+        public static void ProcessAuthorityCycle()
+        {
+            while (DiscoveryQueue.Count > 0)
+            {
+                var key = DiscoveryQueue.Dequeue();
+                QueuedDiscovery.Remove(key);
+                if (!DiscoveryByParticipant.TryGetValue(key,
+                        out DiscoveryWork work)) continue;
+                War war = FindWar(work.WarId);
+                Kingdom kingdom = FindKingdom(work.KingdomId);
+                if (!IsActiveParticipant(war, kingdom))
                 {
-                    participant = army?.data != null &&
-                                  kingdom?.data != null &&
-                                  pWar.hasKingdom(kingdom);
+                    DiscoveryByParticipant.Remove(key);
+                    continue;
                 }
-                catch { participant = false; }
-                if (!participant) continue;
-                EnsureForArmy(pWar.data.id, army,
-                    ArmyRtsWarPhase.StrategicMovement);
+                if (work.Cursor == null)
+                    work.Cursor = ArmyStrategicIndexService.CreateSnapshotCursor(
+                        kingdom);
+                IReadOnlyList<long> ids = work.Cursor.Take(
+                    MaximumDiscoveryArmiesPerCycle);
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    Army army = ArmyStrategicIndexService.
+                        ResolveIndexedArmy(ids[i], kingdom.id);
+                    if (!ArmyNativeNameService.IsOrdinaryArmy(army))
+                        continue;
+                    EnsureForArmy(war.data.id, army,
+                        ArmyRtsWarPhase.StrategicMovement);
+                }
+                if (work.Cursor.IsComplete)
+                    DiscoveryByParticipant.Remove(key);
+                else
+                    QueueDiscovery(key);
+                return;
             }
         }
 
@@ -226,20 +286,56 @@ namespace AncientWarfare3.core.lineage
         {
             long warId = pWar?.data?.id ?? -1L;
             if (warId < 0L) return;
-            Store.ClearWar(warId);
-            if (World.world?.armies == null) return;
-            foreach (Army army in World.world.armies)
+            IReadOnlyList<ArmyRtsWarLifecycleRecord> records =
+                Store.Snapshot();
+            for (int i = 0; i < records.Count; i++)
             {
-                if (army?.data == null) continue;
-                army.data.get(LineageKeys.AW_RTS_LIFECYCLE_WAR_ID,
-                    out long persistedWarId, -1L);
-                if (persistedWarId == warId) ClearPersisted(army);
+                ArmyRtsWarLifecycleRecord record = records[i];
+                if (record?.WarId == warId)
+                    ClearPersisted(FindArmy(record.ArmyId));
             }
+            Store.ClearWar(warId);
+            RemoveDiscoveryWar(warId);
         }
 
         public static void ClearRuntime()
         {
             Store.Clear();
+            DiscoveryByParticipant.Clear();
+            DiscoveryQueue.Clear();
+            QueuedDiscovery.Clear();
+        }
+
+        private static void EnqueueDiscovery(War pWar, Kingdom pKingdom)
+        {
+            if (pWar?.data == null || pKingdom?.data == null) return;
+            var key = (pWar.data.id, pKingdom.id);
+            if (!DiscoveryByParticipant.ContainsKey(key))
+                DiscoveryByParticipant[key] = new DiscoveryWork
+                {
+                    WarId = pWar.data.id,
+                    KingdomId = pKingdom.id
+                };
+            QueueDiscovery(key);
+        }
+
+        private static void QueueDiscovery(
+            (long WarId, long KingdomId) pKey)
+        {
+            if (!QueuedDiscovery.Add(pKey)) return;
+            DiscoveryQueue.Enqueue(pKey);
+        }
+
+        private static void RemoveDiscoveryWar(long pWarId)
+        {
+            var remove = new List<(long WarId, long KingdomId)>();
+            foreach (var pair in DiscoveryByParticipant)
+                if (pair.Key.WarId == pWarId) remove.Add(pair.Key);
+            for (int i = 0; i < remove.Count; i++)
+            {
+                DiscoveryByParticipant.Remove(remove[i]);
+                QueuedDiscovery.Remove(remove[i]);
+            }
         }
 
         private static ArmyRtsWarLifecycleRecord EnsureForArmy(long pWarId,
@@ -445,6 +541,42 @@ namespace AncientWarfare3.core.lineage
                 try { return pArmy?.getKingdom(); }
                 catch { return null; }
             }
+        }
+
+        private static bool IsActiveParticipant(War pWar,
+            Kingdom pKingdom)
+        {
+            if (pWar?.data == null || pKingdom?.data == null) return false;
+            try
+            {
+                return !pWar.hasEnded() && pWar.hasKingdom(pKingdom) &&
+                       !pKingdom.isRekt() && pKingdom.isAlive();
+            }
+            catch { return false; }
+        }
+
+        private static Kingdom SafeMainAttacker(War pWar)
+        {
+            try { return pWar?.getMainAttacker(); }
+            catch { return null; }
+        }
+
+        private static Kingdom SafeMainDefender(War pWar)
+        {
+            try { return pWar?.getMainDefender(); }
+            catch { return null; }
+        }
+
+        private static Kingdom FindKingdom(long pKingdomId)
+        {
+            try { return World.world?.kingdoms?.get(pKingdomId); }
+            catch { return null; }
+        }
+
+        private static War FindWar(long pWarId)
+        {
+            try { return World.world?.wars?.get(pWarId); }
+            catch { return null; }
         }
 
         private static Army FindArmy(long pArmyId)

@@ -3,6 +3,118 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
+    public enum WarFirstOrderSide
+    {
+        Attacker = 0,
+        Defender = 1
+    }
+
+    public readonly struct WarFirstOrderAssignment :
+        IEquatable<WarFirstOrderAssignment>
+    {
+        public WarFirstOrderAssignment(long warId, long kingdomId,
+            WarFirstOrderSide side)
+        {
+            WarId = warId;
+            KingdomId = kingdomId;
+            Side = side;
+        }
+
+        public long WarId { get; }
+        public long KingdomId { get; }
+        public WarFirstOrderSide Side { get; }
+
+        public bool Equals(WarFirstOrderAssignment other)
+        {
+            return WarId == other.WarId && KingdomId == other.KingdomId &&
+                   Side == other.Side;
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is WarFirstOrderAssignment other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = (int)(WarId ^ (WarId >> 32));
+                hash = hash * 397 ^ (int)(KingdomId ^ (KingdomId >> 32));
+                return hash * 397 ^ (int)Side;
+            }
+        }
+    }
+
+    public sealed class KingdomWarFirstOrderQueue
+    {
+        private readonly Queue<WarFirstOrderAssignment> _ready =
+            new Queue<WarFirstOrderAssignment>();
+        private readonly HashSet<WarFirstOrderAssignment> _queued =
+            new HashSet<WarFirstOrderAssignment>();
+
+        public int Count => _ready.Count;
+
+        public void EnqueueWar(long warId,
+            IReadOnlyList<long> attackers,
+            IReadOnlyList<long> defenders)
+        {
+            int attackerCount = attackers?.Count ?? 0;
+            int defenderCount = defenders?.Count ?? 0;
+            int rounds = Math.Max(attackerCount, defenderCount);
+            for (int i = 0; i < rounds; i++)
+            {
+                if (i < attackerCount)
+                    Enqueue(new WarFirstOrderAssignment(warId,
+                        attackers[i], WarFirstOrderSide.Attacker));
+                if (i < defenderCount)
+                    Enqueue(new WarFirstOrderAssignment(warId,
+                        defenders[i], WarFirstOrderSide.Defender));
+            }
+        }
+
+        public bool TryTake(out WarFirstOrderAssignment assignment)
+        {
+            if (_ready.Count == 0)
+            {
+                assignment = default;
+                return false;
+            }
+            assignment = _ready.Dequeue();
+            _queued.Remove(assignment);
+            return true;
+        }
+
+        public void RemoveWar(long warId)
+        {
+            if (_ready.Count == 0) return;
+            int count = _ready.Count;
+            for (int i = 0; i < count; i++)
+            {
+                WarFirstOrderAssignment item = _ready.Dequeue();
+                if (item.WarId == warId)
+                {
+                    _queued.Remove(item);
+                    continue;
+                }
+                _ready.Enqueue(item);
+            }
+        }
+
+        public void Clear()
+        {
+            _ready.Clear();
+            _queued.Clear();
+        }
+
+        private void Enqueue(WarFirstOrderAssignment assignment)
+        {
+            if (assignment.WarId < 0L || assignment.KingdomId < 0L ||
+                !_queued.Add(assignment)) return;
+            _ready.Enqueue(assignment);
+        }
+    }
+
     public static class KingdomWarDirectorWorkRules
     {
         public const int MaximumWarPlansPerWorkItem = 8;
