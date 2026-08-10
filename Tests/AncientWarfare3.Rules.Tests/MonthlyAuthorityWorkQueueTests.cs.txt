@@ -95,9 +95,9 @@ internal static class MonthlyAuthorityWorkQueueTests
         Equal("aw3_month_kingdom_policy",
             RecentFeatureBenchmarkRules.IdForIndex(63),
             "kingdom policy month work has a stable benchmark id");
-        Equal("aw3_month_preparation_levy",
+        Equal("aw3_runtime_replenishment",
             RecentFeatureBenchmarkRules.IdForIndex(64),
-            "preparation levy month work has a stable benchmark id");
+            "integer manpower replenishment has a stable benchmark id");
     }
 
     private static void True(bool value, string name)

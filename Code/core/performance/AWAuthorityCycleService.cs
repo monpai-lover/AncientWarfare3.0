@@ -95,13 +95,11 @@ namespace AncientWarfare3.core.performance
                 ZhuluAgeDirectorService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
                 WarForceEliminationSettlementService.ProcessAuthorityCycle);
-            Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
-                TemporaryLevyService.ProcessPreparationMonth);
-            Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
+            Measure(RecentFeatureBenchmarkRules.MonthKingdomPolicyIndex,
                 KingdomDecisionMonthlyService.ProcessAuthorityCycle);
-            Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
+            Measure(RecentFeatureBenchmarkRules.ReplenishmentIndex,
                 CityReservePoolService.ProcessAuthorityCycle);
-            Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
+            Measure(RecentFeatureBenchmarkRules.ReplenishmentIndex,
                 ArmyReplenishmentOperationService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
                 DrainAuthorityCompletions);

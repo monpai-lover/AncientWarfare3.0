@@ -217,11 +217,7 @@ namespace AncientWarfare3.core.policy
         {
             MeasureRecent(
                 RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
-                () =>
-                {
-                    TemporaryLevyService.OnKingdomYear(pKingdom);
-                    WartimeGarrisonService.OnKingdomYear(pKingdom);
-                });
+                () => WartimeGarrisonService.OnKingdomYear(pKingdom));
         }
 
         private static void RunPolicy(Kingdom pKingdom)

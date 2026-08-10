@@ -240,7 +240,10 @@ namespace AncientWarfare3.patch
 
             if (TrySelectStableCaptain(__instance, out Actor replacement))
                 AWArmyService.SetCaptainIfChanged(__instance, replacement);
-            else if (!TemporaryLevyService.TryPromoteExistingLevyCaptain(__instance) && currentExists)
+            else if (TryPromoteSyntheticCaptain(__instance,
+                         out replacement))
+                AWArmyService.SetCaptainIfChanged(__instance, replacement);
+            else if (currentExists)
                 __instance.setCaptain(null);
             DetachCivilAuthorityCaptain(__instance, current);
             return false;
@@ -285,6 +288,43 @@ namespace AncientWarfare3.patch
             return pCaptain != null;
         }
 
+        private static bool TryPromoteSyntheticCaptain(Army pArmy,
+            out Actor pCaptain)
+        {
+            pCaptain = null;
+            if (pArmy?.data == null) return false;
+            Kingdom intendedKingdom = AWArmyService.GetIntendedKingdom(
+                pArmy);
+            if (intendedKingdom?.data == null) return false;
+            long bestActorId = -1L;
+            try
+            {
+                foreach (Actor candidate in pArmy.getUnits())
+                {
+                    if (candidate?.data == null ||
+                        !SyntheticLevyService.IsSynthetic(candidate) ||
+                        candidate.kingdom != intendedKingdom ||
+                        !candidate.isAlive() || candidate.isRekt() ||
+                        !candidate.isWarrior() ||
+                        !IsArmyMember(pArmy, candidate) ||
+                        IsCivilAuthority(candidate)) continue;
+                    long candidateId = ActorId(candidate);
+                    if (!ArmyCaptainContinuityRules.
+                            ShouldPreferReplacement(bestActorId,
+                                candidateId)) continue;
+                    bestActorId = candidateId;
+                    pCaptain = candidate;
+                }
+            }
+            catch
+            {
+                pCaptain = null;
+            }
+            if (pCaptain?.data == null) return false;
+            SyntheticLevyService.Promote(pCaptain);
+            return IsEligibleCaptain(pArmy, pCaptain);
+        }
+
         private static bool IsEligibleCaptain(Army pArmy, Actor pActor)
         {
             return CaptainMatchesArmyKingdom(pArmy, pActor) &&
@@ -318,7 +358,6 @@ namespace AncientWarfare3.patch
             }
             ArmyRtsControllerService.ReleaseActor(pActor);
             ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
-            TemporaryLevyService.OnActorInvalidated(pActor);
             WartimeGarrisonService.OnActorInvalidated(pActor);
             TemporarySlaveVanguardService.OnMemberInvalidated(pActor);
             MandateMilitaryPhaseService.Clear(pActor);
@@ -1024,7 +1063,6 @@ namespace AncientWarfare3.patch
             }
             ArmyRtsControllerService.ReleaseActor(pActor);
             ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
-            TemporaryLevyService.OnActorInvalidated(pActor);
             WartimeGarrisonService.OnActorInvalidated(pActor);
             TemporarySlaveVanguardService.OnMemberInvalidated(pActor);
             MandateMilitaryPhaseService.Clear(pActor);

@@ -7,8 +7,6 @@ namespace AncientWarfare3.core.lineage
     {
         public const int PeaceCityBudget = 1;
         public const int PreparationCityBudget = 4;
-        public const int PeaceActorBudget = 8;
-        public const int PreparationActorBudget = 32;
         public const int ReserveExhaustionContribution = 20;
 
         public static int ResolveAvailableManpower(
@@ -94,7 +92,7 @@ namespace AncientWarfare3.core.lineage
 
         public static int ActorBudget(bool preparation)
         {
-            return preparation ? int.MaxValue : PeaceActorBudget;
+            return 0;
         }
 
         public static int FullReconciliationBudget(int residentCount,

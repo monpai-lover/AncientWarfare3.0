@@ -389,7 +389,6 @@ namespace AncientWarfare3.core.lineage
 
             ArmyRtsControllerService.ReleaseActor(pActor);
             ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
-            TemporaryLevyService.OnActorInvalidated(pActor);
             WartimeGarrisonService.OnActorInvalidated(pActor);
             MandateMilitaryPhaseService.Clear(pActor);
             ArmyStrategicIndexService.OnArmyRosterChanged(pFormerArmy);
@@ -571,7 +570,7 @@ namespace AncientWarfare3.core.lineage
             bool hardRetirement = SoldierRetirementRules.
                 HasReachedHardRetirementAge(age);
             if (!hardRetirement &&
-                (TemporaryLevyService.IsTemporaryLevy(pActor) ||
+                (SyntheticLevyService.IsSynthetic(pActor) ||
                  TemporarySlaveVanguardService.IsMember(pActor))) return false;
             bool alreadyRetired = IsRetiredSoldier(pActor);
             float lifespan = pActor.stats["lifespan"];

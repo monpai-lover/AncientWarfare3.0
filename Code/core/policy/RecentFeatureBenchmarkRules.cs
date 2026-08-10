@@ -81,7 +81,7 @@ namespace AncientWarfare3.core.policy
         public const int PerformanceDiagnosticIndex = 61;
         public const int MonthRulerHouseholdIndex = 62;
         public const int MonthKingdomPolicyIndex = 63;
-        public const int MonthPreparationLevyIndex = 64;
+        public const int ReplenishmentIndex = 64;
 
         public const string Pathfinding = "aw3_runtime_pathfinding";
         public const string Schools = "aw3_runtime_schools";
@@ -92,7 +92,8 @@ namespace AncientWarfare3.core.policy
         public const string ArmyMarch = "aw3_actor_army_march";
         public const string WartimeGarrison = "aw3_runtime_wartime_garrison";
         public const string KingdomAnnualQueue = "aw3_year_queue_submit";
-        public const string KingdomMobilization = "aw3_year_war_mobilization";
+        public const string KingdomMobilization =
+            "aw3_year_wartime_garrison";
         public const string KingdomDiplomacy = "aw3_year_diplomacy";
         public const string KingdomCourtSupport = "aw3_year_court_support";
         public const string KingdomFeudatory = "aw3_year_feudatory";
@@ -170,8 +171,8 @@ namespace AncientWarfare3.core.policy
             "aw3_month_ruler_household";
         public const string MonthKingdomPolicy =
             "aw3_month_kingdom_policy";
-        public const string MonthPreparationLevy =
-            "aw3_month_preparation_levy";
+        public const string Replenishment =
+            "aw3_runtime_replenishment";
         public const string OutsideVanillaFrameTotal =
             "aw3_frame_outside_vanilla_total";
 
@@ -241,7 +242,7 @@ namespace AncientWarfare3.core.policy
             PerformanceDiagnostic,
             MonthRulerHousehold,
             MonthKingdomPolicy,
-            MonthPreparationLevy
+            Replenishment
         };
 
         public static RecentActorAiCategory ClassifyActorAiTask(

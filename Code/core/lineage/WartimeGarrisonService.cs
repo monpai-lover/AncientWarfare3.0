@@ -1081,7 +1081,7 @@ namespace AncientWarfare3.core.lineage
                 RoyalAsylumService.IsActive(pActor) ||
                 SlaveService.IsSlave(pActor) ||
                 SlaveService.IsRetiredSoldier(pActor) ||
-                TemporaryLevyService.IsTemporaryLevy(pActor) ||
+                SyntheticLevyService.IsSynthetic(pActor) ||
                 TemporarySlaveVanguardService.IsMember(pActor) ||
                 IsActive(pActor)) return true;
             if (pActor.army != null ||

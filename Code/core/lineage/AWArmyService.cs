@@ -377,7 +377,6 @@ namespace AncientWarfare3.core.lineage
             City city = SafeGetCity(pArmy) ?? pCityHint;
             Kingdom kingdom = SafeGetStoredKingdom(pArmy) ??
                               pKingdomHint ?? SafeGetKingdom(pArmy, city);
-            bool wasSpecialArmy = IsSpecialArmy(pArmy);
             long armyId = pArmy.data?.id ?? -1L;
             var units = new List<Actor>();
             try
@@ -435,22 +434,6 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
-            bool hasReplacementArmy = false;
-            try
-            {
-                Army replacement = city?.getArmy();
-                hasReplacementArmy = replacement?.data != null &&
-                                      replacement != pArmy &&
-                                      replacement.isAlive() &&
-                                      SafeGetKingdom(replacement, city) ==
-                                      kingdom;
-            }
-            catch { }
-            if (ArmyLifecycleRules.ShouldRequestOffensiveReinforcement(
-                    pRequestReplacement, wasSpecialArmy,
-                    MilitaryEmergencyService.HasAny(kingdom),
-                    hasReplacementArmy))
-                TemporaryLevyService.RequestOffensiveRecovery(kingdom, city);
             return true;
             }
         }
@@ -565,7 +548,7 @@ namespace AncientWarfare3.core.lineage
                             actorAlive: true,
                             currentProfessionIsWarrior: true,
                             pActor.hasArmy(),
-                            TemporaryLevyService.IsTemporaryLevy(pActor),
+                            SyntheticLevyService.IsSynthetic(pActor),
                             WartimeGarrisonService.IsActive(pActor),
                             TemporarySlaveVanguardService.IsMember(pActor),
                             SlaveService.IsSlave(pActor))) return false;

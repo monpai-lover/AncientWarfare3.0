@@ -6900,7 +6900,7 @@ foreach ((int index, string id) in new[]
              (61, "aw3_frame_performance_diagnostic"),
              (62, "aw3_month_ruler_household"),
              (63, "aw3_month_kingdom_policy"),
-             (64, "aw3_month_preparation_levy")
+             (64, "aw3_runtime_replenishment")
          })
     Equal(id, RecentFeatureBenchmarkRules.IdForIndex(index),
         "MapBox frame benchmark indices remain append-only");

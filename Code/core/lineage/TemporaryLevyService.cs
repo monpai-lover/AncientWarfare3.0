@@ -470,6 +470,34 @@ namespace AncientWarfare3.core.lineage
             plan.ExhaustedTargetArmyIds.Add(pTargetArmy.id);
         }
 
+        internal static void ClearReplenishmentStateForWar(War war)
+        {
+            if (war?.data == null) return;
+            var kingdomIds = new HashSet<long>();
+            foreach (Kingdom kingdom in war.getAttackers())
+                if (kingdom?.data != null) kingdomIds.Add(kingdom.id);
+            foreach (Kingdom kingdom in war.getDefenders())
+                if (kingdom?.data != null) kingdomIds.Add(kingdom.id);
+            foreach (long kingdomId in kingdomIds)
+            {
+                Kingdom kingdom = ResolveKingdom(kingdomId);
+                if (kingdom?.data != null)
+                    ClearReplenishmentState(kingdom);
+                else
+                {
+                    CasualtyReinforcementPlans.Remove(kingdomId);
+                    RemoveCaptainRecoveryPlansForKingdom(kingdomId);
+                }
+            }
+        }
+
+        internal static void ClearReplenishmentState(Kingdom kingdom)
+        {
+            if (kingdom?.data == null) return;
+            CasualtyReinforcementPlans.Remove(kingdom.id);
+            RemoveCaptainRecoveryPlansForKingdom(kingdom.id);
+        }
+
         public static void RequestCaptainRecovery(Kingdom pKingdom,
             Army pArmy)
         {
@@ -571,7 +599,7 @@ namespace AncientWarfare3.core.lineage
                     finally
                     {
                         RecentFeatureBenchmark.End(
-                            RecentFeatureBenchmarkRules.MonthPreparationLevyIndex,
+                            RecentFeatureBenchmarkRules.ReplenishmentIndex,
                             benchmark);
                     }
                 });
@@ -767,39 +795,10 @@ namespace AncientWarfare3.core.lineage
 
         public static void RebuildRuntime()
         {
-            StandingArmyService.ClearEstablishmentRuntime();
-            Pools.Clear();
-            RecruitmentPlans.Clear();
-            PreparationRecruitmentPlans.Clear();
-            CasualtyReinforcementPlans.Clear();
-            CaptainRecoveryPlans.Clear();
-            ActiveActorIds.Clear();
-            LastPreparationMonthKey = int.MinValue;
-            PreparationMonthlyWork.Clear();
-            ClearDiagnosticSampling();
-            if (World.world?.units != null)
-            {
-                foreach (Actor actor in World.world.units)
-                {
-                    if (!HasPersistedFlag(actor)) continue;
-                    actor.data.get(LineageKeys.TEMPORARY_LEVY_KINGDOM_ID, out long kingdomId, -1L);
-                    if (kingdomId < 0)
-                    {
-                        ClearFields(actor);
-                        continue;
-                    }
-                    ActiveActorIds.Add(actor.data.id);
-                    Pool(kingdomId).ActorIds.Add(actor.data.id);
-                }
-            }
-
-            foreach (long kingdomId in new List<long>(Pools.Keys))
-            {
-                Kingdom kingdom = ResolveKingdom(kingdomId);
-                if (kingdom?.data == null || !MilitaryEmergencyService.HasAny(kingdom))
-                    ScheduleDemobilization(kingdomId);
-            }
-            ResumeActiveRecruitmentPlans();
+            ClearRuntime();
+            if (World.world?.units == null) return;
+            foreach (Actor actor in World.world.units)
+                if (HasPersistedFlag(actor)) ClearFields(actor);
         }
 
         public static void ClearRuntime()

@@ -356,11 +356,6 @@ namespace AncientWarfare3.core.lineage
                 return 0;
 
             long emergencyId = war.data.id;
-            if (ArmyRtsControllerService.TryGetWartimeRecovery(army,
-                    out _, out long recoveryWarId) &&
-                recoveryWarId == emergencyId)
-                return SyntheticLevyService.CreateBatch(sourceCity,
-                    kingdom, army, requested, emergencyId, recruits);
             int available = CityReservePoolService.OpenOrReadWarReserve(
                 sourceCity, emergencyId);
             int syntheticRequest = TemporaryLevyRules.SyntheticFallbackRequest(

@@ -124,6 +124,90 @@ namespace AncientWarfare3.core.lineage
             if (dead) ReleaseLiveLedgerOnce(actor);
         }
 
+        internal static void OnWarEnded(War war)
+        {
+            if (war?.data == null) return;
+            CleanupWarActors(war.data.id, null);
+        }
+
+        internal static void OnKingdomLeftWar(War war, Kingdom kingdom)
+        {
+            if (war?.data == null || kingdom?.data == null) return;
+            CleanupWarActors(war.data.id, kingdom);
+        }
+
+        internal static void OnCityKingdomChanged(City city,
+            Kingdom previousKingdom, Kingdom currentKingdom)
+        {
+            if (city?.data == null || previousKingdom == currentKingdom ||
+                city.units == null) return;
+            var candidates = new List<Actor>();
+            for (int i = 0; i < city.units.Count; i++)
+            {
+                Actor actor = city.units[i];
+                if (!IsSynthetic(actor)) continue;
+                actor.data.get(LineageKeys.SYNTHETIC_LEVY_SOURCE_CITY_ID,
+                    out long sourceCityId, -1L);
+                if (sourceCityId == city.id) candidates.Add(actor);
+            }
+            ApplyWarEndDisposition(candidates);
+        }
+
+        private static void CleanupWarActors(long warId,
+            Kingdom departingKingdom)
+        {
+            if (warId < 0L || World.world?.units == null) return;
+            var candidates = new List<Actor>();
+            foreach (Actor actor in World.world.units)
+            {
+                if (!IsSynthetic(actor)) continue;
+                actor.data.get(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID,
+                    out long emergencyId, -1L);
+                if (emergencyId != warId) continue;
+                if (departingKingdom?.data != null)
+                {
+                    actor.data.get(
+                        LineageKeys.SYNTHETIC_LEVY_SOURCE_KINGDOM_ID,
+                        out long sourceKingdomId, -1L);
+                    if (sourceKingdomId != departingKingdom.id &&
+                        actor.kingdom != departingKingdom) continue;
+                }
+                candidates.Add(actor);
+            }
+
+            ApplyWarEndDisposition(candidates);
+        }
+
+        private static void ApplyWarEndDisposition(List<Actor> candidates)
+        {
+            if (candidates == null) return;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                Actor actor = candidates[i];
+                bool living;
+                try
+                {
+                    living = actor?.data != null && actor.isAlive() &&
+                             !actor.isRekt();
+                }
+                catch { living = false; }
+                SyntheticLevyDisposition disposition =
+                    SyntheticLevyRules.ResolveDemobilization(
+                        synthetic: true, alive: living,
+                        militaryMerit: living
+                            ? GeneralService.GetMerit(actor)
+                            : 0);
+                if (disposition == SyntheticLevyDisposition.RemoveActor)
+                {
+                    RemoveWithoutPersonalHistory(actor);
+                    continue;
+                }
+                if (disposition ==
+                    SyntheticLevyDisposition.PromotePermanent)
+                    Promote(actor);
+            }
+        }
+
         internal static void RemoveWithoutPersonalHistory(Actor actor)
         {
             RemoveWithoutPersonalHistory(actor,
@@ -139,7 +223,6 @@ namespace AncientWarfare3.core.lineage
             {
                 using (SyntheticLevySpawnScope.Open())
                 {
-                    TemporaryLevyService.OnActorInvalidated(actor);
                     if (actor.army != null)
                     {
                         try { actor.removeFromArmy(); }
@@ -168,8 +251,6 @@ namespace AncientWarfare3.core.lineage
                 emergencyId);
             actor.data.set(LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED,
                 false);
-            TemporaryLevyService.RegisterSyntheticLevy(actor, kingdom,
-                city, emergencyId);
         }
 
         private static void ReleaseLiveLedgerOnce(Actor actor,
@@ -182,7 +263,10 @@ namespace AncientWarfare3.core.lineage
             actor.data.set(LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED,
                 true);
             sourceCity ??= FindSourceCity(actor);
-            if (sourceCity?.data != null)
+            actor.data.get(LineageKeys.SYNTHETIC_LEVY_SOURCE_KINGDOM_ID,
+                out long sourceKingdomId, -1L);
+            if (sourceCity?.data != null && sourceKingdomId >= 0L &&
+                sourceCity.kingdom?.id == sourceKingdomId)
                 CityReservePoolService.OnSyntheticRemoved(sourceCity, 1);
         }
 

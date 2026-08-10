@@ -20,8 +20,6 @@ namespace AncientWarfare3.core.court
                     RoyalGuardService.DismissGuard(pActor, "civil_office");
             }
             catch { }
-            try { TemporaryLevyService.OnActorInvalidated(pActor); }
-            catch { }
             try { MandateBorderDefenseService.ReleaseBorderGuard(pActor); }
             catch { }
             try { pActor.stopBeingWarrior(); }

@@ -31,8 +31,6 @@ Require-Text 'former army membership is removed' 'pActor.removeFromArmy();'
 Require-Text 'RTS ownership is released' 'ArmyRtsControllerService.ReleaseActor(pActor);'
 Require-Text 'deployment ownership is released' `
     'ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);'
-Require-Text 'temporary levy ownership is released' `
-    'TemporaryLevyService.OnActorInvalidated(pActor);'
 Require-Text 'wartime garrison ownership is released' `
     'WartimeGarrisonService.OnActorInvalidated(pActor);'
 Require-Text 'strategic army index is refreshed' `

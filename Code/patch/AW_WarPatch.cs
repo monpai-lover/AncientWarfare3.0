@@ -117,7 +117,6 @@ namespace AncientWarfare3.patch
             MandateService.OnWarStarted(__result);
             RoyalAsylumService.OnWarStarted(__result);
             MilitaryEmergencyService.OnWarStarted(__result);
-            TemporaryLevyService.OnWarStarted(__result, WarNoticeService.FindSignatureForWar(__result));
             WartimeGarrisonService.OnWarStarted(__result);
             TemporarySlaveVanguardService.OnWarStarted(__result);
             WarNoticeService.OnWarStarted(__result);
@@ -280,6 +279,8 @@ namespace AncientWarfare3.patch
             CloseParticipantSources(pWar.data.id,
                 __state?.ParticipantIds);
             ArmyReplenishmentOperationService.OnWarEnded(pWar);
+            TemporaryLevyService.ClearReplenishmentStateForWar(pWar);
+            SyntheticLevyService.OnWarEnded(pWar);
             DiplomaticWarDeclarationService.OnWarEnded(pWar);
             KingdomWarDirectorService.OnWarEnded(pWar);
             ArmyRtsWarLifecycleService.OnWarEnded(pWar);
@@ -292,7 +293,6 @@ namespace AncientWarfare3.patch
             RoyalAsylumService.OnWarEnded(pWar);
             MilitaryEmergencyService.OnWarEnded(pWar);
             CityReservePoolService.OnWarEnded(pWar);
-            TemporaryLevyService.OnWarEnded(pWar);
             WartimeGarrisonService.OnWarEnded(pWar);
             TemporarySlaveVanguardService.OnWarEnded(pWar);
             WarRecordWriter.OnWarEnd(pWar, pWinner);
@@ -337,7 +337,6 @@ namespace AncientWarfare3.patch
             WarParticipantCityBaselineService.RegisterParticipant(pWar, pKingdom);
             CityReservePoolService.OnKingdomJoinedWar(pWar, pKingdom);
             MilitaryEmergencyService.OnKingdomJoinedWar(pWar, pKingdom, pDefender);
-            TemporaryLevyService.OnEmergencyChanged(pKingdom);
             WartimeGarrisonService.OnKingdomWarStateChanged(pKingdom);
             TemporarySlaveVanguardService.OnEmergencyChanged(pKingdom);
             VassalMapModeService.DirtyMapIfActive();
@@ -421,9 +420,10 @@ namespace AncientWarfare3.patch
                 pKingdom);
             ArmyLogisticsService.OnWarParticipantLeft(pWar, pKingdom);
             WarScoreService.ClearDepartedParticipantControls(pWar, pKingdom);
+            TemporaryLevyService.ClearReplenishmentState(pKingdom);
+            SyntheticLevyService.OnKingdomLeftWar(pWar, pKingdom);
             MilitaryEmergencyService.OnKingdomLeftWar(pWar, pKingdom);
             CityReservePoolService.OnKingdomLeftWar(pWar, pKingdom);
-            TemporaryLevyService.OnEmergencyChanged(pKingdom);
             WartimeGarrisonService.OnKingdomWarStateChanged(pKingdom);
             TemporarySlaveVanguardService.OnEmergencyChanged(pKingdom);
             VassalMapModeService.DirtyMapIfActive();

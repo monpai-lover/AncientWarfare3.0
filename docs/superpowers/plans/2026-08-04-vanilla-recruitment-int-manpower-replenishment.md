@@ -16,10 +16,10 @@
 - Create: `Tests/AncientWarfare3.Rules.Tests/VanillaRecruitmentOwnershipSourceGuard.ps1`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj`
 
-- [ ] Add a source guard that fails while `AWAuthorityCycleService` calls `ProcessPreparationMonth`, `KingdomAnnualWorkService` calls `TemporaryLevyService.OnKingdomYear`, or war-notice paths call `OnEmergencyChanged`.
-- [ ] Run the guard and confirm RED against the current source.
-- [ ] Disconnect those entry points while leaving garrison annual work intact.
-- [ ] Run the guard and confirm GREEN.
+- [x] Add a source guard that fails while `AWAuthorityCycleService` calls `ProcessPreparationMonth`, `KingdomAnnualWorkService` calls `TemporaryLevyService.OnKingdomYear`, or war-notice paths call `OnEmergencyChanged`.
+- [x] Run the guard and confirm RED against the current source.
+- [x] Disconnect those entry points while leaving garrison annual work intact.
+- [x] Run the guard and confirm GREEN.
 
 ### Task 2: Make the city manpower pool integer-only
 
@@ -28,11 +28,11 @@
 - Modify: `Code/patch/AW_CityReservePoolPatch.cs`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/CityReservePoolRulesTests.cs.txt`
 
-- [ ] Add failing source assertions that the runtime city pool contains no `ActorIds`, `EligibleActorIds`, or actor cursors and that actor transition callbacks do not maintain membership.
-- [ ] Replace actor membership state with city id, capacity, consumed count, emergency id, and synthetic-live count only.
-- [ ] Preserve integer reserve open/reserve/release, war start/end, save/restore, availability, and mobilization phase APIs.
-- [ ] Remove the actor transition Harmony patch from active behavior.
-- [ ] Run focused reserve tests and confirm GREEN.
+- [x] Add failing source assertions that the runtime city pool contains no `ActorIds`, `EligibleActorIds`, or actor cursors and that actor transition callbacks do not maintain membership.
+- [x] Replace actor membership state with city id, capacity, consumed count, emergency id, and synthetic-live count only.
+- [x] Preserve integer reserve open/reserve/release, war start/end, save/restore, availability, and mobilization phase APIs.
+- [x] Remove the actor transition Harmony patch from active behavior.
+- [x] Run focused reserve tests and confirm GREEN.
 
 ### Task 3: Preserve spawn-based replenishment
 
@@ -43,11 +43,11 @@
 - Modify: `Tests/AncientWarfare3.Rules.Tests/SyntheticLevyRulesTests.cs.txt`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/ArmyReplenishmentOperationRulesTests.cs.txt`
 
-- [ ] Add failing assertions that replenishment reserves integer manpower before spawning and releases unmaterialized reservations.
-- [ ] Keep bounded soldier creation and direct target-army assignment.
-- [ ] Remove synthetic replenishment soldiers from temporary-levy registration while retaining history suppression and cleanup metadata.
-- [ ] Reduce `TemporaryLevyService` to legacy cleanup/exhaustion compatibility or move the remaining exhaustion bookkeeping into replenishment ownership.
-- [ ] Run focused replenishment tests and confirm GREEN.
+- [x] Add failing assertions that replenishment reserves integer manpower before spawning and releases unmaterialized reservations.
+- [x] Keep bounded soldier creation and direct target-army assignment.
+- [x] Remove synthetic replenishment soldiers from temporary-levy registration while retaining history suppression and cleanup metadata.
+- [x] Reduce `TemporaryLevyService` to legacy cleanup/exhaustion compatibility or move the remaining exhaustion bookkeeping into replenishment ownership.
+- [x] Run focused replenishment tests and confirm GREEN.
 
 ### Task 4: Remove legacy levy runtime hooks
 
@@ -60,10 +60,10 @@
 - Modify: `Code/patch/AW_WarPatch.cs`
 - Modify: `Code/core/multiplayer/AW3RuntimeRestorePipeline.cs`
 
-- [ ] Remove levy casualty, enlistment, retirement, standing-army, emergency, and annual recruitment hooks that are no longer reachable.
-- [ ] Keep synthetic replenishment death cleanup and replenishment operation war-end cleanup.
-- [ ] Ensure old saves clear legacy runtime queues without rebuilding actor-based pools.
-- [ ] Run source guards and full rules tests.
+- [x] Remove levy casualty, enlistment, retirement, standing-army, emergency, and annual recruitment hooks that are no longer reachable.
+- [x] Keep synthetic replenishment death cleanup and replenishment operation war-end cleanup.
+- [x] Ensure old saves clear legacy runtime queues without rebuilding actor-based pools.
+- [x] Run source guards and full rules tests.
 
 ### Task 5: Verify performance-facing behavior
 
@@ -71,8 +71,8 @@
 - Modify: `Code/core/policy/RecentFeatureBenchmarkRules.cs`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/Program.cs.txt`
 
-- [ ] Remove or retire the monthly preparation levy benchmark label so it cannot imply active work.
-- [ ] Keep annual garrison and replenishment diagnostics separately visible.
-- [ ] Run `dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj` and require `Rule tests passed.`
-- [ ] Inspect `git diff --check` and the complete diff for accidental unrelated changes.
-- [ ] Do not build the main mod DLL.
+- [x] Remove or retire the monthly preparation levy benchmark label so it cannot imply active work.
+- [x] Keep annual garrison and replenishment diagnostics separately visible.
+- [x] Run `dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj` and require `Rule tests passed.`
+- [x] Inspect `git diff --check` and the complete diff for accidental unrelated changes.
+- [x] Do not build the main mod DLL.

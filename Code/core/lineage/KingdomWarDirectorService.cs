@@ -689,30 +689,10 @@ namespace AncientWarfare3.core.lineage
                     }
                     continue;
                 }
-                if (!(army?.SpecialArmy ?? false) &&
-                    KingdomWarDirectorRules.
-                        ShouldRequestDepletedArmyRecovery(
-                            army?.UnitCount ?? 0,
-                            army?.CaptainAlive ?? false,
-                            army?.RoyalGuard ?? false,
-                            army?.DedicatedGarrison ?? false,
-                            canCommit: ArmyRtsRuntimeModeRules.ShouldCommit(
-                                ArmyRtsRuntimeMode.Current)))
-                    RequestDepletedArmyRecovery(pKingdom, army);
                 if (IsEligibleFieldArmy(army))
                     pWork.Armies.Add(army);
             }
             if (!batch.Complete) return;
-
-            if (TemporaryLevyRules.ShouldRequestZeroArmyRecovery(
-                    MilitaryEmergencyService.HasAny(pKingdom),
-                    pWork.Armies.Count,
-                    TemporaryLevyService.HasPendingOffensiveRecovery(
-                        pKingdom)))
-                TemporaryLevyService.RequestOffensiveRecovery(pKingdom,
-                    pKingdom.capital,
-                    TemporaryLevyRules.MaxRecruitsPerWorkItem,
-                    pForceEstablishment: true);
 
             var warFacts = new List<WarAllocationFacts>(
                 pWork.SelectedWars.Count);
@@ -1617,23 +1597,6 @@ namespace AncientWarfare3.core.lineage
                        pArmy.SpecialArmy);
         }
 
-        private static void RequestDepletedArmyRecovery(Kingdom pKingdom,
-            ArmyStrategicFacts pArmy)
-        {
-            if (pKingdom?.data == null || pArmy == null) return;
-            Army army = ArmyStrategicIndexService.ResolveIndexedArmy(
-                pArmy.ArmyId, pKingdom.id);
-            City anchor = FindCity(pArmy.AnchorCityId);
-            int targetStrength = StandingArmyService.TargetStrength(army,
-                pKingdom);
-            int demand = Math.Max(
-                ArmyLogisticsRules.MinimumOperationalForce -
-                Math.Max(0, pArmy.UnitCount),
-                targetStrength - Math.Max(0, pArmy.UnitCount));
-            TemporaryLevyService.RequestOffensiveRecovery(pKingdom,
-                anchor, Math.Max(1, demand), pTargetArmy: army);
-        }
-
         private static bool TryRecoverMissingCaptain(Kingdom pKingdom,
             ArmyStrategicFacts pArmy)
         {
@@ -1659,7 +1622,6 @@ namespace AncientWarfare3.core.lineage
                     !captain.isRekt()) return true;
             }
             catch { }
-            TemporaryLevyService.RequestCaptainRecovery(pKingdom, army);
             return false;
         }
 

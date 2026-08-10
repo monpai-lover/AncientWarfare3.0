@@ -104,13 +104,6 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(City), "tryToMakeWarrior")]
-        private static bool TryToMakeWarrior_Prefix()
-        {
-            return MilitaryRecruitmentScope.AllowsVanillaTryToMakeWarrior;
-        }
-
-        [HarmonyPrefix]
         [HarmonyPatch(typeof(City), nameof(City.checkCanMakeWarrior))]
         private static bool CheckCanMakeWarrior_Prefix(City __instance, Actor pActor, ref bool __result)
         {
@@ -123,7 +116,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.checkIfWarriorStillOk))]
         private static bool CheckIfWarriorStillOk_Prefix(City __instance, Actor pActor, ref bool __result)
         {
-            if (TemporaryLevyService.IsTemporaryLevy(pActor) ||
+            if (SyntheticLevyService.IsSynthetic(pActor) ||
                 WartimeGarrisonService.IsActive(pActor) ||
                 TemporarySlaveVanguardService.IsMember(pActor) ||
                 StandingArmyService.ShouldKeepWithinOriginalArmyLimit(__instance, pActor))

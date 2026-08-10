@@ -65,10 +65,10 @@ internal static class CityReservePoolRulesTests
             "peace maintenance visits one city per world day");
         Equal(4, CityReservePoolRules.CityBudget(preparation: true),
             "preparation accelerates city maintenance");
-        Equal(8, CityReservePoolRules.ActorBudget(preparation: false),
-            "peace candidate validation is bounded");
-        Equal(int.MaxValue, CityReservePoolRules.ActorBudget(preparation: true),
-            "preparation scans every resident without using it as an allocation size");
+        Equal(0, CityReservePoolRules.ActorBudget(preparation: false),
+            "integer-only reserves perform no peace actor validation");
+        Equal(0, CityReservePoolRules.ActorBudget(preparation: true),
+            "preparation never scans residents for reserve membership");
         Equal(18, CityReservePoolRules.CapacityForPreparation(
             eligibleCivilians: 61, lawPercent: 30, preparation: true),
             "preparation reserve capacity still follows the conscription law");
@@ -283,7 +283,7 @@ internal static class CityReservePoolRulesTests
         WarEntryWaitsForCompleteRestoreValidation();
         WarEntryReconciliationRunsOncePerKingdom();
 
-        PreparationUsesMaintainedActorPool();
+        PreparationUsesIntegerLedgerOnly();
     }
 
     private static void CombinedMobilizedAndPoolCountObeysLawCapacity()
@@ -493,35 +493,30 @@ internal static class CityReservePoolRulesTests
             "war emergency generation uses the idempotent transition rule");
     }
 
-    private static void PreparationUsesMaintainedActorPool()
+    private static void PreparationUsesIntegerLedgerOnly()
     {
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "CityReservePoolService.cs"));
-        Equal(true, source.Contains(
-                "int actorBudget = CityReservePoolRules.ActorBudget(preparation);",
+        Equal(false, source.Contains("EligibleActorIds",
                 StringComparison.Ordinal),
-            "daily and notice maintenance must budget actor-index work");
-        Equal(true, source.Contains(
-                "bool complete = MaintainCity(kingdom, city, state,",
+            "integer reserves keep no eligible-actor collection");
+        Equal(false, source.Contains("ActorIds",
                 StringComparison.Ordinal),
-            "daily and notice maintenance must populate the city actor pool");
-        Equal(true, source.Contains(
-                "if (!IndexEligibleActor(actor, kingdom, city, pool)) return;",
+            "integer reserves keep no member-actor collection");
+        string authorityCycle = Section(source,
+            "internal static void ProcessAuthorityCycle()",
+            "internal static void OnWarStarted(");
+        Equal(false, authorityCycle.Contains("World.world.units",
                 StringComparison.Ordinal),
-            "an eligible actor enters the reserve when becoming adult");
+            "high-frequency reserve maintenance never scans actors");
         Equal(true, source.Contains(
-                "CityReservePoolRules.TryTakeNextActorId(pool.ActorIds,",
+                "ReconcileLedger(kingdom.cities[state.CityCursor++], state);",
                 StringComparison.Ordinal),
-            "notice mobilization must consume the law-limited actor pool");
-        Equal(true, source.Contains(
-                "CityReservePoolRules.RestoreRejectedActorId(",
+            "daily maintenance reconciles one city integer ledger");
+        Equal(true, source.Contains("TryReserveWarManpower(",
                 StringComparison.Ordinal),
-            "a failed enlistment must restore its actor to the source pool");
-        Equal(true, source.Contains(
-                "foreach (Actor actor in World.world.units)",
-                StringComparison.Ordinal),
-            "load rebuild must reconstruct actor pools from living residents");
+            "replenishment reserves integer manpower before spawning");
     }
 
     private static string Section(string source, string start, string end)
