@@ -2571,6 +2571,27 @@ Equal(0, CentralizationRules.EffectiveLevel(
 Equal(3, CentralizationRules.EffectiveLevel(
         3, MandatePhase.Golden, pCanParticipate: true),
     "the Mandate realm retains its phase-capped centralization");
+Equal(-2, MandateDeclineRules.CityTransferDelta(false),
+    "legal core loss costs two mandate");
+Equal(-8, MandateDeclineRules.CityTransferDelta(true),
+    "capital legal core loss costs eight mandate");
+Equal(-12, MandateDeclineRules.ClampAnnualCityLoss(-20),
+    "city loss is capped per year");
+Equal(0, MandateDeclineRules.ClampAnnualCityLoss(4),
+    "positive city loss input is normalized to zero");
+Equal(-4, MandateDeclineRules.WarDefeatDelta(false, false),
+    "ordinary defeat costs four mandate");
+Equal(-7, MandateDeclineRules.WarDefeatDelta(true, false),
+    "half army loss adds three");
+Equal(-9, MandateDeclineRules.WarDefeatDelta(true, true),
+    "total elimination replaces half-loss penalty");
+True(MandateDeclineRules.ShouldCollapseChaos(8, true),
+    "eight unresolved chaos years collapse");
+Equal(false, MandateDeclineRules.ShouldCollapseChaos(7, true),
+    "seven unresolved chaos years do not collapse");
+True(MandateDeclineRules.ShouldRecoverChaos(40, 40, 0.70f,
+        false, false, 3),
+    "stable chaos recovers after three years");
 Equal(45, CentralizationRules.ReformCost(1), "level one reform cost");
 Equal(75, CentralizationRules.ReformCost(2), "level two reform cost");
 Equal(110, CentralizationRules.ReformCost(3), "level three reform cost");
