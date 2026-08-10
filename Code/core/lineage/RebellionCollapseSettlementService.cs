@@ -115,6 +115,7 @@ namespace AncientWarfare3.core.lineage
             bool rebellion = false;
             bool rebelParticipantValid = false;
             bool warriorFactsReadable = false;
+            bool reserveFactsReadable = false;
             int rebelWarriors = -1;
             int rebelReserves = -1;
             Kingdom rebel = null;
@@ -128,9 +129,10 @@ namespace AncientWarfare3.core.lineage
                 if (rebelParticipantValid)
                 {
                     rebelWarriors = war.countAttackersWarriors();
-                    warriorFactsReadable = rebelWarriors >= 0;
-                    rebelReserves = CityReservePoolService.
-                        CountAvailable(rebel);
+                    reserveFactsReadable = CityReservePoolService
+                        .TryCountAvailable(rebel, out rebelReserves);
+                    warriorFactsReadable = rebelWarriors >= 0 &&
+                                           reserveFactsReadable;
                 }
             }
             catch

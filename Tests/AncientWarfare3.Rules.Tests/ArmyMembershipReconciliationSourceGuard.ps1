@@ -56,7 +56,6 @@ $requiredCleanup = @(
     'if (!actorValid)',
     'ArmyRtsControllerService.ReleaseActor',
     'ArmyDeploymentService.ReleaseActor',
-    'TemporaryLevyService.OnActorInvalidated',
     'WartimeGarrisonService.OnActorInvalidated',
     'MandateMilitaryPhaseService.Clear',
     'ArmyStrategicIndexService.OnArmyRosterChanged'

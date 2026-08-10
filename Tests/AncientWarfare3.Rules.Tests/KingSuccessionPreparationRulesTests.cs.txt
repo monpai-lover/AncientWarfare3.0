@@ -427,7 +427,7 @@ internal static class KingSuccessionPreparationRulesTests
     {
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
-            "SuccessionArchiveFallbackService.cs"));
+            "SuccessionArchiveFallbackService.cs")).Replace("\r\n", "\n");
         True(source.Contains("RestartedAfterCandidateLoss"),
             "archive fallback records its one allowed candidate-loss rescan");
         True(source.Contains(

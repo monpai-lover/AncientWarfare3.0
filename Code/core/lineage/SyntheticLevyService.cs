@@ -146,7 +146,6 @@ namespace AncientWarfare3.core.lineage
             {
                 using (SyntheticLevySpawnScope.Open())
                 {
-                    TemporaryLevyService.OnActorInvalidated(actor);
                     if (actor.army != null)
                     {
                         try { actor.removeFromArmy(); }
@@ -175,8 +174,6 @@ namespace AncientWarfare3.core.lineage
                 emergencyId);
             actor.data.set(LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED,
                 false);
-            TemporaryLevyService.RegisterSyntheticLevy(actor, kingdom,
-                city, emergencyId);
         }
 
         private static void ReleaseLiveLedgerOnce(Actor actor,

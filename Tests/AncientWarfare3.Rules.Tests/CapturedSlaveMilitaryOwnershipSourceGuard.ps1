@@ -43,8 +43,6 @@ Require-CleanupText 'RTS ownership is released' `
     'ArmyRtsControllerService.ReleaseActor(pActor);'
 Require-CleanupText 'deployment ownership is released' `
     'ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);'
-Require-CleanupText 'temporary levy ownership is released' `
-    'TemporaryLevyService.OnActorInvalidated(pActor);'
 Require-CleanupText 'wartime garrison ownership is released' `
     'WartimeGarrisonService.OnActorInvalidated(pActor);'
 Require-Text 'strategic army index is refreshed' `

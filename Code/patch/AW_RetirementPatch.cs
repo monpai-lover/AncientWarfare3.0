@@ -22,7 +22,7 @@ namespace AncientWarfare3.patch
             bool supportedActor = SlaveService.IsSupportedSlaveryActor(__instance);
             if (!SoldierRetirementRules.ShouldEnterActorUpdateAgeRetirement(supportedActor, rekt, warrior)) return;
             bool temporaryService =
-                TemporaryLevyService.IsTemporaryLevy(__instance) ||
+                SyntheticLevyService.IsSynthetic(__instance) ||
                 TemporarySlaveVanguardService.IsMember(__instance);
             if (SoldierRetirementRules.ShouldDeferTemporaryServiceRetirement(
                     temporaryService, __instance.getAge())) return;

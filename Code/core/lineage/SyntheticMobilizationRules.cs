@@ -35,5 +35,19 @@ namespace AncientWarfare3.core.lineage
         {
             return Batch(pending, DemobilizationBatchLimit);
         }
+
+        public static bool ShouldRestartCityCursor(int expectedCityCount,
+            int currentCityCount)
+        {
+            return Math.Max(0, expectedCityCount) !=
+                   Math.Max(0, currentCityCount);
+        }
+
+        public static int ExpandLifecycleEnd(int currentEndExclusive,
+            int eventRecordCount)
+        {
+            return Math.Max(Math.Max(0, currentEndExclusive),
+                Math.Max(0, eventRecordCount));
+        }
     }
 }

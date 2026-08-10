@@ -21,6 +21,21 @@ internal static class CityReservePoolRulesTests
         Equal(true, CityReservePoolRules.CanConfirmManpowerExhausted(
             ledgerReady: true, availableManpower: 0),
             "a ready empty ledger confirms exhaustion");
+        Equal(false, CityReservePoolRules.ShouldRestartCacheGeneration(
+            rebuildActive: true, rebuildRequested: true,
+            expectedCityCount: 4, currentCityCount: 4),
+            "repeated ledger changes do not restart an active generation");
+        Equal(true, CityReservePoolRules.ShouldRestartCacheGeneration(
+            rebuildActive: false, rebuildRequested: true,
+            expectedCityCount: 4, currentCityCount: 4),
+            "a coalesced ledger change starts after publication");
+        Equal(true, CityReservePoolRules.ShouldRestartCacheGeneration(
+            rebuildActive: true, rebuildRequested: false,
+            expectedCityCount: 4, currentCityCount: 3),
+            "city removal restarts the generation with its new topology");
+        Equal(false, CityReservePoolRules.ShouldQueueFollowUpCacheGeneration(
+            expectedCityCount: 0),
+            "an empty kingdom does not spin cache generations");
         Equal(15, CityReservePoolRules.Capacity(50, 30),
             "limited law registers thirty percent of eligible civilians");
         Equal(25, CityReservePoolRules.Capacity(50, 50),
@@ -65,10 +80,10 @@ internal static class CityReservePoolRulesTests
             "peace maintenance visits one city per world day");
         Equal(4, CityReservePoolRules.CityBudget(preparation: true),
             "preparation accelerates city maintenance");
-        Equal(8, CityReservePoolRules.ActorBudget(preparation: false),
-            "peace candidate validation is bounded");
-        Equal(32, CityReservePoolRules.ActorBudget(preparation: true),
-            "legacy preparation work remains bounded during migration");
+        Equal(0, CityReservePoolRules.ActorBudget(preparation: false),
+            "integer-only reserves perform no peace actor validation");
+        Equal(0, CityReservePoolRules.ActorBudget(preparation: true),
+            "preparation never scans residents for reserve membership");
         Equal(18, CityReservePoolRules.CapacityForPreparation(
             eligibleCivilians: 61, lawPercent: 30, preparation: true),
             "preparation reserve capacity still follows the conscription law");
@@ -96,7 +111,6 @@ internal static class CityReservePoolRulesTests
             "a migrant cannot be returned to the former city's pool");
         RejectedCandidateReturnIsDeterministicAndIdempotent();
         FailedLastCandidateReturnReopensAvailability();
-        RecruitmentExitsOwnOneReturnAndResolveFinalAvailability();
         Equal(true, CityReservePoolRules.MatchesSourceCity(
             sourceCityId: 10L, candidateCityId: 10L),
             "an army may consume reserves raised by its source city");
@@ -280,10 +294,7 @@ internal static class CityReservePoolRulesTests
         Equal(false, CityReservePoolRules.ShouldDeferCallbackInvalidation(
             hasPersistedMember: true, restoreInFlight: false),
             "normal profession changes still validate reserve members");
-        WarEntryWaitsForCompleteRestoreValidation();
-        WarEntryReconciliationRunsOncePerKingdom();
-
-        PreparationDoesNotMaintainActorPool();
+        PreparationUsesIntegerLedgerOnly();
     }
 
     private static void CombinedMobilizedAndPoolCountObeysLawCapacity()
@@ -384,11 +395,11 @@ internal static class CityReservePoolRulesTests
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "TemporaryLevyService.cs"));
-        Equal(3, CountOccurrences(source, "RestoreRejectedCandidates("),
-            "only pre-war compatibility exits return real candidates");
-        Equal(3, CountOccurrences(source,
+        Equal(4, CountOccurrences(source, "RestoreRejectedCandidates("),
+            "four recruitment exits own exactly one rejected-candidate return");
+        Equal(4, CountOccurrences(source,
                 "ResolveConfirmedExhaustionAfterReturn("),
-            "each remaining compatibility return resolves availability");
+            "every return owner resolves exhaustion from final availability");
         string reserveHelper = Section(source,
             "internal static int EnlistReserveActors(",
             "private static int DirectedDemand(");
@@ -493,32 +504,33 @@ internal static class CityReservePoolRulesTests
             "war emergency generation uses the idempotent transition rule");
     }
 
-    private static void PreparationDoesNotMaintainActorPool()
+    private static void PreparationUsesIntegerLedgerOnly()
     {
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "CityReservePoolService.cs"));
-        string warEntry = Section(source,
-            "internal static bool PrepareWarEntry(",
-            "private static bool EnsureRestoreValidationForWarEntry(");
-        Equal(false, warEntry.Contains("CompletePreWarReconciliation(",
+        Equal(false, source.Contains("EligibleActorIds",
                 StringComparison.Ordinal),
-            "war entry must not scan resident actors");
-        string consumption = Section(source,
-            "internal static int TryConsumeForMobilization(",
-            "internal static ArmyMobilizationPhase ResolveMobilizationPhase(");
-        Equal(false, consumption.Contains("TryTakeNextActorId(",
+            "integer reserves keep no eligible-actor collection");
+        Equal(false, source.Contains("ActorIds",
                 StringComparison.Ordinal),
-            "mobilization must not extract real residents");
-        Equal(true, consumption.Contains("confirmedExhausted = true;",
+            "integer reserves keep no member-actor collection");
+        string authorityCycle = Section(source,
+            "internal static void ProcessAuthorityCycle()",
+            "internal static void OnWarStarted(");
+        Equal(false, authorityCycle.Contains("World.world.units",
                 StringComparison.Ordinal),
-            "the retired resident pool reports no AW3 candidates");
-        string rebuild = Section(source,
-            "internal static void RebuildRuntime()",
-            "internal static void FinalizeRuntimeRestore(");
-        Equal(false, rebuild.Contains("RebuildRuntime(validatePersistedMembers",
+            "high-frequency reserve maintenance never scans actors");
+        Equal(true, source.Contains(
+                "ReconcileEstimate(kingdom.cities[state.CityCursor++], state);",
                 StringComparison.Ordinal),
-            "load restore must not rebuild a real-actor reserve index");
+            "daily maintenance refreshes one city estimate");
+        Equal(false, source.Contains("TryReserveWarManpower(",
+                StringComparison.Ordinal),
+            "the compatibility estimator does not own wartime replacements");
+        Equal(false, source.Contains("WarReserveCapacity",
+                StringComparison.Ordinal),
+            "the synthetic mobilization ledger is the only wartime ledger");
     }
 
     private static string Section(string source, string start, string end)

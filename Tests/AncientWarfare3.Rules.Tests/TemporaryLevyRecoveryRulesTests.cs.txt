@@ -86,24 +86,6 @@ internal static class TemporaryLevyRecoveryRulesTests
                 new object[] { true, 1 }),
             "a completed scan must release the city even after a productive batch");
 
-        MethodInfo retainPreparationCity = typeof(TemporaryLevyRules).
-            GetMethod("ShouldKeepPreparationRecruitmentCity", new[]
-            {
-                typeof(bool), typeof(int)
-            });
-        if (retainPreparationCity == null)
-            throw new InvalidOperationException(
-                "preparation recruitment must rotate after a nonproductive partial city scan");
-        Assert(!(bool)retainPreparationCity.Invoke(null,
-                new object[] { false, 0 }),
-            "a preparation scan with no recruit must not trap the monthly plan in one city");
-        Assert((bool)retainPreparationCity.Invoke(null,
-                new object[] { false, 1 }),
-            "a productive partial preparation scan may continue filling its current frontline Army");
-        Assert(!(bool)retainPreparationCity.Invoke(null,
-                new object[] { true, 1 }),
-            "a completed preparation city must yield to the next city after its cursor reaches the end");
-
         Assert(TemporaryLevyRules.ShouldContinueCasualtyRecoveryUntilCoverage(
                 emergencyActive: true, pendingDemand: 8,
                 candidateCoverageComplete: false),

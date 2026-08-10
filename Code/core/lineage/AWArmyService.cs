@@ -563,7 +563,7 @@ namespace AncientWarfare3.core.lineage
                             actorAlive: true,
                             currentProfessionIsWarrior: true,
                             pActor.hasArmy(),
-                            TemporaryLevyService.IsTemporaryLevy(pActor),
+                            SyntheticLevyService.IsSynthetic(pActor),
                             WartimeGarrisonService.IsActive(pActor),
                             TemporarySlaveVanguardService.IsMember(pActor),
                             SlaveService.IsSlave(pActor))) return false;

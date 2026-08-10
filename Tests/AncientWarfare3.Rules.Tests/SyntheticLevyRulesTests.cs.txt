@@ -161,13 +161,13 @@ internal static class SyntheticLevyRulesTests
             "a generated actor is marked, joined, made Warrior, and assigned " +
             "before leaving the synthetic spawn scope");
         Equal(true, source.Contains(
-                "TemporaryLevyService.RegisterSyntheticLevy(",
+                "SyntheticMobilizationLedgerService.OnSyntheticMaterialized(",
                 StringComparison.Ordinal),
-            "generated soldiers enter the shared demobilization index");
+            "generated soldiers enter the unified mobilization ledger");
         Equal(true, source.Contains(
-                "TemporaryLevyService.OnActorInvalidated(actor)",
+                "SyntheticMobilizationLedgerService.OnSyntheticRemoved(",
                 StringComparison.Ordinal),
-            "synthetic removal explicitly clears the demobilization index");
+            "synthetic removal releases unified ledger membership");
     }
 
     private static void FormalWarReplenishmentUsesSyntheticReserveOnly()

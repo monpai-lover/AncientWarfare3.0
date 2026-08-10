@@ -835,7 +835,7 @@ namespace AncientWarfare3.core.lineage
             if (!RoyalAsylumRules.CanPerformProtectedRole(RoyalAsylumService.IsActive(pActor))) return false;
             if (pActor.isKing() || pActor.isCityLeader() || GeneralService.IsActiveGeneralFast(pActor) ||
                 RoyalGuardService.IsRoyalGuard(pActor) || HeirService.IsCurrentHeir(pKingdom, pActor) ||
-                TemporaryLevyService.IsTemporaryLevy(pActor)) return false;
+                SyntheticLevyService.IsSynthetic(pActor)) return false;
             if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
@@ -849,7 +849,7 @@ namespace AncientWarfare3.core.lineage
             if (!CanBeBaseCandidate(pKingdom, pCity, pActor) || !SlaveService.IsSlave(pActor) ||
                 SlaveService.IsRetiredSoldier(pActor)) return false;
             if (RoyalGuardService.IsRoyalGuard(pActor) || RoyalAsylumService.IsActive(pActor) ||
-                TemporaryLevyService.IsTemporaryLevy(pActor)) return false;
+                SyntheticLevyService.IsSynthetic(pActor)) return false;
             return HistoricalMasterVocationService.CanEnter(pActor,
                 HistoricalMasterMilitaryContext.SlaveArmyCadre);
         }

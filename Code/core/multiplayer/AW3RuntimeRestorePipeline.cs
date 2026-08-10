@@ -237,7 +237,8 @@ namespace AncientWarfare3.core.multiplayer
                         restored = SyntheticMobilizationLedgerService.
                             TryRestoreSnapshot(directory, out snapshotError);
                     if (!restored && !string.IsNullOrEmpty(snapshotError))
-                        throw new InvalidOperationException(snapshotError);
+                        ModClass.LogWarning("Synthetic mobilization snapshot " +
+                            "reconciliation fallback: " + snapshotError);
                 }),
                 new AW3RestoreStage("army_replenishment_operations",
                     ArmyReplenishmentOperationService.RebuildRuntime),

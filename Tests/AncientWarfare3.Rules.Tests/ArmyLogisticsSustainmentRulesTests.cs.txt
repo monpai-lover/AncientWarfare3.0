@@ -11,6 +11,7 @@ internal static class ArmyLogisticsSustainmentRulesTests
         DisabledSupplyAlwaysNormalizesToFull();
         DisabledSupplyDoesNotBlockRegroupCompletion();
         OrganizationStillRespondsToCasualtiesAndRegrouping();
+        OnlyStrictNumericalSuperioritySuppressesRetreat();
         LogisticsSchedulerDoesNotRequestASecondSnapshotWithinSamePeriod();
         EmptyKingdomsRemainPendingForLaterFrameSlices();
     }
@@ -159,6 +160,14 @@ internal static class ArmyLogisticsSustainmentRulesTests
                     Regrouping = true
                 }),
             "regrouping still restores organization while supply is disabled");
+    }
+
+    private static void OnlyStrictNumericalSuperioritySuppressesRetreat()
+    {
+        Equal(false, ArmyRtsRules.HasLocalForceAdvantage(10, 10),
+            "equal forces are not a local numerical advantage");
+        Equal(true, ArmyRtsRules.HasLocalForceAdvantage(11, 10),
+            "strictly greater friendly force is a local advantage");
     }
 
     private static void Equal<T>(T expected, T actual, string name)
