@@ -37,6 +37,9 @@ try
         case "oracle":
             RunOracleProbe();
             break;
+        case "continuity":
+            RunContinuityProbe(options.Seed);
+            break;
         case "":
             RunFoundationProbe();
             break;
@@ -508,7 +511,26 @@ static void RunFoundationProbe()
     Check.Equal(64, smoke.Trace.Count, "trace is capped at 64 entries");
     Check.Equal("change:16", smoke.Trace.Entries[0],
         "trace discards the oldest entry first");
+    RunContinuityProbe(seed: 17);
     Console.WriteLine("PASS foundation seed=17 trace=64");
+}
+
+static void RunContinuityProbe(int seed)
+{
+    ContinuityAcceptanceResult result =
+        ContinuityAcceptanceSuite.Run(seed);
+    Check.Equal(10, result.CompletedScenarios,
+        "all RTS continuity failure modes complete");
+    Check.Equal(80, result.LargeArmiesAdvanced,
+        "Large mode advances every army captured at pass entry");
+    Check.Equal(0, result.DuplicateAssignments,
+        "recovery never duplicates an army assignment");
+    Check.True(result.RouteWorkersUsed <= result.RouteWorkerLimit,
+        "Large army budgets do not expand low-level route workers");
+    Console.WriteLine(
+        $"PASS continuity seed={seed} scenarios={result.CompletedScenarios} " +
+        $"large_armies={result.LargeArmiesAdvanced} " +
+        $"route_workers={result.RouteWorkersUsed}");
 }
 
 static void RunOracleProbe()
