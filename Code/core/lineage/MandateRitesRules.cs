@@ -15,7 +15,7 @@ namespace AncientWarfare3.core.lineage
 
     public static class MandateRitesRules
     {
-        public const int OrdinaryRequirement = 2;
+        public const int OrdinaryRequirement = 1;
         public const int MaximumPermanentPoints = 10;
 
         public static int NormalizePermanentPoints(int pPoints)

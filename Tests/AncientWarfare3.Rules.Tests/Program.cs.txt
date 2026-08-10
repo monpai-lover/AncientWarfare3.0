@@ -2647,14 +2647,12 @@ Equal(MandateDeclarationSource.AutonomousRestoration,
 Equal(MandateDeclarationSource.Ordinary,
     MandateRitesRules.ResolveSource("decision", "native", "orthodox"),
     "ordinary decisions retain the ordinary source");
-Equal(false, MandateRitesRules.CanDeclare(1,
+True(MandateRitesRules.CanDeclare(1,
         MandateDeclarationSource.Ordinary, out string ritesReason),
-    "ordinary declarations fail below the completeness threshold");
-Equal("ritual_completeness_missing", ritesReason,
-    "ordinary declarations report the exact rites failure");
+    "ordinary declarations pass with one point of rites completeness");
 True(MandateRitesRules.CanDeclare(2, MandateDeclarationSource.Ordinary,
         out ritesReason),
-    "ordinary declarations pass at the completeness threshold");
+    "ordinary declarations continue to pass above the completeness threshold");
 True(MandateRitesRules.CanDeclare(0,
         MandateDeclarationSource.AutonomousRestoration, out ritesReason),
     "special sources bypass only the ordinary rites gate");
