@@ -155,9 +155,7 @@ namespace AncientWarfare3.ui.windows
             for (int i = options.Count; i < _reasonRows.Count; i++)
                 _reasonRows[i].Root.SetActive(false);
             _emptyReasons.gameObject.SetActive(options.Count == 0);
-            bool canDeclare = _selectedOption != null &&
-                              !DiplomaticWarDeclarationService.HasPending(
-                                  attacker) && !_commandPending;
+            bool canDeclare = _selectedOption != null && !_commandPending;
             _declareButton.interactable = canDeclare;
             _declareText.text = canDeclare
                 ? AW_L10n.Text("aw_diplomatic_war_send", "Deliver declaration")

@@ -46,9 +46,7 @@ namespace AncientWarfare3.core.lineage
             bool projectionExists, bool projectionClosing)
         {
             return projectionExists && !projectionClosing &&
-                   !string.IsNullOrEmpty(requestedSignature) &&
-                   string.Equals(requestedSignature, primarySignature,
-                       System.StringComparison.Ordinal);
+                   !string.IsNullOrEmpty(requestedSignature);
         }
 
         public static bool IsFacingFrontierTile(bool ownedBySide,
@@ -65,6 +63,14 @@ namespace AncientWarfare3.core.lineage
             if (frontierCount <= 0) return -1;
             return (int)(unchecked((ulong)armyId) %
                          (ulong)frontierCount);
+        }
+
+        public static int StableNoticeIndex(long pArmyId,
+            int pNoticeCount)
+        {
+            if (pNoticeCount <= 0) return -1;
+            return (int)(unchecked((ulong)pArmyId) %
+                         (ulong)pNoticeCount);
         }
 
         public static bool ShouldResetAssignment(string currentSignature, string nextSignature,
@@ -110,6 +116,12 @@ namespace AncientWarfare3.core.lineage
             bool discoveryComplete)
         {
             return canSendArmy && discoveryComplete;
+        }
+
+        public static bool CanAssignPrewarDeployment(
+            bool pHasLivingWarriors, bool pDiscoveryComplete)
+        {
+            return pHasLivingWarriors && pDiscoveryComplete;
         }
 
         public static bool ShouldRestoreLegacyJob(bool restoreRequested,

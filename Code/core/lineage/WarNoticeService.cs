@@ -278,7 +278,9 @@ namespace AncientWarfare3.core.lineage
                     Kingdom attacker = ResolveKingdom(state.AttackerId);
                     if (attacker?.data != null &&
                         DiplomaticWarDeclarationService.HasPending(attacker))
-                        DiplomaticWarDeclarationService.Clear(attacker);
+                        DiplomaticWarDeclarationService.ClearPendingForPair(
+                            attacker, ResolveKingdom(state.DefenderId),
+                            "invalid_participants");
                     else
                         Close(signature);
                 }
@@ -292,8 +294,15 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             pKingdom.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
                 out string signature, "");
-            if (string.IsNullOrEmpty(signature)) return;
-            Close(signature);
+            OnDiplomaticDeclarationClearing(pKingdom, signature);
+        }
+
+        public static void OnDiplomaticDeclarationClearing(Kingdom pKingdom,
+            string pNoticeSignature)
+        {
+            if (pKingdom?.data == null ||
+                string.IsNullOrEmpty(pNoticeSignature)) return;
+            Close(pNoticeSignature);
         }
 
         public static void OnWarStarted(War pWar)
@@ -335,19 +344,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void RebuildCurrent(Kingdom pKingdom)
         {
-            pKingdom.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
-                out string signature, "");
-            if (string.IsNullOrEmpty(signature))
-            {
-                EnsureCurrentNotice(pKingdom);
-                return;
-            }
-            Kingdom defender = DiplomaticWarDeclarationService.TargetKingdom(
-                pKingdom);
-            WarNoticeState state = ReadCurrentState(pKingdom, defender);
-            if (state == null) return;
-            Index(state);
-            ArmyDeploymentService.ActivateNotice(state);
+            DiplomaticWarDeclarationService.EnsureLedgerNotices(pKingdom);
         }
 
         private static WarNoticeState ReadCurrentState(Kingdom pAttacker, Kingdom pDefender)

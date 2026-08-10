@@ -300,6 +300,45 @@ namespace AncientWarfare3.core.lineage
             ClearKingdomGuardStateHints(pKingdom);
         }
 
+        internal static List<Actor> CaptureForVassalAbsorption(
+            Kingdom pKingdom)
+        {
+            var result = new List<Actor>();
+            if (pKingdom?.data == null) return result;
+            try
+            {
+                foreach (Actor actor in pKingdom.units)
+                    if (IsRoyalGuard(actor)) result.Add(actor);
+            }
+            catch { }
+            return result;
+        }
+
+        internal static void ReleaseAfterVassalAbsorption(
+            Kingdom pFormerKingdom, Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            bool formerGuard;
+            try
+            {
+                pActor.data.get(LineageKeys.ROYAL_GUARD_KINGDOM_ID,
+                    out long guardKingdomId, -1L);
+                formerGuard = IsRoyalGuard(pActor) ||
+                              guardKingdomId == pFormerKingdom?.id;
+            }
+            catch { return; }
+            if (!formerGuard) return;
+            RemoveGuardFromRoster(pFormerKingdom, pActor);
+            RemoveFromGuardArmy(pActor);
+            ClearStaleGuardIdentity(pActor);
+        }
+
+        internal static void ClearKingdomGuardStateForAbsorption(
+            Kingdom pKingdom)
+        {
+            ClearKingdomGuardStateHints(pKingdom);
+        }
+
         public static void OnGuardDeath(Actor pActor)
         {
             if (!IsRoyalGuard(pActor)) return;

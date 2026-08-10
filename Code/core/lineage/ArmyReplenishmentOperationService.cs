@@ -290,11 +290,11 @@ namespace AncientWarfare3.core.lineage
                 Clear(army);
                 return;
             }
-            if (ArmyReplenishmentOperationRules.ShouldFinishEarly(
-                    liveShortage) || deadlineReached)
+            bool finish = ArmyReplenishmentOperationRules.ShouldFinish(liveShortage <= 0,
+                confirmedExhausted, deadlineReached);
+            if (finish)
             {
-                if (deadlineReached && liveShortage > 0 &&
-                    confirmedExhausted)
+                if (liveShortage > 0 && confirmedExhausted)
                     TemporaryLevyService.RecordConfirmedReserveExhaustion(
                         SafeKingdom(army), army, liveShortage);
                 Clear(army);

@@ -8,6 +8,7 @@ internal static class ArmyLogisticsSustainmentRulesTests
         AConfirmedMissionCorridorKeepsMarchSupplyConnected();
         ACurrentCorridorCityAndRouteAnchorPreventFalseIsolation();
         AStalledMarchDoesNotConsumeSupply();
+        OnlyStrictNumericalSuperioritySuppressesRetreat();
         LogisticsSchedulerDoesNotRequestASecondSnapshotWithinSamePeriod();
     }
 
@@ -100,6 +101,20 @@ internal static class ArmyLogisticsSustainmentRulesTests
                 ArmyRtsState.March, connectedSupply: false,
                 inCorridor: true, strategicMovementProgressed: true),
             "an actual March step still consumes its ordinary supply");
+    }
+
+    private static void OnlyStrictNumericalSuperioritySuppressesRetreat()
+    {
+        var method = typeof(ArmyRtsRules).GetMethod(
+            "HasLocalForceAdvantage");
+        Equal(false, method == null,
+            "RTS exposes a numeric force-advantage rule");
+        Equal(false, (bool)method.Invoke(null,
+                new object[] { 10, 10 }),
+            "equal forces are not a local numerical advantage");
+        Equal(true, (bool)method.Invoke(null,
+                new object[] { 11, 10 }),
+            "strictly greater friendly force is a local advantage");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

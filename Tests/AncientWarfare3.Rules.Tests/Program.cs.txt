@@ -119,7 +119,7 @@ if (args.Length == 1 && args[0] == "--conscription-law-slice")
 if (args.Length == 1 && args[0] == "--three-month-replenishment-slice")
 {
     ArmyReplenishmentOperationRulesTests.Run();
-    Console.WriteLine("AW3 three-month replenishment rules passed.");
+    Console.WriteLine("AW3 replenishment window rules passed.");
     return;
 }
 
@@ -3788,6 +3788,22 @@ True(ArmyDeploymentRules.CompareNoticePriority(
         pRightNoticeYear: 100,
         pRightSignature: "b") < 0,
     "notice signature makes exact deployment priority ties deterministic");
+True(ArmyDeploymentRules.CanUseDeclarationProjection(
+        requestedSignature: "notice-b",
+        primarySignature: "notice-a",
+        projectionExists: true,
+        projectionClosing: false),
+    "each concurrent declaration uses its own live deployment projection");
+var stableNoticeIndexMethod = typeof(ArmyDeploymentRules).GetMethod(
+    "StableNoticeIndex");
+True(stableNoticeIndexMethod != null,
+    "concurrent declarations expose deterministic army partitioning");
+Equal(0, (int)stableNoticeIndexMethod.Invoke(null,
+        new object[] { 10L, 2 }),
+    "the first army is assigned to one declaration front");
+Equal(1, (int)stableNoticeIndexMethod.Invoke(null,
+        new object[] { 11L, 2 }),
+    "the next army is assigned to the other declaration front");
 True(ArmyDeploymentRules.ShouldBypassPrewarDeployment(pDefenderAlreadyAtWar: true),
     "an army already fighting a real war is released from prewar deployment");
 Equal(false, ArmyDeploymentRules.ShouldBypassPrewarDeployment(

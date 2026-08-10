@@ -281,14 +281,13 @@ namespace AncientWarfare3.core.lineage
                 !KingdomPolicyService.SetPolicyEnabled(kingdom, true))
                 return false;
 
-            if (DiplomaticWarDeclarationService.HasPending(kingdom))
-                return true;
-
             CourtSnapshot court = CourtService.GetSnapshot(kingdom);
             Kingdom target = IsUsableRedirectTarget(kingdom, pPreferredTarget)
                 ? pPreferredTarget
                 : PickNormalWarTarget(kingdom, court, out _);
             if (target?.data == null) return false;
+            if (DiplomaticWarDeclarationService.HasPendingForPair(kingdom,
+                    target)) return true;
 
             WarTerritoryService.WarTargetOption option =
                 PickBestImmediateOption(kingdom, target,
@@ -350,7 +349,8 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (!StillWantsWar(pKingdom, target, pCourt)) return false;
-            if (DiplomaticWarDeclarationService.HasPending(pKingdom))
+            if (DiplomaticWarDeclarationService.HasPendingForPair(pKingdom,
+                    target))
                 return false;
 
             WarTerritoryService.WarTargetOption option = PickBestImmediateOption(pKingdom, target);

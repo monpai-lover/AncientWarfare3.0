@@ -123,7 +123,7 @@ namespace AncientWarfare3.core.lineage
         private static void RefreshSide(WarNoticeState pState,
             long pOwnerKingdomId)
         {
-            NoticeAssignments assignments = ResolvePrimaryAssignments(
+            NoticeAssignments assignments = ResolveDeclarationAssignments(
                 pState, pOwnerKingdomId);
             if (assignments == null || assignments.Closing) return;
             if (!assignments.DiscoveryComplete)
@@ -254,10 +254,14 @@ namespace AncientWarfare3.core.lineage
             AWArmyMarchService.ReleaseCompletedDeploymentTrailIfUnused(pArmy);
             if (pKingdom?.data == null ||
                 !KingdomNoticeGroups.TryGetValue(pKingdom.id, out KingdomNoticeGroup group)) return;
-            NoticeAssignments assignments = ResolvePrimaryAssignments(group);
-            if (assignments == null || assignments.Closing) return;
-            if (pRosterExpanded) assignments.ArrivedArmyIds.Remove(pArmy.id);
-            RegisterOrRefreshArmy(assignments, pArmy);
+            foreach (SideNotice side in group.Notices.Values)
+            {
+                NoticeAssignments assignments = ResolveNoticeAssignments(side);
+                if (assignments == null || assignments.Closing) continue;
+                if (pRosterExpanded)
+                    assignments.ArrivedArmyIds.Remove(pArmy.id);
+                RegisterOrRefreshArmy(assignments, pArmy);
+            }
         }
 
         public static void OnArmyInvalidated(Kingdom pKingdom, long pArmyId)
@@ -266,23 +270,22 @@ namespace AncientWarfare3.core.lineage
             AWArmyMarchService.ClearArmy(pArmyId);
             if (pKingdom?.data == null ||
                 !KingdomNoticeGroups.TryGetValue(pKingdom.id, out KingdomNoticeGroup group)) return;
-            NoticeAssignments assignments = ResolvePrimaryAssignments(group);
-            if (assignments == null) return;
-            assignments.BlockingArmyIds.Remove(pArmyId);
-            assignments.ArrivedArmyIds.Remove(pArmyId);
-            assignments.TargetCityByArmy.Remove(pArmyId);
-            assignments.TargetTileByArmy.Remove(pArmyId);
-            assignments.AssignedTargetTileByArmy.Remove(pArmyId);
-            assignments.NextActorIndexByArmy.Remove(pArmyId);
+            foreach (SideNotice side in group.Notices.Values)
+            {
+                if (!Assignments.TryGetValue(side.AssignmentKey,
+                        out NoticeAssignments assignments)) continue;
+                RemoveArmyFromProjection(assignments, pArmyId);
+            }
         }
 
         public static void OnKingdomEnteredWar(Kingdom pKingdom)
         {
             if (pKingdom?.data == null ||
-                !KingdomNoticeGroups.TryGetValue(pKingdom.id, out KingdomNoticeGroup group) ||
-                string.IsNullOrEmpty(group.PrimarySignature)) return;
-            BeginAssignmentCleanup(BuildAssignmentKey(
-                group.PrimarySignature, group.KingdomId), restoreJobs: true);
+                !KingdomNoticeGroups.TryGetValue(pKingdom.id,
+                    out KingdomNoticeGroup group)) return;
+            foreach (SideNotice side in group.Notices.Values)
+                BeginAssignmentCleanup(side.AssignmentKey,
+                    restoreJobs: true);
         }
 
         public static bool TryPrepareMove(Actor pActor, out WorldTile pTarget)
@@ -435,30 +438,9 @@ namespace AncientWarfare3.core.lineage
             string nextPrimary = group.Priorities.Count > 0
                 ? group.Priorities.Min.Signature
                 : "";
-            if (!string.Equals(group.PrimarySignature, nextPrimary, StringComparison.Ordinal))
-            {
-                string previousPrimary = group.PrimarySignature;
-                group.PrimarySignature = nextPrimary;
-                if (!string.IsNullOrEmpty(previousPrimary))
-                    BeginAssignmentCleanup(BuildAssignmentKey(
-                        previousPrimary, group.KingdomId),
-                        restoreJobs: true);
-            }
-
-            NoticeAssignments assignments = ResolvePrimaryAssignments(group);
-            if (assignments != null && group.Notices.TryGetValue(
-                    group.PrimarySignature, out SideNotice primary))
-                ApplySide(assignments, primary);
-        }
-
-        private static NoticeAssignments ResolvePrimaryAssignments(
-            WarNoticeState pState, long pOwnerKingdomId)
-        {
-            if (pState == null ||
-                !KingdomNoticeGroups.TryGetValue(pOwnerKingdomId,
-                    out KingdomNoticeGroup group))
-                return null;
-            return ResolvePrimaryAssignments(group);
+            group.PrimarySignature = nextPrimary;
+            ResolveNoticeAssignments(group.Notices[pState.Signature]);
+            RebalanceGroupAssignments(group);
         }
 
         private static NoticeAssignments ResolveDeclarationAssignments(
@@ -467,6 +449,9 @@ namespace AncientWarfare3.core.lineage
             if (pState == null ||
                 !KingdomNoticeGroups.TryGetValue(pOwnerKingdomId,
                     out KingdomNoticeGroup group)) return null;
+            if (!group.Notices.TryGetValue(pState.Signature,
+                    out SideNotice side)) return null;
+            ResolveNoticeAssignments(side);
             string assignmentKey = BuildAssignmentKey(pState.Signature, pOwnerKingdomId);
             bool exists = Assignments.TryGetValue(assignmentKey,
                 out NoticeAssignments assignments);
@@ -485,33 +470,59 @@ namespace AncientWarfare3.core.lineage
                     out SideNotice primary))
                 return null;
 
-            Kingdom owner = ResolveKingdom(pGroup.KingdomId);
+            return ResolveNoticeAssignments(primary);
+        }
+
+        private static NoticeAssignments ResolveNoticeAssignments(
+            SideNotice pSide)
+        {
+            if (pSide?.State == null ||
+                string.IsNullOrEmpty(pSide.AssignmentKey)) return null;
+
+            Kingdom owner = ResolveKingdom(pSide.OwnerKingdomId);
             bool ownerAlreadyAtWar = owner?.data != null &&
                                      MilitaryEmergencyService.
                                          TryGetActiveWarId(owner, out _);
             if (ArmyDeploymentRules.ShouldBypassPrewarDeployment(
                     ownerAlreadyAtWar))
             {
-                BeginAssignmentCleanup(primary.AssignmentKey,
+                BeginAssignmentCleanup(pSide.AssignmentKey,
                     restoreJobs: true);
                 return null;
             }
 
             bool created = !Assignments.TryGetValue(
-                primary.AssignmentKey, out NoticeAssignments assignments);
+                pSide.AssignmentKey, out NoticeAssignments assignments);
             if (created)
             {
                 assignments = new NoticeAssignments();
-                ApplySide(assignments, primary);
-                Assignments[primary.AssignmentKey] = assignments;
+                ApplySide(assignments, pSide);
+                Assignments[pSide.AssignmentKey] = assignments;
             }
             else
             {
                 if (assignments.Closing) return null;
-                ApplySide(assignments, primary);
+                ApplySide(assignments, pSide);
             }
-            if (created) ScheduleDiscovery(primary.AssignmentKey);
+            if (created) ScheduleDiscovery(pSide.AssignmentKey);
             return assignments;
+        }
+
+        private static void RebalanceGroupAssignments(
+            KingdomNoticeGroup pGroup)
+        {
+            if (pGroup == null) return;
+            foreach (SideNotice side in pGroup.Notices.Values)
+            {
+                NoticeAssignments assignments =
+                    ResolveNoticeAssignments(side);
+                if (assignments == null || assignments.Closing) continue;
+                if (!assignments.DiscoveryComplete)
+                    ScheduleDiscovery(assignments.AssignmentKey);
+                else
+                    ScheduleArmyReview(assignments.AssignmentKey,
+                        pRestart: true);
+            }
         }
 
         private static void RemoveNoticeFromGroup(string pSignature, bool restoreJobs)
@@ -550,10 +561,9 @@ namespace AncientWarfare3.core.lineage
             }
             KingdomIdByAssignmentKey.Remove(pAssignmentKey);
 
-            bool wasPrimary = string.Equals(
-                group.PrimarySignature, pSignature, StringComparison.Ordinal);
-            if (wasPrimary)
-                BeginAssignmentCleanup(pAssignmentKey, restoreJobs);
+            bool wasPrimary = string.Equals(group.PrimarySignature,
+                pSignature, StringComparison.Ordinal);
+            BeginAssignmentCleanup(pAssignmentKey, restoreJobs);
 
             if (group.Notices.Count == 0 || group.Priorities.Count == 0)
             {
@@ -561,9 +571,9 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            if (!wasPrimary) return;
-            group.PrimarySignature = group.Priorities.Min.Signature;
-            ResolvePrimaryAssignments(group);
+            if (wasPrimary)
+                group.PrimarySignature = group.Priorities.Min.Signature;
+            RebalanceGroupAssignments(group);
         }
 
         private static void ApplySide(NoticeAssignments pAssignments,
@@ -1105,7 +1115,13 @@ namespace AncientWarfare3.core.lineage
             ObserveFormation(pAssignments, pArmy);
             if (!IsRequiredArmy(pArmy, owner, out int living))
             {
-                if (pArmy?.data != null) pAssignments.BlockingArmyIds.Remove(pArmy.id);
+                if (pArmy?.data != null)
+                    RemoveArmyFromProjection(pAssignments, pArmy.id);
+                return;
+            }
+            if (!OwnsArmyForNotice(pAssignments, pArmy.id))
+            {
+                RemoveArmyFromProjection(pAssignments, pArmy.id);
                 return;
             }
 
@@ -1116,7 +1132,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             bool ready = IsReady(pArmy, living);
-            if (ArmyDeploymentRules.CanBeginDeployment(ready,
+            if (ArmyDeploymentRules.CanAssignPrewarDeployment(living > 0,
                     pAssignments.DiscoveryComplete))
             {
                 FrontierTarget target = ResolveAssignedTarget(pAssignments,
@@ -1130,6 +1146,39 @@ namespace AncientWarfare3.core.lineage
                 pAssignments.BlockingArmyIds.Add(pArmy.id);
             else
                 pAssignments.BlockingArmyIds.Remove(pArmy.id);
+        }
+
+        private static bool OwnsArmyForNotice(
+            NoticeAssignments pAssignments, long pArmyId)
+        {
+            if (pAssignments?.State == null ||
+                !KingdomNoticeGroups.TryGetValue(
+                    pAssignments.OwnerKingdomId,
+                    out KingdomNoticeGroup group) ||
+                group.Priorities.Count == 0) return false;
+            int selected = ArmyDeploymentRules.StableNoticeIndex(
+                pArmyId, group.Priorities.Count);
+            int index = 0;
+            foreach (NoticePriority priority in group.Priorities)
+            {
+                if (index++ != selected) continue;
+                return string.Equals(priority.Signature,
+                    pAssignments.State.Signature,
+                    StringComparison.Ordinal);
+            }
+            return false;
+        }
+
+        private static void RemoveArmyFromProjection(
+            NoticeAssignments pAssignments, long pArmyId)
+        {
+            if (pAssignments == null || pArmyId < 0L) return;
+            pAssignments.BlockingArmyIds.Remove(pArmyId);
+            pAssignments.ArrivedArmyIds.Remove(pArmyId);
+            pAssignments.TargetCityByArmy.Remove(pArmyId);
+            pAssignments.TargetTileByArmy.Remove(pArmyId);
+            pAssignments.AssignedTargetTileByArmy.Remove(pArmyId);
+            pAssignments.NextActorIndexByArmy.Remove(pArmyId);
         }
 
         private static void ObserveFormation(NoticeAssignments pAssignments,

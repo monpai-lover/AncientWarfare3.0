@@ -3,7 +3,7 @@ namespace AncientWarfare3.core.lineage
     public static class ArmyReplenishmentOperationRules
     {
         public const int SchemaVersion = 1;
-        public const double DurationWorldSeconds = 15d;
+        public const double DurationWorldSeconds = 20d;
         public const int MaximumOperationsPerCycle = 8;
 
         public static int ResolveApprovedShortage(int existingApproved,
@@ -44,6 +44,13 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldFinishEarly(int liveShortage)
         {
             return liveShortage <= 0;
+        }
+
+        public static bool ShouldFinish(bool shortageResolved,
+            bool reservesConfirmedExhausted, bool deadlineReached)
+        {
+            return shortageResolved || reservesConfirmedExhausted ||
+                   deadlineReached;
         }
 
         public static int ClampEnlisted(int approved, int persistedEnlisted)

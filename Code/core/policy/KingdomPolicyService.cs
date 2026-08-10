@@ -88,15 +88,11 @@ namespace AncientWarfare3.core.policy
             if (elapsedYears <= 0) return;
             pKingdom.data.set(LineageKeys.POLICY_LAST_YEAR, currentYear);
 
-            long benchmark = UpdateAgeBenchmark.Begin();
-            try { AddYearlyPoints(pKingdom, elapsedYears); }
-            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyPointsIndex, benchmark); }
-
             EraChangeTriggerService.TryProcessAnnualAi(pKingdom);
 
             TryStartCoreFabrication(pKingdom);
             StartNextQueuedDecisionIfEmpty(pKingdom);
-            benchmark = UpdateAgeBenchmark.Begin();
+            long benchmark = UpdateAgeBenchmark.Begin();
             try { KingdomPolicyAI.TryFillEmptySlots(pKingdom); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAiIndex, benchmark); }
 
@@ -104,15 +100,9 @@ namespace AncientWarfare3.core.policy
             try { AdvanceCurrent(pKingdom, PolicyNodeKind.Tech, elapsedYears); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAdvanceTechIndex, benchmark); }
 
-            AdvanceCoreFabrication(pKingdom);
-
             benchmark = UpdateAgeBenchmark.Begin();
             try { AdvanceCurrent(pKingdom, PolicyNodeKind.Social, elapsedYears); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAdvanceSocialIndex, benchmark); }
-
-            benchmark = UpdateAgeBenchmark.Begin();
-            try { AdvanceCurrent(pKingdom, PolicyNodeKind.Decision, elapsedYears); }
-            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAdvanceDecisionIndex, benchmark); }
 
             TryStartCoreFabrication(pKingdom);
             StartNextQueuedDecisionIfEmpty(pKingdom);
@@ -131,6 +121,41 @@ namespace AncientWarfare3.core.policy
                 DevelopmentMapModeService.DirtyMapIfActive();
             }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyMapDirtyIndex, benchmark); }
+        }
+
+        internal static void OnKingdomDecisionMonth(Kingdom pKingdom,
+            int pMonthKey)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return;
+            if (!IsPolicyEnabledForKingdom(pKingdom)) return;
+            EnsureInitialized(pKingdom);
+            pKingdom.data.get(LineageKeys.POLICY_LAST_DECISION_MONTH,
+                out int lastMonthKey, int.MinValue);
+            if (!KingdomDecisionMonthlyRules.ShouldProcessMonth(pMonthKey,
+                    lastMonthKey)) return;
+            pKingdom.data.set(LineageKeys.POLICY_LAST_DECISION_MONTH,
+                pMonthKey);
+
+            AddMonthlyPoints(pKingdom);
+            TryStartCoreFabrication(pKingdom);
+            AdvanceCoreFabrication(pKingdom,
+                KingdomDecisionMonthlyRules.MonthlyYearFraction);
+            StartNextQueuedDecisionIfEmpty(pKingdom);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try
+            {
+                AdvanceCurrent(pKingdom, PolicyNodeKind.Decision,
+                    KingdomDecisionMonthlyRules.MonthlyYearFraction);
+            }
+            finally
+            {
+                UpdateAgeBenchmark.End(
+                    UpdateAgeBenchmarkRules.KingdomPolicyAdvanceDecisionIndex,
+                    benchmark);
+            }
+            TryStartCoreFabrication(pKingdom);
+            StartNextQueuedDecisionIfEmpty(pKingdom);
+            UpsertSnapshot(pKingdom);
         }
 
         public static bool CanUsePolicySystem(Kingdom pKingdom)
@@ -1052,20 +1077,19 @@ namespace AncientWarfare3.core.policy
             return king?.data != null && (king.hasTrait("first") || king.hasTrait("figure"));
         }
 
-        private static void AddYearlyPoints(Kingdom pKingdom,
-            int pElapsedYears)
+        private static void AddMonthlyPoints(Kingdom pKingdom)
         {
             float political = GetPoliticalPoints(pKingdom);
             float tech = GetTechPoints(pKingdom);
             pKingdom.data.set(LineageKeys.POLICY_POINTS,
                 Mathf.Clamp(political +
-                            KingdomAnnualProgressRules.ScaleAnnualValue(
-                                CalcPoliticalGain(pKingdom), pElapsedYears),
+                            KingdomDecisionMonthlyRules.MonthlyShare(
+                                CalcPoliticalGain(pKingdom)),
                     0f, MAX_POINTS));
             pKingdom.data.set(LineageKeys.TECH_POINTS,
                 Mathf.Clamp(tech +
-                            KingdomAnnualProgressRules.ScaleAnnualValue(
-                                CalcTechGain(pKingdom), pElapsedYears),
+                            KingdomDecisionMonthlyRules.MonthlyShare(
+                                CalcTechGain(pKingdom)),
                     0f, MAX_POINTS));
         }
 
@@ -1088,7 +1112,7 @@ namespace AncientWarfare3.core.policy
         }
 
         private static void AdvanceCurrent(Kingdom pKingdom,
-            PolicyNodeKind pKind, int pElapsedYears)
+            PolicyNodeKind pKind, float pElapsedYears)
         {
             string current = GetCurrent(pKingdom, pKind);
             if (string.IsNullOrEmpty(current)) return;
@@ -1148,8 +1172,8 @@ namespace AncientWarfare3.core.policy
             if (points <= 0f) return;
 
             float remaining = def.Cost - progress;
-            float spendLimit = KingdomAnnualProgressRules.ResolveSpendLimit(
-                MAX_YEARLY_SPEND, pElapsedYears);
+            float spendLimit = Mathf.Max(0f,
+                MAX_YEARLY_SPEND * pElapsedYears);
             float rawSpend = pKind == PolicyNodeKind.Tech
                 ? Mathf.Min(points, spendLimit)
                 : PoliticalPointSpendingRules.AutomaticSpend(points,
@@ -1654,7 +1678,8 @@ namespace AncientWarfare3.core.policy
             StartCoreFabrication(pKingdom, city);
         }
 
-        private static void AdvanceCoreFabrication(Kingdom pKingdom)
+        private static void AdvanceCoreFabrication(Kingdom pKingdom,
+            float pElapsedYears)
         {
             if (pKingdom?.data == null) return;
             if (IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId))
@@ -1684,7 +1709,8 @@ namespace AncientWarfare3.core.policy
             float cost = GetCoreFabricationCost();
             float remaining = cost - progress;
             float spend = PoliticalPointSpendingRules.AutomaticSpend(points,
-                Mathf.Min(MAX_YEARLY_SPEND, remaining));
+                Mathf.Min(MAX_YEARLY_SPEND * Mathf.Max(0f,
+                    pElapsedYears), remaining));
             if (spend <= 0f) return;
 
             points -= spend;

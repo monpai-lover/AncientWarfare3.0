@@ -462,6 +462,8 @@ namespace AncientWarfare3.core.lineage
             internal int ObservedLiving;
             internal int TargetStrength;
             internal int DirectorGeneration = -1;
+            internal int DirectorFriendlyForce;
+            internal int DirectorEnemyForce;
             internal bool DirectorConnectivityInitialized;
             internal bool DirectorConnectedSupply;
             internal bool DirectorConnectedCorridor;
@@ -676,9 +678,7 @@ namespace AncientWarfare3.core.lineage
                 }
                 AssignMission(army, mission, proposal.ConnectedSupply,
                     proposal.ConnectedCorridor, pSnapshot.Generation);
-                if (RuntimeByArmy.TryGetValue(proposal.ArmyId,
-                        out RuntimeState runtime))
-                    runtime.DirectorForceReady = proposal.ForceReady;
+                ApplyDirectorTacticalProjection(proposal);
             }
 
             var stale = new List<long>();
@@ -753,6 +753,9 @@ namespace AncientWarfare3.core.lineage
                 RuntimeByArmy[pArmy.id] = runtime;
             }
             runtime.DirectorForceReady = pProposal.ForceReady;
+            runtime.DirectorFriendlyForce = Math.Max(0,
+                pProposal.FriendlyForce);
+            runtime.DirectorEnemyForce = Math.Max(0, pProposal.EnemyForce);
             runtime.DirectorGeneration = pDirectorGeneration;
             bool connectivityChanged =
                 !runtime.DirectorConnectivityInitialized ||
@@ -768,6 +771,17 @@ namespace AncientWarfare3.core.lineage
                 ArmyLogisticsService.OnMissionAssigned(pArmy,
                     record.Mission, pProposal.ConnectedSupply,
                     pProposal.ConnectedCorridor);
+        }
+
+        private static void ApplyDirectorTacticalProjection(
+            KingdomWarDirectorShadowMission pProposal)
+        {
+            if (pProposal == null || !RuntimeByArmy.TryGetValue(
+                    pProposal.ArmyId, out RuntimeState runtime)) return;
+            runtime.DirectorForceReady = pProposal.ForceReady;
+            runtime.DirectorFriendlyForce = Math.Max(0,
+                pProposal.FriendlyForce);
+            runtime.DirectorEnemyForce = Math.Max(0, pProposal.EnemyForce);
         }
 
         private static bool IsKingdomInWar(War pWar,
@@ -2583,6 +2597,11 @@ namespace AncientWarfare3.core.lineage
                 pursuitState != ArmyRtsState.Pursue;
             facts.PursuitRequiresRegroup = pursuitState ==
                 ArmyRtsState.Regroup;
+            facts.OpenObjective = targetValid && !frontHold && !complete;
+            facts.LocalForceAdvantage = facts.OpenObjective &&
+                ArmyRtsRules.HasLocalForceAdvantage(
+                    pRuntime.DirectorFriendlyForce,
+                    pRuntime.DirectorEnemyForce);
             facts.Supply = operational.Supply;
             facts.Organization = operational.Organization;
             return facts;

@@ -30,6 +30,13 @@ namespace AncientWarfare3.core.lineage
                 hasValidRtsMission: validMission);
         }
 
+        public static bool IsWartimeMilitaryActor(Actor pActor)
+        {
+            if (!IsAlive(pActor) || !IsKingdomAtWar(pActor?.kingdom))
+                return false;
+            return HasActiveMilitaryIdentity(pActor);
+        }
+
         public static bool TryPrepareCivilAppointment(Actor pActor)
         {
             if (!IsAlive(pActor) || HasActiveMilitaryIdentity(pActor))

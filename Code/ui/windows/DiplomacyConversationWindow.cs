@@ -851,8 +851,8 @@ namespace AncientWarfare3.ui.windows
                 {
                     title = AW_L10n.Text("aw_diplomacy_action_declare_war",
                         "Declare war");
-                    available = !DiplomaticWarDeclarationService.HasPending(
-                                    pRequester) &&
+                    available = !DiplomaticWarDeclarationService.
+                                    HasPendingForPair(pRequester, pResponder) &&
                                 WarTerritoryService.BuildTargetOptions(
                                     pRequester, pResponder).Count > 0;
                     reason = available ? "" : "unavailable";

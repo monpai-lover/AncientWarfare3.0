@@ -681,6 +681,8 @@ namespace AncientWarfare3.core.lineage
 
             List<City> cities = pVassal.getCities().Where(c => c?.data != null && !c.isRekt()).ToList();
             if (cities.Count == 0) return false;
+            List<Actor> formerGuards = RoyalGuardService.CaptureForVassalAbsorption(
+                pVassal);
             foreach (City city in cities)
                 city.joinAnotherKingdom(pSuzerain);
 
@@ -696,6 +698,10 @@ namespace AncientWarfare3.core.lineage
                 RollBackCityTransfer(pVassal, pSuzerain, cities);
                 return false;
             }
+
+            VassalAnnexGuardReconciliationService.Reconcile(pSuzerain,
+                pVassal, formerGuards, pCityTransferCommitted: true,
+                pRelationClosed: true);
 
             foreach (Kingdom child in GetVassals(pVassal).ToList())
                 SetVassal(child, pSuzerain, "absorbed_reparent");

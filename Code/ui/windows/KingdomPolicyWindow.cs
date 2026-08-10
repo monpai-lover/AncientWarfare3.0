@@ -756,6 +756,10 @@ namespace AncientWarfare3.ui.windows
                 ? KingdomPolicyService.GetTechPointGain(pKingdom)
                 : KingdomPolicyService.GetPoliticalPointGain(pKingdom);
             int years = EstimateYearsRemaining(remaining, banked, yearlyGain);
+            float monthlyGain = KingdomDecisionMonthlyRules.MonthlyShare(
+                yearlyGain);
+            int months = EstimateMonthsRemaining(remaining, banked,
+                monthlyGain);
 
             var lines = new List<string>
             {
@@ -768,6 +772,11 @@ namespace AncientWarfare3.ui.windows
             };
             if (pKind == PolicyNodeKind.Decision)
             {
+                lines.Add(AW_L10n.Text("aw_policy_monthly_gain",
+                    "\u6708\u589e\u957F") + ": " +
+                    monthlyGain.ToString("0.0"));
+                lines.Add(AW_L10n.Text("aw_policy_estimated_months",
+                    "\u9884\u8BA1\u6708\u6570") + ": " + months);
                 string target = KingdomPolicyService.BuildDecisionTargetLine(pKingdom);
                 if (!string.IsNullOrEmpty(target)) lines.Insert(1, target);
             }
@@ -850,6 +859,28 @@ namespace AncientWarfare3.ui.windows
                 if (remaining <= 0.001f) return year;
             }
             return 99;
+        }
+
+        private static int EstimateMonthsRemaining(float pRemaining,
+            float pBanked, float pMonthlyGain)
+        {
+            if (pRemaining <= 0f) return 0;
+            float remaining = pRemaining;
+            float stock = Mathf.Max(0f, pBanked);
+            float gain = Mathf.Max(0f, pMonthlyGain);
+            float monthlySpend = KingdomDecisionMonthlyRules.MonthlyShare(
+                KingdomPolicyService.MAX_YEARLY_SPEND);
+            for (int month = 1; month <= 396; month++)
+            {
+                stock += gain;
+                float spend = Mathf.Min(stock, Mathf.Min(monthlySpend,
+                    remaining));
+                if (spend <= 0.001f) return 396;
+                stock -= spend;
+                remaining -= spend;
+                if (remaining <= 0.001f) return month;
+            }
+            return 396;
         }
 
         private static string NoCurrentText(PolicyNodeKind pKind)

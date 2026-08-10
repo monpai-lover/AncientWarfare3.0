@@ -439,6 +439,19 @@ namespace AncientWarfare3.core.lineage
                    hasArmyIndex && armyMissionActive;
         }
 
+        public static bool ShouldRegroupInsteadOfRetreat(
+            bool pLocalForceAdvantage, bool pOpenObjective)
+        {
+            return pLocalForceAdvantage && pOpenObjective;
+        }
+
+        public static bool HasLocalForceAdvantage(int pFriendlyForce,
+            int pEnemyForce)
+        {
+            return pFriendlyForce > 0 &&
+                   pFriendlyForce > System.Math.Max(0, pEnemyForce);
+        }
+
         public static ArmyRtsState ResolveState(
             ArmyRtsTransitionFacts pFacts)
         {
@@ -452,7 +465,9 @@ namespace AncientWarfare3.core.lineage
 
             if (pFacts.CurrentState == ArmyRtsState.Regroup)
             {
-                if (pFacts.RegroupRecoveryStalled)
+                bool holdAdvantage = ShouldRegroupInsteadOfRetreat(
+                    pFacts.LocalForceAdvantage, pFacts.OpenObjective);
+                if (pFacts.RegroupRecoveryStalled && !holdAdvantage)
                     return ArmyRtsState.Retreat;
                 bool retreatStrengthReady =
                     pFacts.Posture == ArmyRtsPosture.Retreat &&
@@ -473,11 +488,17 @@ namespace AncientWarfare3.core.lineage
                     ? ArmyRtsState.Regroup
                     : ArmyRtsState.Hold;
 
-            if (pFacts.Posture == ArmyRtsPosture.Retreat ||
-                pFacts.Supply <= CriticalSupply ||
-                pFacts.Organization <= RetreatOrganization &&
-                !pFacts.SurvivalException)
+            if (pFacts.Posture == ArmyRtsPosture.Retreat)
                 return ArmyRtsState.Retreat;
+
+            bool logisticsRetreat = pFacts.Supply <= CriticalSupply ||
+                pFacts.Organization <= RetreatOrganization &&
+                !pFacts.SurvivalException;
+            if (logisticsRetreat && !ShouldRegroupInsteadOfRetreat(
+                    pFacts.LocalForceAdvantage, pFacts.OpenObjective))
+                return ArmyRtsState.Retreat;
+            if (logisticsRetreat)
+                return ArmyRtsState.Regroup;
 
             if (!pFacts.TargetValid) return ArmyRtsState.Idle;
             if (pFacts.TargetComplete)

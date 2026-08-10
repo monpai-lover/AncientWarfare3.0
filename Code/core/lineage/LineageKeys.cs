@@ -379,6 +379,8 @@ namespace AncientWarfare3.core.lineage
         public const string DIPLOMATIC_WAR_NOTICE_RECORDED = "aw_diplomatic_war_notice_recorded";
         public const string DIPLOMATIC_WAR_LAST_CANCEL_REASON = "aw_diplomatic_war_last_cancel_reason";
         public const string DIPLOMATIC_WAR_LAST_CANCEL_YEAR = "aw_diplomatic_war_last_cancel_year";
+        public const string DIPLOMATIC_WAR_LEDGER =
+            "aw_diplomatic_war_ledger";
         public const string DEPLOYMENT_NOTICE_SIGNATURE = "aw_deployment_notice_signature";
         public const string DEPLOYMENT_TARGET_CITY_ID = "aw_deployment_target_city_id";
         public const string DEPLOYMENT_TARGET_X = "aw_deployment_target_x";
@@ -389,6 +391,8 @@ namespace AncientWarfare3.core.lineage
         public const string CORE_FAB_PROGRESS = "aw_core_fab_progress";
         public const string CORE_FAB_QUEUE = "aw_core_fab_queue";
         public const string POLICY_LAST_YEAR = "aw_policy_last_year";
+        public const string POLICY_LAST_DECISION_MONTH =
+            "aw_policy_last_decision_month";
         public const string POLICY_ENABLED = "aw_policy_enabled";
         public const string POLICY_AI_ENABLED = "aw_policy_ai_enabled";
         public const string POLICY_LOCKED_NODES = "aw_policy_locked_nodes";
