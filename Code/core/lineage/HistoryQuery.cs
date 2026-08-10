@@ -1138,7 +1138,8 @@ namespace AncientWarfare3.core.lineage
             {
                 if (period == null) continue;
                 period.year_prefix_snapshot = "";
-                period.king_actor_id = -1;
+                if (!period.is_ruler_period)
+                    period.king_actor_id = -1;
                 period.posthumous_title = "";
                 period.posthumous_color = "";
             }
