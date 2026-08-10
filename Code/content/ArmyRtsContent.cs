@@ -263,7 +263,8 @@ namespace AncientWarfare3.content
                 DecisionAction upstream = decision.action_check_launch;
                 decision.action_check_launch = pActor =>
                     ArmyRtsRuntimeModeRules.ShouldAllowVanillaStrategicDecision(
-                        ArmyRtsRuntimeMode.Current, decisionId) &&
+                        ArmyRtsRuntimeMode.Current, decisionId,
+                        ArmyRtsControllerService.OwnsLiveActor(pActor)) &&
                     (upstream == null || upstream(pActor));
                 InstalledDecisionAssets[decisionId] = decision;
                 InstalledDecisionActions[decisionId] =

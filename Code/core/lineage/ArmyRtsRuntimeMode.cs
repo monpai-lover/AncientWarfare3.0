@@ -59,6 +59,13 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static bool ShouldAllowVanillaStrategicDecision(
+            ArmyRtsMode pMode, string pDecisionId, bool rtsOwnsActor)
+        {
+            return !rtsOwnsActor ||
+                   ShouldAllowVanillaStrategicDecision(pMode, pDecisionId);
+        }
+
         public static bool ShouldAllowVanillaDecisionEvaluation(
             ArmyRtsMode pMode, bool rtsOwnsActor)
         {
