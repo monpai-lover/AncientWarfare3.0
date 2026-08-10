@@ -39,6 +39,8 @@ if (args.Length == 1 && args[0] == "--actor-manual-rename-rules")
 if (args.Length == 1 && args[0] == "--native-sinitic-naming")
 {
     NativeSiniticNamingRulesTests.Run();
+    NativeSiniticIdentityMigrationRulesTests.Run();
+    NativeSiniticIdentityMigrationPersistenceSqlTests.Run();
     Console.WriteLine("Native Sinitic naming rules passed.");
     return;
 }
@@ -7996,6 +7998,8 @@ KingdomRenamePersistenceRulesTests.Run();
 ClassicCivLifespanContentTests.Run();
 XiaExpansionAndCivMonkeyNamingRulesTests.Run();
 NativeSiniticNamingRulesTests.Run();
+NativeSiniticIdentityMigrationRulesTests.Run();
+NativeSiniticIdentityMigrationPersistenceSqlTests.Run();
 IntegratedNamingRulesTests.Run();
 XiaizationAuthoritySeparationRulesTests.Run();
 WesternLineageNamingRulesTests.Run();

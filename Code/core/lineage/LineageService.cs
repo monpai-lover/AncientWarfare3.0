@@ -2278,6 +2278,7 @@ namespace AncientWarfare3.core.lineage
                     string.Empty);
                 return;
             }
+            NativeSiniticIdentityMigrationService.TryRepair(pActor);
             bool cultureIntegrated = UsesXiaPersonalNaming(pActor);
             if (!IntegratedCultureNamingMigrationRules.ShouldApplyXiaDisplay(
                     nativeXia: UsesNativeSiniticGenealogy(pActor),

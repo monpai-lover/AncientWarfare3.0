@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.naming
             if (pActor?.data == null) return string.Empty;
             if (TryProjectHistoricalFigure(pActor, out string historicalName))
                 return historicalName;
+            NativeSiniticIdentityMigrationService.TryRepair(pActor);
             string generatorId = ResolveActorGenerator(pActor, MetaType.Unit);
             bool nativeSinitic = IsNativeSiniticActor(pActor);
             return EnsureIdentity(pActor.data, "Unit", generatorId, pActor.getID(),
@@ -582,6 +583,7 @@ namespace AncientWarfare3.core.naming
         {
             if (!IsNativeSiniticActor(pActor) || pActor?.data == null)
                 return false;
+            NativeSiniticIdentityMigrationService.TryRepair(pActor);
             pActor.data.get(LineageKeys.FAMILY_NAME, out string family,
                 string.Empty);
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given,
@@ -597,6 +599,32 @@ namespace AncientWarfare3.core.naming
             pActor.data.get(LineageKeys.GIVEN_NAME, out given, string.Empty);
             return !string.IsNullOrWhiteSpace(family) &&
                    !string.IsNullOrWhiteSpace(given);
+        }
+
+        internal static NativeSiniticNameParts GenerateNativeSiniticIdentity(
+            Actor pActor, string pInheritedFamily)
+        {
+            if (!IsNativeSiniticActor(pActor) || pActor?.data == null)
+                return default;
+            string generatorId = ResolveActorGenerator(pActor, MetaType.Unit);
+            AWGeneratedName generated = GenerateIdentity(generatorId,
+                pActor.getID(), ResolveCultureId(pActor),
+                (pGenerator, pParameters) =>
+                {
+                    AWNameParameterGetters.GetActorParameterGetter(
+                        pGenerator.ParameterGetter)?.Invoke(pActor,
+                        pParameters);
+                    if (!string.IsNullOrWhiteSpace(pInheritedFamily))
+                        pParameters[AWNameDataKeys.FamilyNameInTemplate] =
+                            pInheritedFamily.Trim();
+                });
+            if (generated?.Components == null) return default;
+            generated.Components.TryGetValue("family_name",
+                out string generatedFamily);
+            generated.Components.TryGetValue("given_name",
+                out string taggedGiven);
+            return AWNativeSiniticNamePartsRules.Resolve(generated.Name,
+                generatedFamily, taggedGiven, pInheritedFamily);
         }
 
         private static bool IsNativeSiniticActor(Actor pActor)
