@@ -5,6 +5,9 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $taskPatch = [IO.File]::ReadAllText(
     (Join-Path $repoRoot 'Code/patch/AW_WartimeMilitaryTaskPatch.cs'),
     [Text.Encoding]::UTF8)
+$taskGate = [IO.File]::ReadAllText(
+    (Join-Path $repoRoot 'Code/core/lineage/WartimeMilitaryTaskGate.cs'),
+    [Text.Encoding]::UTF8)
 $ledger = [IO.File]::ReadAllText(
     (Join-Path $repoRoot 'Code/core/lineage/SyntheticMobilizationLedgerService.cs'),
     [Text.Encoding]::UTF8)
@@ -26,10 +29,12 @@ function Get-MethodBlock([string]$source, [string]$signature) {
     throw "Could not locate closing brace for '$signature'."
 }
 
-$update = Get-MethodBlock $taskPatch 'private static bool Update_Prefix('
 $failures = [Collections.Generic.List[string]]::new()
 if ($taskPatch.Contains('SyntheticLevyService.IsSynthetic(')) {
     $failures.Add('AI job/task/update patches must not poll synthetic levy data')
+}
+if ($taskGate.Contains('SyntheticLevyService.IsSynthetic(')) {
+    $failures.Add('the shared wartime task gate must not poll synthetic levy data')
 }
 if ($taskPatch.Contains('AW_WartimeMilitaryJobPatch')) {
     $failures.Add('synthetic levies must not install a global setJob prefix')
