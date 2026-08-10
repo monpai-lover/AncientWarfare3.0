@@ -1388,6 +1388,7 @@ namespace AncientWarfare3.core.policy
 
             if (pDef.Kind != PolicyNodeKind.Decision)
                 effectApplied = ApplyEffect(pKingdom, pDef);
+            RecordWesternInstitutionTransition(pKingdom);
             if (pDef.Kind == PolicyNodeKind.Tech)
                 CityTechService.OnNationalTechCompleted(pKingdom, pDef);
             if (effectApplied && EraNameRules.IsCentralReform(pDef.Id))
@@ -1423,6 +1424,15 @@ namespace AncientWarfare3.core.policy
             if (ShouldRecordGenericCompletion(pDef)) RecordCompletion(pKingdom, pDef);
             UpsertSnapshot(pKingdom);
             return true;
+        }
+
+        private static void RecordWesternInstitutionTransition(
+            Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null ||
+                GetPolicyProfile(pKingdom) !=
+                KingdomPolicyProfileId.WesternGeneral) return;
+            CourtInstitutionService.Refresh(pKingdom, pRecordHistory: true);
         }
 
         private static bool HasValidSuzerain(Kingdom pKingdom)

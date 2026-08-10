@@ -63,8 +63,7 @@ namespace AncientWarfare3.core.court
             pKingdom.data.set(LineageKeys.COURT_INSTITUTION, next);
             pKingdom.data.set(LineageKeys.COURT_TIER,
                 CourtInstitutionRules.TierForInstitution(next));
-            if (pRecordHistory &&
-                CourtInstitutionRules.IsUpgrade(previous, next))
+            if (pRecordHistory && previous != next)
                 ChronicleEvents.OnCourtInstitutionReformed(
                     pKingdom, previous, next);
             return next;

@@ -855,8 +855,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnCourtInstitutionReformed(Kingdom pKingdom,
             string pPrevious, string pNext)
         {
-            if (pKingdom?.data == null ||
-                !CourtInstitutionRules.IsUpgrade(pPrevious, pNext)) return;
+            if (pKingdom?.data == null || pPrevious == pNext) return;
             HistoryWriter.RecordKingdom(pKingdom,
                 KingdomEvent.COURT_INSTITUTION_REFORMED,
                 HistoryText.Kingdom(pKingdom) +
