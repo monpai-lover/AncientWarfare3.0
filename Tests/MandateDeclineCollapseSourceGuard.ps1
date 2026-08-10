@@ -25,6 +25,8 @@ $war = Method-Slice $mandate 'public static void OnWarEnded(' `
     'private static int ReadOrdinaryWarDefeatDelta('
 $change = Method-Slice $mandate 'private static void ChangeMandate(' `
     'private static MandateReport ReadReportFromDb('
+$collapse = Method-Slice $mandate 'public static void CollapseMandate(' `
+    'public static void OnWarStarted('
 $chaos = Method-Slice $phase 'private static bool EvaluateChaosLifecycle(' `
     'private static void SetPhase('
 
@@ -38,8 +40,12 @@ Require-Text $mandate 'snapshot.AttackerLosses' `
     'Attacking mandate losses are not read from the war snapshot.'
 Require-Text $mandate 'snapshot.DefenderLosses' `
     'Defending mandate losses are not read from the war snapshot.'
+Require-Text $mandate 'if (!Exists) return false;' `
+    'Post-change mandate effects can revive an already collapsed mandate.'
 Require-Text $change 'SyncMandateRuntimeMirrors(' `
     'ChangeMandate does not synchronize kingdom.data mirrors.'
+Require-Text $change 'HandleMandateCollapseThreshold(' `
+    'Event-driven mandate loss does not evaluate the collapse threshold.'
 Require-Text $mandate 'LineageKeys.MANDATE_VALUE' `
     'Mandate value mirror write is missing.'
 Require-Text $mandate 'LineageKeys.MANDATE_AUTHORITY' `
@@ -50,6 +56,15 @@ Require-Text $chaos 'MandateDeclineRules.IsChaosUnresolved(' `
     'Chaos unresolved-year rule is not wired.'
 Require-Text $chaos 'MandateDeclineRules.ShouldRecoverChaos(' `
     'Chaos recovery rule is not wired.'
+
+$rebelIndex = $collapse.IndexOf(
+    'MandateRebelService.OnMandateCollapse(pKingdom, pReason);',
+    [System.StringComparison]::Ordinal)
+$clearIndex = $collapse.IndexOf('ClearMandate(pReason);',
+    [System.StringComparison]::Ordinal)
+if ($rebelIndex -lt 0 -or $clearIndex -le $rebelIndex) {
+    throw 'Mandate collapse must clear state after the optional rebel wave.'
+}
 
 foreach ($slice in @($city, $war, $chaos)) {
     foreach ($forbidden in @('World.world.actors', 'World.world.cities',

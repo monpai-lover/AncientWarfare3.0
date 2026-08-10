@@ -393,19 +393,8 @@ namespace AncientWarfare3.core.lineage
 
             if (nextValue <= MIN_VALUE || chaosCollapse)
             {
-                MandateProtectionResolution protection = MandatePhaseService.
-                    ResolveCollapseProtection(IsHistoricalFigureKing(pKingdom),
-                        currentYear);
-                if (protection == MandateProtectionResolution.StartGrace)
-                {
-                    RecordEvent("mandate_protected", pKingdom, pKingdom.king, null, 0, nextValue,
-                        pKingdom.king.getName() + T("aw_hist_mandate_protected"));
-                }
-                else if (protection == MandateProtectionResolution.Collapse)
-                {
-                    CollapseMandate(pKingdom,
-                        nextValue <= MIN_VALUE ? "low_mandate" : "chaos_timeout");
-                }
+                HandleMandateCollapseThreshold(pKingdom, nextValue,
+                    chaosCollapse, currentYear);
             }
         }
 
@@ -1090,6 +1079,7 @@ namespace AncientWarfare3.core.lineage
             string eventType = pReason ?? "mandate_sacrifice";
             ChangeMandate(pKingdom, pEffects.MandateDelta,
                 eventType, pContent, pRecordEvent: false);
+            if (!Exists) return false;
             MandateReport r = ReadReport();
             int authority = Mathf.Clamp(
                 r.imperial_authority + pEffects.AuthorityDelta, 0, 100);
@@ -2036,15 +2026,42 @@ namespace AncientWarfare3.core.lineage
                 r.vassal_loyalty, CrisisLevel(next), Date.getCurrentYear());
             SyncMandateRuntimeMirrors(pKingdom, next,
                 r.imperial_authority, r.dynasty_prestige);
-            if (!pRecordEvent) return;
-            if (!string.IsNullOrEmpty(pContent))
+            if (pRecordEvent && !string.IsNullOrEmpty(pContent))
             {
                 RecordEvent(pEventType, pKingdom, pKingdom.king, null, pDelta, next, pContent);
+            }
+            else if (pRecordEvent)
+            {
+                RecordEvent(pEventType, pKingdom, pKingdom.king, null,
+                    pDelta, next,
+                    pKingdom.name + T("aw_hist_mandate_changed_mid") +
+                    Signed(pDelta) + T("aw_hist_mandate_current") + next);
+            }
+            if (next <= MIN_VALUE)
+                HandleMandateCollapseThreshold(pKingdom, next,
+                    false, Date.getCurrentYear());
+        }
+
+        private static void HandleMandateCollapseThreshold(Kingdom pKingdom,
+            int pMandateValue, bool pChaosTimeout, int pCurrentYear)
+        {
+            if (pKingdom?.data == null ||
+                (!pChaosTimeout && pMandateValue > MIN_VALUE)) return;
+            MandateProtectionResolution protection = MandatePhaseService.
+                ResolveCollapseProtection(IsHistoricalFigureKing(pKingdom),
+                    pCurrentYear);
+            if (protection == MandateProtectionResolution.StartGrace)
+            {
+                RecordEvent("mandate_protected", pKingdom, pKingdom.king,
+                    null, 0, pMandateValue,
+                    pKingdom.king.getName() + T("aw_hist_mandate_protected"));
                 return;
             }
-            RecordEvent(pEventType, pKingdom, pKingdom.king, null, pDelta, next,
-                pKingdom.name + T("aw_hist_mandate_changed_mid") + Signed(pDelta) +
-                T("aw_hist_mandate_current") + next);
+            if (protection == MandateProtectionResolution.Collapse)
+                CollapseMandate(pKingdom,
+                    pMandateValue <= MIN_VALUE
+                        ? "low_mandate"
+                        : "chaos_timeout");
         }
 
         private static void SyncMandateRuntimeMirrors(Kingdom pKingdom,
