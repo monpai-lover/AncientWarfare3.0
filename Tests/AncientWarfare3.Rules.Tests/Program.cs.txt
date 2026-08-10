@@ -2590,8 +2590,49 @@ True(MandateDeclineRules.ShouldCollapseChaos(8, true),
 Equal(false, MandateDeclineRules.ShouldCollapseChaos(7, true),
     "seven unresolved chaos years do not collapse");
 True(MandateDeclineRules.ShouldRecoverChaos(40, 40, 0.70f,
-        false, false, 3),
+        false, false, 40, 3),
     "stable chaos recovers after three years");
+True(MandateDeclineRules.IsChaosUnresolved(0, 0.70f,
+        false, false, 0),
+    "zero mandate keeps chaos unresolved");
+True(MandateDeclineRules.IsChaosUnresolved(30, 0.49f,
+        false, false, 0),
+    "minority legal core control keeps chaos unresolved");
+True(MandateDeclineRules.IsChaosUnresolved(30, 0.70f,
+        false, false, 90),
+    "maximum catalyst pressure keeps chaos unresolved");
+Equal(false, MandateDeclineRules.IsChaosUnresolved(30, 0.50f,
+        false, false, 89),
+    "a resolved middle state does not advance collapse");
+Equal(false, MandateDeclineRules.ShouldRecoverChaos(40, 40, 0.70f,
+        false, false, 41, 3),
+    "high catalyst blocks chaos recovery");
+True(MandateDeclineRules.IsChaosRecoveryYear(40, 40, 0.70f,
+        false, false, 40),
+    "a fully stable year advances chaos recovery");
+Equal(false, MandateDeclineRules.IsChaosRecoveryYear(39, 40, 0.70f,
+        false, false, 40),
+    "low mandate interrupts chaos recovery");
+Equal(MandateProtectionResolution.StartGrace,
+    MandateDeclineRules.ResolveProtection(
+        pEligible: true, pUsed: false, pCurrentYear: 100,
+        pGraceUntilYear: -1),
+    "eligible historical ruler consumes the one-time grace");
+Equal(MandateProtectionResolution.ContinueGrace,
+    MandateDeclineRules.ResolveProtection(
+        pEligible: true, pUsed: true, pCurrentYear: 103,
+        pGraceUntilYear: 104),
+    "active grace continues before its deadline");
+Equal(MandateProtectionResolution.Collapse,
+    MandateDeclineRules.ResolveProtection(
+        pEligible: true, pUsed: true, pCurrentYear: 104,
+        pGraceUntilYear: 104),
+    "used grace cannot defer collapse at its deadline");
+Equal(MandateProtectionResolution.Collapse,
+    MandateDeclineRules.ResolveProtection(
+        pEligible: false, pUsed: false, pCurrentYear: 100,
+        pGraceUntilYear: -1),
+    "ordinary rulers receive no historical grace");
 Equal(45, CentralizationRules.ReformCost(1), "level one reform cost");
 Equal(75, CentralizationRules.ReformCost(2), "level two reform cost");
 Equal(110, CentralizationRules.ReformCost(3), "level three reform cost");

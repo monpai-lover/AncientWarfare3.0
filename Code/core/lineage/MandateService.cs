@@ -381,7 +381,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_VALUE, nextValue);
             pKingdom.data.set(LineageKeys.MANDATE_AUTHORITY, authority);
             pKingdom.data.set(LineageKeys.MANDATE_PRESTIGE, prestige);
-            MandatePhaseService.EvaluateActiveMandateYear(
+            bool chaosCollapse = MandatePhaseService.EvaluateActiveMandateYear(
                 ReadReport(), currentYear, nextValue, authority, delta);
             MandateDeclineRebellionService.OnMandateYear(pKingdom,
                 nextValue, authority, MandatePhaseService.CatalystScore);
@@ -391,16 +391,20 @@ namespace AncientWarfare3.core.lineage
                     pKingdom.name + T("aw_hist_mandate_changed_mid") + Signed(delta) +
                     T("aw_hist_mandate_current") + nextValue);
 
-            if (nextValue <= MIN_VALUE)
+            if (nextValue <= MIN_VALUE || chaosCollapse)
             {
-                if (HasMandateProtection(pKingdom))
+                MandateProtectionResolution protection = MandatePhaseService.
+                    ResolveCollapseProtection(IsHistoricalFigureKing(pKingdom),
+                        currentYear);
+                if (protection == MandateProtectionResolution.StartGrace)
                 {
                     RecordEvent("mandate_protected", pKingdom, pKingdom.king, null, 0, nextValue,
                         pKingdom.king.getName() + T("aw_hist_mandate_protected"));
                 }
-                else
+                else if (protection == MandateProtectionResolution.Collapse)
                 {
-                    CollapseMandate(pKingdom, "low_mandate");
+                    CollapseMandate(pKingdom,
+                        nextValue <= MIN_VALUE ? "low_mandate" : "chaos_timeout");
                 }
             }
         }
@@ -1108,8 +1112,9 @@ namespace AncientWarfare3.core.lineage
 
         public static bool HasMandateProtection(Kingdom pKingdom)
         {
-            Actor king = pKingdom?.king;
-            return king?.data != null && (king.hasTrait("first") || king.hasTrait("figure"));
+            return pKingdom?.data != null && IsMandateKingdom(pKingdom) &&
+                   MandatePhaseService.IsCollapseProtectionActive(
+                       Date.getCurrentYear());
         }
 
         public static bool ShouldBlockPeacefulFellApart(Kingdom pKingdom)
