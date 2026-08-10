@@ -1,0 +1,22 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class WesternChronicleRulerRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, HistoryRulerPeriodRules.IsRulerTransition("ruler_change"),
+            "western ruler transition opens a period");
+        Equal(false, HistoryRulerPeriodRules.IsRegnalPeriod("ruler_change"),
+            "western ruler transition has no regnal chronology");
+        Equal(true, HistoryRulerPeriodRules.IsRegnalPeriod("rule_change"),
+            "monarchical accession remains regnal");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
+    }
+}

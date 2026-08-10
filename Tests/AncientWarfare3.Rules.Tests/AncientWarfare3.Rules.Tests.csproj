@@ -265,6 +265,7 @@
     <Compile Include="OccupiedCityCivilianProtectionRulesTests.cs.txt" />
     <Compile Include="HistoryLocalizationRulesTests.cs.txt" />
     <Compile Include="ConsistencyRegressionRulesTests.cs.txt" />
+    <Compile Include="WesternChronicleRulerRulesTests.cs.txt" />
     <Compile Include="MandateSuccessionRegressionRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\MandatePowerRules.cs" Link="Production\MandatePowerRules.cs" />
     <Compile Include="Regression20260721Tests.cs.txt" />
@@ -449,6 +450,8 @@
     <Compile Include="..\..\Code\core\lineage\ArmyCreationSafetyRules.cs" Link="Production\ArmyCreationSafetyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\AllianceConversationRules.cs" Link="Production\AllianceConversationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoryDynastyAssignmentRules.cs" Link="Production\HistoryDynastyAssignmentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ChronicleKeys.cs" Link="Production\ChronicleKeys.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoryRulerPeriodRules.cs" Link="Production\HistoryRulerPeriodRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyLogisticsRules.cs" Link="Production\ArmyLogisticsRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyLogisticsService.cs" Link="Production\ArmyLogisticsService.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsObjectiveRules.cs" Link="Production\ArmyRtsObjectiveRules.cs" />
