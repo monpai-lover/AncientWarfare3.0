@@ -1,0 +1,113 @@
+using System;
+using AncientWarfare3.core.performance;
+
+internal static class ArmyRtsExecutionBudgetRulesTests
+{
+    internal static void Run()
+    {
+        LargeModeDrainsTheCapturedSnapshot();
+        NativeModeRetainsBoundedBudgets();
+        FixedModeRetainsBoundedBudgets();
+        EmptyAndNegativePendingWorkRemainEmpty();
+    }
+
+    private static void LargeModeDrainsTheCapturedSnapshot()
+    {
+        ArmyRtsPendingWork pending = new ArmyRtsPendingWork(
+            controllerArmies: 41,
+            firstOrders: 9,
+            replenishmentArrivals: 7,
+            watchdogArmies: 13,
+            successionRecoveries: 6,
+            lifecycleDiscoveries: 5,
+            assignmentReconciliations: 11,
+            abstractBattles: 4);
+
+        ArmyRtsExecutionBudget budget =
+            ArmyRtsExecutionBudgetRules.Capture(
+                AWSimulationMode.Large, pending);
+
+        Equal(41, budget.ControllerArmies,
+            "Large drains the controller snapshot");
+        Equal(9, budget.FirstOrders,
+            "Large drains the first-order snapshot");
+        Equal(7, budget.ReplenishmentArrivals,
+            "Large drains the replenishment snapshot");
+        Equal(13, budget.WatchdogArmies,
+            "Large drains the watchdog snapshot");
+        Equal(6, budget.SuccessionRecoveries,
+            "Large drains the succession snapshot");
+        Equal(5, budget.LifecycleDiscoveries,
+            "Large drains the lifecycle snapshot");
+        Equal(11, budget.AssignmentReconciliations,
+            "Large drains the reconciliation snapshot");
+        Equal(4, budget.AbstractBattles,
+            "Large drains the abstract-battle snapshot");
+
+        pending = new ArmyRtsPendingWork(100, 100, 100, 100,
+            100, 100, 100, 100);
+        Equal(41, budget.ControllerArmies,
+            "a captured budget is unaffected by later pending work");
+    }
+
+    private static void NativeModeRetainsBoundedBudgets()
+    {
+        ArmyRtsExecutionBudget budget =
+            ArmyRtsExecutionBudgetRules.Capture(
+                AWSimulationMode.Native,
+                new ArmyRtsPendingWork(41, 9, 7, 13,
+                    16, 15, 11, 10));
+
+        Equal(32, budget.ControllerArmies, "Native controller cap");
+        Equal(1, budget.FirstOrders, "Native first-order cap");
+        Equal(4, budget.ReplenishmentArrivals,
+            "Native replenishment cap");
+        Equal(2, budget.WatchdogArmies, "Native watchdog cap");
+        Equal(8, budget.SuccessionRecoveries,
+            "Native succession cap");
+        Equal(8, budget.LifecycleDiscoveries,
+            "Native lifecycle cap");
+        Equal(8, budget.AssignmentReconciliations,
+            "Native reconciliation cap");
+        Equal(4, budget.AbstractBattles,
+            "Native abstract-battle cap");
+    }
+
+    private static void FixedModeRetainsBoundedBudgets()
+    {
+        ArmyRtsExecutionBudget budget =
+            ArmyRtsExecutionBudgetRules.Capture(
+                AWSimulationMode.Fixed,
+                new ArmyRtsPendingWork(80, 20, 20, 20,
+                    20, 20, 20, 20));
+
+        Equal(32, budget.ControllerArmies,
+            "only Large mode receives full controller budget");
+        Equal(1, budget.FirstOrders,
+            "only Large mode receives full first-order budget");
+    }
+
+    private static void EmptyAndNegativePendingWorkRemainEmpty()
+    {
+        ArmyRtsExecutionBudget budget =
+            ArmyRtsExecutionBudgetRules.Capture(
+                AWSimulationMode.Large,
+                new ArmyRtsPendingWork(0, -1, 0, -3,
+                    0, -5, 0, -7));
+
+        Equal(0, budget.ControllerArmies, "empty controller work");
+        Equal(0, budget.FirstOrders, "negative first-order work");
+        Equal(0, budget.WatchdogArmies, "negative watchdog work");
+        Equal(0, budget.LifecycleDiscoveries,
+            "negative lifecycle work");
+        Equal(0, budget.AbstractBattles,
+            "negative abstract-battle work");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

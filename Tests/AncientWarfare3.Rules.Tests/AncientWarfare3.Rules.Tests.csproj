@@ -216,6 +216,7 @@
     <Compile Include="SchedulerLoadSafetyRulesTests.cs.txt" />
     <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
     <Compile Include="ArmyRtsSchedulingRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsExecutionBudgetRulesTests.cs.txt" />
     <Compile Include="ArmyRtsFullRosterCursorRulesTests.cs.txt" />
     <Compile Include="ArmyRtsFirstOrderRecoveryRulesTests.cs.txt" />
     <Compile Include="TestArmyRoutePollKindStub.cs.txt" />
@@ -635,6 +636,7 @@
     <Compile Include="..\..\Code\core\lineage\FamilyTreeSnapshotOverlayRules.cs" Link="Production\FamilyTreeSnapshotOverlayRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DeferredRuntimeWorkRules.cs" Link="Production\DeferredRuntimeWorkRules.cs" />
     <Compile Include="..\..\Code\core\performance\ArmyRtsSchedulingMode.cs" Link="Production\ArmyRtsSchedulingMode.cs" />
+    <Compile Include="..\..\Code\core\performance\ArmyRtsExecutionBudgetRules.cs" Link="Production\ArmyRtsExecutionBudgetRules.cs" />
     <Compile Include="..\..\Code\content\XiaNameRepairRules.cs" Link="Production\XiaNameRepairRules.cs" />
     <Compile Include="..\..\Code\content\XiaPreQinKingdomNameRules.cs" Link="Production\XiaPreQinKingdomNameRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedKingdomNamingRules.cs" Link="Production\XiaizedKingdomNamingRules.cs" />
