@@ -197,6 +197,26 @@ namespace AncientWarfare3.core.lineage
                    (long)target * DeploymentQuorumPercent;
         }
 
+        public static bool ShouldSkipInitialRally(bool warStarted,
+            bool wartimeRecovery)
+        {
+            return warStarted && !wartimeRecovery;
+        }
+
+        public static bool ShouldEnterReplenishment(
+            bool needsReplenishment, bool wartimeRecovery,
+            bool alreadyReplenishing)
+        {
+            return needsReplenishment &&
+                   (wartimeRecovery || alreadyReplenishing);
+        }
+
+        public static int ResolveCityArmyTarget(int cityCapacity,
+            int living)
+        {
+            return Math.Max(Math.Max(0, cityCapacity), Math.Max(0, living));
+        }
+
         public static bool ShouldContinueRequestedReplenishment(
             bool replenishmentRequested, int currentStrength,
             int targetStrength)
@@ -541,6 +561,9 @@ namespace AncientWarfare3.core.lineage
             if (pFacts.Posture == ArmyRtsPosture.Retreat)
                 return ArmyRtsState.Retreat;
 
+            bool skipInitialRally = ShouldSkipInitialRally(
+                pFacts.WarStarted, pFacts.WartimeRecovery);
+
             bool logisticsRetreat = pFacts.Supply <= CriticalSupply ||
                 pFacts.Organization <= RetreatOrganization &&
                 !pFacts.SurvivalException;
@@ -559,14 +582,18 @@ namespace AncientWarfare3.core.lineage
             bool operationCommitted = IsOperationCommitted(
                 pFacts.CurrentState);
             if (operationCommitted && !pFacts.MinimumForceReady &&
+                !skipInitialRally &&
                 !pFacts.SurvivalException)
                 return ArmyRtsState.Retreat;
-            if (pFacts.NeedsReplenishment)
+            bool enterReplenishment = ShouldEnterReplenishment(
+                pFacts.NeedsReplenishment, pFacts.WartimeRecovery,
+                pFacts.CurrentState == ArmyRtsState.Replenish);
+            if (enterReplenishment)
                 return ArmyRtsState.Replenish;
             if (pFacts.CurrentState == ArmyRtsState.March &&
                 !pFacts.RouteArrived)
                 return ArmyRtsState.March;
-            if (!operationCommitted &&
+            if (!operationCommitted && !skipInitialRally &&
                 (!pFacts.ForceReady || !pFacts.RallyReady))
                 return ArmyRtsState.Rally;
             if (!pFacts.RouteArrived) return ArmyRtsState.March;

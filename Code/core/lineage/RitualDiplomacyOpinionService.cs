@@ -36,14 +36,37 @@ namespace AncientWarfare3.core.lineage
             int titleRank = (int)KingdomTitleService.GetTitle(pKingdom);
             bool isMandate = MandateService.IsRuntimeMandateKingdom(pKingdom);
 
-            pKingdom.data.set(LineageKeys.DIPLOMACY_ROOT_SUZERAIN_ID, root.id);
+            pKingdom.data.set(LineageKeys.DIPLOMACY_ROOT_SUZERAIN_ID,
+                TryGetId(root));
             pKingdom.data.set(LineageKeys.DIPLOMACY_XIA_LEVEL, xiaLevel);
             pKingdom.data.set(LineageKeys.DIPLOMACY_RITES_SCORE, ritesScore);
             pKingdom.data.set(LineageKeys.DIPLOMACY_TITLE_RANK, titleRank);
             pKingdom.data.set(LineageKeys.DIPLOMACY_IS_MANDATE, isMandate);
             pKingdom.data.set(LineageKeys.DIPLOMACY_CULTURE_ID,
-                pKingdom.culture?.id ?? -1L);
+                TryGetCultureId(pKingdom.culture));
             pKingdom.data.set(LineageKeys.DIPLOMACY_SNAPSHOT_LAST_YEAR, year);
+        }
+
+        private static long TryGetCultureId(Culture pCulture)
+        {
+            if (pCulture?.data == null) return -1L;
+            try
+            {
+                long id = pCulture.id;
+                return id >= 0L ? id : -1L;
+            }
+            catch { return -1L; }
+        }
+
+        private static long TryGetId(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return -1L;
+            try
+            {
+                long id = pKingdom.id;
+                return id >= 0L ? id : -1L;
+            }
+            catch { return -1L; }
         }
 
         private static void AddOpinion(string pId, string pPositiveKey,

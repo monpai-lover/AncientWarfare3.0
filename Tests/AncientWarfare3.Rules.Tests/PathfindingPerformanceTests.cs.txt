@@ -31,6 +31,7 @@ internal static class PathfindingPerformanceTests
         FastSwimmingProfileChangesSpeedAndStaminaCost();
         InitialTraversalPublicationCannotStarveOnLiveDirtyChunks();
         InitialConnectivityBuildUsesTraversalWorker();
+        InitialTraversalBuildCarriesWorkerTopology();
         LargeSchedulerPathProgressRules();
         UnboundedPathsDoNotRepeatFullSearchForEachSegment();
         ShortSafePathUsesDirectFastPath();
@@ -75,6 +76,22 @@ internal static class PathfindingPerformanceTests
             "AW3 PERF separates Actor post worker and commit costs");
         Assert(diagnostic.Contains("TakeDiagnostics()"),
             "runtime diagnostics consume Actor post metrics");
+    }
+
+    private static void InitialTraversalBuildCarriesWorkerTopology()
+    {
+        var chunks = new AWTileTraversalSnapshot[1][];
+        chunks[0] = new AWTileTraversalSnapshot[64];
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+                chunks[0][x + y * 8] = new AWTileTraversalSnapshot(
+                    x + y * 8, x, y, ground: true, regionId: 1);
+
+        AWTraversalBuildResult result = AWTraversalBuildRules.Build(
+            new AWTraversalBuildInput(1L, 0, 0L, 8, 8, 8, chunks,
+                Array.Empty<AWTraversalChunkCapture>()));
+        Assert(result.RegionTopology != null,
+            "initial traversal build must carry worker-built region topology");
     }
 
     private static void EnemySearchUsesVanillaChunkLocalCacheOnly()

@@ -786,6 +786,22 @@ namespace AncientWarfare3.core.lineage
         {
             ClearRuntime();
             BeginLegacyMigration();
+            ResumeActivePreparationPlans();
+        }
+
+        private static void ResumeActivePreparationPlans()
+        {
+            if (World.world?.kingdoms == null) return;
+            int monthKey = CurrentPreparationMonthKey();
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null || kingdom.isRekt() ||
+                    kingdom.isNeutral() ||
+                    !MilitaryEmergencyService.HasAny(kingdom)) continue;
+                PreparationRecruitmentPlan plan =
+                    RestorePreparationRecruitmentPlan(kingdom, monthKey);
+                if (plan != null) SchedulePreparationRecruitment(plan);
+            }
         }
 
         internal static void ProcessLegacyMigration()

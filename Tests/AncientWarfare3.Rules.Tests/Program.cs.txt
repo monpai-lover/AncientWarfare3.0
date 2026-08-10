@@ -10,6 +10,7 @@ using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
 HistoricalWriteModeRulesTests.Run();
+AWThirdPartySchedulerFaultRulesTests.Run();
 ActorVisualRoleRulesTests.Run();
 MilitaryGovernorateCourtRulesTests.Run();
 if (args.Length == 1 &&
@@ -39,8 +40,7 @@ if (args.Length == 1 && args[0] == "--actor-manual-rename-rules")
 if (args.Length == 1 && args[0] == "--native-sinitic-naming")
 {
     NativeSiniticNamingRulesTests.Run();
-    NativeSiniticIdentityMigrationRulesTests.Run();
-    NativeSiniticIdentityMigrationPersistenceSqlTests.Run();
+    HistoryDynastyAssignmentRulesTests.Run();
     Console.WriteLine("Native Sinitic naming rules passed.");
     return;
 }
@@ -273,7 +273,6 @@ if (args.Length == 1 && args[0] == "--integrated-naming-rules-slice")
 {
     IntegratedNamingRulesTests.Run();
     NameIntegrationMaterializationRulesTests.Run();
-    IntegratedCultureNamingMigrationPersistenceSqlTests.Run();
     NameIntegrationMaterializationPersistenceSqlTests.Run();
     KingdomInstitutionalXiaizationPersistenceSqlTests.Run();
     ActorLocalizedNameBoundaryRulesTests.Run();
@@ -7997,8 +7996,6 @@ KingdomRenamePersistenceRulesTests.Run();
 ClassicCivLifespanContentTests.Run();
 XiaExpansionAndCivMonkeyNamingRulesTests.Run();
 NativeSiniticNamingRulesTests.Run();
-NativeSiniticIdentityMigrationRulesTests.Run();
-NativeSiniticIdentityMigrationPersistenceSqlTests.Run();
 IntegratedNamingRulesTests.Run();
 XiaizationAuthoritySeparationRulesTests.Run();
 WesternLineageNamingRulesTests.Run();

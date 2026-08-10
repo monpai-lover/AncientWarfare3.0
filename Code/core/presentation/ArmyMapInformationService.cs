@@ -471,15 +471,12 @@ namespace AncientWarfare3.core.presentation
             }
 
             int standingTarget = 0;
-            if (pActiveDeployment)
+            try
             {
-                try
-                {
-                    standingTarget = StandingArmyService.TargetStrength(pArmy,
-                        AWArmyService.GetIntendedKingdom(pArmy));
-                }
-                catch { }
+                standingTarget = StandingArmyService.TargetStrength(pArmy,
+                    AWArmyService.GetIntendedKingdom(pArmy));
             }
+            catch { }
             pShortage = ArmyMapInformationRules.ResolvePendingShortage(
                 pHasMission && pMission != null,
                 pMission?.TargetStrength ?? 0, pActiveDeployment,

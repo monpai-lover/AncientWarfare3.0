@@ -151,7 +151,10 @@ namespace AncientWarfare3.core.pathfinding
         {
             return ageTicks >= 0L && maximumAgeTicks >= 0L &&
                    ageTicks <= maximumAgeTicks &&
-                   pExisting.Equals(pRequested);
+                   pExisting.ActorId == pRequested.ActorId &&
+                   pExisting.Request.Equals(pRequested.Request) &&
+                   pExisting.WorldGeneration == pRequested.WorldGeneration &&
+                   pExisting.InsideBoat == pRequested.InsideBoat;
         }
 
         public static int ClampCompletedCapacity(int pCapacity)

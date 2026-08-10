@@ -1,46 +1,36 @@
 $ErrorActionPreference = 'Stop'
 
 $repo = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-$name = Get-Content -Raw -LiteralPath (Join-Path $repo `
-    'Code\core\lineage\NameIntegrationMaterializationService.cs')
+$authority = Get-Content -Raw -LiteralPath (Join-Path $repo `
+    'Code\core\performance\AWAuthorityCycleService.cs')
 $culture = Get-Content -Raw -LiteralPath (Join-Path $repo `
-    'Code\core\lineage\IntegratedCultureNamingMigrationService.cs')
-$institution = Get-Content -Raw -LiteralPath (Join-Path $repo `
-    'Code\core\policy\KingdomInstitutionalXiaizationService.cs')
+    'Code\core\lineage\XiaCultureIntegrationService.cs')
+$transition = Get-Content -Raw -LiteralPath (Join-Path $repo `
+    'Code\core\lineage\XiaizedFamilyBranchTransitionPersistence.cs')
 
-function Require-Present([string] $source, [string] $needle,
-    [string] $message) {
-    if (-not $source.Contains($needle)) { throw $message }
+foreach ($forbidden in @(
+        'IntegratedCultureNamingMigrationService',
+        'aw3.authority.integrated_culture_naming_migration')) {
+    if ($authority.Contains($forbidden)) {
+        throw "Removed live-name migration authority path returned: $forbidden"
+    }
+}
+if ($culture.Contains('IntegratedCultureNamingMigrationService.Request')) {
+    throw 'Culture trait projection must not request live actor migration.'
+}
+if ($transition.Contains('WHERE IS_ALIVE=1 AND (SHI_ID=@old')) {
+    throw 'Xia branch transition must not migrate every living relative.'
+}
+if (-not $transition.Contains('WHERE ID=@actor AND IS_ALIVE=1')) {
+    throw 'Xia branch transition must target only the new branch founder.'
 }
 
-function Require-Absent([string] $source, [string] $needle,
-    [string] $message) {
-    if ($source.Contains($needle)) { throw $message }
+foreach ($removed in @(
+        'Code\core\lineage\IntegratedCultureNamingMigrationService.cs',
+        'Code\core\lineage\IntegratedCultureNamingMigrationPersistence.cs')) {
+    if (Test-Path -LiteralPath (Join-Path $repo $removed)) {
+        throw "Removed migration source still exists: $removed"
+    }
 }
 
-foreach ($service in @($name, $culture, $institution)) {
-    Require-Present $service 'Queue<long> PendingOrder' `
-        'Migration services must use a persistent round-robin queue.'
-    Require-Absent $service 'Pending.Keys.ToArray()' `
-        'Migration services must not allocate a key snapshot every cycle.'
-}
-
-Require-Present $name 'Dictionary<long, int> CandidateCursors' `
-    'Name migration must resume candidates by index instead of rescanning.'
-Require-Present $culture 'Dictionary<long, int> CandidateCursors' `
-    'Culture migration must resume candidates by index instead of rescanning.'
-Require-Present $culture 'BuildCandidateIndex()' `
-    'Culture migrations must share one world Actor index.'
-if ($culture -notmatch '(?s)internal static void Request\(Culture pCulture\).*?_candidateIndexBuilt = false;\s+CandidateCursors.Clear\(\);\s+Enqueue') {
-    throw 'Invalidating the shared Actor index must also invalidate list cursors.'
-}
-Require-Present $institution 'MaxKingdomStagesPerCycle = 1' `
-    'Institution migration must have a strict per-cycle kingdom budget.'
-foreach ($service in @($name, $institution)) {
-    Require-Present $service 'MaxRestoreKingdomsPerCycle = 4' `
-        'World-load migration restore must be bounded per authority cycle.'
-    Require-Present $service 'IEnumerator _restoreEnumerator' `
-        'World-load migration restore must resume instead of rescanning kingdoms.'
-}
-
-Write-Output 'Migration performance source guard passed.'
+Write-Output 'Future-only Xia naming performance guard passed.'

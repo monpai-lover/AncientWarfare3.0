@@ -43,6 +43,12 @@ internal static class SyntheticMobilizationRulesTests
         Equal(7, SyntheticMobilizationRules.ExpandLifecycleEnd(
             currentEndExclusive: 7, eventRecordCount: 5),
             "a later smaller view cannot retract pending lifecycle work");
+        Equal(true, SyntheticMobilizationRules.ShouldDeferOrphanScan(
+                loadReconciliationPending: true),
+            "orphan synthetic cleanup waits for the bounded load scan");
+        Equal(false, SyntheticMobilizationRules.ShouldDeferOrphanScan(
+                loadReconciliationPending: false),
+            "orphan synthetic cleanup runs after the load scan");
         int remaining = 41;
         int[] expectedBatches = { 16, 16, 9 };
         for (int i = 0; i < expectedBatches.Length; i++)
@@ -68,6 +74,11 @@ internal static class SyntheticMobilizationRulesTests
             "the ledger observes war termination");
         Contains(source, "ProcessAuthorityCycle()",
             "ledger work is authority-cycle bounded");
+        Contains(source, "ProcessWarEnrollmentScan();",
+            "war enrollment continues while actor reconciliation is pending");
+        DoesNotContain(source,
+            "if (_loadActorReconciliationPending) return;",
+            "actor reconciliation must not block war and replenishment work");
         Contains(source, "city.getPopulationPeople()",
             "quota snapshots use the native aggregate population API");
         DoesNotContain(source, "city.units[",

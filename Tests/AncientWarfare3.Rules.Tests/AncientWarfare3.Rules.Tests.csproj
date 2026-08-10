@@ -52,6 +52,7 @@
     <Compile Include="IdleBehaviourThrottleGateTests.cs.txt" />
     <Compile Include="ActiveMilitaryLifecycleRulesTests.cs.txt" />
     <Compile Include="WartimeMilitaryTaskRulesTests.cs.txt" />
+    <Compile Include="AWThirdPartySchedulerFaultRulesTests.cs.txt" />
     <Compile Include="WarArmyReturnRulesTests.cs.txt" />
     <Compile Include="WarRuntimeDisplayRulesTests.cs.txt" />
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
@@ -108,11 +109,9 @@
     <Compile Include="ArmyMembershipOwnershipRulesTests.cs.txt" />
     <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
     <Compile Include="NativeSiniticNamingRulesTests.cs.txt" />
-    <Compile Include="NativeSiniticIdentityMigrationRulesTests.cs.txt" />
-    <Compile Include="NativeSiniticIdentityMigrationPersistenceSqlTests.cs.txt" />
+    <Compile Include="HistoryDynastyAssignmentRulesTests.cs.txt" />
     <Compile Include="IntegratedNamingRulesTests.cs.txt" />
     <Compile Include="NameIntegrationMaterializationRulesTests.cs.txt" />
-    <Compile Include="IntegratedCultureNamingMigrationPersistenceSqlTests.cs.txt" />
     <Compile Include="NameIntegrationMaterializationPersistenceSqlTests.cs.txt" />
     <Compile Include="KingdomInstitutionalXiaizationPersistenceSqlTests.cs.txt" />
     <Compile Include="XiaizationAuthoritySeparationRulesTests.cs.txt" />
@@ -553,8 +552,6 @@
     <Compile Include="..\..\Code\core\naming\AWActorInitialNameRules.cs" Link="Production\AWActorInitialNameRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWNativeSiniticSpeciesRules.cs" Link="Production\AWNativeSiniticSpeciesRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWNativeSiniticNamePartsRules.cs" Link="Production\AWNativeSiniticNamePartsRules.cs" />
-    <Compile Include="..\..\Code\core\lineage\NativeSiniticIdentityMigrationRules.cs" Link="Production\NativeSiniticIdentityMigrationRules.cs" />
-    <Compile Include="..\..\Code\core\lineage\NativeSiniticIdentityMigrationPersistence.cs" Link="Production\NativeSiniticIdentityMigrationPersistence.cs" />
     <Compile Include="..\..\Code\core\naming\AWNameGeneratorAsset.cs" Link="Production\AWNameGeneratorAsset.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameProjectionRules.cs" Link="Production\AWLocalizedNameProjectionRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedMottoProjectionRules.cs" Link="Production\AWLocalizedMottoProjectionRules.cs" />
@@ -579,7 +576,6 @@
     <Compile Include="..\..\Code\core\db\KingdomNameIntegrationMigrationStateTableItem.cs" Link="Production\KingdomNameIntegrationMigrationStateTableItem.cs" />
     <Compile Include="..\..\Code\core\db\KingdomInstitutionalXiaizationStateTableItem.cs" Link="Production\KingdomInstitutionalXiaizationStateTableItem.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomInstitutionalXiaizationPersistence.cs" Link="Production\KingdomInstitutionalXiaizationPersistence.cs" />
-    <Compile Include="..\..\Code\core\lineage\IntegratedCultureNamingMigrationPersistence.cs" Link="Production\IntegratedCultureNamingMigrationPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\NameIntegrationMaterializationPersistence.cs" Link="Production\NameIntegrationMaterializationPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\WesternStemConversionRules.cs" Link="Production\WesternStemConversionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionPersistence.cs" Link="Production\XiaizedFamilyBranchTransitionPersistence.cs" />
@@ -714,6 +710,7 @@
     <Compile Include="..\..\Code\core\policy\ActorBatchPerformanceRules.cs" Link="Production\ActorBatchPerformanceRules.cs" />
     <Compile Include="..\..\Code\core\policy\ArmyRtsControllerPerformanceRules.cs" Link="Production\ArmyRtsControllerPerformanceRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWFrameSchedulerRules.cs" Link="Production\AWFrameSchedulerRules.cs" />
+    <Compile Include="..\..\Code\core\performance\AWThirdPartySchedulerFaultRules.cs" Link="Production\AWThirdPartySchedulerFaultRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoryWriteTimingRules.cs" Link="Production\HistoryWriteTimingRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorProfessionLoadSafetyRules.cs" Link="Production\ActorProfessionLoadSafetyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActorKingdomSafetyRules.cs" Link="Production\ActorKingdomSafetyRules.cs" />

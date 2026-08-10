@@ -95,10 +95,20 @@ namespace AncientWarfare3.core.lineage
                 return pools;
             }
 
-            long requesterLineage = LineageQuery.GetActorLineageId(
+            long requesterActorLineage = LineageQuery.GetActorLineageId(
                 pRequester.king.data.id);
-            long responderLineage = LineageQuery.GetActorLineageId(
+            long responderActorLineage = LineageQuery.GetActorLineageId(
                 pResponder.king.data.id);
+            long requesterKingdomLineage = ReadKingdomLegitimateLineage(
+                pRequester);
+            long responderKingdomLineage = ReadKingdomLegitimateLineage(
+                pResponder);
+            long requesterLineage = DiplomacyActionExpansionRules
+                .ResolveRoyalMarriageLineage(requesterActorLineage,
+                    requesterKingdomLineage);
+            long responderLineage = DiplomacyActionExpansionRules
+                .ResolveRoyalMarriageLineage(responderActorLineage,
+                    responderKingdomLineage);
             if (requesterLineage < 0 || responderLineage < 0)
             {
                 pools.Reason = "missing_royal_house";
@@ -126,6 +136,14 @@ namespace AncientWarfare3.core.lineage
             else
                 pools.Reason = "";
             return pools;
+        }
+
+        private static long ReadKingdomLegitimateLineage(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return -1L;
+            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID,
+                out long lineageId, -1L);
+            return lineageId;
         }
 
         internal static DiplomaticMarriagePreview PrepareSelection(

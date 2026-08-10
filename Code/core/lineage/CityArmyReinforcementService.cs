@@ -17,10 +17,7 @@ namespace AncientWarfare3.core.lineage
             int slots = EffectiveWarriorSlots(anchor, pKingdom);
             int capacity = CityArmyReinforcementRules.CityCapacity(population,
                 slots);
-            if (!ArmyFieldIndexService.TryGetCityArmy(anchor,
-                    out Army canonical) || canonical != pArmy)
-                return living;
-            return Math.Max(living, capacity);
+            return ArmyRtsRules.ResolveCityArmyTarget(capacity, living);
         }
 
         private static bool IsValidAnchor(City pCity, Kingdom pKingdom)

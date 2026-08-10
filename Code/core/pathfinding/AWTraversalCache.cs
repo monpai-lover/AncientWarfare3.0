@@ -476,7 +476,7 @@ namespace AncientWarfare3.core.pathfinding
             }
             _current = new AWTraversalGeneration(++_generationId,
                 _width, _height, AWTraversalGeneration.DefaultChunkSize,
-                pResult.Chunks);
+                pResult.Chunks, pResult.RegionTopology);
             _initialCaptureTiles = null;
             _initialChunks = null;
             _initialCaptureCursor = 0;
@@ -554,7 +554,9 @@ namespace AncientWarfare3.core.pathfinding
             var next = new AWTraversalGeneration(++_generationId,
                 pResult.Width, pResult.Height, pResult.ChunkSize,
                 pResult.Chunks,
-                reuseTopology ? _current?.RegionTopology : null);
+                reuseTopology
+                    ? _current?.RegionTopology
+                    : pResult.RegionTopology);
             AWTraversalGeneration previous = _current;
             _overlayBuildScheduled = false;
             _current = next;

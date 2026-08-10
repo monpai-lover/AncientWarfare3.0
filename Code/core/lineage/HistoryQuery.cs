@@ -603,16 +603,28 @@ namespace AncientWarfare3.core.lineage
             var dynasties = ReadDynasties(pKingdomId);
             if (dynasties.Count == 0)
             {
-                // 兜底：一个匿名朝代包含所有王段
-                var fallback = new DynastyView
+                var hasKingPeriods = new List<bool>(reigns.Count);
+                var reignStarts = new List<double>(reigns.Count);
+                var reignEnds = new List<double>(reigns.Count);
+                foreach (ReignPeriod reign in reigns)
                 {
-                    dynasty_name = "",
-                    dynasty_index = 0,
-                    start_time = 0,
-                    end_time = GetKingdomDestroyedTime(pKingdomId)
-                };
-                fallback.reigns.AddRange(reigns);
-                return new List<DynastyView> { fallback };
+                    hasKingPeriods.Add(reign?.has_king == true);
+                    reignStarts.Add(reign?.start_time ?? 0d);
+                    reignEnds.Add(reign?.end_time ?? -1d);
+                }
+                if (HistoryDynastyAssignmentRules.TryGetFallbackDynastyRange(
+                        hasKingPeriods, reignStarts, reignEnds,
+                        out double fallbackStart, out double fallbackEnd))
+                {
+                    dynasties.Add(new DynastyView
+                    {
+                        dynasty_name = "",
+                        dynasty_index = 0,
+                        start_time = fallbackStart,
+                        end_time = fallbackEnd
+                    });
+                }
+                // 兜底：一个匿名朝代包含所有王段
             }
 
             // 将每个 reign 分配到时间最接近的朝代
@@ -625,12 +637,38 @@ namespace AncientWarfare3.core.lineage
             }
             foreach (ReignPeriod reign in reigns)
             {
+                if (!HistoryDynastyAssignmentRules.ShouldAssignToDynasty(
+                        reign.has_king))
+                    continue;
                 int dynastyIndex = HistoryDynastyAssignmentRules.SelectIndex(
                     reign.start_time, dynastyStarts, dynastyEnds);
                 if (dynastyIndex >= 0)
                     dynasties[dynastyIndex].reigns.Add(reign);
             }
-            return dynasties;
+            var result = new List<DynastyView>();
+            foreach (DynastyView dynasty in dynasties)
+                if (dynasty.reigns.Count > 0)
+                    result.Add(dynasty);
+            foreach (ReignPeriod reign in reigns)
+            {
+                if (HistoryDynastyAssignmentRules.ShouldAssignToDynasty(
+                        reign.has_king)) continue;
+                var interregnum = new DynastyView
+                {
+                    is_interregnum_group = true,
+                    dynasty_color = reign.period_color,
+                    kingdom_color = reign.period_color,
+                    start_time = reign.start_time,
+                    end_time = reign.end_time
+                };
+                interregnum.reigns.Add(reign);
+                result.Add(interregnum);
+            }
+            result.Sort((left, right) =>
+                left.start_time.CompareTo(right.start_time));
+            for (int index = 0; index < result.Count; index++)
+                result[index].dynasty_index = index;
+            return result;
         }
 
         private static List<DynastyView> ReadDynasties(long pKingdomId)

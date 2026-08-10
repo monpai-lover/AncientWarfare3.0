@@ -1,0 +1,85 @@
+using AncientWarfare3.core.performance;
+
+internal static class AWThirdPartySchedulerFaultRulesTests
+{
+    internal static void Run()
+    {
+        Exception runtimeFault = CaptureRuntimeFault();
+        Equal(true,
+            AWThirdPartySchedulerFaultRules.ShouldQuarantine(runtimeFault),
+            "runtime stack identifies the exact third-party origin frame");
+
+        const string compatibleTrace =
+            "System.NullReferenceException: Object reference not set to an instance of an object\n" +
+            "  at FunBoost.Patches.FamilyReproduction.FamilyManagerNewFamilyPatch.Postfix (Family __result, Actor pActor, Actor pActor2)\n" +
+            "  at (wrapper dynamic-method) FamilyManager.DMD<FamilyManager::newFamily> (FamilyManager,WorldTile,Actor,Actor)\n" +
+            "  at AncientWarfare3.core.performance.AWCooperativeActorPostRunner.RunPostJob ()";
+
+        Equal(true,
+            AWThirdPartySchedulerFaultRules.ShouldQuarantine(
+                typeof(NullReferenceException), compatibleTrace),
+            "exact FunBoost family postfix null reference is quarantined");
+
+        Equal(false,
+            AWThirdPartySchedulerFaultRules.ShouldQuarantine(
+                typeof(InvalidOperationException), compatibleTrace),
+            "invariant-style exceptions are never quarantined");
+
+        Equal(false,
+            AWThirdPartySchedulerFaultRules.ShouldQuarantine(
+                typeof(NullReferenceException),
+                "System.NullReferenceException: other\n" +
+                "  at AncientWarfare3.core.lineage.HeirService.Repair ()\n" +
+                "  at FunBoost.Patches.FamilyReproduction.FamilyManagerNewFamilyPatch.Postfix ()"),
+            "AW3-origin exceptions remain fatal even if FunBoost is later in the trace");
+
+        Equal(false,
+            AWThirdPartySchedulerFaultRules.ShouldQuarantine(
+                typeof(NullReferenceException),
+                "System.NullReferenceException: other\n" +
+                "  at FunBoost.Patches.FamilyReproduction.FamilyManagerNewFamilyPatch.Prefix ()"),
+            "adjacent FunBoost patch methods are not broadly quarantined");
+
+        Equal(false,
+            AWThirdPartySchedulerFaultRules.ShouldQuarantine(
+                typeof(NullReferenceException),
+                "System.NullReferenceException: other\n" +
+                "  at FunBoost.Patches.FamilyReproductionPatch.Postfix ()"),
+            "legacy or differently named patches require separate evidence");
+    }
+
+    private static Exception CaptureRuntimeFault()
+    {
+        try
+        {
+            FunBoost.Patches.FamilyReproduction
+                .FamilyManagerNewFamilyPatch.Postfix();
+        }
+        catch (Exception error)
+        {
+            return error;
+        }
+
+        throw new InvalidOperationException("test fault was not thrown");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+}
+
+namespace FunBoost.Patches.FamilyReproduction
+{
+    internal static class FamilyManagerNewFamilyPatch
+    {
+        [System.Runtime.CompilerServices.MethodImpl(
+            System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        internal static void Postfix()
+        {
+            throw new NullReferenceException("known third-party test fault");
+        }
+    }
+}

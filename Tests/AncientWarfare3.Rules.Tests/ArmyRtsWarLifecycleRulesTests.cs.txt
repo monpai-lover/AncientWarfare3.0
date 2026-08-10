@@ -39,8 +39,8 @@ internal static class ArmyRtsWarLifecycleRulesTests
             "arrival without defenders keeps strategic movement active");
 
         Assert(ArmyRtsWarLifecycleRules.CanGenerateReplacements(
-                combatActive: false, transportActive: false,
-                movementActive: false),
+            combatActive: false, transportActive: false,
+            movementActive: false),
             "an idle army in a replenishment city may generate replacements");
         Assert(!ArmyRtsWarLifecycleRules.CanGenerateReplacements(
                 combatActive: true, transportActive: false,
@@ -51,9 +51,38 @@ internal static class ArmyRtsWarLifecycleRulesTests
                 movementActive: false),
             "transport blocks generated replacements");
         Assert(!ArmyRtsWarLifecycleRules.CanGenerateReplacements(
-                combatActive: false, transportActive: false,
-                movementActive: true),
+            combatActive: false, transportActive: false,
+            movementActive: true),
             "movement blocks generated replacements");
+
+        Assert(ArmyRtsRules.ShouldSkipInitialRally(
+                warStarted: true, wartimeRecovery: false),
+            "an army that missed preparation must skip initial rally after war starts");
+        Assert(!ArmyRtsRules.ShouldSkipInitialRally(
+                warStarted: true, wartimeRecovery: true),
+            "a casualty recovery operation may still use replenishment");
+        Assert(!ArmyRtsRules.ShouldEnterReplenishment(
+                needsReplenishment: true, wartimeRecovery: false,
+                alreadyReplenishing: false),
+            "initial wartime shortage must not create a blocking replenishment state");
+        Assert(ArmyRtsRules.ShouldEnterReplenishment(
+                needsReplenishment: true, wartimeRecovery: true,
+                alreadyReplenishing: false),
+            "the twenty-percent casualty recovery path may replenish");
+        Assert(ArmyRtsRules.ShouldEnterReplenishment(
+                needsReplenishment: true, wartimeRecovery: false,
+                alreadyReplenishing: true),
+            "an existing replenishment operation remains owned until completed");
+        Assert(ArmyRtsRules.ResolveCityArmyTarget(40, 12) == 40,
+            "city capacity is the replenishment target");
+        Assert(ArmyRtsRules.ResolveCityArmyTarget(8, 12) == 12,
+            "a target never drops below the current living roster");
+        Assert(ArmyRtsControllerRules.ShouldPrioritizeMission(
+                new ArmyRtsMission { WarId = 7L }),
+            "war missions receive the priority controller queue");
+        Assert(!ArmyRtsControllerRules.ShouldPrioritizeMission(
+                new ArmyRtsMission { WarId = -1L }),
+            "non-war missions do not enter the wartime priority queue");
 
         Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
             {

@@ -1011,6 +1011,9 @@ namespace AncientWarfare3.ui.windows
 
         private static string BuildDynastyDisplayName(DynastyView pDyn)
         {
+            if (pDyn != null && pDyn.is_interregnum_group)
+                return AW_L10n.Text("aw_history_no_king_period",
+                    "无王时期");
             if (pDyn != null && !string.IsNullOrEmpty(pDyn.clan_name))
             {
                 string ruleName = pDyn.clan_name +
@@ -1035,6 +1038,10 @@ namespace AncientWarfare3.ui.windows
         private static string BuildDynastyTooltip(DynastyView pDyn)
         {
             if (pDyn == null) return "";
+            if (pDyn.is_interregnum_group)
+                return AW_L10n.Text("aw_history_no_king_period",
+                           "无王时期") + "\n" +
+                       YearSpan(pDyn.start_time, pDyn.end_time);
             var sb = new System.Text.StringBuilder();
             if (!string.IsNullOrEmpty(pDyn.original_kingdom_name))
                 sb.Append(AW_L10n.Text("aw_dynasty_original_kingdom", "\u5EFA\u7ACB\u65F6\u56FD\u540D\uFF1A"))

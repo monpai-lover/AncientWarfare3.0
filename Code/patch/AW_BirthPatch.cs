@@ -1,5 +1,6 @@
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.schools;
 using HarmonyLib;
 
@@ -30,7 +31,8 @@ namespace AncientWarfare3.patch
             if (SyntheticLevyService.SuppressPersonalHistory(__instance))
                 return;
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
-            if (!LineageService.UsesNativeSiniticGenealogy(__instance)) return;
+            AWCultureNamingTraditionService.InitializeActorProfile(__instance);
+            if (!LineageService.IsNativeXiaCultureActor(__instance)) return;
 
             try { LineageService.OnActorBorn(__instance); }
             catch (System.Exception e)

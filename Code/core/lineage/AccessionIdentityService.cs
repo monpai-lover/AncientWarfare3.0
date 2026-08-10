@@ -487,7 +487,7 @@ namespace AncientWarfare3.core.lineage
                 LastPrepareFailureReason = "royal_guard_identity";
                 return false;
             }
-            if (!TryRepairCapital(pKingdom, out City capital))
+            if (!TryRepairCapital(pKingdom, pActor, out City capital))
             {
                 LastPrepareFailureReason = "invalid_capital";
                 return false;
@@ -601,35 +601,60 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool TryRepairCapital(Kingdom pKingdom,
-            out City pCapital)
+            Actor pSuccessor, out City pCapital)
         {
             if (TryGetValidCapital(pKingdom, out pCapital)) return true;
             pCapital = null;
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
             try
             {
-                City best = null;
-                int bestScore = int.MinValue;
-                foreach (City city in pKingdom.getCities())
+                City selected = null;
+                City successorHome = pSuccessor?.city;
+                if (IsValidCapitalCandidate(successorHome, pKingdom))
                 {
-                    if (city?.data == null || city.isRekt() ||
-                        city.kingdom != pKingdom || !city.isAlive()) continue;
-                    int score = 0;
-                    try { score += city.getPopulationPeople() * 4; } catch { }
-                    try { score += city.zones.Count; } catch { }
-                    if (best == null || score > bestScore)
-                    {
-                        best = city;
-                        bestScore = score;
-                    }
+                    selected = successorHome;
                 }
-                if (best == null) return false;
+                else
+                {
+                    var citiesById = new Dictionary<long, City>();
+                    var candidates =
+                        new List<AccessionCapitalCandidateFact>();
+                    foreach (City city in pKingdom.getCities())
+                    {
+                        if (!IsValidCapitalCandidate(city, pKingdom) ||
+                            citiesById.ContainsKey(city.data.id))
+                            continue;
+                        citiesById[city.data.id] = city;
+                        int population = 0;
+                        int zones = 0;
+                        try { population = city.getPopulationPeople(); }
+                        catch { }
+                        try { zones = city.zones?.Count ?? 0; }
+                        catch { }
+                        candidates.Add(new AccessionCapitalCandidateFact(
+                            city.data.id, pOwnedByKingdom: true,
+                            pAlive: true, pIsSuccessorHome: false,
+                            population, zones));
+                    }
+                    long selectedId = AccessionIdentityRules
+                        .SelectCapitalRepairCandidateId(candidates);
+                    if (selectedId >= 0)
+                        citiesById.TryGetValue(selectedId, out selected);
+                }
+                if (selected == null) return false;
                 _capitalRepairInProgress = true;
-                try { pKingdom.setCapital(best); }
+                try { pKingdom.setCapital(selected); }
                 finally { _capitalRepairInProgress = false; }
                 return TryGetValidCapital(pKingdom, out pCapital);
             }
             catch { return false; }
+        }
+
+        private static bool IsValidCapitalCandidate(City pCity,
+            Kingdom pKingdom)
+        {
+            return pCity?.data != null && !pCity.isRekt() &&
+                   pCity.isAlive() && pCity.kingdom == pKingdom;
         }
 
         private static bool CloseGuestOffice(Actor pActor)

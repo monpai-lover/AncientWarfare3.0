@@ -73,8 +73,6 @@ namespace AncientWarfare3.patch
                                      __instance?.king == pActor;
             if (actorIsActualKing && profile == NamingProfileId.Monkey)
                 CivMonkeyNamingContent.EnsureActorFamilyIdentity(pActor);
-            if (actorIsActualKing && profile == NamingProfileId.NativeSinitic)
-                AWLocalizedNameService.EnsureNativeSiniticActorIdentity(pActor);
             if (actorIsActualKing &&
                 (profile == NamingProfileId.Western ||
                  profile == NamingProfileId.OrcNomadic))

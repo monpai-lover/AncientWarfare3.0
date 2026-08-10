@@ -246,6 +246,9 @@ internal static class AW3RuntimeRestorePipelineTests
             "generated fallback fails a strict operation");
         Contains(coordinator, ".TryTimeout(DateTime.UtcNow)",
             "coordinator polls the strict deadline");
+        Contains(coordinator,
+            "AWAsyncRuntime.State == AWAsyncLifecycleState.Stopped",
+            "an untracked native world still starts the async runtime");
 
         int patch = modClass.IndexOf("PatchHarmonyByClass();",
             StringComparison.Ordinal);

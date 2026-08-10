@@ -49,5 +49,11 @@ namespace AncientWarfare3.core.lineage
             return Math.Max(Math.Max(0, currentEndExclusive),
                 Math.Max(0, eventRecordCount));
         }
+
+        public static bool ShouldDeferOrphanScan(
+            bool loadReconciliationPending)
+        {
+            return loadReconciliationPending;
+        }
     }
 }

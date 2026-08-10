@@ -102,10 +102,10 @@ internal static class WesternLineageAdmissionRulesTests
                 NamingProfileId.Monkey, isXiaActor: false,
                 isXiaKingdom: false, isForeignPseudoDynasty: false),
             "monkey kingdoms must not enter the western admission hook");
-        Equal(true, WesternLineageAdmissionRules.ShouldRunPromotionHook(
+        Equal(false, WesternLineageAdmissionRules.ShouldRunPromotionHook(
                 NamingProfileId.NativeSinitic, isXiaActor: false,
                 isXiaKingdom: false, isForeignPseudoDynasty: false),
-            "native Sinitic promotions enter the shared genealogy hook");
+            "native Sinitic promotions stay outside genealogy hooks");
 
         Equal(true, WesternLineageAdmissionRules.ShouldRunKingAdmission(
                 fromLoad: true, actorIsActualKing: true,
@@ -119,10 +119,10 @@ internal static class WesternLineageAdmissionRulesTests
                 fromLoad: true, actorIsActualKing: true,
                 NamingProfileId.Monkey),
             "a monkey king remains excluded from western admission");
-        Equal(true, WesternLineageAdmissionRules.ShouldRunKingAdmission(
+        Equal(false, WesternLineageAdmissionRules.ShouldRunKingAdmission(
                 fromLoad: true, actorIsActualKing: true,
                 NamingProfileId.NativeSinitic),
-            "a restored native Sinitic king enters genealogy admission");
+            "a restored native Sinitic king stays outside genealogy admission");
         Equal(false, WesternLineageAdmissionRules.ShouldRunKingAdmission(
                 fromLoad: false, actorIsActualKing: false,
                 NamingProfileId.Western),

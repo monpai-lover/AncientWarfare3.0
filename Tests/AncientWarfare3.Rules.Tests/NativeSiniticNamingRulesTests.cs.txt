@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.naming;
 
 internal static class NativeSiniticNamingRulesTests
@@ -121,16 +122,52 @@ internal static class NativeSiniticNamingRulesTests
             AWNativeSiniticNamePartsRules.Resolve("狐", "狐", "").Valid,
             "a surname-only result rejects the identity");
 
-        Equal("赵",
-            AWNativeSiniticNamePartsRules.ResolveLineageFamily(
-                hasExistingShi: true, clanName: "赵",
-                chineseFamilyName: "钱", familyName: "孙"),
-            "an established Shi remains authoritative");
-        Equal("钱",
-            AWNativeSiniticNamePartsRules.ResolveLineageFamily(
-                hasExistingShi: false, clanName: "赵",
-                chineseFamilyName: "钱", familyName: "孙"),
-            "a new branch preserves the current-library Chinese family");
+        Equal(false,
+            IntegratedCultureNamingMigrationRules.ShouldMigrateNaturalProfile(
+                NamingProfileId.NativeSinitic, false),
+            "native Sinitic cultures never enter live-name migration");
+        Equal(false,
+            IntegratedCultureNamingMigrationRules.ShouldMigrateNaturalProfile(
+                NamingProfileId.Monkey, true),
+            "civilized monkey cultures never enter live-name migration");
+        Equal(true,
+            IntegratedCultureNamingMigrationRules.ShouldMigrateNaturalProfile(
+                NamingProfileId.Western, false),
+            "western cultures may opt into future-only Xia naming");
+        Equal(NamingProfileId.Western,
+            AWCultureNamingTraditionRules.ResolveActorSnapshotProfile(
+                NamingProfileId.Western, NamingProfileId.None,
+                NamingProfileId.Xia, pCreationBoundary: false),
+            "legacy living actors keep their natural profile");
+        Equal(NamingProfileId.Xia,
+            AWCultureNamingTraditionRules.ResolveActorSnapshotProfile(
+                NamingProfileId.Western, NamingProfileId.None,
+                NamingProfileId.Xia, pCreationBoundary: true),
+            "new western actors adopt the current Xia culture profile");
+        Equal(NamingProfileId.Western,
+            AWCultureNamingTraditionRules.ResolveActorSnapshotProfile(
+                NamingProfileId.Western, NamingProfileId.Western,
+                NamingProfileId.Xia, pCreationBoundary: true),
+            "an existing actor snapshot is never reinterpreted");
+        Equal(true,
+            AWCultureNamingTraditionRules
+                .ShouldDeferActorProfileInitialization(
+                    NamingProfileId.Western,
+                    pHasCultureContext: false),
+            "a western newborn waits for parent culture before snapshotting");
+        Equal(true,
+            AWCultureNamingTraditionRules
+                .ShouldDeferActorProfileInitialization(
+                    NamingProfileId.OrcNomadic,
+                    pHasCultureContext: false),
+            "an orc newborn waits for parent culture before snapshotting");
+        Equal(false,
+            AWCultureNamingTraditionRules
+                .ShouldDeferActorProfileInitialization(
+                    NamingProfileId.NativeSinitic,
+                    pHasCultureContext: false),
+            "native Sinitic newborn identity never depends on Xia culture");
+
     }
 
     private static void Equal<T>(T expected, T actual, string message)

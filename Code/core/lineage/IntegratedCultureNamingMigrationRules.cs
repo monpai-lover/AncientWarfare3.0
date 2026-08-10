@@ -11,6 +11,14 @@ namespace AncientWarfare3.core.lineage
 
     public static class IntegratedCultureNamingMigrationRules
     {
+        public static bool ShouldMigrateNaturalProfile(
+            NamingProfileId pNaturalProfile, bool pNativePolicySpecies)
+        {
+            if (pNativePolicySpecies) return false;
+            return pNaturalProfile == NamingProfileId.Western ||
+                   pNaturalProfile == NamingProfileId.OrcNomadic;
+        }
+
         public static bool ShouldUseXiaPersonalNaming(bool integrated,
             bool fullyIntegrated)
         {

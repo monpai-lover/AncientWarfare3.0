@@ -62,11 +62,11 @@ internal static class ArmyMapInformationRulesTests
                 activeDeployment: true, standingTargetStrength: 22,
                 memberCount: 13, minimumOperationalForce: 2),
             "notice deployment reports the standing establishment shortage");
-        Equal(0, ArmyMapInformationRules.ResolvePendingShortage(
+        Equal(9, ArmyMapInformationRules.ResolvePendingShortage(
                 hasMission: false, missionTargetStrength: 0,
                 activeDeployment: false, standingTargetStrength: 22,
                 memberCount: 13, minimumOperationalForce: 2),
-            "an idle peacetime army does not claim a mobilization shortage");
+            "an idle ordinary army reports its city establishment shortage");
         Equal(true, ArmyMapInformationRules.ShouldDisplayReserveManpower(
                 royalGuardArmy: false),
             "ordinary army labels display shortage and reserve supply");

@@ -1,0 +1,50 @@
+using AncientWarfare3.core.lineage;
+
+internal static class HistoryDynastyAssignmentRulesTests
+{
+    public static void Run()
+    {
+        Equal(false,
+            HistoryDynastyAssignmentRules.ShouldAssignToDynasty(false),
+            "no-king periods remain top-level chronicle sections");
+        Equal(true,
+            HistoryDynastyAssignmentRules.ShouldAssignToDynasty(true),
+            "king periods may be assigned to a dynasty");
+
+        Equal(true,
+            HistoryDynastyAssignmentRules.ShouldCreateFallbackDynasty(
+                new[] { false, true, false }),
+            "a missing dynasty table still groups king periods");
+        Equal(false,
+            HistoryDynastyAssignmentRules.ShouldCreateFallbackDynasty(
+                new[] { false, false }),
+            "an all-interregnum timeline does not invent a dynasty");
+        Equal(true,
+            HistoryDynastyAssignmentRules.TryGetFallbackDynastyRange(
+                new[] { false, true, false, true, false },
+                new[] { 0d, 10d, 20d, 30d, 40d },
+                new[] { 10d, 20d, 30d, 40d, -1d },
+                out double fallbackStart, out double fallbackEnd),
+            "a mixed timeline has a fallback dynasty range");
+        Equal(10d, fallbackStart,
+            "opening interregnum sorts before fallback dynasty");
+        Equal(40d, fallbackEnd,
+            "final interregnum sorts after fallback dynasty");
+        Equal(false,
+            HistoryDynastyAssignmentRules.TryGetFallbackDynastyRange(
+                new[] { false, false }, new[] { 0d, 10d },
+                new[] { 10d, -1d }, out _, out _),
+            "an all-interregnum timeline has no fallback range");
+
+        Equal(false,
+            HistoryDynastyAssignmentRules.ShouldAssignToDynasty(false),
+            "opening, middle and final interregnums use the same top-level rule");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new System.InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

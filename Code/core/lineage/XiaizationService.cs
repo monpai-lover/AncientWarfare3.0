@@ -489,11 +489,6 @@ namespace AncientWarfare3.core.lineage
         private static bool TrySetLevel(Kingdom pKingdom, int pLevel, string pLegitimacy, bool pRecord)
         {
             if (pKingdom?.data == null || pLevel <= GetLevel(pKingdom)) return false;
-            XiaizedFamilyBranchTransitionPrepared familyTransition = null;
-            if (pLevel >= LevelXiaizedDynasty &&
-                !XiaizedFamilyBranchTransitionService.TryPrepare(
-                    pKingdom, out familyTransition))
-                return false;
             pKingdom.data.set(LineageKeys.XIAIZATION_LEVEL, pLevel);
             pKingdom.data.set(LineageKeys.XIAIZATION_LEGITIMACY, pLegitimacy ?? "");
             if (KingdomPolicySplitInheritanceRules
@@ -509,7 +504,6 @@ namespace AncientWarfare3.core.lineage
                 XiaCultureIntegrationService.MarkFullyIntegrated(
                     pKingdom.culture);
             }
-            XiaizedFamilyBranchTransitionService.Publish(familyTransition);
             UpsertKingdomState(pKingdom, pLevel, pLegitimacy, HasAdoptedRites(pKingdom), HasAdoptedLaw(pKingdom),
                 ReadStableYears(pKingdom));
             if (KingdomInstitutionalXiaizationRules

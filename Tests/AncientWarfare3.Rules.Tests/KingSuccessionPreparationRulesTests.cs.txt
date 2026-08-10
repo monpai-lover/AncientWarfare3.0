@@ -29,6 +29,9 @@ internal static class KingSuccessionPreparationRulesTests
         SuccessionAttemptsRetryIndefinitelyAndClearAllPagedState();
         CourtUsurpationEstablishesNewLegitimateAwLine();
         ImperialCourtUsurpationBindsNewShiBeforeDynastyTransition();
+        InvalidCapitalRepairPrefersInstalledSuccessorHome();
+        InvalidCapitalRepairFallsBackToBestRealmCity();
+        InvalidCapitalRepairUsesNativeCapitalApi();
         AccessionModeSnapshotRetriesUntilChronicleSettlement();
         ForeignReigningHeirLeavesOldThroneBeforeTransfer();
         KingLeftClearsCompletedAccessionProgress();
@@ -41,6 +44,71 @@ internal static class KingSuccessionPreparationRulesTests
         PagedEvidenceContinuesOnTheNextFrame();
         WorldGenerationSeparatesFallbackAttempts();
         UnchangedHeirSignatureSkipsMaintenance();
+    }
+
+    private static void InvalidCapitalRepairPrefersInstalledSuccessorHome()
+    {
+        var candidates = new[]
+        {
+            new AccessionCapitalCandidateFact(31L,
+                pOwnedByKingdom: true, pAlive: true,
+                pIsSuccessorHome: false, pPopulation: 300, pZones: 40),
+            new AccessionCapitalCandidateFact(12L,
+                pOwnedByKingdom: true, pAlive: true,
+                pIsSuccessorHome: true, pPopulation: 1, pZones: 1)
+        };
+
+        Equal(12L, AccessionIdentityRules.SelectCapitalRepairCandidateId(
+                candidates),
+            "an installed successor's valid realm home repairs the capital first");
+    }
+
+    private static void InvalidCapitalRepairFallsBackToBestRealmCity()
+    {
+        var candidates = new[]
+        {
+            new AccessionCapitalCandidateFact(12L,
+                pOwnedByKingdom: false, pAlive: true,
+                pIsSuccessorHome: true, pPopulation: 500, pZones: 50),
+            new AccessionCapitalCandidateFact(41L,
+                pOwnedByKingdom: true, pAlive: true,
+                pIsSuccessorHome: false, pPopulation: 20, pZones: 4),
+            new AccessionCapitalCandidateFact(39L,
+                pOwnedByKingdom: true, pAlive: true,
+                pIsSuccessorHome: false, pPopulation: 40, pZones: 5),
+            new AccessionCapitalCandidateFact(7L,
+                pOwnedByKingdom: true, pAlive: false,
+                pIsSuccessorHome: false, pPopulation: 999, pZones: 99)
+        };
+
+        Equal(39L, AccessionIdentityRules.SelectCapitalRepairCandidateId(
+                candidates),
+            "a foreign heir home is skipped before choosing a live realm city");
+    }
+
+    private static void InvalidCapitalRepairUsesNativeCapitalApi()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AccessionIdentityService.cs"));
+        int repairStart = source.IndexOf(
+            "private static bool TryRepairCapital(",
+            StringComparison.Ordinal);
+        int repairEnd = source.IndexOf(
+            "private static bool CloseGuestOffice(", repairStart,
+            StringComparison.Ordinal);
+        True(repairStart >= 0 && repairEnd > repairStart,
+            "capital repair source has a stable method boundary");
+        string repair = source.Substring(repairStart,
+            repairEnd - repairStart);
+        True(repair.Contains("Actor pSuccessor", StringComparison.Ordinal),
+            "capital repair receives the installed successor home");
+        True(repair.Contains("pKingdom.setCapital(selected)",
+                StringComparison.Ordinal),
+            "capital repair commits through the native Kingdom API");
+        Equal(false, repair.Contains("pKingdom.capital =",
+                StringComparison.Ordinal),
+            "capital repair never writes the capital field directly");
     }
 
     private static void RegisteredHeirSurvivesTransientIdentityChanges()

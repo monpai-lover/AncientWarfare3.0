@@ -25,11 +25,7 @@ namespace AncientWarfare3.core.lineage
 
         public static bool MarkIntegrated(Culture pCulture)
         {
-            bool changed = MarkTrait(pCulture,
-                XiaCultureTraits.IntegratedTraitId);
-            if (IsIntegrated(pCulture) || IsFullyIntegrated(pCulture))
-                IntegratedCultureNamingMigrationService.Request(pCulture);
-            return changed;
+            return MarkTrait(pCulture, XiaCultureTraits.IntegratedTraitId);
         }
 
         public static bool MarkFullyIntegrated(Culture pCulture)
@@ -38,8 +34,6 @@ namespace AncientWarfare3.core.lineage
                 XiaCultureTraits.IntegratedTraitId);
             bool fullChanged = MarkTrait(pCulture,
                 XiaCultureTraits.FullyIntegratedTraitId);
-            if (IsIntegrated(pCulture) || IsFullyIntegrated(pCulture))
-                IntegratedCultureNamingMigrationService.Request(pCulture);
             return integratedChanged || fullChanged;
         }
 

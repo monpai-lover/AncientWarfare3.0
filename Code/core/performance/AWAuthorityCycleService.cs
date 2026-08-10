@@ -22,7 +22,6 @@ namespace AncientWarfare3.core.performance
             ArmyRtsSuccessionRecovery,
             LocalizedNameMigration,
             WesternLineageMigration,
-            IntegratedCultureNamingMigration,
             NameIntegrationMaterialization,
             KingdomInstitutionalXiaization,
             DynasticMaleLineContinuity,
@@ -66,7 +65,6 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.army_rts_succession_recovery",
             "aw3.authority.localized_name_migration",
             "aw3.authority.western_lineage_migration",
-            "aw3.authority.integrated_culture_naming_migration",
             "aw3.authority.name_integration_materialization",
             "aw3.authority.kingdom_institutional_xiaization",
             "aw3.authority.dynastic_male_line_continuity",
@@ -212,7 +210,6 @@ namespace AncientWarfare3.core.performance
             ZhuluAgeDirectorService.Reset();
             AWLocalizedNameMigrationService.Reset();
             WesternLineageMigrationService.Reset();
-            IntegratedCultureNamingMigrationService.Reset();
             NameIntegrationMaterializationService.Reset();
             KingdomInstitutionalXiaizationService.Reset();
             ActorDeathArchiveService.Reset();
@@ -279,10 +276,6 @@ namespace AncientWarfare3.core.performance
                     break;
                 case CooperativeAuthorityStage.WesternLineageMigration:
                     WesternLineageMigrationService.ProcessAuthorityCycle();
-                    break;
-                case CooperativeAuthorityStage.IntegratedCultureNamingMigration:
-                    IntegratedCultureNamingMigrationService.
-                        ProcessAuthorityCycle();
                     break;
                 case CooperativeAuthorityStage.NameIntegrationMaterialization:
                     NameIntegrationMaterializationService.

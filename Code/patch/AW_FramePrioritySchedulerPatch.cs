@@ -31,6 +31,7 @@ namespace AncientWarfare3.patch
         private static bool _bypassAutoSaveDeferral;
         private static bool _ensuringSaveBoundary;
         private static bool _schedulerLifecycleOwned;
+        private static bool _reportedThirdPartySchedulerFault;
 
         public static void SpecialPatch()
         {
@@ -1378,6 +1379,9 @@ namespace AncientWarfare3.patch
         private static void HandleBackgroundSimulationFault(
             Exception pError)
         {
+            bool quarantineThirdPartyFault =
+                AWThirdPartySchedulerFaultRules.ShouldQuarantine(pError);
+            bool cleanupSucceeded = true;
             try
             {
                 ResetSchedulerState(
@@ -1386,9 +1390,23 @@ namespace AncientWarfare3.patch
             }
             catch (Exception cleanupException)
             {
+                cleanupSucceeded = false;
                 ModClass.LogWarning(
                     "AW scheduler cleanup failed after background fault: " +
                     cleanupException);
+            }
+
+            if (quarantineThirdPartyFault && cleanupSucceeded)
+            {
+                if (!_reportedThirdPartySchedulerFault)
+                {
+                    _reportedThirdPartySchedulerFault = true;
+                    ModClass.LogWarning(
+                        "AW quarantined the known FunBoost new-family " +
+                        "postfix null reference; the failed scheduler " +
+                        "cycle was reset without pausing: " + pError);
+                }
+                return;
             }
 
             AWFramePriorityGovernor.MarkFault(pError);

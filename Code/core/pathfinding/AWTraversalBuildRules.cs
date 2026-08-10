@@ -163,13 +163,19 @@ namespace AncientWarfare3.core.pathfinding
             // into a full-map BFS and allocates every tile again. Keep the
             // baseline pass for world initialization; topology changes are
             // explicitly handled by the caller and may opt back in.
-            if (ShouldRebuildWaterConnectivity(pInput.BaseGenerationId,
-                    pInput.RebuildWaterConnectivity))
+            bool rebuildConnectivity = ShouldRebuildWaterConnectivity(
+                pInput.BaseGenerationId, pInput.RebuildWaterConnectivity);
+            if (rebuildConnectivity)
                 chunks = AWOceanConnectivityRules.Apply(pInput.Width,
                     pInput.Height, pInput.ChunkSize, chunks);
+            AWRegionTopologySnapshot topology = rebuildConnectivity
+                ? AWRegionTopologySnapshot.Build(chunks, pInput.Width,
+                    pInput.Height, pInput.ChunkSize)
+                : null;
             return new AWTraversalBuildResult(pInput.WorldGeneration,
                 pInput.BaseGenerationId, pInput.SourceRevision,
-                pInput.Width, pInput.Height, pInput.ChunkSize, chunks);
+                pInput.Width, pInput.Height, pInput.ChunkSize, chunks,
+                topology);
         }
 
         public static bool CanPublish(AWTraversalBuildResult pResult,

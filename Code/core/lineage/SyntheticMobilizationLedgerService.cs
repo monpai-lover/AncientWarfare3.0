@@ -232,8 +232,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
             ProcessLoadActorReconciliation();
-            if (_loadActorReconciliationPending) return;
-            ProcessOrphanSyntheticActors();
+            if (!SyntheticMobilizationRules.ShouldDeferOrphanScan(
+                    _loadActorReconciliationPending))
+                ProcessOrphanSyntheticActors();
             ProcessWarEnrollmentScan();
             ProcessPendingParticipantWork();
             ProcessPendingWarRecordWork();

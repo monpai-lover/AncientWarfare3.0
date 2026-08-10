@@ -237,6 +237,7 @@ namespace AncientWarfare3.core.lineage
     /// <summary>国家史两层折叠用:一个朝代 + 其下若干王段。</summary>
     internal class DynastyView
     {
+        public bool   is_interregnum_group;
         public int    dynasty_index;      // 用于两级折叠 toggle 的序号
         public string dynasty_name = "";
         public string dynasty_color = "";

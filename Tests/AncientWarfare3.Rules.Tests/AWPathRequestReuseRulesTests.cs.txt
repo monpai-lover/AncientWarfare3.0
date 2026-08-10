@@ -16,14 +16,14 @@ internal static class AWPathRequestReuseRulesTests
             "equivalent live request is reused");
         var changedTerrain = new AWPathReuseKey(42, 10, request,
             terrainRevision: 8, worldGeneration: 3, insideBoat: false);
-        Equal(false, AWPathRequestReuseRules.CanReuse(same,
+        Equal(true, AWPathRequestReuseRules.CanReuse(same,
                 changedTerrain, 2, 8),
-            "terrain changes invalidate reuse");
+            "terrain revisions do not invalidate an active streamed path");
         var changedStart = new AWPathReuseKey(42, 11, request,
             terrainRevision: 7, worldGeneration: 3, insideBoat: false);
-        Equal(false, AWPathRequestReuseRules.CanReuse(same, changedStart,
+        Equal(true, AWPathRequestReuseRules.CanReuse(same, changedStart,
                 2, 8),
-            "meaningful start-region changes invalidate reuse");
+            "crossing a region does not invalidate an active streamed path");
         var changedBoat = new AWPathReuseKey(42, 10, request,
             terrainRevision: 7, worldGeneration: 3, insideBoat: true);
         Equal(false, AWPathRequestReuseRules.CanReuse(same, changedBoat,

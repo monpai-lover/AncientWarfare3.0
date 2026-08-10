@@ -137,11 +137,11 @@ namespace AncientWarfare3.core.lineage
             int standingTargetStrength, int memberCount,
             int minimumOperationalForce)
         {
-            int target = hasMission
-                ? missionTargetStrength
-                : activeDeployment
-                    ? standingTargetStrength
-                    : minimumOperationalForce;
+            _ = activeDeployment;
+            int target = Math.Max(0, standingTargetStrength);
+            if (hasMission && missionTargetStrength > 0)
+                target = Math.Max(target, missionTargetStrength);
+            if (target <= 0) target = minimumOperationalForce;
             return Math.Max(0, Math.Max(0, target) -
                                Math.Max(0, memberCount));
         }

@@ -26,6 +26,16 @@ internal static class WartimeMilitaryTaskRulesTests
         Equal(true, WartimeMilitaryTaskRules.AllowsTask(
                 pWartimeMilitary: false, pTaskId: "sleep_inside"),
             "peacetime actors retain civilian tasks");
+        Equal(true, WartimeMilitaryTaskRules.
+                ShouldContinueUpdateAfterRejectingActiveTask(
+                    pWartimeMilitary: true,
+                    pTaskId: "socialize_with_actor"),
+            "rejecting a loaded civilian task must let AI advance to its military job");
+        Equal(false, WartimeMilitaryTaskRules.
+                ShouldContinueUpdateAfterRejectingActiveTask(
+                    pWartimeMilitary: false,
+                    pTaskId: "socialize_with_actor"),
+            "a legal civilian task is not force-finished");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

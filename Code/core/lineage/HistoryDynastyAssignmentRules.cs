@@ -23,6 +23,44 @@ namespace AncientWarfare3.core.lineage
 
     public static class HistoryDynastyAssignmentRules
     {
+        public static bool ShouldAssignToDynasty(bool pHasKing)
+        {
+            return pHasKing;
+        }
+
+        public static bool ShouldCreateFallbackDynasty(
+            IReadOnlyList<bool> pHasKingPeriods)
+        {
+            if (pHasKingPeriods == null) return false;
+            for (int index = 0; index < pHasKingPeriods.Count; index++)
+                if (pHasKingPeriods[index]) return true;
+            return false;
+        }
+
+        public static bool TryGetFallbackDynastyRange(
+            IReadOnlyList<bool> pHasKingPeriods,
+            IReadOnlyList<double> pStarts,
+            IReadOnlyList<double> pEnds,
+            out double pStart, out double pEnd)
+        {
+            pStart = 0d;
+            pEnd = -1d;
+            int count = Math.Min(pHasKingPeriods?.Count ?? 0,
+                Math.Min(pStarts?.Count ?? 0, pEnds?.Count ?? 0));
+            bool found = false;
+            for (int index = 0; index < count; index++)
+            {
+                if (!pHasKingPeriods[index]) continue;
+                if (!found)
+                {
+                    pStart = pStarts[index];
+                    found = true;
+                }
+                pEnd = pEnds[index];
+            }
+            return found;
+        }
+
         public static int SelectIndex(double pReignStart,
             IReadOnlyList<double> pDynastyStarts,
             IReadOnlyList<double> pDynastyEnds)

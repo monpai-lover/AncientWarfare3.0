@@ -39,6 +39,8 @@ namespace AncientWarfare3.core.lineage
         public ArmyRtsRole Role { get; set; }
         public ArmyRtsPosture Posture { get; set; }
         public bool HasMission { get; set; }
+        public bool WarStarted { get; set; }
+        public bool WartimeRecovery { get; set; }
         public bool FrontHold { get; set; }
         public bool TargetValid { get; set; }
         public bool FormationObservationComplete { get; set; } = true;

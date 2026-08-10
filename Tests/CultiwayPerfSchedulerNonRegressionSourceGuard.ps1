@@ -20,7 +20,7 @@ function Get-NormalizedTextSha256 {
 
 $expected = @{
     'Code/patch/AW_FramePrioritySchedulerPatch.cs' =
-        'FFEB5975322A2FC1DB52958284DC4554C15B9DC67844715D815CB430AC74127D'
+        'B3B66EE7CC4780721AD2BC2C95E2DCDD9F18C107863541DFBB6D1E97E43D6B7E'
     'Code/core/performance/AWCooperativeSimulationRunner.cs' =
         '12DC261FF37E1BB5CDD34D4AD1466725CA88248332D9C21E01C121DF68925EB1'
     'Code/core/performance/AWCooperativeBatchRunner.cs' =
@@ -53,6 +53,18 @@ $framePatch = Get-Content -Raw -Encoding UTF8 (Join-Path $projectRoot `
     'Code/patch/AW_FramePrioritySchedulerPatch.cs')
 if ($framePatch -notmatch 'AWAuthorityCycleService\.ProcessNativeCycle\(\)') {
     throw 'Native mode lost the canonical AW authority-cycle entry.'
+}
+if ($framePatch -notmatch
+    'AWThirdPartySchedulerFaultRules\.ShouldQuarantine\(pError\)') {
+    throw 'Known third-party scheduler faults lost their narrow classifier.'
+}
+if ($framePatch -notmatch
+    'if \(quarantineThirdPartyFault && cleanupSucceeded\)') {
+    throw 'Third-party faults must not resume after failed scheduler cleanup.'
+}
+if ($framePatch -notmatch
+    'AWFramePriorityGovernor\.MarkFault\(pError\);\s*Config\.paused = true;') {
+    throw 'Unclassified scheduler faults must still pause the simulation.'
 }
 
 $runner = Get-Content -Raw -Encoding UTF8 (Join-Path $projectRoot `

@@ -141,6 +141,10 @@ namespace AncientWarfare3.core.asyncwork
                     HistoricalWriteService.StartWorld(generation);
                     readerStartAttempted = true;
                     AWHistoricalReadService.StartWorld(generation);
+                    ModClass.LogInfo("AW3 async world started: generation=" +
+                        generation + " compute_workers=" +
+                        AWAsyncRuntime.WorkerCount + " worker_alive=" +
+                        AWAsyncRuntime.WorkerAlive);
                     return generation;
                 }
                 catch (Exception startError)

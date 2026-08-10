@@ -22,6 +22,11 @@ namespace AncientWarfare3.core.lineage
     {
         public const int MaximumControllersPerFrame = 32;
 
+        public static bool ShouldPrioritizeMission(ArmyRtsMission pMission)
+        {
+            return pMission != null && pMission.WarId >= 0L;
+        }
+
         public static ArmyRtsMission CopyMission(ArmyRtsMission pMission)
         {
             if (pMission == null) return null;
@@ -190,6 +195,9 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<long, ArmyRtsControllerRecord>();
         private readonly Queue<long> _queued = new Queue<long>();
         private readonly HashSet<long> _queuedIds = new HashSet<long>();
+        private readonly Queue<long> _priorityQueued = new Queue<long>();
+        private readonly HashSet<long> _priorityQueuedIds =
+            new HashSet<long>();
         private readonly List<long> _frameBatch = new List<long>(
             ArmyRtsControllerRules.MaximumControllersPerFrame);
 
@@ -222,7 +230,8 @@ namespace AncientWarfare3.core.lineage
                     State = ArmyRtsState.Rally
                 };
             }
-            Enqueue(pMission.ArmyId);
+            Enqueue(pMission.ArmyId,
+                ArmyRtsControllerRules.ShouldPrioritizeMission(copy));
             return changed;
         }
 
@@ -257,10 +266,17 @@ namespace AncientWarfare3.core.lineage
         {
             int limit = Math.Max(0, pMaximum);
             _frameBatch.Clear();
-            while (_frameBatch.Count < limit && _queued.Count > 0)
+            while (_frameBatch.Count < limit &&
+                   (_priorityQueued.Count > 0 || _queued.Count > 0))
             {
-                long armyId = _queued.Dequeue();
-                if (!_queuedIds.Remove(armyId) ||
+                bool priority = _priorityQueued.Count > 0;
+                long armyId = priority
+                    ? _priorityQueued.Dequeue()
+                    : _queued.Dequeue();
+                bool removed = priority
+                    ? _priorityQueuedIds.Remove(armyId)
+                    : _queuedIds.Remove(armyId);
+                if (!removed ||
                     !_records.ContainsKey(armyId)) continue;
                 _frameBatch.Add(armyId);
             }
@@ -269,7 +285,9 @@ namespace AncientWarfare3.core.lineage
 
         public bool Requeue(long pArmyId)
         {
-            return _records.ContainsKey(pArmyId) && Enqueue(pArmyId);
+            return _records.ContainsKey(pArmyId) && Enqueue(pArmyId,
+                ArmyRtsControllerRules.ShouldPrioritizeMission(
+                    _records[pArmyId].Mission));
         }
 
         public bool SetState(long pArmyId, ArmyRtsState pState)
@@ -283,6 +301,7 @@ namespace AncientWarfare3.core.lineage
         public bool Invalidate(long pArmyId)
         {
             _queuedIds.Remove(pArmyId);
+            _priorityQueuedIds.Remove(pArmyId);
             return _records.Remove(pArmyId);
         }
 
@@ -291,10 +310,20 @@ namespace AncientWarfare3.core.lineage
             _records.Clear();
             _queued.Clear();
             _queuedIds.Clear();
+            _priorityQueued.Clear();
+            _priorityQueuedIds.Clear();
         }
 
-        private bool Enqueue(long pArmyId)
+        private bool Enqueue(long pArmyId, bool pPriority)
         {
+            if (pPriority)
+            {
+                _queuedIds.Remove(pArmyId);
+                if (!_priorityQueuedIds.Add(pArmyId)) return false;
+                _priorityQueued.Enqueue(pArmyId);
+                return true;
+            }
+            _priorityQueuedIds.Remove(pArmyId);
             if (!_queuedIds.Add(pArmyId)) return false;
             _queued.Enqueue(pArmyId);
             return true;
@@ -3030,6 +3059,13 @@ namespace AncientWarfare3.core.lineage
                     pRecord.Mission.WarId, pArmy.id,
                     out ArmyRtsWarLifecycleRecord lifecycle) &&
                 lifecycle.Phase == ArmyRtsWarPhase.Replenishing;
+            War missionWar = FindWar(pRecord.Mission.WarId);
+            bool warStarted = missionWar?.data != null;
+            if (warStarted)
+            {
+                try { warStarted = !missionWar.hasEnded(); }
+                catch { warStarted = false; }
+            }
             if (wartimeRecovery)
                 targetStrength = ArmyRtsWarLifecycleRules.
                     RecoveryTargetStrength(lifecycle.BaselineStrength);
@@ -3105,7 +3141,7 @@ namespace AncientWarfare3.core.lineage
                                      kingdom?.capital == target;
             bool hostileWarriorInsideTargetCity = complete &&
                 CityAttackZoneService.HasHostileMilitaryInside(
-                    FindWar(pRecord.Mission.WarId), target, kingdom);
+                    missionWar, target, kingdom);
             bool pursuitAllowed = ArmyRtsRules.
                 ShouldPursueCompletedTarget(
                     complete,
@@ -3121,6 +3157,8 @@ namespace AncientWarfare3.core.lineage
             facts.Role = pRecord.Mission.Role;
             facts.Posture = pRecord.Mission.Posture;
             facts.HasMission = true;
+            facts.WarStarted = warStarted;
+            facts.WartimeRecovery = wartimeRecovery;
             facts.FrontHold = frontHold;
             facts.TargetValid = targetValid;
             facts.FormationObservationComplete = true;

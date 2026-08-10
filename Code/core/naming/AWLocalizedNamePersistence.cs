@@ -105,60 +105,44 @@ namespace AncientWarfare3.core.naming
                     out string metaType)) return false;
             try
             {
-                using SQLiteTransaction transaction = db.BeginTransaction();
-                using var command = new SQLiteCommand(db)
-                {
-                    Transaction = transaction
-                };
-                AddIdentityParameters(command, metaType, pObjectId,
-                    pIdentity);
-                command.CommandText = "UPDATE " + Table + " SET " +
-                    "IDENTITY_KEY=@key,NATIVE_NAME=@native," +
-                    "CHINESE_NAME=@chinese,GIVEN_NAME=@given," +
-                    "FAMILY_COMPONENT=@family,GENERATOR_ID=@generator," +
-                    "CULTURE_ID=@culture,SCHEMA_VERSION=@schema," +
-                    "UPDATED_TIME=@time WHERE META_TYPE=@type AND " +
-                    "OBJECT_ID=@object";
-                int updated = command.ExecuteNonQuery();
-                if (updated == 0)
-                {
-                    command.CommandText = "INSERT INTO " + Table +
-                        " (IDENTITY_KEY,META_TYPE,OBJECT_ID,NATIVE_NAME," +
-                        "CHINESE_NAME,GIVEN_NAME,FAMILY_COMPONENT,GENERATOR_ID," +
-                        "CULTURE_ID,SCHEMA_VERSION,UPDATED_TIME) VALUES " +
-                        "(@key,@type,@object,@native,@chinese,@given,@family," +
-                        "@generator,@culture,@schema,@time)";
-                    if (command.ExecuteNonQuery() != 1) return false;
-                }
-                transaction.Commit();
-                return updated == 1 || updated == 0;
+                using var command = new SQLiteCommand(db);
+                command.CommandText = "INSERT INTO " + Table +
+                    " (IDENTITY_KEY,META_TYPE,OBJECT_ID,NATIVE_NAME," +
+                    "CHINESE_NAME,GIVEN_NAME,FAMILY_COMPONENT,GENERATOR_ID," +
+                    "CULTURE_ID,SCHEMA_VERSION,UPDATED_TIME) VALUES " +
+                    "(@key,@type,@object,@native,@chinese,@given,@family," +
+                    "@generator,@culture,@schema,@time) " +
+                    "ON CONFLICT(META_TYPE,OBJECT_ID) DO UPDATE SET " +
+                    "IDENTITY_KEY=excluded.IDENTITY_KEY," +
+                    "NATIVE_NAME=excluded.NATIVE_NAME," +
+                    "CHINESE_NAME=excluded.CHINESE_NAME," +
+                    "GIVEN_NAME=excluded.GIVEN_NAME," +
+                    "FAMILY_COMPONENT=excluded.FAMILY_COMPONENT," +
+                    "GENERATOR_ID=excluded.GENERATOR_ID," +
+                    "CULTURE_ID=excluded.CULTURE_ID," +
+                    "SCHEMA_VERSION=excluded.SCHEMA_VERSION," +
+                    "UPDATED_TIME=excluded.UPDATED_TIME";
+                command.Parameters.AddWithValue("@key", IdentityKey(metaType,
+                    pObjectId));
+                command.Parameters.AddWithValue("@type", metaType);
+                command.Parameters.AddWithValue("@object", pObjectId);
+                command.Parameters.AddWithValue("@native", pIdentity.NativeName ??
+                    string.Empty);
+                command.Parameters.AddWithValue("@chinese",
+                    pIdentity.ChineseName ?? string.Empty);
+                command.Parameters.AddWithValue("@given", pIdentity.GivenName ??
+                    string.Empty);
+                command.Parameters.AddWithValue("@family",
+                    pIdentity.FamilyComponent ?? string.Empty);
+                command.Parameters.AddWithValue("@generator",
+                    pIdentity.GeneratorId ?? string.Empty);
+                command.Parameters.AddWithValue("@culture", pIdentity.CultureId);
+                command.Parameters.AddWithValue("@schema", pIdentity.SchemaVersion);
+                command.Parameters.AddWithValue("@time",
+                    World.world?.getCurWorldTime() ?? 0d);
+                return command.ExecuteNonQuery() == 1;
             }
             catch { return false; }
-        }
-
-        private static void AddIdentityParameters(SQLiteCommand pCommand,
-            string pMetaType, long pObjectId,
-            AWLocalizedNameIdentitySnapshot pIdentity)
-        {
-            pCommand.Parameters.AddWithValue("@key", IdentityKey(pMetaType,
-                pObjectId));
-            pCommand.Parameters.AddWithValue("@type", pMetaType);
-            pCommand.Parameters.AddWithValue("@object", pObjectId);
-            pCommand.Parameters.AddWithValue("@native", pIdentity.NativeName ??
-                string.Empty);
-            pCommand.Parameters.AddWithValue("@chinese",
-                pIdentity.ChineseName ?? string.Empty);
-            pCommand.Parameters.AddWithValue("@given", pIdentity.GivenName ??
-                string.Empty);
-            pCommand.Parameters.AddWithValue("@family",
-                pIdentity.FamilyComponent ?? string.Empty);
-            pCommand.Parameters.AddWithValue("@generator",
-                pIdentity.GeneratorId ?? string.Empty);
-            pCommand.Parameters.AddWithValue("@culture", pIdentity.CultureId);
-            pCommand.Parameters.AddWithValue("@schema",
-                pIdentity.SchemaVersion);
-            pCommand.Parameters.AddWithValue("@time",
-                World.world?.getCurWorldTime() ?? 0d);
         }
 
         internal static string IdentityKey(string pMetaType, long pObjectId)

@@ -177,6 +177,7 @@ namespace AncientWarfare3.core.multiplayer
             string strictDirectory = string.Empty;
             string normalDirectory = string.Empty;
             bool initializeGeneratedWorld = false;
+            bool startUntrackedWorld = false;
 
             lock (Gate)
             {
@@ -200,6 +201,8 @@ namespace AncientWarfare3.core.multiplayer
                     _normalLoadDirectory = string.Empty;
                     _normalWorldDataQueued = false;
                 }
+                else if (AWAsyncRuntime.State == AWAsyncLifecycleState.Stopped)
+                    startUntrackedWorld = true;
             }
 
             if (operation != null)
@@ -267,6 +270,18 @@ namespace AncientWarfare3.core.multiplayer
                         normalDirectory, strict: false);
                 if (result.Success) AWAsyncWorldLifecycle.StartWorld();
                 LogNormalFailure("save load", result);
+            }
+            else if (startUntrackedWorld)
+            {
+                try
+                {
+                    AWAsyncWorldLifecycle.StartWorld();
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning(
+                        "AW3 untracked world async start failed: " + error);
+                }
             }
             CityReservePoolService.EndWorldLoadRestore();
         }

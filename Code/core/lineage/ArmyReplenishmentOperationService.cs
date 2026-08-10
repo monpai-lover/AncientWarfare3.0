@@ -411,10 +411,8 @@ namespace AncientWarfare3.core.lineage
             out int pShortage)
         {
             pShortage = 0;
-            if (pArmy?.data == null ||
-                !ArmyRtsControllerService.TryGetMission(pArmy,
-                    out ArmyRtsMission mission) || mission == null ||
-                mission.TargetStrength <= 0) return false;
+            if (pArmy?.data == null || !CanUseReservePool(pArmy))
+                return false;
             int living;
             try { living = Math.Max(0, pArmy.countUnits()); }
             catch { return false; }
@@ -425,7 +423,10 @@ namespace AncientWarfare3.core.lineage
                     living, baseline);
                 return true;
             }
-            pShortage = Math.Max(0, mission.TargetStrength - living);
+            Kingdom kingdom = SafeKingdom(pArmy);
+            int cityTarget = CityArmyReinforcementService.ApprovedTarget(
+                pArmy, kingdom);
+            pShortage = Math.Max(0, cityTarget - living);
             return true;
         }
 

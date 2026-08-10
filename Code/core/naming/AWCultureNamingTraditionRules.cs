@@ -125,6 +125,26 @@ namespace AncientWarfare3.core.naming
                 : pCultureProfile;
         }
 
+        public static NamingProfileId ResolveActorSnapshotProfile(
+            NamingProfileId pNaturalProfile,
+            NamingProfileId pPersistedActorProfile,
+            NamingProfileId pCultureProfile, bool pCreationBoundary)
+        {
+            if (pPersistedActorProfile != NamingProfileId.None)
+                return pPersistedActorProfile;
+            return pCreationBoundary
+                ? ResolveActorProfile(pNaturalProfile, pCultureProfile)
+                : pNaturalProfile;
+        }
+
+        public static bool ShouldDeferActorProfileInitialization(
+            NamingProfileId pNaturalProfile, bool pHasCultureContext)
+        {
+            if (pHasCultureContext) return false;
+            return pNaturalProfile == NamingProfileId.Western ||
+                   pNaturalProfile == NamingProfileId.OrcNomadic;
+        }
+
         public static WesternNamingTradition ResolveInheritedTradition(
             NamingProfileId pParentProfile,
             WesternNamingTradition pParentTradition,

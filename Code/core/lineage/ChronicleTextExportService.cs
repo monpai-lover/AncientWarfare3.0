@@ -74,6 +74,8 @@ namespace AncientWarfare3.core.lineage
 
         private static string DynastyTitle(DynastyView pDynasty)
         {
+            if (pDynasty.is_interregnum_group)
+                return "无王时期";
             if (!string.IsNullOrWhiteSpace(pDynasty.dynasty_name))
                 return pDynasty.dynasty_name;
             if (!string.IsNullOrWhiteSpace(pDynasty.clan_name))

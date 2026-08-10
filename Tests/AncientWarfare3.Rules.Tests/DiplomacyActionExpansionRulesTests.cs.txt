@@ -19,6 +19,18 @@ internal static class DiplomacyActionExpansionRulesTests
         Equal(8,
             DiplomacyActionExpansionRules.MaximumMarriageMaintenanceRows,
             "royal marriage maintenance remains bounded per realm-year");
+        Equal(73L,
+            DiplomacyActionExpansionRules.ResolveRoyalMarriageLineage(
+                actorLineageId: -1L, kingdomLegitimateLineageId: 73L),
+            "royal marriage uses the AW kingdom dynasty when an old-save king has not materialized actor lineage");
+        Equal(91L,
+            DiplomacyActionExpansionRules.ResolveRoyalMarriageLineage(
+                actorLineageId: 91L, kingdomLegitimateLineageId: 73L),
+            "the reigning king's AW lineage remains authoritative after a dynasty change");
+        Equal(-1L,
+            DiplomacyActionExpansionRules.ResolveRoyalMarriageLineage(
+                actorLineageId: -1L, kingdomLegitimateLineageId: -1L),
+            "royal marriage does not invent an original-clan fallback");
         Equal(-1L,
             DiplomacyActionExpansionRules.NextMarriageMaintenanceCursor(
                 Array.Empty<long>()),

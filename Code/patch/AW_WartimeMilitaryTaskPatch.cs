@@ -42,7 +42,9 @@ namespace AncientWarfare3.patch
                     __instance.ai_object, taskId)) return true;
             try { __instance.setTaskBehFinished(); }
             catch { }
-            return false;
+            return WartimeMilitaryTaskRules.
+                ShouldContinueUpdateAfterRejectingActiveTask(
+                    pWartimeMilitary: true, taskId);
         }
     }
 

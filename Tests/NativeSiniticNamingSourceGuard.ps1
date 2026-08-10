@@ -21,57 +21,40 @@ Require $service 'AWNativeSiniticNamePartsRules.Resolve(' `
     'localized actor naming does not preserve complete current-library words'
 Require $service 'pParts.DisplayName' `
     'localized actor naming does not project surname before complete given name'
-Require $service 'NativeSiniticIdentityMigrationService.TryRepair(pActor)' `
-    'actor projection does not lazily repair an existing native Sinitic identity'
-$serviceSource = [IO.File]::ReadAllText((Join-Path $root $service))
-if ([regex]::Matches($serviceSource,
-        'NativeSiniticIdentityMigrationService\.TryRepair\(pActor\)').Count -lt 2) {
-    $failures.Add('promotion identity checks can bypass native Sinitic migration')
-}
+Forbid $service 'NativeSiniticIdentityMigration' `
+    'actor projection must not invoke the removed native Sinitic identity migration'
 
 $lineageService = 'Code/core/lineage/LineageService.cs'
-Require $lineageService 'NativeSiniticIdentityMigrationService.TryRepair(pActor)' `
-    'family-tree display boundaries do not trigger native Sinitic migration'
+Forbid $lineageService 'UsesNativeSiniticGenealogy' `
+    'lineage service must not admit the five native Sinitic species as genealogy actors'
+Forbid $lineageService 'NativeSiniticIdentityMigration' `
+    'lineage service must not invoke the removed native Sinitic identity migration'
 
-$migration = 'Code/core/lineage/NativeSiniticIdentityMigrationService.cs'
-Require $migration '[ThreadStatic]' `
-    'native Sinitic migration has no recursion guard'
-Require $migration 'MigrationVersionKey' `
-    'native Sinitic migration repeats branch reads after successful repair'
-Require $migration 'GetShiBranchInfo(shiId)' `
-    'native Sinitic migration does not read exactly one existing branch'
-Require $migration 'pActor.data.get(LineageKeys.NAMING_PROFILE' `
-    'branchless actors with a legacy Western profile are not repairable'
-Forbid $migration 'World.world.units' `
-    'native Sinitic migration scans the world actor collection'
-Forbid $migration 'Update(' `
-    'native Sinitic migration is registered as periodic update work'
-Forbid $migration 'OnWorldLoaded' `
-    'native Sinitic migration performs synchronous load-wide repair'
-
-$migrationPersistence = `
-    'Code/core/lineage/NativeSiniticIdentityMigrationPersistence.cs'
-Require $migrationPersistence 'BeginTransaction(IsolationLevel.Serializable)' `
-    'native Sinitic branch migration is not transactional'
-Require $migrationPersistence 'WHERE SHI_ID=@shi AND NAMING_PROFILE=@profile' `
-    'native Sinitic branch migration does not guard the prior profile'
+foreach ($migration in @(
+        'Code/core/lineage/NativeSiniticIdentityMigrationService.cs',
+        'Code/core/lineage/NativeSiniticIdentityMigrationRules.cs',
+        'Code/core/lineage/NativeSiniticIdentityMigrationPersistence.cs')) {
+    if ([IO.File]::Exists((Join-Path $root $migration))) {
+        $failures.Add("removed native Sinitic migration source still exists: $migration")
+    }
+}
 
 $manual = 'Code/core/naming/ActorManualRenameService.cs'
 Require $manual 'profile == NamingProfileId.NativeSinitic' `
     'manual rename does not use the surname-first editor for the new profile'
 
 $birth = 'Code/patch/AW_BirthPatch.cs'
-Require $birth 'UsesNativeSiniticGenealogy(__instance)' `
-    'actor creation does not enter the native Sinitic genealogy lifecycle'
+Require $birth 'IsNativeXiaCultureActor(__instance)' `
+    'actor creation boundary changed beyond Xia/civilized-monkey lifecycle'
 $clan = 'Code/patch/AW_ClanEventPatch.cs'
-Require $clan 'UsesNativeSiniticGenealogy(__instance)' `
-    'clan changes do not refresh native Sinitic genealogy'
+Require $clan 'IsNativeXiaCultureActor(__instance)' `
+    'clan-change boundary changed beyond Xia/civilized-monkey lifecycle'
 $archive = 'Code/core/lineage/LineageArchiveWriter.cs'
-Require $archive 'UsesNativeSiniticGenealogy(pActor)' `
-    'lineage archive does not recognize native Sinitic genealogy'
+Require $archive 'IsNativeXiaCultureActor(pActor)' `
+    'lineage archive boundary changed beyond Xia/civilized-monkey lifecycle'
 $promotion = 'Code/patch/AW_PromotionPatch.cs'
-Require $promotion 'EnsureNativeSiniticActorIdentity(pActor)' `
-    'king promotion does not ensure the current-library family identity'
+Forbid $promotion 'EnsureNativeSiniticActorIdentity' `
+    'promotion must not trigger native Sinitic identity migration'
 
 $policy = [IO.File]::ReadAllText((Join-Path $root `
     'Code/core/policy/CivMonkeyPolicyRules.cs'))

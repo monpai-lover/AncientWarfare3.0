@@ -59,7 +59,8 @@ namespace AncientWarfare3.core.pathfinding
         public AWTraversalBuildResult(long pWorldGeneration,
             int pBaseGenerationId, long pSourceRevision, int pWidth,
             int pHeight, int pChunkSize,
-            AWTileTraversalSnapshot[][] pChunks)
+            AWTileTraversalSnapshot[][] pChunks,
+            AWRegionTopologySnapshot pRegionTopology = null)
         {
             WorldGeneration = pWorldGeneration;
             BaseGenerationId = pBaseGenerationId;
@@ -68,6 +69,7 @@ namespace AncientWarfare3.core.pathfinding
             Height = pHeight;
             ChunkSize = pChunkSize;
             Chunks = pChunks ?? Array.Empty<AWTileTraversalSnapshot[]>();
+            RegionTopology = pRegionTopology;
         }
 
         public long WorldGeneration { get; }
@@ -77,6 +79,9 @@ namespace AncientWarfare3.core.pathfinding
         public int Height { get; }
         public int ChunkSize { get; }
         public AWTileTraversalSnapshot[][] Chunks { get; }
+        // Built with the immutable snapshot on the worker, so publication only
+        // swaps references on the main thread.
+        internal AWRegionTopologySnapshot RegionTopology { get; }
     }
 
     internal sealed class AWTraversalOverlayEntry

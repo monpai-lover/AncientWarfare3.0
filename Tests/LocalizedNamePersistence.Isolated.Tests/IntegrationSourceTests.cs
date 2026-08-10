@@ -10,26 +10,21 @@ namespace AncientWarfare3.Tests
         {
             ActorReadPathOnlyProjectsStoredIdentity();
             FullScanWritesRouteThroughRetryQueue();
-            PersistenceUsesLegacyCompatibleTransactionalUpsert();
+            PersistenceUsesSingleStatementUpsertWithoutPerActorTransaction();
             MigrationDoesNotFabricateHumanGenerators();
             ManualActorNameIsProtectedAcrossProjectionAndRestore();
             ManualRenameServiceOwnsStructuredPersistence();
             SplitActorNameEditorReplacesVanillaInput();
         }
 
-        private static void PersistenceUsesLegacyCompatibleTransactionalUpsert()
+        private static void PersistenceUsesSingleStatementUpsertWithoutPerActorTransaction()
         {
             string source = Read("Code", "core", "naming",
                 "AWLocalizedNamePersistence.cs");
-            string compact = Compact(source);
-            AssertEx.True(!source.Contains("ON CONFLICT"),
-                "Localized identity writes must support the bundled legacy SQLite engine.");
-            AssertEx.True(compact.Contains("db.BeginTransaction()") &&
-                          compact.Contains("UPDATE" +
-                              "\"+Table+\"SET") &&
-                          compact.Contains("if(updated==0)") &&
-                          compact.Contains("INSERTINTO"),
-                "Localized identity writes must update-then-insert in one transaction.");
+            AssertEx.True(source.Contains("ON CONFLICT(META_TYPE,OBJECT_ID)"),
+                "Localized identity writes must use one upsert statement.");
+            AssertEx.True(!source.Contains("BeginTransaction"),
+                "Per-actor localized identity writes must not open SQLite transactions.");
         }
 
         private static void ActorReadPathOnlyProjectsStoredIdentity()

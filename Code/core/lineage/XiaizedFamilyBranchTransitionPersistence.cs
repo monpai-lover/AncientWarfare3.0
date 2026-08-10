@@ -70,9 +70,9 @@ namespace AncientWarfare3.core.lineage
                 Inject(pFail,
                     XiaizedFamilyBranchTransitionStage.AfterBranchWrite);
 
-                List<long> movedActorIds = ReadLivingMemberIds(pDb,
-                    transaction, pRequest.OldShiId, newShiId);
-                RebindLivingMembers(pDb, transaction, pRequest, newShiId);
+                RebindFounder(pDb, transaction, pRequest, newShiId);
+                var movedActorIds = new List<long>
+                    { pRequest.FounderActorId };
                 Inject(pFail,
                     XiaizedFamilyBranchTransitionStage.AfterActorWrite);
                 transaction.Commit();
@@ -188,22 +188,7 @@ namespace AncientWarfare3.core.lineage
                 throw new InvalidOperationException("child_branch_insert_failed");
         }
 
-        private static List<long> ReadLivingMemberIds(SQLiteConnection pDb,
-            SQLiteTransaction pTransaction, long pOldShiId, long pNewShiId)
-        {
-            var result = new List<long>();
-            using var command = new SQLiteCommand(pDb)
-                { Transaction = pTransaction };
-            command.CommandText = "SELECT ID FROM ActorArchive WHERE " +
-                "IS_ALIVE=1 AND (SHI_ID=@old OR SHI_ID=@new) ORDER BY ID";
-            command.Parameters.AddWithValue("@old", pOldShiId);
-            command.Parameters.AddWithValue("@new", pNewShiId);
-            using SQLiteDataReader reader = command.ExecuteReader();
-            while (reader.Read()) result.Add(reader.GetInt64(0));
-            return result;
-        }
-
-        private static void RebindLivingMembers(SQLiteConnection pDb,
+        private static void RebindFounder(SQLiteConnection pDb,
             SQLiteTransaction pTransaction,
             XiaizedFamilyBranchTransitionRequest pRequest, long pNewShiId)
         {
@@ -211,12 +196,17 @@ namespace AncientWarfare3.core.lineage
                 { Transaction = pTransaction };
             command.CommandText = "UPDATE ActorArchive SET SHI_ID=@new," +
                 "FAMILY_NAME=@family,CLAN_NAME=@clan,NAME_INTEGRATED=1 " +
-                "WHERE IS_ALIVE=1 AND (SHI_ID=@old OR SHI_ID=@new)";
+                "WHERE ID=@actor AND IS_ALIVE=1 AND " +
+                "(SHI_ID=@old OR SHI_ID=@new)";
             command.Parameters.AddWithValue("@new", pNewShiId);
             command.Parameters.AddWithValue("@family", pRequest.FamilyName);
             command.Parameters.AddWithValue("@clan", pRequest.ClanName);
             command.Parameters.AddWithValue("@old", pRequest.OldShiId);
-            command.ExecuteNonQuery();
+            command.Parameters.AddWithValue("@actor",
+                pRequest.FounderActorId);
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException(
+                    "founder_rebind_failed");
         }
 
         private static void Inject(

@@ -116,8 +116,53 @@ namespace AncientWarfare3.core.naming
         {
             if (pActor?.data == null || pActor.asset == null)
                 return Empty;
-            return ResolveForAssetReadOnly(pActor.asset,
-                ResolveActorCulture(pActor), pActor.getID());
+            pActor.data.get(LineageKeys.NAMING_PROFILE,
+                out string actorProfileId, string.Empty);
+            NamingProfileId persistedActorProfile =
+                AWCultureNamingTraditionRules.ParseProfile(actorProfileId);
+            NamingProfileId naturalProfile = ResolveAssetNaturalProfile(
+                pActor.asset);
+            NamingProfileId profile = AWCultureNamingTraditionRules
+                .ResolveActorSnapshotProfile(naturalProfile,
+                    persistedActorProfile, NamingProfileId.None,
+                    pCreationBoundary: false);
+            return new AWCultureNamingTradition(profile,
+                ResolveActorTraditionReadOnly(pActor, profile));
+        }
+
+        internal static void InitializeActorProfile(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.asset == null) return;
+            pActor.data.get(LineageKeys.NAMING_PROFILE,
+                out string existing, string.Empty);
+            if (AWCultureNamingTraditionRules.ParseProfile(existing) !=
+                NamingProfileId.None) return;
+            NamingProfileId naturalProfile = ResolveAssetNaturalProfile(
+                pActor.asset);
+            if (AWCultureNamingTraditionRules
+                    .ShouldDeferActorProfileInitialization(
+                        naturalProfile, ResolveActorCulture(pActor) != null))
+                return;
+            AWCultureNamingTradition culture = ResolveForCultureReadOnly(
+                ResolveActorCulture(pActor));
+            NamingProfileId profile = AWCultureNamingTraditionRules
+                .ResolveActorSnapshotProfile(naturalProfile,
+                    NamingProfileId.None, culture.Profile,
+                    pCreationBoundary: true);
+            if (profile == NamingProfileId.None) return;
+            pActor.data.set(LineageKeys.NAMING_PROFILE,
+                AWCultureNamingTraditionRules.SerializeProfile(
+                    profile));
+        }
+
+        private static WesternNamingTradition ResolveActorTraditionReadOnly(
+            Actor pActor, NamingProfileId pProfile)
+        {
+            if (pProfile != NamingProfileId.Western) return WesternNamingTradition.Von;
+            pActor.data.get(LineageKeys.WESTERN_NAMING_TRADITION,
+                out string persisted, string.Empty);
+            return AWCultureNamingTraditionRules.ResolvePersistedTradition(
+                persisted, null, pActor.getID());
         }
 
         internal static AWCultureNamingTradition ResolveForAssetReadOnly(
@@ -239,6 +284,23 @@ namespace AncientWarfare3.core.naming
                     StringComparison.Ordinal),
                 civilized: asset != null && asset.civ,
                 valid: valid);
+        }
+
+        private static NamingProfileId ResolveAssetNaturalProfile(
+            ActorAsset pAsset)
+        {
+            if (pAsset == null) return NamingProfileId.None;
+            return AWNamingProfileRules.Resolve(
+                biologicalXia: string.Equals(pAsset.id,
+                    LineageService.XIA_ASSET_ID, StringComparison.Ordinal),
+                civilizedMonkey: CivMonkeyNamingRules.IsCivilizedMonkey(
+                    pAsset.id),
+                nativeSinitic: AWNativeSiniticSpeciesRules
+                    .IsNativeSiniticSpecies(pAsset.id),
+                orc: string.Equals(pAsset.id, "orc",
+                    StringComparison.Ordinal),
+                civilized: pAsset.civ,
+                valid: true);
         }
 
         private static Culture ResolveActorCulture(Actor pActor)

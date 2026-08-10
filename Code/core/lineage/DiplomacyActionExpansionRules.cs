@@ -448,6 +448,22 @@ namespace AncientWarfare3.core.lineage
             return "";
         }
 
+        /// <summary>
+        /// Resolves the AW dynasty used by royal-marriage candidate queries.
+        /// A loaded king can temporarily lack the live LINEAGE_ID field while
+        /// the kingdom's persisted AW succession identity is already valid.
+        /// Never fall back to the game's native Clan/royal_clan_id here.
+        /// </summary>
+        public static long ResolveRoyalMarriageLineage(long actorLineageId,
+            long kingdomLegitimateLineageId)
+        {
+            return actorLineageId >= 0L
+                ? actorLineageId
+                : kingdomLegitimateLineageId >= 0L
+                    ? kingdomLegitimateLineageId
+                    : -1L;
+        }
+
         public static bool IsModifierActive(int currentYear,
             int untilYear)
         {

@@ -40,7 +40,7 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null ||
-                !LineageService.UsesNativeSiniticGenealogy(__instance)) return;
+                !LineageService.IsNativeXiaCultureActor(__instance)) return;
 
             LineageService.ArchiveActor(__instance, pAlive: true);
 

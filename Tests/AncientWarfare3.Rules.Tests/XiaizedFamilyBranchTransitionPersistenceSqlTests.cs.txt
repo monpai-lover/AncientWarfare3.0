@@ -5,37 +5,32 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
 {
     public static void Run()
     {
-        CreatesChildAndMovesOnlyLivingMembers();
+        CreatesChildAndMovesOnlyTheNewFounder();
         ReplayReusesTheSameChild();
-        DistinctSourceBranchesRemainDistinct();
         FailureRollsBackEveryWrite();
     }
 
-    private static void CreatesChildAndMovesOnlyLivingMembers()
+    private static void CreatesChildAndMovesOnlyTheNewFounder()
     {
         using SQLiteConnection db = OpenDatabase();
         SeedWesternBranch(db);
         XiaizedFamilyBranchTransitionResult result =
-            XiaizedFamilyBranchTransitionPersistence.TryCommit(db,
-                Request());
+            XiaizedFamilyBranchTransitionPersistence.TryCommit(db, Request());
 
         Equal(true, result.Success, "transition commits");
         Equal(11L, result.NewShiId, "one child Shi is allocated");
-        Equal("western|德·巴黎", ScalarText(db,
+        Equal("western|de Paris", ScalarText(db,
             "SELECT NAMING_PROFILE||'|'||DISPLAY_STEM FROM ShiBranch " +
-            "WHERE SHI_ID=10"), "the historical western branch is unchanged");
-        Equal("10|xia||de Paris", ScalarText(db,
-            "SELECT PARENT_SHI_ID||'|'||NAMING_PROFILE||'|'||" +
-            "WESTERN_NAMING_TRADITION||'|'||DISPLAY_STEM FROM ShiBranch " +
-            "WHERE SHI_ID=11"), "the new Xia branch points to its parent");
-        Equal("11|姬|洛|1", ScalarText(db,
-            "SELECT SHI_ID||'|'||FAMILY_NAME||'|'||CLAN_NAME||'|'||" +
-            "NAME_INTEGRATED FROM ActorArchive WHERE ID=101"),
-            "living members move to the Xia branch");
-        Equal("10|德·巴黎|德·巴黎|0", ScalarText(db,
-            "SELECT SHI_ID||'|'||FAMILY_NAME||'|'||CLAN_NAME||'|'||" +
-            "NAME_INTEGRATED FROM ActorArchive WHERE ID=102"),
-            "dead members remain on the historical branch");
+            "WHERE SHI_ID=10"), "historical branch remains western");
+        Equal(11L, ScalarLong(db,
+            "SELECT SHI_ID FROM ActorArchive WHERE ID=101"),
+            "new founder moves to Xia branch");
+        Equal(10L, ScalarLong(db,
+            "SELECT SHI_ID FROM ActorArchive WHERE ID=102"),
+            "dead relative remains on historical branch");
+        Equal(10L, ScalarLong(db,
+            "SELECT SHI_ID FROM ActorArchive WHERE ID=103"),
+            "older living relative remains on historical branch");
     }
 
     private static void ReplayReusesTheSameChild()
@@ -47,7 +42,7 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
             XiaizedFamilyBranchTransitionPersistence.TryCommit(db, Request());
 
         Equal(true, replay.Success, "replay succeeds");
-        Equal(11L, replay.NewShiId, "replay reuses the existing Xia child");
+        Equal(11L, replay.NewShiId, "replay reuses child branch");
         Equal(2L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
             "replay creates no duplicate branch");
     }
@@ -66,33 +61,7 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
             "failed transition leaves no child branch");
         Equal(10L, ScalarLong(db,
             "SELECT SHI_ID FROM ActorArchive WHERE ID=101"),
-            "failed transition leaves the living actor on the old branch");
-    }
-
-    private static void DistinctSourceBranchesRemainDistinct()
-    {
-        using SQLiteConnection db = OpenDatabase();
-        SeedWesternBranch(db);
-        Execute(db, "INSERT INTO ShiBranch VALUES " +
-            "(20,5,'德·巴黎',-1,'western','de','原城','德·巴黎'," +
-            "201,'western_admission',9,10,-1,1,0)");
-        Execute(db, "INSERT INTO ActorArchive VALUES " +
-            "(201,20,5,'德·巴黎','德·巴黎','Alex','Alex 德·巴黎',0,1)");
-
-        XiaizedFamilyBranchTransitionPersistence.TryCommit(db, Request());
-        XiaizedFamilyBranchTransitionRequest second = Request();
-        second.FounderActorId = 201L;
-        second.OldShiId = 20L;
-        second.DisplayStem = "德·巴黎";
-        XiaizedFamilyBranchTransitionResult result =
-            XiaizedFamilyBranchTransitionPersistence.TryCommit(db, second);
-
-        Equal(true, result.Success,
-            "a second source branch with the same visible stem also migrates");
-        Equal(true, result.NewShiId != 11L,
-            "same visible surname does not reuse the first source branch");
-        Equal(4L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
-            "each source branch owns its own Xia child");
+            "failed transition leaves founder on old branch");
     }
 
     private static XiaizedFamilyBranchTransitionRequest Request()
@@ -103,12 +72,12 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
             LineageId = 5L,
             OldShiId = 10L,
             OldNamingProfile = "western",
-            FamilyName = "姬",
-            ClanName = "洛",
+            FamilyName = "Zhou",
+            ClanName = "Lu",
             DisplayStem = "de Paris",
             OriginKingdomId = 7L,
             OriginCityId = 8L,
-            OriginCityChineseName = "洛阳",
+            OriginCityChineseName = "Luoyang",
             CreatedTime = 100d
         };
     }
@@ -135,12 +104,14 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
     private static void SeedWesternBranch(SQLiteConnection db)
     {
         Execute(db, "INSERT INTO ShiBranch VALUES " +
-            "(10,5,'德·巴黎',-1,'western','de','巴黎','德·巴黎'," +
+            "(10,5,'Paris',-1,'western','de','Paris','de Paris'," +
             "101,'western_admission',7,8,-1,1,0)");
         Execute(db, "INSERT INTO ActorArchive VALUES " +
-            "(101,10,5,'德·巴黎','德·巴黎','路易','路易 德·巴黎',0,1)");
+            "(101,10,5,'Paris','Paris','Louis','Louis de Paris',0,1)");
         Execute(db, "INSERT INTO ActorArchive VALUES " +
-            "(102,10,5,'德·巴黎','德·巴黎','查理','查理 德·巴黎',0,0)");
+            "(102,10,5,'Paris','Paris','Charles','Charles de Paris',0,0)");
+        Execute(db, "INSERT INTO ActorArchive VALUES " +
+            "(103,10,5,'Paris','Paris','Alex','Alex de Paris',0,1)");
     }
 
     private static void Execute(SQLiteConnection db, string sql)

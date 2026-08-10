@@ -31,6 +31,16 @@ internal static class CityArmyReinforcementRulesTests
             "approved target alone defines displayed reinforcement shortage");
         Equal(0, CityArmyReinforcementRules.Shortage(40, 35),
             "a population decline never creates a negative shortage");
+        Equal(30, ArmyMapInformationRules.ResolvePendingShortage(
+                hasMission: false, missionTargetStrength: 0,
+                activeDeployment: false, standingTargetStrength: 50,
+                memberCount: 20, minimumOperationalForce: 10),
+            "an idle ordinary army reports shortage against its city capacity");
+        Equal(30, ArmyMapInformationRules.ResolvePendingShortage(
+                hasMission: true, missionTargetStrength: 0,
+                activeDeployment: false, standingTargetStrength: 50,
+                memberCount: 20, minimumOperationalForce: 10),
+            "a zero legacy mission target falls back to city capacity");
 
         Equal(ArmyRecruitmentDisposition.Replenish,
             ArmyEstablishmentRules.DecideCityRecruitment(

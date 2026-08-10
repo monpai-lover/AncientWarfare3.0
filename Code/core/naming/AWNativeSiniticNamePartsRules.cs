@@ -45,16 +45,6 @@ namespace AncientWarfare3.core.naming
                 inherited.Length > 0 ? inherited : family, given);
         }
 
-        public static string ResolveLineageFamily(bool hasExistingShi,
-            string clanName, string chineseFamilyName, string familyName)
-        {
-            string clan = (clanName ?? string.Empty).Trim();
-            if (hasExistingShi && clan.Length > 0) return clan;
-            string chinese = (chineseFamilyName ?? string.Empty).Trim();
-            if (chinese.Length > 0) return chinese;
-            return (familyName ?? string.Empty).Trim();
-        }
-
         private static NativeSiniticNameParts Invalid =>
             new NativeSiniticNameParts(false, string.Empty, string.Empty);
     }
