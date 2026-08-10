@@ -107,6 +107,7 @@
     <Compile Include="LineageGivenNameNormalizationRulesTests.cs.txt" />
     <Compile Include="ArmyMembershipOwnershipRulesTests.cs.txt" />
     <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
+    <Compile Include="NativeSiniticNamingRulesTests.cs.txt" />
     <Compile Include="IntegratedNamingRulesTests.cs.txt" />
     <Compile Include="NameIntegrationMaterializationRulesTests.cs.txt" />
     <Compile Include="IntegratedCultureNamingMigrationPersistenceSqlTests.cs.txt" />
@@ -545,6 +546,8 @@
     <Compile Include="..\..\Code\core\naming\AWWordLibraryManager.cs" Link="Production\AWWordLibraryManager.cs" />
     <Compile Include="..\..\Code\core\naming\AWNameTemplate.cs" Link="Production\AWNameTemplate.cs" />
     <Compile Include="..\..\Code\core\naming\AWActorInitialNameRules.cs" Link="Production\AWActorInitialNameRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWNativeSiniticSpeciesRules.cs" Link="Production\AWNativeSiniticSpeciesRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWNativeSiniticNamePartsRules.cs" Link="Production\AWNativeSiniticNamePartsRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWNameGeneratorAsset.cs" Link="Production\AWNameGeneratorAsset.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedNameProjectionRules.cs" Link="Production\AWLocalizedNameProjectionRules.cs" />
     <Compile Include="..\..\Code\core\naming\AWLocalizedMottoProjectionRules.cs" Link="Production\AWLocalizedMottoProjectionRules.cs" />

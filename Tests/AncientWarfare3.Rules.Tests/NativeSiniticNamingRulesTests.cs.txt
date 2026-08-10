@@ -1,0 +1,62 @@
+using System;
+using AncientWarfare3.core.naming;
+
+internal static class NativeSiniticNamingRulesTests
+{
+    public static void Run()
+    {
+        string[] included =
+        {
+            "civ_dog", "civ_fox", "civ_lemon_man", "civ_rabbit",
+            "civ_turtle"
+        };
+        foreach (string assetId in included)
+            Equal(true,
+                AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(assetId),
+                assetId + " uses native Sinitic naming");
+
+        string[] excluded =
+        {
+            "dog", "fox", "rabbit", "turtle", "lemon_snail",
+            "miniciv_lemon_snail", "civ_bear", "civ_monkey", "", null
+        };
+        foreach (string assetId in excluded)
+            Equal(false,
+                AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(assetId),
+                (assetId ?? "null") + " stays outside the exact species set");
+
+        NativeSiniticNameParts japanese =
+            AWNativeSiniticNamePartsRules.Resolve(
+                "山田太郎", "山田", "太");
+        Equal(true, japanese.Valid,
+            "a current Japanese-library template produces valid parts");
+        Equal("山田", japanese.FamilyName,
+            "the tagged current-library surname is retained");
+        Equal("太郎", japanese.GivenName,
+            "untagged suffix words remain in the complete given name");
+
+        NativeSiniticNameParts shanhai =
+            AWNativeSiniticNamePartsRules.Resolve("狐甲子", "狐", "");
+        Equal(true, shanhai.Valid,
+            "a current Shanhai-library template produces valid parts");
+        Equal("甲子", shanhai.GivenName,
+            "a template without a given tag derives the complete suffix");
+
+        Equal(false,
+            AWNativeSiniticNamePartsRules.Resolve("甲子", "", "甲").Valid,
+            "an empty generated surname rejects the identity");
+        Equal(false,
+            AWNativeSiniticNamePartsRules.Resolve("甲狐子", "狐", "甲").Valid,
+            "a surname outside the visible prefix rejects the identity");
+        Equal(false,
+            AWNativeSiniticNamePartsRules.Resolve("狐", "狐", "").Valid,
+            "a surname-only result rejects the identity");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}
