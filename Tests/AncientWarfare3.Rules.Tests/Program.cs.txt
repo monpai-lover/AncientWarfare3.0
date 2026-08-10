@@ -342,6 +342,7 @@ if (args.Length == 1 && args[0] == "--western-policy-profile-slice")
     WesternPolicyEffectRulesTests.Run();
     WesternPolicyAiRulesTests.Run();
     WesternCourtProfileRulesTests.Run();
+    WesternChronicleRulerRulesTests.Run();
     WesternCourtElectionRulesTests.Run();
     WesternCourtOfficeEffectRulesTests.Run();
     WesternMayorTermRulesTests.Run();

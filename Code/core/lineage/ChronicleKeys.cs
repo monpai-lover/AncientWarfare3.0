@@ -87,6 +87,7 @@ namespace AncientWarfare3.core.lineage
     {
         public const string FOUND = "found";
         public const string RULE_CHANGE = "rule_change";
+        public const string RULER_CHANGE = "ruler_change";
         public const string ACCESSION_BOOK = "accession_book";
         public const string DESTROYED = "destroyed";
         public const string RENAMED = "kingdom_renamed";

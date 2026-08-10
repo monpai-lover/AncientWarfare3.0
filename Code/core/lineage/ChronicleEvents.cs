@@ -24,6 +24,11 @@ namespace AncientWarfare3.core.lineage
             if (hasAccessionModeSnapshot)
                 AccessionChronicleRetryService.Track(pKingdom, pNewKing);
             if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
+            if (!UsesHereditaryReignArchive(pKingdom, pNewKing))
+            {
+                RecordWesternRulerChanged(pKingdom, pNewKing);
+                return;
+            }
 
             // 防重复:记录上次为该国登记的王 id,相同则跳过。
             pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID, out long lastKingId, -1L);
@@ -96,6 +101,47 @@ namespace AncientWarfare3.core.lineage
                 YearNameService.TryStartAccessionEra(pKingdom, pNewKing);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
             RecordAccessionBook(pKingdom, pNewKing);
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.RulerAccession);
+        }
+
+        public static void EnsureCurrentRulerRecorded(Kingdom pKingdom)
+        {
+            Actor ruler = pKingdom?.king;
+            if (pKingdom?.data == null || ruler?.data == null ||
+                ruler.isRekt() || !ruler.isAlive() ||
+                UsesHereditaryReignArchive(pKingdom, ruler)) return;
+            RecordWesternRulerChanged(pKingdom, ruler);
+        }
+
+        private static bool UsesHereditaryReignArchive(Kingdom pKingdom,
+            Actor pRuler)
+        {
+            return LineageService.IsXiaKingdom(pKingdom) &&
+                   LineageService.IsXia(pRuler);
+        }
+
+        private static void RecordWesternRulerChanged(Kingdom pKingdom,
+            Actor pRuler)
+        {
+            if (pKingdom?.data == null || pRuler?.data == null) return;
+            pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID,
+                out long previousId, -1L);
+            if (previousId == pRuler.data.id) return;
+
+            string projectionKey = "western_ruler_change:" + pKingdom.id +
+                                   ":" + pRuler.data.id;
+            bool recorded = HistoryWriter.TryRecordKingdomForSubject(
+                pKingdom, KingdomEvent.RULER_CHANGE,
+                HistoryText.Actor(pRuler, pRuler.getName()) +
+                H("aw_hist_western_ruler_ascended"), pRuler.getName(),
+                HistoryTarget.Actor(pRuler), projectionKey);
+            if (!recorded) return;
+
+            pKingdom.data.set(LineageKeys.CHRONICLE_LAST_KING_ID,
+                pRuler.data.id);
+            KingdomArchiveWriter.Upsert(pKingdom);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
             FamilyTreeProjectionRevision.Advance(
                 FamilyTreeProjectionChange.RulerAccession);
         }
@@ -809,8 +855,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnCourtInstitutionReformed(Kingdom pKingdom,
             string pPrevious, string pNext)
         {
-            if (pKingdom?.data == null ||
-                !CourtInstitutionRules.IsUpgrade(pPrevious, pNext)) return;
+            if (pKingdom?.data == null || pPrevious == pNext) return;
             HistoryWriter.RecordKingdom(pKingdom,
                 KingdomEvent.COURT_INSTITUTION_REFORMED,
                 HistoryText.Kingdom(pKingdom) +

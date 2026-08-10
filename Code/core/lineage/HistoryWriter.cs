@@ -354,6 +354,18 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("KINGDOM_ID", pKingdom.data.id));
         }
 
+        public static bool TryRecordKingdomForSubject(Kingdom pKingdom,
+            string pEventType, HistoryText pContent, string pSubjectName,
+            HistoryTarget pTarget, string pProjectionKey)
+        {
+            if (pKingdom?.data == null) return false;
+            return InsertProjection(KingdomHistoryTableItem.GetTableName(),
+                pKingdom, pEventType, pContent, pSubjectName,
+                pTarget.IsValid ? pTarget : HistoryTarget.Kingdom(pKingdom),
+                pProjectionKey,
+                ColumnVal.Create("KINGDOM_ID", pKingdom.data.id));
+        }
+
         internal static bool TryRecordKingdomSnapshot(double pWorldTime,
             string pYearPrefix, string pYearPrefixRich,
             long pKingdomId, string pKingdomName, string pKingdomColor,

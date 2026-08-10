@@ -178,7 +178,10 @@ aw_history_filter_bond,羁绊,Bonds,羈絆
 aw_history_early_period,早期,Early Period,早期
 aw_history_no_owner,无所属,No Owner,無所屬
 aw_history_no_king_period,无王时期,No-King Period,無王時期
+aw_history_ruler_period,统治者,Ruler,統治者
+aw_hist_western_ruler_ascended,就任本国统治者。,assumed leadership of the realm.,就任本國統治者。
 aw_view_king_biography,查看君主传记：,View Ruler Biography:,查看君主傳記：
+aw_view_ruler_biography,查看统治者传记：,View Ruler Biography:,查看統治者傳記：
 aw_until_now,至今,Present,至今
 aw_history_event,历史事件,Historical Event,歷史事件
 aw_history_type,类型：,Type:,類型：

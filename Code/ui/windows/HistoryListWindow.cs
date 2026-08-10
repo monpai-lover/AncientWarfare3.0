@@ -1084,6 +1084,10 @@ namespace AncientWarfare3.ui.windows
 
             if (pReign.has_king)
             {
+                if (pReign.is_ruler_period)
+                    return AW_L10n.Text("aw_history_ruler_period", "统治者") +
+                           " 路 " + RichName(DisplayKingName(pReign),
+                               DisplayKingColor(pReign)) + " 路 " + span;
                 string chronology = BuildReignChronologySpan(pReign);
                 if (!string.IsNullOrEmpty(chronology))
                     return chronology;
@@ -1097,7 +1101,14 @@ namespace AncientWarfare3.ui.windows
 
         private static string BuildBiographyButtonText(ReignPeriod pReign)
         {
-            return AW_L10n.Text("aw_view_king_biography", "\u67E5\u770B\u541B\u4E3B\u4F20\u8BB0\uFF1A") + RichName(DisplayKingName(pReign), DisplayKingColor(pReign));
+            string key = pReign.is_ruler_period
+                ? "aw_view_ruler_biography"
+                : "aw_view_king_biography";
+            string fallback = pReign.is_ruler_period
+                ? "查看统治者传记："
+                : "\u67E5\u770B\u541B\u4E3B\u4F20\u8BB0\uFF1A";
+            return AW_L10n.Text(key, fallback) + RichName(
+                DisplayKingName(pReign), DisplayKingColor(pReign));
         }
 
         private static string DisplayKingName(ReignPeriod pReign)

@@ -181,6 +181,7 @@ namespace AncientWarfare3.core.lineage
     internal class ReignPeriod
     {
         public bool   has_king;
+        public bool   is_ruler_period;
         public string king_name;           // 国家史:王名(若有谥号则显谥号);城市史:所属国名
         public string king_color = "";
         public long   king_actor_id = -1;  // 国家史:该王 actor id,用于跳转个人传记

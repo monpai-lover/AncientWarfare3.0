@@ -341,7 +341,8 @@ namespace AncientWarfare3.core.lineage
             var transitionEventIds = new List<long>();
             foreach (HistoryEntry entry in events)
             {
-                bool accession = entry.event_type == KingdomEvent.RULE_CHANGE;
+                bool accession = HistoryRulerPeriodRules.IsRulerTransition(
+                    entry.event_type);
                 bool destroyed = entry.event_type == KingdomEvent.DESTROYED;
                 if (!accession && !destroyed) continue;
                 transitionEntries.Add(entry);
@@ -364,6 +365,9 @@ namespace AncientWarfare3.core.lineage
                 periods.Add(new ReignPeriod
                 {
                     has_king = segment.HasKing,
+                    is_ruler_period = segment.HasKing &&
+                        !HistoryRulerPeriodRules.IsRegnalPeriod(
+                            opening.event_type),
                     king_name = segment.HasKing ? opening.subject_name : "",
                     king_color = segment.HasKing ? opening.subject_color : "",
                     king_actor_id = segment.HasKing &&
@@ -1093,6 +1097,7 @@ namespace AncientWarfare3.core.lineage
                 case KingdomEvent.FOUND: return 0;
                 case KingdomEvent.ERA_CHANGE: return 10;
                 case KingdomEvent.RULE_CHANGE: return 20;
+                case KingdomEvent.RULER_CHANGE: return 20;
                 case KingdomEvent.DYNASTY_CHANGE: return 30;
                 default: return 100;
             }
@@ -1133,7 +1138,8 @@ namespace AncientWarfare3.core.lineage
             {
                 if (period == null) continue;
                 period.year_prefix_snapshot = "";
-                period.king_actor_id = -1;
+                if (!period.is_ruler_period)
+                    period.king_actor_id = -1;
                 period.posthumous_title = "";
                 period.posthumous_color = "";
             }

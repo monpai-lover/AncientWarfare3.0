@@ -416,7 +416,8 @@ namespace AncientWarfare3.core.court
             if (pKingdom?.data == null || pKingdom.isRekt()) return;
             if (!KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom)) return;
             if (!LineageArchiveManager.Instance.IsOperational) return;
-            CourtInstitutionService.Refresh(pKingdom, pRecordHistory: false);
+            ChronicleEvents.EnsureCurrentRulerRecorded(pKingdom);
+            CourtInstitutionService.Refresh(pKingdom, pRecordHistory: true);
 
             int year = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.COURT_LAST_REFRESH_YEAR, out int lastYear, -1);
