@@ -1464,10 +1464,13 @@ namespace AncientWarfare3.core.lineage
                               type == WAR_TIANMING_REBEL;
             if (!mandateWar)
             {
-                if (defender == mandate && pWinner == WarWinner.Attackers)
+                Kingdom loser = pWinner == WarWinner.Attackers
+                    ? defender
+                    : pWinner == WarWinner.Defenders ? attacker : null;
+                if (loser == mandate)
                 {
-                    ChangeMandate(defender, ReadOrdinaryWarDefeatDelta(pWar,
-                        defender), "mandate_war_lost");
+                    ChangeMandate(loser, ReadOrdinaryWarDefeatDelta(pWar,
+                        loser), "mandate_war_lost");
                 }
                 return;
             }
@@ -1500,8 +1503,13 @@ namespace AncientWarfare3.core.lineage
                 if (WarScoreRuntimeBridge.TryGetSnapshot(pWar, pDefender,
                         out WarScoreSnapshot snapshot))
                 {
-                    int baseline = snapshot.DefenderMobilizationBaseline;
-                    int losses = snapshot.DefenderLosses;
+                    bool attacker = snapshot.AttackerKingdomId == pDefender.id;
+                    int baseline = attacker
+                        ? snapshot.AttackerMobilizationBaseline
+                        : snapshot.DefenderMobilizationBaseline;
+                    int losses = attacker
+                        ? snapshot.AttackerLosses
+                        : snapshot.DefenderLosses;
                     if (baseline > 0)
                     {
                         totalLoss = losses >= baseline;

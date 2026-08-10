@@ -2607,6 +2607,10 @@ True(MandateDeclineRules.ShouldCollapseChaos(8, true),
     "eight unresolved chaos years collapse");
 Equal(false, MandateDeclineRules.ShouldCollapseChaos(7, true),
     "seven unresolved chaos years do not collapse");
+Equal(6, MandateDeclineRules.NextChaosUnresolvedYears(5, true),
+    "an unresolved year advances the consecutive chaos counter");
+Equal(0, MandateDeclineRules.NextChaosUnresolvedYears(5, false),
+    "a resolved year resets the consecutive chaos counter");
 True(MandateDeclineRules.ShouldRecoverChaos(40, 40, 0.70f,
         false, false, 40, 3),
     "stable chaos recovers after three years");

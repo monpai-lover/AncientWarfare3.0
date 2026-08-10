@@ -38,6 +38,12 @@ namespace AncientWarfare3.core.lineage
             return pUnresolved && pUnresolvedYears >= ChaosCollapseYears;
         }
 
+        public static int NextChaosUnresolvedYears(int pCurrentYears,
+            bool pUnresolved)
+        {
+            return pUnresolved ? Math.Min(999, Math.Max(0, pCurrentYears) + 1) : 0;
+        }
+
         public static bool ShouldRecoverChaos(int pMandateValue,
             int pAuthority, float pCoreControl, bool pActiveClaimants,
             bool pActiveZhuluWars, int pCatalystScore, int pStableYears)

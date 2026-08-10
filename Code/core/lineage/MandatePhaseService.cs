@@ -238,9 +238,8 @@ namespace AncientWarfare3.core.lineage
                 pMandateValue, pAuthority, pReport?.core_control ?? 0f,
                 rebelClaimants, activeZhuluWars, _catalystScore);
 
-            if (unresolved)
-                _chaosUnresolvedYears = Math.Min(999,
-                    _chaosUnresolvedYears + 1);
+            _chaosUnresolvedYears = MandateDeclineRules.
+                NextChaosUnresolvedYears(_chaosUnresolvedYears, unresolved);
             _chaosRecoveryYears = recoveryYear
                 ? Math.Min(999, _chaosRecoveryYears + 1)
                 : 0;
