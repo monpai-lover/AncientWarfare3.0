@@ -240,7 +240,7 @@ namespace AncientWarfare3.patch
 
             if (TrySelectStableCaptain(__instance, out Actor replacement))
                 AWArmyService.SetCaptainIfChanged(__instance, replacement);
-            else if (!TemporaryLevyService.TryPromoteExistingLevyCaptain(__instance) && currentExists)
+            else if (currentExists)
                 __instance.setCaptain(null);
             DetachCivilAuthorityCaptain(__instance, current);
             return false;
@@ -318,7 +318,6 @@ namespace AncientWarfare3.patch
             }
             ArmyRtsControllerService.ReleaseActor(pActor);
             ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
-            TemporaryLevyService.OnActorInvalidated(pActor);
             WartimeGarrisonService.OnActorInvalidated(pActor);
             TemporarySlaveVanguardService.OnMemberInvalidated(pActor);
             MandateMilitaryPhaseService.Clear(pActor);
@@ -1038,7 +1037,6 @@ namespace AncientWarfare3.patch
             }
             ArmyRtsControllerService.ReleaseActor(pActor);
             ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
-            TemporaryLevyService.OnActorInvalidated(pActor);
             WartimeGarrisonService.OnActorInvalidated(pActor);
             TemporarySlaveVanguardService.OnMemberInvalidated(pActor);
             MandateMilitaryPhaseService.Clear(pActor);

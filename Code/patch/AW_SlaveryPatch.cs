@@ -57,14 +57,11 @@ namespace AncientWarfare3.patch
             ArmyMembershipReconciliationService.Enqueue(__state.Army);
             ArmyMembershipReconciliationService.Enqueue(__instance?.army);
             if (AW3MultiplayerReplicaScope.IsApplying) return;
-            CityReservePoolService.OnActorKingdomChanged(__instance,
-                __state.Kingdom);
             WarNoticeService.QueueArmyChanged(__state.Kingdom,
                 __instance.army);
             ArmyDeploymentService.ReleaseActor(__instance, restoreJob: true);
             TemporarySlaveVanguardService.OnActorKingdomChanged(__instance,
                 __state.Kingdom);
-            TemporaryLevyService.OnActorInvalidated(__instance);
         }
 
         [HarmonyPostfix]

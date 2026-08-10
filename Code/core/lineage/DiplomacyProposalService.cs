@@ -4163,14 +4163,17 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
             int current = 0;
+            bool potentialReady = false;
             try
             {
-                current = WartimeMilitaryPotentialService.
-                    CountPotentialWarriorsBounded(pParticipant.Kingdom,
+                potentialReady = WartimeMilitaryPotentialService.
+                    TryCountPotentialWarriorsBounded(pParticipant.Kingdom,
                         DiplomacyProposalAiRules.
-                            MaximumSeparatePeacePotentialCityScans);
+                            MaximumSeparatePeacePotentialCityScans,
+                        out current);
             }
             catch { }
+            if (!potentialReady) return sideExhaustion;
             return SeparatePeaceRuntimeFactsRules.ParticipantExhaustion(
                 sideExhaustion, baseline, current);
         }

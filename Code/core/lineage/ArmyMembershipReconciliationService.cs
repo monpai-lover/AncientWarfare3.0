@@ -158,7 +158,6 @@ namespace AncientWarfare3.core.lineage
             if (ownedByNewArmy) return changed;
             ArmyRtsControllerService.ReleaseActor(pActor);
             ArmyDeploymentService.ReleaseActor(pActor, restoreJob: true);
-            TemporaryLevyService.OnActorInvalidated(pActor);
             WartimeGarrisonService.OnActorInvalidated(pActor);
             MandateMilitaryPhaseService.Clear(pActor);
             return changed;

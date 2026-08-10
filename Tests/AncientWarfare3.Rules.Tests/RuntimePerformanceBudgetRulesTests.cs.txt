@@ -71,12 +71,10 @@ internal static class RuntimePerformanceBudgetRulesTests
 
     private static void PreparationReserveScansRemainBounded()
     {
-        Equal(CityReservePoolRules.PeaceActorBudget,
-            CityReservePoolRules.ActorBudget(false),
-            "peace reserve maintenance keeps its actor scan budget");
-        Equal(CityReservePoolRules.PreparationActorBudget,
-            CityReservePoolRules.ActorBudget(true),
-            "war preparation reserve maintenance cannot scan an entire city in one frame");
+        Equal(0, CityReservePoolRules.ActorBudget(false),
+            "peace reserve maintenance never scans resident actors");
+        Equal(0, CityReservePoolRules.ActorBudget(true),
+            "war preparation never scans resident actors");
     }
 
     private static void SharedPathWorkerBudgetUsesCultiwayFormula()

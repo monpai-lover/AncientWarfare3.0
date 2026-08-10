@@ -167,6 +167,10 @@ namespace AncientWarfare3.core.lineage
         private static readonly Dictionary<long, CaptainRecoveryPlan>
             CaptainRecoveryPlans = new Dictionary<long, CaptainRecoveryPlan>();
         private static readonly HashSet<long> ActiveActorIds = new HashSet<long>();
+        private const int LegacyMigrationScanBatchLimit = 64;
+        private const int LegacyMigrationDemobilizationBatchLimit = 16;
+        private static bool _legacyMigrationPending;
+        private static int _legacyMigrationCursor;
         private const int PreparationKingdomsPerAuthorityCycle = 2;
         private const double DiagnosticSampleIntervalSeconds = 30d;
         private const int MaximumDiagnosticOperations = 128;
@@ -780,40 +784,49 @@ namespace AncientWarfare3.core.lineage
 
         public static void RebuildRuntime()
         {
-            StandingArmyService.ClearEstablishmentRuntime();
-            Pools.Clear();
-            RecruitmentPlans.Clear();
-            PreparationRecruitmentPlans.Clear();
-            CasualtyReinforcementPlans.Clear();
-            CaptainRecoveryPlans.Clear();
-            ActiveActorIds.Clear();
-            LastPreparationMonthKey = int.MinValue;
-            PreparationMonthlyWork.Clear();
-            ClearDiagnosticSampling();
-            if (World.world?.units != null)
-            {
-                foreach (Actor actor in World.world.units)
-                {
-                    if (!HasPersistedFlag(actor)) continue;
-                    SyntheticLevyService.ReconcileLoadedActor(actor);
-                    actor.data.get(LineageKeys.TEMPORARY_LEVY_KINGDOM_ID, out long kingdomId, -1L);
-                    if (kingdomId < 0)
-                    {
-                        ClearFields(actor);
-                        continue;
-                    }
-                    ActiveActorIds.Add(actor.data.id);
-                    Pool(kingdomId).ActorIds.Add(actor.data.id);
-                }
-            }
+            ClearRuntime();
+            BeginLegacyMigration();
+        }
 
-            foreach (long kingdomId in new List<long>(Pools.Keys))
+        internal static void ProcessLegacyMigration()
+        {
+            if (!_legacyMigrationPending) return;
+            List<Actor> actors = World.world?.units?.getSimpleList();
+            if (actors == null)
             {
-                Kingdom kingdom = ResolveKingdom(kingdomId);
-                if (kingdom?.data == null || !MilitaryEmergencyService.HasAny(kingdom))
-                    ScheduleDemobilization(kingdomId);
+                _legacyMigrationPending = false;
+                return;
             }
-            ResumeActiveRecruitmentPlans();
+            if (_legacyMigrationCursor < 0 ||
+                _legacyMigrationCursor > actors.Count)
+                _legacyMigrationCursor = 0;
+            int inspected = 0;
+            int demobilized = 0;
+            while (_legacyMigrationCursor < actors.Count &&
+                   inspected < LegacyMigrationScanBatchLimit &&
+                   demobilized < LegacyMigrationDemobilizationBatchLimit)
+            {
+                Actor actor = actors[_legacyMigrationCursor++];
+                inspected++;
+                if (!HasPersistedFlag(actor)) continue;
+                if (SyntheticLevyService.IsSynthetic(actor))
+                {
+                    ClearFields(actor);
+                    continue;
+                }
+                actor.data.get(LineageKeys.TEMPORARY_LEVY_KINGDOM_ID,
+                    out long kingdomId, -1L);
+                DemobilizeActor(actor, kingdomId);
+                demobilized++;
+            }
+            if (_legacyMigrationCursor >= actors.Count)
+                _legacyMigrationPending = false;
+        }
+
+        private static void BeginLegacyMigration()
+        {
+            _legacyMigrationCursor = 0;
+            _legacyMigrationPending = true;
         }
 
         public static void ClearRuntime()
@@ -828,6 +841,8 @@ namespace AncientWarfare3.core.lineage
             LastPreparationMonthKey = int.MinValue;
             PreparationMonthlyWork.Clear();
             ClearDiagnosticSampling();
+            _legacyMigrationPending = false;
+            _legacyMigrationCursor = 0;
         }
 
         private static void ScheduleRecruitmentYear(Kingdom pKingdom, int pYear)

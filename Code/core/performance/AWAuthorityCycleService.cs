@@ -362,7 +362,11 @@ namespace AncientWarfare3.core.performance
                     break;
                 case CooperativeAuthorityStage.CityReservePool:
                     Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
-                        CityReservePoolService.ProcessAuthorityCycle);
+                        () =>
+                        {
+                            TemporaryLevyService.ProcessLegacyMigration();
+                            CityReservePoolService.ProcessAuthorityCycle();
+                        });
                     break;
                 case CooperativeAuthorityStage.SyntheticMobilizationLedger:
                     Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,

@@ -175,8 +175,8 @@ internal static class WarForceEliminationRulesTests
         False(source.Contains(
                 "ArmyFieldIndexService.CreateSnapshotCursor"),
             "kingdom potential does not rescan Army indexes");
-        True(source.Contains("CityReservePoolService.CountAvailable"),
-            "AW3 reserves remain additive");
+        True(source.Contains("TryCountAvailable"),
+            "AW3 reserves remain additive with explicit readiness");
     }
 
     private static void True(bool value, string name)

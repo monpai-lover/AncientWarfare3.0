@@ -7,8 +7,6 @@ namespace AncientWarfare3.core.lineage
     {
         public const int PeaceCityBudget = 1;
         public const int PreparationCityBudget = 4;
-        public const int PeaceActorBudget = 8;
-        public const int PreparationActorBudget = 32;
         public const int ReserveExhaustionContribution = 20;
 
         public static int ResolveAvailableManpower(
@@ -25,6 +23,21 @@ namespace AncientWarfare3.core.lineage
             bool ledgerReady, int availableManpower)
         {
             return ledgerReady && availableManpower <= 0;
+        }
+
+        public static bool ShouldRestartCacheGeneration(
+            bool rebuildActive, bool rebuildRequested,
+            int expectedCityCount, int currentCityCount)
+        {
+            return Math.Max(0, expectedCityCount) !=
+                       Math.Max(0, currentCityCount) ||
+                   !rebuildActive && rebuildRequested;
+        }
+
+        public static bool ShouldQueueFollowUpCacheGeneration(
+            int expectedCityCount)
+        {
+            return expectedCityCount > 0;
         }
 
         public static int Capacity(int eligibleCivilians, int percent)
@@ -94,7 +107,7 @@ namespace AncientWarfare3.core.lineage
 
         public static int ActorBudget(bool preparation)
         {
-            return preparation ? PreparationActorBudget : PeaceActorBudget;
+            return 0;
         }
 
         public static int FullReconciliationBudget(int residentCount,

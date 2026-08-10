@@ -501,7 +501,6 @@ namespace AncientWarfare3.core.lineage
             CourtService.ClearOfficeForReignTransition(pActor, "became_king");
             GeneralService.RetireForSuccession(pActor);
             RoyalGuardService.DismissGuard(pActor, "became_king");
-            TemporaryLevyService.OnActorInvalidated(pActor);
             WartimeGarrisonService.OnActorInvalidated(pActor);
 
             Army previousArmy = pActor.army;
