@@ -7,21 +7,25 @@ internal static class ArmyRtsFirstOrderRecoveryRulesTests
 {
     internal static void Run()
     {
+        RetryKeepsTheFirstOrderAlive();
+        TerminalResultsReleaseTheDeduplicationKey();
+        RemovingWarClearsInflightOrders();
+
         var queue = new KingdomWarFirstOrderQueue();
         queue.EnqueueWar(7L, new[] { 10L, 11L }, new[] { 20L, 21L });
         Equal(4, queue.Count,
             "one first-order item is queued for each participant");
         Equal(new WarFirstOrderAssignment(7L, 10L,
-                WarFirstOrderSide.Attacker), Take(queue),
+                WarFirstOrderSide.Attacker), TakeAndComplete(queue),
             "the main attacker receives the first pulse");
         Equal(new WarFirstOrderAssignment(7L, 20L,
-                WarFirstOrderSide.Defender), Take(queue),
+                WarFirstOrderSide.Defender), TakeAndComplete(queue),
             "the main defender receives the second pulse");
         Equal(new WarFirstOrderAssignment(7L, 11L,
-                WarFirstOrderSide.Attacker), Take(queue),
+                WarFirstOrderSide.Attacker), TakeAndComplete(queue),
             "additional attackers remain in their lane");
         Equal(new WarFirstOrderAssignment(7L, 21L,
-                WarFirstOrderSide.Defender), Take(queue),
+                WarFirstOrderSide.Defender), TakeAndComplete(queue),
             "additional defenders alternate fairly");
         queue.EnqueueWar(8L, new[] { 30L }, new[] { 40L });
         queue.EnqueueWar(8L, new[] { 30L }, new[] { 40L });
@@ -84,11 +88,84 @@ internal static class ArmyRtsFirstOrderRecoveryRulesTests
             "retained missions repair route and watchdog state online");
     }
 
+    private static void RetryKeepsTheFirstOrderAlive()
+    {
+        var queue = new KingdomWarFirstOrderQueue();
+        var assignment = new WarFirstOrderAssignment(31L, 41L,
+            WarFirstOrderSide.Attacker);
+        queue.EnqueueWar(31L, new[] { 41L }, Array.Empty<long>());
+
+        Equal(assignment, Take(queue),
+            "the pending first order enters processing");
+        Equal(0, queue.Count,
+            "in-flight work is not also present in the ready queue");
+        Equal(true, queue.Complete(assignment,
+                WarFirstOrderResult.RetryLater),
+            "temporary failure returns the first order to the queue");
+        Equal(1, queue.Count,
+            "retried first order remains pending");
+
+        queue.EnqueueWar(31L, new[] { 41L }, Array.Empty<long>());
+        Equal(1, queue.Count,
+            "a duplicate war callback cannot duplicate retried work");
+        Equal(assignment, Take(queue),
+            "retried work is available on a later pass");
+        Equal(true, queue.Complete(assignment,
+                WarFirstOrderResult.Assigned),
+            "successful assignment acknowledges the order");
+        Equal(0, queue.Count, "acknowledged work leaves the queue");
+    }
+
+    private static void TerminalResultsReleaseTheDeduplicationKey()
+    {
+        var queue = new KingdomWarFirstOrderQueue();
+        var assignment = new WarFirstOrderAssignment(51L, 61L,
+            WarFirstOrderSide.Defender);
+        queue.EnqueueWar(51L, Array.Empty<long>(), new[] { 61L });
+        Equal(assignment, Take(queue), "terminal test takes the order");
+        Equal(true, queue.Complete(assignment,
+                WarFirstOrderResult.Discard),
+            "invalid war work is discarded explicitly");
+
+        queue.EnqueueWar(51L, Array.Empty<long>(), new[] { 61L });
+        Equal(1, queue.Count,
+            "terminal completion releases the deduplication key");
+    }
+
+    private static void RemovingWarClearsInflightOrders()
+    {
+        var queue = new KingdomWarFirstOrderQueue();
+        var assignment = new WarFirstOrderAssignment(71L, 81L,
+            WarFirstOrderSide.Attacker);
+        queue.EnqueueWar(71L, new[] { 81L }, Array.Empty<long>());
+        Equal(assignment, Take(queue),
+            "war-removal test moves the order in flight");
+
+        queue.RemoveWar(71L);
+        Equal(false, queue.Complete(assignment,
+                WarFirstOrderResult.RetryLater),
+            "ended war cannot requeue its in-flight first order");
+
+        queue.EnqueueWar(71L, new[] { 81L }, Array.Empty<long>());
+        Equal(1, queue.Count,
+            "war removal releases all first-order deduplication state");
+    }
+
     private static WarFirstOrderAssignment Take(
         KingdomWarFirstOrderQueue queue)
     {
         if (!queue.TryTake(out WarFirstOrderAssignment item))
             throw new InvalidOperationException("expected queued work");
+        return item;
+    }
+
+    private static WarFirstOrderAssignment TakeAndComplete(
+        KingdomWarFirstOrderQueue queue)
+    {
+        WarFirstOrderAssignment item = Take(queue);
+        if (!queue.Complete(item, WarFirstOrderResult.Assigned))
+            throw new InvalidOperationException(
+                "expected first-order acknowledgement");
         return item;
     }
 
