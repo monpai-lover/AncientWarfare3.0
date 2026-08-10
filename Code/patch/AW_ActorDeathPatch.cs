@@ -18,6 +18,8 @@ namespace AncientWarfare3.patch
             public long Diagnostic;
             public Kingdom DyingKingdom;
             public long DyingKingActorId = -1L;
+            public Army DyingCaptainArmy;
+            public long DyingCaptainActorId = -1L;
         }
 
         [HarmonyPriority(Priority.Last)]
@@ -39,6 +41,24 @@ namespace AncientWarfare3.patch
             __state = new DieState();
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
+            Army dyingArmy = __instance.army;
+            bool wasCaptain = false;
+            try
+            {
+                wasCaptain = dyingArmy?.data != null &&
+                             dyingArmy.getCaptain() == __instance;
+            }
+            catch { }
+            if (ArmyRtsSuccessionRecoveryRules.
+                    ShouldEnqueueCaptainRecovery(
+                        dyingArmy?.data != null, wasCaptain,
+                        dyingArmy?.data != null &&
+                        ArmyRtsControllerService.HasActiveMission(
+                            dyingArmy.id)))
+            {
+                __state.DyingCaptainArmy = dyingArmy;
+                __state.DyingCaptainActorId = __instance.data.id;
+            }
             bool suppressPersonalHistory =
                 SyntheticLevyService.SuppressPersonalHistory(__instance);
             ActorAgeWorkService.Remove(__instance.data.id);
@@ -196,6 +216,12 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying ||
                 AW3MultiplayerReplicaScope.IsReplicaSession) return;
             SyntheticLevyService.OnActorDied(__instance);
+            if (__state?.DyingCaptainArmy?.data != null &&
+                __state.DyingCaptainActorId >= 0L &&
+                __instance != null && !__instance.isAlive())
+                ArmyRtsSuccessionRecoveryService.OnCaptainDied(
+                    __state.DyingCaptainArmy,
+                    __state.DyingCaptainActorId);
             if (__state?.DyingKingdom == null ||
                 __state.DyingKingActorId < 0L || __instance == null ||
                 __instance.isAlive()) return;

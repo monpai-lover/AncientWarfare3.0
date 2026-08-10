@@ -14,6 +14,8 @@ namespace AncientWarfare3.core.lineage
             new SortedDictionary<long, Work>();
         private static readonly Dictionary<long, long> CompletedKingByKingdom =
             new Dictionary<long, long>();
+        private static readonly SortedSet<long> PendingCaptainArmies =
+            new SortedSet<long>();
         private static readonly List<long> ArmyIds = new List<long>(
             ArmyRtsSuccessionRecoveryRules.MaximumArmiesPerCycle);
 
@@ -35,8 +37,10 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
-            if (!ArmyRtsRuntimeMode.ShouldCommit || Pending.Count == 0)
-                return;
+            if (!ArmyRtsRuntimeMode.ShouldCommit) return;
+            ProcessPendingCaptains(
+                ArmyRtsSuccessionRecoveryRules.MaximumArmiesPerCycle);
+            if (Pending.Count == 0) return;
             using IEnumerator<KeyValuePair<long, Work>> iterator =
                 Pending.GetEnumerator();
             if (!iterator.MoveNext()) return;
@@ -72,6 +76,47 @@ namespace AncientWarfare3.core.lineage
             CompletedKingByKingdom[kingdomId] = work.KingId;
             Pending.Remove(kingdomId);
             KingdomWarDirectorService.QueueArmyChanged(kingdom);
+        }
+
+        internal static int PendingCaptainCount =>
+            PendingCaptainArmies.Count;
+
+        internal static void OnCaptainDied(Army pArmy, long pCaptainId)
+        {
+            if (pArmy?.data == null || pCaptainId < 0L ||
+                !ArmyRtsControllerService.HasActiveMission(pArmy.id))
+                return;
+            PendingCaptainArmies.Add(pArmy.id);
+        }
+
+        internal static int ProcessPendingCaptains(int pMaximum)
+        {
+            int limit = System.Math.Min(System.Math.Max(0, pMaximum),
+                PendingCaptainArmies.Count);
+            int processed = 0;
+            while (processed < limit && PendingCaptainArmies.Count > 0)
+            {
+                long armyId = PendingCaptainArmies.Min;
+                PendingCaptainArmies.Remove(armyId);
+                Army army = FindArmy(armyId);
+                Kingdom kingdom = AWArmyService.GetIntendedKingdom(army);
+                if (army?.data == null || kingdom?.data == null ||
+                    !ArmyRtsControllerService.HasActiveMission(armyId))
+                {
+                    processed++;
+                    continue;
+                }
+                EnsureNonSyntheticCaptain(army, kingdom);
+                try { army.checkCaptainExistence(); }
+                catch { }
+                ArmyRtsControllerService.
+                    RehydrateAfterAuthorityChange(army);
+                ArmyRtsAssignmentReconciliationService.Enqueue(army);
+                if (!HasLiveCaptain(army))
+                    PendingCaptainArmies.Add(armyId);
+                processed++;
+            }
+            return processed;
         }
 
         private static void EnsureNonSyntheticCaptain(Army pArmy,
@@ -147,7 +192,19 @@ namespace AncientWarfare3.core.lineage
         {
             Pending.Clear();
             CompletedKingByKingdom.Clear();
+            PendingCaptainArmies.Clear();
             ArmyIds.Clear();
+        }
+
+        private static bool HasLiveCaptain(Army pArmy)
+        {
+            try
+            {
+                Actor captain = pArmy?.getCaptain();
+                return captain?.data != null && captain.isAlive() &&
+                       !captain.isRekt();
+            }
+            catch { return false; }
         }
 
         private static bool IsCurrent(Kingdom pKingdom, Work pWork)
@@ -160,6 +217,12 @@ namespace AncientWarfare3.core.lineage
         private static Kingdom FindKingdom(long pKingdomId)
         {
             try { return World.world?.kingdoms?.get(pKingdomId); }
+            catch { return null; }
+        }
+
+        private static Army FindArmy(long pArmyId)
+        {
+            try { return World.world?.armies?.get(pArmyId); }
             catch { return null; }
         }
     }

@@ -96,16 +96,19 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
+            Actor king = pActor ?? __instance.king;
+            bool setKingSucceeded = king?.data != null &&
+                                     (pActor == null ||
+                                      __instance.king == pActor);
+            if (setKingSucceeded)
+                ArmyRtsSuccessionRecoveryService.OnKingInstalled(
+                    __instance, king, pFromLoad);
             if (pFromLoad)
             {
                 HeirService.RestoreAccessionModeSnapshotRetry(__instance);
                 return;
             }
             if (!UsesManagedSuccession(__instance)) return;
-            Actor king = pActor ?? __instance.king;
-            bool setKingSucceeded = king?.data != null &&
-                                     (pActor == null ||
-                                      __instance.king == pActor);
             if (!setKingSucceeded) return;
             AuthoritativeSuccessionService.OnSuccessorInstalled(__instance,
                 __state.PreviousKing);
