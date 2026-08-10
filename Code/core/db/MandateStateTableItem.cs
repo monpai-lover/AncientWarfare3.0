@@ -35,5 +35,9 @@ namespace AncientWarfare3.core.db
         public int phase_stability_years = 0;
         public int catalyst_score = 0;
         public int phase_last_year = -999999;
+        public int chaos_unresolved_years = 0;
+        public int chaos_recovery_years = 0;
+        public int mandate_protection_used = 0;
+        public int mandate_protection_until_year = -999999;
     }
 }

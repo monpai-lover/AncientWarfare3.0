@@ -22,9 +22,17 @@ namespace AncientWarfare3.core.lineage
         private static int _stableYears;
         private static int _catalystScore;
         private static int _lastYear = UNSET_YEAR;
+        private static int _chaosUnresolvedYears;
+        private static int _chaosRecoveryYears;
+        private static bool _mandateProtectionUsed;
+        private static int _mandateProtectionUntilYear = UNSET_YEAR;
 
         public static MandatePhase CurrentPhase => _phase;
         public static int CatalystScore => _catalystScore;
+        public static int ChaosUnresolvedYears => _chaosUnresolvedYears;
+        public static int ChaosRecoveryYears => _chaosRecoveryYears;
+        public static bool MandateProtectionUsed => _mandateProtectionUsed;
+        public static int MandateProtectionUntilYear => _mandateProtectionUntilYear;
         public static int PhaseSinceYear => _phaseSinceYear <= UNSET_YEAR
             ? SafeCurrentYear()
             : _phaseSinceYear;
@@ -45,10 +53,10 @@ namespace AncientWarfare3.core.lineage
                 "vacant_year");
         }
 
-        public static void EvaluateActiveMandateYear(MandateReport pReport, int pYear,
+        public static bool EvaluateActiveMandateYear(MandateReport pReport, int pYear,
             int pMandateValue, int pAuthority, int pAnnualMandateDelta)
         {
-            if (!BeginAnnualEvaluation(pYear)) return;
+            if (!BeginAnnualEvaluation(pYear)) return false;
             int courtDelta = MandatePoliticalCatalystService.CourtDelta(
                 MandateService.GetCurrentMandateKingdom());
             ApplyAnnualCatalyst(
@@ -64,6 +72,8 @@ namespace AncientWarfare3.core.lineage
             _stableYears = stable ? Math.Min(999, _stableYears + 1) : 0;
             EvaluateAndPersist(pReport, pYear, true,
                 pMandateValue, pAuthority, "active_year");
+            return EvaluateChaosLifecycle(pReport, pYear, pMandateValue,
+                pAuthority);
         }
 
         public static void ForceChaos(string pReason)
@@ -84,6 +94,10 @@ namespace AncientWarfare3.core.lineage
             SetPhase(MandatePhaseRules.PhaseAfterMandateEstablished(
                 pHadPreviousMandate), pYear);
             _stableYears = 0;
+            _chaosUnresolvedYears = 0;
+            _chaosRecoveryYears = 0;
+            _mandateProtectionUsed = false;
+            _mandateProtectionUntilYear = UNSET_YEAR;
             _lastYear = pYear;
             Persist(pHadPreviousMandate ? "mandate_renewal" : "first_mandate");
         }
@@ -114,6 +128,30 @@ namespace AncientWarfare3.core.lineage
             Persist(pReason ?? "catalyst_changed");
         }
 
+        public static MandateProtectionResolution ResolveCollapseProtection(
+            bool pEligible, int pYear)
+        {
+            if (!EnsureLoaded())
+                return MandateProtectionResolution.Collapse;
+            MandateProtectionResolution resolution =
+                MandateDeclineRules.ResolveProtection(pEligible,
+                    _mandateProtectionUsed, pYear,
+                    _mandateProtectionUntilYear);
+            if (resolution == MandateProtectionResolution.StartGrace)
+            {
+                _mandateProtectionUsed = true;
+                _mandateProtectionUntilYear = pYear + 4;
+                Persist("mandate_protection_started");
+            }
+            return resolution;
+        }
+
+        public static bool IsCollapseProtectionActive(int pYear)
+        {
+            return EnsureLoaded() && _mandateProtectionUsed &&
+                   pYear < _mandateProtectionUntilYear;
+        }
+
         public static void RebuildRuntime()
         {
             ClearRuntime();
@@ -129,6 +167,10 @@ namespace AncientWarfare3.core.lineage
             _stableYears = 0;
             _catalystScore = 0;
             _lastYear = UNSET_YEAR;
+            _chaosUnresolvedYears = 0;
+            _chaosRecoveryYears = 0;
+            _mandateProtectionUsed = false;
+            _mandateProtectionUntilYear = UNSET_YEAR;
         }
 
         private static bool BeginAnnualEvaluation(int pYear)
@@ -174,6 +216,51 @@ namespace AncientWarfare3.core.lineage
             Persist(pReason);
         }
 
+        private static bool EvaluateChaosLifecycle(MandateReport pReport,
+            int pYear, int pMandateValue, int pAuthority)
+        {
+            if (_phase != MandatePhase.Chaos)
+            {
+                if (_chaosUnresolvedYears == 0 && _chaosRecoveryYears == 0)
+                    return false;
+                _chaosUnresolvedYears = 0;
+                _chaosRecoveryYears = 0;
+                Persist("chaos_counters_reset");
+                return false;
+            }
+
+            bool rebelClaimants = MandateRebelService.HasActiveRebelClaimants();
+            bool activeZhuluWars = ZhuluWarService.HasActivePrincipalWars();
+            bool unresolved = MandateDeclineRules.IsChaosUnresolved(
+                pMandateValue, pReport?.core_control ?? 0f,
+                rebelClaimants, activeZhuluWars, _catalystScore);
+            bool recoveryYear = MandateDeclineRules.IsChaosRecoveryYear(
+                pMandateValue, pAuthority, pReport?.core_control ?? 0f,
+                rebelClaimants, activeZhuluWars, _catalystScore);
+
+            _chaosUnresolvedYears = MandateDeclineRules.
+                NextChaosUnresolvedYears(_chaosUnresolvedYears, unresolved);
+            _chaosRecoveryYears = recoveryYear
+                ? Math.Min(999, _chaosRecoveryYears + 1)
+                : 0;
+
+            if (MandateDeclineRules.ShouldRecoverChaos(pMandateValue,
+                    pAuthority, pReport?.core_control ?? 0f,
+                    rebelClaimants, activeZhuluWars, _catalystScore,
+                    _chaosRecoveryYears))
+            {
+                SetPhase(MandatePhase.Decline, pYear);
+                _chaosUnresolvedYears = 0;
+                _chaosRecoveryYears = 0;
+                Persist("chaos_recovered");
+                return false;
+            }
+
+            Persist("chaos_lifecycle");
+            return MandateDeclineRules.ShouldCollapseChaos(
+                _chaosUnresolvedYears, unresolved);
+        }
+
         private static void SetPhase(MandatePhase pPhase, int pYear)
         {
             if (_phase == pPhase && _phaseSinceYear > UNSET_YEAR) return;
@@ -181,6 +268,11 @@ namespace AncientWarfare3.core.lineage
             _phase = pPhase;
             _phaseSinceYear = pYear;
             _stableYears = 0;
+            if (previous != pPhase)
+            {
+                _chaosUnresolvedYears = 0;
+                _chaosRecoveryYears = 0;
+            }
             CentralizationService.OnPhaseChanged(previous, pPhase, pYear);
             MandateMilitaryPhaseService.OnPhaseChanged(previous, pPhase);
         }
@@ -203,13 +295,19 @@ namespace AncientWarfare3.core.lineage
                         ColumnVal.Create("PHASE_SINCE_YEAR", year),
                         ColumnVal.Create("PHASE_STABILITY_YEARS", 0),
                         ColumnVal.Create("CATALYST_SCORE", 0),
-                        ColumnVal.Create("PHASE_LAST_YEAR", UNSET_YEAR));
+                        ColumnVal.Create("PHASE_LAST_YEAR", UNSET_YEAR),
+                        ColumnVal.Create("CHAOS_UNRESOLVED_YEARS", 0),
+                        ColumnVal.Create("CHAOS_RECOVERY_YEARS", 0),
+                        ColumnVal.Create("MANDATE_PROTECTION_USED", 0),
+                        ColumnVal.Create("MANDATE_PROTECTION_UNTIL_YEAR", UNSET_YEAR));
                 }
 
                 using var command = new SQLiteCommand(DB);
                 command.CommandText =
                     "SELECT MANDATE_PHASE,PHASE_SINCE_YEAR,PHASE_STABILITY_YEARS," +
-                    "CATALYST_SCORE,PHASE_LAST_YEAR FROM " + table +
+                    "CATALYST_SCORE,PHASE_LAST_YEAR,CHAOS_UNRESOLVED_YEARS," +
+                    "CHAOS_RECOVERY_YEARS,MANDATE_PROTECTION_USED," +
+                    "MANDATE_PROTECTION_UNTIL_YEAR FROM " + table +
                     " WHERE STATE_ID=@id LIMIT 1";
                 command.Parameters.AddWithValue("@id", STATE_ID);
                 using SQLiteDataReader reader = command.ExecuteReader();
@@ -221,6 +319,10 @@ namespace AncientWarfare3.core.lineage
                     _catalystScore = MandatePhaseRules.AdjustCatalyst(
                         ReadInt(reader, 3, 0), 0);
                     _lastYear = ReadInt(reader, 4, UNSET_YEAR);
+                    _chaosUnresolvedYears = Math.Max(0, ReadInt(reader, 5, 0));
+                    _chaosRecoveryYears = Math.Max(0, ReadInt(reader, 6, 0));
+                    _mandateProtectionUsed = ReadInt(reader, 7, 0) != 0;
+                    _mandateProtectionUntilYear = ReadInt(reader, 8, UNSET_YEAR);
                 }
 
                 if (_phaseSinceYear <= UNSET_YEAR)
@@ -258,6 +360,11 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("PHASE_STABILITY_YEARS", _stableYears),
                     ColumnVal.Create("CATALYST_SCORE", _catalystScore),
                     ColumnVal.Create("PHASE_LAST_YEAR", _lastYear),
+                    ColumnVal.Create("CHAOS_UNRESOLVED_YEARS", _chaosUnresolvedYears),
+                    ColumnVal.Create("CHAOS_RECOVERY_YEARS", _chaosRecoveryYears),
+                    ColumnVal.Create("MANDATE_PROTECTION_USED", _mandateProtectionUsed ? 1 : 0),
+                    ColumnVal.Create("MANDATE_PROTECTION_UNTIL_YEAR",
+                        _mandateProtectionUntilYear),
                     ColumnVal.Create("UPDATED_TIME", LineageService.CurTime()));
             }
             catch (Exception exception)

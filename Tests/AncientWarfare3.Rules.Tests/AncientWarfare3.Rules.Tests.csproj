@@ -379,6 +379,8 @@
     <Compile Include="..\..\Code\core\lineage\DynastyStateNamePersistence.cs" Link="Production\DynastyStateNamePersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\MandatePhaseRules.cs" Link="Production\MandatePhaseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateDeclineRebellionRules.cs" Link="Production\MandateDeclineRebellionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateDeclineRules.cs" Link="Production\MandateDeclineRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateCoreTransferRules.cs" Link="Production\MandateCoreTransferRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateFeudatoryCompletionRules.cs" Link="Production\MandateFeudatoryCompletionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateMilitaryPhaseRules.cs" Link="Production\MandateMilitaryPhaseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CentralizationRules.cs" Link="Production\CentralizationRules.cs" />
