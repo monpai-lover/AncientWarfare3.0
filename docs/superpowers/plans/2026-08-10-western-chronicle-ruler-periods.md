@@ -169,4 +169,3 @@ dotnet build AncientWarfare3.csproj -c Release --no-restore
 ```
 
 Expected: both exit 0 with no compile errors.
-
