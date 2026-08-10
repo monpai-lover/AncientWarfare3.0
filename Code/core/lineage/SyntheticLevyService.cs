@@ -7,24 +7,40 @@ namespace AncientWarfare3.core.lineage
     {
         internal static bool IsSynthetic(Actor actor)
         {
-            if (actor?.data == null) return false;
-            actor.data.get(LineageKeys.SYNTHETIC_LEVY,
-                out bool synthetic, false);
-            actor.data.get(LineageKeys.SYNTHETIC_LEVY_PROMOTED,
-                out bool promoted, false);
-            return synthetic && !promoted;
+            return TryReadFlags(actor, out bool synthetic,
+                out bool promoted) && synthetic && !promoted;
         }
 
         internal static bool SuppressPersonalHistory(Actor actor)
         {
             if (SyntheticLevySpawnScope.IsActive) return true;
-            if (actor?.data == null) return false;
-            actor.data.get(LineageKeys.SYNTHETIC_LEVY,
-                out bool synthetic, false);
-            actor.data.get(LineageKeys.SYNTHETIC_LEVY_PROMOTED,
-                out bool promoted, false);
+            if (!TryReadFlags(actor, out bool synthetic,
+                    out bool promoted)) return false;
             return SyntheticLevyRules.SuppressPersonalHistory(
                 synthetic, promoted);
+        }
+
+        private static bool TryReadFlags(Actor actor,
+            out bool synthetic, out bool promoted)
+        {
+            synthetic = false;
+            promoted = false;
+            try
+            {
+                var data = actor?.data;
+                if (data == null) return false;
+                data.get(LineageKeys.SYNTHETIC_LEVY,
+                    out synthetic, false);
+                data.get(LineageKeys.SYNTHETIC_LEVY_PROMOTED,
+                    out promoted, false);
+                return true;
+            }
+            catch (NullReferenceException)
+            {
+                synthetic = false;
+                promoted = false;
+                return false;
+            }
         }
 
         internal static Actor TryCreate(City city, Kingdom kingdom,

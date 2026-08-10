@@ -4,8 +4,6 @@ namespace AncientWarfare3.core.lineage
     {
         public static bool Allows(Actor pActor, string pTaskId)
         {
-            if (SyntheticLevyService.IsSynthetic(pActor))
-                return SyntheticLevyRules.AllowTaskId(true, pTaskId);
             if (!WartimeMilitaryTaskRules.
                     ShouldEvaluateMilitaryState(pTaskId)) return true;
             try
