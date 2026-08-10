@@ -509,6 +509,12 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_BORDER_CITY_CURSOR = "aw_court_border_city_cursor";
         public const string COURT_BORDER_REQUEST_CITY_CURSOR = "aw_court_border_request_city_cursor";
         public const string COURT_DOMINANT_SCHOOL = "aw_court_dominant_school";
+        public const string CITY_BUREAU_STATE_INITIALIZED =
+            "aw_city_bureau_state_initialized";
+        public const string CITY_BUREAU_OFFICE_SLOTS =
+            "aw_city_bureau_office_slots";
+        public const string CITY_BUREAU_LOCAL_SCHOOL =
+            "aw_city_bureau_local_school";
         public const string COURT_SECONDARY_SCHOOL = "aw_court_secondary_school";
         public const string COURT_FACTION_CACHE = "aw_court_faction_cache";
         public const string COURT_ARISTOCRATIC_GROUP_CACHE =
@@ -711,11 +717,21 @@ namespace AncientWarfare3.core.lineage
             "aw_heir_selection_dirty";
         public const string IS_HEIR = "aw_is_heir";
         public const string KINGDOM_PRE_SUCCESSION_KING_ID = "aw_pre_succession_king_id";
+        public const string KINGDOM_PRE_SUCCESSION_GENERATION =
+            "aw_pre_succession_generation";
+        public const string KINGDOM_PRE_SUCCESSION_LINEAGE_ID =
+            "aw_pre_succession_lineage_id";
+        public const string KINGDOM_PRE_SUCCESSION_SHI_ID =
+            "aw_pre_succession_shi_id";
         public const string KINGDOM_LEGITIMATE_SHI_ID = "aw_legitimate_shi_id";
         public const string KINGDOM_LEGITIMATE_LINEAGE_ID = "aw_legitimate_lineage_id";
         public const string KINGDOM_MONARCHY_ESTABLISHED = "aw_monarchy_established";
         public const string KINGDOM_RESTORED_SHI_ID = "aw_restored_shi_id";
         public const string KINGDOM_SUCCESSION_MODE = "aw_succession_mode";
+        public const string KINGDOM_PENDING_ACCESSION_ACTOR_ID =
+            "aw_pending_accession_actor_id";
+        public const string KINGDOM_PENDING_ACCESSION_MODE =
+            "aw_pending_accession_mode";
         public const string INHERITANCE_LAW_EFFECTIVE = "aw_inheritance_law_effective";
         public const string INHERITANCE_LAW_LOCKED = "aw_inheritance_law_locked";
         public const string INHERITANCE_LAW_LAST_EVALUATION_YEAR =
@@ -778,6 +794,7 @@ namespace AncientWarfare3.core.lineage
         public const string COLLATERAL_RESTORE = "collateral_restore";
         public const string CLAN_FALLBACK = "clan_fallback";
         public const string LEADER_FALLBACK = "leader_fallback";
+        public const string COURT_USURPATION = "court_usurpation";
         public const string REPUBLIC_ELECTIVE = "republic_elective";
         public const string MILITARY_ACCLAIM = "military_acclaim";
         public const string CIVIL_ACCLAIM = "civil_acclaim";

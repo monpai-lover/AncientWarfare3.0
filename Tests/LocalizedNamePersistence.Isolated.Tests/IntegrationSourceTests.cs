@@ -10,10 +10,26 @@ namespace AncientWarfare3.Tests
         {
             ActorReadPathOnlyProjectsStoredIdentity();
             FullScanWritesRouteThroughRetryQueue();
+            PersistenceUsesLegacyCompatibleTransactionalUpsert();
             MigrationDoesNotFabricateHumanGenerators();
             ManualActorNameIsProtectedAcrossProjectionAndRestore();
             ManualRenameServiceOwnsStructuredPersistence();
             SplitActorNameEditorReplacesVanillaInput();
+        }
+
+        private static void PersistenceUsesLegacyCompatibleTransactionalUpsert()
+        {
+            string source = Read("Code", "core", "naming",
+                "AWLocalizedNamePersistence.cs");
+            string compact = Compact(source);
+            AssertEx.True(!source.Contains("ON CONFLICT"),
+                "Localized identity writes must support the bundled legacy SQLite engine.");
+            AssertEx.True(compact.Contains("db.BeginTransaction()") &&
+                          compact.Contains("UPDATE" +
+                              "\"+Table+\"SET") &&
+                          compact.Contains("if(updated==0)") &&
+                          compact.Contains("INSERTINTO"),
+                "Localized identity writes must update-then-insert in one transaction.");
         }
 
         private static void ActorReadPathOnlyProjectsStoredIdentity()

@@ -135,6 +135,12 @@ namespace AncientWarfare3.core.lineage
                 : Array.Empty<long>(), pLimit);
         }
 
+        internal static bool HasLivingLineageMembers(long pLineageId)
+        {
+            return State.IsReady && pLineageId >= 0L &&
+                   State.LineageMembers(pLineageId).Count > 0;
+        }
+
         internal static IReadOnlyList<long> GetLivingShiMemberIds(
             long pShiId, int pLimit)
         {

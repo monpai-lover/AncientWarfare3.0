@@ -480,7 +480,11 @@ namespace AncientWarfare3.core.court
 
             CourtSnapshot snapshot = GetSnapshot(pKingdom);
             benchmark = UpdateAgeBenchmark.Begin();
-            try { RefreshCityBureaus(pKingdom, snapshot); }
+            try
+            {
+                CityBureauAnnualWorkService.Schedule(pKingdom,
+                    snapshot?.efficiency ?? 0f);
+            }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCityBureauRefreshIndex, benchmark); }
 
             EvaluateStrongEvent(pKingdom, snapshot);
@@ -1224,7 +1228,7 @@ namespace AncientWarfare3.core.court
                         slave, madness, male, royalAsylum: false, king,
                         hasCentralOffice, affiliationAvailable: true))) return false;
 
-            return CourtManualAppointmentRules.CanListCandidate(
+            bool otherwiseEligible = CourtManualAppointmentRules.CanListCandidate(
                 new CourtManualCandidateFacts(
                     alive,
                     adult: pActor.isAdult(),
@@ -1236,9 +1240,16 @@ namespace AncientWarfare3.core.court
                     king,
                     hasCentralOffice,
                     affiliationAvailable:
-                         HistoricalAffiliationService.IsAvailableForOffice(pActor))) &&
-                   HistoricalSchoolEducationService.CanAppoint(pActor,
-                       pKingdom, pLayer, pOfficeId);
+                         HistoricalAffiliationService.IsAvailableForOffice(pActor)));
+            if (!otherwiseEligible) return false;
+
+            bool westernProfile = CourtProfileRegistry.For(pKingdom)?.Id ==
+                                  CourtProfileId.Western;
+            bool historicalSchoolEligible = westernProfile ||
+                HistoricalSchoolEducationService.CanAppoint(pActor,
+                    pKingdom, pLayer, pOfficeId);
+            return WesternCourtElectionRules.CanUseLocalCandidate(
+                otherwiseEligible, westernProfile, historicalSchoolEligible);
         }
 
         internal static bool IsManualOfficeInCurrentTier(Kingdom pKingdom,
@@ -2099,97 +2110,6 @@ namespace AncientWarfare3.core.court
         }
 
         private static SQLiteConnection CourtDB => LineageArchiveManager.Instance?.OperatingDB;
-
-        private static void RefreshCityBureaus(Kingdom pKingdom, CourtSnapshot pSnapshot)
-        {
-            var db = CourtDB;
-            if (db == null || pKingdom?.data == null) return;
-            if (!HasOfficialCourt(pKingdom)) return;
-
-            int year = Date.getCurrentYear();
-            float courtEfficiency = pSnapshot?.efficiency ?? 0f;
-
-            IEnumerable<City> cities;
-            try { cities = pKingdom.getCities(); }
-            catch { return; }
-            if (cities == null) return;
-
-            string table = CityBureauStateTableItem.GetTableName();
-            foreach (City city in cities)
-            {
-                if (city?.data == null || city.isRekt()) continue;
-
-                int population = SafeCityPopulation(city);
-                int zoneCount = SafeZoneCount(city);
-                bool isCapital = pKingdom.capital == city;
-                int slots = CourtRules.CityOfficeSlots(population, zoneCount, isCapital);
-                int filled = CourtBureauRules.FilledSlots(slots, courtEfficiency);
-                CitySchoolSnapshot schoolSnapshot = CitySchoolSnapshotService.GetSnapshot(city);
-                string localSchool = schoolSnapshot?.DominantSchool ?? CourtSchoolId.None;
-                if (schoolSnapshot == null) CitySchoolSnapshotService.MarkDirty(city);
-                float efficiency = CourtBureauRules.BureauEfficiency(slots, filled);
-
-                try { UpsertCityBureau(db, table, pKingdom, city, slots, localSchool, efficiency, year); }
-                catch (Exception e) { AncientWarfare3.ModClass.LogWarning("CityBureauState upsert failed: " + e.Message); }
-            }
-        }
-
-        private static void UpsertCityBureau(SQLiteConnection pDb, string pTable, Kingdom pKingdom, City pCity,
-            int pSlots, string pSchool, float pEfficiency, int pYear)
-        {
-            bool exists = pDb.CheckKeyExist(pTable, SimpleColumnConstraint.CreateEq("CITY_ID", pCity.data.id));
-            int prevSlots = -1;
-            string prevSchool = "";
-            if (exists) ReadBureauPrevious(pDb, pTable, pCity.data.id, out prevSlots, out prevSchool);
-
-            var values = new List<ColumnVal>
-            {
-                ColumnVal.Create("KINGDOM_ID", pKingdom.id),
-                ColumnVal.Create("CITY_NAME", pCity.data.name ?? ""),
-                ColumnVal.Create("OFFICE_SLOTS", pSlots),
-                ColumnVal.Create("LOCAL_SCHOOL", pSchool ?? ""),
-                ColumnVal.Create("BUREAU_EFFICIENCY", (double)pEfficiency),
-                ColumnVal.Create("OFFICER_ACTOR_IDS", ""),
-                ColumnVal.Create("LAST_REFRESH_YEAR", pYear),
-                ColumnVal.Create("UPDATED_TIME", LineageService.CurTime())
-            };
-
-            if (exists)
-            {
-                pDb.UpdateValue(pTable,
-                    new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("CITY_ID", pCity.data.id) },
-                    values.ToArray());
-            }
-            else
-            {
-                var insert = new List<ColumnVal> { ColumnVal.Create("CITY_ID", pCity.data.id) };
-                insert.AddRange(values);
-                pDb.Insert(pTable, insert.ToArray());
-            }
-
-            if (CourtBureauRules.ShouldRecordCityBureauChange(prevSlots, pSlots, prevSchool, pSchool))
-                ChronicleEvents.OnCourtCityBureau(pKingdom, pCity.data.name ?? "", pSchool ?? "");
-        }
-
-        private static void ReadBureauPrevious(SQLiteConnection pDb, string pTable, long pCityId,
-            out int pSlots, out string pSchool)
-        {
-            pSlots = -1;
-            pSchool = "";
-            try
-            {
-                using var cmd = new SQLiteCommand(pDb);
-                cmd.CommandText = $"SELECT OFFICE_SLOTS, LOCAL_SCHOOL FROM {pTable} WHERE CITY_ID = @cid LIMIT 1";
-                cmd.Parameters.AddWithValue("@cid", pCityId);
-                using var reader = cmd.ExecuteReader();
-                if (reader.Read())
-                {
-                    pSlots = reader.IsDBNull(0) ? -1 : Convert.ToInt32(reader.GetValue(0));
-                    pSchool = reader.IsDBNull(1) ? "" : reader.GetValue(1)?.ToString() ?? "";
-                }
-            }
-            catch { pSlots = -1; pSchool = ""; }
-        }
 
         private static void EvaluateStrongEvent(Kingdom pKingdom, CourtSnapshot pSnapshot)
         {

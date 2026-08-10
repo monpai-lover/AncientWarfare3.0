@@ -543,6 +543,47 @@ internal static class IntegratedNamingRulesTests
                 "ch", renamedKingdom.Snapshot.NativeName,
                 renamedKingdom.Snapshot.ChineseName),
             "a Chinese language refresh keeps the committed level-five name");
+
+        var retryWrites = new AWBoundedLocalizedNameWriteQueue(3);
+        retryWrites.Enqueue("Kingdom", 1L, oldKingdomIdentity);
+        retryWrites.Enqueue("Kingdom", 2L, fullXiaIdentity);
+        int poisonAttempts = 0;
+        int healthyAttempts = 0;
+        Equal(1, retryWrites.Flush(2, pending =>
+            {
+                if (pending.ObjectId == 1L)
+                {
+                    poisonAttempts++;
+                    throw new InvalidOperationException("poisoned write");
+                }
+                healthyAttempts++;
+                return true;
+            }),
+            "one failed localized write cannot block the healthy write behind it");
+        Equal(1, retryWrites.Count,
+            "the failed localized write remains queued for retry");
+        Equal(1, poisonAttempts,
+            "the failed localized write is attempted once in its first flush");
+        Equal(1, healthyAttempts,
+            "the healthy localized write completes in the same flush");
+        Equal(0, retryWrites.Flush(1, pending =>
+            {
+                poisonAttempts++;
+                return true;
+            }),
+            "the first retry flush respects exponential backoff");
+        Equal(1, poisonAttempts,
+            "backoff does not invoke the localized writer early");
+        Equal(1, retryWrites.Flush(1, pending =>
+            {
+                poisonAttempts++;
+                return true;
+            }),
+            "the localized write retries when its bounded delay expires");
+        Equal(2, poisonAttempts,
+            "the delayed localized write is invoked exactly once on retry");
+        Equal(0, retryWrites.Count,
+            "a successful retry drains the localized write queue");
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

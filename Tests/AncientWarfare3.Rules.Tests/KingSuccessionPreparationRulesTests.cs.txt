@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 
 internal static class KingSuccessionPreparationRulesTests
@@ -10,10 +12,750 @@ internal static class KingSuccessionPreparationRulesTests
         WorldLoadRebuildStartsFromEmptyState();
         OrdinaryActorCannotRequestSuccessionMaintenance();
         ForeignReigningBranchCannotDirtyThisKingdom();
+        RegisteredHeirSurvivesTransientIdentityChanges();
+        RegisteredHeirLookupIgnoresTransientIdentity();
+        HeirRegistrationNormalizesIdentityBeforeCommit();
+        MissingHomeDoesNotVetoNativeAccession();
+        RegisteredHeirNormalizationFailurePreservesAuthority();
+        CourtUsurpationRequiresConfirmedLineageExtinction();
+        ArchiveFallbackIsPagedBoundedAndEvidenceAware();
+        MissingLegitimacyAndPredecessorGenerationUseArchiveEvidence();
+        NullArchivedGenerationRemainsPending();
+        DyingKingIdentitySnapshotPrecedesArchiveFallback();
+        AuthoritativeFallbackConsumesArchiveEvidenceWithoutFalseUsurpation();
+        CourtFallbackCollectsAllRequiredAwOfficesAndPagesWinningShi();
+        PagedFallbacksRetainAlternatesAndAdvanceFamilies();
+        ArchiveCandidateLossRescanIsBounded();
+        SuccessionAttemptsRetryIndefinitelyAndClearAllPagedState();
+        CourtUsurpationEstablishesNewLegitimateAwLine();
+        ImperialCourtUsurpationBindsNewShiBeforeDynastyTransition();
+        AccessionModeSnapshotRetriesUntilChronicleSettlement();
+        ForeignReigningHeirLeavesOldThroneBeforeTransfer();
+        KingLeftClearsCompletedAccessionProgress();
+        AccessionChronicleRetryQueueKeepsOneTokenPerKingdom();
+        SuccessionEvidenceDistinguishesPendingFromExtinction();
+        ArchiveFallbackRanksNearbyGenerationByAttribute();
+        CourtUsurpationRanksShiByOfficeWeightThenHolderCount();
         ValidRegisteredHeirSkipsFallback();
-        InvalidRegisteredHeirRunsFallbackOncePerDeath();
+        InvalidRegisteredHeirRetriesAfterCooldown();
+        PagedEvidenceContinuesOnTheNextFrame();
         WorldGenerationSeparatesFallbackAttempts();
         UnchangedHeirSignatureSkipsMaintenance();
+    }
+
+    private static void RegisteredHeirSurvivesTransientIdentityChanges()
+    {
+        True(AuthoritativeSuccessionRules.IsRegisteredHeirAvailable(
+                pIsAlive: true, pIsPresentInWorldUnits: true),
+            "a live registered actor remains authoritative");
+        Equal(false, AuthoritativeSuccessionRules.IsRegisteredHeirAvailable(
+                pIsAlive: false, pIsPresentInWorldUnits: true),
+            "death invalidates a registered actor");
+        Equal(false, AuthoritativeSuccessionRules.IsRegisteredHeirAvailable(
+                pIsAlive: true, pIsPresentInWorldUnits: false),
+            "removal from the world unit manager invalidates registration");
+    }
+
+    private static void RegisteredHeirLookupIgnoresTransientIdentity()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HeirService.cs"));
+        int start = source.IndexOf(
+            "public static Actor PeekRegisteredHeir(",
+            StringComparison.Ordinal);
+        int end = source.IndexOf(
+            "public static Actor PeekStoredHeirForMinimap(", start,
+            StringComparison.Ordinal);
+        True(start >= 0 && end > start,
+            "registered heir lookup source is present");
+        string body = source.Substring(start, end - start);
+        True(body.Contains("World.world?.units?.get(heirId)"),
+            "registered heir lookup resolves the authoritative live actor");
+        True(body.Contains(
+                "AuthoritativeSuccessionRules.IsRegisteredHeirAvailable("),
+            "registered heir lookup uses availability-only validation");
+        Equal(false, body.Contains("IsRegisteredCandidateEligible("),
+            "registered heir lookup ignores transient candidate identity");
+    }
+
+    private static void HeirRegistrationNormalizesIdentityBeforeCommit()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HeirService.cs"));
+        int normalizeStart = source.IndexOf(
+            "private static bool NormalizeHeirForRegistration(",
+            StringComparison.Ordinal);
+        True(normalizeStart >= 0,
+            "heir normalization source is present");
+        int normalizeEnd = source.IndexOf(
+            "private static HeirSelection SelectByEffectiveLaw(",
+            normalizeStart, StringComparison.Ordinal);
+        True(normalizeEnd > normalizeStart,
+            "heir normalization source has a stable boundary");
+        string normalize = source.Substring(normalizeStart,
+            normalizeEnd - normalizeStart);
+        AssertOrdered(normalize,
+            "ResolveRegistrationHome(",
+            "RoyalGuardService.ReleaseForRegisteredHeir(",
+            "SlaveService.FreeSlave(",
+            "FormalAffiliationTransferScope.Open(",
+            "pHeir.joinKingdom(pKingdom)",
+            "pHeir.joinCity(home)");
+        True(normalize.Contains(
+                "pHeir.kingdom == pKingdom &&") &&
+             normalize.Contains(
+                 "(home?.data == null || pHeir.city == home)"),
+            "registration verifies the committed affiliation");
+        True(normalize.Contains("pKingdom.capital") &&
+             normalize.Contains("pHeir.city") &&
+             normalize.Contains("pKingdom.getCities()"),
+            "registration home prefers capital, then current target-realm city, then any realm city");
+
+        int storeStart = source.IndexOf(
+            "private static Actor StoreHeirSelection(",
+            StringComparison.Ordinal);
+        int storeEnd = source.IndexOf(
+            "private static bool NormalizeHeirForRegistration(",
+            storeStart, StringComparison.Ordinal);
+        string store = source.Substring(storeStart, storeEnd - storeStart);
+        AssertOrdered(store,
+            "NormalizeHeirForRegistration(pKingdom, heir)",
+            "pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID");
+    }
+
+    private static void MissingHomeDoesNotVetoNativeAccession()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HeirService.cs"));
+        int start = source.IndexOf(
+            "private static bool NormalizeHeirForRegistration(",
+            StringComparison.Ordinal);
+        int end = source.IndexOf(
+            "internal static bool ReleaseForeignKingshipForSuccession(",
+            start, StringComparison.Ordinal);
+        string body = source.Substring(start, end - start);
+        Equal(false, body.Contains("if (home?.data == null) return false;"),
+            "a temporarily cityless realm cannot veto its registered heir");
+        True(body.Contains("home?.data?.id ?? -1L") &&
+             body.Contains("if (home?.data != null && pHeir.city != home)"),
+            "home relocation is optional while kingdom affiliation remains mandatory");
+    }
+
+    private static void RegisteredHeirNormalizationFailurePreservesAuthority()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HeirService.cs"));
+        int start = source.IndexOf("private static Actor RefreshHeirAndReturn(",
+            StringComparison.Ordinal);
+        int end = source.IndexOf("private static long ResolveReferenceKingId(",
+            start, StringComparison.Ordinal);
+        string body = source.Substring(start, end - start);
+        True(body.Contains("NormalizeHeirForRegistration(pKingdom, storedHeir)"),
+            "a live registered heir retries identity normalization");
+        Equal(false, body.Contains("ClearHeir(pKingdom)"),
+            "transient identity normalization failure never clears the authoritative heir id");
+
+        int storeStart = source.IndexOf("private static Actor StoreHeirSelection(",
+            StringComparison.Ordinal);
+        int storeEnd = source.IndexOf(
+            "private static bool NormalizeHeirForRegistration(", storeStart,
+            StringComparison.Ordinal);
+        string store = source.Substring(storeStart, storeEnd - storeStart);
+        True(store.Contains(
+                 "if (heir?.data == null && previousHeir?.data != null &&") &&
+             store.Contains("previousHeir.isAlive()"),
+            "an empty recomputation cannot erase a live authoritative registered heir");
+        True(store.IndexOf("heir?.data == null", StringComparison.Ordinal) <
+             store.IndexOf("NormalizeHeirForRegistration(pKingdom, heir)",
+                 StringComparison.Ordinal),
+            "the preservation gate applies only before processing a real replacement candidate");
+    }
+
+    private static void CourtUsurpationRequiresConfirmedLineageExtinction()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AuthoritativeSuccessionService.cs"));
+        int evidence = source.IndexOf(
+            "SuccessionEvidenceStatus evidence", StringComparison.Ordinal);
+        int extinctionGate = source.IndexOf(
+            "AuthoritativeSuccessionRules.CanStartCourtUsurpation(",
+            StringComparison.Ordinal);
+        int courtFallback = source.IndexOf(
+            "SuccessionCourtFallbackService.ResolveCandidate(",
+            StringComparison.Ordinal);
+        True(evidence >= 0 && extinctionGate > evidence &&
+             courtFallback > extinctionGate,
+            "court usurpation is downstream of explicit extinction evidence");
+        Equal(false, source.Contains(
+                "HeirService.GetLeaderSuccessionCandidate(pKingdom)"),
+            "authoritative succession no longer treats city leaders as extinction evidence");
+        True(source.Contains("SuccessionMode.COURT_USURPATION"),
+            "court accession records an explicit usurpation mode");
+        Equal(false, source.Contains(
+                "legitimateLineageId < 0L)\n            {\n                evidence = SuccessionEvidenceStatus.ExtinctConfirmed"),
+            "a missing legitimate lineage id is not itself extinction evidence");
+    }
+
+    private static void ArchiveFallbackIsPagedBoundedAndEvidenceAware()
+    {
+        string path = Path.Combine(Directory.GetCurrentDirectory(), "Code",
+            "core", "lineage", "SuccessionArchiveFallbackService.cs");
+        True(File.Exists(path), "dedicated succession archive fallback exists");
+        string source = File.ReadAllText(path);
+        True(source.Contains("MaximumActorsPerPage = 32"),
+            "archive fallback has a fixed 32-actor page budget");
+        True(source.Contains("Dictionary<KingSuccessionKey"),
+            "archive scan progress is isolated by succession attempt key");
+        True(source.Contains("LINEAGE_ID=@lineage AND IS_ALIVE=1"),
+            "archive fallback queries AW lineage identity only");
+        True(source.Contains(
+                "GENERATION BETWEEN @minGeneration AND @maxGeneration"),
+            "archive fallback limits the fast path to predecessor generation plus or minus two");
+        True(source.Contains("ID>@cursor") &&
+             source.Contains("LIMIT @limit"),
+            "archive fallback uses keyset paging");
+        True(source.Contains("ActorTool.attributeDice(") &&
+             source.Contains("AddCandidate("),
+            "each page retains ranked eligible live actors");
+        True(source.Contains("CandidateIds") &&
+             source.Contains("ResolveBestEligibleActor("),
+            "archive paging retains bounded alternates when the first choice becomes invalid");
+        True(source.Contains("TryHasLivingLineageMembers("),
+            "completed-window evidence distinguishes remote living kin from true extinction");
+        True(source.Contains("SuccessionEvidenceStatus.PendingEvidence") &&
+             source.Contains("ResolveEvidenceStatus("),
+            "archive failures and completed evidence remain distinct");
+        Equal(false, source.Contains("getSimpleArray("),
+            "archive fallback never scans all live units");
+        Equal(false, source.Contains("World.world.clans") ||
+                     source.Contains("royal_clan_id"),
+            "archive fallback never reads vanilla clan state");
+    }
+
+    private static void MissingLegitimacyAndPredecessorGenerationUseArchiveEvidence()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AuthoritativeSuccessionService.cs"));
+        True(source.Contains("TryResolveLegitimateContext("),
+            "missing kingdom legitimacy is recovered from live/predecessor/archive AW identity");
+        True(source.Contains("TryResolvePredecessorGeneration("),
+            "a missing predecessor actor reads its true archived generation");
+        True(source.Contains("SuccessionEvidenceStatus.PendingEvidence"),
+            "unavailable identity evidence remains pending instead of declaring extinction");
+
+        string archive = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SuccessionArchiveFallbackService.cs"));
+        True(archive.Contains("SELECT LINEAGE_ID,SHI_ID,GENERATION FROM ") &&
+             archive.Contains(" WHERE ID=@actor LIMIT 1"),
+            "predecessor AW identity and generation are recovered by actor id");
+    }
+
+    private static void NullArchivedGenerationRemainsPending()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SuccessionArchiveFallbackService.cs"));
+        True(source.Contains("if (reader.IsDBNull(2))") &&
+             source.Contains(
+                 "new SuccessionArchiveIdentityResult(true, false,"),
+            "a legacy archive row without generation remains insufficient evidence");
+    }
+
+    private static void DyingKingIdentitySnapshotPrecedesArchiveFallback()
+    {
+        string keys = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageKeys.cs"));
+        foreach (string token in new[]
+                 {
+                     "KINGDOM_PRE_SUCCESSION_GENERATION",
+                     "KINGDOM_PRE_SUCCESSION_LINEAGE_ID",
+                     "KINGDOM_PRE_SUCCESSION_SHI_ID"
+                 })
+            True(keys.Contains(token),
+                "pre-succession memory snapshot key exists: " + token);
+
+        string death = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_ActorDeathPatch.cs"));
+        int dyingKing = death.IndexOf("__state.DyingKingdom = __instance.kingdom;",
+            StringComparison.Ordinal);
+        int snapshot = death.IndexOf(
+            "HeirService.RememberPreSuccessionKing(__state.DyingKingdom, __instance);",
+            dyingKing, StringComparison.Ordinal);
+        True(snapshot > dyingKing,
+            "the dying king stores its AW identity snapshot before death mutation");
+
+        string authoritative = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AuthoritativeSuccessionService.cs"));
+        int context = authoritative.IndexOf(
+            "private static bool TryResolveLegitimateContext(",
+            StringComparison.Ordinal);
+        int snapshotRead = authoritative.IndexOf(
+            "TryReadPreSuccessionSnapshot(", context,
+            StringComparison.Ordinal);
+        int archiveRead = authoritative.IndexOf(
+            "ResolveIdentity(pPredecessorId)", context,
+            StringComparison.Ordinal);
+        True(snapshotRead > context && archiveRead > snapshotRead,
+            "legitimate context reads the death snapshot before archive fallback");
+        int snapshotMethod = authoritative.IndexOf(
+            "private static bool TryReadPreSuccessionSnapshot(",
+            StringComparison.Ordinal);
+        string snapshotBody = authoritative.Substring(snapshotMethod,
+            authoritative.IndexOf(
+                "private static bool TryResolvePredecessorGeneration(",
+                snapshotMethod, StringComparison.Ordinal) - snapshotMethod);
+        True(snapshotBody.Contains("int.MinValue") &&
+             snapshotBody.Contains("pGeneration == int.MinValue"),
+            "legacy saves without the new generation key cannot masquerade as generation zero snapshots");
+    }
+
+    private static void AuthoritativeFallbackConsumesArchiveEvidenceWithoutFalseUsurpation()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AuthoritativeSuccessionService.cs"));
+        int archiveResolve = source.IndexOf(
+            "SuccessionArchiveFallbackService.Resolve(",
+            StringComparison.Ordinal);
+        True(archiveResolve >= 0,
+            "authoritative succession calls the bounded AW archive fallback");
+        Equal(false, source.Contains(
+                "else if (SuccessionRelationshipIndex.IsReady)"),
+            "a ready relationship index cannot short-circuit bounded archive candidate resolution");
+        int found = source.IndexOf(
+            "SuccessionEvidenceStatus.Found", archiveResolve,
+            StringComparison.Ordinal);
+        int store = source.IndexOf(
+            "SuccessionMode.COLLATERAL_RESTORE", found,
+            StringComparison.Ordinal);
+        int restart = source.IndexOf(
+            "SuccessionArchiveFallbackService.Restart(key)", store,
+            StringComparison.Ordinal);
+        int refresh = source.IndexOf("HeirService.RefreshHeir(pKingdom)",
+            restart, StringComparison.Ordinal);
+        True(found > archiveResolve && store > found,
+            "unready relationship indexes consume the AW archive result");
+        True(source.Contains("TryResolvePredecessorGeneration("),
+            "archive fallback anchors its generation window to the live or archived predecessor");
+        True(source.Contains("SuccessionRelationshipIndex.IsReady") &&
+             source.Contains("SuccessionEvidenceStatus.PendingEvidence") &&
+             source.Contains("SuccessionRelationshipIndex.HasLivingLineageMembers("),
+            "terminal archive evidence waits for the live relationship index and reconciles wider living kin");
+        int scanProgress = source.IndexOf("archive.ScanInProgress",
+            archiveResolve, StringComparison.Ordinal);
+        True(scanProgress > archiveResolve,
+            "archive result exposes normal page progress");
+        int scheduleNextFrame = source.IndexOf(
+            "FallbackAttempts.ScheduleRetry(key, Time.frameCount, 1L)",
+            scanProgress, StringComparison.Ordinal);
+        True(scheduleNextFrame > scanProgress,
+            "successful archive page progress resumes on the next frame");
+        True(restart > store && refresh > restart,
+            "failed archive registration resets evidence and reruns heir search");
+    }
+
+    private static void CourtFallbackCollectsAllRequiredAwOfficesAndPagesWinningShi()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SuccessionCourtFallbackService.cs"));
+        foreach (string token in new[]
+                 {
+                     "MaximumActorsPerPage = 32",
+                     "Dictionary<KingSuccessionKey",
+                     "CourtService.GetActiveOfficers(pKingdom, 96)",
+                     "CourtPyramidRules.HighOfficeRank",
+                     "MilitaryGovernorateStore.GetDirectActive(",
+                     "GeneralService.GetActiveGeneralsForReadModel(",
+                     "pKingdom.getCities()",
+                     "RankFamilies(",
+                     "SHI_ID=@shi AND IS_ALIVE=1",
+                     "ID>@cursor",
+                     "LIMIT @limit",
+                     "ActorTool.attributeDice("
+                 })
+            True(source.Contains(token),
+                "court fallback source includes: " + token);
+        True(source.Contains("fact.ShiId == pRulingShiId"),
+            "the displaced ruling Shi cannot win its own usurpation fallback");
+        Equal(false, source.Contains("getSimpleArray("),
+            "court fallback never scans all live units");
+        Equal(false, source.Contains("World.world.clans") ||
+                     source.Contains("royal_clan_id") ||
+                     source.Contains("Clan "),
+            "court fallback is based only on AW Shi identity");
+        True(source.Contains("SuccessionCourtFallbackResult") &&
+             source.Contains("ScanInProgress"),
+            "court paging explicitly reports normal scan progress to its caller");
+    }
+
+    private static void PagedFallbacksRetainAlternatesAndAdvanceFamilies()
+    {
+        string archive = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SuccessionArchiveFallbackService.cs"));
+        True(archive.Contains("CandidateIds") &&
+             archive.Contains("MaximumRetainedCandidates"),
+            "archive scan keeps a bounded ranked candidate set");
+
+        string court = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SuccessionCourtFallbackService.cs"));
+        foreach (string token in new[]
+                 {
+                     "RankedShiIds",
+                     "FamilyIndex",
+                     "CandidateIds",
+                     "AdvanceFamily(",
+                     "ScanInProgress"
+                 })
+            True(court.Contains(token),
+                "court fallback supports bounded alternate progression: " + token);
+    }
+
+    private static void ArchiveCandidateLossRescanIsBounded()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SuccessionArchiveFallbackService.cs"));
+        True(source.Contains("RestartedAfterCandidateLoss"),
+            "archive fallback records its one allowed candidate-loss rescan");
+        True(source.Contains(
+                "hadRetainedCandidates &&\n                !state.RestartedAfterCandidateLoss"),
+            "archive fallback cannot rescan forever when retained actors keep invalidating");
+    }
+
+    private static void SuccessionAttemptsRetryIndefinitelyAndClearAllPagedState()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AuthoritativeSuccessionService.cs"));
+        Equal(false, source.Contains("MaximumAttempts") ||
+                     source.Contains("MaxAttempts"),
+            "pending evidence has no terminal retry count");
+        int courtStore = source.IndexOf("SuccessionMode.COURT_USURPATION",
+            StringComparison.Ordinal);
+        int courtRestart = source.IndexOf(
+            "SuccessionCourtFallbackService.Restart(key)", courtStore,
+            StringComparison.Ordinal);
+        True(courtStore >= 0 && courtRestart > courtStore,
+            "failed court registration resets its candidate scan");
+        int heirRefresh = source.IndexOf("HeirService.RefreshHeir(pKingdom)",
+            courtRestart, StringComparison.Ordinal);
+        True(heirRefresh > courtRestart,
+            "failed court registration resets its scan and reruns heir search");
+
+        int installed = source.IndexOf(
+            "internal static void OnSuccessorInstalled(",
+            StringComparison.Ordinal);
+        int reset = source.IndexOf("internal static void Reset()", installed,
+            StringComparison.Ordinal);
+        string installedBody = source.Substring(installed, reset - installed);
+        True(installedBody.Contains(
+                "KINGDOM_PRE_SUCCESSION_KING_ID"),
+            "installation cleanup can recover a missing predecessor id");
+        foreach (string token in new[]
+                 {
+                     "FallbackAttempts.Complete(key)",
+                     "SuccessionArchiveFallbackService.Complete(key)",
+                     "SuccessionCourtFallbackService.Complete(key)"
+                 })
+            True(installedBody.Contains(token),
+                "installation clears attempt state: " + token);
+        Equal(false, installedBody.Contains("if (predecessorId < 0L) return;"),
+            "success cleanup also clears scans keyed by an unknown predecessor");
+        string resetBody = source.Substring(reset);
+        True(resetBody.Contains("SuccessionArchiveFallbackService.Reset()") &&
+             resetBody.Contains("SuccessionCourtFallbackService.Reset()"),
+            "world reset clears both paged succession scans");
+    }
+
+    private static void CourtUsurpationEstablishesNewLegitimateAwLine()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AuthoritativeSuccessionService.cs"));
+        int installed = source.IndexOf("internal static void OnSuccessorInstalled(",
+            StringComparison.Ordinal);
+        int reset = source.IndexOf("internal static void Reset()", installed,
+            StringComparison.Ordinal);
+        string body = source.Substring(installed, reset - installed);
+        True(body.Contains("BindCourtUsurpationLegitimacy(") &&
+             source.Contains("SuccessionMode.COURT_USURPATION") &&
+             source.Contains("KINGDOM_LEGITIMATE_LINEAGE_ID") &&
+             source.Contains("KINGDOM_LEGITIMATE_SHI_ID"),
+            "successful court usurpation binds the installed king's AW lineage and Shi as the new legitimacy");
+    }
+
+    private static void ImperialCourtUsurpationBindsNewShiBeforeDynastyTransition()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "ChronicleEvents.cs"));
+        int ensure = source.IndexOf(
+            "private static bool EnsureInitialStateNameForRuler(",
+            StringComparison.Ordinal);
+        int project = source.IndexOf(
+            "private static bool ProjectDynasticStateNameForRuler(", ensure,
+            StringComparison.Ordinal);
+        string body = source.Substring(ensure, project - ensure);
+        True(body.Contains("pAccessionMode") &&
+             body.Contains("SuccessionMode.COURT_USURPATION") &&
+             body.Contains("KingdomTitleService.IsEmperor(pKingdom)"),
+            "imperial court usurpation uses the actor-bound accession mode snapshot");
+        True(body.Contains(
+                "!imperialCourtUsurpation && StateNameRules.ShouldSkipInitialStateBinding("),
+            "imperial usurpation bypasses only the existing-dynasty binding skip");
+
+        int initialCall = source.IndexOf(
+            "EnsureInitialStateNameForRuler(", StringComparison.Ordinal);
+        int dynastyWrite = source.IndexOf(
+            "DynastyRecordWriter.TryOnKingChanged(", initialCall,
+            StringComparison.Ordinal);
+        True(initialCall >= 0 && dynastyWrite > initialCall,
+            "the new Shi state name is bound before dynasty creation");
+        True(source.Contains(
+                "isActiveMandate: MandateService.IsMandateKingdom(pKingdom)"),
+            "court usurpation state-name projection keeps the real active-Mandate gate");
+    }
+
+    private static void AccessionModeSnapshotRetriesUntilChronicleSettlement()
+    {
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_HeirPatch.cs"));
+        int prefix = patch.IndexOf(
+            "SetKing_CaptureBranchContext_Prefix(",
+            StringComparison.Ordinal);
+        int managed = patch.IndexOf(
+            "bool managedSuccession = UsesManagedSuccession(__instance);",
+            prefix, StringComparison.Ordinal);
+        int snapshot = patch.IndexOf(
+            "HeirService.RememberAccessionModeSnapshot(", prefix,
+            StringComparison.Ordinal);
+        True(managed > prefix && snapshot > managed,
+            "non-managed setKing calls cannot leave AW accession snapshots");
+        True(patch.Contains(
+                "HeirService.RestoreAccessionModeSnapshotRetry(__instance)"),
+            "load-time setKing restores persisted pending accession retries");
+
+        string chronicle = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "ChronicleEvents.cs"));
+        int track = chronicle.IndexOf(
+            "AccessionChronicleRetryService.Track(",
+            StringComparison.Ordinal);
+        int archiveGate = chronicle.IndexOf(
+            "if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;",
+            StringComparison.Ordinal);
+        True(track >= 0 && archiveGate > track,
+            "transient archive ineligibility retains a retryable accession");
+
+        string identity = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AccessionIdentityService.cs"));
+        True(identity.Contains(
+                "AccessionChronicleRetryService.ProcessAuthorityCycle();"),
+            "the existing accession authority stage retries chronicle settlement");
+        string retryPath = Path.Combine(Directory.GetCurrentDirectory(),
+            "Code", "core", "lineage",
+            "AccessionChronicleRetryService.cs");
+        True(File.Exists(retryPath),
+            "bounded accession chronicle retry service exists");
+        string retry = File.ReadAllText(retryPath);
+        True(retry.Contains("ChronicleEvents.OnKingChanged(") &&
+             retry.Contains("RetryDelayFrames") &&
+             retry.Contains("InspectionBudget"),
+            "chronicle retries are bounded, delayed, and replay the shared settlement path");
+    }
+
+    private static void ForeignReigningHeirLeavesOldThroneBeforeTransfer()
+    {
+        string heir = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HeirService.cs"));
+        int release = heir.IndexOf(
+            "internal static bool ReleaseForeignKingshipForSuccession(",
+            StringComparison.Ordinal);
+        True(release >= 0,
+            "foreign kingship has a shared explicit release boundary");
+        string releaseBody = heir.Substring(release,
+            heir.IndexOf("private static City ResolveRegistrationHome(",
+                release, StringComparison.Ordinal) - release);
+        AssertOrdered(releaseBody,
+            "previousKingdom.king != pHeir)",
+            "ReigningRoyalLineageIndex.OnKingDying(previousKingdom",
+            "previousKingdom.kingLeftEvent()",
+            "return previousKingdom.king != pHeir;");
+        int normalize = heir.IndexOf(
+            "private static bool NormalizeHeirForRegistration(",
+            StringComparison.Ordinal);
+        int normalizeEnd = heir.IndexOf(
+            "internal static bool ReleaseForeignKingshipForSuccession(",
+            normalize, StringComparison.Ordinal);
+        True(heir.Substring(normalize, normalizeEnd - normalize).Contains(
+                "ReleaseForeignKingshipForSuccession(pKingdom, pHeir)"),
+            "heir registration clears stale foreign kingship before affiliation transfer");
+
+        string identity = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AccessionIdentityService.cs"));
+        True(identity.Contains(
+                 "HeirService.ReleaseForeignKingshipForSuccession(") &&
+             identity.Contains("pKingdom, pActor)"),
+            "the final accession preparation repeats the foreign-kingship safety boundary");
+
+        string mandate = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_MandateSuccessionPatch.cs"));
+        AssertOrdered(mandate,
+            "HeirService.PrepareRegisteredHeirForAccession(",
+            "__instance.makeKingAndMoveToCapital(pKingdom, successor)");
+    }
+
+    private static void KingLeftClearsCompletedAccessionProgress()
+    {
+        string identity = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AccessionIdentityService.cs"));
+        int removalStart = identity.IndexOf(
+            "internal static void OnKingRemoved(Kingdom pKingdom,",
+            StringComparison.Ordinal);
+        int removalEnd = identity.IndexOf(
+            "internal static void DeferInstalledKing(", removalStart,
+            StringComparison.Ordinal);
+        True(removalStart >= 0 && removalEnd > removalStart,
+            "king removal source has a stable method boundary");
+        string removal = identity.Substring(removalStart,
+            removalEnd - removalStart);
+        True(removal.Contains("progress.ActorId == pActor.data.id") &&
+             removal.Contains(
+                 "CompletionProgressByKingdom.Remove(pKingdom.id)"),
+            "king removal clears only the departed actor's completed pipeline");
+        True(removal.Contains("pending.ActorId == pActor.data.id") &&
+             removal.Contains("RemoveDeferredInstallation(pKingdom.id)"),
+            "king removal clears only the departed actor's deferred installation");
+
+        string abdicate = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_AbdicatePatch.cs"));
+        AssertOrdered(abdicate,
+            "HeirService.RememberPreSuccessionKing(__instance, __state);",
+            "ReigningRoyalLineageIndex.OnKingRemoved(__instance, __state);",
+            "[HarmonyPostfix]",
+            "if (__instance?.king == __state)",
+            "ReigningRoyalLineageIndex.OnKingInstalled(",
+            "AccessionIdentityService.OnKingRemoved(__instance, __state);",
+            "if (__state.data.id == AW_ActorDeathPatch.DyingKingActorId) return;");
+    }
+
+    private static void AccessionChronicleRetryQueueKeepsOneTokenPerKingdom()
+    {
+        string retry = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AccessionChronicleRetryService.cs"));
+        True(retry.Contains("HashSet<long> Queued") &&
+             retry.Contains("private static void EnqueueUnique("),
+            "accession chronicle retry tracks one queued token per kingdom");
+        int processStart = retry.IndexOf(
+            "internal static void ProcessAuthorityCycle()",
+            StringComparison.Ordinal);
+        int resetStart = retry.IndexOf("internal static void Reset()",
+            processStart, StringComparison.Ordinal);
+        True(processStart >= 0 && resetStart > processStart,
+            "accession chronicle retry process has a stable boundary");
+        string process = retry.Substring(processStart,
+            resetStart - processStart);
+        True(!process.Contains("Pending.Count == 0") &&
+             process.Contains("Queued.Remove(kingdomId)") &&
+             process.Contains("EnqueueUnique(kingdomId)"),
+            "stale retry tokens drain and active retries requeue uniquely");
+        string reset = retry.Substring(resetStart);
+        True(reset.Contains("Queued.Clear()"),
+            "world reset clears accession retry token ownership");
+    }
+
+    private static void SuccessionEvidenceDistinguishesPendingFromExtinction()
+    {
+        Equal(SuccessionEvidenceStatus.Found,
+            AuthoritativeSuccessionRules.ResolveEvidenceStatus(
+                pHasCandidate: true, pEvidenceAvailable: false,
+                pSearchComplete: false, pHasLivingLineageMembers: false),
+            "a resolved candidate wins over incomplete evidence");
+        Equal(SuccessionEvidenceStatus.PendingEvidence,
+            AuthoritativeSuccessionRules.ResolveEvidenceStatus(
+                pHasCandidate: false, pEvidenceAvailable: false,
+                pSearchComplete: false, pHasLivingLineageMembers: false),
+            "an unavailable archive remains pending");
+        Equal(SuccessionEvidenceStatus.EligibleLineExhausted,
+            AuthoritativeSuccessionRules.ResolveEvidenceStatus(
+                pHasCandidate: false, pEvidenceAvailable: true,
+                pSearchComplete: true, pHasLivingLineageMembers: true),
+            "a complete plus-or-minus-two succession window is exhausted without falsely declaring remote kin extinct");
+        Equal(SuccessionEvidenceStatus.ExtinctConfirmed,
+            AuthoritativeSuccessionRules.ResolveEvidenceStatus(
+                pHasCandidate: false, pEvidenceAvailable: true,
+                pSearchComplete: true, pHasLivingLineageMembers: false),
+            "complete evidence can confirm lineage extinction");
+        Equal(true, AuthoritativeSuccessionRules.CanStartCourtUsurpation(
+                SuccessionEvidenceStatus.EligibleLineExhausted),
+            "an exhausted eligible window can start regime replacement");
+        Equal(true, AuthoritativeSuccessionRules.CanStartCourtUsurpation(
+                SuccessionEvidenceStatus.ExtinctConfirmed),
+            "confirmed extinction can start regime replacement");
+        Equal(false, AuthoritativeSuccessionRules.CanStartCourtUsurpation(
+                SuccessionEvidenceStatus.PendingEvidence),
+            "unavailable evidence cannot start regime replacement");
+    }
+
+    private static void ArchiveFallbackRanksNearbyGenerationByAttribute()
+    {
+        var candidates = new[]
+        {
+            new SuccessionArchiveCandidateFact(31L, 7, 80, true),
+            new SuccessionArchiveCandidateFact(22L, 2, 99, true),
+            new SuccessionArchiveCandidateFact(19L, 6, 90, true),
+            new SuccessionArchiveCandidateFact(17L, 6, 90, true),
+            new SuccessionArchiveCandidateFact(11L, 5, 100, false)
+        };
+
+        Equal(17L, AuthoritativeSuccessionRules.SelectArchiveCandidateId(
+                pPredecessorGeneration: 5, candidates),
+            "the highest eligible nearby attribute wins with stable actor-id ties");
+    }
+
+    private static void CourtUsurpationRanksShiByOfficeWeightThenHolderCount()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SuccessionCourtFallbackService.cs"));
+        foreach (string weight in new[]
+                 {
+                     "case CourtRole.CentralHigh: return 50;",
+                     "case CourtRole.MilitaryGovernor: return 40;",
+                     "case CourtRole.General: return 35;",
+                     "default: return 25;"
+                 })
+            True(source.Contains(weight),
+                "court family ranking keeps the required office weight: " +
+                weight);
+        AssertOrdered(source,
+            ".OrderByDescending(p => p.Weight)",
+            ".ThenByDescending(p => p.Members)",
+            ".ThenBy(p => p.ShiId)");
+        True(source.Contains("strongestByActor") &&
+             source.Contains("RoleWeight(fact.Role) > RoleWeight(current.Role)"),
+            "one actor contributes only its strongest current office");
     }
 
     private static void SameLineageKeepsFlagUntilLastKingLeaves()
@@ -108,7 +850,7 @@ internal static class KingSuccessionPreparationRulesTests
             "valid registered heir never recomputes");
     }
 
-    private static void InvalidRegisteredHeirRunsFallbackOncePerDeath()
+    private static void InvalidRegisteredHeirRetriesAfterCooldown()
     {
         True(AuthoritativeSuccessionRules.ShouldRunFallback(
                 pHasValidRegisteredHeir: false,
@@ -121,20 +863,25 @@ internal static class KingSuccessionPreparationRulesTests
 
         var attempts = new SuccessionFallbackAttemptState();
         var key = new KingSuccessionKey(7L, 100L, 900L);
-        True(attempts.TryBegin(key), "the first invalid-heir fallback runs");
-        Equal(false, attempts.TryBegin(key),
-            "the same death cannot run fallback twice");
+        True(attempts.TryBegin(key, 100L, 20L),
+            "the first invalid-heir fallback runs");
+        Equal(false, attempts.TryBegin(key, 119L, 20L),
+            "the same death is throttled before its retry window");
+        True(attempts.TryBegin(key, 120L, 20L),
+            "a transiently failed fallback retries after cooldown");
         attempts.Complete(key);
-        True(attempts.TryBegin(key),
+        True(attempts.TryBegin(key, 121L, 20L),
             "successful installation releases the completed death key");
     }
 
     private static void WorldGenerationSeparatesFallbackAttempts()
     {
         var attempts = new SuccessionFallbackAttemptState();
-        True(attempts.TryBegin(new KingSuccessionKey(7L, 100L, 900L)),
+        True(attempts.TryBegin(new KingSuccessionKey(7L, 100L, 900L),
+                100L, 20L),
             "the first world accepts the death key");
-        True(attempts.TryBegin(new KingSuccessionKey(8L, 100L, 900L)),
+        True(attempts.TryBegin(new KingSuccessionKey(8L, 100L, 900L),
+                100L, 20L),
             "a new world generation is independent");
     }
 
@@ -153,6 +900,31 @@ internal static class KingSuccessionPreparationRulesTests
     private static void True(bool value, string name)
     {
         if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void PagedEvidenceContinuesOnTheNextFrame()
+    {
+        var attempts = new SuccessionFallbackAttemptState();
+        var key = new KingSuccessionKey(7L, 100L, 900L);
+        True(attempts.TryBegin(key, 100L, 256L),
+            "the first archive page starts immediately");
+        attempts.ScheduleRetry(key, 100L, 1L);
+        Equal(false, attempts.TryBegin(key, 100L, 256L),
+            "bounded paging never repeats in the same frame");
+        True(attempts.TryBegin(key, 101L, 256L),
+            "normal page progress continues on the next frame");
+    }
+
+    private static void AssertOrdered(string source, params string[] tokens)
+    {
+        int previous = -1;
+        foreach (string token in tokens)
+        {
+            int current = source.IndexOf(token, previous + 1,
+                StringComparison.Ordinal);
+            True(current > previous, "expected ordered source token: " + token);
+            previous = current;
+        }
     }
 
     private static void Equal<T>(T expected, T actual, string name)

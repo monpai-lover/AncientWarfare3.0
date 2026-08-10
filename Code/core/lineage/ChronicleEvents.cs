@@ -19,6 +19,10 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingChanged(Kingdom pKingdom, Actor pNewKing)
         {
             if (pKingdom?.data == null || pNewKing?.data == null) return;
+            bool hasAccessionModeSnapshot = HeirService.TryGetAccessionModeSnapshot(
+                pKingdom, pNewKing, out string accessionMode);
+            if (hasAccessionModeSnapshot)
+                AccessionChronicleRetryService.Track(pKingdom, pNewKing);
             if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
 
             // 防重复:记录上次为该国登记的王 id,相同则跳过。
@@ -32,17 +36,23 @@ namespace AncientWarfare3.core.lineage
                     () => ReignRecordWriter.TryTransitionReign(
                         pKingdom, pNewKing, retryStart,
                         out persistedRetryStart, out retryError),
+                    hasAccessionModeSnapshot
+                        ? () => TryPublishDynastyAndStateName(
+                            pKingdom, pNewKing, accessionMode)
+                        : (Func<bool>)(() => true),
                     () => pKingdom.king?.data?.id == pNewKing.data.id,
                     () => MandateService.OnRulerSucceeded(
                         pKingdom, pNewKing),
                     () => ReignRecordWriter.ProjectCurrentReignStart(
                         pKingdom, pNewKing, persistedRetryStart));
-                if (!retrySettled && !string.IsNullOrEmpty(retryError))
+                if (retrySettled && hasAccessionModeSnapshot)
+                    HeirService.CompleteAccessionModeSnapshot(
+                        pKingdom, pNewKing);
+                else if (!retrySettled && !string.IsNullOrEmpty(retryError))
                     ModClass.LogWarning("Ruler accession retry failed: " +
                                         retryError);
                 return;
             }
-            pNewKing.data.get(LineageKeys.SHI_ID, out long newShiId, -1L);
             double accessionTime = World.world.getCurWorldTime();
             double persistedStartTime = -1d;
             string transitionError = "";
@@ -50,80 +60,8 @@ namespace AncientWarfare3.core.lineage
                 () => ReignRecordWriter.TryTransitionReign(
                     pKingdom, pNewKing, accessionTime,
                     out persistedStartTime, out transitionError),
-                () =>
-                {
-                    if (!EnsureInitialStateNameForRuler(
-                            pKingdom, pNewKing))
-                    {
-                        WarnStateNameProjection(pKingdom, pNewKing);
-                        return false;
-                    }
-                    DynastyTransitionStatus dynastyStatus =
-                        DynastyRecordWriter.TryOnKingChanged(
-                            pKingdom, pNewKing);
-                    if (!DynastyTransitionRules.TryResolve(dynastyStatus,
-                            out _))
-                        return false;
-                    if (!DynastyRecordWriter.TryReadCurrentDynastyState(
-                            pKingdom.id,
-                            out DynastyStateNamePersistence.
-                                CurrentDynastyState dynastyState,
-                            out string dynastyStateError))
-                    {
-                        ModClass.LogWarning(
-                            "Current dynasty state read failed: " +
-                            dynastyStateError);
-                        return false;
-                    }
-                    long currentDynastyId = dynastyState.Exists
-                        ? dynastyState.DynastyId
-                        : -1L;
-                    long openReignDynastyId = -1L;
-                    if (currentDynastyId >= 0L &&
-                        !ReignRecordWriter.TryReadCurrentReignDynasty(
-                            pKingdom, pNewKing, out openReignDynastyId,
-                            out string dynastyReadError))
-                    {
-                        ModClass.LogWarning(
-                            "Reign dynasty read failed: " +
-                            dynastyReadError);
-                        return false;
-                    }
-                    DynastyReignProjectionDisposition dynastyDisposition =
-                        DynastyTransitionRules.ResolveReignProjection(
-                            dynastyStatus, currentDynastyId,
-                            openReignDynastyId);
-                    if (dynastyDisposition ==
-                        DynastyReignProjectionDisposition.Failure)
-                        return false;
-                    if (dynastyDisposition ==
-                        DynastyReignProjectionDisposition.Reconcile &&
-                        !ReignRecordWriter.TryProjectCurrentReignDynasty(
-                            pKingdom, pNewKing, currentDynastyId,
-                            out string dynastyProjectionError))
-                    {
-                        ModClass.LogWarning(
-                            "Reign dynasty projection failed: " +
-                            dynastyProjectionError);
-                        return false;
-                    }
-                    string boundStateName = newShiId >= 0L
-                        ? StateNameService.GetBoundStateName(newShiId)
-                        : "";
-                    bool stateNamePending = StateNameRules.ShouldRetryDynasticStateName(
-                            dynastyState.Exists, dynastyState.ShiId,
-                            newShiId, dynastyState.StateName,
-                            boundStateName,
-                            isEmpireRank:
-                                KingdomTitleService.IsEmperor(pKingdom),
-                            isActiveMandate: MandateService.IsMandateKingdom(pKingdom));
-                    bool projected = ProjectDynasticStateNameForRuler(
-                        pKingdom, pNewKing, newShiId, boundStateName,
-                        stateNamePending);
-                    if (!projected)
-                        WarnStateNameProjection(pKingdom, pNewKing);
-                    return projected;
-                },
+                () => TryPublishDynastyAndStateName(
+                    pKingdom, pNewKing, accessionMode),
                 () => pKingdom.king?.data?.id == pNewKing.data.id,
                 () => MandateService.OnRulerSucceeded(
                     pKingdom, pNewKing),
@@ -136,6 +74,7 @@ namespace AncientWarfare3.core.lineage
                                         transitionError);
                 return;
             }
+            HeirService.CompleteAccessionModeSnapshot(pKingdom, pNewKing);
             RecordPreviousKingLostThrone(
                 pKingdom, lastKingId, pNewKing.data.id);
             string kingName = pNewKing.getName();
@@ -642,13 +581,86 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Actor(pNoble));
         }
 
+        private static bool TryPublishDynastyAndStateName(Kingdom pKingdom,
+            Actor pNewKing, string pAccessionMode)
+        {
+            pNewKing.data.get(LineageKeys.SHI_ID, out long newShiId, -1L);
+            if (!EnsureInitialStateNameForRuler(
+                    pKingdom, pNewKing, pAccessionMode))
+            {
+                WarnStateNameProjection(pKingdom, pNewKing);
+                return false;
+            }
+            DynastyTransitionStatus dynastyStatus =
+                DynastyRecordWriter.TryOnKingChanged(pKingdom, pNewKing);
+            if (!DynastyTransitionRules.TryResolve(dynastyStatus, out _))
+                return false;
+            if (!DynastyRecordWriter.TryReadCurrentDynastyState(
+                    pKingdom.id,
+                    out DynastyStateNamePersistence.CurrentDynastyState
+                        dynastyState,
+                    out string dynastyStateError))
+            {
+                ModClass.LogWarning("Current dynasty state read failed: " +
+                                    dynastyStateError);
+                return false;
+            }
+            long currentDynastyId = dynastyState.Exists
+                ? dynastyState.DynastyId
+                : -1L;
+            long openReignDynastyId = -1L;
+            if (currentDynastyId >= 0L &&
+                !ReignRecordWriter.TryReadCurrentReignDynasty(
+                    pKingdom, pNewKing, out openReignDynastyId,
+                    out string dynastyReadError))
+            {
+                ModClass.LogWarning("Reign dynasty read failed: " +
+                                    dynastyReadError);
+                return false;
+            }
+            DynastyReignProjectionDisposition dynastyDisposition =
+                DynastyTransitionRules.ResolveReignProjection(
+                    dynastyStatus, currentDynastyId, openReignDynastyId);
+            if (dynastyDisposition ==
+                DynastyReignProjectionDisposition.Failure)
+                return false;
+            if (dynastyDisposition ==
+                DynastyReignProjectionDisposition.Reconcile &&
+                !ReignRecordWriter.TryProjectCurrentReignDynasty(
+                    pKingdom, pNewKing, currentDynastyId,
+                    out string dynastyProjectionError))
+            {
+                ModClass.LogWarning("Reign dynasty projection failed: " +
+                                    dynastyProjectionError);
+                return false;
+            }
+            string boundStateName = newShiId >= 0L
+                ? StateNameService.GetBoundStateName(newShiId)
+                : "";
+            bool stateNamePending = StateNameRules.ShouldRetryDynasticStateName(
+                    dynastyState.Exists, dynastyState.ShiId,
+                    newShiId, dynastyState.StateName, boundStateName,
+                    isEmpireRank: KingdomTitleService.IsEmperor(pKingdom),
+                    isActiveMandate: MandateService.IsMandateKingdom(pKingdom));
+            bool projected = ProjectDynasticStateNameForRuler(
+                pKingdom, pNewKing, newShiId, boundStateName,
+                stateNamePending);
+            if (!projected)
+                WarnStateNameProjection(pKingdom, pNewKing);
+            return projected;
+        }
+
         private static bool EnsureInitialStateNameForRuler(Kingdom pKingdom,
-            Actor pRuler)
+            Actor pRuler, string pAccessionMode)
         {
             if (!LineageService.IsXiaKingdom(pKingdom) &&
                 !XiaizationService.UsesXiaizedInstitutionSystem(pKingdom)) return true;
             pRuler.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
             if (shiId < 0) return true;
+            bool imperialCourtUsurpation = string.Equals(pAccessionMode,
+                SuccessionMode.COURT_USURPATION,
+                StringComparison.Ordinal) &&
+                KingdomTitleService.IsEmperor(pKingdom);
             ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
             long currentShiId =
                 DynastyRecordWriter.GetCurrentDynastyShiId(pKingdom.id);
@@ -656,7 +668,9 @@ namespace AncientWarfare3.core.lineage
                 HistoricalFigureService.GetPreferredKingdomName(pRuler);
             bool hasHistoricalPreferredName =
                 StateNameRules.IsValid(preferredStateName);
-            if (StateNameRules.ShouldSkipInitialStateBinding(
+            bool isActiveMandate =
+                MandateService.IsMandateKingdom(pKingdom);
+            if (!imperialCourtUsurpation && StateNameRules.ShouldSkipInitialStateBinding(
                     currentShiId >= 0, hasHistoricalPreferredName) ||
                 !StateNameRules.IsValid(pKingdom.name)) return true;
             StateNameCommitResult initial =
@@ -664,7 +678,9 @@ namespace AncientWarfare3.core.lineage
                     pKingdom, pRuler, shiId, -1L,
                     branch?.origin_kingdom_id ?? pKingdom.id,
                     preferredStateName);
-            if (initial.Success && hasHistoricalPreferredName)
+            if (StateNameRules.ShouldProjectInitialHistoricalStateName(
+                    initial.Success, hasHistoricalPreferredName,
+                    isActiveMandate))
             {
                 bool projected = StateNameService.ProjectCommittedStateName(pKingdom, initial);
                 if (projected)

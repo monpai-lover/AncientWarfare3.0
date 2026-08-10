@@ -323,7 +323,10 @@ namespace AncientWarfare3.core.lineage
 
         public static bool HasTraceableArchive(Actor pActor)
         {
-            return pActor?.data != null && LineageArchiveReader.ReadRow(pActor.data.id) != null;
+            if (pActor?.data == null) return false;
+            long actorId = pActor.data.id;
+            return ActorArchivePresenceIndex.Contains(actorId) ||
+                   ActorArchivePendingStore.TryRead(actorId, out _);
         }
 
         public static void ArchiveTraceableActor(Actor pActor, bool pAlive)

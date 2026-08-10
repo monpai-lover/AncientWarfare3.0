@@ -2234,6 +2234,18 @@ internal static class MandateSuccessionRegressionRulesTests
                 changedRulingShi: true, hasExistingBoundStateName: true,
                 isActiveMandate: true),
             "a Mandate succession cannot replace the imperial state name with a branch state");
+        Equal(false,
+            StateNameRules.ShouldProjectInitialHistoricalStateName(
+                bindingSucceeded: true,
+                hasHistoricalPreferredName: true,
+                isActiveMandate: true),
+            "a historical ruler preference cannot bypass the active Mandate name gate");
+        Equal(true,
+            StateNameRules.ShouldProjectInitialHistoricalStateName(
+                bindingSucceeded: true,
+                hasHistoricalPreferredName: true,
+                isActiveMandate: false),
+            "a non-Mandate historical ruler can still project its committed state name");
     }
 
     private static void SavedMandateReignUsesImperialPosthumousRank()

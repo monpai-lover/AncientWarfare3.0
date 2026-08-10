@@ -155,6 +155,14 @@ namespace AncientWarfare3.core.lineage
                        boundStateName, StringComparison.Ordinal);
         }
 
+        public static bool ShouldProjectInitialHistoricalStateName(
+            bool bindingSucceeded, bool hasHistoricalPreferredName,
+            bool isActiveMandate)
+        {
+            return bindingSucceeded && hasHistoricalPreferredName &&
+                   !isActiveMandate;
+        }
+
         private static bool LooksLikeLocalizationKey(string pValue)
         {
             if (pValue.StartsWith("aw_", StringComparison.OrdinalIgnoreCase) ||

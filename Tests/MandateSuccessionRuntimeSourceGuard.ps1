@@ -322,6 +322,21 @@ Require $dynastyWriter 'TryReadCurrentDynastyState' `
     'state-name retry cannot observe the durable active dynasty marker'
 Require $chronicleCode 'StateNameRules.ShouldRetryDynasticStateName(' `
     'state-name retry still depends only on transient created status'
+$initialStateStart = $chronicleCode.IndexOf(
+    'private static bool EnsureInitialStateNameForRuler(')
+$initialStateEnd = $chronicleCode.IndexOf(
+    'private static bool ProjectDynasticStateNameForRuler(',
+    $initialStateStart)
+if ($initialStateStart -lt 0 -or $initialStateEnd -le $initialStateStart) {
+    throw 'initial state-name binding method boundary is missing'
+}
+$initialState = $chronicleCode.Substring($initialStateStart,
+    $initialStateEnd - $initialStateStart)
+Require $initialState 'MandateService.IsMandateKingdom(pKingdom)' `
+    'initial state-name binding does not read the real active Mandate state'
+Require $initialState `
+    'StateNameRules.ShouldProjectInitialHistoricalStateName(' `
+    'historical preferred names can bypass the active Mandate projection gate'
 RequireOrder $chronicleCode 'StateNameService.ProjectExistingStateName(' `
     'DynastyRecordWriter.UpdateCurrentStateName(' `
     'dynasty marker advances before runtime state-name projection succeeds'

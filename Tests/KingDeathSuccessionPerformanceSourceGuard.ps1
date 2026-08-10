@@ -12,11 +12,19 @@ function Read-Source([string]$relativePath) {
 $death = Read-Source 'Code/patch/AW_ActorDeathPatch.cs'
 $mandate = Read-Source 'Code/patch/AW_MandateSuccessionPatch.cs'
 $heir = Read-Source 'Code/patch/AW_HeirPatch.cs'
+$chroniclePatch = Read-Source 'Code/patch/AW_ChroniclePatch.cs'
+$chronicle = Read-Source 'Code/core/lineage/ChronicleEvents.cs'
+$heirService = Read-Source 'Code/core/lineage/HeirService.cs'
+$candidateService = Read-Source `
+    'Code/core/lineage/InheritanceCandidateService.cs'
+$authoritative = Read-Source `
+    'Code/core/lineage/AuthoritativeSuccessionService.cs'
 $persistence = Read-Source `
     'Code/core/lineage/SuccessionDisputePersistenceService.cs'
 $dispute = Read-Source 'Code/core/lineage/SuccessionDisputeService.cs'
 $authority = Read-Source 'Code/core/performance/AWAuthorityCycleService.cs'
 $identity = Read-Source 'Code/core/lineage/AccessionIdentityService.cs'
+$lineageKeys = Read-Source 'Code/core/lineage/LineageKeys.cs'
 $code = (Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Code') `
     -Recurse -Filter '*.cs' | ForEach-Object {
         Get-Content -Raw -Encoding UTF8 $_.FullName
@@ -46,15 +54,67 @@ foreach ($forbidden in @('BuildSnapshot(',
     }
 }
 
+if (-not [regex]::IsMatch($mandate,
+        'Actor\s+successor\s*=\s*AuthoritativeSuccessionService\s*\.\s*EnsureRegisteredCandidate\s*\(')) {
+    throw 'dead-king handling must resolve the authoritative successor'
+}
+if (-not $mandate.Contains('pKingdom.data.timer_new_king > 0f')) {
+    throw 'managed succession must preserve the native accession delay'
+}
 if (-not $mandate.Contains(
-        'AuthoritativeSuccessionService.EnsureRegisteredCandidate(')) {
-    throw 'dead-king handling must validate the registered heir once'
+        '__instance.makeKingAndMoveToCapital(pKingdom, successor);')) {
+    throw 'a valid registered heir must use the native king installer directly'
+}
+if ($mandate.Contains('if (!pKingdom.hasKing()) return true;')) {
+    throw 'managed succession cannot fall back to native royal-clan selection'
+}
+if (-not $authoritative.Contains(
+        'AuthoritativeSuccessionRules.CanStartCourtUsurpation(') -or
+    -not $authoritative.Contains(
+        'SuccessionCourtFallbackService.ResolveCandidate(') -or
+    -not $authoritative.Contains('SuccessionMode.COURT_USURPATION')) {
+    throw 'court usurpation must follow confirmed AW lineage extinction'
+}
+foreach ($source in @($mandate, $authoritative, $heirService,
+        $candidateService)) {
+    if ($source.Contains('royal_clan_id') -or
+        $source.Contains('World.world.clans')) {
+        throw 'managed succession still depends on native royal clan state'
+    }
+}
+if ($candidateService.Contains('AddRoyalClanMembers')) {
+    throw 'managed succession candidate collection still imports native clan members'
 }
 if (-not $heir.Contains('HeirService.PeekRegisteredHeir(pKingdom)')) {
     throw 'native royal-clan selection must consume the registered heir'
 }
 if ($death.Contains('SuccessionPreparationService.CaptureDeath')) {
     throw 'Actor.die must not capture a succession snapshot'
+}
+foreach ($accessionKey in @('KINGDOM_PENDING_ACCESSION_ACTOR_ID',
+        'KINGDOM_PENDING_ACCESSION_MODE')) {
+    if (-not $lineageKeys.Contains($accessionKey)) {
+        throw "actor-bound accession mode key is missing: $accessionKey"
+    }
+}
+if (-not $heir.Contains('HeirService.RememberAccessionModeSnapshot(')) {
+    throw 'setKing must capture accession mode before heir cleanup'
+}
+if (-not $chronicle.Contains('HeirService.TryGetAccessionModeSnapshot(') -or
+    -not $chronicle.Contains('HeirService.CompleteAccessionModeSnapshot(') -or
+    -not $chronicle.Contains('TryPublishDynastyAndStateName(')) {
+    throw 'chronicle accession must consume and settle the actor-bound mode snapshot'
+}
+foreach ($snapshotKey in @('KINGDOM_PRE_SUCCESSION_GENERATION',
+        'KINGDOM_PRE_SUCCESSION_LINEAGE_ID',
+        'KINGDOM_PRE_SUCCESSION_SHI_ID')) {
+    if (-not $lineageKeys.Contains($snapshotKey)) {
+        throw "dying-king memory snapshot key is missing: $snapshotKey"
+    }
+}
+if (-not $death.Contains(
+        'HeirService.RememberPreSuccessionKing(__state.DyingKingdom, __instance);')) {
+    throw 'dying king identity must be snapshotted before the native death mutation'
 }
 if (-not $heir.Contains(
         'AccessionIdentityService.CompleteInstalledKing(')) {

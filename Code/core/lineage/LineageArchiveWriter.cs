@@ -18,11 +18,17 @@ namespace AncientWarfare3.core.lineage
         public static bool Upsert(Actor pActor, bool pAlive,
             bool pTraceOnly = false, bool pFinalizeProjection = true)
         {
-            return Upsert(pActor, pAlive, pTraceOnly,
+            bool accepted = Upsert(pActor, pAlive, pTraceOnly,
                 pForceSynchronous: false,
                 pAllowSynchronousFallback: true,
                 pFinalizeProjection: pFinalizeProjection,
                 pIdentityOnlyProjection: false);
+            long actorId = pActor?.data?.id ?? -1L;
+            if (accepted && pAlive)
+                ActorArchivePresenceIndex.Mark(actorId);
+            else if (accepted)
+                ActorArchivePresenceIndex.Remove(actorId);
+            return accepted;
         }
 
         public static bool QueueDeath(Actor pActor, bool pTraceOnly)
@@ -45,8 +51,10 @@ namespace AncientWarfare3.core.lineage
             FamilyTreeProjectionChange projectionChange = previous == null
                 ? FamilyTreeProjectionChange.LifeStatus
                 : ResolveProjectionChange(previous, snapshot);
-            return ActorDeathArchiveService.EnqueueLineage(snapshot,
+            bool accepted = ActorDeathArchiveService.EnqueueLineage(snapshot,
                 projectionChange, pFinalizeProjection: true);
+            if (accepted) ActorArchivePresenceIndex.Remove(pActor.data.id);
+            return accepted;
         }
 
         private static bool Upsert(Actor pActor, bool pAlive,

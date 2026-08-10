@@ -27,6 +27,11 @@ namespace AncientWarfare3.core.lineage
 
         internal static void OnKingDying(Kingdom pKingdom, Actor pKing)
         {
+            OnKingRemoved(pKingdom, pKing);
+        }
+
+        internal static void OnKingRemoved(Kingdom pKingdom, Actor pKing)
+        {
             if (pKingdom?.data == null || pKing?.data == null ||
                 pKingdom.king != pKing) return;
             State.RemoveKingdom(pKingdom.id);

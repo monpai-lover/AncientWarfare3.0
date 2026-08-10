@@ -57,6 +57,7 @@ namespace AncientWarfare3.core.lineage
             if (Pending.Count >= Capacity) return false;
             Pending[actorId] = item;
             Order.Enqueue(actorId);
+            ActorArchivePresenceIndex.Remove(actorId);
             FamilyTreeProjectionRevision.Advance(pProjectionChange);
             return true;
         }

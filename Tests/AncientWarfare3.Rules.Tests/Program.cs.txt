@@ -136,6 +136,13 @@ if (args.Length == 1 && args[0] == "--mandate-succession-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--authoritative-succession-slice")
+{
+    KingSuccessionPreparationRulesTests.Run();
+    Console.WriteLine("Authoritative succession rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--lineage-family-migration-slice")
 {
     LineageFamilyArchiveMigrationTests.Run();

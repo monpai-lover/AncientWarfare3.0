@@ -61,6 +61,13 @@ namespace AncientWarfare3.core.court
             return eligible && !isKing;
         }
 
+        public static bool CanUseLocalCandidate(bool otherwiseEligible,
+            bool westernProfile, bool historicalSchoolEligible)
+        {
+            return otherwiseEligible &&
+                   (westernProfile || historicalSchoolEligible);
+        }
+
         public static WesternCourtElectionCandidate SelectWinner(
             IEnumerable<WesternCourtElectionCandidate> candidates)
         {

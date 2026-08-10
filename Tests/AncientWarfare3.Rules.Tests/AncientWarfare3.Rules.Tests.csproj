@@ -815,7 +815,10 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\HierarchicalVassalOccupationReuseSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\RtsSchedulingPerformanceSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\SyntheticMobilizationSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\DeathSqlHotPathSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\AnnualPolicyHotPathSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\DiplomacyAiToggleSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WesternCourtCandidateEligibilitySourceGuard.ps1&quot;" />
   </Target>
   <Target Name="XiaItemDynamicAtlasSourceGuard"
       BeforeTargets="Build">

@@ -70,7 +70,6 @@ namespace AncientWarfare3.core.lineage
                     GetLivingShiMemberIds(shiId,
                     InheritanceCandidateRules.MaximumArchiveIds), result, seen);
 
-            if (!AtLimit(result)) AddRoyalClanMembers(pKingdom, result, seen);
             return result;
         }
 
@@ -169,24 +168,6 @@ namespace AncientWarfare3.core.lineage
 
             if (IsFastAdultRoyalCandidate(registered, pKingdom, lineageId,
                     shiId)) return true;
-
-            int scanned = 0;
-            try
-            {
-                long clanId = pKingdom.data.royal_clan_id;
-                Clan clan = clanId < 0 ? null : World.world?.clans?.get(clanId);
-                if (clan?.units != null)
-                {
-                    foreach (Actor actor in clan.units)
-                    {
-                        if (scanned++ >=
-                            InheritanceCandidateRules.MaximumArchiveIds) break;
-                        if (IsFastAdultRoyalCandidate(actor, pKingdom,
-                                lineageId, shiId)) return true;
-                    }
-                }
-            }
-            catch { }
 
             IReadOnlyList<long> archiveIds = lineageId >= 0
                 ? SuccessionRelationshipIndex.GetLivingLineageMemberIds(
@@ -751,24 +732,6 @@ namespace AncientWarfare3.core.lineage
                 InheritanceCandidateRules.MaximumArchiveIds);
             for (int i = 0; i < limit && !AtLimit(pResult); i++)
                 AddLive(ResolveActor(pIds[i]), pResult, pSeen);
-        }
-
-        private static void AddRoyalClanMembers(Kingdom pKingdom,
-            List<Actor> pResult, HashSet<long> pSeen)
-        {
-            try
-            {
-                long clanId = pKingdom.data.royal_clan_id;
-                if (clanId < 0) return;
-                Clan clan = World.world?.clans?.get(clanId);
-                if (clan?.units == null) return;
-                foreach (Actor actor in clan.units)
-                {
-                    AddLive(actor, pResult, pSeen);
-                    if (AtLimit(pResult)) break;
-                }
-            }
-            catch { }
         }
 
         private static void AddLive(Actor pActor, List<Actor> pResult,

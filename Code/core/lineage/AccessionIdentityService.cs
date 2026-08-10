@@ -75,11 +75,25 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ClearRuntime()
         {
+            AccessionChronicleRetryService.Reset();
             DeferredInstallations.Clear();
             DeferredInstallationOrder.Clear();
             _deferredInstallationCursor = 0;
             CompletionProgressByKingdom.Clear();
             _capitalRepairInProgress = false;
+        }
+
+        internal static void OnKingRemoved(Kingdom pKingdom, Actor pActor)
+        {
+            if (pKingdom?.data == null || pActor?.data == null) return;
+            if (CompletionProgressByKingdom.TryGetValue(pKingdom.id,
+                    out AccessionCompletionProgress progress) &&
+                progress.ActorId == pActor.data.id)
+                CompletionProgressByKingdom.Remove(pKingdom.id);
+            if (DeferredInstallations.TryGetValue(pKingdom.id,
+                    out DeferredInstallation pending) &&
+                pending.ActorId == pActor.data.id)
+                RemoveDeferredInstallation(pKingdom.id);
         }
 
         internal static void DeferInstalledKing(Kingdom pKingdom, Actor pActor)
@@ -141,6 +155,7 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessDeferredInstallations()
         {
+            AccessionChronicleRetryService.ProcessAuthorityCycle();
             if (DeferredInstallations.Count == 0 ||
                 World.world?.kingdoms == null || World.world?.units == null)
                 return;
@@ -505,6 +520,13 @@ namespace AncientWarfare3.core.lineage
 
             pActor.data.set(LineageKeys.CAPTIVE_NOBLE_TITLE, "");
             pActor.data.set(LineageKeys.CAPTIVE_NOBLE_COLOR, "");
+
+            if (!HeirService.ReleaseForeignKingshipForSuccession(
+                    pKingdom, pActor))
+            {
+                LastPrepareFailureReason = "foreign_kingship_release";
+                return false;
+            }
 
             City previousCity = pActor.city;
             if (previousCity?.leader == pActor)

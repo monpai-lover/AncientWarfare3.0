@@ -90,6 +90,7 @@ namespace AncientWarfare3.core.db
                 LineageArchivePragmaService.Configure(_db);
                 Interlocked.Increment(ref _runtimeDatabaseEpoch);
                 InitializeTables();
+                ActorArchivePresenceIndex.ResetEmpty();
                 InitializeSuccessful = true;
             }
             catch (Exception e)
@@ -155,6 +156,7 @@ namespace AncientWarfare3.core.db
                 File.Copy(savedDb, runtime, overwrite: true);
                 OpenRuntimeDatabase(runtime);
                 EnsureLoadedSchema(); // 注册表元信息 + 旧档案幂等补列(否则 Insert 抛 KeyNotFound / no such column)
+                ActorArchivePresenceIndex.Rebuild(_db);
                 InitializeSuccessful = true;
                 return true;
             }
@@ -377,6 +379,7 @@ namespace AncientWarfare3.core.db
                 {
                     OpenRuntimeDatabase(runtime);
                     EnsureLoadedSchema();
+                    ActorArchivePresenceIndex.Rebuild(_db);
                     InitializeSuccessful = true;
                 }
                 catch
@@ -389,6 +392,7 @@ namespace AncientWarfare3.core.db
                         runtimeMoved = false;
                         OpenRuntimeDatabase(runtime);
                         EnsureLoadedSchema();
+                        ActorArchivePresenceIndex.Rebuild(_db);
                         InitializeSuccessful = true;
                         backup = null;
                     }
@@ -413,6 +417,7 @@ namespace AncientWarfare3.core.db
                         runtimeMoved = false;
                         OpenRuntimeDatabase(runtime);
                         EnsureLoadedSchema();
+                        ActorArchivePresenceIndex.Rebuild(_db);
                         InitializeSuccessful = true;
                         backup = null;
                     }
@@ -455,6 +460,7 @@ namespace AncientWarfare3.core.db
             _db.Close();
             _db.Dispose();
             _db = null;
+            ActorArchivePresenceIndex.ClearUnknown();
             Interlocked.Increment(ref _runtimeDatabaseEpoch);
         }
 

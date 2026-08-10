@@ -69,6 +69,7 @@ namespace AncientWarfare3.core.lineage
                             parent2Id, sequence, error),
                         out long queuedSequence, out _))
                 {
+                    ActorArchivePresenceIndex.Mark(childId);
                     return new LineageBirthArchiveResult(
                         LineageBirthArchiveStatus.Queued, childId,
                         parent1Id, parent2Id, string.Empty);
@@ -148,6 +149,7 @@ namespace AncientWarfare3.core.lineage
                     childId, FamilyTreeProjectionChange.FamilyStructure,
                     finalWriteSucceeded: true);
             FamilyTreeProjectionRevision.Advance(committedChange);
+            ActorArchivePresenceIndex.Mark(childId);
             return new LineageBirthArchiveResult(
                 LineageBirthArchiveStatus.Committed, childId, parent1Id,
                 parent2Id, string.Empty);

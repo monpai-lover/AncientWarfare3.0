@@ -23,6 +23,20 @@ namespace AncientWarfare3.core.naming
         internal string MetaType { get; }
         internal long ObjectId { get; }
         internal AWLocalizedNameIdentitySnapshot Snapshot { get; }
+        internal int FailureCount { get; private set; }
+        internal long RetryAfterFlush { get; private set; }
+
+        internal bool IsReady(long pFlushSequence)
+        {
+            return pFlushSequence >= RetryAfterFlush;
+        }
+
+        internal void MarkFailed(long pFlushSequence)
+        {
+            FailureCount++;
+            int exponent = Math.Min(6, FailureCount);
+            RetryAfterFlush = pFlushSequence + (1L << exponent);
+        }
     }
 
     internal sealed class AWBoundedLocalizedNameWriteQueue
@@ -34,6 +48,7 @@ namespace AncientWarfare3.core.naming
             AWLocalizedNamePendingWrite>> _byIdentity =
             new Dictionary<Identity, LinkedListNode<
                 AWLocalizedNamePendingWrite>>();
+        private long _flushSequence;
 
         internal AWBoundedLocalizedNameWriteQueue(int pCapacity)
         {
@@ -93,22 +108,29 @@ namespace AncientWarfare3.core.naming
             Func<AWLocalizedNamePendingWrite, bool> pWrite)
         {
             if (pBudget <= 0 || pWrite == null) return 0;
+            _flushSequence++;
             int completed = 0;
-            while (completed < pBudget && TryDequeue(
+            int inspected = 0;
+            int maximumInspections = Math.Min(pBudget, _pending.Count);
+            while (inspected < maximumInspections && TryDequeue(
                        out AWLocalizedNamePendingWrite pending))
             {
+                inspected++;
+                if (!pending.IsReady(_flushSequence))
+                {
+                    RequeueLast(pending);
+                    continue;
+                }
+
                 bool succeeded;
                 try { succeeded = pWrite(pending); }
-                catch
-                {
-                    RequeueFirst(pending);
-                    throw;
-                }
+                catch { succeeded = false; }
 
                 if (!succeeded)
                 {
-                    RequeueFirst(pending);
-                    break;
+                    pending.MarkFailed(_flushSequence);
+                    RequeueLast(pending);
+                    continue;
                 }
                 completed++;
             }
@@ -120,6 +142,7 @@ namespace AncientWarfare3.core.naming
             _pending.Clear();
             _byIdentity.Clear();
             FullRescanRequired = false;
+            _flushSequence = 0L;
         }
 
         internal void ClearFullRescanRequired()
@@ -127,7 +150,7 @@ namespace AncientWarfare3.core.naming
             FullRescanRequired = false;
         }
 
-        private void RequeueFirst(AWLocalizedNamePendingWrite pPending)
+        private void RequeueLast(AWLocalizedNamePendingWrite pPending)
         {
             var identity = new Identity(pPending.MetaType, pPending.ObjectId);
             if (_byIdentity.TryGetValue(identity,
@@ -135,11 +158,11 @@ namespace AncientWarfare3.core.naming
             {
                 existing.Value = pPending;
                 _pending.Remove(existing);
-                _pending.AddFirst(existing);
+                _pending.AddLast(existing);
                 return;
             }
             LinkedListNode<AWLocalizedNamePendingWrite> node =
-                _pending.AddFirst(pPending);
+                _pending.AddLast(pPending);
             _byIdentity[identity] = node;
         }
 

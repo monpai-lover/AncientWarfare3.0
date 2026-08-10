@@ -28,6 +28,18 @@ internal static class WesternCourtElectionRulesTests
         Equal(true, WesternCourtElectionRules.CanStand(
                 eligible: true, isKing: false),
             "eligible incumbent may stand again");
+        Equal(true, WesternCourtElectionRules.CanUseLocalCandidate(
+                otherwiseEligible: true, westernProfile: true,
+                historicalSchoolEligible: false),
+            "Western local candidate does not require historical education");
+        Equal(false, WesternCourtElectionRules.CanUseLocalCandidate(
+                otherwiseEligible: true, westernProfile: false,
+                historicalSchoolEligible: false),
+            "non-Western candidate keeps the historical education gate");
+        Equal(false, WesternCourtElectionRules.CanUseLocalCandidate(
+                otherwiseEligible: false, westernProfile: true,
+                historicalSchoolEligible: true),
+            "Western education exemption never bypasses common safety gates");
 
         var incumbent = Candidate(10, incumbent: true, ability: 20,
             merit: 20, family: 20, school: 20, faction: 20);

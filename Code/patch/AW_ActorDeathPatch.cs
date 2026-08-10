@@ -48,6 +48,7 @@ namespace AncientWarfare3.patch
             {
                 __state.DyingKingdom = __instance.kingdom;
                 __state.DyingKingActorId = __instance.data.id;
+                HeirService.RememberPreSuccessionKing(__state.DyingKingdom, __instance);
             }
 
             long militaryStage = RuntimePerformanceDiagnostic.BeginDeathStage(

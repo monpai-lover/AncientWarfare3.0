@@ -53,6 +53,8 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return true;
             if (pFromLoad || __instance?.data == null || pActor?.data == null)
                 return true;
+            bool managedSuccession = UsesManagedSuccession(__instance);
+            if (!managedSuccession) return true;
             __state.PreviousKing = __instance.king;
             HeirService.RememberPreSuccessionKing(__instance, __state.PreviousKing);
 
@@ -62,12 +64,12 @@ namespace AncientWarfare3.patch
             __instance.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
             __instance.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE,
                 out __state.SuccessionSourceMode, SuccessionMode.NONE);
+            HeirService.RememberAccessionModeSnapshot(__instance, pActor,
+                __state.SuccessionSourceMode);
             pActor.data.get(LineageKeys.IS_HEIR, out bool heirFlag, false);
             __state.WasRegisteredHeir = heirFlag || heirId == pActor.data.id;
             __state.AccessionLaw =
                 InheritanceLawService.GetEffectiveLaw(__instance);
-            bool managedSuccession = UsesManagedSuccession(__instance);
-            if (!managedSuccession) return true;
             if (AccessionIdentityRules.ShouldDeferForInitialKingdomCreation(
                     managedSuccession,
                     pHasCurrentKing: __instance.king?.data != null,
@@ -93,7 +95,12 @@ namespace AncientWarfare3.patch
             KingBranchContext __state)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
-            if (pFromLoad || __instance?.data == null) return;
+            if (__instance?.data == null) return;
+            if (pFromLoad)
+            {
+                HeirService.RestoreAccessionModeSnapshotRetry(__instance);
+                return;
+            }
             if (!UsesManagedSuccession(__instance)) return;
             Actor king = pActor ?? __instance.king;
             bool setKingSucceeded = king?.data != null &&

@@ -10,17 +10,26 @@ namespace AncientWarfare3.patch
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(KingdomBehCheckKing), nameof(KingdomBehCheckKing.execute))]
-        public static bool Execute_Prefix(Kingdom pKingdom,
+        public static bool Execute_Prefix(KingdomBehCheckKing __instance,
+            Kingdom pKingdom,
             ref BehResult __result)
         {
             if (!UsesManagedLineage(pKingdom)) return true;
-            if (!pKingdom.hasKing()) return true;
+            if (pKingdom.data.timer_new_king > 0f) return true;
             Actor king = pKingdom.king;
-            if (king?.data == null || king.isAlive()) return true;
-            AuthoritativeSuccessionService.EnsureRegisteredCandidate(
+            if (king?.data != null && king.isAlive()) return true;
+            Actor successor = AuthoritativeSuccessionService.EnsureRegisteredCandidate(
                 pKingdom, king);
-            if (!AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king))
-                return true;
+            if (king?.data != null &&
+                AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king))
+            {
+                __result = BehResult.Continue;
+                return false;
+            }
+            if (successor?.data != null &&
+                HeirService.PrepareRegisteredHeirForAccession(
+                    pKingdom, successor))
+                __instance.makeKingAndMoveToCapital(pKingdom, successor);
             __result = BehResult.Continue;
             return false;
         }

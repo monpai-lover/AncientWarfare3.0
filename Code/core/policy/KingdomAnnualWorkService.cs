@@ -56,6 +56,7 @@ namespace AncientWarfare3.core.policy
             LastCompletedYear.Clear();
             KingdomFoodReliefService.ClearRuntime();
             AsyncKingdomStrategyService.ClearRuntime();
+            CityBureauAnnualWorkService.ClearRuntime();
         }
 
         private static void Enqueue(long pKingdomId)
