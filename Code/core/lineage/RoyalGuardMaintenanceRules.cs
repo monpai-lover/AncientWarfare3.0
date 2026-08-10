@@ -268,6 +268,12 @@ namespace AncientWarfare3.core.lineage
                    !pRuntimeJobMatches;
         }
 
+        public static bool ShouldRepairGuardTask(
+            bool pProtectTaskActive, bool pFollowTaskActive)
+        {
+            return !pProtectTaskActive && !pFollowTaskActive;
+        }
+
         // 每趟维护只重建有限个禁卫头像(clearGraphicsFully 极贵),其余标脏留到后续趟处理,
         // 把编队/改制时的瞬时图形重建尖峰摊平到多趟。
         public static bool ShouldRebuildGuardGraphicsNow(bool pGfxDirty, int pRebuiltThisPass, int pBudget)

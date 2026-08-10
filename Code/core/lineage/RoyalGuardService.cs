@@ -225,6 +225,7 @@ namespace AncientWarfare3.core.lineage
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardRefreshCaptain, CityMaintenanceBenchmarkRules.Group);
             RefreshGuardIdentity(captain, pKingdom, guardName, pCaptain: true, guardArmy,
                 ref runtimeRefreshesApplied, RUNTIME_REFRESH_BATCH_LIMIT);
+            RepairProtectKingTaskIfNeeded(captain);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefreshCaptain, CityMaintenanceBenchmarkRules.Group);
             pKingdom.data.get(LineageKeys.ROYAL_GUARD_REFRESH_CURSOR, out int refreshCursor, 0);
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardRefreshBatch, CityMaintenanceBenchmarkRules.Group);
@@ -245,6 +246,7 @@ namespace AncientWarfare3.core.lineage
                     continue;
                 RefreshGuardIdentity(guard, pKingdom, guardName, pCaptain: false, guardArmy,
                     ref runtimeRefreshesApplied, RUNTIME_REFRESH_BATCH_LIMIT);
+                RepairProtectKingTaskIfNeeded(guard);
             }
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefreshBatch, CityMaintenanceBenchmarkRules.Group);
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_REFRESH_CURSOR,
@@ -548,6 +550,18 @@ namespace AncientWarfare3.core.lineage
                 pActor.ai.setTask(GuardContent.TASK_FOLLOW_KING);
             }
             catch { }
+        }
+
+        private static void RepairProtectKingTaskIfNeeded(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            bool protectTask = pActor.isTask(
+                GuardContent.TASK_PROTECT_KING);
+            bool followTask = pActor.isTask(
+                GuardContent.TASK_FOLLOW_KING);
+            if (RoyalGuardMaintenanceRules.ShouldRepairGuardTask(
+                    protectTask, followTask))
+                EnsureProtectKingTask(pActor);
         }
 
         public static bool IsValidThreatForGuard(Actor pGuard, Actor pTarget)
