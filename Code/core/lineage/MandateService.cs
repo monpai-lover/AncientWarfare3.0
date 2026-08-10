@@ -1181,8 +1181,43 @@ namespace AncientWarfare3.core.lineage
                     AW3MultiplayerReplicaScope.IsReplicaSession))
                 return;
             if (pCity?.data == null || pCity.kingdom != pOldKingdom) return;
+            ApplyImmediateCoreCityLoss(pCity, pOldKingdom, pNewKingdom);
             TrackHostileMandateFinalCityConqueror(pOldKingdom,
                 pNewKingdom);
+        }
+
+        private static void ApplyImmediateCoreCityLoss(City pCity,
+            Kingdom pOldKingdom, Kingdom pNewKingdom)
+        {
+            MandateReport report = ReadReport();
+            bool ownerChanged = pOldKingdom?.data != null &&
+                                pNewKingdom != pOldKingdom;
+            if (!MandateCoreTransferRules.ShouldApplyMandateLoss(
+                    report.period_id >= 0,
+                    _coreCityIds.Contains(pCity.id),
+                    report.active && report.kingdom_id == pOldKingdom?.id,
+                    ownerChanged)) return;
+
+            int year = Date.getCurrentYear();
+            pOldKingdom.data.get(LineageKeys.MANDATE_CITY_LOSS_YEAR,
+                out int lossYear, int.MinValue);
+            pOldKingdom.data.get(
+                LineageKeys.MANDATE_CITY_LOSS_ACCUMULATED,
+                out int accumulatedLoss, 0);
+            if (lossYear != year) accumulatedLoss = 0;
+
+            bool capital = pOldKingdom.capital == pCity;
+            int requestedDelta = MandateDeclineRules.CityTransferDelta(capital);
+            int allowedDelta = MandateCoreTransferRules.
+                AllowedAnnualLossDelta(accumulatedLoss, requestedDelta);
+            if (allowedDelta == 0) return;
+
+            pOldKingdom.data.set(LineageKeys.MANDATE_CITY_LOSS_YEAR, year);
+            pOldKingdom.data.set(
+                LineageKeys.MANDATE_CITY_LOSS_ACCUMULATED,
+                accumulatedLoss + allowedDelta);
+            ChangeMandate(pOldKingdom, allowedDelta,
+                capital ? "mandate_capital_lost" : "mandate_core_city_lost");
         }
 
         private static void TrackHostileMandateFinalCityConqueror(
@@ -1419,12 +1454,23 @@ namespace AncientWarfare3.core.lineage
                 return;
             if (pWar?.data == null) return;
             string type = GetWarType(pWar);
-            if (type != WAR_TIANMING && type != WAR_TIANMING_REBEL) return;
 
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
             Kingdom mandate = GetCurrentMandateKingdom();
             if (attacker?.data == null || defender?.data == null || mandate?.data == null) return;
+
+            bool mandateWar = type == WAR_TIANMING ||
+                              type == WAR_TIANMING_REBEL;
+            if (!mandateWar)
+            {
+                if (defender == mandate && pWinner == WarWinner.Attackers)
+                {
+                    ChangeMandate(defender, ReadOrdinaryWarDefeatDelta(pWar,
+                        defender), "mandate_war_lost");
+                }
+                return;
+            }
 
             if (defender == mandate && pWinner == WarWinner.Attackers)
             {
@@ -1442,6 +1488,29 @@ namespace AncientWarfare3.core.lineage
 
             if (defender == mandate && pWinner == WarWinner.Defenders)
                 ChangeMandate(defender, 12, "mandate_war_won");
+        }
+
+        private static int ReadOrdinaryWarDefeatDelta(War pWar,
+            Kingdom pDefender)
+        {
+            bool halfLoss = false;
+            bool totalLoss = false;
+            try
+            {
+                if (WarScoreRuntimeBridge.TryGetSnapshot(pWar, pDefender,
+                        out WarScoreSnapshot snapshot))
+                {
+                    int baseline = snapshot.DefenderMobilizationBaseline;
+                    int losses = snapshot.DefenderLosses;
+                    if (baseline > 0)
+                    {
+                        totalLoss = losses >= baseline;
+                        halfLoss = losses * 2 >= baseline;
+                    }
+                }
+            }
+            catch { }
+            return MandateDeclineRules.WarDefeatDelta(halfLoss, totalLoss);
         }
 
         public static void OnKingdomDestroyed(Kingdom pKingdom)
@@ -1957,6 +2026,8 @@ namespace AncientWarfare3.core.lineage
             int next = Mathf.Clamp(r.mandate_value + pDelta, MIN_VALUE, MAX_VALUE);
             UpdateState(pKingdom, r.period_id, next, r.imperial_authority, r.dynasty_prestige, r.core_control,
                 r.vassal_loyalty, CrisisLevel(next), Date.getCurrentYear());
+            SyncMandateRuntimeMirrors(pKingdom, next,
+                r.imperial_authority, r.dynasty_prestige);
             if (!pRecordEvent) return;
             if (!string.IsNullOrEmpty(pContent))
             {
@@ -1966,6 +2037,15 @@ namespace AncientWarfare3.core.lineage
             RecordEvent(pEventType, pKingdom, pKingdom.king, null, pDelta, next,
                 pKingdom.name + T("aw_hist_mandate_changed_mid") + Signed(pDelta) +
                 T("aw_hist_mandate_current") + next);
+        }
+
+        private static void SyncMandateRuntimeMirrors(Kingdom pKingdom,
+            int pMandateValue, int pAuthority, int pPrestige)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.MANDATE_VALUE, pMandateValue);
+            pKingdom.data.set(LineageKeys.MANDATE_AUTHORITY, pAuthority);
+            pKingdom.data.set(LineageKeys.MANDATE_PRESTIGE, pPrestige);
         }
 
         private static MandateReport ReadReportFromDb()

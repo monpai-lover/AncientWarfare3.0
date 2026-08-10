@@ -69,6 +69,10 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_AUTHORITY = "aw_mandate_authority";
         public const string MANDATE_PRESTIGE = "aw_mandate_prestige";
         public const string MANDATE_LAST_YEAR = "aw_mandate_last_year";
+        public const string MANDATE_CITY_LOSS_YEAR =
+            "aw_mandate_city_loss_year";
+        public const string MANDATE_CITY_LOSS_ACCUMULATED =
+            "aw_mandate_city_loss_accumulated";
         public const string MANDATE_ORIGIN_TYPE = "aw_mandate_origin_type";
         public const string MANDATE_CLAIMANT_KIND = "aw_mandate_claimant_kind";
         public const string MANDATE_MAP_MARKER_KIND = "aw_mandate_map_marker_kind";
