@@ -8177,6 +8177,7 @@ ArmyRtsSchedulingRulesTests.Run();
 ArmyRtsExecutionBudgetRulesTests.Run();
 ArmyRtsFullRosterCursorRulesTests.Run();
 ArmyRtsFirstOrderRecoveryRulesTests.Run();
+ArmyRtsPreDepartureDeadlineRulesTests.Run();
 ArmySharedPathRecoveryRulesTests.Run();
 TemporaryLevyDiagnosticSamplingTests.Run();
 RecruitmentLifecycleRemovalRulesTests.Run();
