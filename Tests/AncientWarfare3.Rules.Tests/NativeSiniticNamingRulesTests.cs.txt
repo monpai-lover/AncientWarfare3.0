@@ -120,6 +120,17 @@ internal static class NativeSiniticNamingRulesTests
         Equal(false,
             AWNativeSiniticNamePartsRules.Resolve("狐", "狐", "").Valid,
             "a surname-only result rejects the identity");
+
+        Equal("赵",
+            AWNativeSiniticNamePartsRules.ResolveLineageFamily(
+                hasExistingShi: true, clanName: "赵",
+                chineseFamilyName: "钱", familyName: "孙"),
+            "an established Shi remains authoritative");
+        Equal("钱",
+            AWNativeSiniticNamePartsRules.ResolveLineageFamily(
+                hasExistingShi: false, clanName: "赵",
+                chineseFamilyName: "钱", familyName: "孙"),
+            "a new branch preserves the current-library Chinese family");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

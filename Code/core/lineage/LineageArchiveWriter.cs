@@ -38,7 +38,7 @@ namespace AncientWarfare3.core.lineage
                 pActor?.data == null) return false;
             bool traceableSpecies = LineageService.IsHuman(pActor) ||
                                     LineageService
-                                        .IsNativeXiaCultureActor(pActor);
+                                        .UsesNativeSiniticGenealogy(pActor);
             if (!LineageService.UsesAwLineageSystem(pActor) &&
                 !LineageService.HasOriginalClan(pActor) &&
                 (!pTraceOnly || !traceableSpecies)) return false;
@@ -70,7 +70,7 @@ namespace AncientWarfare3.core.lineage
             long id = pActor.data.id;
             ActorArchiveTableItem previous = LineageArchiveReader.ReadRow(id);
             bool traceableSpecies = LineageService.IsHuman(pActor) ||
-                                    LineageService.IsNativeXiaCultureActor(pActor);
+                                    LineageService.UsesNativeSiniticGenealogy(pActor);
             if (!LineageService.UsesAwLineageSystem(pActor) &&
                 !LineageService.HasOriginalClan(pActor) &&
                 (!pTraceOnly || !traceableSpecies) &&

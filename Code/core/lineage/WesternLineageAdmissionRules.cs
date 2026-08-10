@@ -26,7 +26,8 @@ namespace AncientWarfare3.core.lineage
             bool isXiaKingdom, bool isForeignPseudoDynasty)
         {
             if (pProfile == NamingProfileId.Western ||
-                pProfile == NamingProfileId.OrcNomadic)
+                pProfile == NamingProfileId.OrcNomadic ||
+                pProfile == NamingProfileId.NativeSinitic)
                 return true;
             return isXiaActor || isXiaKingdom || isForeignPseudoDynasty;
         }
@@ -36,7 +37,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (!actorIsActualKing) return false;
             return !fromLoad || pProfile == NamingProfileId.Western ||
-                   pProfile == NamingProfileId.OrcNomadic;
+                   pProfile == NamingProfileId.OrcNomadic ||
+                   pProfile == NamingProfileId.NativeSinitic;
         }
 
         public static bool ShouldProcessMigration(bool archiveOperational)

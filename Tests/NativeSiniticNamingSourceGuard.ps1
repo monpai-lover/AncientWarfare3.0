@@ -21,6 +21,28 @@ $manual = 'Code/core/naming/ActorManualRenameService.cs'
 Require $manual 'profile == NamingProfileId.NativeSinitic' `
     'manual rename does not use the surname-first editor for the new profile'
 
+$birth = 'Code/patch/AW_BirthPatch.cs'
+Require $birth 'UsesNativeSiniticGenealogy(__instance)' `
+    'actor creation does not enter the native Sinitic genealogy lifecycle'
+$clan = 'Code/patch/AW_ClanEventPatch.cs'
+Require $clan 'UsesNativeSiniticGenealogy(__instance)' `
+    'clan changes do not refresh native Sinitic genealogy'
+$archive = 'Code/core/lineage/LineageArchiveWriter.cs'
+Require $archive 'UsesNativeSiniticGenealogy(pActor)' `
+    'lineage archive does not recognize native Sinitic genealogy'
+$promotion = 'Code/patch/AW_PromotionPatch.cs'
+Require $promotion 'EnsureNativeSiniticActorIdentity(pActor)' `
+    'king promotion does not ensure the current-library family identity'
+
+$policy = [IO.File]::ReadAllText((Join-Path $root `
+    'Code/core/policy/CivMonkeyPolicyRules.cs'))
+foreach ($id in @('civ_dog', 'civ_fox', 'civ_lemon_man', 'civ_rabbit',
+        'civ_turtle')) {
+    if ($policy.Contains($id)) {
+        $failures.Add("native Sinitic naming leaked into monkey policy: $id")
+    }
+}
+
 $rules = [IO.File]::ReadAllText((Join-Path $root `
     'Code/core/naming/AWNativeSiniticSpeciesRules.cs'))
 foreach ($forbidden in @('Surnames', 'GivenNames', 'SurnamePool',

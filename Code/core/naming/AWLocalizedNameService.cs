@@ -578,6 +578,27 @@ namespace AncientWarfare3.core.naming
             return string.Empty;
         }
 
+        internal static bool EnsureNativeSiniticActorIdentity(Actor pActor)
+        {
+            if (!IsNativeSiniticActor(pActor) || pActor?.data == null)
+                return false;
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string family,
+                string.Empty);
+            pActor.data.get(LineageKeys.GIVEN_NAME, out string given,
+                string.Empty);
+            if (!string.IsNullOrWhiteSpace(family) &&
+                !string.IsNullOrWhiteSpace(given)) return true;
+            if (pActor.data.custom_name) return false;
+
+            ResetGeneratedActorIdentity(pActor);
+            ProjectActor(pActor);
+            pActor.data.get(LineageKeys.FAMILY_NAME, out family,
+                string.Empty);
+            pActor.data.get(LineageKeys.GIVEN_NAME, out given, string.Empty);
+            return !string.IsNullOrWhiteSpace(family) &&
+                   !string.IsNullOrWhiteSpace(given);
+        }
+
         private static bool IsNativeSiniticActor(Actor pActor)
         {
             return AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(
