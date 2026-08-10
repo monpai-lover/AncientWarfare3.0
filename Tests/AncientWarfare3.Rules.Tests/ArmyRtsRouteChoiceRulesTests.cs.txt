@@ -73,6 +73,28 @@ internal static class ArmyRtsRouteChoiceRulesTests
                 lockedTileId: 41, lockedEndpointLive: false,
                 candidateTileId: 77) == 77,
             "an invalidated endpoint must fall back to the current city candidate");
+        Assert(ArmyRtsControllerRules.HasReachedStrategicDestination(
+                captainTileId: 41, destinationTileId: 41,
+                distanceSquared: 0, sameTargetZone: false,
+                endpointValidated: false, arrivalRadius: 2),
+            "the exact strategic tile always completes the route");
+        Assert(ArmyRtsControllerRules.HasReachedStrategicDestination(
+                captainTileId: 40, destinationTileId: 41,
+                distanceSquared: 1, sameTargetZone: true,
+                endpointValidated: true, arrivalRadius: 2),
+            "a validated nearby endpoint in the target zone completes");
+        Assert(!ArmyRtsControllerRules.HasReachedStrategicDestination(
+                40, 41, distanceSquared: 1, sameTargetZone: false,
+                endpointValidated: true, arrivalRadius: 2),
+            "nearby tiles across a zone boundary do not complete");
+        Assert(!ArmyRtsControllerRules.HasReachedStrategicDestination(
+                40, 41, distanceSquared: 1, sameTargetZone: true,
+                endpointValidated: false, arrivalRadius: 2),
+            "an unvalidated nearby tile does not complete");
+        Assert(!ArmyRtsControllerRules.HasReachedStrategicDestination(
+                30, 41, distanceSquared: 9, sameTargetZone: true,
+                endpointValidated: true, arrivalRadius: 2),
+            "a validated endpoint outside arrival radius does not complete");
         RetainForwardFrontHoldAfterAllAttackObjectivesClose();
         Assert(!ArmyFormationRules.ShouldRestartObservationForAnchorUpdate(
                 allowObservationRestart: true,

@@ -21,6 +21,7 @@ namespace AncientWarfare3.core.lineage
     public static class ArmyRtsControllerRules
     {
         public const int MaximumControllersPerFrame = 32;
+        public const int StrategicArrivalRadius = 2;
 
         public static bool ShouldPrioritizeMission(ArmyRtsMission pMission)
         {
@@ -144,6 +145,20 @@ namespace AncientWarfare3.core.lineage
         {
             return captainTileId >= 0 &&
                    captainTileId == destinationTileId;
+        }
+
+        public static bool HasReachedStrategicDestination(int captainTileId,
+            int destinationTileId, int distanceSquared,
+            bool sameTargetZone, bool endpointValidated,
+            int arrivalRadius)
+        {
+            if (HasReachedStrategicDestination(captainTileId,
+                    destinationTileId)) return true;
+            if (captainTileId < 0 || destinationTileId < 0 ||
+                distanceSquared < 0 || !sameTargetZone ||
+                !endpointValidated) return false;
+            int radius = Math.Max(0, arrivalRadius);
+            return (long)distanceSquared <= (long)radius * radius;
         }
 
         public static bool ShouldUseCaptainAsMarchFormationAnchor(
@@ -2349,6 +2364,9 @@ namespace AncientWarfare3.core.lineage
                     status, combatActive: false, transportActive: false) ||
                 !AWArmyMarchService.ResetActorSharedRoute(actor))
                 return false;
+            if (IsCaptain(actor, army))
+                return RequestRouteReplan(pArmyId,
+                    pAlternateEndpoint: false);
             ReassertMissionCommand(pArmyId, pActorId);
             return true;
         }
@@ -3373,8 +3391,19 @@ namespace AncientWarfare3.core.lineage
             int captainTileId = captain.current_tile.data?.tile_id ?? -1;
             int targetTileId = target.data?.tile_id ?? -1;
             if (ArmyRtsControllerRules.HasReachedStrategicDestination(
-                    captainTileId, targetTileId))
+                    captainTileId, targetTileId,
+                    TileDistanceSquared(captain.current_tile, target),
+                    sameTargetZone: target.zone != null &&
+                                    captain.current_tile.zone == target.zone,
+                    endpointValidated: target.Type != null &&
+                                       !target.Type.block &&
+                                       !target.Type.lava,
+                    arrivalRadius:
+                        ArmyRtsControllerRules.StrategicArrivalRadius))
             {
+                ArmyRouteProviderService.Cancel(pArmy.id,
+                    ArmyRouteCancelReason.TargetReplaced);
+                AWArmyMarchService.ClearArmy(pArmy);
                 pRuntime.AnchorTileId = -1;
                 pRuntime.RouteArrived = true;
                 pRuntime.RouteSubmitted = false;

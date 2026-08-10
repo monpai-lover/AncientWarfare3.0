@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using AncientWarfare3.core.lineage;
 
 internal static class ArmySharedPathRecoveryRulesTests
@@ -38,6 +39,21 @@ internal static class ArmySharedPathRecoveryRulesTests
         Assert(!ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(stale,
                 combatActive: false, transportActive: true),
             "transport blocks shared-route recovery");
+
+        string root = Directory.GetCurrentDirectory();
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        int recoveryStart = controller.IndexOf(
+            "internal static bool RecoverEmptySharedRoute(",
+            StringComparison.Ordinal);
+        int recoveryEnd = controller.IndexOf(
+            "private static void TrySubmitIndependentFollowerRecoveryRoute(",
+            recoveryStart, StringComparison.Ordinal);
+        string recoveryBody = controller.Substring(recoveryStart,
+            recoveryEnd - recoveryStart);
+        Assert(recoveryBody.Contains("RequestRouteReplan(pArmyId",
+                StringComparison.Ordinal),
+            "a stale captain path clears the controller anchor and replans");
     }
 
     private static void Assert(bool condition, string message)
