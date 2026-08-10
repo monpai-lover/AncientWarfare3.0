@@ -218,6 +218,8 @@ namespace AncientWarfare3.core.lineage
 
         public int Count => _records.Count;
         public int QueuedCount => _queuedIds.Count;
+        public int PendingCount => _queuedIds.Count +
+                                   _priorityQueuedIds.Count;
 
         public bool AssignMission(ArmyRtsMission pMission)
         {
@@ -1202,16 +1204,31 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessFrame()
         {
+            ProcessFrame(
+                ArmyRtsControllerRules.MaximumControllersPerFrame,
+                ArmyRtsReplenishmentArrivalRules.
+                    MaximumArrivalChecksPerFrame);
+        }
+
+        public static void ProcessFrame(int pControllerBudget,
+            int pReplenishmentBudget)
+        {
             ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
             if (!ArmyRtsRuntimeModeRules.ShouldPlan(mode)) return;
             if (ArmyRtsWarDoctrine.IsAbstractDecisive) return;
-            ProcessPendingReplenishmentArrivals();
+            ProcessPendingReplenishmentArrivals(pReplenishmentBudget);
             ArmyRtsTransportService.ProcessFrame();
-            IReadOnlyList<long> batch = Controllers.Take(
-                ArmyRtsControllerRules.MaximumControllersPerFrame);
+            IReadOnlyList<long> batch = Controllers.Take(Math.Min(
+                Math.Max(0, pControllerBudget), Controllers.PendingCount));
             for (int i = 0; i < batch.Count; i++)
                 ProcessOne(batch[i], mode);
         }
+
+        public static int PendingControllerCount =>
+            Controllers.PendingCount;
+
+        public static int PendingReplenishmentArrivalCount =>
+            PendingReplenishmentArrivalQueue.Count;
 
         internal static void TrackReplenishmentArrival(Actor pActor,
             Army pArmy)
@@ -1243,15 +1260,15 @@ namespace AncientWarfare3.core.lineage
             PendingReplenishmentArrivalQueue.Enqueue(actorId);
         }
 
-        private static void ProcessPendingReplenishmentArrivals()
+        private static void ProcessPendingReplenishmentArrivals(
+            int pMaximum)
         {
             if (!ArmyRtsRuntimeMode.ShouldCommit ||
                 PendingReplenishmentArrivals.Count == 0 ||
                 PendingReplenishmentArrivalQueue.Count == 0 ||
                 World.world == null || World.world.isPaused()) return;
             double now = CurrentRealtime();
-            int limit = Math.Min(
-                ArmyRtsReplenishmentArrivalRules.MaximumArrivalChecksPerFrame,
+            int limit = Math.Min(Math.Max(0, pMaximum),
                 PendingReplenishmentArrivalQueue.Count);
             for (int i = 0; i < limit; i++)
             {

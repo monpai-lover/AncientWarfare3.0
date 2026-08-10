@@ -560,9 +560,14 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessFrame()
         {
+            ProcessFrame(1);
+        }
+
+        public static void ProcessFrame(int pFirstOrderBudget)
+        {
             ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
             if (!ArmyRtsRuntimeModeRules.ShouldPlan(mode)) return;
-            if (ProcessFirstOrders(1) > 0) return;
+            if (ProcessFirstOrders(pFirstOrderBudget) > 0) return;
             long worldDay = CurrentWorldDay();
             if (!WorkQueue.TryTake(worldDay, out long kingdomId)) return;
             Kingdom kingdom = FindKingdom(kingdomId);

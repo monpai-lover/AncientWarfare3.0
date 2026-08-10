@@ -37,45 +37,78 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
-            if (!ArmyRtsRuntimeMode.ShouldCommit) return;
-            ProcessPendingCaptains(
-                ArmyRtsSuccessionRecoveryRules.MaximumArmiesPerCycle);
-            if (Pending.Count == 0) return;
-            using IEnumerator<KeyValuePair<long, Work>> iterator =
-                Pending.GetEnumerator();
-            if (!iterator.MoveNext()) return;
-            long kingdomId = iterator.Current.Key;
-            Work work = iterator.Current.Value;
-            Kingdom kingdom = FindKingdom(kingdomId);
-            if (!IsCurrent(kingdom, work))
-            {
-                Pending.Remove(kingdomId);
-                return;
-            }
-
-            ArmyIds.Clear();
-            ArmyStrategicIndexService.CopyArmyIdsAfter(kingdom,
-                work.AfterArmyId,
+            ProcessPendingRecoveries(
                 ArmyRtsSuccessionRecoveryRules.MaximumArmiesPerCycle,
-                ArmyIds, out bool complete);
-            for (int i = 0; i < ArmyIds.Count; i++)
+                pRequireRuntimeCommit: true);
+        }
+
+        internal static int PendingRecoveryUpperBound
+        {
+            get
             {
-                long armyId = ArmyIds[i];
-                Army army = ArmyStrategicIndexService.ResolveIndexedArmy(
-                    armyId, kingdomId);
-                if (army?.data == null) continue;
-                EnsureNonSyntheticCaptain(army, kingdom);
-                try { army.checkCaptainExistence(); }
-                catch { }
-                ArmyRtsControllerService.
-                    RehydrateAfterAuthorityChange(army);
-                ArmyRtsAssignmentReconciliationService.Enqueue(army);
-                work.AfterArmyId = armyId;
+                long pending = PendingCaptainArmies.Count + Pending.Count;
+                foreach (KeyValuePair<long, Work> pair in Pending)
+                {
+                    Kingdom kingdom = FindKingdom(pair.Key);
+                    pending += ArmyStrategicIndexService.
+                        CreateSnapshotCursor(kingdom).Remaining;
+                    if (pending >= int.MaxValue) return int.MaxValue;
+                }
+                return (int)System.Math.Max(0L, pending);
             }
-            if (!complete) return;
-            CompletedKingByKingdom[kingdomId] = work.KingId;
-            Pending.Remove(kingdomId);
-            KingdomWarDirectorService.QueueArmyChanged(kingdom);
+        }
+
+        internal static int ProcessPendingRecoveries(int pMaximum,
+            bool pRequireRuntimeCommit = true)
+        {
+            if (pRequireRuntimeCommit &&
+                !ArmyRtsRuntimeMode.ShouldCommit) return 0;
+            int limit = System.Math.Max(0, pMaximum);
+            int processed = ProcessPendingCaptains(limit);
+            int kingdomVisits = Pending.Count;
+            while (processed < limit && Pending.Count > 0 &&
+                   kingdomVisits-- > 0)
+            {
+                using IEnumerator<KeyValuePair<long, Work>> iterator =
+                    Pending.GetEnumerator();
+                if (!iterator.MoveNext()) break;
+                long kingdomId = iterator.Current.Key;
+                Work work = iterator.Current.Value;
+                Kingdom kingdom = FindKingdom(kingdomId);
+                if (!IsCurrent(kingdom, work))
+                {
+                    Pending.Remove(kingdomId);
+                    continue;
+                }
+
+                ArmyIds.Clear();
+                ArmyStrategicIndexService.CopyArmyIdsAfter(kingdom,
+                    work.AfterArmyId, limit - processed,
+                    ArmyIds, out bool complete);
+                for (int i = 0; i < ArmyIds.Count; i++)
+                {
+                    long armyId = ArmyIds[i];
+                    work.AfterArmyId = armyId;
+                    Army army = ArmyStrategicIndexService.
+                        ResolveIndexedArmy(armyId, kingdomId);
+                    if (army?.data != null)
+                    {
+                        EnsureNonSyntheticCaptain(army, kingdom);
+                        try { army.checkCaptainExistence(); }
+                        catch { }
+                        ArmyRtsControllerService.
+                            RehydrateAfterAuthorityChange(army);
+                        ArmyRtsAssignmentReconciliationService.
+                            Enqueue(army);
+                    }
+                    processed++;
+                }
+                if (!complete) break;
+                CompletedKingByKingdom[kingdomId] = work.KingId;
+                Pending.Remove(kingdomId);
+                KingdomWarDirectorService.QueueArmyChanged(kingdom);
+            }
+            return processed;
         }
 
         internal static int PendingCaptainCount =>

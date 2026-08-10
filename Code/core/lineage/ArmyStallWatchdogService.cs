@@ -108,6 +108,14 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessFrame()
         {
+            ProcessFrame(pMaximumArmies: -1, pForceSample: false);
+        }
+
+        public static int PendingArmyCount => ActiveArmyIds.Count;
+
+        public static void ProcessFrame(int pMaximumArmies,
+            bool pForceSample)
+        {
             if (ArmyRtsWarDoctrine.IsAbstractDecisive ||
                 !ArmyRtsRuntimeMode.ShouldCommit || World.world == null)
                 return;
@@ -124,7 +132,14 @@ namespace AncientWarfare3.core.lineage
                 ResetSampleBatch();
                 return;
             }
-            if (_sampleCursor >= _sampleArmyIds.Count)
+            if (pForceSample)
+            {
+                var forcedSnapshot = new long[ActiveArmyIds.Count];
+                ActiveArmyIds.CopyTo(forcedSnapshot);
+                _sampleArmyIds = forcedSnapshot;
+                _sampleCursor = 0;
+            }
+            else if (_sampleCursor >= _sampleArmyIds.Count)
             {
                 if (!startSample) return;
                 var snapshot = new long[ActiveArmyIds.Count];
@@ -133,9 +148,11 @@ namespace AncientWarfare3.core.lineage
                 _sampleCursor = 0;
             }
 
-            int sampleCount = RuntimePerformanceBudgetRules.
-                ResolveWatchdogArmiesPerFrame(_sampleArmyIds.Count -
-                    _sampleCursor);
+            int pending = _sampleArmyIds.Count - _sampleCursor;
+            int sampleCount = pMaximumArmies < 0
+                ? RuntimePerformanceBudgetRules.
+                    ResolveWatchdogArmiesPerFrame(pending)
+                : Math.Min(Math.Max(0, pMaximumArmies), pending);
             int end = Math.Min(_sampleArmyIds.Count,
                 _sampleCursor + sampleCount);
             for (; _sampleCursor < end; _sampleCursor++)
