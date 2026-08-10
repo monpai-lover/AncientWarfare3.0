@@ -30,7 +30,7 @@ namespace AncientWarfare3.patch
             if (SyntheticLevyService.SuppressPersonalHistory(__instance))
                 return;
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
-            if (!LineageService.IsNativeXiaCultureActor(__instance)) return;
+            if (!LineageService.UsesNativeSiniticGenealogy(__instance)) return;
 
             try { LineageService.OnActorBorn(__instance); }
             catch (System.Exception e)

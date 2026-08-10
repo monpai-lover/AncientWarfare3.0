@@ -61,6 +61,9 @@ internal static class WesternLineageEligibilityRulesTests
         Equal(true, WesternLineageEligibilityRules.UsesAwLineageSystem(
                 NamingProfileId.Monkey, hasStableLineageId: true),
             "civilized monkey with stable lineage identity keeps the existing full system");
+        Equal(true, WesternLineageEligibilityRules.UsesAwLineageSystem(
+                NamingProfileId.NativeSinitic, hasStableLineageId: true),
+            "native Sinitic actors with stable lineage identity use the full system");
         Equal(false, WesternLineageEligibilityRules.UsesAwLineageSystem(
                 NamingProfileId.None, hasStableLineageId: true),
             "an invalid profile cannot expose the lineage system");
@@ -121,6 +124,11 @@ internal static class WesternLineageEligibilityRulesTests
                 monkey: true, civilized: true, parentHasLineage: false,
                 requiresFullArchive: false),
             "civilized monkey keeps native birth initialization");
+        Equal(true, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
+                NamingProfileId.NativeSinitic, biologicalXia: false,
+                monkey: false, civilized: true, parentHasLineage: false,
+                requiresFullArchive: false),
+            "native Sinitic species keep native birth initialization");
         Equal(false, WesternLineageEligibilityRules.ShouldUseFullBirthPath(
                 NamingProfileId.None, biologicalXia: false,
                 monkey: false, civilized: false, parentHasLineage: true,
@@ -177,6 +185,11 @@ internal static class WesternLineageEligibilityRulesTests
             parentHasLineage: false, requiresFullArchive: false,
             expectedFullPath: true, expectedLightweightEdges: false,
             "a civilized monkey birth keeps full-path edge ownership");
+        AssertBirthAdmission(NamingProfileId.NativeSinitic,
+            biologicalXia: false, monkey: false, civilized: true,
+            parentHasLineage: false, requiresFullArchive: false,
+            expectedFullPath: true, expectedLightweightEdges: false,
+            "a native Sinitic birth keeps full-path edge ownership");
         AssertBirthAdmission(NamingProfileId.Xia,
             biologicalXia: false, monkey: false, civilized: true,
             parentHasLineage: true, requiresFullArchive: false,

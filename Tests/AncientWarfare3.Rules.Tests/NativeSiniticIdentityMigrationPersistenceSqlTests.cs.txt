@@ -1,0 +1,97 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class NativeSiniticIdentityMigrationPersistenceSqlTests
+{
+    public static void Run()
+    {
+        ConvertsLegacyBranchOnce();
+        FailureRollsBackAndCanRetry();
+    }
+
+    private static void ConvertsLegacyBranchOnce()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        Seed(db, "western", "Old House");
+
+        NativeSiniticIdentityMigrationCommitResult first =
+            NativeSiniticIdentityMigrationPersistence.TryCommit(db, 7L,
+                "Lin");
+        NativeSiniticIdentityMigrationCommitResult replay =
+            NativeSiniticIdentityMigrationPersistence.TryCommit(db, 7L,
+                "Other");
+
+        Equal(true, first.Success, "legacy branch migration commits");
+        Equal(true, first.Changed, "first migration changes the branch");
+        Equal("Lin", first.FamilyName, "candidate family becomes branch family");
+        Equal(true, replay.Success, "replay succeeds");
+        Equal(false, replay.Changed, "replay is idempotent");
+        Equal("Lin", replay.FamilyName,
+            "later members reuse the committed branch family");
+        Equal("Lin|native_sinitic||Lin", ScalarText(db,
+            "SELECT CLAN_NAME||'|'||NAMING_PROFILE||'|'||" +
+            "WESTERN_NAMING_TRADITION||'|'||DISPLAY_STEM " +
+            "FROM ShiBranch WHERE SHI_ID=7"),
+            "all branch identity fields change together");
+    }
+
+    private static void FailureRollsBackAndCanRetry()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        Seed(db, "orc_nomadic", "Old Clan");
+
+        NativeSiniticIdentityMigrationCommitResult failed =
+            NativeSiniticIdentityMigrationPersistence.TryCommit(db, 7L,
+                "Zhao", () => true);
+        Equal(false, failed.Success, "injected failure is reported");
+        Equal("Old Clan|orc_nomadic", ScalarText(db,
+            "SELECT CLAN_NAME||'|'||NAMING_PROFILE FROM ShiBranch " +
+            "WHERE SHI_ID=7"), "failed write rolls back");
+
+        NativeSiniticIdentityMigrationCommitResult retry =
+            NativeSiniticIdentityMigrationPersistence.TryCommit(db, 7L,
+                "Zhao");
+        Equal(true, retry.Success, "a later boundary retries the migration");
+        Equal("Zhao", retry.FamilyName, "retry commits the generated family");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection("Data Source=:memory:");
+        db.Open();
+        Execute(db, "CREATE TABLE ShiBranch (SHI_ID INTEGER PRIMARY KEY," +
+            "CLAN_NAME TEXT,NAMING_PROFILE TEXT," +
+            "WESTERN_NAMING_TRADITION TEXT,DISPLAY_STEM TEXT)");
+        return db;
+    }
+
+    private static void Seed(SQLiteConnection db, string profile,
+        string family)
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO ShiBranch VALUES (7,@family,@profile,'de',@family)",
+            db);
+        command.Parameters.AddWithValue("@family", family);
+        command.Parameters.AddWithValue("@profile", profile);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static string ScalarText(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return command.ExecuteScalar()?.ToString() ?? string.Empty;
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new System.InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

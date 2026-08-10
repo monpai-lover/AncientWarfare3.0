@@ -89,6 +89,8 @@ namespace AncientWarfare3.core.naming
                     LineageService.XIA_ASSET_ID, StringComparison.Ordinal),
                 civilizedMonkey: CivMonkeyNamingRules.IsCivilizedMonkey(
                     pAsset.id),
+                nativeSinitic: AWNativeSiniticSpeciesRules
+                    .IsNativeSiniticSpecies(pAsset.id),
                 orc: string.Equals(pAsset.id, "orc",
                     StringComparison.Ordinal),
                 civilized: pAsset.civ,
@@ -128,6 +130,8 @@ namespace AncientWarfare3.core.naming
                     LineageService.XIA_ASSET_ID, StringComparison.Ordinal),
                 civilizedMonkey: CivMonkeyNamingRules.IsCivilizedMonkey(
                     pAsset.id),
+                nativeSinitic: AWNativeSiniticSpeciesRules
+                    .IsNativeSiniticSpecies(pAsset.id),
                 orc: string.Equals(pAsset.id, "orc",
                     StringComparison.Ordinal),
                 civilized: pAsset.civ,
@@ -229,6 +233,8 @@ namespace AncientWarfare3.core.naming
                     LineageService.XIA_ASSET_ID, StringComparison.Ordinal),
                 civilizedMonkey: CivMonkeyNamingRules.IsCivilizedMonkey(
                     speciesId),
+                nativeSinitic: AWNativeSiniticSpeciesRules
+                    .IsNativeSiniticSpecies(speciesId),
                 orc: string.Equals(speciesId, "orc",
                     StringComparison.Ordinal),
                 civilized: asset != null && asset.civ,

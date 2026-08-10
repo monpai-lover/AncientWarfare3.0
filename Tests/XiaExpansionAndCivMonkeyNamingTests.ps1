@@ -131,13 +131,13 @@ Require-Present 'monkey lineage initialization preserves the ChineseName surname
 Require-Present 'monkey lineage surname selection receives both ChineseName family fields' `
     $lineageService 'existingShiId >= 0, existingClan, chineseFamily, existingFamily);'
 Require-Present 'civilized monkey births enter native Xia-culture lineage initialization' `
-    'Code/patch/AW_BirthPatch.cs' 'LineageService.IsNativeXiaCultureActor(__instance)'
+    'Code/patch/AW_BirthPatch.cs' 'LineageService.UsesNativeSiniticGenealogy(__instance)'
 Require-Present 'civilized monkey clan changes refresh lineage archives' `
-    'Code/patch/AW_ClanEventPatch.cs' 'LineageService.IsNativeXiaCultureActor(__instance)'
+    'Code/patch/AW_ClanEventPatch.cs' 'LineageService.UsesNativeSiniticGenealogy(__instance)'
 Require-Present 'native Xia-culture clan members can be archived before ennoblement' `
     'Code/core/lineage/LineageArchiveWriter.cs' 'LineageService.HasOriginalClan(pActor)'
 Require-Present 'trace-only archive updates include civilized monkeys' `
-    'Code/core/lineage/LineageArchiveWriter.cs' 'LineageService.IsNativeXiaCultureActor(pActor)'
+    'Code/core/lineage/LineageArchiveWriter.cs' 'LineageService.UsesNativeSiniticGenealogy(pActor)'
 Require-Present 'detached family snapshots retain archived species identity' `
     'Code/core/lineage/LineageBulkQuery.cs' 'AssetId = strings.Take(actor?.asset_id);'
 Require-Present 'family tree DTO retains archived species identity' `

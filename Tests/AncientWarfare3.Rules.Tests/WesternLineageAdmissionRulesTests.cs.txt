@@ -32,7 +32,8 @@ internal static class WesternLineageAdmissionRulesTests
                  {
                      NamingProfileId.None,
                      NamingProfileId.Xia,
-                     NamingProfileId.Monkey
+                     NamingProfileId.Monkey,
+                     NamingProfileId.NativeSinitic
                  })
         {
             Equal(WesternLineageAdmissionAction.Reject,
@@ -101,6 +102,10 @@ internal static class WesternLineageAdmissionRulesTests
                 NamingProfileId.Monkey, isXiaActor: false,
                 isXiaKingdom: false, isForeignPseudoDynasty: false),
             "monkey kingdoms must not enter the western admission hook");
+        Equal(true, WesternLineageAdmissionRules.ShouldRunPromotionHook(
+                NamingProfileId.NativeSinitic, isXiaActor: false,
+                isXiaKingdom: false, isForeignPseudoDynasty: false),
+            "native Sinitic promotions enter the shared genealogy hook");
 
         Equal(true, WesternLineageAdmissionRules.ShouldRunKingAdmission(
                 fromLoad: true, actorIsActualKing: true,
@@ -114,6 +119,10 @@ internal static class WesternLineageAdmissionRulesTests
                 fromLoad: true, actorIsActualKing: true,
                 NamingProfileId.Monkey),
             "a monkey king remains excluded from western admission");
+        Equal(true, WesternLineageAdmissionRules.ShouldRunKingAdmission(
+                fromLoad: true, actorIsActualKing: true,
+                NamingProfileId.NativeSinitic),
+            "a restored native Sinitic king enters genealogy admission");
         Equal(false, WesternLineageAdmissionRules.ShouldRunKingAdmission(
                 fromLoad: false, actorIsActualKing: false,
                 NamingProfileId.Western),
@@ -173,7 +182,8 @@ internal static class WesternLineageAdmissionRulesTests
                  {
                      NamingProfileId.None,
                      NamingProfileId.Xia,
-                     NamingProfileId.Monkey
+                     NamingProfileId.Monkey,
+                     NamingProfileId.NativeSinitic
                  })
         {
             Equal(WesternOriginalClanSyncAction.None,

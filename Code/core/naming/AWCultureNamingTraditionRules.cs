@@ -62,7 +62,8 @@ namespace AncientWarfare3.core.naming
             if (pNaturalProfile == NamingProfileId.None)
                 return NamingProfileId.None;
             if (pNaturalProfile == NamingProfileId.Xia ||
-                pNaturalProfile == NamingProfileId.Monkey)
+                pNaturalProfile == NamingProfileId.Monkey ||
+                pNaturalProfile == NamingProfileId.NativeSinitic)
                 return pNaturalProfile;
             if (IntegratedCultureNamingMigrationRules
                     .ShouldUseXiaPersonalNaming(integrated, fullyXiaized) ||
@@ -91,7 +92,8 @@ namespace AncientWarfare3.core.naming
             if (pChildNaturalProfile == NamingProfileId.None)
                 return NamingProfileId.None;
             if (pChildNaturalProfile == NamingProfileId.Xia ||
-                pChildNaturalProfile == NamingProfileId.Monkey)
+                pChildNaturalProfile == NamingProfileId.Monkey ||
+                pChildNaturalProfile == NamingProfileId.NativeSinitic)
                 return pChildNaturalProfile;
             if (IntegratedCultureNamingMigrationRules
                     .ShouldUseXiaPersonalNaming(integrated, fullyXiaized) ||
@@ -111,7 +113,8 @@ namespace AncientWarfare3.core.naming
             if (pNaturalProfile == NamingProfileId.None)
                 return NamingProfileId.None;
             if (pNaturalProfile == NamingProfileId.Xia ||
-                pNaturalProfile == NamingProfileId.Monkey)
+                pNaturalProfile == NamingProfileId.Monkey ||
+                pNaturalProfile == NamingProfileId.NativeSinitic)
                 return pNaturalProfile;
             if (pCultureProfile == NamingProfileId.Xia)
                 return NamingProfileId.Xia;
@@ -151,6 +154,7 @@ namespace AncientWarfare3.core.naming
             {
                 NamingProfileId.Xia => "xia",
                 NamingProfileId.Monkey => "monkey",
+                NamingProfileId.NativeSinitic => "native_sinitic",
                 NamingProfileId.OrcNomadic => "orc_nomadic",
                 NamingProfileId.Western => "western",
                 _ => string.Empty
@@ -163,6 +167,7 @@ namespace AncientWarfare3.core.naming
             {
                 "xia" => NamingProfileId.Xia,
                 "monkey" => NamingProfileId.Monkey,
+                "native_sinitic" => NamingProfileId.NativeSinitic,
                 "orc_nomadic" => NamingProfileId.OrcNomadic,
                 "western" => NamingProfileId.Western,
                 _ => NamingProfileId.None
@@ -226,6 +231,9 @@ namespace AncientWarfare3.core.naming
                 case NamingProfileId.Monkey:
                     return ResolveMonkeyGenerator(pKind,
                         pExplicitGeneratorId);
+                case NamingProfileId.NativeSinitic:
+                    return ResolveNativeSiniticGenerator(pKind, pSpeciesId,
+                        pExplicitGeneratorId);
                 case NamingProfileId.None:
                 default:
                     return pExplicitGeneratorId ?? string.Empty;
@@ -256,6 +264,9 @@ namespace AncientWarfare3.core.naming
                 return ResolveXiaGenerator(pKind, pExplicitGeneratorId);
             if (pProfile == NamingProfileId.Monkey)
                 return ResolveMonkeyGenerator(pKind, pExplicitGeneratorId);
+            if (pProfile == NamingProfileId.NativeSinitic)
+                return ResolveNativeSiniticGenerator(pKind, pSpeciesId,
+                    pExplicitGeneratorId);
             if (pProfile != NamingProfileId.Western)
                 return pExplicitGeneratorId ?? string.Empty;
             if (pKind == AWNamingObjectKind.Actor)
@@ -319,6 +330,22 @@ namespace AncientWarfare3.core.naming
                 AWNamingObjectKind.City => "civ_monkey_city",
                 AWNamingObjectKind.Clan => "civ_monkey_clan",
                 AWNamingObjectKind.Kingdom => "civ_monkey_kingdom",
+                _ => pExplicitGeneratorId ?? string.Empty
+            };
+        }
+
+        private static string ResolveNativeSiniticGenerator(
+            AWNamingObjectKind pKind, string pSpeciesId,
+            string pExplicitGeneratorId)
+        {
+            if (!AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(
+                    pSpeciesId))
+                return pExplicitGeneratorId ?? string.Empty;
+            return pKind switch
+            {
+                AWNamingObjectKind.Actor => pSpeciesId + "_name",
+                AWNamingObjectKind.City => pSpeciesId + "_city",
+                AWNamingObjectKind.Kingdom => pSpeciesId + "_kingdom",
                 _ => pExplicitGeneratorId ?? string.Empty
             };
         }
