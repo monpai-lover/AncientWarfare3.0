@@ -434,6 +434,7 @@ namespace AncientWarfare3.core.asyncwork
                         completion.Error);
                     continue;
                 }
+                long commitStarted = Stopwatch.GetTimestamp();
                 try
                 {
                     commit.Commit(completion.Result);
@@ -443,6 +444,12 @@ namespace AncientWarfare3.core.asyncwork
                 {
                     _diagnostics.RecordFaulted();
                     NotifyFault(commit, AWAsyncFaultPhase.Commit, error);
+                }
+                finally
+                {
+                    _diagnostics.RecordMainThreadCommit(commit.Key,
+                        commit.Lane,
+                        Stopwatch.GetTimestamp() - commitStarted);
                 }
             }
         }
@@ -456,6 +463,11 @@ namespace AncientWarfare3.core.asyncwork
                     _activeWorkerCount, _completions.Count,
                     _worldGeneration, _workers.Length);
             }
+        }
+
+        public AWAsyncCommitTimingSnapshot TakeMainThreadCommitTiming()
+        {
+            return _diagnostics.TakeMainThreadCommitTiming();
         }
 
         public AWAsyncFaultRecord[] SnapshotFaults()

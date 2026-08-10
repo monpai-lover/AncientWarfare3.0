@@ -1123,6 +1123,88 @@ namespace AncientWarfare3.core.schools
             return HistoricalSchoolTeachingPersistenceOutcome.Committed;
         }
 
+        internal static HistoricalSchoolTeachingPersistenceOutcome
+            RollbackConversionInTransaction(SQLiteConnection pDb,
+                SQLiteTransaction pTransaction, SchoolMembershipRecord pCurrent,
+                SchoolMembershipRecord pReplacement, int pYear, double pTime)
+        {
+            if (pDb == null || pTransaction == null || pCurrent == null ||
+                pReplacement == null || !pCurrent.IsValid || !pReplacement.IsValid ||
+                pCurrent.ActorId != pReplacement.ActorId || pYear < pCurrent.StartYear)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            bool currentActive = false;
+            bool currentClosed = false;
+            bool replacementActive = false;
+            bool replacementExists = false;
+            bool conflict = false;
+            using (var command = new SQLiteCommand(pDb) { Transaction = pTransaction })
+            {
+                command.CommandText = MembershipSelect() +
+                    " WHERE MEMBERSHIP_ID=@current OR MEMBERSHIP_ID=@replacement" +
+                    " OR (ACTOR_ID=@actor AND ACTIVE=1)";
+                command.Parameters.AddWithValue("@current", pCurrent.MembershipId);
+                command.Parameters.AddWithValue("@replacement", pReplacement.MembershipId);
+                command.Parameters.AddWithValue("@actor", pCurrent.ActorId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    long membershipId = ValueLong(reader, 0, -1L);
+                    if (membershipId == pCurrent.MembershipId)
+                    {
+                        currentActive |= MembershipRowMatches(reader, pCurrent,
+                            pActive: true, pEndYear: -1, pEndReason: "", pTime,
+                            pRequireTime: false);
+                        currentClosed |= MembershipRowMatches(reader, pCurrent,
+                            pActive: false, pEndYear: pYear, pEndReason: "converted",
+                            pTime, pRequireTime: true);
+                        if (!currentActive && !currentClosed) conflict = true;
+                    }
+                    else if (membershipId == pReplacement.MembershipId)
+                    {
+                        replacementExists = true;
+                        bool exact = MembershipRowMatches(reader, pReplacement,
+                            pActive: true, pEndYear: -1, pEndReason: "", pTime,
+                            pRequireTime: true);
+                        replacementActive |= exact;
+                        if (!exact) conflict = true;
+                    }
+                    else
+                    {
+                        conflict = true;
+                    }
+                }
+            }
+            if (currentActive && !replacementExists && !conflict)
+                return HistoricalSchoolTeachingPersistenceOutcome.Replayed;
+            if (!currentClosed || !replacementActive || conflict)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            using (var delete = new SQLiteCommand(pDb) { Transaction = pTransaction })
+            {
+                delete.CommandText = "DELETE FROM " + MembershipTable +
+                    " WHERE MEMBERSHIP_ID=@replacement AND ACTOR_ID=@actor AND ACTIVE=1";
+                delete.Parameters.AddWithValue("@replacement", pReplacement.MembershipId);
+                delete.Parameters.AddWithValue("@actor", pCurrent.ActorId);
+                if (delete.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException(
+                        "replacement membership compensation failed");
+            }
+            using (var restore = new SQLiteCommand(pDb) { Transaction = pTransaction })
+            {
+                restore.CommandText = "UPDATE " + MembershipTable +
+                    " SET ACTIVE=1,END_YEAR=-1,END_REASON='',UPDATED_TIME=@time" +
+                    " WHERE MEMBERSHIP_ID=@current AND ACTOR_ID=@actor AND ACTIVE=0" +
+                    " AND END_YEAR=@year AND END_REASON='converted'";
+                restore.Parameters.AddWithValue("@time", FiniteNonNegative(pTime));
+                restore.Parameters.AddWithValue("@current", pCurrent.MembershipId);
+                restore.Parameters.AddWithValue("@actor", pCurrent.ActorId);
+                restore.Parameters.AddWithValue("@year", pYear);
+                if (restore.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException(
+                        "original membership compensation failed");
+            }
+            return HistoricalSchoolTeachingPersistenceOutcome.Committed;
+        }
+
         public static bool UpdateMembershipStanding(
             SchoolMembershipRecord pCurrent,
             SchoolMembershipRecord pNext,

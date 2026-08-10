@@ -58,8 +58,6 @@ namespace AncientWarfare3.core.naming
         }
 
         internal int Count => _pending.Count;
-        internal bool FullRescanRequired { get; private set; }
-
         internal bool Enqueue(string pMetaType, long pObjectId,
             AWLocalizedNameIdentitySnapshot pSnapshot)
         {
@@ -77,10 +75,7 @@ namespace AncientWarfare3.core.naming
                 return true;
             }
             if (_pending.Count >= _capacity)
-            {
-                FullRescanRequired = true;
                 return false;
-            }
 
             LinkedListNode<AWLocalizedNamePendingWrite> node =
                 _pending.AddLast(pending);
@@ -141,13 +136,7 @@ namespace AncientWarfare3.core.naming
         {
             _pending.Clear();
             _byIdentity.Clear();
-            FullRescanRequired = false;
             _flushSequence = 0L;
-        }
-
-        internal void ClearFullRescanRequired()
-        {
-            FullRescanRequired = false;
         }
 
         private void RequeueLast(AWLocalizedNamePendingWrite pPending)

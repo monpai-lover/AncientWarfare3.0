@@ -158,6 +158,26 @@ namespace AncientWarfare3.core.policy
                    intervalTicks;
         }
 
+        public static long FrameGapTicks(long previousFrameEndTicks,
+            long currentFrameStartTicks)
+        {
+            if (previousFrameEndTicks <= 0L || currentFrameStartTicks <= 0L)
+                return 0L;
+            return System.Math.Max(0L,
+                currentFrameStartTicks - previousFrameEndTicks);
+        }
+
+        public static double AverageLogicalCoreUsage(long processCpuTicks,
+            long intervalStopwatchTicks, long processCpuTicksPerSecond,
+            long stopwatchFrequency)
+        {
+            if (processCpuTicks <= 0L || intervalStopwatchTicks <= 0L ||
+                processCpuTicksPerSecond <= 0L || stopwatchFrequency <= 0L)
+                return 0d;
+            return processCpuTicks * (double)stopwatchFrequency /
+                   (processCpuTicksPerSecond * intervalStopwatchTicks);
+        }
+
         public static long ExclusiveTicks(long totalTicks, long nestedTicks)
         {
             return System.Math.Max(0L, totalTicks - nestedTicks);

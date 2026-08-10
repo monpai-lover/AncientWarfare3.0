@@ -18,6 +18,8 @@ namespace AncientWarfare3.core.lineage
         private static readonly HashSet<long> ReportedFailures =
             new HashSet<long>();
 
+        internal static int PendingRepairCount => QueuedIds.Count;
+
         public static void QueueRepair(Actor pActor)
         {
             long id = ActorId(pActor);

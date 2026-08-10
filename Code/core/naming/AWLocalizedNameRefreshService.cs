@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.naming
 {
@@ -100,6 +101,8 @@ namespace AncientWarfare3.core.naming
             switch (pObject)
             {
                 case Kingdom kingdom:
+                    StateNameService.ReconcileLocalizedIdentityBeforeRestore(
+                        kingdom);
                     AWLocalizedMottoService.ProjectKingdom(kingdom,
                         kingdom.data?.motto);
                     AWLocalizedKingdomNameService.ProjectStored(kingdom);

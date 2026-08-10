@@ -4,6 +4,11 @@ internal static class LocalizedNameMigrationRulesTests
 {
     public static void Run()
     {
+        LanguageChangesRefreshProjectionWithoutRestartingMigration();
+        RestoreRefreshesProjectionWithoutMigratingLiveWorld();
+        AuthorityCycleOnlySubmitsAsynchronousWrites();
+        AuthorityCycleDoesNotPollUnavailableWriter();
+        QueuePressureCannotRestartLiveWorldMigration();
         AWLocalizedNameMigrationDecision nativeOnly =
             AWLocalizedNameMigrationRules.Resolve("Native", "Native", "",
                 0, AWLocalizedNameLegacySource.Unknown, "en");
@@ -60,6 +65,90 @@ internal static class LocalizedNameMigrationRulesTests
             "native host projects its local presentation");
         Equal("中文名", client.ProjectedName,
             "Chinese client projects its local presentation");
+    }
+
+    private static void LanguageChangesRefreshProjectionWithoutRestartingMigration()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch", "naming",
+            "AW_LanguageChangeNamePatch.cs"));
+        Equal(true, source.Contains("AWLocalizedNameRefreshService.Request()",
+                StringComparison.Ordinal),
+            "language changes refresh stored localized projections");
+        Equal(false, source.Contains("AWLocalizedNameMigrationService.Request()",
+                StringComparison.Ordinal),
+            "language changes cannot restart a full live-world identity migration");
+    }
+
+    private static void RestoreRefreshesProjectionWithoutMigratingLiveWorld()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "naming",
+            "AWLocalizedNameMigrationService.cs"));
+        int start = source.IndexOf(
+            "internal static void RebuildVisibleProjections()",
+            StringComparison.Ordinal);
+        int end = source.IndexOf(
+            "internal static void ProcessAuthorityCycle()", start,
+            StringComparison.Ordinal);
+        Equal(true, start >= 0 && end > start,
+            "the restore projection boundary remains discoverable");
+        string method = source.Substring(start, end - start);
+        Equal(true, method.Contains("AWLocalizedNameRefreshService.Request()",
+                StringComparison.Ordinal),
+            "restore refreshes persisted localized projections");
+        Equal(false, method.Split('\n').Any(line =>
+                string.Equals(line.Trim(), "Request();",
+                    StringComparison.Ordinal)),
+            "restore cannot scan and migrate every live-world object");
+    }
+
+    private static void AuthorityCycleOnlySubmitsAsynchronousWrites()
+    {
+        string source = MigrationServiceSource();
+        Equal(true, source.Contains("HistoricalWriteService.TryUpsertState(",
+                StringComparison.Ordinal),
+            "localized identity persistence uses the historical async writer");
+        Equal(false, source.Contains("AWLocalizedNamePersistence.Upsert(",
+                StringComparison.Ordinal),
+            "the simulation authority cycle cannot write SQLite synchronously");
+        Equal(false, source.Contains("AWLocalizedNamePersistence.TryLoad(",
+                StringComparison.Ordinal),
+            "the simulation authority cycle cannot query SQLite synchronously");
+    }
+
+    private static void QueuePressureCannotRestartLiveWorldMigration()
+    {
+        string source = MigrationServiceSource();
+        Equal(false, source.Contains("ResolveCollection(",
+                StringComparison.Ordinal),
+            "localized name queue pressure cannot scan live-world collections");
+        Equal(false, source.Contains("FullRescanRequired",
+                StringComparison.Ordinal),
+            "localized name queue overflow cannot request a full rescan");
+    }
+
+    private static void AuthorityCycleDoesNotPollUnavailableWriter()
+    {
+        string source = MigrationServiceSource();
+        int start = source.IndexOf(
+            "internal static void ProcessAuthorityCycle(int pBudget)",
+            StringComparison.Ordinal);
+        int end = source.IndexOf("private static bool TrySubmitAsync", start,
+            StringComparison.Ordinal);
+        Equal(true, start >= 0 && end > start,
+            "localized authority-cycle boundary remains discoverable");
+        string method = source.Substring(start, end - start);
+        Equal(true, method.Contains("HistoricalWriteService.Ready",
+                StringComparison.Ordinal),
+            "localized writes wait without polling when the async writer is unavailable");
+    }
+
+    private static string MigrationServiceSource()
+    {
+        return File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "naming",
+            "AWLocalizedNameMigrationService.cs"));
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

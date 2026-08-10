@@ -66,6 +66,7 @@ namespace AncientWarfare3.core.schools
         private static int _duePlanEligibleYear = -1;
 
         internal static bool HasPendingDescents => PendingDescentsByActor.Count > 0;
+        internal static int PendingDescentCount => PendingDescentsByActor.Count;
 
         public static void LoadState()
         {

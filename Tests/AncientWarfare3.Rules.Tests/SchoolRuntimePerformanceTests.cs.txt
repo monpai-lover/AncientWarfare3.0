@@ -79,6 +79,51 @@ internal static class SchoolRuntimePerformanceTests
                 "HistoricalSchoolPopulationRecoveryService.ProcessYearFrame"),
             "the annual school scheduler runs bounded population recovery");
 
+        string guestOfficeSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools",
+            "SchoolGuestOfficeService.cs"));
+        True(guestOfficeSource.Contains(
+                "GuestEndWriteOperation : IHistoricalSchoolWriteOperation,\r\n" +
+                "            IHistoricalSchoolAsyncWriteOperation") ||
+             guestOfficeSource.Contains(
+                "GuestEndWriteOperation : IHistoricalSchoolWriteOperation,\n" +
+                "            IHistoricalSchoolAsyncWriteOperation"),
+            "guest-office end persistence detaches from the simulation thread");
+
+        string membershipSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools",
+            "SchoolMembershipService.cs"));
+        True(membershipSource.Contains(
+                "IHistoricalSchoolWriteOperation,\r\n" +
+                "            IHistoricalSchoolAsyncWriteOperation") ||
+             membershipSource.Contains(
+                "IHistoricalSchoolWriteOperation,\n" +
+                "            IHistoricalSchoolAsyncWriteOperation"),
+            "school membership persistence detaches from the simulation thread");
+        True(membershipSource.Contains("MembershipWriteEpochs"),
+            "queued membership writes expose an actor-scoped invalidation epoch");
+        True(membershipSource.Contains("IsMembershipWriteCurrent"),
+            "background membership writes revalidate the frozen epoch");
+        True(membershipSource.Contains("TryQueueCompensation"),
+            "a post-commit actor invalidation closes the durable membership");
+        True(membershipSource.Contains("RollbackConversionInTransaction"),
+            "invalidated conversions restore the original membership before death cleanup");
+
+        string writeBufferServiceSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools",
+            "HistoricalSchoolWriteBufferService.cs"));
+        True(writeBufferServiceSource.Contains("FailAsync(operationKey"),
+            "terminal background-write failure releases school operation state");
+        True(writeBufferServiceSource.Contains("ProjectionRetries"),
+            "committed school projections retain bounded main-thread retries");
+        int asyncProjection = writeBufferServiceSource.IndexOf(
+            "operation.AfterCommit(outcome);", StringComparison.Ordinal);
+        int asyncRemoval = writeBufferServiceSource.IndexOf(
+            "PendingAsync.Remove(pOperationKey);", asyncProjection,
+            StringComparison.Ordinal);
+        True(asyncProjection >= 0 && asyncRemoval > asyncProjection,
+            "async school state is removed only after projection succeeds");
+
         var years = new HistoricalSchoolSchedulerState();
         True(years.EnqueueYear(73), "first year token is accepted");
         True(years.EnqueueYear(75), "newer year coalesces pending work");

@@ -9,6 +9,7 @@ using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.performance;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.core.uiquery;
 
 namespace AncientWarfare3.core.policy
@@ -42,6 +43,13 @@ namespace AncientWarfare3.core.policy
         private static bool _sampling;
         private static long _intervalStarted;
         private static long _intervalFrameStarted;
+        private static long _intervalProcessCpuStarted;
+        private static long _intervalMapUpdateTicks;
+        private static long _intervalOutsideMapTicks;
+        private static long _previousFrameEnded;
+        private static int _intervalGc0Started;
+        private static int _intervalGc1Started;
+        private static int _intervalGc2Started;
         private static int _intervalMode;
         private static int _actorDetailSamples;
         private static long _frameStarted;
@@ -117,6 +125,7 @@ namespace AncientWarfare3.core.policy
         public static void BeginFrame()
         {
             if (_frame < long.MaxValue) _frame++;
+            long frameStarted = Stopwatch.GetTimestamp();
             int currentMode = CurrentIntervalMode();
             if (currentMode == 0)
             {
@@ -126,19 +135,33 @@ namespace AncientWarfare3.core.policy
                     TerminateIntervalBaseline();
                 _sampling = false;
                 _frameStarted = 0L;
+                _previousFrameEnded = 0L;
                 return;
             }
             Interlocked.Exchange(ref _actorDetailSamples, 0);
-            if (RuntimePerformanceDiagnosticRules.ShouldStartIntervalBaseline(
-                    _intervalMode, currentMode))
+            bool startInterval = RuntimePerformanceDiagnosticRules.
+                ShouldStartIntervalBaseline(_intervalMode, currentMode);
+            if (startInterval)
             {
                 ResetDeathInterval();
-                _intervalStarted = Stopwatch.GetTimestamp();
+                _intervalStarted = frameStarted;
                 _intervalFrameStarted = Math.Max(0L, _frame - 1L);
+                _intervalProcessCpuStarted = CurrentProcessCpuTicks();
+                _intervalMapUpdateTicks = 0L;
+                _intervalOutsideMapTicks = 0L;
+                _intervalGc0Started = GC.CollectionCount(0);
+                _intervalGc1Started = GC.CollectionCount(1);
+                _intervalGc2Started = GC.CollectionCount(2);
                 ResetWorstFrameInterval();
             }
+            else
+            {
+                _intervalOutsideMapTicks +=
+                    RuntimePerformanceDiagnosticRules.FrameGapTicks(
+                        _previousFrameEnded, frameStarted);
+            }
             _intervalMode = currentMode;
-            _frameStarted = Stopwatch.GetTimestamp();
+            _frameStarted = frameStarted;
             _frameContinuousStageId = "none";
             _frameContinuousStageTicks = 0L;
             _frameAnnualStageId = "none";
@@ -436,9 +459,15 @@ namespace AncientWarfare3.core.policy
 
         public static void FlushFrame()
         {
-            long continuousFrameTicks = Elapsed(_frameStarted);
+            long frameEnded = Stopwatch.GetTimestamp();
+            long continuousFrameTicks = _frameStarted <= 0L
+                ? -1L
+                : Math.Max(0L, frameEnded - _frameStarted);
             RecordWorstFrame(continuousFrameTicks);
+            if (continuousFrameTicks >= 0L)
+                _intervalMapUpdateTicks += continuousFrameTicks;
             _frameStarted = 0L;
+            _previousFrameEnded = frameEnded;
             if (!_sampling) return;
             int currentMode = CurrentIntervalMode();
             if (!RuntimePerformanceDiagnosticRules.ShouldFlushInterval(
@@ -455,7 +484,7 @@ namespace AncientWarfare3.core.policy
                 _sampling = false;
                 return;
             }
-            long intervalEnded = Stopwatch.GetTimestamp();
+            long intervalEnded = frameEnded;
             long intervalTicks = _intervalStarted <= 0L
                 ? 0L
                 : Math.Max(0L, intervalEnded - _intervalStarted);
@@ -466,9 +495,42 @@ namespace AncientWarfare3.core.policy
             double averageFps = RuntimePerformanceDiagnosticRules.
                 AverageFramesPerSecond(intervalFrames, intervalTicks,
                     Stopwatch.Frequency);
-            ReadLiveWorldCounts(out int livePopulation, out int armyCount);
+            ReadProcessSnapshot(out long currentProcessCpuTicks,
+                out long processPrivateBytes, out long processWorkingBytes,
+                out int processHandles, out int processThreads);
+            long processCpuTicks = _intervalProcessCpuStarted <= 0L ||
+                                   currentProcessCpuTicks <= 0L
+                ? 0L
+                : Math.Max(0L,
+                    currentProcessCpuTicks - _intervalProcessCpuStarted);
+            double processCpuCores = RuntimePerformanceDiagnosticRules.
+                AverageLogicalCoreUsage(processCpuTicks, intervalTicks,
+                    TimeSpan.TicksPerSecond, Stopwatch.Frequency);
+            long averageMapUpdateTicks = intervalFrames <= 0L
+                ? 0L
+                : _intervalMapUpdateTicks / intervalFrames;
+            long averageOutsideMapTicks = intervalFrames <= 0L
+                ? 0L
+                : _intervalOutsideMapTicks / intervalFrames;
+            long intervalUnaccountedTicks = Math.Max(0L,
+                intervalTicks - _intervalMapUpdateTicks -
+                _intervalOutsideMapTicks);
+            int currentGc0 = GC.CollectionCount(0);
+            int currentGc1 = GC.CollectionCount(1);
+            int currentGc2 = GC.CollectionCount(2);
+            int intervalGc0 = Math.Max(0, currentGc0 - _intervalGc0Started);
+            int intervalGc1 = Math.Max(0, currentGc1 - _intervalGc1Started);
+            int intervalGc2 = Math.Max(0, currentGc2 - _intervalGc2Started);
+            long managedHeapBytes = GC.GetTotalMemory(false);
+            ReadLiveWorldCounts(out int livePopulation,
+                out int totalActorObjects, out int dyingActorObjects,
+                out int actorDestroyQueue, out int schoolPendingDeaths,
+                out int schoolPendingDescents, out int deferredRuntimeWork,
+                out int kingdomRepairQueue, out int armyCount);
             AWAsyncDiagnosticsSnapshot asyncSnapshot =
                 AWAsyncRuntime.SnapshotDiagnostics();
+            AWAsyncCommitTimingSnapshot asyncCommitTiming =
+                AWAsyncRuntime.TakeMainThreadCommitTiming();
             AWAsyncDiagnosticsSnapshot readSnapshot =
                 AWHistoricalReadService.SnapshotDiagnostics();
             AWAsyncShadowSnapshot shadowSnapshot =
@@ -488,6 +550,8 @@ namespace AncientWarfare3.core.policy
             int strategicPathActive = ArmyRouteProviderService.ActiveCount;
             ArmyRtsBenchmarkSnapshot armyRts =
                 ArmyRtsBenchmark.Snapshot();
+            HistoricalSchoolDiagnosticSnapshot schoolDiagnostics =
+                HistoricalSchoolDiagnostics.Snapshot();
             long frameTicks = Elapsed(_sampleFrameStarted);
             long exclusivePathStep =
                 RuntimePerformanceDiagnosticRules.ExclusiveTicks(
@@ -529,7 +593,39 @@ namespace AncientWarfare3.core.policy
                 " interval_frames=" + intervalFrames +
                 " avg_fps=" + averageFps.ToString("0.###",
                     CultureInfo.InvariantCulture) +
+                " map_update_avg_ms=" + Milliseconds(averageMapUpdateTicks) +
+                " outside_map_avg_ms=" +
+                Milliseconds(averageOutsideMapTicks) +
+                " interval_unaccounted_ms=" +
+                Milliseconds(intervalUnaccountedTicks) +
+                " process_cpu_cores=" + processCpuCores.ToString("0.###",
+                    CultureInfo.InvariantCulture) +
+                " managed_heap_mb=" + Megabytes(managedHeapBytes) +
+                " process_private_mb=" + Megabytes(processPrivateBytes) +
+                " process_working_mb=" + Megabytes(processWorkingBytes) +
+                " process_handles=" + processHandles +
+                " process_threads=" + processThreads +
+                " interval_gc0_collections=" + intervalGc0 +
+                " interval_gc1_collections=" + intervalGc1 +
+                " interval_gc2_collections=" + intervalGc2 +
+                " unity_time_scale=" +
+                UnityEngine.Time.timeScale.ToString("0.###",
+                    CultureInfo.InvariantCulture) +
+                " unity_target_fps=" + UnityEngine.Application.targetFrameRate +
+                " unity_vsync=" + UnityEngine.QualitySettings.vSyncCount +
+                " school_db_sync_total=" +
+                schoolDiagnostics.DbSyncDependencies +
+                " school_sql_batches_total=" + schoolDiagnostics.SqlBatches +
+                " school_sql_commit_total_ms=" +
+                Milliseconds(schoolDiagnostics.SqlCommitTicks) +
                 " live_population=" + livePopulation +
+                " total_actor_objects=" + totalActorObjects +
+                " dying_actor_objects=" + dyingActorObjects +
+                " actor_destroy_queue=" + actorDestroyQueue +
+                " school_pending_deaths=" + schoolPendingDeaths +
+                " school_pending_descents=" + schoolPendingDescents +
+                " deferred_runtime_work=" + deferredRuntimeWork +
+                " kingdom_repair_queue=" + kingdomRepairQueue +
                 " army_count=" + armyCount +
                 " frame_ms=" + Milliseconds(frameTicks) +
                 " worst_frame=" + _worstFrameNumber +
@@ -594,6 +690,15 @@ namespace AncientWarfare3.core.policy
                 " async_faulted=" + asyncSnapshot.Faulted +
                 " async_committed=" + asyncSnapshot.Committed +
                 " async_rejected=" + asyncSnapshot.Rejected +
+                " async_commit_slowest=" +
+                asyncCommitTiming.SlowestKey +
+                " async_commit_slowest_lane=" +
+                asyncCommitTiming.SlowestLane +
+                " async_commit_slowest_ms=" +
+                Milliseconds(asyncCommitTiming.SlowestTicks) +
+                " async_commit_total_ms=" +
+                Milliseconds(asyncCommitTiming.TotalTicks) +
+                " async_commit_calls=" + asyncCommitTiming.Calls +
                 " async_db_pending=" + HistoricalWriteService.PendingCount +
                 " async_db_terminal=" +
                 (HistoricalWriteService.TerminalFaulted ? 1 : 0) +
@@ -717,6 +822,12 @@ namespace AncientWarfare3.core.policy
                     "main_sprite"));
             _intervalStarted = intervalEnded;
             _intervalFrameStarted = _frame;
+            _intervalProcessCpuStarted = currentProcessCpuTicks;
+            _intervalMapUpdateTicks = 0L;
+            _intervalOutsideMapTicks = 0L;
+            _intervalGc0Started = currentGc0;
+            _intervalGc1Started = currentGc1;
+            _intervalGc2Started = currentGc2;
             ResetWorstFrameInterval();
             ResetDeathInterval();
             _sampling = false;
@@ -885,10 +996,56 @@ namespace AncientWarfare3.core.policy
         {
             _intervalStarted = 0L;
             _intervalFrameStarted = 0L;
+            _intervalProcessCpuStarted = 0L;
+            _intervalMapUpdateTicks = 0L;
+            _intervalOutsideMapTicks = 0L;
+            _previousFrameEnded = 0L;
+            _intervalGc0Started = 0;
+            _intervalGc1Started = 0;
+            _intervalGc2Started = 0;
             _intervalMode = 0;
             _frameStarted = 0L;
             ResetWorstFrameInterval();
             ResetDeathInterval();
+        }
+
+        private static long CurrentProcessCpuTicks()
+        {
+            ReadProcessSnapshot(out long cpuTicks, out _, out _, out _, out _);
+            return cpuTicks;
+        }
+
+        private static void ReadProcessSnapshot(out long pCpuTicks,
+            out long pPrivateBytes, out long pWorkingBytes,
+            out int pHandles, out int pThreads)
+        {
+            pCpuTicks = 0L;
+            pPrivateBytes = 0L;
+            pWorkingBytes = 0L;
+            pHandles = 0;
+            pThreads = 0;
+            try { pWorkingBytes = Environment.WorkingSet; }
+            catch { }
+
+            Process process = null;
+            try { process = Process.GetCurrentProcess(); }
+            catch { }
+            if (process == null) return;
+            try
+            {
+                pCpuTicks = process.TotalProcessorTime.Ticks;
+            }
+            catch { }
+            try { pPrivateBytes = process.PrivateMemorySize64; }
+            catch { }
+            try { pWorkingBytes = process.WorkingSet64; }
+            catch { }
+            try { pHandles = process.HandleCount; }
+            catch { }
+            try { pThreads = process.Threads.Count; }
+            catch { }
+            try { process.Dispose(); }
+            catch { }
         }
 
         private static void RecordWorstFrame(long pFrameTicks)
@@ -955,14 +1112,61 @@ namespace AncientWarfare3.core.policy
         }
 
         private static void ReadLiveWorldCounts(out int pLivePopulation,
-            out int pArmyCount)
+            out int pTotalActorObjects, out int pDyingActorObjects,
+            out int pActorDestroyQueue, out int pSchoolPendingDeaths,
+            out int pSchoolPendingDescents, out int pDeferredRuntimeWork,
+            out int pKingdomRepairQueue, out int pArmyCount)
         {
             pLivePopulation = 0;
+            pTotalActorObjects = 0;
+            pDyingActorObjects = 0;
+            pActorDestroyQueue = -1;
+            pSchoolPendingDeaths = 0;
+            pSchoolPendingDescents = 0;
+            pDeferredRuntimeWork = 0;
+            pKingdomRepairQueue = 0;
             pArmyCount = 0;
+            ActorManager units = null;
+            try { units = World.world?.units; }
+            catch { }
             try
             {
-                pLivePopulation = World.world?.units?.units_only_alive?.Count ??
-                                  0;
+                pLivePopulation = units?.units_only_alive?.Count ?? 0;
+            }
+            catch { }
+            try { pTotalActorObjects = units?.Count ?? 0; }
+            catch { }
+            try
+            {
+                pDyingActorObjects = units?.units_only_dying?.Count ?? 0;
+            }
+            catch { }
+            try
+            {
+                pActorDestroyQueue = HistoricalSchoolActorDestroyQueue.Count;
+            }
+            catch { }
+            try
+            {
+                pSchoolPendingDeaths =
+                    SchoolMembershipService.PendingDeathCount;
+            }
+            catch { }
+            try
+            {
+                pSchoolPendingDescents =
+                    HistoricalSchoolDescentService.PendingDescentCount;
+            }
+            catch { }
+            try
+            {
+                pDeferredRuntimeWork = DeferredRuntimeWorkService.PendingCount;
+            }
+            catch { }
+            try
+            {
+                pKingdomRepairQueue =
+                    ActorKingdomSafetyService.PendingRepairCount;
             }
             catch { }
             try { pArmyCount = World.world?.armies?.Count ?? 0; }
@@ -972,6 +1176,12 @@ namespace AncientWarfare3.core.policy
         private static string Kilobytes(long pBytes)
         {
             return (pBytes / 1024d).ToString("0.###",
+                CultureInfo.InvariantCulture);
+        }
+
+        private static string Megabytes(long pBytes)
+        {
+            return (pBytes / (1024d * 1024d)).ToString("0.###",
                 CultureInfo.InvariantCulture);
         }
 

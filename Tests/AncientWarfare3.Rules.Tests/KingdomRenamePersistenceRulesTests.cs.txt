@@ -299,19 +299,20 @@ internal static class KingdomRenamePersistenceRulesTests
         Equal(false, committedProjection.Contains("setName("),
             "formal state-name projection cannot bypass localized persistence with setName");
 
-        string migrationService = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "naming", "AWLocalizedNameMigrationService.cs"));
-        int migrateStart = migrationService.IndexOf(
-            "private static void Migrate", StringComparison.Ordinal);
-        int captureStart = migrationService.IndexOf(
-            "AWLocalizedNamePersistence.Capture", migrateStart,
+        string refreshService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "naming", "AWLocalizedNameRefreshService.cs"));
+        int kingdomProjectionStart = refreshService.IndexOf(
+            "case Kingdom kingdom:", StringComparison.Ordinal);
+        int projectionStart = refreshService.IndexOf(
+            "AWLocalizedKingdomNameService.ProjectStored", kingdomProjectionStart,
             StringComparison.Ordinal);
-        int reconcileStart = migrationService.IndexOf(
+        int reconcileStart = refreshService.IndexOf(
             "StateNameService.ReconcileLocalizedIdentityBeforeRestore",
-            migrateStart, StringComparison.Ordinal);
-        Equal(true, reconcileStart >= migrateStart &&
-                    reconcileStart < captureStart,
-            "restore repairs an already projected formal state name before stale localized slots are captured");
+            kingdomProjectionStart, StringComparison.Ordinal);
+        Equal(true, kingdomProjectionStart >= 0 &&
+                    reconcileStart >= kingdomProjectionStart &&
+                    reconcileStart < projectionStart,
+            "restore repairs an already projected formal state name before localized kingdom projection");
         Equal(true, stateNameService.Contains(
                 "string.Equals(pKingdom.name, committed"),
             "old-save repair only trusts a branch state name already projected into the live save");

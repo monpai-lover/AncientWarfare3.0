@@ -104,6 +104,12 @@ namespace AncientWarfare3.core.asyncwork
             return Coordinator.SnapshotDiagnostics();
         }
 
+        public static AWAsyncCommitTimingSnapshot
+            TakeMainThreadCommitTiming()
+        {
+            return Coordinator.TakeMainThreadCommitTiming();
+        }
+
         public static AWAsyncFaultRecord[] SnapshotFaults()
         {
             return Coordinator.SnapshotFaults();

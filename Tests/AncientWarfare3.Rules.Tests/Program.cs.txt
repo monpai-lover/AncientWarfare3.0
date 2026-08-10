@@ -7633,7 +7633,7 @@ True(AWPathLifecycleRules.ShouldPollWaiting(
         now: 10.25d, nextPollAt: 10.25d),
     "waiting paths poll again when their bounded interval elapses");
 Equal(8, AWTraversalGeneration.DefaultChunkSize,
-    "dirty traversal snapshots rebuild small chunks instead of 1024-tile blocks");
+    "stable traversal storage keeps bounded chunks for atomic publication");
 var dirtyScheduleMethod = typeof(AWTraversalCacheBudgetRules).GetMethod(
     "ShouldProcessDirty");
 True(dirtyScheduleMethod != null,
@@ -7641,22 +7641,22 @@ True(dirtyScheduleMethod != null,
 if (dirtyScheduleMethod != null)
 {
     Equal(false, (bool)dirtyScheduleMethod.Invoke(null, new object[] { 3L, 8 }),
-        "dirty traversal publication waits for its four-frame batch boundary");
+        "dirty tile publication waits for its four-frame batch boundary");
     True((bool)dirtyScheduleMethod.Invoke(null, new object[] { 4L, 1 }),
-        "dirty traversal publication runs on the fourth frame when work exists");
+        "dirty tile publication runs on the fourth frame when work exists");
     Equal(false, (bool)dirtyScheduleMethod.Invoke(null, new object[] { 4L, 0 }),
         "an empty traversal cache never performs a scheduled publication");
 }
 var dirtyBudgetMethod = typeof(AWTraversalCacheBudgetRules).GetMethod(
-    "DirtyChunkBudgetForFrame");
+    "DirtyTileBudgetForFrame");
 True(dirtyBudgetMethod != null,
     "dirty traversal publication exposes a bounded batch budget");
 if (dirtyBudgetMethod != null)
 {
     Equal(3, (int)dirtyBudgetMethod.Invoke(null, new object[] { 3 }),
-        "a small dirty backlog rebuilds only the chunks that exist");
-    Equal(8, (int)dirtyBudgetMethod.Invoke(null, new object[] { 64 }),
-        "a large dirty backlog rebuilds at most eight chunks per publication");
+        "a small dirty backlog publishes only the exact tiles that exist");
+    Equal(128, (int)dirtyBudgetMethod.Invoke(null, new object[] { 512 }),
+        "a large dirty backlog publishes at most 128 exact tiles per frame");
 }
 Equal(false, AWTraversalCacheBudgetRules.ShouldRunConsistencySweep(
         frame: 15),
@@ -7666,7 +7666,7 @@ True(AWTraversalCacheBudgetRules.ShouldRunConsistencySweep(frame: 16),
 Equal(16, AWTraversalCacheBudgetRules.ConsistencyTileBudget,
     "fallback consistency work checks only sixteen tiles per pass");
 Equal(128, AWTraversalCacheBudgetRules.MaximumDirtyTilesPerFrame,
-    "dirty traversal rebuild throughput remains two chunks per average frame");
+    "dirty traversal publication remains bounded to 128 exact tiles per frame");
 var titleLocaleKeys = File.ReadAllLines(Path.Combine(
         Directory.GetCurrentDirectory(), "Locales", "aw3_titles.csv"))
     .Skip(1)

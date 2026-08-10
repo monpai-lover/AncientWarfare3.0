@@ -132,7 +132,8 @@ namespace AncientWarfare3.core.pathfinding
                     var thread = new Thread(WorkerLoop)
                     {
                         IsBackground = true,
-                        Name = "AW3 Path Worker " + (i + 1)
+                        Name = "AW3 Path Worker " + (i + 1),
+                        Priority = ThreadPriority.BelowNormal
                     };
                     _workers[i] = thread;
                     thread.Start();
@@ -296,11 +297,27 @@ namespace AncientWarfare3.core.pathfinding
             pCursor = default;
             if (!_sessions.TryGetValue(pActorId, out PathSessionRecord record))
                 return new AWPathPollResult(AWPathPollKind.NoRequest);
-            PathfindingTask task;
+            PathfindingTask task = Volatile.Read(ref record.Latest);
+            if (task != null && task.WaitingInitialized && !task.HasWorkerUpdate)
+            {
+                pCursor = new ReadyPathCursor(this, pActorId, task);
+                return new AWPathPollResult(AWPathPollKind.Waiting);
+            }
             lock (record.Gate) task = record.Latest;
+            if (task == null)
+                return new AWPathPollResult(AWPathPollKind.NoRequest);
+            task.ClearWorkerUpdate();
             AWPathPollResult result = PollOwned(pActorId, task);
             if (result.Kind == AWPathPollKind.StepReady)
+            {
+                task.ResetWaitingInitialized();
                 pCursor = new ReadyPathCursor(this, pActorId, task);
+            }
+            else if (result.Kind == AWPathPollKind.Waiting)
+            {
+                task.MarkWaitingInitialized();
+                pCursor = new ReadyPathCursor(this, pActorId, task);
+            }
             return result;
         }
 
@@ -502,6 +519,9 @@ namespace AncientWarfare3.core.pathfinding
                             !segmentResult.Succeeded ||
                             segmentResult.ReachedTarget)
                             task.Request.Stream.EnsureCompleted();
+                        // Wake a waiting actor only after the worker has
+                        // published a new stream state or segment.
+                        task.MarkWorkerUpdate();
                         if (task.Request.Stream.State == AWPathRequestState.Succeeded)
                             _diagnostics?.OnCompleted();
                         else if (task.Request.Stream.State == AWPathRequestState.Failed)
@@ -858,9 +878,23 @@ namespace AncientWarfare3.core.pathfinding
         {
             private int _references = 2;
             private int _workerReleased;
+            private int _workerUpdate;
+            private int _waitingInitialized;
 
             internal PathfindingTask(AWPathRequest pRequest) { Request = pRequest; }
             internal AWPathRequest Request { get; }
+            internal bool HasWorkerUpdate =>
+                Volatile.Read(ref _workerUpdate) != 0;
+            internal bool WaitingInitialized =>
+                Volatile.Read(ref _waitingInitialized) != 0;
+            internal void ClearWorkerUpdate() =>
+                Interlocked.Exchange(ref _workerUpdate, 0);
+            internal void MarkWorkerUpdate() =>
+                Interlocked.Exchange(ref _workerUpdate, 1);
+            internal void MarkWaitingInitialized() =>
+                Interlocked.Exchange(ref _waitingInitialized, 1);
+            internal void ResetWaitingInitialized() =>
+                Volatile.Write(ref _waitingInitialized, 0);
             internal void ReleaseOwner() => Release();
             internal void ReleaseWorker()
             {

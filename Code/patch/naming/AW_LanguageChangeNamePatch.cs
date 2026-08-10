@@ -11,7 +11,6 @@ namespace AncientWarfare3.patch.naming
         private static void SetLanguage_Postfix()
         {
             AWLocalizedNameRefreshService.Request();
-            AWLocalizedNameMigrationService.Request();
         }
     }
 }

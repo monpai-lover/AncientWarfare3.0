@@ -9,10 +9,14 @@ namespace AncientWarfare3.core.pathfinding
     {
         private readonly Dictionary<int, AWRegionNode> _regions;
 
-        private AWRegionTopologySnapshot(Dictionary<int, AWRegionNode> pRegions)
+        private AWRegionTopologySnapshot(int pRevision,
+            Dictionary<int, AWRegionNode> pRegions)
         {
+            Revision = Math.Max(1, pRevision);
             _regions = pRegions ?? new Dictionary<int, AWRegionNode>();
         }
+
+        internal int Revision { get; }
 
         internal bool TryGetRegion(int pRegionId, out AWRegionNode pRegion)
         {
@@ -25,7 +29,7 @@ namespace AncientWarfare3.core.pathfinding
         {
             var builders = new Dictionary<int, RegionBuilder>();
             if (pChunks == null || pWidth <= 0 || pHeight <= 0)
-                return new AWRegionTopologySnapshot(null);
+                return new AWRegionTopologySnapshot(1, null);
 
             int chunksWide = Math.Max(1, (pWidth + pChunkSize - 1) / pChunkSize);
             int tileCount = pWidth * pHeight;
@@ -76,7 +80,67 @@ namespace AncientWarfare3.core.pathfinding
                 result.Add(pair.Key, new AWRegionNode(pair.Key,
                     pair.Value.CenterTileId, neighbours));
             }
-            return new AWRegionTopologySnapshot(result);
+            return new AWRegionTopologySnapshot(1, result);
+        }
+
+        internal static AWRegionTopologySnapshot Build(
+            AWTraversalGeneration pGeneration)
+        {
+            var builders = new Dictionary<int, RegionBuilder>();
+            if (pGeneration == null || pGeneration.Width <= 0 ||
+                pGeneration.Height <= 0)
+                return new AWRegionTopologySnapshot(1, null);
+
+            int tileCount = pGeneration.TileCount;
+            for (int tileId = 0; tileId < tileCount; tileId++)
+            {
+                if (!pGeneration.TryGet(tileId,
+                        out AWTileTraversalSnapshot tile) ||
+                    tile.RegionId < 0) continue;
+                if (!builders.TryGetValue(tile.RegionId,
+                        out RegionBuilder builder))
+                {
+                    builder = new RegionBuilder();
+                    builders.Add(tile.RegionId, builder);
+                }
+                if (builder.CenterTileId < 0) builder.CenterTileId = tile.Id;
+            }
+
+            for (int tileId = 0; tileId < tileCount; tileId++)
+            {
+                if (!pGeneration.TryGet(tileId,
+                        out AWTileTraversalSnapshot tile) ||
+                    tile.RegionId < 0 || !builders.TryGetValue(tile.RegionId,
+                        out RegionBuilder source)) continue;
+                for (int index = 0; index < tile.NeighborCount; index++)
+                {
+                    int neighbourId = tile.GetNeighbor(index);
+                    if (!pGeneration.TryGet(neighbourId,
+                            out AWTileTraversalSnapshot neighbour) ||
+                        neighbour.RegionId < 0 ||
+                        neighbour.RegionId == tile.RegionId) continue;
+                    source.Neighbours.Add(neighbour.RegionId);
+                    if (builders.TryGetValue(neighbour.RegionId,
+                            out RegionBuilder target))
+                        target.Neighbours.Add(tile.RegionId);
+                }
+            }
+
+            var result = new Dictionary<int, AWRegionNode>(builders.Count);
+            foreach (KeyValuePair<int, RegionBuilder> pair in builders)
+            {
+                int[] neighbours = new int[pair.Value.Neighbours.Count];
+                pair.Value.Neighbours.CopyTo(neighbours);
+                Array.Sort(neighbours);
+                result.Add(pair.Key, new AWRegionNode(pair.Key,
+                    pair.Value.CenterTileId, neighbours));
+            }
+            return new AWRegionTopologySnapshot(1, result);
+        }
+
+        internal AWRegionTopologySnapshot WithRevision(int pRevision)
+        {
+            return new AWRegionTopologySnapshot(pRevision, _regions);
         }
 
         private static bool TryGetTile(AWTileTraversalSnapshot[][] pChunks,
@@ -143,8 +207,9 @@ namespace AncientWarfare3.core.pathfinding
                 start.RegionId < 0 || target.RegionId < 0)
                 return null;
 
-            var key = new RouteKey(pGeneration, start.RegionId, target.RegionId,
-                pTraversalClass);
+            AWRegionTopologySnapshot topology = pGeneration.RegionTopology;
+            var key = new RouteKey(pGeneration, topology, start.RegionId,
+                target.RegionId, pTraversalClass);
             lock (_gate)
             {
                 if (_entries.TryGetValue(key,
@@ -156,8 +221,7 @@ namespace AncientWarfare3.core.pathfinding
                 }
             }
 
-            int[] route = BuildRoute(pGeneration.RegionTopology,
-                start.RegionId, target.RegionId);
+            int[] route = BuildRoute(topology, start.RegionId, target.RegionId);
             lock (_gate)
             {
                 if (_entries.TryGetValue(key,
@@ -241,15 +305,18 @@ namespace AncientWarfare3.core.pathfinding
         private readonly struct RouteKey : IEquatable<RouteKey>
         {
             internal RouteKey(AWTraversalGeneration pGeneration,
-                int pStartRegion, int pTargetRegion, int pTraversalClass)
+                AWRegionTopologySnapshot pTopology, int pStartRegion,
+                int pTargetRegion, int pTraversalClass)
             {
                 GenerationIdentity = pGeneration?.Identity ?? 0L;
+                TopologyRevision = pTopology?.Revision ?? 0;
                 StartRegion = pStartRegion;
                 TargetRegion = pTargetRegion;
                 TraversalClass = pTraversalClass;
             }
 
             internal long GenerationIdentity { get; }
+            internal int TopologyRevision { get; }
             internal int StartRegion { get; }
             internal int TargetRegion { get; }
             internal int TraversalClass { get; }
@@ -257,6 +324,7 @@ namespace AncientWarfare3.core.pathfinding
             public bool Equals(RouteKey pOther)
             {
                 return GenerationIdentity == pOther.GenerationIdentity &&
+                       TopologyRevision == pOther.TopologyRevision &&
                        StartRegion == pOther.StartRegion &&
                        TargetRegion == pOther.TargetRegion &&
                        TraversalClass == pOther.TraversalClass;
@@ -272,6 +340,7 @@ namespace AncientWarfare3.core.pathfinding
                 unchecked
                 {
                     int hash = GenerationIdentity.GetHashCode();
+                    hash = hash * 397 ^ TopologyRevision;
                     hash = hash * 397 ^ StartRegion;
                     hash = hash * 397 ^ TargetRegion;
                     hash = hash * 397 ^ TraversalClass;

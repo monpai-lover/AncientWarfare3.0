@@ -8,25 +8,21 @@ namespace AncientWarfare3.core.pathfinding
     public static class AWTraversalCacheBudgetRules
     {
         public const int DirtyPublishIntervalFrames = 4;
-        public const int DirtyChunkBudget = 8;
-        public const int AverageDirtyChunkBudgetPerFrame =
-            DirtyChunkBudget / DirtyPublishIntervalFrames;
+        public const int DirtyTileBudget = 128;
         public const int ConsistencySweepIntervalFrames = 16;
         public const int ConsistencyTileBudget = 16;
-        public const int MaximumDirtyTilesPerFrame = AverageDirtyChunkBudgetPerFrame *
-                                                    AWTraversalGeneration.DefaultChunkSize *
-                                                    AWTraversalGeneration.DefaultChunkSize;
+        public const int MaximumDirtyTilesPerFrame = DirtyTileBudget;
 
-        public static bool ShouldProcessDirty(long frame, int dirtyChunkCount)
+        public static bool ShouldProcessDirty(long frame, int dirtyTileCount)
         {
-            return dirtyChunkCount > 0 &&
+            return dirtyTileCount > 0 &&
                    frame > 0 &&
                    frame % DirtyPublishIntervalFrames == 0;
         }
 
-        public static int DirtyChunkBudgetForFrame(int dirtyChunkCount)
+        public static int DirtyTileBudgetForFrame(int dirtyTileCount)
         {
-            return Math.Min(DirtyChunkBudget, Math.Max(0, dirtyChunkCount));
+            return Math.Min(DirtyTileBudget, Math.Max(0, dirtyTileCount));
         }
 
         public static bool ShouldRunConsistencySweep(long frame)
@@ -51,9 +47,30 @@ namespace AncientWarfare3.core.pathfinding
             bool block = false, bool liquid = false, bool ocean = false, bool lava = false,
             bool fire = false, bool damageUnits = false, float terrainDamage = 0f,
             float walkMultiplier = 1f, bool goodForBoat = false, int oceanComponent = -1,
-            int regionId = -1, int islandId = -1, int[] pNeighbors = null)
+            int regionId = -1, int islandId = -1, int[] pNeighbors = null,
+            bool hasType = true)
+            : this(pId, pX, pY, ground, block, liquid, ocean, lava, fire,
+                damageUnits, terrainDamage, walkMultiplier, goodForBoat,
+                oceanComponent, regionId, islandId,
+                Math.Min(8, pNeighbors?.Length ?? 0),
+                Neighbor(pNeighbors, 0), Neighbor(pNeighbors, 1),
+                Neighbor(pNeighbors, 2), Neighbor(pNeighbors, 3),
+                Neighbor(pNeighbors, 4), Neighbor(pNeighbors, 5),
+                Neighbor(pNeighbors, 6), Neighbor(pNeighbors, 7), hasType)
+        {
+        }
+
+        internal AWTileTraversalSnapshot(int pId, int pX, int pY,
+            bool ground, bool block, bool liquid, bool ocean, bool lava,
+            bool fire, bool damageUnits, float terrainDamage,
+            float walkMultiplier, bool goodForBoat, int oceanComponent,
+            int regionId, int islandId, int neighborCount,
+            int pNeighbor0, int pNeighbor1, int pNeighbor2, int pNeighbor3,
+            int pNeighbor4, int pNeighbor5, int pNeighbor6, int pNeighbor7,
+            bool hasType)
         {
             Exists = pId >= 0;
+            HasType = Exists && hasType;
             Id = pId;
             X = pX;
             Y = pY;
@@ -70,15 +87,15 @@ namespace AncientWarfare3.core.pathfinding
             OceanComponent = oceanComponent;
             RegionId = regionId;
             IslandId = islandId;
-            NeighborCount = Math.Min(8, pNeighbors?.Length ?? 0);
-            _neighbor0 = Neighbor(pNeighbors, 0);
-            _neighbor1 = Neighbor(pNeighbors, 1);
-            _neighbor2 = Neighbor(pNeighbors, 2);
-            _neighbor3 = Neighbor(pNeighbors, 3);
-            _neighbor4 = Neighbor(pNeighbors, 4);
-            _neighbor5 = Neighbor(pNeighbors, 5);
-            _neighbor6 = Neighbor(pNeighbors, 6);
-            _neighbor7 = Neighbor(pNeighbors, 7);
+            NeighborCount = Math.Max(0, Math.Min(8, neighborCount));
+            _neighbor0 = pNeighbor0;
+            _neighbor1 = pNeighbor1;
+            _neighbor2 = pNeighbor2;
+            _neighbor3 = pNeighbor3;
+            _neighbor4 = pNeighbor4;
+            _neighbor5 = pNeighbor5;
+            _neighbor6 = pNeighbor6;
+            _neighbor7 = pNeighbor7;
         }
 
         public bool Exists { get; }
@@ -124,7 +141,7 @@ namespace AncientWarfare3.core.pathfinding
             return new AWTileTraversalSnapshot(Id, X, Y, Ground, Block,
                 Liquid, Ocean, Lava, Fire, DamageUnits, TerrainDamage,
                 WalkMultiplier, GoodForBoat, pComponent, RegionId, IslandId,
-                neighbors);
+                neighbors, HasType);
         }
 
         private static int Neighbor(int[] pNeighbors, int pIndex)
@@ -195,12 +212,30 @@ namespace AncientWarfare3.core.pathfinding
     public sealed class AWTraversalGeneration : IDisposable
     {
         public const int DefaultChunkSize = 8;
+        private const int ExistsFlag = 1 << 0;
+        private const int HasTypeFlag = 1 << 1;
+        private const int GroundFlag = 1 << 2;
+        private const int BlockFlag = 1 << 3;
+        private const int LiquidFlag = 1 << 4;
+        private const int OceanFlag = 1 << 5;
+        private const int LavaFlag = 1 << 6;
+        private const int FireFlag = 1 << 7;
+        private const int DamageUnitsFlag = 1 << 8;
+        private const int GoodForBoatFlag = 1 << 9;
         private static long _nextIdentity;
 
-        private readonly AWTileTraversalSnapshot[][] _chunks;
+        private readonly int[] _tileFlags;
+        private readonly float[] _terrainDamage;
+        private readonly float[] _walkMultipliers;
+        private readonly int[] _oceanComponents;
+        private readonly int[] _regionIds;
+        private readonly int[] _islandIds;
+        private readonly int[] _neighborCounts;
+        private readonly int[] _neighbors;
         private readonly IReadOnlyDictionary<int,
             AWTileTraversalSnapshot[]> _overlayChunks;
-        private readonly AWRegionTopologySnapshot _regionTopology;
+        private AWRegionTopologySnapshot _regionTopology;
+        private int _topologyRevision;
         private readonly long _identity;
         private AWTraversalGeneration _baseGeneration;
         private int _references = 1;
@@ -214,11 +249,29 @@ namespace AncientWarfare3.core.pathfinding
             Height = Math.Max(0, pHeight);
             ChunkSize = Math.Max(1, pChunkSize);
             ChunksWide = Math.Max(1, (Width + ChunkSize - 1) / ChunkSize);
-            _chunks = pChunks ?? Array.Empty<AWTileTraversalSnapshot[]>();
+            int tileCount = TileCount;
+            _tileFlags = new int[tileCount];
+            _terrainDamage = new float[tileCount];
+            _walkMultipliers = new float[tileCount];
+            _oceanComponents = new int[tileCount];
+            _regionIds = new int[tileCount];
+            _islandIds = new int[tileCount];
+            _neighborCounts = new int[tileCount];
+            _neighbors = new int[tileCount * 8];
+            for (int tileId = 0; tileId < tileCount; tileId++)
+            {
+                _oceanComponents[tileId] = -1;
+                _regionIds[tileId] = -1;
+                _islandIds[tileId] = -1;
+            }
+            for (int index = 0; index < _neighbors.Length; index++)
+                _neighbors[index] = -1;
             _overlayChunks = null;
             _identity = Interlocked.Increment(ref _nextIdentity);
             _regionTopology = pRegionTopology ?? AWRegionTopologySnapshot.Build(
-                _chunks, Width, Height, ChunkSize);
+                pChunks, Width, Height, ChunkSize);
+            _topologyRevision = _regionTopology.Revision;
+            LoadChunks(pChunks);
         }
 
         private AWTraversalGeneration(int pId, AWTraversalGeneration pBase,
@@ -230,9 +283,17 @@ namespace AncientWarfare3.core.pathfinding
             Height = pBase.Height;
             ChunkSize = pBase.ChunkSize;
             ChunksWide = pBase.ChunksWide;
-            _chunks = Array.Empty<AWTileTraversalSnapshot[]>();
+            _tileFlags = null;
+            _terrainDamage = null;
+            _walkMultipliers = null;
+            _oceanComponents = null;
+            _regionIds = null;
+            _islandIds = null;
+            _neighborCounts = null;
+            _neighbors = null;
             _identity = Interlocked.Increment(ref _nextIdentity);
             _regionTopology = pBase.RegionTopology;
+            _topologyRevision = _regionTopology?.Revision ?? 1;
             if (pOverlays == null || pOverlays.Count == 0)
                 _overlayChunks = null;
             else
@@ -255,7 +316,8 @@ namespace AncientWarfare3.core.pathfinding
         public int TileCount => Width * Height;
         public int ReferenceCount => Math.Max(0, Volatile.Read(ref _references));
         internal long Identity => _identity;
-        internal AWRegionTopologySnapshot RegionTopology => _regionTopology;
+        internal AWRegionTopologySnapshot RegionTopology =>
+            Volatile.Read(ref _regionTopology);
 
         public AWTraversalGeneration Retain()
         {
@@ -286,8 +348,31 @@ namespace AncientWarfare3.core.pathfinding
                 return _baseGeneration.TryGet(pTileId, out pTile);
             else
             {
-                if (chunkId < 0 || chunkId >= _chunks.Length) return false;
-                chunk = _chunks[chunkId];
+                int flags = Volatile.Read(ref _tileFlags[pTileId]);
+                if ((flags & ExistsFlag) == 0) return false;
+                int neighborOffset = pTileId * 8;
+                pTile = new AWTileTraversalSnapshot(pTileId, x, y,
+                    HasFlag(flags, GroundFlag), HasFlag(flags, BlockFlag),
+                    HasFlag(flags, LiquidFlag), HasFlag(flags, OceanFlag),
+                    HasFlag(flags, LavaFlag), HasFlag(flags, FireFlag),
+                    HasFlag(flags, DamageUnitsFlag),
+                    Volatile.Read(ref _terrainDamage[pTileId]),
+                    Volatile.Read(ref _walkMultipliers[pTileId]),
+                    HasFlag(flags, GoodForBoatFlag),
+                    Volatile.Read(ref _oceanComponents[pTileId]),
+                    Volatile.Read(ref _regionIds[pTileId]),
+                    Volatile.Read(ref _islandIds[pTileId]),
+                    Volatile.Read(ref _neighborCounts[pTileId]),
+                    Volatile.Read(ref _neighbors[neighborOffset]),
+                    Volatile.Read(ref _neighbors[neighborOffset + 1]),
+                    Volatile.Read(ref _neighbors[neighborOffset + 2]),
+                    Volatile.Read(ref _neighbors[neighborOffset + 3]),
+                    Volatile.Read(ref _neighbors[neighborOffset + 4]),
+                    Volatile.Read(ref _neighbors[neighborOffset + 5]),
+                    Volatile.Read(ref _neighbors[neighborOffset + 6]),
+                    Volatile.Read(ref _neighbors[neighborOffset + 7]),
+                    HasFlag(flags, HasTypeFlag));
+                return true;
             }
             if (chunk == null) return false;
             int local = x % ChunkSize + (y % ChunkSize) * ChunkSize;
@@ -299,7 +384,15 @@ namespace AncientWarfare3.core.pathfinding
         internal AWTileTraversalSnapshot[][] CopyChunkReferences()
         {
             if (_baseGeneration == null)
-                return (AWTileTraversalSnapshot[][])_chunks.Clone();
+            {
+                int chunksHigh = Math.Max(1,
+                    (Height + ChunkSize - 1) / ChunkSize);
+                var stableChunks = new AWTileTraversalSnapshot[
+                    ChunksWide * chunksHigh][];
+                for (int chunkId = 0; chunkId < stableChunks.Length; chunkId++)
+                    stableChunks[chunkId] = CopyChunkSnapshot(chunkId);
+                return stableChunks;
+            }
             AWTileTraversalSnapshot[][] chunks =
                 _baseGeneration.CopyChunkReferences();
             if (_overlayChunks != null)
@@ -308,6 +401,113 @@ namespace AncientWarfare3.core.pathfinding
                     if (entry.Key >= 0 && entry.Key < chunks.Length)
                         chunks[entry.Key] = entry.Value;
             return chunks;
+        }
+
+        internal AWTileTraversalSnapshot[] CopyChunkSnapshot(int pChunkId)
+        {
+            if (pChunkId < 0) return Array.Empty<AWTileTraversalSnapshot>();
+            if (_baseGeneration != null)
+            {
+                if (_overlayChunks != null && _overlayChunks.TryGetValue(
+                        pChunkId, out AWTileTraversalSnapshot[] overlay))
+                    return (AWTileTraversalSnapshot[])overlay.Clone();
+                return _baseGeneration.CopyChunkSnapshot(pChunkId);
+            }
+            int chunksHigh = Math.Max(1,
+                (Height + ChunkSize - 1) / ChunkSize);
+            if (pChunkId >= ChunksWide * chunksHigh)
+                return Array.Empty<AWTileTraversalSnapshot>();
+            var result = new AWTileTraversalSnapshot[ChunkSize * ChunkSize];
+            int chunkX = pChunkId % ChunksWide;
+            int chunkY = pChunkId / ChunksWide;
+            for (int localY = 0; localY < ChunkSize; localY++)
+            for (int localX = 0; localX < ChunkSize; localX++)
+            {
+                int x = chunkX * ChunkSize + localX;
+                int y = chunkY * ChunkSize + localY;
+                if (x >= Width || y >= Height) continue;
+                int tileId = x + y * Width;
+                if (TryGet(tileId, out AWTileTraversalSnapshot tile))
+                    result[localX + localY * ChunkSize] = tile;
+            }
+            return result;
+        }
+
+        internal void ApplyTileSnapshots(
+            IReadOnlyList<AWTileTraversalSnapshot> pTiles)
+        {
+            if (_baseGeneration != null || pTiles == null ||
+                pTiles.Count == 0) return;
+            for (int index = 0; index < pTiles.Count; index++)
+            {
+                AWTileTraversalSnapshot tile = pTiles[index];
+                if (!tile.Exists || tile.Id < 0 || tile.Id >= TileCount)
+                    continue;
+                WriteTileSnapshot(tile);
+            }
+        }
+
+        private void LoadChunks(AWTileTraversalSnapshot[][] pChunks)
+        {
+            if (pChunks == null) return;
+            for (int chunkId = 0; chunkId < pChunks.Length; chunkId++)
+            {
+                AWTileTraversalSnapshot[] chunk = pChunks[chunkId];
+                if (chunk == null) continue;
+                for (int local = 0; local < chunk.Length; local++)
+                {
+                    AWTileTraversalSnapshot tile = chunk[local];
+                    if (tile.Exists && tile.Id >= 0 && tile.Id < TileCount)
+                        WriteTileSnapshot(tile);
+                }
+            }
+        }
+
+        private void WriteTileSnapshot(AWTileTraversalSnapshot pTile)
+        {
+            int tileId = pTile.Id;
+            if (_tileFlags == null || tileId < 0 || tileId >= TileCount)
+                return;
+            Volatile.Write(ref _terrainDamage[tileId], pTile.TerrainDamage);
+            Volatile.Write(ref _walkMultipliers[tileId], pTile.WalkMultiplier);
+            Volatile.Write(ref _oceanComponents[tileId], pTile.OceanComponent);
+            Volatile.Write(ref _regionIds[tileId], pTile.RegionId);
+            Volatile.Write(ref _islandIds[tileId], pTile.IslandId);
+            Volatile.Write(ref _neighborCounts[tileId], pTile.NeighborCount);
+            int neighborOffset = tileId * 8;
+            for (int index = 0; index < 8; index++)
+                Volatile.Write(ref _neighbors[neighborOffset + index],
+                    pTile.GetNeighbor(index));
+            Volatile.Write(ref _tileFlags[tileId], FlagsOf(pTile));
+        }
+
+        private static int FlagsOf(AWTileTraversalSnapshot pTile)
+        {
+            int flags = pTile.Exists ? ExistsFlag : 0;
+            if (pTile.HasType) flags |= HasTypeFlag;
+            if (pTile.Ground) flags |= GroundFlag;
+            if (pTile.Block) flags |= BlockFlag;
+            if (pTile.Liquid) flags |= LiquidFlag;
+            if (pTile.Ocean) flags |= OceanFlag;
+            if (pTile.Lava) flags |= LavaFlag;
+            if (pTile.Fire) flags |= FireFlag;
+            if (pTile.DamageUnits) flags |= DamageUnitsFlag;
+            if (pTile.GoodForBoat) flags |= GoodForBoatFlag;
+            return flags;
+        }
+
+        private static bool HasFlag(int pFlags, int pFlag)
+        {
+            return (pFlags & pFlag) != 0;
+        }
+
+        internal void ReplaceTopologySnapshot(
+            AWRegionTopologySnapshot pTopology)
+        {
+            if (_baseGeneration != null || pTopology == null) return;
+            int revision = Interlocked.Increment(ref _topologyRevision);
+            AWRegionTopologySnapshot topology = pTopology.WithRevision(revision);
+            Volatile.Write(ref _regionTopology, topology);
         }
 
         internal static AWTraversalGeneration FromOverlay(int pId,

@@ -10,6 +10,25 @@ namespace AncientWarfare3.core.schools
             typeof(SimSystemManager<Actor, ActorData>).GetField("_to_destroy_objects",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
+        internal static int Count
+        {
+            get
+            {
+                try
+                {
+                    ActorManager units = World.world?.units;
+                    return units != null && ActorDestroyQueueField?.GetValue(units)
+                        is HashSet<Actor> queue
+                        ? queue.Count
+                        : -1;
+                }
+                catch
+                {
+                    return -1;
+                }
+            }
+        }
+
         internal static bool Queue(Actor pActor, string pFailureContext)
         {
             try

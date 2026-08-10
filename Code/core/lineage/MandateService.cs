@@ -1490,7 +1490,7 @@ namespace AncientWarfare3.core.lineage
             bool totalLoss = false;
             try
             {
-                if (WarScoreRuntimeBridge.TryGetSnapshot(pWar, pDefender,
+                if (WarScoreService.TryGetSnapshot(pWar, pDefender,
                         out WarScoreSnapshot snapshot))
                 {
                     bool attacker = snapshot.AttackerKingdomId == pDefender.id;

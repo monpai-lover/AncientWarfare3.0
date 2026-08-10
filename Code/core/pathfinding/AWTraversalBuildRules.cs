@@ -172,10 +172,15 @@ namespace AncientWarfare3.core.pathfinding
                 ? AWRegionTopologySnapshot.Build(chunks, pInput.Width,
                     pInput.Height, pInput.ChunkSize)
                 : null;
+            AWTraversalGeneration prepared = pInput.ResultGenerationId > 0
+                ? new AWTraversalGeneration(pInput.ResultGenerationId,
+                    pInput.Width, pInput.Height, pInput.ChunkSize, chunks,
+                    topology)
+                : null;
             return new AWTraversalBuildResult(pInput.WorldGeneration,
                 pInput.BaseGenerationId, pInput.SourceRevision,
                 pInput.Width, pInput.Height, pInput.ChunkSize, chunks,
-                topology);
+                topology, prepared);
         }
 
         public static bool CanPublish(AWTraversalBuildResult pResult,
@@ -343,6 +348,55 @@ namespace AncientWarfare3.core.pathfinding
         {
             pToken.ThrowIfCancellationRequested();
             return AWTraversalBuildRules.Build(_input);
+        }
+    }
+
+    internal sealed class AWTraversalTopologyBuildExecution : IDisposable
+    {
+        private AWTraversalGeneration _generation;
+        private readonly long _worldGeneration;
+        private readonly int _baseGenerationId;
+        private readonly long _sourceRevision;
+
+        public AWTraversalTopologyBuildExecution(
+            AWTraversalGeneration pGeneration, long pWorldGeneration,
+            int pBaseGenerationId, long pSourceRevision)
+        {
+            _generation = pGeneration?.Retain() ??
+                throw new ArgumentNullException(nameof(pGeneration));
+            _worldGeneration = pWorldGeneration;
+            _baseGenerationId = pBaseGenerationId;
+            _sourceRevision = pSourceRevision;
+        }
+
+        public object Execute(CancellationToken pToken)
+        {
+            AWTraversalGeneration generation = Interlocked.Exchange(
+                ref _generation, null);
+            if (generation == null)
+                throw new ObjectDisposedException(
+                    nameof(AWTraversalTopologyBuildExecution));
+            try
+            {
+                pToken.ThrowIfCancellationRequested();
+                AWRegionTopologySnapshot topology =
+                    AWRegionTopologySnapshot.Build(generation);
+                return new AWTraversalBuildResult(_worldGeneration,
+                    _baseGenerationId, _sourceRevision, generation.Width,
+                    generation.Height, generation.ChunkSize,
+                    Array.Empty<AWTileTraversalSnapshot[]>(), topology);
+            }
+            finally
+            {
+                generation.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            AWTraversalGeneration generation = Interlocked.Exchange(
+                ref _generation, null);
+            generation?.Dispose();
         }
     }
 }

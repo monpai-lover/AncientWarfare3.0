@@ -113,7 +113,7 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         int flushGate = flushSource.IndexOf("ShouldFlushInterval(",
             StringComparison.Ordinal);
         int intervalClock = flushSource.IndexOf(
-            "long intervalEnded = Stopwatch.GetTimestamp();",
+            "long intervalEnded = frameEnded;",
             StringComparison.Ordinal);
         Contains(flushSource, "TerminateIntervalBaseline();",
             "an invalid flush terminates its mixed interval");
@@ -240,6 +240,17 @@ internal static class RuntimePerformanceDiagnosticRulesTests
                 intervalFrames: 120L, intervalTicks: 2000L,
                 timestampFrequency: 0L),
             "an unavailable timestamp frequency has no average FPS");
+        Equal(25L, RuntimePerformanceDiagnosticRules.FrameGapTicks(
+                previousFrameEndTicks: 75L, currentFrameStartTicks: 100L),
+            "the diagnostic accounts for work between MapBox update frames");
+        Equal(0L, RuntimePerformanceDiagnosticRules.FrameGapTicks(
+                previousFrameEndTicks: 100L, currentFrameStartTicks: 75L),
+            "a regressed timestamp cannot create a negative frame gap");
+        Equal(2d, RuntimePerformanceDiagnosticRules.AverageLogicalCoreUsage(
+                processCpuTicks: 40_000_000L, intervalStopwatchTicks: 2_000L,
+                processCpuTicksPerSecond: 10_000_000L,
+                stopwatchFrequency: 1_000L),
+            "process CPU is reported as average logical cores used");
     }
 
     private static void PerformanceIntervalLogUsesO1NativeCounts()
@@ -252,8 +263,36 @@ internal static class RuntimePerformanceDiagnosticRulesTests
             "PERF log exposes frames completed during the interval");
         Contains(source, " avg_fps=",
             "PERF log exposes average real frames per second");
+        Contains(source, " map_update_avg_ms=",
+            "PERF log exposes average MapBox update time");
+        Contains(source, " outside_map_avg_ms=",
+            "PERF log exposes time outside the currently instrumented update");
+        Contains(source, " process_cpu_cores=",
+            "PERF log distinguishes CPU saturation from frame waiting");
+        Contains(source, " managed_heap_mb=",
+            "PERF log exposes absolute managed heap growth");
+        Contains(source, " process_private_mb=",
+            "PERF log distinguishes managed growth from native process growth");
+        Contains(source, " interval_gc2_collections=",
+            "PERF log exposes full collections across the complete interval");
+        Contains(source, " school_db_sync_total=",
+            "PERF log exposes remaining simulation-thread school writes");
         Contains(source, " live_population=",
             "PERF log exposes the current live population");
+        Contains(source, " total_actor_objects=",
+            "PERF log exposes actors still retained by the native manager");
+        Contains(source, " dying_actor_objects=",
+            "PERF log exposes actors waiting in the native dying partition");
+        Contains(source, " actor_destroy_queue=",
+            "PERF log exposes actors waiting for native destruction");
+        Contains(source, " school_pending_deaths=",
+            "PERF log exposes school death records retaining actors");
+        Contains(source, " school_pending_descents=",
+            "PERF log exposes historical descent records retaining actors");
+        Contains(source, " deferred_runtime_work=",
+            "PERF log exposes deferred closures retaining runtime graphs");
+        Contains(source, " kingdom_repair_queue=",
+            "PERF log exposes actor repair work retaining actors");
         Contains(source, " army_count=",
             "PERF log exposes the current army count");
 
@@ -271,7 +310,7 @@ internal static class RuntimePerformanceDiagnosticRulesTests
             "ShouldStartIntervalBaseline(", enableState,
             StringComparison.Ordinal);
         int baselineClock = source.IndexOf(
-            "_intervalStarted = Stopwatch.GetTimestamp();",
+            "_intervalStarted = frameStarted;",
             baselineDecision, StringComparison.Ordinal);
         True(enableState >= 0 && baselineDecision > enableState &&
              baselineClock > baselineDecision,
@@ -287,6 +326,10 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         string countSource = source.Substring(helper, helperEnd - helper);
         Contains(countSource, "units_only_alive?.Count",
             "live population reuses the native alive-unit list count");
+        Contains(countSource, "units?.Count",
+            "total actor retention reuses the native manager count");
+        Contains(countSource, "units_only_dying?.Count",
+            "dying actor retention reuses the native dying-list count");
         Contains(countSource, "armies?.Count",
             "army count reuses the native manager count");
         Equal(false, countSource.Contains("foreach") ||
@@ -294,6 +337,33 @@ internal static class RuntimePerformanceDiagnosticRulesTests
                      countSource.Contains("getSimpleArray") ||
                      countSource.Contains("ToList("),
             "world-count sampling performs no world scan or materialization");
+
+        int processHelper = source.IndexOf(
+            "private static void ReadProcessSnapshot(",
+            StringComparison.Ordinal);
+        int processHelperEnd = IndexAfter(source, "        private static ",
+            processHelper + 1);
+        True(processHelper >= 0 && processHelperEnd > processHelper,
+            "PERF diagnostics expose a bounded process snapshot helper");
+        string processSource = source.Substring(processHelper,
+            processHelperEnd - processHelper);
+        Contains(processSource, "Environment.WorkingSet",
+            "working-set diagnostics have a Mono-compatible fallback");
+        True(Count(processSource, "try") >= 5,
+            "unsupported Process properties cannot zero unrelated metrics");
+    }
+
+    private static int Count(string source, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(value, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 
     private static void ActorParallelMetricsSeparateWallFromWorkerTime()

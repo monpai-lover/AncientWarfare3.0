@@ -5,6 +5,7 @@ internal static class PathfindingPerformanceTests
 {
     public static void Run()
     {
+        TraversalSnapshotPreservesTileTypePresence();
         WorkClassesPreserveOperationalCapacityWithFairness();
         RuntimeSubmittersClassifyPathWorkExplicitly();
         RequestKeysMatchWithoutAllocating();
@@ -26,10 +27,19 @@ internal static class PathfindingPerformanceTests
         TraversalRevisionMustMatchBeforeConsumption();
         StaleTraversalRequestIsRejectedBeforeSearch();
         RegionRouteCacheReusesOnlyMatchingSnapshotVersion();
+        RegionRouteCacheRejectsReplacedTopologyInStableGeneration();
         RetainAfterDisposeDoesNotResurrectSnapshot();
         RegionTopologyUsesDeclaredHeightForPartialChunkArrays();
         FastSwimmingProfileChangesSpeedAndStaminaCost();
         InitialTraversalPublicationCannotStarveOnLiveDirtyChunks();
+        InitialTraversalBuildKeepsConcurrentDirtyTilesQueued();
+        DirtyTraversalUsesStableExactTilePublication();
+        StableTraversalGenerationPublishesOnlyChangedTiles();
+        TopologyBuildUsesAnIndependentRevisionBoundary();
+        TopologyPublicationCannotOverwriteNewerTileState();
+        StableTraversalTilePublicationDoesNotCloneChunks();
+        TopologyAndShadowBuildsAvoidMainThreadFullMapMaterialization();
+        InitialWorkerPreparesStableTraversalStorage();
         InitialConnectivityBuildUsesTraversalWorker();
         InitialTraversalBuildCarriesWorkerTopology();
         LargeSchedulerPathProgressRules();
@@ -45,6 +55,8 @@ internal static class PathfindingPerformanceTests
         ActorGateHotPathDoesNotUseGlobalLifecycleLock();
         PathfinderSubmissionDoesNotUseGlobalLifecycleLock();
         PathfinderStopLinearizesAgainstNewSubmissions();
+        WaitingPathPollingSkipsUnchangedWorkerState();
+        PathWorkersYieldCpuToTheFrameScheduler();
         ConcurrentDisposeWaitsForTheActiveDrain();
         RecoveryStateSupportsIndependentActorWorkers();
         NativeMovementHotPathShortCircuitsBeforeOwnershipLookup();
@@ -61,6 +73,18 @@ internal static class PathfindingPerformanceTests
         VassalPowerTraversalUsesRelationIndex();
         WarAiDistantCandidatesUseABoundedNearestWindow();
         ActorPostDiagnosticsExposeWorkerAndCommitCosts();
+        AsyncCommitDiagnosticsExposeSlowestKey();
+    }
+
+    private static void TraversalSnapshotPreservesTileTypePresence()
+    {
+        var tile = new AWTileTraversalSnapshot(1, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        Assert(tile.HasType,
+            "a captured normal tile must preserve HasType for runtime step validation");
+        Assert((AWPathTileFlagsExtensions.FromSnapshot(tile) &
+                AWPathTileFlags.HasType) != 0,
+            "planned path flags must include HasType for a normal tile");
     }
 
     private static void ActorPostDiagnosticsExposeWorkerAndCommitCosts()
@@ -76,6 +100,66 @@ internal static class PathfindingPerformanceTests
             "AW3 PERF separates Actor post worker and commit costs");
         Assert(diagnostic.Contains("TakeDiagnostics()"),
             "runtime diagnostics consume Actor post metrics");
+    }
+
+    private static void AsyncCommitDiagnosticsExposeSlowestKey()
+    {
+        string coordinator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "asyncwork",
+            "AWAsyncWorkCoordinator.cs"));
+        string diagnostic = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "RuntimePerformanceDiagnostic.cs"));
+        Assert(coordinator.Contains("RecordMainThreadCommit(") &&
+               coordinator.Contains("TakeMainThreadCommitTiming("),
+            "async completion drain records and consumes per-key commit timing");
+        Assert(diagnostic.Contains("async_commit_slowest=") &&
+               diagnostic.Contains("async_commit_slowest_ms=") &&
+               diagnostic.Contains("async_commit_total_ms=") &&
+               diagnostic.Contains("async_commit_calls="),
+            "AW3 PERF identifies the main-thread commit responsible for a drain spike");
+    }
+
+    private static void WaitingPathPollingSkipsUnchangedWorkerState()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(source.Contains("WaitingInitialized") &&
+               source.Contains("HasWorkerUpdate") &&
+               source.Contains("ClearWorkerUpdate") &&
+               source.Contains("MarkWaitingInitialized") &&
+               source.Contains("ResetWaitingInitialized"),
+            "path tasks retain Cultiway-style waiting and worker-update state");
+        int openStart = source.IndexOf("OpenReadyCursor(",
+            StringComparison.Ordinal);
+        int openEnd = source.IndexOf("public bool Consume(", openStart,
+            StringComparison.Ordinal);
+        Assert(openStart >= 0 && openEnd > openStart &&
+               source.Substring(openStart, openEnd - openStart).Contains(
+                   "WaitingInitialized && !task.HasWorkerUpdate",
+                   StringComparison.Ordinal),
+            "unchanged waiting paths return before polling the stream or actor gate");
+        Assert(source.Substring(openStart, openEnd - openStart).Contains(
+                   "Volatile.Read(ref record.Latest)",
+                   StringComparison.Ordinal),
+            "unchanged waiting paths read the published task without taking the session gate");
+        Assert(source.Substring(openStart, openEnd - openStart).Contains(
+                   "task != null && task.WaitingInitialized",
+                   StringComparison.Ordinal) &&
+               source.Substring(openStart, openEnd - openStart).Contains(
+                   "if (task == null)", StringComparison.Ordinal),
+            "session publication races cannot dereference an unpublished path task");
+    }
+
+    private static void PathWorkersYieldCpuToTheFrameScheduler()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(finder.Contains("Priority = ThreadPriority.BelowNormal",
+                StringComparison.Ordinal),
+            "Cultiway-perf worker allocation requires path workers to yield CPU to Unity and foreground simulation");
     }
 
     private static void InitialTraversalBuildCarriesWorkerTopology()
@@ -741,6 +825,219 @@ internal static class PathfindingPerformanceTests
             "live dirty chunks remain queued without starving the first traversal generation");
     }
 
+    private static void InitialTraversalBuildKeepsConcurrentDirtyTilesQueued()
+    {
+        string cache = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        int captureComplete = cache.IndexOf(
+            "bool tileCaptureComplete =", StringComparison.Ordinal);
+        int scheduledGuard = cache.IndexOf(
+            "if (_initialBuildScheduled) return;", captureComplete,
+            StringComparison.Ordinal);
+        int dirtyCapture = cache.IndexOf(
+            "CaptureInitialDirtyFrame(", captureComplete,
+            StringComparison.Ordinal);
+        Assert(captureComplete >= 0 && scheduledGuard > captureComplete &&
+               dirtyCapture > scheduledGuard,
+            "dirty tiles arriving during the initial worker build remain queued for stable exact publication");
+    }
+
+    private static void DirtyTraversalUsesStableExactTilePublication()
+    {
+        string cache = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        Assert(cache.Contains("HashSet<int> _dirtyTiles",
+                StringComparison.Ordinal),
+            "Cultiway-style traversal maintenance tracks exact dirty tile ids");
+        Assert(cache.Contains("Queue<int> _dirtyTileQueue",
+                StringComparison.Ordinal) &&
+               !cache.Contains("_dirtyTiles.GetEnumerator()",
+                   StringComparison.Ordinal),
+            "budgeted exact dirty publication consumes a FIFO instead of repeatedly scanning HashSet tombstones");
+        Assert(!cache.Contains("Queue<int> _dirtyChunks",
+                StringComparison.Ordinal),
+            "one dirty tile cannot expand into an entire queued chunk capture");
+        Assert(cache.Contains("ApplyTileSnapshots",
+                StringComparison.Ordinal),
+            "steady-state dirty tiles publish into the stable navigation generation");
+        Assert(!cache.Contains("new AWAsyncWorkRequest(\"traversal-cache\"",
+                StringComparison.Ordinal),
+            "ordinary dirty tiles cannot create repeated traversal async commits");
+    }
+
+    private static void StableTraversalGenerationPublishesOnlyChangedTiles()
+    {
+        using AWTraversalGeneration generation = LinearLandGeneration(4);
+        long identity = generation.Identity;
+        Assert(generation.TryGet(1, out AWTileTraversalSnapshot before) &&
+               before.Ground,
+            "stable traversal test starts with a traversable tile");
+        var changed = new AWTileTraversalSnapshot(1, 1, 0,
+            ground: false, block: true, pNeighbors: new[] { 0, 2 });
+
+        generation.ApplyTileSnapshots(new[] { changed });
+
+        Assert(generation.Identity == identity,
+            "exact dirty publication preserves the navigation grid identity");
+        Assert(generation.TryGet(1, out AWTileTraversalSnapshot after) &&
+               after.Block && !after.Ground,
+            "the exact dirty tile becomes visible to path workers");
+        Assert(generation.TryGet(2, out AWTileTraversalSnapshot untouched) &&
+               untouched.Ground,
+            "an adjacent tile is not recaptured or replaced");
+    }
+
+    private static void TopologyBuildUsesAnIndependentRevisionBoundary()
+    {
+        string cache = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        Assert(cache.Contains("_topologySourceRevision",
+                StringComparison.Ordinal),
+            "region topology builds use a revision independent from ordinary tile publication");
+        int scheduleStart = cache.IndexOf(
+            "private void ScheduleTopologyBuild()", StringComparison.Ordinal);
+        int publishStart = cache.IndexOf(
+            "private void PublishTopologyBuild(", scheduleStart,
+            StringComparison.Ordinal);
+        Assert(scheduleStart >= 0 && publishStart > scheduleStart,
+            "topology scheduling has an isolated source boundary");
+        string schedule = cache.Substring(scheduleStart,
+            publishStart - scheduleStart);
+        Assert(schedule.Contains("_topologySourceRevision",
+                StringComparison.Ordinal) &&
+               !schedule.Contains("rebuildWaterConnectivity: true",
+                   StringComparison.Ordinal),
+            "ordinary topology refreshes neither bind to tile revisions nor rebuild global water connectivity");
+        int topologyStart = cache.IndexOf(
+            "private static bool TopologyRelevantChanged(",
+            StringComparison.Ordinal);
+        int topologyEnd = cache.IndexOf("private int TakeDirtyTile()",
+            topologyStart, StringComparison.Ordinal);
+        Assert(topologyStart >= 0 && topologyEnd > topologyStart,
+            "topology change classification remains explicit");
+        string classification = cache.Substring(topologyStart,
+            topologyEnd - topologyStart);
+        Assert(classification.Contains("RegionId", StringComparison.Ordinal) &&
+               classification.Contains("NeighborCount", StringComparison.Ordinal) &&
+               !classification.Contains("Ground", StringComparison.Ordinal) &&
+               !classification.Contains("GoodForBoat", StringComparison.Ordinal),
+            "only region and neighbour graph changes invalidate region topology");
+    }
+
+    private static void TopologyPublicationCannotOverwriteNewerTileState()
+    {
+        string cache = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        int publishStart = cache.IndexOf(
+            "private void PublishTopologyBuild(", StringComparison.Ordinal);
+        int commitStart = cache.IndexOf(
+            "private sealed class AWTraversalTopologyCommit", publishStart,
+            StringComparison.Ordinal);
+        Assert(publishStart >= 0 && commitStart > publishStart,
+            "topology publication has an isolated commit boundary");
+        string publish = cache.Substring(publishStart,
+            commitStart - publishStart);
+        Assert(publish.Contains("ReplaceTopologySnapshot(pResult.RegionTopology)",
+                StringComparison.Ordinal) &&
+               !publish.Contains("pResult.Chunks",
+                   StringComparison.Ordinal),
+            "a completed topology worker cannot roll stable tile data back to its capture-time chunks");
+    }
+
+    private static void StableTraversalTilePublicationDoesNotCloneChunks()
+    {
+        string snapshot = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalSnapshot.cs"));
+        Assert(snapshot.Contains("int[] _tileFlags",
+                StringComparison.Ordinal) &&
+               snapshot.Contains("float[] _terrainDamage",
+                   StringComparison.Ordinal) &&
+               snapshot.Contains("float[] _walkMultipliers",
+                   StringComparison.Ordinal) &&
+               snapshot.Contains("int[] _regionIds",
+                   StringComparison.Ordinal),
+            "stable traversal generations retain Cultiway-style scalar tile stores");
+        int applyStart = snapshot.IndexOf(
+            "internal void ApplyTileSnapshots(", StringComparison.Ordinal);
+        int topologyStart = snapshot.IndexOf(
+            "internal void ReplaceTopologySnapshot(", applyStart,
+            StringComparison.Ordinal);
+        Assert(applyStart >= 0 && topologyStart > applyStart,
+            "stable tile publication has an isolated implementation");
+        string apply = snapshot.Substring(applyStart,
+            topologyStart - applyStart);
+        Assert(apply.Contains("WriteTileSnapshot(",
+                StringComparison.Ordinal) &&
+               !apply.Contains("Clone()", StringComparison.Ordinal) &&
+               !apply.Contains("replacements", StringComparison.Ordinal),
+            "steady-state dirty publication writes exact tiles without cloning touched chunks");
+        Assert(snapshot.Contains("Volatile.Write(ref _tileFlags[",
+                StringComparison.Ordinal),
+            "tile flags publish last so workers observe the preceding scalar writes");
+    }
+
+    private static void TopologyAndShadowBuildsAvoidMainThreadFullMapMaterialization()
+    {
+        string cache = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        int dirtyStart = cache.IndexOf("private int ProcessDirtyTiles(",
+            StringComparison.Ordinal);
+        int shadowStart = cache.IndexOf("private void ScheduleShadowBuild(",
+            dirtyStart, StringComparison.Ordinal);
+        string dirty = cache.Substring(dirtyStart, shadowStart - dirtyStart);
+        Assert(!dirty.Contains("CopyChunkReferences()",
+                   StringComparison.Ordinal) &&
+               dirty.Contains("CopyChunkSnapshot(", StringComparison.Ordinal),
+            "shadow comparison copies only touched chunks instead of materializing the full map twice");
+        int topologyStart = cache.IndexOf(
+            "private void ScheduleTopologyBuild()", StringComparison.Ordinal);
+        int topologyEnd = cache.IndexOf(
+            "private void HandleTopologyBuildFault", topologyStart,
+            StringComparison.Ordinal);
+        string topology = cache.Substring(topologyStart,
+            topologyEnd - topologyStart);
+        Assert(!topology.Contains("CopyChunkReferences()",
+                   StringComparison.Ordinal) &&
+               topology.Contains("AWTraversalTopologyBuildExecution(_current",
+                   StringComparison.Ordinal),
+            "topology scheduling retains the stable SoA generation and performs its full scan on the worker");
+    }
+
+    private static void InitialWorkerPreparesStableTraversalStorage()
+    {
+        string models = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalBuildModels.cs"));
+        string rules = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalBuildRules.cs"));
+        string cache = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        Assert(models.Contains("PreparedGeneration", StringComparison.Ordinal) &&
+               models.Contains("ResultGenerationId", StringComparison.Ordinal) &&
+               rules.Contains("new AWTraversalGeneration(",
+                   StringComparison.Ordinal),
+            "the initial traversal worker prepares stable SoA storage before commit");
+        int publishStart = cache.IndexOf("private void PublishInitialBuild(",
+            StringComparison.Ordinal);
+        int publishEnd = cache.IndexOf("private void ScheduleTopologyBuild()",
+            publishStart, StringComparison.Ordinal);
+        string publish = cache.Substring(publishStart,
+            publishEnd - publishStart);
+        Assert(publish.Contains("pResult.PreparedGeneration",
+                   StringComparison.Ordinal) &&
+               !publish.Contains("new AWTraversalGeneration(",
+                   StringComparison.Ordinal),
+            "initial publication adopts worker-prepared storage without scanning every tile on the main thread");
+    }
+
     private static void OwnershipIndexUsesSingleHotLookup()
     {
         var ownership = new AWPathOwnershipIndex();
@@ -1203,7 +1500,7 @@ internal static class PathfindingPerformanceTests
             "initial connectivity is not computed inline on the simulation thread");
         int publishStart = cache.IndexOf("private void PublishInitialBuild(",
             StringComparison.Ordinal);
-        int publishEnd = cache.IndexOf("private void ScheduleOverlayBuild(",
+        int publishEnd = cache.IndexOf("private void ScheduleTopologyBuild(",
             publishStart, StringComparison.Ordinal);
         Assert(publishStart >= 0 && publishEnd > publishStart,
             "initial traversal publication has an isolated validation block");
@@ -1295,6 +1592,47 @@ internal static class PathfindingPerformanceTests
         int[] changed = cache.GetOrBuild(secondGeneration, 0, 15, 0);
         Assert(changed != null && !ReferenceEquals(first, changed),
             "a new traversal generation cannot reuse an old region route");
+    }
+
+    private static void RegionRouteCacheRejectsReplacedTopologyInStableGeneration()
+    {
+        var initialTiles = new[]
+        {
+            new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+                regionId: 0, pNeighbors: new[] { 1 }),
+            new AWTileTraversalSnapshot(1, 1, 0, ground: true,
+                regionId: 1, pNeighbors: new[] { 0, 2 }),
+            new AWTileTraversalSnapshot(2, 2, 0, ground: true,
+                regionId: 2, pNeighbors: new[] { 1 })
+        };
+        using var generation = AWTraversalGeneration.FromTiles(901, 3, 1,
+            initialTiles);
+        var cache = new AWRegionRouteCache(4);
+        int[] first = cache.GetOrBuild(generation, 0, 2, 0);
+        Assert(first != null && first.Length == 3 && first[1] == 1,
+            "the initial stable generation route uses the original topology");
+
+        var replacementTiles = new[]
+        {
+            new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+                regionId: 0, pNeighbors: new[] { 1 }),
+            new AWTileTraversalSnapshot(1, 1, 0, ground: true,
+                regionId: 3, pNeighbors: new[] { 0, 2 }),
+            new AWTileTraversalSnapshot(2, 2, 0, ground: true,
+                regionId: 2, pNeighbors: new[] { 1 })
+        };
+        using var replacement = AWTraversalGeneration.FromTiles(902, 3, 1,
+            replacementTiles);
+        AWTileTraversalSnapshot[][] chunks = replacement.CopyChunkReferences();
+        AWRegionTopologySnapshot topology = AWRegionTopologySnapshot.Build(
+            chunks, replacement.Width, replacement.Height,
+            replacement.ChunkSize);
+        generation.ReplaceTopologySnapshot(topology);
+
+        int[] changed = cache.GetOrBuild(generation, 0, 2, 0);
+        Assert(changed != null && changed.Length == 3 && changed[1] == 3 &&
+               !ReferenceEquals(first, changed),
+            "a topology replacement invalidates cached routes without replacing the generation");
     }
 
     private static void FastSwimmingProfileChangesSpeedAndStaminaCost()
