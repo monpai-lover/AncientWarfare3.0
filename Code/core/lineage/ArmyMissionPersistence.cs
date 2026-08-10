@@ -5,6 +5,13 @@ using AncientWarfare3.api.multiplayer;
 
 namespace AncientWarfare3.core.lineage
 {
+    public enum ArmyMissionRestoreDisposition
+    {
+        Invalid = 0,
+        Restored = 1,
+        NeedsAssignment = 2
+    }
+
     public sealed class ArmyMissionStoredIntent
     {
         public long WarId { get; set; } = -1L;
@@ -92,39 +99,79 @@ namespace AncientWarfare3.core.lineage
             ArmyMissionRestoreFacts pFacts, out ArmyRtsMission pMission,
             out ArmyRtsState pInitialState)
         {
+            double currentWorldTime = pStored?.IssuedTime >= 0d &&
+                                      !double.IsNaN(pStored.IssuedTime) &&
+                                      !double.IsInfinity(pStored.IssuedTime)
+                ? pStored.IssuedTime
+                : 0d;
+            return ResolveRestore(pStored, pFacts, currentWorldTime,
+                       out pMission, out pInitialState) ==
+                   ArmyMissionRestoreDisposition.Restored;
+        }
+
+        public static ArmyMissionRestoreDisposition ResolveRestore(
+            ArmyMissionStoredIntent pStored,
+            ArmyMissionRestoreFacts pFacts, double currentWorldTime,
+            out ArmyRtsMission pMission,
+            out ArmyRtsState pInitialState)
+        {
             pMission = null;
             pInitialState = ArmyRtsState.Idle;
             if (pStored == null || pFacts == null ||
                 !pFacts.ArmyAlive || !pFacts.ArmyKingdomMatches ||
-                !pFacts.WarActive || !pFacts.TargetAlive ||
+                !pFacts.WarActive || pStored.WarId < 0L)
+                return ArmyMissionRestoreDisposition.Invalid;
+
+            pInitialState = ArmyRtsState.Rally;
+            if (!pFacts.TargetAlive ||
                 !pFacts.TargetBelongsToMissionWar ||
-                pStored.WarId < 0L || pStored.FrontId < 0L ||
-                pStored.TargetCityId < 0L || pStored.IssuedTime < 0d ||
-                double.IsNaN(pStored.IssuedTime) ||
-                double.IsInfinity(pStored.IssuedTime))
-                return false;
-            if (!TryParseDefined(pStored.Role, out ArmyRtsRole role) ||
-                !TryParseDefined(pStored.Posture,
-                    out ArmyRtsPosture posture) ||
-                !TryParseDefined(pStored.ProposalKind,
-                    out ArmyRtsProposalKind proposalKind)) return false;
+                pStored.TargetCityId < 0L)
+                return ArmyMissionRestoreDisposition.NeedsAssignment;
+
+            ArmyRtsRole role = ParseOrDefault(pStored.Role,
+                ArmyRtsRole.Assault);
+            ArmyRtsPosture posture = ParseOrDefault(pStored.Posture,
+                ArmyRtsPosture.Automatic);
+            ArmyRtsProposalKind proposalKind = ParseOrDefault(
+                pStored.ProposalKind, ArmyRtsProposalKind.Attack);
+            double issuedTime = pStored.IssuedTime;
+            if (issuedTime < 0d || double.IsNaN(issuedTime) ||
+                double.IsInfinity(issuedTime))
+                issuedTime = NormalizeWorldTime(currentWorldTime);
 
             pMission = new ArmyRtsMission
             {
                 ArmyId = pFacts.ArmyId,
                 KingdomId = pFacts.KingdomId,
                 WarId = pStored.WarId,
-                FrontId = pStored.FrontId,
+                FrontId = pStored.FrontId >= 0L
+                    ? pStored.FrontId
+                    : pStored.TargetCityId,
                 TargetCityId = pStored.TargetCityId,
                 TargetStrength = Math.Max(0, pStored.TargetStrength),
                 ProposalKind = proposalKind,
                 Role = role,
                 Posture = posture,
                 PlayerOrder = pStored.PlayerOrder,
-                IssuedTime = pStored.IssuedTime
+                IssuedTime = issuedTime
             };
-            pInitialState = ArmyRtsState.Rally;
-            return true;
+            return ArmyMissionRestoreDisposition.Restored;
+        }
+
+        private static T ParseOrDefault<T>(string pValue, T pDefault)
+            where T : struct, Enum
+        {
+            return TryParseDefined(pValue, out T parsed)
+                ? parsed
+                : pDefault;
+        }
+
+        private static double NormalizeWorldTime(double pWorldTime)
+        {
+            return pWorldTime >= 0d && !double.IsNaN(pWorldTime) &&
+                   !double.IsInfinity(pWorldTime)
+                ? pWorldTime
+                : 0d;
         }
 
         private static bool TryParseDefined<T>(string pValue,
@@ -190,13 +237,23 @@ namespace AncientWarfare3.core.lineage
                 TargetBelongsToMissionWar =
                     IsTargetInWar(war, target, kingdom)
             };
-            if (!ArmyMissionPersistenceRules.TryRestore(stored, facts,
-                    out pMission, out pInitialState))
+            ArmyMissionRestoreDisposition disposition =
+                ArmyMissionPersistenceRules.ResolveRestore(stored, facts,
+                    LineageService.CurTime(), out pMission,
+                    out pInitialState);
+            if (disposition == ArmyMissionRestoreDisposition.Invalid)
                 return RejectRestore(pArmy);
+            if (disposition ==
+                ArmyMissionRestoreDisposition.NeedsAssignment)
+            {
+                Restored.Remove(pArmy.id);
+                KingdomWarDirectorService.OnArmyChanged(kingdom);
+                return false;
+            }
             if (!ArmyRtsControllerService.ValidateMissionTarget(pArmy,
                     pMission))
                 return RejectRestore(pArmy);
-            Restored[pArmy.id] = pMission;
+            Persist(pArmy, pMission);
             KingdomWarDirectorService.OnArmyChanged(kingdom);
             return true;
         }

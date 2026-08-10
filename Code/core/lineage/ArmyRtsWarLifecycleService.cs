@@ -306,6 +306,18 @@ namespace AncientWarfare3.core.lineage
             QueuedDiscovery.Clear();
         }
 
+        public static void RebuildDiscovery()
+        {
+            DiscoveryByParticipant.Clear();
+            DiscoveryQueue.Clear();
+            QueuedDiscovery.Clear();
+            if (World.world?.wars == null) return;
+            foreach (War war in World.world.wars)
+            {
+                if (IsActiveWar(war)) OnWarStarted(war);
+            }
+        }
+
         private static void EnqueueDiscovery(War pWar, Kingdom pKingdom)
         {
             if (pWar?.data == null || pKingdom?.data == null) return;

@@ -234,6 +234,7 @@
     <Compile Include="ArmyRtsCombatHandoffRulesTests.cs.txt" />
     <Compile Include="ArmyRtsSyntheticRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAssignmentReconciliationRulesTests.cs.txt" />
+    <Compile Include="ArmyMissionPersistenceRulesTests.cs.txt" />
     <Compile Include="ArmyRtsSuccessionRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmySharedPathRecoveryRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyDiagnosticSamplingTests.cs.txt" />
@@ -473,6 +474,7 @@
     <Compile Include="..\..\Code\core\lineage\PreparationRecruitmentProtectionRules.cs" Link="Production\PreparationRecruitmentProtectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsWarLifecycleService.cs" Link="Production\ArmyRtsWarLifecycleService.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsAssignmentReconciliationRules.cs" Link="Production\ArmyRtsAssignmentReconciliationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyMissionPersistence.cs" Link="Production\ArmyMissionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsReplenishmentArrivalRules.cs" Link="Production\ArmyRtsReplenishmentArrivalRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyCaptainContinuityRules.cs" Link="Production\ArmyCaptainContinuityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRuntimeMode.cs" Link="Production\ArmyRtsRuntimeMode.cs" />

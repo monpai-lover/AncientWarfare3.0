@@ -8171,6 +8171,7 @@ ArmyRtsWarLifecycleStateTests.Run();
 ArmyRtsCombatHandoffRulesTests.Run();
 ArmyRtsSyntheticRecoveryRulesTests.Run();
 ArmyRtsAssignmentReconciliationRulesTests.Run();
+ArmyMissionPersistenceRulesTests.Run();
 ArmyRtsSuccessionRecoveryRulesTests.Run();
 ArmyRtsSchedulingRulesTests.Run();
 ArmyRtsExecutionBudgetRulesTests.Run();
