@@ -20,6 +20,7 @@ namespace AncientWarfare3.core.naming
             if (TryProjectHistoricalFigure(pActor, out string historicalName))
                 return historicalName;
             string generatorId = ResolveActorGenerator(pActor, MetaType.Unit);
+            bool nativeSinitic = IsNativeSiniticActor(pActor);
             return EnsureIdentity(pActor.data, "Unit", generatorId, pActor.getID(),
                 ResolveCultureId(pActor), (pGenerator, pParameters) =>
                 {
@@ -31,6 +32,9 @@ namespace AncientWarfare3.core.naming
                 }, (pGenerated, pSelectedName) =>
                     PersistActorGeneratedComponents(pActor, pGenerated,
                         pSelectedName), pGenerated =>
+                    nativeSinitic
+                        ? SelectNativeSiniticGeneratedName(pActor, pGenerated)
+                        :
                     AWActorInitialNameRules.ResolveGeneratedName(
                     pGenerated.Name, pGenerated.Components,
                         CivMonkeyNamingRules.IsCivilizedMonkey(
@@ -470,6 +474,21 @@ namespace AncientWarfare3.core.naming
         {
             if (pActor?.data == null || pGenerated?.Components == null) return;
 
+            if (IsNativeSiniticActor(pActor))
+            {
+                NativeSiniticNameParts pParts =
+                    ResolveNativeSiniticGeneratedIdentity(pActor, pGenerated);
+                if (!pParts.Valid) return;
+                pActor.data.set(LineageKeys.FAMILY_NAME, pParts.FamilyName);
+                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME,
+                    pParts.FamilyName);
+                pActor.data.set(AWNameDataKeys.FamilyComponent,
+                    pParts.FamilyName);
+                pActor.data.set(LineageKeys.GIVEN_NAME, pParts.GivenName);
+                pActor.data.set(AWNameDataKeys.GivenName, pParts.GivenName);
+                return;
+            }
+
             // Actor creation stores only the generated given name. A family
             // or surname becomes durable only after AW3 admits a family
             // branch or records an inherited parent identity.
@@ -557,6 +576,34 @@ namespace AncientWarfare3.core.naming
                 if (!string.IsNullOrWhiteSpace(family)) return family.Trim();
             }
             return string.Empty;
+        }
+
+        private static bool IsNativeSiniticActor(Actor pActor)
+        {
+            return AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(
+                pActor?.asset?.id);
+        }
+
+        private static NativeSiniticNameParts
+            ResolveNativeSiniticGeneratedIdentity(Actor pActor,
+                AWGeneratedName pGenerated)
+        {
+            if (pGenerated?.Components == null)
+                return default;
+            pGenerated.Components.TryGetValue("family_name",
+                out string generatedFamily);
+            pGenerated.Components.TryGetValue("given_name",
+                out string taggedGiven);
+            return AWNativeSiniticNamePartsRules.Resolve(pGenerated.Name,
+                generatedFamily, taggedGiven, ResolveActorFamily(pActor));
+        }
+
+        private static string SelectNativeSiniticGeneratedName(Actor pActor,
+            AWGeneratedName pGenerated)
+        {
+            NativeSiniticNameParts pParts =
+                ResolveNativeSiniticGeneratedIdentity(pActor, pGenerated);
+            return pParts.DisplayName;
         }
 
         private static long ResolveCultureId(Actor pActor)

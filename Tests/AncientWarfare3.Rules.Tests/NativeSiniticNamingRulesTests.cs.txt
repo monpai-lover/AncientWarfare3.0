@@ -92,6 +92,18 @@ internal static class NativeSiniticNamingRulesTests
         Equal("太郎", japanese.GivenName,
             "untagged suffix words remain in the complete given name");
 
+        NativeSiniticNameParts inherited =
+            AWNativeSiniticNamePartsRules.Resolve(
+                "山田太郎", "山田", "太", "赵");
+        Equal(true, inherited.Valid,
+            "an inherited family can replace the generated family");
+        Equal("赵", inherited.FamilyName,
+            "the selected parent family remains authoritative");
+        Equal("太郎", inherited.GivenName,
+            "family inheritance preserves every generated given-name word");
+        Equal("赵太郎", inherited.DisplayName,
+            "native Sinitic projection stays surname first without a space");
+
         NativeSiniticNameParts shanhai =
             AWNativeSiniticNamePartsRules.Resolve("狐甲子", "狐", "");
         Equal(true, shanhai.Valid,

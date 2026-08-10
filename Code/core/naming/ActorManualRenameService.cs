@@ -11,7 +11,8 @@ namespace AncientWarfare3.core.naming
             if (LineageService.IsXia(pActor)) return ActorManualNameMode.Xia;
             NamingProfileId profile = AWCultureNamingTraditionService
                 .ResolveForActorReadOnly(pActor).Profile;
-            return profile == NamingProfileId.Xia
+            return profile == NamingProfileId.Xia ||
+                   profile == NamingProfileId.NativeSinitic
                 ? ActorManualNameMode.Xia
                 : ActorManualNameMode.NonXia;
         }
