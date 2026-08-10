@@ -23,7 +23,24 @@ namespace AncientWarfare3.core.naming
                     StringComparison.Ordinal))
                 return string.Equals(profile, "monkey",
                     StringComparison.Ordinal);
+            if (IsNativeSiniticGenerator(generator))
+                return string.Equals(profile, "native_sinitic",
+                    StringComparison.Ordinal);
             return generator.Length > 0;
+        }
+
+        private static bool IsNativeSiniticGenerator(string pGeneratorId)
+        {
+            string[] species =
+            {
+                "civ_dog_", "civ_fox_", "civ_lemon_man_", "civ_rabbit_",
+                "civ_turtle_"
+            };
+            foreach (string prefix in species)
+                if (pGeneratorId.StartsWith(prefix,
+                        StringComparison.Ordinal))
+                    return true;
+            return false;
         }
     }
 }

@@ -25,6 +25,63 @@ internal static class NativeSiniticNamingRulesTests
                 AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(assetId),
                 (assetId ?? "null") + " stays outside the exact species set");
 
+        Equal(NamingProfileId.NativeSinitic,
+            AWNamingProfileRules.Resolve(false, false,
+                nativeSinitic: true, orc: false, civilized: true, valid: true),
+            "the exact species set receives its own natural profile");
+        Equal("native_sinitic",
+            AWCultureNamingTraditionRules.SerializeProfile(
+                NamingProfileId.NativeSinitic),
+            "the profile has a stable persisted id");
+        Equal(NamingProfileId.NativeSinitic,
+            AWCultureNamingTraditionRules.ParseProfile("native_sinitic"),
+            "the persisted profile is restored");
+        Equal(false,
+            AWCultureNamingTraditionRules.ShouldPersistWesternTradition(
+                NamingProfileId.NativeSinitic),
+            "native Sinitic cultures never persist a Western tradition");
+        Equal(NamingProfileId.NativeSinitic,
+            AWCultureNamingTraditionRules.ResolveEffectiveProfile(
+                NamingProfileId.NativeSinitic, NamingProfileId.Western,
+                fullyXiaized: false),
+            "a legacy Western culture resolves to its native profile");
+        Equal(NamingProfileId.NativeSinitic,
+            AWCultureNamingTraditionRules.ResolveInheritedProfile(
+                NamingProfileId.NativeSinitic, NamingProfileId.Western,
+                fullyXiaized: false),
+            "a culture split cannot inherit a Western profile");
+        Equal(NamingProfileId.NativeSinitic,
+            AWCultureNamingTraditionRules.ResolveActorProfile(
+                NamingProfileId.NativeSinitic, NamingProfileId.Xia),
+            "the species keeps its native personal-name profile in Xia culture");
+
+        foreach (string assetId in included)
+        {
+            Equal(assetId + "_name",
+                AWCultureNamingTraditionRules.ResolveGeneratorId(
+                    NamingProfileId.NativeSinitic,
+                    WesternNamingTradition.Von, AWNamingObjectKind.Actor,
+                    assetId, "western_von_name"),
+                assetId + " uses its current actor generator");
+            Equal(assetId + "_city",
+                AWCultureNamingTraditionRules.ResolveGeneratorId(
+                    NamingProfileId.NativeSinitic,
+                    WesternNamingTradition.Von, AWNamingObjectKind.City,
+                    assetId, "western_city"),
+                assetId + " uses its current city generator");
+            Equal(assetId + "_kingdom",
+                AWCultureNamingTraditionRules.ResolveGeneratorId(
+                    NamingProfileId.NativeSinitic,
+                    WesternNamingTradition.Von, AWNamingObjectKind.Kingdom,
+                    assetId, "western_kingdom"),
+                assetId + " uses its current kingdom generator");
+            Equal(assetId + "_name",
+                AWCultureNamingTraditionRules.ResolveFallbackGeneratorId(
+                    NamingProfileId.NativeSinitic,
+                    AWNamingObjectKind.Actor, assetId, "human_name"),
+                assetId + " fallback cannot cross into another profile");
+        }
+
         NativeSiniticNameParts japanese =
             AWNativeSiniticNamePartsRules.Resolve(
                 "山田太郎", "山田", "太");
