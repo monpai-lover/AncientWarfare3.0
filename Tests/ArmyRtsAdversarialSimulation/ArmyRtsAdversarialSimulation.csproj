@@ -39,6 +39,14 @@
              Link="Production\SyntheticMobilizationRules.cs" />
     <Compile Include="..\..\Code\core\performance\ArmyRtsSchedulingMode.cs"
              Link="Production\ArmyRtsSchedulingMode.cs" />
+    <Compile Include="..\..\Code\core\performance\AWFrameSchedulerRules.cs"
+             Link="Production\AWFrameSchedulerRules.cs" />
+    <Compile Include="..\..\Code\core\performance\ArmyRtsExecutionBudgetRules.cs"
+             Link="Production\ArmyRtsExecutionBudgetRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmySharedPathRules.cs"
+             Link="Production\ArmySharedPathRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RoyalGuardMaintenanceRules.cs"
+             Link="Production\RoyalGuardMaintenanceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityManpowerRules.cs"
              Link="Production\CityManpowerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WartimeRecruitmentPopulationRules.cs"

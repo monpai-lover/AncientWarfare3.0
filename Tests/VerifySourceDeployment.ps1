@@ -1,13 +1,18 @@
 [CmdletBinding()]
 param(
-    [string]$SourceRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$SourceRoot,
     [string]$DestinationRoot,
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
 
+if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
+    $SourceRoot = Split-Path -Parent $PSScriptRoot
+}
+
 $productionDirectories = @(
+    'Assemblies',
     'ABPackages',
     'EmbededResources',
     'fonts',
@@ -28,7 +33,7 @@ $productionRootFiles = @(
     'THIRD_PARTY_NOTICES.md'
 )
 $excludedDirectoryNames = @(
-    'Assemblies', 'bin', 'obj', 'Tests', 'docs', '.git', '.worktrees',
+    'bin', 'obj', 'Tests', 'docs', '.git', '.worktrees',
     '.codex', '.superpowers', 'release', 'log', 'logs', 'db', 'temp',
     'tmp', '.runtime'
 )
@@ -100,7 +105,8 @@ function Get-ProductionManifest([string]$Root, [bool]$IsSource,
                     return
                 }
                 $relative = ConvertTo-RelativePath $resolvedRoot $_.FullName
-                if ($IsSource -and $_.Extension -ieq '.dll') {
+                if ($IsSource -and $directory -ine 'Assemblies' -and
+                    $_.Extension -ieq '.dll') {
                     $Failures.Add("Source production collection contains forbidden DLL: $relative")
                 }
                 $manifest[$relative] = $_.FullName
@@ -160,6 +166,9 @@ function Format-SuccessMessage([int]$FileCount) {
 function New-SelfTestFixture([string]$Root) {
     New-Item -ItemType Directory -Path (Join-Path $Root 'Code') -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $Root 'Code/core/db') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $Root 'Assemblies') -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $Root 'Assemblies/Required.dll') `
+        -Value 'fixture-required-assembly' -NoNewline
     foreach ($directory in $productionDirectories) {
         New-Item -ItemType Directory -Path (Join-Path $Root $directory) -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $Root "$directory/content.txt") `
@@ -191,10 +200,10 @@ function Invoke-SelfTest {
             $selfTestFailures.Add('identical fixture was rejected: ' +
                 ($identical.Failures -join '; '))
         }
-        $expectedFixtureCount = 2 + $productionDirectories.Count +
+        $expectedFixtureCount = 3 + $productionDirectories.Count +
             $productionRootFiles.Count
         if ($identical.SourceCount -ne $expectedFixtureCount) {
-            $selfTestFailures.Add("Code/core/db source was omitted: expected $expectedFixtureCount fixture files, found $($identical.SourceCount)")
+            $selfTestFailures.Add("production fixture manifest mismatch: expected $expectedFixtureCount files, found $($identical.SourceCount)")
         }
         $successMessage = Format-SuccessMessage $identical.SourceCount
         if ($successMessage -cne

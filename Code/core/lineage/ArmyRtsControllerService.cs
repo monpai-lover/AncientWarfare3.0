@@ -21,6 +21,7 @@ namespace AncientWarfare3.core.lineage
     public static class ArmyRtsControllerRules
     {
         public const int MaximumControllersPerFrame = 32;
+        public const int StrategicArrivalRadius = 2;
 
         public static bool ShouldPrioritizeMission(ArmyRtsMission pMission)
         {
@@ -146,6 +147,20 @@ namespace AncientWarfare3.core.lineage
                    captainTileId == destinationTileId;
         }
 
+        public static bool HasReachedStrategicDestination(int captainTileId,
+            int destinationTileId, int distanceSquared,
+            bool sameTargetZone, bool endpointValidated,
+            int arrivalRadius)
+        {
+            if (HasReachedStrategicDestination(captainTileId,
+                    destinationTileId)) return true;
+            if (captainTileId < 0 || destinationTileId < 0 ||
+                distanceSquared < 0 || !sameTargetZone ||
+                !endpointValidated) return false;
+            int radius = Math.Max(0, arrivalRadius);
+            return (long)distanceSquared <= (long)radius * radius;
+        }
+
         public static bool ShouldUseCaptainAsMarchFormationAnchor(
             ArmyRtsState pState, bool destinationPublished,
             bool routeArrived)
@@ -203,6 +218,8 @@ namespace AncientWarfare3.core.lineage
 
         public int Count => _records.Count;
         public int QueuedCount => _queuedIds.Count;
+        public int PendingCount => _queuedIds.Count +
+                                   _priorityQueuedIds.Count;
 
         public bool AssignMission(ArmyRtsMission pMission)
         {
@@ -1187,16 +1204,31 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessFrame()
         {
+            ProcessFrame(
+                ArmyRtsControllerRules.MaximumControllersPerFrame,
+                ArmyRtsReplenishmentArrivalRules.
+                    MaximumArrivalChecksPerFrame);
+        }
+
+        public static void ProcessFrame(int pControllerBudget,
+            int pReplenishmentBudget)
+        {
             ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
             if (!ArmyRtsRuntimeModeRules.ShouldPlan(mode)) return;
             if (ArmyRtsWarDoctrine.IsAbstractDecisive) return;
-            ProcessPendingReplenishmentArrivals();
+            ProcessPendingReplenishmentArrivals(pReplenishmentBudget);
             ArmyRtsTransportService.ProcessFrame();
-            IReadOnlyList<long> batch = Controllers.Take(
-                ArmyRtsControllerRules.MaximumControllersPerFrame);
+            IReadOnlyList<long> batch = Controllers.Take(Math.Min(
+                Math.Max(0, pControllerBudget), Controllers.PendingCount));
             for (int i = 0; i < batch.Count; i++)
                 ProcessOne(batch[i], mode);
         }
+
+        public static int PendingControllerCount =>
+            Controllers.PendingCount;
+
+        public static int PendingReplenishmentArrivalCount =>
+            PendingReplenishmentArrivalQueue.Count;
 
         internal static void TrackReplenishmentArrival(Actor pActor,
             Army pArmy)
@@ -1228,15 +1260,15 @@ namespace AncientWarfare3.core.lineage
             PendingReplenishmentArrivalQueue.Enqueue(actorId);
         }
 
-        private static void ProcessPendingReplenishmentArrivals()
+        private static void ProcessPendingReplenishmentArrivals(
+            int pMaximum)
         {
             if (!ArmyRtsRuntimeMode.ShouldCommit ||
                 PendingReplenishmentArrivals.Count == 0 ||
                 PendingReplenishmentArrivalQueue.Count == 0 ||
                 World.world == null || World.world.isPaused()) return;
             double now = CurrentRealtime();
-            int limit = Math.Min(
-                ArmyRtsReplenishmentArrivalRules.MaximumArrivalChecksPerFrame,
+            int limit = Math.Min(Math.Max(0, pMaximum),
                 PendingReplenishmentArrivalQueue.Count);
             for (int i = 0; i < limit; i++)
             {
@@ -2349,6 +2381,9 @@ namespace AncientWarfare3.core.lineage
                     status, combatActive: false, transportActive: false) ||
                 !AWArmyMarchService.ResetActorSharedRoute(actor))
                 return false;
+            if (IsCaptain(actor, army))
+                return RequestRouteReplan(pArmyId,
+                    pAlternateEndpoint: false);
             ReassertMissionCommand(pArmyId, pActorId);
             return true;
         }
@@ -3373,8 +3408,19 @@ namespace AncientWarfare3.core.lineage
             int captainTileId = captain.current_tile.data?.tile_id ?? -1;
             int targetTileId = target.data?.tile_id ?? -1;
             if (ArmyRtsControllerRules.HasReachedStrategicDestination(
-                    captainTileId, targetTileId))
+                    captainTileId, targetTileId,
+                    TileDistanceSquared(captain.current_tile, target),
+                    sameTargetZone: target.zone != null &&
+                                    captain.current_tile.zone == target.zone,
+                    endpointValidated: target.Type != null &&
+                                       !target.Type.block &&
+                                       !target.Type.lava,
+                    arrivalRadius:
+                        ArmyRtsControllerRules.StrategicArrivalRadius))
             {
+                ArmyRouteProviderService.Cancel(pArmy.id,
+                    ArmyRouteCancelReason.TargetReplaced);
+                AWArmyMarchService.ClearArmy(pArmy);
                 pRuntime.AnchorTileId = -1;
                 pRuntime.RouteArrived = true;
                 pRuntime.RouteSubmitted = false;

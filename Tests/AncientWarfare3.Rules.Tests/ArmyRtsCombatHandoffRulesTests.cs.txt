@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using AncientWarfare3.core.lineage;
 
 internal static class ArmyRtsCombatHandoffRulesTests
@@ -66,6 +67,27 @@ internal static class ArmyRtsCombatHandoffRulesTests
         Assert(ArmyRtsWarLifecycleRules.OwnsTacticalActors(
                 ArmyRtsWarPhase.Withdrawal),
             "RTS actor patches resume ownership for withdrawal");
+
+        Assert(ArmyRtsRuntimeModeRules.
+                ShouldAllowVanillaStrategicDecision(
+                    ArmyRtsMode.On,
+                    "warrior_army_leader_move_to_attack_target",
+                    rtsOwnsActor: false),
+            "released combat actors retain vanilla attack decisions");
+        Assert(!ArmyRtsRuntimeModeRules.
+                ShouldAllowVanillaStrategicDecision(
+                    ArmyRtsMode.On,
+                    "warrior_army_leader_move_to_attack_target",
+                    rtsOwnsActor: true),
+            "RTS-owned actors still reject vanilla strategic movement");
+
+        string root = Directory.GetCurrentDirectory();
+        string content = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "ArmyRtsContent.cs"));
+        Assert(content.Contains(
+                "ArmyRtsControllerService.OwnsLiveActor(pActor)",
+                StringComparison.Ordinal),
+            "the decision wrapper must resolve tactical ownership per actor");
     }
 
     private static void Assert(bool condition, string message)

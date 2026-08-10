@@ -1,0 +1,125 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyMissionPersistenceRulesTests
+{
+    internal static void Run()
+    {
+        MissingOptionalFieldsAreMigrated();
+        MissingTargetRequestsReassignment();
+        InvalidAuthorityIsRejected();
+    }
+
+    private static void MissingOptionalFieldsAreMigrated()
+    {
+        var stored = new ArmyMissionStoredIntent
+        {
+            WarId = 10L,
+            FrontId = -1L,
+            TargetCityId = 30L,
+            Role = string.Empty,
+            Posture = string.Empty,
+            ProposalKind = string.Empty,
+            IssuedTime = -1d
+        };
+
+        ArmyMissionRestoreDisposition disposition =
+            ArmyMissionPersistenceRules.ResolveRestore(stored,
+                ValidFacts(), currentWorldTime: 77d,
+                out ArmyRtsMission mission,
+                out ArmyRtsState initialState);
+
+        Equal(ArmyMissionRestoreDisposition.Restored, disposition,
+            "optional legacy fields remain restorable");
+        Equal(ArmyRtsRole.Assault, mission.Role,
+            "legacy role defaults to assault");
+        Equal(ArmyRtsPosture.Automatic, mission.Posture,
+            "legacy posture defaults to automatic");
+        Equal(ArmyRtsProposalKind.Attack, mission.ProposalKind,
+            "legacy proposal defaults to attack");
+        Equal(30L, mission.FrontId,
+            "missing front falls back to the validated target");
+        Equal(77d, mission.IssuedTime,
+            "missing issue time migrates to current world time");
+        Equal(ArmyRtsState.Rally, initialState,
+            "restored missions restart from Rally");
+    }
+
+    private static void MissingTargetRequestsReassignment()
+    {
+        var stored = new ArmyMissionStoredIntent
+        {
+            WarId = 10L,
+            TargetCityId = -1L,
+            IssuedTime = 20d
+        };
+        ArmyMissionRestoreFacts facts = ValidFacts();
+        facts.TargetAlive = false;
+        facts.TargetBelongsToMissionWar = false;
+
+        ArmyMissionRestoreDisposition disposition =
+            ArmyMissionPersistenceRules.ResolveRestore(stored, facts,
+                currentWorldTime: 80d, out ArmyRtsMission mission,
+                out ArmyRtsState initialState);
+
+        Equal(ArmyMissionRestoreDisposition.NeedsAssignment, disposition,
+            "active participant with stale target remains discoverable");
+        Equal<ArmyRtsMission>(null, mission,
+            "stale target cannot create a controller mission");
+        Equal(ArmyRtsState.Rally, initialState,
+            "reassignment starts from Rally");
+    }
+
+    private static void InvalidAuthorityIsRejected()
+    {
+        var stored = new ArmyMissionStoredIntent
+        {
+            WarId = 10L,
+            FrontId = 30L,
+            TargetCityId = 30L,
+            Role = "assault",
+            Posture = "attack",
+            ProposalKind = "attack",
+            IssuedTime = 20d
+        };
+        ArmyMissionRestoreFacts endedWar = ValidFacts();
+        endedWar.WarActive = false;
+        Equal(ArmyMissionRestoreDisposition.Invalid,
+            Resolve(stored, endedWar),
+            "ended wars invalidate persisted missions");
+
+        ArmyMissionRestoreFacts wrongKingdom = ValidFacts();
+        wrongKingdom.ArmyKingdomMatches = false;
+        Equal(ArmyMissionRestoreDisposition.Invalid,
+            Resolve(stored, wrongKingdom),
+            "non-participant armies cannot restore the mission");
+    }
+
+    private static ArmyMissionRestoreDisposition Resolve(
+        ArmyMissionStoredIntent stored, ArmyMissionRestoreFacts facts)
+    {
+        return ArmyMissionPersistenceRules.ResolveRestore(stored, facts,
+            currentWorldTime: 80d, out _, out _);
+    }
+
+    private static ArmyMissionRestoreFacts ValidFacts()
+    {
+        return new ArmyMissionRestoreFacts
+        {
+            ArmyId = 20L,
+            KingdomId = 21L,
+            ArmyAlive = true,
+            ArmyKingdomMatches = true,
+            WarActive = true,
+            TargetAlive = true,
+            TargetBelongsToMissionWar = true
+        };
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

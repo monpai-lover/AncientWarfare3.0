@@ -9,6 +9,13 @@ namespace AncientWarfare3.core.lineage
         Defender = 1
     }
 
+    public enum WarFirstOrderResult
+    {
+        Assigned = 0,
+        RetryLater = 1,
+        Discard = 2
+    }
+
     public readonly struct WarFirstOrderAssignment :
         IEquatable<WarFirstOrderAssignment>
     {
@@ -50,7 +57,9 @@ namespace AncientWarfare3.core.lineage
     {
         private readonly Queue<WarFirstOrderAssignment> _ready =
             new Queue<WarFirstOrderAssignment>();
-        private readonly HashSet<WarFirstOrderAssignment> _queued =
+        private readonly HashSet<WarFirstOrderAssignment> _known =
+            new HashSet<WarFirstOrderAssignment>();
+        private readonly HashSet<WarFirstOrderAssignment> _inFlight =
             new HashSet<WarFirstOrderAssignment>();
 
         public int Count => _ready.Count;
@@ -81,36 +90,60 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             assignment = _ready.Dequeue();
-            _queued.Remove(assignment);
+            _inFlight.Add(assignment);
+            return true;
+        }
+
+        public bool Complete(WarFirstOrderAssignment assignment,
+            WarFirstOrderResult result)
+        {
+            if (!_inFlight.Remove(assignment)) return false;
+            if (result == WarFirstOrderResult.RetryLater)
+            {
+                _ready.Enqueue(assignment);
+                return true;
+            }
+            _known.Remove(assignment);
             return true;
         }
 
         public void RemoveWar(long warId)
         {
-            if (_ready.Count == 0) return;
             int count = _ready.Count;
             for (int i = 0; i < count; i++)
             {
                 WarFirstOrderAssignment item = _ready.Dequeue();
                 if (item.WarId == warId)
                 {
-                    _queued.Remove(item);
+                    _known.Remove(item);
                     continue;
                 }
                 _ready.Enqueue(item);
+            }
+            if (_inFlight.Count == 0) return;
+            var remove = new List<WarFirstOrderAssignment>();
+            foreach (WarFirstOrderAssignment item in _inFlight)
+            {
+                if (item.WarId == warId) remove.Add(item);
+            }
+            for (int i = 0; i < remove.Count; i++)
+            {
+                _inFlight.Remove(remove[i]);
+                _known.Remove(remove[i]);
             }
         }
 
         public void Clear()
         {
             _ready.Clear();
-            _queued.Clear();
+            _known.Clear();
+            _inFlight.Clear();
         }
 
         private void Enqueue(WarFirstOrderAssignment assignment)
         {
             if (assignment.WarId < 0L || assignment.KingdomId < 0L ||
-                !_queued.Add(assignment)) return;
+                !_known.Add(assignment)) return;
             _ready.Enqueue(assignment);
         }
     }

@@ -163,7 +163,36 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessAuthorityCycle()
         {
-            while (DiscoveryQueue.Count > 0)
+            ProcessAuthorityCycle(MaximumDiscoveryArmiesPerCycle);
+        }
+
+        public static int PendingDiscoveryArmyCount
+        {
+            get
+            {
+                long pending = DiscoveryQueue.Count;
+                foreach (DiscoveryWork work in
+                         DiscoveryByParticipant.Values)
+                {
+                    if (work.Cursor == null)
+                    {
+                        Kingdom kingdom = FindKingdom(work.KingdomId);
+                        work.Cursor = ArmyStrategicIndexService.
+                            CreateSnapshotCursor(kingdom);
+                    }
+                    pending += work.Cursor?.Remaining ?? 0;
+                    if (pending >= int.MaxValue) return int.MaxValue;
+                }
+                return (int)Math.Max(0L, pending);
+            }
+        }
+
+        public static void ProcessAuthorityCycle(int pMaximumArmies)
+        {
+            int remainingBudget = Math.Max(0, pMaximumArmies);
+            int participantVisits = DiscoveryQueue.Count;
+            while (DiscoveryQueue.Count > 0 &&
+                   participantVisits-- > 0 && remainingBudget > 0)
             {
                 var key = DiscoveryQueue.Dequeue();
                 QueuedDiscovery.Remove(key);
@@ -180,7 +209,7 @@ namespace AncientWarfare3.core.lineage
                     work.Cursor = ArmyStrategicIndexService.CreateSnapshotCursor(
                         kingdom);
                 IReadOnlyList<long> ids = work.Cursor.Take(
-                    MaximumDiscoveryArmiesPerCycle);
+                    remainingBudget);
                 for (int i = 0; i < ids.Count; i++)
                 {
                     Army army = ArmyStrategicIndexService.
@@ -190,11 +219,11 @@ namespace AncientWarfare3.core.lineage
                     EnsureForArmy(war.data.id, army,
                         ArmyRtsWarPhase.StrategicMovement);
                 }
+                remainingBudget -= ids.Count;
                 if (work.Cursor.IsComplete)
                     DiscoveryByParticipant.Remove(key);
                 else
                     QueueDiscovery(key);
-                return;
             }
         }
 
@@ -304,6 +333,18 @@ namespace AncientWarfare3.core.lineage
             DiscoveryByParticipant.Clear();
             DiscoveryQueue.Clear();
             QueuedDiscovery.Clear();
+        }
+
+        public static void RebuildDiscovery()
+        {
+            DiscoveryByParticipant.Clear();
+            DiscoveryQueue.Clear();
+            QueuedDiscovery.Clear();
+            if (World.world?.wars == null) return;
+            foreach (War war in World.world.wars)
+            {
+                if (IsActiveWar(war)) OnWarStarted(war);
+            }
         }
 
         private static void EnqueueDiscovery(War pWar, Kingdom pKingdom)
@@ -541,6 +582,13 @@ namespace AncientWarfare3.core.lineage
                 try { return pArmy?.getKingdom(); }
                 catch { return null; }
             }
+        }
+
+        private static bool IsActiveWar(War pWar)
+        {
+            if (pWar?.data == null) return false;
+            try { return !pWar.hasEnded(); }
+            catch { return false; }
         }
 
         private static bool IsActiveParticipant(War pWar,

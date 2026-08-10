@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.performance;
 
 internal static class ArmyRtsSchedulingRulesTests
@@ -38,6 +39,45 @@ internal static class ArmyRtsSchedulingRulesTests
         Assert(service.Contains("ProcessLogicalPass(",
                 StringComparison.Ordinal),
             "large-step passes expose one RTS pulse boundary");
+        Assert(service.Contains("ArmyRtsExecutionBudgetRules.Capture(",
+                StringComparison.Ordinal) &&
+               service.Contains("AWPerformanceSettings.Mode",
+                   StringComparison.Ordinal),
+            "each RTS pulse captures one mode-aware execution budget");
+        Assert(service.Contains(
+                "budget.ControllerArmies, budget.ReplenishmentArrivals",
+                StringComparison.Ordinal),
+            "controller and replenishment drains use the captured budget");
+        Assert(service.Contains("budget.WatchdogArmies",
+                StringComparison.Ordinal) &&
+               service.Contains("budget.LifecycleDiscoveries",
+                   StringComparison.Ordinal) &&
+               service.Contains("budget.AssignmentReconciliations",
+                   StringComparison.Ordinal) &&
+               service.Contains("budget.SuccessionRecoveries",
+                   StringComparison.Ordinal),
+            "Large recovery drains all use the shared snapshot");
+        Assert(service.Contains(
+                "ArmyRouteProviderService.ProcessFrame",
+                StringComparison.Ordinal) &&
+               !service.Contains(
+                   "ArmyRouteProviderService.ProcessFrame(int.MaxValue",
+                   StringComparison.Ordinal),
+            "global route planning retains its bounded worker pulse");
+        Assert(!service.Contains("int.MaxValue",
+                StringComparison.Ordinal),
+            "the scheduler never drains a dynamically growing queue without a snapshot");
+
+        var work = new ArmyRtsControllerWorkIndex();
+        work.AssignMission(new ArmyRtsMission
+        {
+            ArmyId = 101L,
+            KingdomId = 201L,
+            WarId = 301L,
+            TargetCityId = 401L
+        });
+        Assert(work.PendingCount == 1,
+            "controller pending count includes priority wartime missions");
     }
 
     private static void Assert(bool condition, string message)

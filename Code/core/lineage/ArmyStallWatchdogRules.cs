@@ -591,7 +591,8 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldExpectFormationProgress(
             ArmyRtsState pState, bool targetComplete)
         {
-            return pState == ArmyRtsState.Deploy && !targetComplete;
+            return (pState == ArmyRtsState.Rally ||
+                    pState == ArmyRtsState.Deploy) && !targetComplete;
         }
 
         public static double ResolveObjectiveProgress(

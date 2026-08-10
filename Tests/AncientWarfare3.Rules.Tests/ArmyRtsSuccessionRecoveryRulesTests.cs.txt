@@ -11,9 +11,9 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
                 currentKingId: 9L, requestedKingId: 9L,
                 completedKingId: -1L),
             "a committed live succession queues military recovery");
-        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueue(
+        Assert(ArmyRtsSuccessionRecoveryRules.ShouldEnqueue(
                 true, true, fromLoad: true, 9L, 9L, -1L),
-            "load-time setKing uses the normal restore pipeline");
+            "load-time setKing also queues idempotent military recovery");
         Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueue(
                 true, true, false, 9L, 9L, completedKingId: 9L),
             "duplicate succession completion is coalesced");
@@ -21,6 +21,16 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
                 true, true, false, currentKingId: 8L,
                 requestedKingId: 9L, completedKingId: -1L),
             "a superseded successor cannot rebind military state");
+        Assert(ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainRecovery(
+                armyValid: true, actorWasCaptain: true,
+                missionActive: true),
+            "death of an active RTS captain queues recovery");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainRecovery(
+                true, actorWasCaptain: false, missionActive: true),
+            "death of an RTS follower does not queue captain recovery");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainRecovery(
+                true, actorWasCaptain: true, missionActive: false),
+            "an ordinary army does not enter the RTS recovery queue");
         SourceBoundariesExist();
     }
 
@@ -31,6 +41,10 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
             "lineage", "ArmyRtsSuccessionRecoveryService.cs"));
         string accession = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "AccessionIdentityService.cs"));
+        string heirPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_HeirPatch.cs"));
+        string deathPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ActorDeathPatch.cs"));
         Assert(service.Contains("CopyArmyIdsAfter", StringComparison.Ordinal),
             "succession recovery uses the kingdom army index");
         Assert(service.Contains("army.checkCaptainExistence()",
@@ -59,6 +73,18 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
                 "ArmyRtsSuccessionRecoveryService.OnKingInstalled(",
                 StringComparison.Ordinal),
             "committed accession wakes the kingdom military runtime");
+        Assert(heirPatch.Contains(
+                   "ArmyRtsSuccessionRecoveryService.OnKingInstalled(",
+                   StringComparison.Ordinal) &&
+               heirPatch.Contains("__instance, king, pFromLoad",
+                   StringComparison.Ordinal),
+            "every successful setKing path wakes military recovery");
+        Assert(deathPatch.Contains("DyingCaptainArmy",
+                StringComparison.Ordinal) &&
+               deathPatch.Contains(
+                   "ArmyRtsSuccessionRecoveryService.OnCaptainDied(",
+                   StringComparison.Ordinal),
+            "actor death hands the captured captain army to RTS recovery");
     }
 
     private static void Assert(bool condition, string message)

@@ -216,6 +216,7 @@
     <Compile Include="SchedulerLoadSafetyRulesTests.cs.txt" />
     <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
     <Compile Include="ArmyRtsSchedulingRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsExecutionBudgetRulesTests.cs.txt" />
     <Compile Include="ArmyRtsFullRosterCursorRulesTests.cs.txt" />
     <Compile Include="ArmyRtsFirstOrderRecoveryRulesTests.cs.txt" />
     <Compile Include="TestArmyRoutePollKindStub.cs.txt" />
@@ -233,6 +234,7 @@
     <Compile Include="ArmyRtsCombatHandoffRulesTests.cs.txt" />
     <Compile Include="ArmyRtsSyntheticRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAssignmentReconciliationRulesTests.cs.txt" />
+    <Compile Include="ArmyMissionPersistenceRulesTests.cs.txt" />
     <Compile Include="ArmyRtsSuccessionRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmySharedPathRecoveryRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyDiagnosticSamplingTests.cs.txt" />
@@ -472,6 +474,7 @@
     <Compile Include="..\..\Code\core\lineage\PreparationRecruitmentProtectionRules.cs" Link="Production\PreparationRecruitmentProtectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsWarLifecycleService.cs" Link="Production\ArmyRtsWarLifecycleService.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsAssignmentReconciliationRules.cs" Link="Production\ArmyRtsAssignmentReconciliationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyMissionPersistence.cs" Link="Production\ArmyMissionPersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsReplenishmentArrivalRules.cs" Link="Production\ArmyRtsReplenishmentArrivalRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyCaptainContinuityRules.cs" Link="Production\ArmyCaptainContinuityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRuntimeMode.cs" Link="Production\ArmyRtsRuntimeMode.cs" />
@@ -635,6 +638,7 @@
     <Compile Include="..\..\Code\core\lineage\FamilyTreeSnapshotOverlayRules.cs" Link="Production\FamilyTreeSnapshotOverlayRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DeferredRuntimeWorkRules.cs" Link="Production\DeferredRuntimeWorkRules.cs" />
     <Compile Include="..\..\Code\core\performance\ArmyRtsSchedulingMode.cs" Link="Production\ArmyRtsSchedulingMode.cs" />
+    <Compile Include="..\..\Code\core\performance\ArmyRtsExecutionBudgetRules.cs" Link="Production\ArmyRtsExecutionBudgetRules.cs" />
     <Compile Include="..\..\Code\content\XiaNameRepairRules.cs" Link="Production\XiaNameRepairRules.cs" />
     <Compile Include="..\..\Code\content\XiaPreQinKingdomNameRules.cs" Link="Production\XiaPreQinKingdomNameRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizedKingdomNamingRules.cs" Link="Production\XiaizedKingdomNamingRules.cs" />
@@ -823,6 +827,7 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ArmyMembershipReconciliationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\HierarchicalVassalOccupationReuseSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\RtsSchedulingPerformanceSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ArmyRtsContinuitySourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\SyntheticMobilizationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\SyntheticLevyActorUpdateSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\VanillaRecruitmentOwnershipSourceGuard.ps1&quot;" />

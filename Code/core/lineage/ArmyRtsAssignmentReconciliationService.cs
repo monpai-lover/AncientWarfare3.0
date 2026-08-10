@@ -10,6 +10,14 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessAuthorityCycle()
         {
+            ProcessAuthorityCycle(MaximumRecordsPerCycle);
+        }
+
+        public static int PendingRecordCount =>
+            ArmyRtsWarLifecycleService.Snapshot()?.Count ?? 0;
+
+        public static void ProcessAuthorityCycle(int pMaximumRecords)
+        {
             if (!ArmyRtsRuntimeMode.ShouldCommit) return;
             IReadOnlyList<ArmyRtsWarLifecycleRecord> records =
                 ArmyRtsWarLifecycleService.Snapshot();
@@ -22,7 +30,7 @@ namespace AncientWarfare3.core.lineage
 
             int start = _cursor % count;
             if (start < 0) start += count;
-            int maximum = Math.Min(count, MaximumRecordsPerCycle);
+            int maximum = Math.Min(count, Math.Max(0, pMaximumRecords));
             double now = LineageService.CurTime();
             for (int i = 0; i < maximum; i++)
                 ProcessOne(records[(start + i) % count], now);

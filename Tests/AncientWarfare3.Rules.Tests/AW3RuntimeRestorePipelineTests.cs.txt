@@ -141,6 +141,16 @@ internal static class AW3RuntimeRestorePipelineTests
                 "new AW3RestoreStage(\"school_indexes\""),
             "school runtime owns membership index restoration without a duplicate stage");
 
+        int armyControllers = pipeline.IndexOf(
+            "new AW3RestoreStage(\"army_rts_controllers\"",
+            StringComparison.Ordinal);
+        int lifecycleDiscovery = pipeline.IndexOf(
+            "new AW3RestoreStage(\"army_rts_lifecycle_discovery\"",
+            StringComparison.Ordinal);
+        Equal(true, armyControllers >= 0 &&
+                    lifecycleDiscovery > armyControllers,
+            "wartime lifecycle discovery restarts after controller reset");
+
         OrderedTokens(pipeline, new[]
         {
             "new AW3RestoreStage(\"mandate_projection\"",

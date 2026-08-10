@@ -15,9 +15,36 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessFrame()
         {
+            ProcessFrame(MaximumBattlesPerFrame);
+        }
+
+        public static int PendingWorkUpperBound
+        {
+            get
+            {
+                if (!ArmyRtsWarDoctrine.IsAbstractDecisive ||
+                    AW3MultiplayerReplicaScope.IsReplicaSession)
+                    return 0;
+                int missions = ArmyRtsControllerService.
+                    SnapshotMissions().Count;
+                int cities = 0;
+                try { cities = World.world?.cities?.Count ?? 0; }
+                catch { }
+                long total = (long)Math.Max(0, missions) +
+                             Math.Max(0, cities);
+                return total >= int.MaxValue
+                    ? int.MaxValue
+                    : (int)total;
+            }
+        }
+
+        public static void ProcessFrame(int pMaximumBattles)
+        {
             if (!ArmyRtsWarDoctrine.IsAbstractDecisive ||
                 AW3MultiplayerReplicaScope.IsReplicaSession ||
                 World.world?.armies == null) return;
+            int maximumBattles = Math.Max(0, pMaximumBattles);
+            if (maximumBattles == 0) return;
             IReadOnlyList<ArmyRtsMission> missions =
                 ArmyRtsControllerService.SnapshotMissions();
             var groups = new Dictionary<(long WarId, long CityId),
@@ -53,7 +80,7 @@ namespace AncientWarfare3.core.lineage
             });
             int processed = 0;
             for (int i = 0; i < keys.Count &&
-                         processed < MaximumBattlesPerFrame; i++)
+                         processed < maximumBattles; i++)
             {
                 List<ArmyRtsMission> group = groups[keys[i]];
                 group.Sort((pLeft, pRight) =>
@@ -62,11 +89,11 @@ namespace AncientWarfare3.core.lineage
                     processed++;
             }
 
-            if (processed >= MaximumBattlesPerFrame) return;
+            if (processed >= maximumBattles) return;
             List<(City City, ArmyAbstractBattleTransactionSnapshot Snapshot)>
                 pending = SnapshotPendingTransactions();
             for (int i = 0; i < pending.Count &&
-                         processed < MaximumBattlesPerFrame; i++)
+                         processed < maximumBattles; i++)
             {
                 var entry = pending[i];
                 if (groups.ContainsKey((entry.Snapshot.WarId,

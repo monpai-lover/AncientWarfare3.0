@@ -560,9 +560,14 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessFrame()
         {
+            ProcessFrame(1);
+        }
+
+        public static void ProcessFrame(int pFirstOrderBudget)
+        {
             ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
             if (!ArmyRtsRuntimeModeRules.ShouldPlan(mode)) return;
-            if (TryProcessFirstOrder()) return;
+            if (ProcessFirstOrders(pFirstOrderBudget) > 0) return;
             long worldDay = CurrentWorldDay();
             if (!WorkQueue.TryTake(worldDay, out long kingdomId)) return;
             Kingdom kingdom = FindKingdom(kingdomId);
@@ -604,23 +609,35 @@ namespace AncientWarfare3.core.lineage
             WorkQueue.SchedulePeriodic(kingdomId, worldDay);
         }
 
-        private static bool TryProcessFirstOrder()
+        public static int PendingFirstOrderCount => FirstOrderQueue.Count;
+
+        public static int ProcessFirstOrders(int pMaximum)
         {
-            if (!FirstOrderQueue.TryTake(
-                    out WarFirstOrderAssignment assignment)) return false;
-            TryAssignFirstOrderMission(assignment);
-            return true;
+            int limit = Math.Min(Math.Max(0, pMaximum),
+                FirstOrderQueue.Count);
+            int processed = 0;
+            while (processed < limit && FirstOrderQueue.TryTake(
+                       out WarFirstOrderAssignment assignment))
+            {
+                WarFirstOrderResult result =
+                    TryAssignFirstOrderMission(assignment);
+                FirstOrderQueue.Complete(assignment, result);
+                processed++;
+            }
+            return processed;
         }
 
-        private static bool TryAssignFirstOrderMission(
+        private static WarFirstOrderResult TryAssignFirstOrderMission(
             WarFirstOrderAssignment pAssignment)
         {
             War war = FindWar(pAssignment.WarId);
             Kingdom kingdom = FindKingdom(pAssignment.KingdomId);
             if (!IsActiveWar(war) || !IsLiveKingdom(kingdom) ||
-                !SafeHasKingdom(war, kingdom)) return false;
+                !SafeHasKingdom(war, kingdom))
+                return WarFirstOrderResult.Discard;
             if (ArmyRtsControllerService.
-                    HasActiveMissionForKingdom(kingdom)) return true;
+                    HasActiveMissionForKingdom(kingdom))
+                return WarFirstOrderResult.Assigned;
 
             ArmyStrategicIdCursor cursor = ArmyStrategicIndexService.
                 CreateSnapshotCursor(kingdom);
@@ -633,11 +650,12 @@ namespace AncientWarfare3.core.lineage
                 selected = batch.Armies[i];
                 break;
             }
-            if (selected == null) return false;
+            if (selected == null) return WarFirstOrderResult.RetryLater;
             Army army = ArmyStrategicIndexService.ResolveIndexedArmy(
                 selected.ArmyId, kingdom.id);
             WarPlanWork plan = BuildWarPlan(kingdom, war);
-            if (army?.data == null || plan == null) return false;
+            if (army?.data == null || plan == null)
+                return WarFirstOrderResult.RetryLater;
 
             FrontTargetFacts targetFacts;
             using (var front = new FrontScanWork(kingdom, war,
@@ -650,7 +668,7 @@ namespace AncientWarfare3.core.lineage
                     "first_order_target_pending", CurrentWorldTime() +
                     ArmyRtsAssignmentReconciliationRules.
                         AssignmentRetryWorldSeconds);
-                return false;
+                return WarFirstOrderResult.RetryLater;
             }
 
             bool defend = targetFacts.DefensiveObjective ||
@@ -677,7 +695,9 @@ namespace AncientWarfare3.core.lineage
                     PlayerOrder = false,
                     IssuedTime = CurrentWorldTime()
                 });
-            return ArmyRtsControllerService.HasActiveMission(army.id);
+            return ArmyRtsControllerService.HasActiveMission(army.id)
+                ? WarFirstOrderResult.Assigned
+                : WarFirstOrderResult.RetryLater;
         }
 
         public static bool TryGetShadowSnapshot(Kingdom pKingdom,

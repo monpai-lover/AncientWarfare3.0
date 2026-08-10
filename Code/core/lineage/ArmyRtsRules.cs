@@ -342,7 +342,6 @@ namespace AncientWarfare3.core.lineage
             double issuedWorldTime, double currentWorldTime)
         {
             if (!authoritative || !minimumForceReady || !captainPresent ||
-                !escortQuorum ||
                 (state != ArmyRtsState.Rally &&
                  state != ArmyRtsState.Replenish) ||
                 double.IsNaN(issuedWorldTime) ||

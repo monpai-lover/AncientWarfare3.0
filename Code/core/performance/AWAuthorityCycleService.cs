@@ -269,7 +269,10 @@ namespace AncientWarfare3.core.performance
                     AccessionIdentityService.ProcessDeferredInstallations();
                     break;
                 case CooperativeAuthorityStage.ArmyRtsSuccessionRecovery:
-                    ArmyRtsSuccessionRecoveryService.ProcessAuthorityCycle();
+                    if (AWPerformanceSettings.Mode !=
+                        AWSimulationMode.Large)
+                        ArmyRtsSuccessionRecoveryService.
+                            ProcessAuthorityCycle();
                     break;
                 case CooperativeAuthorityStage.LocalizedNameMigration:
                     AWLocalizedNameMigrationService.ProcessAuthorityCycle();
@@ -310,11 +313,15 @@ namespace AncientWarfare3.core.performance
                     WarArmyReturnService.ProcessFrame();
                     break;
                 case CooperativeAuthorityStage.ArmyRtsWarLifecycle:
-                    ArmyRtsWarLifecycleService.ProcessAuthorityCycle();
+                    if (AWPerformanceSettings.Mode !=
+                        AWSimulationMode.Large)
+                        ArmyRtsWarLifecycleService.ProcessAuthorityCycle();
                     break;
                 case CooperativeAuthorityStage.ArmyRtsAssignmentReconciliation:
-                    ArmyRtsAssignmentReconciliationService.
-                        ProcessAuthorityCycle();
+                    if (AWPerformanceSettings.Mode !=
+                        AWSimulationMode.Large)
+                        ArmyRtsAssignmentReconciliationService.
+                            ProcessAuthorityCycle();
                     break;
                 case CooperativeAuthorityStage.Pathfinding:
                     Measure(RecentFeatureBenchmarkRules.PathfindingIndex,

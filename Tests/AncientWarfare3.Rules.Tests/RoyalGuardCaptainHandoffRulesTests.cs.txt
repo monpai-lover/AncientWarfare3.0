@@ -46,6 +46,15 @@ internal static class RoyalGuardCaptainHandoffRulesTests
                 pRuntimeJobMatches: true,
                 pCaptainStateChanged: false),
             "a stable guard with both jobs bound is not force-reset");
+        Check(failures, RoyalGuardMaintenanceRules.ShouldRepairGuardTask(
+                pProtectTaskActive: false, pFollowTaskActive: false),
+            "a social or idle task is Royal Guard task drift");
+        Check(failures, !RoyalGuardMaintenanceRules.ShouldRepairGuardTask(
+                pProtectTaskActive: true, pFollowTaskActive: false),
+            "an active protect task remains stable");
+        Check(failures, !RoyalGuardMaintenanceRules.ShouldRepairGuardTask(
+                pProtectTaskActive: false, pFollowTaskActive: true),
+            "an active follow task remains stable");
 
         Check(failures,
             !AWArmyRoleRules.ShouldRtsOwnCaptain(
@@ -121,6 +130,11 @@ internal static class RoyalGuardCaptainHandoffRulesTests
             guardService.Contains("internal static void EnsureProtectKingTask(Actor pActor)") &&
             guardService.Contains("pActor.ai.setTask(GuardContent.TASK_FOLLOW_KING)"),
             "every RTS task write and release path preserves the Royal Guard protect-king task");
+        Check(failures,
+            guardService.Contains(
+                "RoyalGuardMaintenanceRules.ShouldRepairGuardTask(") &&
+            guardService.Split("RepairProtectKingTaskIfNeeded(").Length - 1 >= 3,
+            "bounded Royal Guard maintenance repairs task drift for the captain and member batch");
 
         if (failures.Count > 0)
             throw new InvalidOperationException(string.Join(Environment.NewLine, failures));

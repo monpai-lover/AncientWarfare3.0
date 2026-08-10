@@ -8,10 +8,16 @@ namespace AncientWarfare3.core.lineage
             bool fromLoad, long currentKingId, long requestedKingId,
             long completedKingId)
         {
-            return kingdomValid && kingValid && !fromLoad &&
+            return kingdomValid && kingValid &&
                    requestedKingId >= 0L &&
                    currentKingId == requestedKingId &&
                    completedKingId != requestedKingId;
+        }
+
+        public static bool ShouldEnqueueCaptainRecovery(bool armyValid,
+            bool actorWasCaptain, bool missionActive)
+        {
+            return armyValid && actorWasCaptain && missionActive;
         }
     }
 }
