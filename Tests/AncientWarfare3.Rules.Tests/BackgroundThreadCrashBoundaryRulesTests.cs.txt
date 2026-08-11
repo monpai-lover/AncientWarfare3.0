@@ -1,0 +1,114 @@
+using System;
+using System.IO;
+
+// A raw background thread is outside every Unity exception handler. When an
+// exception escapes its entry point the CLR terminates the process: no error
+// dialog, no Unity log entry, no crash report. Players experience this as an
+// unexplained silent exit, and because it is race dependent it reproduces on
+// some machines and never on others. Each thread entry point in the mod must
+// therefore end in a catch-all.
+internal static class BackgroundThreadCrashBoundaryRulesTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+
+        AsyncCoordinatorWorkerIsBounded(root);
+        HistoricalWriteWorkerIsBounded(root);
+        PathFinderWorkerIsBounded(root);
+    }
+
+    private static void AsyncCoordinatorWorkerIsBounded(string pRoot)
+    {
+        string source = ReadSource(pRoot, "core", "asyncwork",
+            "AWAsyncWorkCoordinator.cs");
+        string body = Body(source, "private void WorkerLoop()",
+            "private void ReportWorkerLoopFault");
+        Assert(body.Contains("catch (Exception", StringComparison.Ordinal),
+            "the async worker loop must not let an exception reach the thread entry point");
+
+        // A fault after the worker slot was taken must release it, or the
+        // save barrier waits on a worker that no longer exists.
+        Assert(body.Contains("ReleaseFaultedWorkerSlot",
+                StringComparison.Ordinal),
+            "a faulted async worker must release its counted slot");
+        string release = Body(source, "private void ReleaseFaultedWorkerSlot",
+            "private bool RunWorkerIteration");
+        Assert(release.Contains("_activeWorkerCount--",
+                StringComparison.Ordinal),
+            "releasing a faulted worker must decrement the active count");
+        Assert(release.Contains("Monitor.PulseAll",
+                StringComparison.Ordinal),
+            "releasing a faulted worker must wake the waiters it would strand");
+    }
+
+    private static void HistoricalWriteWorkerIsBounded(string pRoot)
+    {
+        string source = ReadSource(pRoot, "core", "db",
+            "HistoricalWriteWorker.cs");
+        // Anchor between the final statement of the batch loop and the
+        // finally, so an inner guard around the sink cannot satisfy this.
+        // The start anchor must be the last occurrence: the same text also
+        // appears in the declaration above the loop.
+        // The end anchor carries method-level indentation so that the word
+        // "finally" inside a comment cannot terminate the region early.
+        string body = BodyFromLast(source, "attempts = 0;",
+            "            finally");
+        Assert(body.Contains("catch (Exception", StringComparison.Ordinal),
+            "the historical write loop must not let an exception reach the thread entry point");
+
+        // Swallowing the fault would leave Flush blocking until its timeout
+        // with no explanation, so the failure has to become terminal state.
+        Assert(body.Contains("SetTerminalFaultLocked",
+                StringComparison.Ordinal),
+            "a faulted historical writer must record a terminal fault so Flush reports it");
+    }
+
+    private static void PathFinderWorkerIsBounded(string pRoot)
+    {
+        string source = ReadSource(pRoot, "core", "pathfinding",
+            "AWPathFinder.cs");
+        string body = Body(source, "private void WorkerLoop()",
+            "private void RunWorkerLoop()");
+        Assert(body.Contains("catch (Exception", StringComparison.Ordinal),
+            "the path worker entry point must catch every exception");
+
+        // An unbounded restart would turn a permanent fault into a hot loop.
+        Assert(body.Contains("MaximumRestarts", StringComparison.Ordinal),
+            "path worker restarts must be bounded");
+        Assert(body.Contains("_stopping", StringComparison.Ordinal),
+            "a stopping finder must not be restarted");
+    }
+
+    private static string ReadSource(string pRoot, params string[] pParts)
+    {
+        string path = Path.Combine(pRoot, "Code");
+        foreach (string part in pParts)
+            path = Path.Combine(path, part);
+        return File.ReadAllText(path);
+    }
+
+    private static string BodyFromLast(string pSource, string pStart,
+        string pEnd)
+    {
+        int start = pSource.LastIndexOf(pStart, StringComparison.Ordinal);
+        Assert(start >= 0, "missing declaration: " + pStart);
+        int end = pSource.IndexOf(pEnd, start, StringComparison.Ordinal);
+        Assert(end > start, "missing terminator: " + pEnd);
+        return pSource.Substring(start, end - start);
+    }
+
+    private static string Body(string pSource, string pStart, string pEnd)
+    {
+        int start = pSource.IndexOf(pStart, StringComparison.Ordinal);
+        Assert(start >= 0, "missing declaration: " + pStart);
+        int end = pSource.IndexOf(pEnd, start, StringComparison.Ordinal);
+        Assert(end > start, "missing terminator: " + pEnd);
+        return pSource.Substring(start, end - start);
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

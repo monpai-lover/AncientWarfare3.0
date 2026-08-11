@@ -386,8 +386,16 @@ if (args.Length == 1 && args[0] == "--actor-race-performance-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--crash-boundary-slice")
+{
+    BackgroundThreadCrashBoundaryRulesTests.Run();
+    Console.WriteLine("AW3 background thread crash boundary rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--scheduler-load-safety-slice")
 {
+    BackgroundThreadCrashBoundaryRulesTests.Run();
     SchedulerLoadSafetyRulesTests.Run();
     Console.WriteLine("AW3 scheduler and load safety rules passed.");
     return;
@@ -8104,6 +8112,7 @@ ArmyRtsControllerPerformanceRulesTests.Run();
 CityMilitaryThreatFactsRulesTests.Run();
 ArmyRtsAsyncPlanningRulesTests.Run();
 SchedulerLoadSafetyRulesTests.Run();
+BackgroundThreadCrashBoundaryRulesTests.Run();
 ActorDeathInvocationRulesTests.Run();
 XiaPopulationRecoveryRulesTests.Run();
 WarAiGoalSelectionRulesTests.Run();

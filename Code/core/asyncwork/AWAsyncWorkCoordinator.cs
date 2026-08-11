@@ -695,12 +695,68 @@ namespace AncientWarfare3.core.asyncwork
 
         private void WorkerLoop()
         {
+            // This is a raw background thread entry point. An exception that
+            // escapes it is not routed through any Unity handler: the CLR
+            // terminates the process with no dialog and no log entry, which
+            // presents to players as an unexplained silent crash. Only the
+            // item execution below used to be guarded, leaving the queue
+            // bookkeeping, completion construction and worker commit able to
+            // kill the process. Every iteration is now bounded, and a fault
+            // releases the worker slot so the save barrier cannot strand.
             while (true)
+            {
+                bool workerCounted = false;
+                try
+                {
+                    if (!RunWorkerIteration(ref workerCounted)) return;
+                }
+                catch (Exception error)
+                {
+                    ReportWorkerLoopFault(error);
+                    if (workerCounted) ReleaseFaultedWorkerSlot();
+                }
+            }
+        }
+
+        private void ReportWorkerLoopFault(Exception pError)
+        {
+            try
+            {
+                _diagnostics.RecordFaulted();
+                AncientWarfare3.ModClass.LogWarning(
+                    "[AW3 async worker] unhandled worker fault: " +
+                    pError);
+            }
+            catch
+            {
+            }
+        }
+
+        private void ReleaseFaultedWorkerSlot()
+        {
+            try
+            {
+                lock (_gate)
+                {
+                    if (_activeWorkerCount > 0) _activeWorkerCount--;
+                    if (_activeWorkerCount == 0)
+                        DisposeRetiredCancellationsLocked();
+                    Monitor.PulseAll(_gate);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        // Returns false when the worker should exit its loop.
+        private bool RunWorkerIteration(ref bool pWorkerCounted)
+        {
             {
                 WorkerItem item;
                 lock (_gate)
                 {
-                    if (_shutdownRequested) return;
+                    if (_shutdownRequested) return false;
                     if (!TryTakeNextLocked(out item))
                     {
                         item = null;
@@ -708,12 +764,13 @@ namespace AncientWarfare3.core.asyncwork
                     else
                     {
                         _activeWorkerCount++;
+                        pWorkerCounted = true;
                     }
                 }
                 if (item == null)
                 {
                     _workSignal.Wait(100);
-                    continue;
+                    return true;
                 }
 
                 object result = null;
@@ -740,32 +797,36 @@ namespace AncientWarfare3.core.asyncwork
                     lock (_gate)
                     {
                         _activeWorkerCount--;
+                        pWorkerCounted = false;
                         if (_activeWorkerCount == 0)
                             DisposeRetiredCancellationsLocked();
                         Monitor.PulseAll(_gate);
                     }
-                    continue;
+                    return true;
                 }
                 lock (_gate)
                 {
                     if (item.Stamp.WorldGeneration != _worldGeneration)
                     {
                         _activeWorkerCount--;
+                        pWorkerCounted = false;
                         if (_activeWorkerCount == 0)
                             DisposeRetiredCancellationsLocked();
                         Monitor.PulseAll(_gate);
-                        continue;
+                        return true;
                     }
                     while (!_shutdownRequested &&
                            item.Stamp.WorldGeneration == _worldGeneration &&
                            !_completions.TryEnqueue(completion))
                         Monitor.Wait(_gate, 50);
                     _activeWorkerCount--;
+                    pWorkerCounted = false;
                     if (_activeWorkerCount == 0)
                         DisposeRetiredCancellationsLocked();
                     Monitor.PulseAll(_gate);
                 }
             }
+            return true;
         }
 
         private void RunWorkerCommit(WorkerItem pItem, object pResult,

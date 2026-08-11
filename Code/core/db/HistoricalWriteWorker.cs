@@ -383,6 +383,7 @@ namespace AncientWarfare3.core.db
 
         private void WorkerLoop()
         {
+            List<HistoricalWriteEnvelope> batch = null;
             try
             {
                 try
@@ -400,7 +401,6 @@ namespace AncientWarfare3.core.db
                     return;
                 }
 
-                List<HistoricalWriteEnvelope> batch = null;
                 int attempts = 0;
                 while (true)
                 {
@@ -492,6 +492,33 @@ namespace AncientWarfare3.core.db
                         attempts = 0;
                         Monitor.PulseAll(_gate);
                     }
+                }
+            }
+            // This is a raw background thread entry point, so an escaping
+            // exception terminates the process with no dialog and no log.
+            // Only the sink open and batch execute were guarded; the queue
+            // bookkeeping around them could kill the process and lose the
+            // pending writes without a trace. Record a terminal fault so
+            // Flush reports the failure instead of blocking to its timeout,
+            // and let the existing finally dispose the sink.
+            catch (Exception error)
+            {
+                try
+                {
+                    lock (_gate)
+                    {
+                        string reason =
+                            "historical write worker faulted: " +
+                            error.Message;
+                        EnqueueFailureCompletionLocked(batch, reason);
+                        SetTerminalFaultLocked(reason);
+                    }
+                    AncientWarfare3.ModClass.LogWarning(
+                        "[AW3 historical writer] unhandled worker fault: " +
+                        error);
+                }
+                catch
+                {
                 }
             }
             finally

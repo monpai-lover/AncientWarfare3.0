@@ -446,7 +446,42 @@ namespace AncientWarfare3.core.pathfinding
                 wait.SpinOnce();
         }
 
+        // Raw background thread entry point. An escaping exception is not
+        // routed through any Unity handler, so the CLR tears the process down
+        // with no dialog and no log: players see an unexplained silent crash.
+        // The inner guard below only covers path generation, leaving the
+        // session bookkeeping and the finally block able to kill the process.
+        // Supervise the loop instead, with a bounded restart budget so a
+        // persistently failing worker retires rather than spinning.
         private void WorkerLoop()
+        {
+            const int MaximumRestarts = 8;
+            for (int restart = 0; ; restart++)
+            {
+                try
+                {
+                    RunWorkerLoop();
+                    return;
+                }
+                catch (Exception error)
+                {
+                    try
+                    {
+                        AncientWarfare3.ModClass.LogWarning(
+                            "[AW3 path worker] unhandled worker fault " +
+                            "(restart " + restart + " of " +
+                            MaximumRestarts + "): " + error);
+                    }
+                    catch
+                    {
+                    }
+                    if (Volatile.Read(ref _stopping) != 0) return;
+                    if (restart >= MaximumRestarts) return;
+                }
+            }
+        }
+
+        private void RunWorkerLoop()
         {
             try
             {
