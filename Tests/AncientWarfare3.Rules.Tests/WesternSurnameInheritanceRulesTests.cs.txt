@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using AncientWarfare3.core.lineage;
 
 public static class WesternSurnameInheritanceRulesTests
@@ -33,6 +34,26 @@ public static class WesternSurnameInheritanceRulesTests
             WesternSurnameInheritanceRules.ResolveSurname(
                 "", " von Alder "),
             "the localized surname slot is a valid fallback");
+
+        string birthPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_BirthPatch.cs"));
+        True(birthPatch.Contains(
+                "LineageService.OnLightweightActorBornWithParents"),
+            "the lightweight western birth path applies inherited surnames");
+
+        string matrilocalServicePath = Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "MatrilocalLineageService.cs");
+        True(File.Exists(matrilocalServicePath),
+            "matrilocal state has an authoritative runtime service");
+        if (File.Exists(matrilocalServicePath))
+        {
+            string service = File.ReadAllText(matrilocalServicePath);
+            True(service.Contains("LineageKeys.MATRILOCAL_IN_LAW") &&
+                 service.Contains("LineageKeys.MATRILOCAL_WIFE_ID"),
+                "the runtime service persists both matrilocal identity fields");
+        }
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)
@@ -40,5 +61,10 @@ public static class WesternSurnameInheritanceRulesTests
         if (!Equals(pExpected, pActual))
             throw new InvalidOperationException(
                 $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
     }
 }

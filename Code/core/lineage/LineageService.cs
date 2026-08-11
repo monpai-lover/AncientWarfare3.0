@@ -233,6 +233,12 @@ namespace AncientWarfare3.core.lineage
             RecordBirthEvent(pBaby);
         }
 
+        internal static void OnLightweightActorBornWithParents(Actor pBaby,
+            Actor pParent1, Actor pParent2)
+        {
+            TryInheritLightweightWesternSurname(pBaby, pParent1, pParent2);
+        }
+
         /// <summary>
         ///     Lightweight Western births still carry family identity. This
         ///     deliberately copies surname fields only; it must not admit a
@@ -264,9 +270,16 @@ namespace AncientWarfare3.core.lineage
                 profile);
             string parent2Surname = ResolveWesternParentSurname(pParent2,
                 profile);
-            int sourceSlot = WesternSurnameInheritanceRules.SelectSourceSlot(
-                pParent1?.isSexMale() == true, parent1Surname,
-                pParent2?.isSexMale() == true, parent2Surname);
+            int sourceSlot = RulerHouseholdRules
+                .SelectBirthLineageSourceSlot(
+                    pParent1?.isSexMale() == true,
+                    parent1Surname.Length > 0,
+                    MatrilocalLineageService.IsMatrilocalTo(pParent1,
+                        pParent2),
+                    pParent2?.isSexMale() == true,
+                    parent2Surname.Length > 0,
+                    MatrilocalLineageService.IsMatrilocalTo(pParent2,
+                        pParent1));
             if (sourceSlot < 0) return false;
 
             string surname = sourceSlot == 1 ? parent1Surname : parent2Surname;
@@ -533,21 +546,23 @@ namespace AncientWarfare3.core.lineage
 
         private static Actor PickPatrilinealSource(Actor pParent1, Actor pParent2)
         {
-            int slot = WesternLineageEligibilityRules.SelectParentSourceSlot(
+            int slot = RulerHouseholdRules.SelectBirthLineageSourceSlot(
                 pParent1?.isSexMale() == true, HasLineageData(pParent1),
-                HasCompleteLineageData(pParent1),
+                MatrilocalLineageService.IsMatrilocalTo(pParent1, pParent2),
                 pParent2?.isSexMale() == true, HasLineageData(pParent2),
-                HasCompleteLineageData(pParent2), requireComplete: false);
+                MatrilocalLineageService.IsMatrilocalTo(pParent2, pParent1));
             return slot == 1 ? pParent1 : slot == 2 ? pParent2 : null;
         }
 
         private static Actor PickCompletePatrilinealSource(Actor pParent1, Actor pParent2)
         {
-            int slot = WesternLineageEligibilityRules.SelectParentSourceSlot(
-                pParent1?.isSexMale() == true, HasLineageData(pParent1),
+            int slot = RulerHouseholdRules.SelectBirthLineageSourceSlot(
+                pParent1?.isSexMale() == true,
                 HasCompleteLineageData(pParent1),
-                pParent2?.isSexMale() == true, HasLineageData(pParent2),
-                HasCompleteLineageData(pParent2), requireComplete: true);
+                MatrilocalLineageService.IsMatrilocalTo(pParent1, pParent2),
+                pParent2?.isSexMale() == true,
+                HasCompleteLineageData(pParent2),
+                MatrilocalLineageService.IsMatrilocalTo(pParent2, pParent1));
             return slot == 1 ? pParent1 : slot == 2 ? pParent2 : null;
         }
 
