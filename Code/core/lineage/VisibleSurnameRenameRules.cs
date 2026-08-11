@@ -40,25 +40,26 @@ namespace AncientWarfare3.core.lineage
     {
         public const int MaxRenameActors = 16384;
 
-        // A rename that clears the surname must also drop the merged flag,
-        // otherwise the display builder keeps rendering a separator for a
-        // family name that no longer exists. An integrated identity keeps the
-        // clan aligned with the family so the two cannot disagree after the
-        // edit; a non-integrated one preserves the clan as recorded.
+        // FAMILY_NAME holds the 姓 and CLAN_NAME holds the 氏. In 嬴姓趙氏 the
+        // 姓 is 嬴 and the 氏 is 趙: two independent identity dimensions, not
+        // two spellings of one name. Editing the 姓 therefore replaces only
+        // the 姓 and carries the 氏 and the merged-rendering flag through
+        // untouched, so that a 姓 edit cannot silently rewrite a lineage
+        // branch. Changing the 氏 is a separate operation.
+        //
+        // A consequence worth stating: because the display builder prefers
+        // the 氏 as the visible prefix, editing the 姓 of an actor that has a
+        // 氏 changes the genealogical record without changing the rendered
+        // name. That is the intended reading of 嬴姓趙氏, not an omission.
         public static VisibleSurnameWritePlan PlanSurnameWrite(
             string pRequestedFamilyName, string pCurrentClanName,
             bool pNameIntegrated)
         {
+            string clan = (pCurrentClanName ?? string.Empty).Trim();
             if (!TryNormalizeFamilyName(pRequestedFamilyName,
                     out string family))
-                return new VisibleSurnameWritePlan(string.Empty,
-                    pNameIntegrated
-                        ? string.Empty
-                        : (pCurrentClanName ?? string.Empty).Trim(),
-                    false);
-            string clan = pNameIntegrated
-                ? family
-                : (pCurrentClanName ?? string.Empty).Trim();
+                return new VisibleSurnameWritePlan(string.Empty, clan,
+                    pNameIntegrated);
             return new VisibleSurnameWritePlan(family, clan,
                 pNameIntegrated);
         }
