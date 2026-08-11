@@ -182,11 +182,10 @@ namespace AncientWarfare3.core.lineage
             if (!States.TryGetValue(pActor.army.id, out MarchState state) ||
                 !state.HasPlan)
                 return ArmyFollowerTargetResult.Unavailable;
-            if (ArmyFormationService.IsInsideLooseEscort(pActor))
-            {
-                pTarget = pActor.current_tile;
-                return ArmyFollowerTargetResult.Hold;
-            }
+            // Prefer the recorded leader trail whenever a march plan exists.
+            // The loose-escort hold radius is only a fallback for armies that
+            // have not produced a usable trail yet; applying it here makes
+            // every follower hold at march start while the captain departs.
             if (state.InstallStatusByActor.TryGetValue(pActor.data.id,
                     out ArmySharedRouteInstallStatus installStatus) &&
                 ArmySharedPathRules.ShouldPublishProviderReconnectTarget(
