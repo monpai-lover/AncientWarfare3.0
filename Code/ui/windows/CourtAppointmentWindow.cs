@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using AncientWarfare3.api.multiplayer;
-using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.uiquery;
@@ -200,17 +199,6 @@ namespace AncientWarfare3.ui.windows
         private void CompleteCandidateScan()
         {
             _candidateScanRunning = false;
-            if (AWAsyncRuntime.ShadowEnabled)
-            {
-                ScheduleCandidateSort(pShadow: true);
-                SortCandidatesSynchronously();
-                return;
-            }
-            if (AWAsyncRuntime.UiEnabled)
-            {
-                ScheduleCandidateSort(pShadow: false);
-                return;
-            }
             SortCandidatesSynchronously();
         }
 
@@ -220,117 +208,6 @@ namespace AncientWarfare3.ui.windows
                 CourtManualAppointmentRules.CompareCandidates(
                     left.score, left.actor_id, right.score, right.actor_id));
             BeginCandidatePage(0);
-        }
-
-        private void ScheduleCandidateSort(bool pShadow)
-        {
-            var rows = new AWUiCandidateRow[_candidateResults.Count];
-            for (int index = 0; index < _candidateResults.Count; index++)
-            {
-                CourtAppointmentCandidateView candidate =
-                    _candidateResults[index];
-                rows[index] = new AWUiCandidateRow(candidate.actor_id,
-                    candidate.score, 0d, candidate.actor_name);
-            }
-            var execution = new AWUiCandidateRankExecution(rows);
-            long[] expectedShadow = pShadow
-                ? BuildSynchronousCandidateIds()
-                : null;
-            var commit = new CourtCandidateSortCommit(this,
-                _candidateQueryKey, expectedShadow);
-            var request = new AWAsyncWorkRequest(
-                "ui:court-appointment:" + _kingdomId,
-                AWAsyncLane.Ui,
-                new AWAsyncStamp(AWAsyncRuntime.WorldGeneration,
-                    Time.frameCount, _candidateQueryKey.Revision),
-                execution.Execute, commit.Commit);
-            if (!AWAsyncRuntime.TrySchedule(request))
-            {
-                AWUiCandidateRow[] result = execution.Execute(
-                    System.Threading.CancellationToken.None) as
-                    AWUiCandidateRow[];
-                if (pShadow)
-                    CompareCandidateShadow(_candidateQueryKey,
-                        expectedShadow, result);
-                else
-                    ApplyCandidateResult(_candidateQueryKey, result);
-            }
-        }
-
-        private long[] BuildSynchronousCandidateIds()
-        {
-            var candidates = new List<CourtAppointmentCandidateView>(
-                _candidateResults);
-            candidates.Sort((left, right) =>
-                CourtManualAppointmentRules.CompareCandidates(
-                    left.score, left.actor_id, right.score, right.actor_id));
-            var result = new long[candidates.Count];
-            for (int index = 0; index < candidates.Count; index++)
-                result[index] = candidates[index].actor_id;
-            return result;
-        }
-
-        private void CompareCandidateShadow(AWUiQueryKey pKey,
-            IReadOnlyList<long> pExpected, AWUiCandidateRow[] pRanked)
-        {
-            if (!AcceptCandidateResult(pKey)) return;
-            var actual = new long[pRanked?.Length ?? 0];
-            for (int index = 0; index < actual.Length; index++)
-                actual[index] = pRanked[index].ActorId;
-            AWAsyncShadowRuntime.CompareIds("ui_court",
-                "court:" + _kingdomId + ":" + _officeId,
-                pExpected, actual);
-        }
-
-        private void ApplyCandidateResult(AWUiQueryKey pKey,
-            AWUiCandidateRow[] pRanked)
-        {
-            if (!AcceptCandidateResult(pKey) || pRanked == null) return;
-            var byActor = new Dictionary<long,
-                CourtAppointmentCandidateView>();
-            foreach (CourtAppointmentCandidateView candidate in
-                     _candidateResults)
-                if (candidate != null) byActor[candidate.actor_id] = candidate;
-            _candidateResults.Clear();
-            foreach (AWUiCandidateRow row in pRanked)
-                if (byActor.TryGetValue(row.ActorId,
-                        out CourtAppointmentCandidateView candidate))
-                    _candidateResults.Add(candidate);
-            BeginCandidatePage(0);
-        }
-
-        private bool AcceptCandidateResult(AWUiQueryKey pKey)
-        {
-            if (!_queryState.Accept(pKey)) return false;
-            if (_queryState.Accept(pKey,
-                KingdomStrategyRevisionService.Current(_kingdomId))) return true;
-            if (isActiveAndEnabled) Refresh();
-            return false;
-        }
-
-        private sealed class CourtCandidateSortCommit
-        {
-            private readonly CourtAppointmentWindow _owner;
-            private readonly AWUiQueryKey _key;
-            private readonly long[] _expectedShadow;
-
-            public CourtCandidateSortCommit(CourtAppointmentWindow pOwner,
-                AWUiQueryKey pKey, long[] pExpectedShadow)
-            {
-                _owner = pOwner;
-                _key = pKey;
-                _expectedShadow = pExpectedShadow;
-            }
-
-            public void Commit(object pResult)
-            {
-                AWUiCandidateRow[] result = pResult as AWUiCandidateRow[];
-                if (_expectedShadow != null)
-                    _owner.CompareCandidateShadow(_key, _expectedShadow,
-                        result);
-                else
-                    _owner.ApplyCandidateResult(_key, result);
-            }
         }
 
         internal static void ChangePage(int pDelta)

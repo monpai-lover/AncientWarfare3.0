@@ -7,6 +7,8 @@ $qualification = Get-Content -Raw -LiteralPath (Join-Path $root `
     'Code\core\court\CivilServiceQualificationService.cs')
 $persistence = Get-Content -Raw -LiteralPath (Join-Path $root `
     'Code\core\court\CivilServiceExamPersistence.cs')
+$window = Get-Content -Raw -LiteralPath (Join-Path $root `
+    'Code\ui\windows\CourtAppointmentWindow.cs')
 
 foreach ($requirement in @(
     @('CaptureManualAppointmentQualifications\(',
@@ -35,6 +37,18 @@ $projection = $service.Substring($projectionStart,
     $projectionEnd - $projectionStart)
 if ($projection -match 'LoadOrRepair\(') {
     throw 'Court appointment candidate projection must not perform per-actor qualification repair.'
+}
+
+$completionStart = $window.IndexOf('private void CompleteCandidateScan()')
+$completionEnd = $window.IndexOf('private void SortCandidatesSynchronously()',
+    $completionStart)
+if ($completionStart -lt 0 -or $completionEnd -le $completionStart) {
+    throw 'Court appointment completion boundary cannot be located.'
+}
+$completion = $window.Substring($completionStart, $completionEnd - $completionStart)
+if ($completion -match 'ScheduleCandidateSort\(' -or
+    $completion -notmatch 'SortCandidatesSynchronously\(') {
+    throw 'Court appointment completion must not depend on an async UI sort commit.'
 }
 
 Write-Output 'Court appointment candidate scan performance source guard passed.'
