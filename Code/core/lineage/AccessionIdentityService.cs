@@ -96,6 +96,52 @@ namespace AncientWarfare3.core.lineage
                 RemoveDeferredInstallation(pKingdom.id);
         }
 
+        internal static void OnKingdomRemoved(Kingdom pKingdom)
+        {
+            long kingdomId = pKingdom?.data?.id ?? -1L;
+            if (kingdomId < 0) return;
+            RemoveDeferredInstallation(kingdomId);
+            CompletionProgressByKingdom.Remove(kingdomId);
+        }
+
+        internal static bool IsConfirmedCityless(Kingdom pKingdom)
+        {
+            return !HasStableOwnedCity(pKingdom, out bool indexStable) &&
+                   indexStable;
+        }
+
+        private static bool HasStableOwnedCity(Kingdom pKingdom,
+            out bool pIndexStable)
+        {
+            pIndexStable = false;
+            if (pKingdom?.data == null || pKingdom.isRekt()) return false;
+            KingdomManager manager = World.world?.kingdoms;
+            if (manager == null) return false;
+            try
+            {
+                pIndexStable = !manager.hasDirtyCities();
+                if (!pIndexStable) return false;
+                return pKingdom.countCities() > 0;
+            }
+            catch
+            {
+                try { return pKingdom.hasCities(); }
+                catch
+                {
+                    pIndexStable = false;
+                    return false;
+                }
+            }
+        }
+
+        private static void DropCitylessAccessionState(Kingdom pKingdom)
+        {
+            long kingdomId = pKingdom?.data?.id ?? -1L;
+            if (kingdomId < 0) return;
+            RemoveDeferredInstallation(kingdomId);
+            CompletionProgressByKingdom.Remove(kingdomId);
+        }
+
         internal static void DeferInstalledKing(Kingdom pKingdom, Actor pActor)
         {
             DeferInstalledKing(pKingdom, pActor, default,
@@ -119,6 +165,11 @@ namespace AncientWarfare3.core.lineage
                     LineageService.IsXiaKingdom(pKingdom),
                     XiaizationService.UsesXiaizedInstitutionSystem(pKingdom)))
                 return;
+            if (IsConfirmedCityless(pKingdom))
+            {
+                DropCitylessAccessionState(pKingdom);
+                return;
+            }
             long kingdomId = pKingdom.data.id;
             long actorId = pActor.data.id;
             if (CompletionProgressByKingdom.TryGetValue(kingdomId,
@@ -200,6 +251,12 @@ namespace AncientWarfare3.core.lineage
                 }
                 catch { }
 
+                if (IsConfirmedCityless(kingdom))
+                {
+                    DropCitylessAccessionState(kingdom);
+                    continue;
+                }
+
                 if (kingdom?.data == null || actor?.data == null ||
                     kingdom.isRekt() || actor.isRekt() ||
                     kingdom.king != actor)
@@ -232,11 +289,12 @@ namespace AncientWarfare3.core.lineage
                     if (!pending.ExhaustionLogged)
                     {
                         pending.ExhaustionLogged = true;
-                        ModClass.LogWarning(
-                            "Deferred king identity repair remains pending for " +
-                            "kingdom " + pending.KingdomId + " actor " +
-                            pending.ActorId + " reason=" +
-                            LastPrepareFailureReason);
+                        if (LastPrepareFailureReason != "invalid_capital")
+                            ModClass.LogWarning(
+                                "Deferred king identity repair remains pending for " +
+                                "kingdom " + pending.KingdomId + " actor " +
+                                pending.ActorId + " reason=" +
+                                LastPrepareFailureReason);
                     }
                 }
             }
@@ -654,7 +712,7 @@ namespace AncientWarfare3.core.lineage
             Kingdom pKingdom)
         {
             return pCity?.data != null && !pCity.isRekt() &&
-                   pCity.isAlive() && pCity.kingdom == pKingdom;
+                   pCity.kingdom == pKingdom;
         }
 
         private static bool CloseGuestOffice(Actor pActor)

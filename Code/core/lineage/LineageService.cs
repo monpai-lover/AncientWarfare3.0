@@ -2410,7 +2410,6 @@ namespace AncientWarfare3.core.lineage
 
             pKingdom.data.set(LineageKeys.KINGDOM_INTEGRATED, true);
             UpsertKingdomState(pKingdom, pIntegrated: true);
-            NameIntegrationMaterializationService.Request(pKingdom);
         }
 
         internal static bool ApplyNameIntegrationToActor(Actor pActor,

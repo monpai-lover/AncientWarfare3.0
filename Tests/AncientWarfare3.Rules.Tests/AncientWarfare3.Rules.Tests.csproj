@@ -46,6 +46,7 @@
     <Compile Include="ActorAgeWorkRulesTests.cs.txt" />
     <Compile Include="FeudatoryDeathPerformanceRulesTests.cs.txt" />
     <Compile Include="ActorDeathArchiveRulesTests.cs.txt" />
+    <Compile Include="ActorDeathSafetyRulesTests.cs.txt" />
     <Compile Include="CapturedMilitaryOwnershipRulesTests.cs.txt" />
     <Compile Include="ActorPresentationDirtyRulesTests.cs.txt" />
     <Compile Include="AWPathRequestReuseRulesTests.cs.txt" />
@@ -91,6 +92,7 @@
     <Compile Include="..\..\Code\core\court\CivilServiceForeignResidentQualificationQuery.cs" Link="Production\CivilServiceForeignResidentQualificationQuery.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceFormalCandidateQuery.cs" Link="Production\CivilServiceFormalCandidateQuery.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageKeys.cs" Link="Production\LineageKeys.cs" />
+    <Compile Include="..\..\Code\core\lineage\ActorDeathSafetyRules.cs" Link="Production\ActorDeathSafetyRules.cs" />
     <Compile Include="..\..\Code\core\db\HistoricalWriteModeRules.cs" Link="Production\HistoricalWriteModeRules.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomPolicyInheritanceDiagnosticRules.cs" Link="Production\KingdomPolicyInheritanceDiagnosticRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyAiRules.cs" Link="Production\DiplomacyAiRules.cs" />
