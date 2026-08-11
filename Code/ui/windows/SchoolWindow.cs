@@ -630,18 +630,13 @@ namespace AncientWarfare3.ui.windows
                 .Where(p => p != null)
                 .OrderByDescending(p => p.Reputation)
                 .ThenBy(p => p.ActorId)
-                .Take(_lineageRows.Count)
                 .ToArray();
+            EnsureLineageRows(members.Length);
             float cursor = pTop;
             int rendered = 0;
-            for (int i = 0; i < _lineageRows.Count; i++)
+            for (int i = 0; i < members.Length; i++)
             {
                 SchoolLineageRowView row = _lineageRows[i];
-                if (i >= members.Length)
-                {
-                    row.gameObject.SetActive(false);
-                    continue;
-                }
                 SchoolMembershipRecord membership = members[i];
                 Actor student = World.world?.units?.get(membership.ActorId);
                 Actor teacher = membership.TeacherActorId >= 0
@@ -661,6 +656,17 @@ namespace AncientWarfare3.ui.windows
                 rendered++;
             }
             return rendered == 0 ? pTop : cursor;
+        }
+
+        private void EnsureLineageRows(int pRequiredCount)
+        {
+            int required = Math.Max(0, pRequiredCount);
+            while (_lineageRows.Count < required)
+            {
+                SchoolLineageRowView row = SchoolLineageRowView.Create(_detailContent);
+                row.gameObject.SetActive(false);
+                _lineageRows.Add(row);
+            }
         }
 
         private static string RecentHistory(string pSchoolId)
