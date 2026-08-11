@@ -5,6 +5,7 @@ namespace AncientWarfare3.core.naming
     internal enum ActorManualNameMode
     {
         Xia,
+        SiniticMerged,
         NonXia
     }
 
@@ -64,8 +65,9 @@ namespace AncientWarfare3.core.naming
         {
             string first = Normalize(pFirstField);
             string second = Normalize(pSecondField);
-            string family = pMode == ActorManualNameMode.Xia ? first : second;
-            string given = pMode == ActorManualNameMode.Xia ? second : first;
+            bool familyFirst = pMode != ActorManualNameMode.NonXia;
+            string family = familyFirst ? first : second;
+            string given = familyFirst ? second : first;
             bool valid = given.Length > 0;
             return new ActorManualNameDraft(valid, given, family,
                 valid ? CreateDisplayName(pMode, given, family) : string.Empty);
@@ -78,7 +80,7 @@ namespace AncientWarfare3.core.naming
             string family = Normalize(pFamilyOrClanName);
             if (given.Length == 0) return family;
             if (family.Length == 0) return given;
-            return pMode == ActorManualNameMode.Xia
+            return pMode != ActorManualNameMode.NonXia
                 ? family + given
                 : given + " " + family;
         }

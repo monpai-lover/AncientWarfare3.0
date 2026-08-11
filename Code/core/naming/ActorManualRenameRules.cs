@@ -36,6 +36,27 @@ namespace AncientWarfare3.core.naming
 
     internal static class ActorManualRenameRules
     {
+        internal static ActorManualNameMode ResolveMode(bool isXia,
+            NamingProfileId profile)
+        {
+            if (isXia || profile == NamingProfileId.Xia)
+                return ActorManualNameMode.Xia;
+            return profile == NamingProfileId.Monkey ||
+                   profile == NamingProfileId.NativeSinitic
+                ? ActorManualNameMode.SiniticMerged
+                : ActorManualNameMode.NonXia;
+        }
+
+        internal static bool UsesFamilyFirst(ActorManualNameMode pMode)
+        {
+            return pMode != ActorManualNameMode.NonXia;
+        }
+
+        internal static bool UsesSingleMergedShi(ActorManualNameMode pMode)
+        {
+            return pMode == ActorManualNameMode.SiniticMerged;
+        }
+
         internal static string ResolveFamilyIdentity(
             ActorManualNameMode pMode, string clanName, string familyName,
             string chineseFamilyName, string localizedFamilyComponent)
@@ -44,7 +65,7 @@ namespace AncientWarfare3.core.naming
             string family = Normalize(familyName);
             string chineseFamily = Normalize(chineseFamilyName);
             string localizedFamily = Normalize(localizedFamilyComponent);
-            if (pMode == ActorManualNameMode.Xia && clan.Length > 0)
+            if (pMode != ActorManualNameMode.NonXia && clan.Length > 0)
                 return clan;
             if (family.Length > 0) return family;
             if (clan.Length > 0) return clan;

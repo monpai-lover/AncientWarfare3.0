@@ -32,7 +32,7 @@ namespace AncientWarfare3.patch
                 return;
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
             AWCultureNamingTraditionService.InitializeActorProfile(__instance);
-            if (!LineageService.IsNativeXiaCultureActor(__instance)) return;
+            if (!LineageService.UsesCommonGenealogy(__instance)) return;
 
             try { LineageService.OnActorBorn(__instance); }
             catch (System.Exception e)
@@ -61,6 +61,17 @@ namespace AncientWarfare3.patch
                                     e.Message);
             }
 
+            try
+            {
+                MatrilocalLineageService.ReconcileParents(pParent1,
+                    pParent2);
+            }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning(
+                    "Matrilocal birth reconciliation failed: " + e.Message);
+            }
+
             WesternLineageBirthAdmissionDecision decision = default;
             try
             {
@@ -81,6 +92,8 @@ namespace AncientWarfare3.patch
                 {
                     WesternLineageParentEdgeService.RecordBirth(pBaby,
                         pParent1, pParent2, pUseLightweightEdges: true);
+                    LineageService.OnLightweightActorBornWithParents(pBaby,
+                        pParent1, pParent2);
                 }
                 catch (System.Exception e)
                 {

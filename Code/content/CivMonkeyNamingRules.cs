@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.content
 {
@@ -59,6 +60,17 @@ namespace AncientWarfare3.content
         public static string ResolveSurname(string pInheritedSurname, long pSeed)
         {
             return ResolveSurname(pInheritedSurname, pSeed, Surnames);
+        }
+
+        internal static int SelectFamilySourceSlot(bool parent1Male,
+            bool parent1HasFamily, bool parent1MatrilocalToParent2,
+            bool parent2Male, bool parent2HasFamily,
+            bool parent2MatrilocalToParent1)
+        {
+            return RulerHouseholdRules.SelectBirthLineageSourceSlot(
+                parent1Male, parent1HasFamily,
+                parent1MatrilocalToParent2, parent2Male,
+                parent2HasFamily, parent2MatrilocalToParent1);
         }
 
         internal static string ResolveLineageSurname(bool pHasExistingShi,

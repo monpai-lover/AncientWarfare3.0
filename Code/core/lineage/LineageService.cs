@@ -82,6 +82,16 @@ namespace AncientWarfare3.core.lineage
             return IsXia(pActor) || IsCivilizedMonkey(pActor);
         }
 
+        // Native-Sinitic civs use the shared genealogy and matrilocal
+        // inheritance pipeline, but retain their one-part Shi naming rather
+        // than being treated as Xia surname/branch identities.
+        public static bool UsesCommonGenealogy(Actor pActor)
+        {
+            return IsNativeXiaCultureActor(pActor) ||
+                   AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(
+                       pActor?.asset?.id);
+        }
+
         public static bool IsXiaHumanPair(Actor pA, Actor pB)
         {
             return (IsXia(pA) && IsHuman(pB)) || (IsHuman(pA) && IsXia(pB));
@@ -89,7 +99,7 @@ namespace AncientWarfare3.core.lineage
 
         public static bool HasOriginalClan(Actor pActor)
         {
-            return IsNativeXiaCultureActor(pActor) && pActor.hasClan() &&
+            return UsesCommonGenealogy(pActor) && pActor.hasClan() &&
                    pActor.clan?.data != null;
         }
 
@@ -98,7 +108,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null) return false;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             if (UsesAwLineageSystem(pActor)) return true;
-            if (IsNativeXiaCultureActor(pActor) &&
+            if (UsesCommonGenealogy(pActor) &&
                 (lineageId >= 0 || HasOriginalClan(pActor))) return true;
 
             NamingProfileId profile = AWCultureNamingTraditionService
@@ -128,7 +138,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             bool hasStableLineageId = lineageId >= 0L;
             if (!hasStableLineageId) return false;
-            if (IsNativeXiaCultureActor(pActor))
+            if (UsesCommonGenealogy(pActor))
                 return ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
                     pIsXiaActor: true,
                     pKingdomIsForeignPseudoDynasty:
@@ -147,7 +157,7 @@ namespace AncientWarfare3.core.lineage
         private static bool CanUseXiaizedLineageGovernment(Actor pActor)
         {
             if (pActor?.data == null) return false;
-            return IsNativeXiaCultureActor(pActor) ||
+            return UsesCommonGenealogy(pActor) ||
                    XiaizationService.IsNativePolicyKingdom(pActor.kingdom) ||
                    XiaizationService.UsesXiaizedInstitutionSystem(pActor.kingdom);
         }
@@ -195,6 +205,8 @@ namespace AncientWarfare3.core.lineage
             AWCultureNamingTraditionService.InitializeActorProfile(pBaby);
             if (!pUseFullPath) return;
 
+            MatrilocalLineageService.ReconcileParents(pParent1, pParent2);
+
             ArchiveTraceableActor(pParent1, pAlive: true);
             ArchiveTraceableActor(pParent2, pAlive: true);
             bool babyUsesXiaNaming = UsesXiaPersonalNaming(pBaby);
@@ -233,6 +245,12 @@ namespace AncientWarfare3.core.lineage
             RecordBirthEvent(pBaby);
         }
 
+        internal static void OnLightweightActorBornWithParents(Actor pBaby,
+            Actor pParent1, Actor pParent2)
+        {
+            TryInheritLightweightWesternSurname(pBaby, pParent1, pParent2);
+        }
+
         /// <summary>
         ///     Lightweight Western births still carry family identity. This
         ///     deliberately copies surname fields only; it must not admit a
@@ -264,9 +282,16 @@ namespace AncientWarfare3.core.lineage
                 profile);
             string parent2Surname = ResolveWesternParentSurname(pParent2,
                 profile);
-            int sourceSlot = WesternSurnameInheritanceRules.SelectSourceSlot(
-                pParent1?.isSexMale() == true, parent1Surname,
-                pParent2?.isSexMale() == true, parent2Surname);
+            int sourceSlot = RulerHouseholdRules
+                .SelectBirthLineageSourceSlot(
+                    pParent1?.isSexMale() == true,
+                    parent1Surname.Length > 0,
+                    MatrilocalLineageService.IsMatrilocalTo(pParent1,
+                        pParent2),
+                    pParent2?.isSexMale() == true,
+                    parent2Surname.Length > 0,
+                    MatrilocalLineageService.IsMatrilocalTo(pParent2,
+                        pParent1));
             if (sourceSlot < 0) return false;
 
             string surname = sourceSlot == 1 ? parent1Surname : parent2Surname;
@@ -351,7 +376,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void ArchiveTraceableActor(Actor pActor, bool pAlive)
         {
-            if (!IsNativeXiaCultureActor(pActor) && !IsHuman(pActor)) return;
+            if (!UsesCommonGenealogy(pActor) && !IsHuman(pActor)) return;
             LineageArchiveWriter.Upsert(pActor, pAlive, pTraceOnly: true);
         }
 
@@ -533,21 +558,23 @@ namespace AncientWarfare3.core.lineage
 
         private static Actor PickPatrilinealSource(Actor pParent1, Actor pParent2)
         {
-            int slot = WesternLineageEligibilityRules.SelectParentSourceSlot(
+            int slot = RulerHouseholdRules.SelectBirthLineageSourceSlot(
                 pParent1?.isSexMale() == true, HasLineageData(pParent1),
-                HasCompleteLineageData(pParent1),
+                MatrilocalLineageService.IsMatrilocalTo(pParent1, pParent2),
                 pParent2?.isSexMale() == true, HasLineageData(pParent2),
-                HasCompleteLineageData(pParent2), requireComplete: false);
+                MatrilocalLineageService.IsMatrilocalTo(pParent2, pParent1));
             return slot == 1 ? pParent1 : slot == 2 ? pParent2 : null;
         }
 
         private static Actor PickCompletePatrilinealSource(Actor pParent1, Actor pParent2)
         {
-            int slot = WesternLineageEligibilityRules.SelectParentSourceSlot(
-                pParent1?.isSexMale() == true, HasLineageData(pParent1),
+            int slot = RulerHouseholdRules.SelectBirthLineageSourceSlot(
+                pParent1?.isSexMale() == true,
                 HasCompleteLineageData(pParent1),
-                pParent2?.isSexMale() == true, HasLineageData(pParent2),
-                HasCompleteLineageData(pParent2), requireComplete: true);
+                MatrilocalLineageService.IsMatrilocalTo(pParent1, pParent2),
+                pParent2?.isSexMale() == true,
+                HasCompleteLineageData(pParent2),
+                MatrilocalLineageService.IsMatrilocalTo(pParent2, pParent1));
             return slot == 1 ? pParent1 : slot == 2 ? pParent2 : null;
         }
 
@@ -1104,6 +1131,8 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.LINEAGE_ID, out long existingLineageId, -1L);
             pActor.data.get(LineageKeys.SHI_ID, out long existingShiId, -1L);
             bool civilizedMonkey = IsCivilizedMonkey(pActor);
+            bool nativeSinitic = AWNativeSiniticSpeciesRules
+                .IsNativeSiniticSpecies(pActor.asset?.id);
             CivMonkeyLineageIdentity monkeyIdentity = default;
             if (civilizedMonkey)
             {
@@ -1118,6 +1147,26 @@ namespace AncientWarfare3.core.lineage
             if (civilizedMonkey)
                 parts = new ForeignPseudoNameParts(parts.GivenName,
                     monkeyIdentity.FamilyName, monkeyIdentity.ClanName);
+            else if (nativeSinitic)
+            {
+                // These species use one merged Shi, never the Xia
+                // surname-plus-branch display. Prefer an existing Shi so a
+                // prior bad Xia-style family field cannot overwrite it.
+                string shi = !string.IsNullOrWhiteSpace(existingClan)
+                    ? existingClan.Trim()
+                    : !string.IsNullOrWhiteSpace(existingFamily)
+                        ? existingFamily.Trim()
+                        : !string.IsNullOrWhiteSpace(chineseFamily)
+                            ? chineseFamily.Trim()
+                            : parts.FamilyName;
+                NativeSiniticNameParts parsed =
+                    AWNativeSiniticNamePartsRules.Resolve(rawName, shi, "");
+                string given = parsed.Valid ? parsed.GivenName :
+                    LineageGivenNameNormalizationRules.Normalize(
+                        parts.GivenName, shi, shi, isNoble: true,
+                        isMale: pActor.isSexMale(), isNameIntegrated: true);
+                parts = new ForeignPseudoNameParts(given, shi, shi);
+            }
             if (existingLineageId >= 0 && existingShiId < 0 && pTrigger == NobleTrigger.Official)
             {
                 GrantOfficialShiBranch(pActor, existingLineageId, pOfficeId);
@@ -1209,6 +1258,41 @@ namespace AncientWarfare3.core.lineage
             if (pArchiveActor)
                 ArchiveActor(pActor, pAlive: true);
             try { pActor.clearGraphicsFully(); } catch { }
+        }
+
+        /// <summary>
+        /// Repairs saves created while native-Sinitic actors were mistakenly
+        /// projected as Xia surname plus Shi identities. These species have a
+        /// single merged Shi, which is authoritative in live UI and archives.
+        /// </summary>
+        internal static bool RepairNativeSiniticIdentity(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.isRekt() ||
+                !AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(
+                    pActor.asset?.id)) return false;
+
+            pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
+            pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME,
+                out string chineseFamily, "");
+            string shi = !string.IsNullOrWhiteSpace(clan) ? clan.Trim() :
+                !string.IsNullOrWhiteSpace(family) ? family.Trim() :
+                chineseFamily?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(shi)) return false;
+
+            string rawName = pActor.data.name ?? string.Empty;
+            NativeSiniticNameParts parsed =
+                AWNativeSiniticNamePartsRules.Resolve(rawName, shi, "");
+            if (parsed.Valid)
+                pActor.data.set(LineageKeys.GIVEN_NAME, parsed.GivenName);
+            pActor.data.set(LineageKeys.FAMILY_NAME, shi);
+            pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, shi);
+            pActor.data.set(LineageKeys.CLAN_NAME, shi);
+            pActor.data.set(AWNameDataKeys.FamilyComponent, shi);
+            pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
+            ApplyDisplayName(pActor);
+            ArchiveTraceableActor(pActor, pAlive: true);
+            return true;
         }
 
         /// <summary>

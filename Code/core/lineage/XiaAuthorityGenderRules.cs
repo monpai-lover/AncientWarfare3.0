@@ -2,16 +2,27 @@ namespace AncientWarfare3.core.lineage
 {
     public static class XiaAuthorityGenderRules
     {
-        public static bool ShouldAllowSetLeader(bool pIsXiaActor, bool pIsMale, bool pIsNewAppointment)
+        public static bool IsSuccessionCandidateSexEligible(bool pIsMale,
+            bool pFemaleSuccessionAllowed)
         {
-            return true;
+            return pIsMale || pFemaleSuccessionAllowed;
         }
 
-        public static bool ShouldAllowSetKing(bool pFromLoad, bool pCandidateIsMale, bool pCandidateIsXia,
-            bool pKingdomIsXia)
+        public static bool ShouldAllowSetLeader(bool pUsesXiaLaw,
+            bool pIsMale, bool pIsNewAppointment,
+            bool pFemaleSuccessionAllowed)
         {
-            if (!pCandidateIsXia && !pKingdomIsXia) return true;
-            return pCandidateIsMale;
+            return !pIsNewAppointment ||
+                   IsSuccessionCandidateSexEligible(pIsMale,
+                       pFemaleSuccessionAllowed);
+        }
+
+        public static bool ShouldAllowSetKing(bool pCandidateIsMale,
+            bool pCandidateIsXia, bool pKingdomIsXia,
+            bool pFemaleSuccessionAllowed)
+        {
+            return IsSuccessionCandidateSexEligible(pCandidateIsMale,
+                pFemaleSuccessionAllowed);
         }
     }
 }

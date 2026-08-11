@@ -2,6 +2,7 @@ key,cz,en,ch
 一米_中文名,一米中文名,Chinese Name by Yimi,一米中文名
 aw_actor_name_given,名,Given name,名
 aw_actor_name_family_or_shi,姓/氏,Surname / Shi,姓/氏
+aw_actor_name_shi,氏,Shi,氏
 aw_actor_name_invalid,名字不能为空,Given name cannot be empty,名字不能為空
 aw_back_to_kingdom,返回国家,Back to Kingdom,返回國家
 status_title_aw_mandate_army_golden,盛世军威,Golden Age Army,盛世軍威
@@ -292,6 +293,7 @@ task_unit_aw_historical_school_debate_travel,赴会论辩,Travel to Debate,赴�
 task_unit_aw_historical_school_debate,百家论辩,School Debate,百家論辯
 task_unit_aw_historical_school_debate_receiving,应邀论辩,Debate Respondent,應邀論辯
 task_unit_aw_guard_protect_king,保护国王,Protecting the King,保護國王
+task_unit_aw_guard_follow_king,跟随国王,Following the King,跟隨國王
 aw_family_name_unknown,未详,Unknown,未詳
 aw_home_shi_label,本家：,Home branch: ,本家：
 aw_return_home_shi,返回本家,Return to Home Branch,返回本家

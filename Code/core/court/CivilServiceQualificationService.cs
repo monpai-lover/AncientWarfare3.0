@@ -76,7 +76,9 @@ namespace AncientWarfare3.core.court
 
         public static bool CanReceiveFormalCivilAppointment(Actor pActor,
             Kingdom pKingdom, string pLayer, string pOfficeId,
-            bool pAllowVacancyPromotion = false)
+            bool pAllowVacancyPromotion = false,
+            CivilServiceQualificationRecord pQualification = null,
+            bool pQualificationsCaptured = false)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
             if (!HasExaminationSystem(pKingdom)) return true;
@@ -85,7 +87,9 @@ namespace AncientWarfare3.core.court
             if (!HistoricalSchoolEducationService.CanAppoint(pActor,
                     pKingdom, pLayer, pOfficeId)) return false;
             CivilServiceQualificationRecord qualification =
-                LoadOrRepair(pActor, pKingdom);
+                pQualificationsCaptured
+                    ? pQualification
+                    : LoadOrRepair(pActor, pKingdom);
             bool hasFormalQualification = qualification != null &&
                 CivilServiceExamRules.IsFormalAppointmentQualification(
                     ParseQualification(qualification.Qualification));
@@ -115,6 +119,17 @@ namespace AncientWarfare3.core.court
             return strictEligible || CivilServiceExamRules.ShouldUseVacancyPromotion(
                 officeVacant: pAllowVacancyPromotion, strictEligible,
                 hasFormalQualification: true);
+        }
+
+        internal static Dictionary<long, CivilServiceQualificationRecord>
+            CaptureManualAppointmentQualifications(Kingdom pKingdom,
+                IReadOnlyList<long> pActorIds)
+        {
+            if (pKingdom?.data == null || pActorIds == null ||
+                pActorIds.Count == 0)
+                return new Dictionary<long, CivilServiceQualificationRecord>();
+            return CivilServiceExamPersistence.LoadLatestQualificationsForActors(
+                DB, pKingdom.id, pActorIds);
         }
 
         internal static bool HasFormalQualification(Actor pActor,

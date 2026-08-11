@@ -8,13 +8,10 @@ namespace AncientWarfare3.core.naming
     {
         internal static ActorManualNameMode ResolveMode(Actor pActor)
         {
-            if (LineageService.IsXia(pActor)) return ActorManualNameMode.Xia;
             NamingProfileId profile = AWCultureNamingTraditionService
                 .ResolveForActorReadOnly(pActor).Profile;
-            return profile == NamingProfileId.Xia ||
-                   profile == NamingProfileId.NativeSinitic
-                ? ActorManualNameMode.Xia
-                : ActorManualNameMode.NonXia;
+            return ActorManualRenameRules.ResolveMode(
+                LineageService.IsXia(pActor), profile);
         }
 
         internal static ActorManualNameDraft Capture(Actor pActor)
@@ -25,7 +22,7 @@ namespace AncientWarfare3.core.naming
             ActorManualNameMode mode = ResolveMode(pActor);
             string family = ResolveFamily(pActor, mode);
             string given = ResolveGiven(pActor, family, mode);
-            return mode == ActorManualNameMode.Xia
+            return ActorManualRenameRules.UsesFamilyFirst(mode)
                 ? ActorManualNameRules.CreateDraft(mode, family, given)
                 : ActorManualNameRules.CreateDraft(mode, given, family);
         }
@@ -102,6 +99,74 @@ namespace AncientWarfare3.core.naming
                 pActor.data);
         }
 
+        internal static void ApplyExplicitSurname(Actor pActor,
+            string pFamilyName)
+        {
+            if (pActor?.data == null || pActor.isRekt()) return;
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string oldFamily,
+                string.Empty);
+            pActor.data.get(LineageKeys.CLAN_NAME, out string clan,
+                string.Empty);
+            pActor.data.get(LineageKeys.NAME_INTEGRATED, out bool integrated,
+                false);
+            VisibleSurnameWritePlan write = VisibleSurnameRenameRules
+                .PlanSurnameWrite(pFamilyName, clan, integrated);
+            ActorManualNameMode mode = ResolveMode(pActor);
+            string given = ResolveGiven(pActor, oldFamily, mode);
+            pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status,
+                LineageStatus.NONE);
+            string display = LineageDisplayNameRules.Build(given,
+                write.FamilyName, write.ClanName,
+                status == LineageStatus.NOBLE, pActor.isSexMale(),
+                write.NameIntegrated);
+            if (display.Length == 0) return;
+
+            pActor.data.set(LineageKeys.FAMILY_NAME, write.FamilyName);
+            pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME,
+                write.FamilyName);
+            pActor.data.set(AWNameDataKeys.FamilyComponent,
+                write.FamilyName);
+            CommitExplicitDisplay(pActor, given, display);
+        }
+
+        internal static void ApplyExplicitClan(Actor pActor,
+            string pClanName)
+        {
+            if (pActor?.data == null || pActor.isRekt()) return;
+            ActorManualNameMode mode = ResolveMode(pActor);
+            string family = ResolveFamily(pActor, mode);
+            string given = ResolveGiven(pActor, family, mode);
+            pActor.data.get(LineageKeys.NAME_INTEGRATED, out bool integrated,
+                false);
+            pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status,
+                LineageStatus.NONE);
+            pActor.data.set(LineageKeys.CLAN_NAME,
+                (pClanName ?? string.Empty).Trim());
+            string display = ActorManualRenameRules.UsesFamilyFirst(mode)
+                ? LineageDisplayNameRules.Build(given, family, pClanName,
+                    status == LineageStatus.NOBLE, pActor.isSexMale(),
+                    integrated)
+                : ActorManualNameRules.CreateDisplayName(mode, given,
+                    family);
+            if (display.Length > 0) CommitExplicitDisplay(pActor, given,
+                display);
+        }
+
+        private static void CommitExplicitDisplay(Actor pActor,
+            string pGivenName, string pDisplayName)
+        {
+            pActor.data.set(LineageKeys.GIVEN_NAME, pGivenName);
+            pActor.data.set(AWNameDataKeys.GivenName, pGivenName);
+            pActor.data.set("display_name", pDisplayName);
+            pActor.data.set(AWNameDataKeys.NativeName, pDisplayName);
+            pActor.data.set(AWNameDataKeys.ChineseName, pDisplayName);
+            pActor.data.set(AWNameDataKeys.NamingSchemaVersion,
+                AWLocalizedNameService.SchemaVersion);
+            pActor.setName(pDisplayName);
+            AWLocalizedNameMigrationService.Enqueue("Unit", pActor.data.id,
+                pActor.data);
+        }
+
         private static void CommitActor(Actor pActor,
             ActorManualNameDraft pDraft, bool pMarkCustom)
         {
@@ -162,7 +227,7 @@ namespace AncientWarfare3.core.naming
             if (!string.IsNullOrWhiteSpace(given)) return given.Trim();
             string display = (pActor.data.name ?? string.Empty).Trim();
             if (pFamily.Length == 0) return display;
-            if (pMode == ActorManualNameMode.Xia &&
+            if (ActorManualRenameRules.UsesFamilyFirst(pMode) &&
                 display.StartsWith(pFamily, StringComparison.Ordinal))
                 return display.Substring(pFamily.Length).Trim();
             string suffix = " " + pFamily;

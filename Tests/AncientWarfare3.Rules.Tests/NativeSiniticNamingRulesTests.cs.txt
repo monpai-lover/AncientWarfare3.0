@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.naming;
 
@@ -25,6 +26,37 @@ internal static class NativeSiniticNamingRulesTests
             Equal(false,
                 AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(assetId),
                 (assetId ?? "null") + " stays outside the exact species set");
+
+        string lineageService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageService.cs"));
+        Equal(true, lineageService.Contains(
+                "bool UsesCommonGenealogy(Actor pActor)"),
+            "native Sinitic species have a genealogy gate distinct from Xia naming");
+        Equal(true, lineageService.Contains(
+                "return IsNativeXiaCultureActor(pActor) ||\n                   AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies"),
+            "native Sinitic species enter the common genealogy gate");
+        string promotionPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_PromotionPatch.cs"));
+        Equal(true, promotionPatch.Contains(
+                "LineageService.UsesCommonGenealogy(pActor)"),
+            "native Sinitic kings use the common promotion genealogy path");
+        string localizedNames = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "naming",
+            "AWLocalizedNameService.cs"));
+        Equal(true, localizedNames.Contains(
+                "pActor.data.set(LineageKeys.CLAN_NAME, pParts.FamilyName);"),
+            "native Sinitic generation stores its single Shi as the family-tree branch");
+        Equal(true, localizedNames.Contains(
+                "pActor.data.set(LineageKeys.NAME_INTEGRATED, true);"),
+            "native Sinitic generation keeps live and archived name projection aligned");
+        string legacyMigration = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "WesternLineageMigrationService.cs"));
+        Equal(true, legacyMigration.Contains(
+                "LineageService.RepairNativeSiniticIdentity(pActor)"),
+            "existing native Sinitic actors are repaired through the bounded load migration");
 
         Equal(NamingProfileId.NativeSinitic,
             AWNamingProfileRules.Resolve(false, false,

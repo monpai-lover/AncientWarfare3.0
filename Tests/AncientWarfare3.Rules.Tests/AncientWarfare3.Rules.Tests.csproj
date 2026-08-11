@@ -502,6 +502,7 @@
     <Compile Include="..\..\Code\core\court\OfficialCareerRankRules.cs" Link="Production\OfficialCareerRankRules.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCareerBiographyRules.cs" Link="Production\OfficialCareerBiographyRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtAuxiliaryLawRules.cs" Link="Production\CourtAuxiliaryLawRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\XiaAuthorityGenderRules.cs" Link="Production\XiaAuthorityGenderRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtConscriptionLawRules.cs" Link="Production\CourtConscriptionLawRules.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCirculationRules.cs" Link="Production\OfficialCirculationRules.cs" />
     <Compile Include="..\..\Code\core\court\WesternMayorTermRules.cs" Link="Production\WesternMayorTermRules.cs" />
@@ -838,6 +839,7 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\AnnualPolicyHotPathSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\DiplomacyAiToggleSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WesternCourtCandidateEligibilitySourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\CourtAppointmentCandidateScanPerformanceSourceGuard.ps1&quot;" />
   </Target>
   <Target Name="XiaItemDynamicAtlasSourceGuard"
       BeforeTargets="Build">

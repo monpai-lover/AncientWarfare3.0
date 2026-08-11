@@ -65,6 +65,42 @@ internal static class RulerHouseholdRulesTests
                 fatherIsMatrilocal: false),
             "ordinary maternal lineage still requires a matrilocal marriage");
 
+        True(RulerHouseholdRules.ShouldEstablishMatrilocal(
+                womanValid: true, womanAuthorityTier: 1,
+                manValid: true, manAuthorityTier: 0),
+            "a female city leader receives an ordinary matrilocal husband");
+        True(RulerHouseholdRules.ShouldEstablishMatrilocal(
+                womanValid: true, womanAuthorityTier: 2,
+                manValid: true, manAuthorityTier: 1),
+            "a female king receives a lower-tier male leader as husband");
+        Equal(false, RulerHouseholdRules.ShouldEstablishMatrilocal(
+                womanValid: true, womanAuthorityTier: 1,
+                manValid: true, manAuthorityTier: 1),
+            "equal authority does not establish matrilocal marriage");
+        Equal(false, RulerHouseholdRules.ShouldEstablishMatrilocal(
+                womanValid: true, womanAuthorityTier: 0,
+                manValid: true, manAuthorityTier: 0),
+            "an ordinary couple remains patrilineal");
+
+        Equal(2, RulerHouseholdRules.SelectBirthLineageSourceSlot(
+                parent1Male: true, parent1Complete: true,
+                parent1MatrilocalToParent2: true,
+                parent2Male: false, parent2Complete: true,
+                parent2MatrilocalToParent1: false),
+            "a marked husband makes the mother authoritative");
+        Equal(1, RulerHouseholdRules.SelectBirthLineageSourceSlot(
+                parent1Male: true, parent1Complete: true,
+                parent1MatrilocalToParent2: false,
+                parent2Male: false, parent2Complete: true,
+                parent2MatrilocalToParent1: false),
+            "an ordinary marriage remains father first");
+        Equal(2, RulerHouseholdRules.SelectBirthLineageSourceSlot(
+                parent1Male: true, parent1Complete: false,
+                parent1MatrilocalToParent2: false,
+                parent2Male: false, parent2Complete: true,
+                parent2MatrilocalToParent1: false),
+            "a missing paternal lineage falls back to the mother");
+
         True(RulerHouseholdRules.IsRoyalMarriageCandidate(
                 otherwiseEligible: true, reigningRuler: false),
             "an eligible non-ruler remains available for royal marriage");

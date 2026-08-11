@@ -486,6 +486,8 @@ namespace AncientWarfare3.core.naming
                     pParts.FamilyName);
                 pActor.data.set(LineageKeys.GIVEN_NAME, pParts.GivenName);
                 pActor.data.set(AWNameDataKeys.GivenName, pParts.GivenName);
+                pActor.data.set(LineageKeys.CLAN_NAME, pParts.FamilyName);
+                pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
                 return;
             }
 

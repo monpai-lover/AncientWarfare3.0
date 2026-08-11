@@ -1,5 +1,6 @@
 using System;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
 
 internal static class CourtConscriptionLawRulesTests
 {
@@ -48,6 +49,44 @@ internal static class CourtConscriptionLawRulesTests
         Equal(4, CourtAuxiliaryLawRules.OptionCount(
             CourtAuxiliaryLawKind.Conscription),
             "conscription exposes four options");
+        Equal(CourtFemaleSuccessionLaw.Forbidden,
+            CourtAuxiliaryLawRules.DefaultFemaleSuccessionLaw(
+                pNativeXia: true),
+            "Xia kingdoms default to male-only succession");
+        Equal(CourtFemaleSuccessionLaw.Permitted,
+            CourtAuxiliaryLawRules.DefaultFemaleSuccessionLaw(
+                pNativeXia: false),
+            "other kingdoms default to permitted female succession");
+        Equal(false, CourtAuxiliaryLawRules.AllowsFemaleSuccession(
+                pNativeXia: false, CourtFemaleSuccessionLaw.Forbidden),
+            "every species follows its kingdom's female succession law");
+        Equal(false, CourtAuxiliaryLawRules.AllowsFemaleSuccession(
+                pNativeXia: true, CourtFemaleSuccessionLaw.Forbidden),
+            "the Xia default rejects female succession");
+        Equal(true, CourtAuxiliaryLawRules.AllowsFemaleSuccession(
+                pNativeXia: true, CourtFemaleSuccessionLaw.Permitted),
+            "the Xia auxiliary law permits female succession");
+        Equal(2, CourtAuxiliaryLawRules.OptionCount(
+            CourtAuxiliaryLawKind.FemaleSuccession),
+            "female succession exposes two options");
+        Equal(false, XiaAuthorityGenderRules.ShouldAllowSetKing(
+            pCandidateIsMale: false, pCandidateIsXia: false,
+            pKingdomIsXia: false, pFemaleSuccessionAllowed: false),
+            "non-Xia kingdoms can also disable female succession");
+        Equal(false, XiaAuthorityGenderRules.ShouldAllowSetKing(
+            pCandidateIsMale: false, pCandidateIsXia: true,
+            pKingdomIsXia: true, pFemaleSuccessionAllowed: false),
+            "Xia female rulers remain blocked by the default law");
+        Equal(true, XiaAuthorityGenderRules.ShouldAllowSetKing(
+            pCandidateIsMale: false, pCandidateIsXia: true,
+            pKingdomIsXia: true, pFemaleSuccessionAllowed: true),
+            "the auxiliary law enables Xia female rulers");
+        Equal(true, XiaAuthorityGenderRules.IsSuccessionCandidateSexEligible(
+            pIsMale: false, pFemaleSuccessionAllowed: true),
+            "enabled succession accepts female heirs");
+        Equal(false, XiaAuthorityGenderRules.IsSuccessionCandidateSexEligible(
+            pIsMale: false, pFemaleSuccessionAllowed: false),
+            "disabled succession rejects female heirs");
     }
 
     private static int Score(CourtConscriptionLaw law, string school,

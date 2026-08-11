@@ -1990,7 +1990,11 @@ namespace AncientWarfare3.core.lineage
                 !imperialHeir &&
                 HeirCandidateRules.IsBasicMaleSuccessionEligible(
                     !pCandidate.isRekt() && pCandidate.isAlive(),
-                    pCandidate == pPrince, pCandidate.isSexMale(),
+                    pCandidate == pPrince,
+                    XiaAuthorityGenderRules.IsSuccessionCandidateSexEligible(
+                        pCandidate.isSexMale(),
+                        CourtAuxiliaryLawService.AllowsFemaleSuccession(
+                            pEmpire)),
                     pCandidate.isKing(), pCandidate.isAdult(),
                     pCandidate.hasTrait("madness"),
                     SlaveService.IsSlave(pCandidate));

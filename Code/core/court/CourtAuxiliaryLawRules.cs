@@ -24,12 +24,19 @@ namespace AncientWarfare3.core.court
         XiaCentered
     }
 
+    public enum CourtFemaleSuccessionLaw
+    {
+        Forbidden,
+        Permitted
+    }
+
     public enum CourtAuxiliaryLawKind
     {
         Term,
         BorderCommand,
         AppointmentCulture,
-        Conscription
+        Conscription,
+        FemaleSuccession
     }
 
     public enum CourtAuxiliaryLawChangeResult
@@ -62,6 +69,19 @@ namespace AncientWarfare3.core.court
             CourtBorderCommandLaw.Petition;
         public const CourtAppointmentCultureLaw DefaultAppointmentCultureLaw =
             CourtAppointmentCultureLaw.XiaPreference;
+
+        public static CourtFemaleSuccessionLaw DefaultFemaleSuccessionLaw(
+            bool pNativeXia)
+        {
+            return pNativeXia ? CourtFemaleSuccessionLaw.Forbidden :
+                CourtFemaleSuccessionLaw.Permitted;
+        }
+
+        public static bool AllowsFemaleSuccession(bool pNativeXia,
+            CourtFemaleSuccessionLaw pLaw)
+        {
+            return pLaw == CourtFemaleSuccessionLaw.Permitted;
+        }
 
         public static int ResolveTermEndYear(CourtTermLaw pLaw,
             int pCurrentYear, int pDynamicLength)
@@ -177,7 +197,7 @@ namespace AncientWarfare3.core.court
             return pKind == CourtAuxiliaryLawKind.Term ||
                    pKind == CourtAuxiliaryLawKind.Conscription
                 ? 4
-                : 3;
+                : pKind == CourtAuxiliaryLawKind.FemaleSuccession ? 2 : 3;
         }
 
         public static int ScoreTermLaw(CourtTermLaw pLaw, float pEfficiency,

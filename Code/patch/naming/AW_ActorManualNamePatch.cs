@@ -162,21 +162,25 @@ namespace AncientWarfare3.patch.naming
                 pFirst.inputField.onEndEdit.RemoveAllListeners();
                 pState.Second.inputField.onEndEdit.RemoveAllListeners();
                 pState.Mode = ActorManualRenameService.ResolveMode(pActor);
-                bool xiaMode = pState.Mode == ActorManualNameMode.Xia;
+                bool familyFirst = ActorManualRenameRules.UsesFamilyFirst(
+                    pState.Mode);
+                bool mergedShi = ActorManualRenameRules.UsesSingleMergedShi(
+                    pState.Mode);
                 ActorManualNameDraft draft = ActorManualRenameService
                     .Capture(pActor);
-                pFirst.can_be_empty = xiaMode;
-                pState.Second.can_be_empty = !xiaMode;
-                pFirst.setText(xiaMode
+                pFirst.can_be_empty = familyFirst;
+                pState.Second.can_be_empty = !familyFirst;
+                pFirst.setText(familyFirst
                     ? draft.FamilyOrClanName
                     : draft.GivenName);
-                pState.Second.setText(xiaMode
+                pState.Second.setText(familyFirst
                     ? draft.GivenName
                     : draft.FamilyOrClanName);
-                SetFieldLabel(pFirst, xiaMode
-                    ? "aw_actor_name_family_or_shi"
+                SetFieldLabel(pFirst, familyFirst
+                    ? mergedShi ? "aw_actor_name_shi" :
+                        "aw_actor_name_family_or_shi"
                     : "aw_actor_name_given");
-                SetFieldLabel(pState.Second, xiaMode
+                SetFieldLabel(pState.Second, familyFirst
                     ? "aw_actor_name_given"
                     : "aw_actor_name_family_or_shi");
                 if (pActor.data.custom_name)
@@ -249,7 +253,8 @@ namespace AncientWarfare3.patch.naming
         private static void FocusGivenField(NameInput pFirst,
             EditorState pState)
         {
-            NameInput given = pState.Mode == ActorManualNameMode.Xia
+            NameInput given = ActorManualRenameRules.UsesFamilyFirst(
+                pState.Mode)
                 ? pState.Second
                 : pFirst;
             try

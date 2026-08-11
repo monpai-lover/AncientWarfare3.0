@@ -78,10 +78,16 @@ namespace AncientWarfare3.core.court
         public readonly string preferred_school_id;
         public readonly bool nine_rank_system;
         public readonly List<long> actor_ids;
+        public readonly Dictionary<long, CivilServiceQualificationRecord>
+            qualification_by_actor_id;
+        public readonly bool qualifications_captured;
 
         public CourtAppointmentCandidateScan(long pKingdomId, string pOfficeId,
             long pIncumbentActorId, long pHeirActorId, string pPreferredSchoolId,
-            List<long> pActorIds, bool pNineRankSystem)
+            List<long> pActorIds, bool pNineRankSystem,
+            Dictionary<long, CivilServiceQualificationRecord>
+                pQualificationByActorId,
+            bool pQualificationsCaptured)
         {
             kingdom_id = pKingdomId;
             office_id = pOfficeId ?? "";
@@ -90,6 +96,10 @@ namespace AncientWarfare3.core.court
             preferred_school_id = pPreferredSchoolId ?? "";
             nine_rank_system = pNineRankSystem;
             actor_ids = pActorIds ?? new List<long>();
+            qualification_by_actor_id = pQualificationByActorId ??
+                                      new Dictionary<long,
+                                          CivilServiceQualificationRecord>();
+            qualifications_captured = pQualificationsCaptured;
         }
     }
 
@@ -1083,12 +1093,20 @@ namespace AncientWarfare3.core.court
 
             var actorIds = new List<long>();
             foreach (Actor actor in SafeUnits(pKingdom)) actorIds.Add(actor.data.id);
+            bool examinationSystem = CivilServiceQualificationService.
+                HasExaminationSystem(pKingdom);
+            Dictionary<long, CivilServiceQualificationRecord> qualifications =
+                examinationSystem
+                    ? CivilServiceQualificationService.
+                        CaptureManualAppointmentQualifications(pKingdom,
+                            actorIds)
+                    : null;
             Actor heir = HeirService.PeekRegisteredHeir(pKingdom);
             pScan = new CourtAppointmentCandidateScan(pKingdom.id, pOfficeId,
                 incumbentActorId, heir?.data?.id ?? -1L,
                 CourtProfileRegistry.PreferredSchoolFor(pKingdom, pOfficeId),
-                actorIds,
-                HasNineRankSystem(pKingdom));
+                actorIds, HasNineRankSystem(pKingdom), qualifications,
+                examinationSystem);
             return CourtManualAppointmentResult.Success;
         }
 
@@ -1106,9 +1124,13 @@ namespace AncientWarfare3.core.court
             if (!CourtManualAppointmentRules.CanChooseCandidate(
                     actorId, pScan.incumbent_actor_id)) return false;
             Actor actor = World.world?.units?.get(actorId);
+            pScan.qualification_by_actor_id.TryGetValue(actorId,
+                out CivilServiceQualificationRecord qualification);
             if (!IsManualCentralCandidateEligible(actor, kingdom,
                     pScan.office_id,
-                    pAllowVacancyPromotion: pScan.incumbent_actor_id < 0))
+                    pAllowVacancyPromotion: pScan.incumbent_actor_id < 0,
+                    pQualification: qualification,
+                    pQualificationsCaptured: pScan.qualifications_captured))
                 return false;
 
             string school = SchoolMembershipService.GetSchool(actorId);
@@ -1182,14 +1204,17 @@ namespace AncientWarfare3.core.court
             Kingdom pKingdom, string pOfficeId,
             bool pAllowVacancyPromotion = false,
             HashSet<long> pUnavailableActorIds = null,
-            string pLayer = CourtOfficeLayer.Central)
+            string pLayer = CourtOfficeLayer.Central,
+            CivilServiceQualificationRecord pQualification = null,
+            bool pQualificationsCaptured = false)
         {
             return IsCentralCandidateEligibleWithoutQualification(pActor,
                        pKingdom, pOfficeId, pUnavailableActorIds, pLayer) &&
                    CivilServiceQualificationService.
                        CanReceiveFormalCivilAppointment(pActor, pKingdom,
                            pLayer, pOfficeId,
-                           pAllowVacancyPromotion);
+                           pAllowVacancyPromotion, pQualification,
+                           pQualificationsCaptured);
         }
 
         private static bool IsActingCentralCandidateEligible(Actor pActor,
