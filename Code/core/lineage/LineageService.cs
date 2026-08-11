@@ -82,6 +82,16 @@ namespace AncientWarfare3.core.lineage
             return IsXia(pActor) || IsCivilizedMonkey(pActor);
         }
 
+        // Native-Sinitic civs use the shared genealogy and matrilocal
+        // inheritance pipeline, but retain their one-part Shi naming rather
+        // than being treated as Xia surname/branch identities.
+        public static bool UsesCommonGenealogy(Actor pActor)
+        {
+            return IsNativeXiaCultureActor(pActor) ||
+                   AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(
+                       pActor?.asset?.id);
+        }
+
         public static bool IsXiaHumanPair(Actor pA, Actor pB)
         {
             return (IsXia(pA) && IsHuman(pB)) || (IsHuman(pA) && IsXia(pB));
@@ -89,7 +99,7 @@ namespace AncientWarfare3.core.lineage
 
         public static bool HasOriginalClan(Actor pActor)
         {
-            return IsNativeXiaCultureActor(pActor) && pActor.hasClan() &&
+            return UsesCommonGenealogy(pActor) && pActor.hasClan() &&
                    pActor.clan?.data != null;
         }
 
@@ -98,7 +108,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null) return false;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             if (UsesAwLineageSystem(pActor)) return true;
-            if (IsNativeXiaCultureActor(pActor) &&
+            if (UsesCommonGenealogy(pActor) &&
                 (lineageId >= 0 || HasOriginalClan(pActor))) return true;
 
             NamingProfileId profile = AWCultureNamingTraditionService
@@ -128,7 +138,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             bool hasStableLineageId = lineageId >= 0L;
             if (!hasStableLineageId) return false;
-            if (IsNativeXiaCultureActor(pActor))
+            if (UsesCommonGenealogy(pActor))
                 return ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
                     pIsXiaActor: true,
                     pKingdomIsForeignPseudoDynasty:
@@ -147,9 +157,7 @@ namespace AncientWarfare3.core.lineage
         private static bool CanUseXiaizedLineageGovernment(Actor pActor)
         {
             if (pActor?.data == null) return false;
-            return IsNativeXiaCultureActor(pActor) ||
-                   AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(
-                       pActor.asset?.id) ||
+            return UsesCommonGenealogy(pActor) ||
                    XiaizationService.IsNativePolicyKingdom(pActor.kingdom) ||
                    XiaizationService.UsesXiaizedInstitutionSystem(pActor.kingdom);
         }
@@ -368,7 +376,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void ArchiveTraceableActor(Actor pActor, bool pAlive)
         {
-            if (!IsNativeXiaCultureActor(pActor) && !IsHuman(pActor)) return;
+            if (!UsesCommonGenealogy(pActor) && !IsHuman(pActor)) return;
             LineageArchiveWriter.Upsert(pActor, pAlive, pTraceOnly: true);
         }
 
@@ -1141,15 +1149,23 @@ namespace AncientWarfare3.core.lineage
                     monkeyIdentity.FamilyName, monkeyIdentity.ClanName);
             else if (nativeSinitic)
             {
-                string family = !string.IsNullOrWhiteSpace(existingFamily)
-                    ? existingFamily.Trim()
-                    : chineseFamily?.Trim() ?? string.Empty;
-                if (string.IsNullOrEmpty(family)) family = parts.FamilyName;
-                string clan = string.IsNullOrWhiteSpace(existingClan)
-                    ? family
-                    : existingClan.Trim();
-                parts = new ForeignPseudoNameParts(parts.GivenName, family,
-                    clan);
+                // These species use one merged Shi, never the Xia
+                // surname-plus-branch display. Prefer an existing Shi so a
+                // prior bad Xia-style family field cannot overwrite it.
+                string shi = !string.IsNullOrWhiteSpace(existingClan)
+                    ? existingClan.Trim()
+                    : !string.IsNullOrWhiteSpace(existingFamily)
+                        ? existingFamily.Trim()
+                        : !string.IsNullOrWhiteSpace(chineseFamily)
+                            ? chineseFamily.Trim()
+                            : parts.FamilyName;
+                NativeSiniticNameParts parsed =
+                    AWNativeSiniticNamePartsRules.Resolve(rawName, shi, "");
+                string given = parsed.Valid ? parsed.GivenName :
+                    LineageGivenNameNormalizationRules.Normalize(
+                        parts.GivenName, shi, shi, isNoble: true,
+                        isMale: pActor.isSexMale(), isNameIntegrated: true);
+                parts = new ForeignPseudoNameParts(given, shi, shi);
             }
             if (existingLineageId >= 0 && existingShiId < 0 && pTrigger == NobleTrigger.Official)
             {
@@ -1242,6 +1258,41 @@ namespace AncientWarfare3.core.lineage
             if (pArchiveActor)
                 ArchiveActor(pActor, pAlive: true);
             try { pActor.clearGraphicsFully(); } catch { }
+        }
+
+        /// <summary>
+        /// Repairs saves created while native-Sinitic actors were mistakenly
+        /// projected as Xia surname plus Shi identities. These species have a
+        /// single merged Shi, which is authoritative in live UI and archives.
+        /// </summary>
+        internal static bool RepairNativeSiniticIdentity(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.isRekt() ||
+                !AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(
+                    pActor.asset?.id)) return false;
+
+            pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
+            pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME,
+                out string chineseFamily, "");
+            string shi = !string.IsNullOrWhiteSpace(clan) ? clan.Trim() :
+                !string.IsNullOrWhiteSpace(family) ? family.Trim() :
+                chineseFamily?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(shi)) return false;
+
+            string rawName = pActor.data.name ?? string.Empty;
+            NativeSiniticNameParts parsed =
+                AWNativeSiniticNamePartsRules.Resolve(rawName, shi, "");
+            if (parsed.Valid)
+                pActor.data.set(LineageKeys.GIVEN_NAME, parsed.GivenName);
+            pActor.data.set(LineageKeys.FAMILY_NAME, shi);
+            pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, shi);
+            pActor.data.set(LineageKeys.CLAN_NAME, shi);
+            pActor.data.set(AWNameDataKeys.FamilyComponent, shi);
+            pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
+            ApplyDisplayName(pActor);
+            ArchiveTraceableActor(pActor, pAlive: true);
+            return true;
         }
 
         /// <summary>

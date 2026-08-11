@@ -32,7 +32,7 @@ namespace AncientWarfare3.patch
                 return;
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
             AWCultureNamingTraditionService.InitializeActorProfile(__instance);
-            if (!LineageService.IsNativeXiaCultureActor(__instance)) return;
+            if (!LineageService.UsesCommonGenealogy(__instance)) return;
 
             try { LineageService.OnActorBorn(__instance); }
             catch (System.Exception e)

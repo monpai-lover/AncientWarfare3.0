@@ -93,7 +93,7 @@ namespace AncientWarfare3.patch
             NamingProfileId profile = AWCultureNamingTraditionService
                 .ResolveForActorReadOnly(pActor).Profile;
             return WesternLineageAdmissionRules.ShouldRunPromotionHook(profile,
-                LineageService.IsXia(pActor),
+                LineageService.UsesCommonGenealogy(pActor),
                 LineageService.IsXiaKingdom(pKingdom),
                 XiaizationService.IsForeignPseudoDynasty(pKingdom));
         }
@@ -112,11 +112,10 @@ namespace AncientWarfare3.patch
                     pActor);
                 return true;
             }
-            return XiaAuthorityGenderRules.ShouldAllowSetKing(
-                pFromLoad,
-                pCandidateIsMale: pActor.isSexMale(),
-                pCandidateIsXia: LineageService.IsXia(pActor),
-                pKingdomIsXia: LineageService.IsXiaKingdom(__instance));
+            // Native game settings decide whether a female candidate is
+            // eligible. AW3 must not block a valid female ruler before the
+            // common genealogy and matrilocal paths can run.
+            return true;
         }
     }
 

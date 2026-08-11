@@ -109,7 +109,8 @@ namespace AncientWarfare3.core.lineage
                 AWCultureNamingTraditionService.ResolveForCulture(
                     pKingdom.culture);
             if (naming.Profile != NamingProfileId.Western &&
-                naming.Profile != NamingProfileId.OrcNomadic) return;
+                naming.Profile != NamingProfileId.OrcNomadic &&
+                naming.Profile != NamingProfileId.NativeSinitic) return;
             if (naming.Profile == NamingProfileId.Western &&
                 WesternLineageAdmissionRules.ShouldDeferKingdomMigration(
                     pKingdom.king?.data != null,
@@ -132,6 +133,11 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || pActor.isRekt() ||
                 pActor.kingdom != _kingdom) return;
             NamingProfileId profile = AWCultureNamingTraditionService.ResolveForActorReadOnly(pActor).Profile;
+            if (profile == NamingProfileId.NativeSinitic)
+            {
+                LineageService.RepairNativeSiniticIdentity(pActor);
+                return;
+            }
             if (profile != NamingProfileId.Western &&
                 profile != NamingProfileId.OrcNomadic) return;
 
