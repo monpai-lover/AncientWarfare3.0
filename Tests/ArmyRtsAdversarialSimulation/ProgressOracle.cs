@@ -92,12 +92,19 @@ internal sealed class ProgressOracle
                 army.State == ArmyRtsState.Assault)
                 Fail(army, "occupied_target_repeated");
 
+            AssertRallyAccounting(army);
+
             foreach (long actorId in army.Members)
             {
                 if (!_state.Actors.TryGetValue(actorId,
                         out SimActor actor) || !actor.Alive) continue;
-                if (actor.King || actor.CityLeader)
-                    Fail(army, "authority_role_in_army");
+                // A king may legitimately lead an army as its captain. What
+                // must never happen is an authority figure being marched
+                // around as an ordinary follower, which is the shape of the
+                // original "the king trails the army" report.
+                if ((actor.King || actor.CityLeader) &&
+                    actorId != army.CaptainId)
+                    Fail(army, "authority_role_as_follower");
                 if (_state.Kind == ScenarioKind.OwnershipLifecycle &&
                     IsForeignTask(actor.Task) &&
                     actor.ForeignTaskAssignedTick >= 0 &&
@@ -106,6 +113,47 @@ internal sealed class ProgressOracle
                     Fail(army, "foreign_task_not_reclaimed");
             }
         }
+    }
+
+    // The rally quorum is a ratio, and the defect class that froze whole wars
+    // was the two sides of it being drawn from different populations. Assert
+    // the accounting stays coherent: the rallied count is a subset of the
+    // living roster, and a quorum that reports ready must survive being
+    // recomputed from the same numbers the oracle can see.
+    private void AssertRallyAccounting(SimArmy army)
+    {
+        if (!army.MissionValid) return;
+
+        // Deliberately not asserted here: that Rallied is a subset of the
+        // currently alive members. Rallied is a cached counter refreshed in
+        // the strategy stage, so a death applied during the events stage of
+        // the same tick can leave it one tick stale. Asserting on it would
+        // test harness cache freshness rather than the property this guards.
+        bool captainPresent =
+            _state.Actors.TryGetValue(army.CaptainId,
+                out SimActor captain) && captain.Alive;
+        int ralliedFollowers = Math.Max(0,
+            army.Rallied - (captainPresent ? 1 : 0));
+        int roster = Math.Max(0, army.Living);
+
+        // The defect that froze whole wars was a quorum whose numerator and
+        // denominator were drawn from different populations. Narrowing the
+        // denominator to the eligible escort must only ever narrow it, and it
+        // must never manufacture a quorum for an army with no captain.
+        int population = ArmyRtsRules.ResolveEscortPopulation(
+            rosterLiving: roster,
+            eligibleFollowersObserved: ralliedFollowers,
+            observationComplete: true,
+            captainPresent: captainPresent);
+        if (population > roster)
+            Fail(army, "escort_population_widened_the_denominator");
+        if (population <= 0 && roster > 0)
+            Fail(army, "escort_population_collapsed_to_zero");
+        if (!captainPresent && ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: population,
+                ralliedFollowers: ralliedFollowers,
+                captainPresent: captainPresent))
+            Fail(army, "quorum_without_captain");
     }
 
     private void AssertTransportDeadlines()

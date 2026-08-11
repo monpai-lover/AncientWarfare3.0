@@ -734,6 +734,12 @@ namespace AncientWarfare3.core.lineage
             int count;
             try { count = army.units.Count; }
             catch { count = 0; }
+            // Off and Shadow assign the captain only, then skip the whole
+            // roster by parking the cursor at the end. This is deliberate:
+            // those modes leave follower movement to the vanilla
+            // warrior_army_follow_leader order, so handing followers a
+            // deployment job would fight the AI that is actually steering
+            // them. Only the committing mode owns followers directly.
             if (!useFormationMovement)
             {
                 if (ArmyDeploymentRules.ShouldAssignDeploymentActor(

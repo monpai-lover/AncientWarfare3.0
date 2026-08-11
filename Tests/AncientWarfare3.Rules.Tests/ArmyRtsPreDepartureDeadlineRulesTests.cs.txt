@@ -17,6 +17,9 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
         StagingReleaseUsesTheOperationalForceGate();
         QuorumDoesNotDependOnTheThrottledCorrectionPath();
         StagingDeadlinesUseWorldTimeNotRealtime();
+        EscortQuorumPinsTheEightyPercentBoundary();
+        TwentyStrongArmyToleratesFourStragglers();
+        NonCommittedModesLeaveFollowersToVanilla();
         Assert(ArmyStallWatchdogRules.ShouldExpectFormationProgress(
                 ArmyRtsState.Rally, targetComplete: false),
             "watchdog samples stranded formation members during Rally");
@@ -136,6 +139,123 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
                     observationComplete: true, captainPresent: true),
                 ralliedFollowers: 14, captainPresent: true),
             "a fully rallied eligible formation reaches quorum");
+    }
+
+    // The deployment quorum is inclusive at exactly 80 percent. Pinning the
+    // three neighbouring ratios keeps a future refactor from drifting the
+    // comparison by one member, which is the difference between an army that
+    // departs and an army that holds its staging state.
+    private static void EscortQuorumPinsTheEightyPercentBoundary()
+    {
+        Assert(!ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: 100, ralliedFollowers: 78,
+                captainPresent: true),
+            "79 percent rallied is below the deployment quorum");
+        Assert(ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: 100, ralliedFollowers: 79,
+                captainPresent: true),
+            "exactly 80 percent rallied meets the deployment quorum");
+        Assert(ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: 100, ralliedFollowers: 80,
+                captainPresent: true),
+            "81 percent rallied clears the deployment quorum");
+
+        Assert(!ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: 100, ralliedFollowers: 79,
+                captainPresent: false),
+            "a missing captain fails the quorum regardless of its followers");
+    }
+
+    // A twenty-strong army is the shape the stall reports describe. State the
+    // straggler budget explicitly: four members may lag behind the rallied
+    // band, the fifth holds the whole army in staging.
+    private static void TwentyStrongArmyToleratesFourStragglers()
+    {
+        const int population = 20;
+        Assert(ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: population, ralliedFollowers: 15,
+                captainPresent: true),
+            "four stragglers still leave a 20-strong army at quorum");
+        Assert(!ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: population, ralliedFollowers: 14,
+                captainPresent: true),
+            "five stragglers drop a 20-strong army below quorum");
+
+        // The same army carrying members the formation cannot command must
+        // still be able to depart once every eligible member has rallied.
+        int mixedPopulation = ArmyRtsRules.ResolveEscortPopulation(
+            rosterLiving: population, eligibleFollowersObserved: 14,
+            observationComplete: true, captainPresent: true);
+        Equal(15, mixedPopulation,
+            "five ineligible members leave a 15-strong escort population");
+        Assert(ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: mixedPopulation, ralliedFollowers: 14,
+                captainPresent: true),
+            "a fully rallied eligible formation departs despite ineligible members");
+        // The smaller eligible population carries a smaller straggler budget:
+        // 11 rallied plus the captain is 12 of 15, exactly at quorum, while
+        // one more straggler drops it to 11 of 15.
+        Assert(ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: mixedPopulation, ralliedFollowers: 11,
+                captainPresent: true),
+            "three stragglers keep a 15-strong eligible formation at quorum");
+        Assert(!ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: mixedPopulation, ralliedFollowers: 10,
+                captainPresent: true),
+            "the eligible population still enforces its own straggler budget");
+    }
+
+    // Off and Shadow deliberately assign only the captain: the RTS does not
+    // own followers there, so vanilla warrior_army_follow_leader moves them.
+    // The escort gate must stay out of the way in those modes, because the
+    // formation counters it reads are only maintained while committing.
+    private static void NonCommittedModesLeaveFollowersToVanilla()
+    {
+        foreach (ArmyRtsMode mode in new[]
+                 { ArmyRtsMode.Off, ArmyRtsMode.Shadow })
+        {
+            Assert(!ArmyDeploymentRules.ShouldUseFormationQuorum(mode),
+                "a non-committing mode must not use the formation quorum");
+            Assert(ArmyDeploymentRules.ShouldAssignDeploymentActor(mode,
+                    actorIsCaptain: true),
+                "the captain still receives the deployment assignment");
+            Assert(!ArmyDeploymentRules.ShouldAssignDeploymentActor(mode,
+                    actorIsCaptain: false),
+                "followers are not assigned a deployment job");
+            Assert(!ArmyDeploymentRules.ShouldUseFormationFollowerJob(mode,
+                    actorIsCaptain: false),
+                "followers must not receive the RTS formation job");
+            Assert(ArmyRtsRuntimeModeRules.ShouldUseLegacyArmyFollowerOrders(
+                    mode),
+                "followers fall back to the vanilla follow-leader order");
+        }
+
+        Assert(ArmyDeploymentRules.ShouldAssignDeploymentActor(
+                ArmyRtsMode.On, actorIsCaptain: false),
+            "committing mode assigns followers so the formation can command them");
+        Assert(ArmyDeploymentRules.ShouldUseFormationFollowerJob(
+                ArmyRtsMode.On, actorIsCaptain: false),
+            "committing mode gives followers the formation job");
+        Assert(!ArmyRtsRuntimeModeRules.ShouldUseLegacyArmyFollowerOrders(
+                ArmyRtsMode.On),
+            "committing mode suppresses the vanilla follow-leader order");
+
+        // The gate is bypassed outside commit mode. Verify the guard clause
+        // rather than the counters, which do not exist in those modes.
+        string root = Directory.GetCurrentDirectory();
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        int start = controller.IndexOf(
+            "public static bool ShouldHoldDeploymentMove(",
+            StringComparison.Ordinal);
+        Assert(start >= 0, "the prewar escort gate must remain available");
+        int end = controller.IndexOf("ArmyFormationObservationProgress",
+            start, StringComparison.Ordinal);
+        Assert(end > start, "the escort gate must consult the observation");
+        string guard = controller.Substring(start, end - start);
+        Assert(guard.Contains("!ArmyRtsRuntimeMode.ShouldCommit",
+                StringComparison.Ordinal),
+            "the escort gate must not hold a captain whose followers are vanilla-driven");
     }
 
     // Under AWSimulationMode.Large the tick rate stays constant while each
