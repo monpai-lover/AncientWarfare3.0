@@ -100,7 +100,7 @@ namespace AncientWarfare3.content
             Actor parent2 = parentCount > 1 ? parents[1] : null;
             string family1 = ReadFamily(parent1);
             string family2 = ReadFamily(parent2);
-            int sourceSlot = SelectFamilySourceSlot(
+            int sourceSlot = CivMonkeyNamingRules.SelectFamilySourceSlot(
                 parent1?.isSexMale() == true, family1.Length > 0,
                 MatrilocalLineageService.IsMatrilocalTo(parent1, parent2),
                 parent2?.isSexMale() == true, family2.Length > 0,
