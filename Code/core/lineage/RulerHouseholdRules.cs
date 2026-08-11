@@ -126,6 +126,26 @@ namespace AncientWarfare3.core.lineage
                    fatherIsMatrilocal;
         }
 
+        public static bool ShouldEstablishMatrilocal(bool womanValid,
+            int womanAuthorityTier, bool manValid, int manAuthorityTier)
+        {
+            return womanValid && manValid && womanAuthorityTier > 0 &&
+                   womanAuthorityTier > manAuthorityTier;
+        }
+
+        public static int SelectBirthLineageSourceSlot(bool parent1Male,
+            bool parent1Complete, bool parent1MatrilocalToParent2,
+            bool parent2Male, bool parent2Complete,
+            bool parent2MatrilocalToParent1)
+        {
+            if (parent1MatrilocalToParent2 && parent2Complete) return 2;
+            if (parent2MatrilocalToParent1 && parent1Complete) return 1;
+            if (parent1Male && parent1Complete) return 1;
+            if (parent2Male && parent2Complete) return 2;
+            if (parent1Complete) return 1;
+            return parent2Complete ? 2 : -1;
+        }
+
         public static bool IsRoyalMarriageCandidate(bool otherwiseEligible,
             bool reigningRuler)
         {
