@@ -57,9 +57,16 @@ namespace AncientWarfare3.core.policy
         public static bool CanClaimZone(bool upstreamAllowed, bool isXia,
             int adoptedTechCount, int zoneCount)
         {
-            if (!upstreamAllowed) return false;
-            return !isXia || System.Math.Max(0, zoneCount) <
-                   ZoneAllowance(adoptedTechCount);
+            return CanClaimZone(upstreamAllowed, adoptedTechCount,
+                zoneCount);
+        }
+
+        public static bool CanClaimZone(bool pUpstreamAllowed,
+            int pAdoptedTechCount, int pZoneCount)
+        {
+            if (!pUpstreamAllowed) return false;
+            return System.Math.Max(0, pZoneCount) <
+                   ZoneAllowance(pAdoptedTechCount);
         }
 
         public static int ClaimCountWithinZoneAllowance(

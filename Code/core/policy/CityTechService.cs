@@ -56,21 +56,31 @@ namespace AncientWarfare3.core.policy
             ZoneExpansionTechCache.Clear();
         }
 
-        public static bool CanXiaCityGrowZones(City pCity,
+        public static bool CanCityGrowZones(City pCity,
             bool pUpstreamAllowed)
         {
             if (!pUpstreamAllowed || pCity?.data == null) return false;
-            bool isXia = LineageService.IsXiaKingdom(pCity.kingdom);
             int adoptedTechCount = ReadCachedAdoptedTechCount(pCity.id);
-            return XiaExpansionDecisionRules.CanClaimZone(pUpstreamAllowed,
-                isXia, adoptedTechCount, pCity.countZones());
+            return XiaExpansionDecisionRules.CanClaimZone(
+                pUpstreamAllowed, adoptedTechCount, pCity.countZones());
         }
 
-        public static int GetXiaCityZoneAllowance(City pCity)
+        public static bool CanXiaCityGrowZones(City pCity,
+            bool pUpstreamAllowed)
+        {
+            return CanCityGrowZones(pCity, pUpstreamAllowed);
+        }
+
+        public static int GetCityZoneAllowance(City pCity)
         {
             if (pCity?.data == null) return 0;
             return XiaExpansionDecisionRules.ZoneAllowance(
                 ReadCachedAdoptedTechCount(pCity.id));
+        }
+
+        public static int GetXiaCityZoneAllowance(City pCity)
+        {
+            return GetCityZoneAllowance(pCity);
         }
 
         public static void OnNationalTechCompleted(Kingdom pKingdom, KingdomPolicyDef pTech)

@@ -16,7 +16,8 @@ namespace AncientWarfare3.patch
             if (!__result || __instance?.data == null) return;
             try
             {
-                __result = CityTechService.CanXiaCityGrowZones(__instance, __result);
+                __result = CityTechService.CanCityGrowZones(__instance,
+                    __result);
             }
             catch
             {
@@ -30,12 +31,32 @@ namespace AncientWarfare3.patch
         private static bool ClaimZoneWithinTechCap_Prefix(Actor pActor,
             ref BehResult __result)
         {
+            bool actorIsKing = false;
+            try { actorIsKing = pActor?.isKing() == true; }
+            catch { }
             City city = pActor?.city;
-            if (city?.data == null ||
-                !LineageService.IsXiaKingdom(city.kingdom))
-                return true;
+            TileZone zone = pActor?.current_tile?.zone;
+            WorldTile cityTile = city?.getTile();
+            if (city?.data == null || !CanCityGrowZones(city))
+            {
+                __result = BehResult.Stop;
+                return false;
+            }
+            if (actorIsKing && cityTile != null &&
+                !IsKingAtClaimBorder(city, zone))
+            {
+                if (TrySetKingClaimBorderTarget(pActor, city, cityTile))
+                {
+                    __result = BehResult.Continue;
+                    return false;
+                }
+                __result = BehResult.Stop;
+                return false;
+            }
 
-            int allowance = CityTechService.GetXiaCityZoneAllowance(city);
+            if (!LineageService.IsXiaKingdom(city.kingdom)) return true;
+
+            int allowance = CityTechService.GetCityZoneAllowance(city);
             if (allowance == int.MaxValue) return true;
             int startingZoneCount = city.countZones();
             if (startingZoneCount >= allowance)
@@ -44,8 +65,8 @@ namespace AncientWarfare3.patch
                 return false;
             }
 
-            TileZone zone = pActor?.current_tile?.zone;
-            WorldTile cityTile = city?.getTile();
+            zone = pActor?.current_tile?.zone;
+            cityTile = city?.getTile();
             if (zone == null || cityTile == null ||
                 !city.isZoneToClaimStillGood(pActor, zone, cityTile))
             {
@@ -91,6 +112,55 @@ namespace AncientWarfare3.patch
             }
             pActor.addLoot(SimGlobals.m.coins_for_zone);
             __result = BehResult.Continue;
+            return false;
+        }
+
+        private static bool CanCityGrowZones(City pCity)
+        {
+            if (pCity?.data == null) return false;
+            int allowance = CityTechService.GetCityZoneAllowance(pCity);
+            return allowance == int.MaxValue ||
+                   pCity.countZones() < allowance;
+        }
+
+        private static bool IsKingAtClaimBorder(City pCity,
+            TileZone pZone)
+        {
+            return pZone != null && pZone.city != pCity &&
+                   TouchesCityBoundary(pCity, pZone);
+        }
+
+        private static bool TrySetKingClaimBorderTarget(Actor pActor,
+            City pCity, WorldTile pCityTile)
+        {
+            if (pActor?.data == null || pCity?.data == null ||
+                pCity.border_zones == null) return false;
+            foreach (TileZone border in pCity.border_zones)
+            {
+                TileZone[] neighbours = border?.neighbours_all;
+                if (neighbours == null) continue;
+                foreach (TileZone candidate in neighbours)
+                {
+                    if (candidate == null || candidate.hasCity() ||
+                        candidate.centerTile == null ||
+                        !candidate.centerTile.isSameIsland(pCityTile) ||
+                        !pCity.isZoneToClaimStillGood(pActor, candidate,
+                            pCityTile)) continue;
+                    pActor.beh_tile_target = candidate.centerTile;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool TouchesCityBoundary(City pCity,
+            TileZone pZone)
+        {
+            if (pCity?.data == null || pZone == null) return false;
+            TileZone[] neighbours = pZone.neighbours_all;
+            if (neighbours == null) return false;
+            for (int i = 0; i < neighbours.Length; i++)
+                if (neighbours[i]?.city == pCity) return true;
             return false;
         }
 

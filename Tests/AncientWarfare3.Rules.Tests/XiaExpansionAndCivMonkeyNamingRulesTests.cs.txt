@@ -59,10 +59,10 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
                 upstreamAllowed: false, isXia: true, adoptedTechCount: 14,
                 zoneCount: 9),
             "the vanilla claim veto remains authoritative for Xia");
-        Equal(true, XiaExpansionDecisionRules.CanClaimZone(
+        Equal(false, XiaExpansionDecisionRules.CanClaimZone(
                 upstreamAllowed: true, isXia: false, adoptedTechCount: 0,
-                zoneCount: 999),
-            "non-Xia city-zone behavior remains unchanged");
+                zoneCount: 55),
+            "a non-Xia city at the shared initial technology allowance pauses land claims");
         Equal(16f, XiaExpansionDecisionRules.ApplyClaimLandWeight(
                 upstreamWeight: 2f, isXia: true, belowZoneAllowance: true,
                 civicLeader: true),
@@ -90,14 +90,20 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
                 "[HarmonyPatch(typeof(City), nameof(City.canGrowZones))]"),
             "Xia zone allowance guards the shared vanilla city growth gate");
         Equal(true, expansionPatch.Contains(
-                "CityTechService.CanXiaCityGrowZones(__instance, __result)"),
-            "the shared Xia zone guard delegates to the CityTechService cache");
+                "CityTechService.CanCityGrowZones(__instance"),
+            "the shared city growth gate delegates to the common tech cap");
         Equal(true, expansionPatch.Contains(
                 "nameof(BehClaimZoneForCityActorBorder.tryClaimZone)"),
             "Xia claims intercept the vanilla multi-zone execution point");
         Equal(true, expansionPatch.Contains(
-                "CityTechService.GetXiaCityZoneAllowance(city)"),
-            "the vanilla claim executor receives the cached technology allowance");
+                "TrySetKingClaimBorderTarget"),
+            "kings receive an external border movement target before claiming");
+        Equal(true, expansionPatch.Contains(
+                "CityTechService.GetCityZoneAllowance(city)"),
+            "the common claim executor receives the shared technology allowance");
+        Equal(true, expansionPatch.Contains(
+                "!LineageService.IsXiaKingdom(city.kingdom)"),
+            "non-Xia cities retain vanilla claim execution after the shared gate");
         Equal(true, expansionPatch.Contains(
                 "pActor.hasCultureTrait(\"expansionists\")"),
             "the Xia executor preserves vanilla human batch expansion semantics");
