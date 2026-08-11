@@ -50,8 +50,10 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool ShouldRtsOwnCaptain(string pArmyRole,
-            bool pCaptainRoyalGuard)
+            bool pCaptainRoyalGuard, bool pCaptainIsCivilAuthority = false)
         {
+            if (pCaptainIsCivilAuthority && pArmyRole == AWArmyRole.RoyalGuard)
+                return true;
             return pArmyRole != AWArmyRole.RoyalGuard &&
                    !pCaptainRoyalGuard;
         }

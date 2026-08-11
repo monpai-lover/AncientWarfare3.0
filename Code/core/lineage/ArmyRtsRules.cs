@@ -496,9 +496,10 @@ namespace AncientWarfare3.core.lineage
             bool isCivilAuthority = false,
             bool isCurrentCaptain = false)
         {
+            if (isCivilAuthority && !isCurrentCaptain)
+                return false;
             bool militaryRole = isCurrentCaptain ||
-                                currentProfessionIsWarrior &&
-                                !isCivilAuthority;
+                                currentProfessionIsWarrior;
             return authoritative && actorValid && militaryRole &&
                    hasArmyIndex && armyMissionActive;
         }

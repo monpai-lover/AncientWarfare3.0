@@ -2261,7 +2261,8 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || pActor.ai == null) return;
             if (!AWArmyRoleRules.ShouldRtsOwnCaptain(
                     AWArmyService.GetRole(pActor.army),
-                    RoyalGuardService.IsRoyalGuard(pActor)))
+                    RoyalGuardService.IsRoyalGuard(pActor),
+                    IsCivilAuthorityActor(pActor)))
             {
                 RoyalGuardService.EnsureProtectKingTask(pActor);
                 return;
@@ -3802,7 +3803,8 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data != null &&
                 !AWArmyRoleRules.ShouldRtsOwnCaptain(
                     AWArmyService.GetRole(pActor.army),
-                    RoyalGuardService.IsRoyalGuard(pActor)))
+                    RoyalGuardService.IsRoyalGuard(pActor),
+                    IsCivilAuthorityActor(pActor)))
             {
                 RoyalGuardService.EnsureProtectKingTask(pActor);
                 return;
@@ -4119,9 +4121,17 @@ namespace AncientWarfare3.core.lineage
             int resolved;
             if (pArmy?.data != null && !AWArmyService.IsSpecialArmy(pArmy))
             {
-                int approved = CityArmyReinforcementService.ApprovedTarget(
-                    pArmy, pKingdom);
-                resolved = Math.Max(living, approved);
+                int persisted = pMission?.TargetStrength ?? 0;
+                if (persisted > 0)
+                {
+                    resolved = Math.Max(living, persisted);
+                }
+                else
+                {
+                    int approved = CityArmyReinforcementService.ApprovedTarget(
+                        pArmy, pKingdom);
+                    resolved = Math.Max(living, approved);
+                }
             }
             else
             {
@@ -4130,7 +4140,8 @@ namespace AncientWarfare3.core.lineage
                     StandingArmyService.TargetStrength(pArmy, pKingdom),
                     living);
             }
-            if (pMission != null) pMission.TargetStrength = resolved;
+            if (pMission != null && pMission.TargetStrength <= 0)
+                pMission.TargetStrength = resolved;
             return resolved;
         }
 
