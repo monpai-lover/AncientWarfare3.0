@@ -702,6 +702,69 @@ namespace AncientWarfare3.core.court
             catch { return null; }
         }
 
+        public static Dictionary<long, CivilServiceQualificationRecord>
+            LoadLatestQualificationsForActors(SQLiteConnection pDb,
+                long pKingdomId, IReadOnlyList<long> pActorIds)
+        {
+            var result = new Dictionary<long, CivilServiceQualificationRecord>();
+            if (pDb == null || pKingdomId < 0L || pActorIds == null) return result;
+
+            var distinctIds = new List<long>();
+            var knownIds = new HashSet<long>();
+            for (int index = 0; index < pActorIds.Count; index++)
+            {
+                long actorId = pActorIds[index];
+                if (actorId >= 0L && knownIds.Add(actorId)) distinctIds.Add(actorId);
+            }
+
+            const int batchSize = 256;
+            try
+            {
+                for (int offset = 0; offset < distinctIds.Count;
+                     offset += batchSize)
+                {
+                    int count = Math.Min(batchSize, distinctIds.Count - offset);
+                    using var command = new SQLiteCommand(pDb);
+                    var parameters = new List<string>(count);
+                    for (int index = 0; index < count; index++)
+                    {
+                        string parameter = "@actor" + index;
+                        parameters.Add(parameter);
+                        command.Parameters.AddWithValue(parameter,
+                            distinctIds[offset + index]);
+                    }
+                    command.Parameters.AddWithValue("@kingdom", pKingdomId);
+                    command.CommandText = "SELECT C.ID,C.ACTOR_ID,C.KINGDOM_ID," +
+                        "C.SESSION_ID,C.QUALIFICATION,S.CYCLE_YEAR,C.ENTRY_BONUS " +
+                        "FROM " + CandidateTable + " C JOIN " + SessionTable +
+                        " S ON S.ID=C.SESSION_ID WHERE C.KINGDOM_ID=@kingdom " +
+                        "AND C.ACTOR_ID IN (" + string.Join(",", parameters) +
+                        ") AND C.QUALIFICATION<>'none' AND S.STATUS='completed' " +
+                        "ORDER BY C.ACTOR_ID,S.CYCLE_YEAR DESC,C.ENTRY_BONUS DESC," +
+                        "C.ID DESC";
+                    using SQLiteDataReader reader = command.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        long actorId = Convert.ToInt64(reader.GetValue(1));
+                        if (result.ContainsKey(actorId)) continue;
+                        result[actorId] = new CivilServiceQualificationRecord
+                        {
+                            CandidateId = Convert.ToInt64(reader.GetValue(0)),
+                            ActorId = actorId,
+                            KingdomId = Convert.ToInt64(reader.GetValue(2)),
+                            SessionId = Convert.ToInt64(reader.GetValue(3)),
+                            Qualification = Convert.ToString(reader.GetValue(4)) ??
+                                "none",
+                            ResultYear = Convert.ToInt32(reader.GetValue(5)),
+                            EntryBonus = Convert.ToInt32(reader.GetValue(6))
+                        };
+                    }
+                }
+            }
+            catch { result.Clear(); }
+            return result;
+        }
+
         public static List<CivilServiceQualificationRecord>
             LoadLatestQualificationsPage(SQLiteConnection pDb,
                 long pAfterCandidateId, int pLimit)

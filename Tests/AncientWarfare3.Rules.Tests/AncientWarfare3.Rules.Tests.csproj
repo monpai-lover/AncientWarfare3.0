@@ -838,6 +838,7 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\AnnualPolicyHotPathSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\DiplomacyAiToggleSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\WesternCourtCandidateEligibilitySourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\CourtAppointmentCandidateScanPerformanceSourceGuard.ps1&quot;" />
   </Target>
   <Target Name="XiaItemDynamicAtlasSourceGuard"
       BeforeTargets="Build">
