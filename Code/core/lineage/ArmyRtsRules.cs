@@ -295,6 +295,29 @@ namespace AncientWarfare3.core.lineage
             return HasDeploymentQuorum(rallied, rosterLiving);
         }
 
+        // The rallied numerator only ever counts eligible formation members
+        // (warriors plus the acting captain), so measuring it against the raw
+        // army roster silently lowers the reachable ratio whenever the army
+        // carries members the formation cannot command -- a resident king,
+        // for instance. Such an army could never reach the quorum and would
+        // hold its staging state forever. Prefer the observed eligible
+        // population and fall back to the roster only when it is unknown.
+        public static int ResolveEscortPopulation(int rosterLiving,
+            int eligibleFollowersObserved, bool observationComplete,
+            bool captainPresent)
+        {
+            int roster = Math.Max(0, rosterLiving);
+            if (!observationComplete || eligibleFollowersObserved < 0)
+                return roster;
+            int eligible = captainPresent
+                ? eligibleFollowersObserved == int.MaxValue
+                    ? int.MaxValue
+                    : eligibleFollowersObserved + 1
+                : eligibleFollowersObserved;
+            if (eligible <= 0) return roster;
+            return Math.Min(roster == 0 ? eligible : roster, eligible);
+        }
+
         public static bool CanCaptainAdvanceWithEscort(
             bool requiresEscort, int rosterLiving, int nearbyFollowers,
             bool captainPresent, bool immediateCombat,

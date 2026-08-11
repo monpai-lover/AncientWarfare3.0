@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using AncientWarfare3.core.lineage;
 
@@ -11,6 +12,9 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
         UnderstrengthArmiesRetryTheirReplenishmentRequest();
         ForceDepartureEscapesMissingEscortAfterDeadline();
         ForceDeploymentRequiresEscortQuorum();
+        CasualtiesCannotHoldAnArmyInStagingForever();
+        EscortQuorumComparesTheSamePopulation();
+        StagingReleaseUsesTheOperationalForceGate();
         Assert(ArmyStallWatchdogRules.ShouldExpectFormationProgress(
                 ArmyRtsState.Rally, targetComplete: false),
             "watchdog samples stranded formation members during Rally");
@@ -68,6 +72,89 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
                 routeArrived: true, deploymentStartedWorldTime: 100d,
                 currentWorldTime: 220d),
             "an understrength force must not be pushed into an assault by deployment timeout");
+    }
+
+    // A depleted army keeps max(living, persisted) as its mission target, so
+    // departure strength never recovers. The bounded staging window must
+    // still release it, or RTS ownership suppresses vanilla movement forever.
+    private static void CasualtiesCannotHoldAnArmyInStagingForever()
+    {
+        Assert(!ArmyRtsRules.HasDepartureStrength(
+                living: 30, targetStrength: 48,
+                minimumForceReady: true,
+                replenishmentBypassActive: false),
+            "a depleted army has not recovered its departure strength");
+        Assert(ArmyLogisticsRules.HasMinimumOperationalForce(30),
+            "a 30-strong remnant is still an operational force");
+        Assert(ArmyRtsRules.ShouldForcePreDeparture(
+                authoritative: true, state: ArmyRtsState.Rally,
+                minimumForceReady: ArmyLogisticsRules.
+                    HasMinimumOperationalForce(30),
+                captainPresent: true,
+                issuedWorldTime: 100d, currentWorldTime: 220d),
+            "an operational remnant escapes staging on the bounded window");
+        Assert(!ArmyRtsRules.ShouldForcePreDeparture(
+                authoritative: true, state: ArmyRtsState.Rally,
+                minimumForceReady: ArmyLogisticsRules.
+                    HasMinimumOperationalForce(1),
+                captainPresent: true,
+                issuedWorldTime: 100d, currentWorldTime: 220d),
+            "a sub-minimal remnant still must not be forced out of staging");
+    }
+
+    // The rallied numerator counts eligible formation members only. Measuring
+    // it against the raw roster makes the quorum unreachable for an army that
+    // carries members the formation cannot command.
+    private static void EscortQuorumComparesTheSamePopulation()
+    {
+        Equal(20, ArmyRtsRules.ResolveEscortPopulation(
+                rosterLiving: 20, eligibleFollowersObserved: 19,
+                observationComplete: true, captainPresent: true),
+            "an all-military roster keeps its full population");
+        Equal(15, ArmyRtsRules.ResolveEscortPopulation(
+                rosterLiving: 20, eligibleFollowersObserved: 14,
+                observationComplete: true, captainPresent: true),
+            "ineligible members leave the escort population");
+        Equal(20, ArmyRtsRules.ResolveEscortPopulation(
+                rosterLiving: 20, eligibleFollowersObserved: 0,
+                observationComplete: false, captainPresent: true),
+            "an incomplete observation falls back to the roster");
+        Equal(20, ArmyRtsRules.ResolveEscortPopulation(
+                rosterLiving: 20, eligibleFollowersObserved: 0,
+                observationComplete: true, captainPresent: false),
+            "an absent captain cannot collapse the population to zero");
+
+        Assert(!ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: 20, ralliedFollowers: 14,
+                captainPresent: true),
+            "the raw roster denominator keeps a mixed army below quorum");
+        Assert(ArmyRtsRules.HasIncrementalEscortQuorum(
+                rosterLiving: ArmyRtsRules.ResolveEscortPopulation(
+                    rosterLiving: 20, eligibleFollowersObserved: 14,
+                    observationComplete: true, captainPresent: true),
+                ralliedFollowers: 14, captainPresent: true),
+            "a fully rallied eligible formation reaches quorum");
+    }
+
+    // Guard the wiring itself: passing departure strength into the bounded
+    // staging window reintroduces the permanent Rally stall.
+    private static void StagingReleaseUsesTheOperationalForceGate()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        int start = controller.IndexOf("bool forcePreDeparture =",
+            StringComparison.Ordinal);
+        Assert(start >= 0,
+            "the controller must resolve a bounded staging release");
+        int end = controller.IndexOf(';', start);
+        Assert(end > start, "the staging release must be a statement");
+        string call = controller.Substring(start, end - start);
+        Assert(call.Contains("minimumForceReady", StringComparison.Ordinal),
+            "the staging window must be gated on the operational force");
+        Assert(!call.Contains("departureStrengthReady",
+                StringComparison.Ordinal),
+            "departure strength never recovers after casualties, so it must not gate the escape hatch");
     }
 
     private static void ReplenishmentBypassNeverMakesAnUnderstrengthArmyReady()

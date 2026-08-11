@@ -86,17 +86,20 @@ namespace AncientWarfare3.core.lineage
 #if !AW3_RULES_TESTS
     internal static class ArmyRtsRuntimeMode
     {
-        private static readonly ArmyRtsMode StartupMode =
+        // The RTS toggle is a live setting: AWPerformanceSettings.SwitchArmyRts
+        // runs while a world is loaded. Caching the mode in a static readonly
+        // field both ignored later switches and depended on whether this type
+        // initialized before the saved configuration was applied.
+        public static ArmyRtsMode Current =>
             ArmyRtsRuntimeModeRules.ResolveConfiguredMode(
                 AWPerformanceSettings.EnableArmyRts);
 
-        public static ArmyRtsMode Current => StartupMode;
         public static bool ShouldPlan =>
-            ArmyRtsRuntimeModeRules.ShouldPlan(StartupMode);
+            ArmyRtsRuntimeModeRules.ShouldPlan(Current);
         public static bool ShouldCommit =>
-            ArmyRtsRuntimeModeRules.ShouldCommit(StartupMode);
+            ArmyRtsRuntimeModeRules.ShouldCommit(Current);
         public static string LogName =>
-            ArmyRtsRuntimeModeRules.LogName(StartupMode);
+            ArmyRtsRuntimeModeRules.LogName(Current);
     }
 #endif
 }

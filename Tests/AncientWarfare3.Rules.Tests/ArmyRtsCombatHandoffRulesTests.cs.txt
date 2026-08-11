@@ -88,6 +88,36 @@ internal static class ArmyRtsCombatHandoffRulesTests
                 "ArmyRtsControllerService.OwnsLiveActor(pActor)",
                 StringComparison.Ordinal),
             "the decision wrapper must resolve tactical ownership per actor");
+
+        RuntimeModeFollowsTheLiveConfiguration(root);
+    }
+
+    // AWPerformanceSettings.SwitchArmyRts changes the configuration while a
+    // world runs, so the runtime mode must be resolved on each read rather
+    // than captured once during type initialization.
+    private static void RuntimeModeFollowsTheLiveConfiguration(string pRoot)
+    {
+        Assert(ArmyRtsRuntimeModeRules.ResolveConfiguredMode(true) ==
+               ArmyRtsMode.On,
+            "an enabled configuration resolves to commit mode");
+        Assert(ArmyRtsRuntimeModeRules.ResolveConfiguredMode(false) ==
+               ArmyRtsMode.Off,
+            "a disabled configuration resolves to off");
+
+        string source = File.ReadAllText(Path.Combine(pRoot, "Code",
+            "core", "lineage", "ArmyRtsRuntimeMode.cs"));
+        int start = source.IndexOf(
+            "internal static class ArmyRtsRuntimeMode",
+            StringComparison.Ordinal);
+        Assert(start >= 0,
+            "the runtime accessor must remain in ArmyRtsRuntimeMode.cs");
+        string body = source.Substring(start);
+        Assert(!body.Contains("static readonly ArmyRtsMode",
+                StringComparison.Ordinal),
+            "a cached startup snapshot would ignore the runtime RTS toggle");
+        Assert(body.Contains("AWPerformanceSettings.EnableArmyRts",
+                StringComparison.Ordinal),
+            "the runtime mode must read the live configuration value");
     }
 
     private static void Assert(bool condition, string message)

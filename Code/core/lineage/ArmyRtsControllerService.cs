@@ -1644,7 +1644,9 @@ namespace AncientWarfare3.core.lineage
             bool immediateCombat = HasImmediateCombatPriority(pActor);
             return !ArmyRtsRules.CanCaptainAdvanceWithEscort(
                 requiresEscort: true,
-                rosterLiving: SafeUnitCount(army),
+                rosterLiving: ArmyRtsRules.ResolveEscortPopulation(
+                    SafeUnitCount(army), counters.Living,
+                    observation.Complete, captainPresent),
                 nearbyFollowers: counters.Rallied,
                 captainPresent: captainPresent,
                 immediateCombat: immediateCombat,
@@ -3118,8 +3120,11 @@ namespace AncientWarfare3.core.lineage
             bool captainPresent = captain?.data != null &&
                                   captain.isAlive() && !captain.isRekt() &&
                                   captain.current_tile?.data != null;
+            int escortPopulation = ArmyRtsRules.ResolveEscortPopulation(
+                rosterLiving, rallyFollowers.Living, observation.Complete,
+                captainPresent);
             bool escortQuorum = observation.Complete &&
-                ArmyRtsRules.HasIncrementalEscortQuorum(rosterLiving,
+                ArmyRtsRules.HasIncrementalEscortQuorum(escortPopulation,
                     rallyFollowers.Rallied, captainPresent);
             bool minimumForceReady =
                 ArmyLogisticsRules.HasMinimumOperationalForce(
@@ -3189,9 +3194,17 @@ namespace AncientWarfare3.core.lineage
                 HasDepartureStrength(rosterLiving, targetStrength,
                     minimumForceReady, replenishmentBypassActive);
             pRuntime.ReplenishmentRetryDue = false;
+            // The bounded staging window is the last escape hatch out of
+            // Rally. It must be gated on the minimum operational force, not
+            // on departure strength: departure strength stays false forever
+            // once an army takes casualties, because the mission target is
+            // max(living, persisted). An army that can no longer reach its
+            // recruitment target -- or whose type has no reserve pool to
+            // draw from -- would otherwise hold Rally permanently while RTS
+            // ownership keeps suppressing the vanilla decisions.
             bool forcePreDeparture = ArmyRtsRules.
                 ShouldForcePreDeparture(pCommit, pRecord.State,
-                    departureStrengthReady, captainPresent, escortQuorum,
+                    minimumForceReady, captainPresent, escortQuorum,
                     pRecord.Mission.IssuedTime, readinessTime);
             ArmyOperationalStateView operational =
                 ArmyLogisticsService.GetOperationalState(pArmy);
@@ -3238,8 +3251,9 @@ namespace AncientWarfare3.core.lineage
             facts.FormationObservationComplete = observation.Complete;
             facts.RallyReady = observation.Complete &&
                 ArmyRtsRules.HasIncrementalRallyReadiness(
-                    departureStrengthReady, rosterLiving,
-                    rallyFollowers.Rallied, captainPresent) || forcePreDeparture;
+                    departureStrengthReady, escortPopulation,
+                    rallyFollowers.Rallied, captainPresent) ||
+                forcePreDeparture;
             facts.RouteArrived = pCommit && pRuntime.RouteArrived;
             bool deploymentBaselineReady = pCommit &&
                 ArmyFormationRules.HasEscortDeploymentReadiness(
