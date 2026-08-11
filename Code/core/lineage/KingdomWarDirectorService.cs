@@ -567,7 +567,10 @@ namespace AncientWarfare3.core.lineage
         {
             ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
             if (!ArmyRtsRuntimeModeRules.ShouldPlan(mode)) return;
-            if (ProcessFirstOrders(pFirstOrderBudget) > 0) return;
+            int assignedFirstOrders = ProcessFirstOrders(pFirstOrderBudget);
+            if (KingdomWarDirectorWorkRules.
+                    ShouldYieldAfterFirstOrderBatch(assignedFirstOrders))
+                return;
             long worldDay = CurrentWorldDay();
             if (!WorkQueue.TryTake(worldDay, out long kingdomId)) return;
             Kingdom kingdom = FindKingdom(kingdomId);
@@ -616,15 +619,17 @@ namespace AncientWarfare3.core.lineage
             int limit = Math.Min(Math.Max(0, pMaximum),
                 FirstOrderQueue.Count);
             int processed = 0;
+            int assigned = 0;
             while (processed < limit && FirstOrderQueue.TryTake(
                        out WarFirstOrderAssignment assignment))
             {
                 WarFirstOrderResult result =
                     TryAssignFirstOrderMission(assignment);
                 FirstOrderQueue.Complete(assignment, result);
+                if (result == WarFirstOrderResult.Assigned) assigned++;
                 processed++;
             }
-            return processed;
+            return assigned;
         }
 
         private static WarFirstOrderResult TryAssignFirstOrderMission(

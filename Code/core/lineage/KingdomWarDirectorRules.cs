@@ -157,6 +157,12 @@ namespace AncientWarfare3.core.lineage
         public const int MaximumFrontParticipantsPerWorkItem = 16;
         public const int RefreshWorldDays = 30;
 
+        public static bool ShouldYieldAfterFirstOrderBatch(
+            int assignedCount)
+        {
+            return assignedCount > 0;
+        }
+
         public static long NextPeriodicWorldDay(long pKingdomId,
             long pCurrentWorldDay)
         {

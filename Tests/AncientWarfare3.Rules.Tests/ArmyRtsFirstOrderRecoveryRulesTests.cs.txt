@@ -10,6 +10,7 @@ internal static class ArmyRtsFirstOrderRecoveryRulesTests
         RetryKeepsTheFirstOrderAlive();
         TerminalResultsReleaseTheDeduplicationKey();
         RemovingWarClearsInflightOrders();
+        RetryDoesNotStarveRegularPlanning();
 
         var queue = new KingdomWarFirstOrderQueue();
         queue.EnqueueWar(7L, new[] { 10L, 11L }, new[] { 20L, 21L });
@@ -86,6 +87,22 @@ internal static class ArmyRtsFirstOrderRecoveryRulesTests
                controller.Contains("IsRegistered(",
                    StringComparison.Ordinal),
             "retained missions repair route and watchdog state online");
+    }
+
+    private static void RetryDoesNotStarveRegularPlanning()
+    {
+        Equal(false, KingdomWarDirectorWorkRules.
+                ShouldYieldAfterFirstOrderBatch(assignedCount: 0),
+            "a retried first order cannot block regular war planning");
+        Equal(true, KingdomWarDirectorWorkRules.
+                ShouldYieldAfterFirstOrderBatch(assignedCount: 1),
+            "a published first order yields the remaining director slice");
+
+        string director = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "KingdomWarDirectorService.cs"));
+        Assert(director.Contains("assigned++", StringComparison.Ordinal),
+            "first-order processing counts published missions, not attempts");
     }
 
     private static void RetryKeepsTheFirstOrderAlive()
