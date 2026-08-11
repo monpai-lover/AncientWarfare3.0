@@ -206,6 +206,24 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
 
         Equal("父姓", CivMonkeyNamingRules.ResolveSurname("父姓", 987654321L),
             "an inherited paternal surname always wins");
+        Equal(2, CivMonkeyNamingRules.SelectFamilySourceSlot(
+                parent1Male: true, parent1HasFamily: true,
+                parent1MatrilocalToParent2: true,
+                parent2Male: false, parent2HasFamily: true,
+                parent2MatrilocalToParent1: false),
+            "a monkey matrilocal husband yields the mother's family");
+        Equal(1, CivMonkeyNamingRules.SelectFamilySourceSlot(
+                parent1Male: true, parent1HasFamily: true,
+                parent1MatrilocalToParent2: false,
+                parent2Male: false, parent2HasFamily: true,
+                parent2MatrilocalToParent1: false),
+            "an ordinary monkey family remains paternal");
+        Equal(2, CivMonkeyNamingRules.SelectFamilySourceSlot(
+                parent1Male: true, parent1HasFamily: false,
+                parent1MatrilocalToParent2: false,
+                parent2Male: false, parent2HasFamily: true,
+                parent2MatrilocalToParent1: false),
+            "a monkey child falls back to a mother with a real family");
         Equal(true, expectedSurnames.Contains(
                 CivMonkeyNamingRules.ResolveSurname("", 987654321L)),
             "a missing surname uses the stable dedicated surname pool");

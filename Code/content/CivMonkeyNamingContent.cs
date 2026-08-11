@@ -87,12 +87,26 @@ namespace AncientWarfare3.content
             if (!string.IsNullOrEmpty(family)) return family;
             if (pActor == null) return "";
 
+            Actor[] parents = new Actor[2];
+            int parentCount = 0;
             foreach (Actor parent in pActor.getParents())
             {
-                if (parent?.data == null || parent.data.sex != ActorSex.Male) continue;
-                family = ReadFamily(parent);
-                if (!string.IsNullOrEmpty(family)) return family;
+                if (parent?.data == null || parentCount >= parents.Length)
+                    continue;
+                parents[parentCount++] = parent;
             }
+
+            Actor parent1 = parentCount > 0 ? parents[0] : null;
+            Actor parent2 = parentCount > 1 ? parents[1] : null;
+            string family1 = ReadFamily(parent1);
+            string family2 = ReadFamily(parent2);
+            int sourceSlot = SelectFamilySourceSlot(
+                parent1?.isSexMale() == true, family1.Length > 0,
+                MatrilocalLineageService.IsMatrilocalTo(parent1, parent2),
+                parent2?.isSexMale() == true, family2.Length > 0,
+                MatrilocalLineageService.IsMatrilocalTo(parent2, parent1));
+            if (sourceSlot == 1) return family1;
+            if (sourceSlot == 2) return family2;
 
             return "";
         }
