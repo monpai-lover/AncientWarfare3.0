@@ -128,6 +128,13 @@ namespace AncientWarfare3.core.lineage
             return pResult == ArmyFollowerStepResult.ReconnectRequired;
         }
 
+        public static bool ShouldUseLongRangeFollowerRoute(
+            bool targetValid, float targetDistanceSquared)
+        {
+            return targetValid && targetDistanceSquared >
+                   LocalReconnectRadius * LocalReconnectRadius;
+        }
+
         public static bool ShouldSubmitIndependentFollowerRecoveryRoute(
             bool sharedRouteAvailable, bool recoveryTargetAvailable,
             bool combatActive, bool transportActive)

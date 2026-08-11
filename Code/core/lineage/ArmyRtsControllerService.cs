@@ -1615,6 +1615,42 @@ namespace AncientWarfare3.core.lineage
                    ShouldOwnMilitaryActor(pActor, missionActive);
         }
 
+        public static bool ShouldHoldDeploymentMove(Actor pActor)
+        {
+            Army army = pActor?.army;
+            if (!ArmyRtsRuntimeMode.ShouldCommit || pActor?.data == null ||
+                army?.data == null || !IsCaptain(pActor, army) ||
+                !Controllers.TryGet(army.id,
+                    out ArmyRtsControllerRecord record)) return false;
+            bool captainPresent = pActor.isAlive() && !pActor.isRekt() &&
+                                  pActor.current_tile?.data != null;
+            // The prewar move must never outlive the same bounded staging
+            // window the RTS rally uses, or a stalled observation would
+            // strand the army instead of only delaying its departure.
+            if (ArmyRtsRules.ShouldForcePreDeparture(
+                    authoritative: true, state: ArmyRtsState.Rally,
+                    minimumForceReady: ArmyLogisticsRules.
+                        HasMinimumOperationalForce(SafeUnitCount(army)),
+                    captainPresent: captainPresent,
+                    issuedWorldTime: record?.Mission?.IssuedTime ?? 0d,
+                    currentWorldTime: CurrentWorldTime())) return false;
+            ArmyFormationObservationProgress observation =
+                ArmyFormationService.GetObservationProgress(army);
+            if (!observation.Complete) return true;
+            ArmyFormationCounters counters =
+                ArmyFormationService.GetIncrementalFollowerCounters(army);
+            bool transportOwnsMovement = pActor.is_inside_boat ||
+                ArmyRtsTransportService.OwnsActorTask(pActor);
+            bool immediateCombat = HasImmediateCombatPriority(pActor);
+            return !ArmyRtsRules.CanCaptainAdvanceWithEscort(
+                requiresEscort: true,
+                rosterLiving: SafeUnitCount(army),
+                nearbyFollowers: counters.Rallied,
+                captainPresent: captainPresent,
+                immediateCombat: immediateCombat,
+                transportOwnsMovement: transportOwnsMovement);
+        }
+
         public static bool HasFrontHoldMission(Actor pActor)
         {
             Army army = pActor?.army;
@@ -3077,11 +3113,13 @@ namespace AncientWarfare3.core.lineage
             int rosterLiving = SafeUnitCount(pArmy);
             ArmyFormationCounters rallyFollowers =
                 ArmyFormationService.GetIncrementalFollowerCounters(pArmy);
+            ArmyFormationObservationProgress observation =
+                ArmyFormationService.GetObservationProgress(pArmy);
             bool captainPresent = captain?.data != null &&
                                   captain.isAlive() && !captain.isRekt() &&
                                   captain.current_tile?.data != null;
-            bool escortQuorum = ArmyRtsRules.
-                HasIncrementalEscortQuorum(rosterLiving,
+            bool escortQuorum = observation.Complete &&
+                ArmyRtsRules.HasIncrementalEscortQuorum(rosterLiving,
                     rallyFollowers.Rallied, captainPresent);
             bool minimumForceReady =
                 ArmyLogisticsRules.HasMinimumOperationalForce(
@@ -3197,10 +3235,11 @@ namespace AncientWarfare3.core.lineage
             facts.WartimeRecovery = wartimeRecovery;
             facts.FrontHold = frontHold;
             facts.TargetValid = targetValid;
-            facts.FormationObservationComplete = true;
-            facts.RallyReady = ArmyRtsRules.HasIncrementalRallyReadiness(
-                departureStrengthReady, rosterLiving, rallyFollowers.Rallied,
-                captainPresent) || forcePreDeparture;
+            facts.FormationObservationComplete = observation.Complete;
+            facts.RallyReady = observation.Complete &&
+                ArmyRtsRules.HasIncrementalRallyReadiness(
+                    departureStrengthReady, rosterLiving,
+                    rallyFollowers.Rallied, captainPresent) || forcePreDeparture;
             facts.RouteArrived = pCommit && pRuntime.RouteArrived;
             bool deploymentBaselineReady = pCommit &&
                 ArmyFormationRules.HasEscortDeploymentReadiness(

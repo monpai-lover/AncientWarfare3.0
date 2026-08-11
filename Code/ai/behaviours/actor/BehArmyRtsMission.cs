@@ -85,6 +85,16 @@ namespace AncientWarfare3.ai.behaviours.actor
                 pActor?.makeWait(0.15f);
                 return BehResult.RepeatStep;
             }
+            if (ArmySharedPathRules.ShouldUseLongRangeFollowerRoute(
+                    target?.data != null,
+                    target?.data != null
+                        ? Toolbox.SquaredDistTile(pActor.current_tile,
+                            target)
+                        : -1f))
+            {
+                pActor.beh_tile_target = target;
+                return BehResult.Continue;
+            }
             ArmyFollowerStepResult stepResult =
                 AWArmyMarchService.TryStepFollowerDirect(pActor, target);
             if (stepResult == ArmyFollowerStepResult.Stepped)

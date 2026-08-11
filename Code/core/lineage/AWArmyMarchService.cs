@@ -301,8 +301,7 @@ namespace AncientWarfare3.core.lineage
                 desired = advancedTarget;
             }
             pState.FollowerCursorByActor[pActor.data.id] = cursor;
-            pTarget = ArmyFormationService.ClampFollowerCorrectionTarget(
-                pActor.current_tile, desired);
+            pTarget = desired;
             if (pTarget?.data == null)
                 return ArmyFollowerTargetResult.Unavailable;
             float distance = Toolbox.SquaredDistTile(pActor.current_tile,

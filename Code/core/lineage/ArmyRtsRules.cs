@@ -300,7 +300,8 @@ namespace AncientWarfare3.core.lineage
             bool captainPresent, bool immediateCombat,
             bool transportOwnsMovement)
         {
-            if (!requiresEscort || transportOwnsMovement) return true;
+            if (!requiresEscort || transportOwnsMovement || immediateCombat)
+                return true;
             if (!captainPresent || rosterLiving <
                     ArmyLogisticsRules.MinimumOperationalForce ||
                 nearbyFollowers <= 0) return false;

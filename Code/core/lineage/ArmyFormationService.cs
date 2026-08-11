@@ -542,10 +542,8 @@ namespace AncientWarfare3.core.lineage
             }
             WorldTile desired = ResolveLooseEscortTile(captainTile, slot);
             if (desired?.data == null) desired = captainTile;
-            pTarget = ClampToLocalCorrection(pActor.current_tile, desired);
-            return pTarget?.data != null &&
-                   ArmyFormationRules.CanDirectCorrect(
-                       DistanceSquared(pActor.current_tile, pTarget));
+            pTarget = desired;
+            return pTarget?.data != null;
         }
 
         public static bool TryGetFollowerRecoveryTarget(Actor pActor,

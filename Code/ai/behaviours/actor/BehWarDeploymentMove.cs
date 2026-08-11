@@ -7,6 +7,11 @@ namespace AncientWarfare3.ai.behaviours.actor
     {
         public override BehResult execute(Actor pActor)
         {
+            if (ArmyRtsControllerService.ShouldHoldDeploymentMove(pActor))
+            {
+                pActor?.makeWait(0.15f);
+                return BehResult.RepeatStep;
+            }
             if (!ArmyDeploymentService.TryPrepareMove(pActor, out WorldTile target))
             {
                 try { pActor.ai?.setJob(pActor.getNextJob()); } catch { }

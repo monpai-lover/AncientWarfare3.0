@@ -349,9 +349,15 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        // A prewar formation change must recompute this army's readiness.
+        // The batched notice review only revisits armies on its own cursor,
+        // so an actor-level change needs a coalesced single-army pass.
         public static void QueueFormationReview(Actor pActor)
         {
-            return;
+            if (pActor?.data == null || pActor.army?.data == null) return;
+            if (!TryGetActiveAssignmentKey(pActor, out string signature))
+                return;
+            ScheduleFormationReview(signature, pActor.army.id);
         }
 
         public static void CancelNotice(string pSignature, bool restoreJobs)
