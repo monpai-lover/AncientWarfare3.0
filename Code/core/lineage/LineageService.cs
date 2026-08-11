@@ -197,6 +197,8 @@ namespace AncientWarfare3.core.lineage
             AWCultureNamingTraditionService.InitializeActorProfile(pBaby);
             if (!pUseFullPath) return;
 
+            MatrilocalLineageService.ReconcileParents(pParent1, pParent2);
+
             ArchiveTraceableActor(pParent1, pAlive: true);
             ArchiveTraceableActor(pParent2, pAlive: true);
             bool babyUsesXiaNaming = UsesXiaPersonalNaming(pBaby);
