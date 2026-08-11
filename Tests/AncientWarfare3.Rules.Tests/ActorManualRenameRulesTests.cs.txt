@@ -4,6 +4,23 @@ internal static class ActorManualRenameRulesTests
 {
     public static void Run()
     {
+        Equal(ActorManualNameMode.SiniticMerged,
+            ActorManualRenameRules.ResolveMode(isXia: false,
+                NamingProfileId.NativeSinitic),
+            "native Sinitic species use one merged Shi field");
+        Equal(ActorManualNameMode.SiniticMerged,
+            ActorManualRenameRules.ResolveMode(isXia: false,
+                NamingProfileId.Monkey),
+            "monkeys use the same merged Shi field");
+        Equal(ActorManualNameMode.Xia,
+            ActorManualRenameRules.ResolveMode(isXia: true,
+                NamingProfileId.NativeSinitic),
+            "Xia identity retains separate surname and Shi editing");
+        Equal("LeJia", ActorManualNameRules.CreateDraft(
+                ActorManualNameMode.SiniticMerged, "Le", "Jia")
+                .DisplayName,
+            "merged Shi names remain family-first without a separator");
+
         ActorManualBranchPlan plan = ActorManualRenameRules.PlanBranchChange(
             10L, "Ji", "Jiang", new long[] { 10L, 11L, 12L });
         Sequence(new long[] { 10L, 11L, 12L }, plan.ActorIds,

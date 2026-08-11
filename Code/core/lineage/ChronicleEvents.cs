@@ -1093,6 +1093,8 @@ namespace AncientWarfare3.core.lineage
                     "aw_court_aux_law_appointment",
                 CourtAuxiliaryLawKind.Conscription =>
                     "aw_court_aux_law_conscription",
+                CourtAuxiliaryLawKind.FemaleSuccession =>
+                    "aw_court_aux_law_female_succession",
                 _ => ""
             });
         }
@@ -1141,6 +1143,12 @@ namespace AncientWarfare3.core.lineage
                     (int)CourtAppointmentCultureLaw.XiaCentered =>
                         "aw_court_appointment_centered",
                     _ => "aw_court_appointment_preference"
+                },
+                CourtAuxiliaryLawKind.FemaleSuccession => pValue switch
+                {
+                    (int)CourtFemaleSuccessionLaw.Permitted =>
+                        "aw_court_female_succession_permitted",
+                    _ => "aw_court_female_succession_forbidden"
                 },
                 _ => pValue switch
                 {

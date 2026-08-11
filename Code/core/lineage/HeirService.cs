@@ -401,12 +401,20 @@ namespace AncientWarfare3.core.lineage
 
         public static void RefreshForNewRoyalChild(Actor pBaby, Actor pParent1, Actor pParent2)
         {
-            if (pBaby?.data == null || !pBaby.isSexMale()) return;
+            if (pBaby?.data == null) return;
             Actor father = FindFather(pParent1, pParent2);
-            if (father?.data == null) return;
-            Kingdom kingdom = father.kingdom;
-            bool fatherIsCurrentKing = kingdom?.king == father || father.isKing();
-            if (!RoyalSuccessionBirthRules.ShouldRefreshHeirForNewChild(pBaby.isSexMale(), fatherIsCurrentKing))
+            Actor royalParent = pParent1?.isKing() == true ? pParent1 :
+                pParent2?.isKing() == true ? pParent2 : father;
+            Kingdom kingdom = royalParent?.kingdom ?? father?.kingdom ??
+                pParent1?.kingdom ?? pParent2?.kingdom;
+            if (kingdom?.data == null) return;
+            bool successionSexEligible = IsSuccessionSexEligible(pBaby,
+                kingdom);
+            if (!successionSexEligible) return;
+            bool fatherIsCurrentKing = royalParent?.kingdom == kingdom &&
+                (kingdom.king == royalParent || royalParent.isKing());
+            if (!RoyalSuccessionBirthRules.ShouldRefreshHeirForNewChild(
+                    successionSexEligible, fatherIsCurrentKing))
                 return;
             RefreshHeir(kingdom);
         }
@@ -425,7 +433,7 @@ namespace AncientWarfare3.core.lineage
             {
                 if (child == null || child.isRekt()) continue;
                 totalChildren++;
-                if (!child.isSexMale()) continue;
+                if (!IsSuccessionSexEligible(child, pKingdom)) continue;
                 if (child.isAdult()) adultSons++;
                 else underageSons++;
             }
@@ -1117,7 +1125,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pChild?.data == null || pChild == pKing ||
                 pActors.ContainsKey(pChild.data.id)) return;
-            bool eligible = pChild.isSexMale() && !pChild.isRekt() &&
+            bool eligible = IsSuccessionSexEligible(pChild, pKing?.kingdom) &&
+                            !pChild.isRekt() &&
                             pChild.isAlive() && !pChild.isKing() &&
                             !pChild.hasTrait("madness") &&
                             !SlaveService.IsSlave(pChild);
@@ -1133,7 +1142,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || pActor == pKing) return false;
             if (!LineageService.IsXia(pActor) && !LineageService.UsesAwLineageSystem(pActor)) return false;
-            if (!pActor.isSexMale()) return false;
+            if (!IsSuccessionSexEligible(pActor, pKingdom)) return false;
             if (pActor.isRekt() || !pActor.isAlive()) return false;
             if (!SuccessionTransitionRules.IsOfficialRoleEligible(
                     pActor.isKing(), pIsCityLeader: false, pIsGeneral: false,
@@ -1143,6 +1152,16 @@ namespace AncientWarfare3.core.lineage
             if (SlaveService.IsSlave(pActor)) return false;
             // 亲缘不再用 LINEAGE_ID(合流后失效)判定,改由调用方按"最近共同父系祖先(同源)"筛选。
             return true;
+        }
+
+        private static bool IsSuccessionSexEligible(Actor pActor,
+            Kingdom pKingdom)
+        {
+            return pActor?.data != null &&
+                   XiaAuthorityGenderRules.IsSuccessionCandidateSexEligible(
+                       pActor.isSexMale(),
+                       CourtAuxiliaryLawService.AllowsFemaleSuccession(
+                           pKingdom));
         }
 
         private static bool IsRegisteredCandidateEligible(Actor pActor, Kingdom pKingdom)
@@ -1166,7 +1185,10 @@ namespace AncientWarfare3.core.lineage
 
         private static Actor FindAdultDirectSon(Actor pKing)
         {
-            return pKing?.data == null ? null : PickEldestStable(pKing.getChildren(false), pKing, pMaleOnly: true);
+            return pKing?.data == null ? null : PickEldestStable(
+                pKing.getChildren(false), pKing,
+                pMaleOnly: !CourtAuxiliaryLawService.AllowsFemaleSuccession(
+                    pKing.kingdom));
         }
 
         private static Actor GetRegisteredHeirIfSuitable(Kingdom pKingdom, Actor pKing)
@@ -1249,7 +1271,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor == pKing) return false;
             if (pActor.kingdom != pKingdom) return false;
             if (!LineageService.IsXia(pActor) && !LineageService.UsesAwLineageSystem(pActor)) return false;
-            if (!pActor.isSexMale()) return false;
+            if (!IsSuccessionSexEligible(pActor, pKingdom)) return false;
             if (pActor.isRekt() || !pActor.isAlive()) return false;
             if (pActor.isKing()) return false;
             if (pActor.hasTrait("madness")) return false;
@@ -1266,7 +1288,7 @@ namespace AncientWarfare3.core.lineage
             if (pRequireAgnatic)
                 // 男系同姓即合格,氏(分支)可不同。成年/未成年已由上面的 pRequireAdult 分档,这里传 isAdult:true。
                 return MandateSuccessionRules.IsValidCollateralRestorationCandidate(
-                    isXia: true, isMale: true, isAlive: true, isAdult: true, isKing: false,
+                    isXia: true, isMale: IsSuccessionSexEligible(pActor, pKingdom), isAlive: true, isAdult: true, isKing: false,
                     hasMadness: false, sameLineage: true, belongsToLegitimateShi: true,
                     canTraceToLegitimateBranch: true, requireAgnatic: true, isAgnaticLineDescendant: agnatic);
 
@@ -1278,7 +1300,7 @@ namespace AncientWarfare3.core.lineage
                 if (!pRequireAdult) return true;
                 return MandateSuccessionRules.IsValidCollateralRestorationCandidate(
                     isXia: true,
-                    isMale: true,
+                    isMale: IsSuccessionSexEligible(pActor, pKingdom),
                     isAlive: true,
                     isAdult: pActor.isAdult(),
                     isKing: false,
@@ -1288,7 +1310,7 @@ namespace AncientWarfare3.core.lineage
             }
             return MandateSuccessionRules.IsValidCollateralRestorationCandidate(
                 isXia: true,
-                isMale: true,
+                isMale: IsSuccessionSexEligible(pActor, pKingdom),
                 isAlive: true,
                 isAdult: pActor.isAdult(),
                 isKing: false,
@@ -1360,7 +1382,10 @@ namespace AncientWarfare3.core.lineage
             if (pKing?.data == null) return null;
 
             // 鍎垮瓙浼樺厛:闀垮瓙(created_time 鏈€灏忕殑鍚堟牸鎴愬勾鍎垮瓙)
-            Actor eldest = PickEldestStable(pKing.getChildren(false), pKing, pMaleOnly: true);
+            bool maleOnly = !CourtAuxiliaryLawService.AllowsFemaleSuccession(
+                pKing.kingdom);
+            Actor eldest = PickEldestStable(pKing.getChildren(false), pKing,
+                pMaleOnly: maleOnly);
             if (eldest != null) return eldest;
 
             Actor underageSon = PickEldestUnderageDirectSon(pKing);
@@ -1411,7 +1436,7 @@ namespace AncientWarfare3.core.lineage
             {
                 if (!IsSuitableHeir(c, pKing)) continue;
                 if (pMaleOnly && !c.isSexMale()) continue;
-                if (!pMaleOnly && c.isSexMale()) continue; // 濂冲効杞椂璺宠繃鐢?                if (c.data.created_time < earliestTime)
+                if (c.data.created_time < earliestTime)
                 {
                     earliestTime = c.data.created_time;
                     eldest = c;
@@ -1430,7 +1455,6 @@ namespace AncientWarfare3.core.lineage
             {
                 if (!IsSuitableHeir(candidate, pKing)) continue;
                 if (pMaleOnly && !candidate.isSexMale()) continue;
-                if (!pMaleOnly && candidate.isSexMale()) continue;
                 if (candidate.data.created_time >= earliestTime) continue;
                 earliestTime = candidate.data.created_time;
                 eldest = candidate;
@@ -1464,7 +1488,8 @@ namespace AncientWarfare3.core.lineage
             return HeirCandidateRules.IsBasicMaleSuccessionEligible(
                 isAlive: pActor != null && !pActor.isRekt() && pActor.isAlive(),
                 sameAsCurrentKing: pActor == pKing,
-                isMale: pActor?.data != null && pActor.isSexMale(),
+                isMale: pActor?.data != null &&
+                    IsSuccessionSexEligible(pActor, pKing?.kingdom),
                 isCurrentKing: pActor?.data != null && pActor.isKing(),
                 isAdult: pActor?.data != null && pActor.isAdult(),
                 hasMadness: pActor?.data != null && pActor.hasTrait("madness"),
@@ -1489,7 +1514,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor == null || pActor.isRekt()) return false;
             if (pKingdom?.data == null || pActor.kingdom != pKingdom) return false;
-            if (!pActor.isSexMale()) return false;
+            if (!IsSuccessionSexEligible(pActor, pKingdom)) return false;
             if (pActor.isKing() || pActor == pKing) return false;
             if (pActor.hasTrait("madness")) return false;
             if (SlaveService.IsSlave(pActor)) return false;
@@ -1502,11 +1527,11 @@ namespace AncientWarfare3.core.lineage
                 return CollateralRestorationTraceService.BelongsToLegitimateShi(pActor, legitimateShi);
             }
 
-            bool hasAdultDirectSon = pKing != null &&
-                PickEldestStable(pKing.getChildren(false), pKing, pMaleOnly: true) != null;
+            bool hasAdultDirectSon = pKing != null && FindAdultDirectSon(
+                pKing) != null;
             return MandateSuccessionRules.CanUseUnderageDirectSonFallback(
                 direct,
-                pActor.isSexMale(),
+                IsSuccessionSexEligible(pActor, pKingdom),
                 !pActor.isRekt(),
                 pActor.isKing() || pActor == pKing,
                 hasAdultDirectSon);
@@ -1517,7 +1542,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor == null || pActor.isRekt() || pActor.isAdult()) return false;
             return HeirCandidateRules.IsUnderageDirectSonEligible(
                 isDirectSon: IsDirectChildOf(pActor, pKing),
-                isMale: pActor.isSexMale(),
+                isMale: IsSuccessionSexEligible(pActor, pKing?.kingdom),
                 isAlive: pActor.isAlive(),
                 isCurrentKing: pActor.isKing() || pActor == pKing,
                 hasAdultDirectSon: pHasAdultDirectSon,

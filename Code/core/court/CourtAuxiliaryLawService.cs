@@ -71,6 +71,26 @@ namespace AncientWarfare3.core.court
             };
         }
 
+        public static CourtFemaleSuccessionLaw GetFemaleSuccessionLaw(
+            Kingdom pKingdom)
+        {
+            bool nativeXia = LineageService.IsXiaKingdom(pKingdom);
+            int value = ReadValue(pKingdom,
+                LineageKeys.COURT_FEMALE_SUCCESSION_LAW,
+                (int)CourtAuxiliaryLawRules.DefaultFemaleSuccessionLaw(
+                    nativeXia));
+            return value == (int)CourtFemaleSuccessionLaw.Permitted
+                ? CourtFemaleSuccessionLaw.Permitted
+                : CourtFemaleSuccessionLaw.Forbidden;
+        }
+
+        public static bool AllowsFemaleSuccession(Kingdom pKingdom)
+        {
+            return CourtAuxiliaryLawRules.AllowsFemaleSuccession(
+                LineageService.IsXiaKingdom(pKingdom),
+                GetFemaleSuccessionLaw(pKingdom));
+        }
+
         public static int GetLastChangeYear(Kingdom pKingdom,
             CourtAuxiliaryLawKind pKind)
         {
@@ -380,6 +400,8 @@ namespace AncientWarfare3.core.court
                     pValue <= (int)CourtAppointmentCultureLaw.XiaCentered,
                 CourtAuxiliaryLawKind.Conscription => pValue >= 0 &&
                     pValue <= (int)CourtConscriptionLaw.FullMobilization,
+                CourtAuxiliaryLawKind.FemaleSuccession => pValue >= 0 &&
+                    pValue <= (int)CourtFemaleSuccessionLaw.Permitted,
                 _ => false
             };
         }
@@ -396,6 +418,8 @@ namespace AncientWarfare3.core.court
                     (int)GetAppointmentCultureLaw(pKingdom),
                 CourtAuxiliaryLawKind.Conscription =>
                     (int)GetConscriptionLaw(pKingdom),
+                CourtAuxiliaryLawKind.FemaleSuccession =>
+                    (int)GetFemaleSuccessionLaw(pKingdom),
                 _ => -1
             };
         }
@@ -411,6 +435,8 @@ namespace AncientWarfare3.core.court
                     LineageKeys.COURT_APPOINTMENT_CULTURE_LAW,
                 CourtAuxiliaryLawKind.Conscription =>
                     LineageKeys.COURT_CONSCRIPTION_LAW,
+                CourtAuxiliaryLawKind.FemaleSuccession =>
+                    LineageKeys.COURT_FEMALE_SUCCESSION_LAW,
                 _ => ""
             };
         }
@@ -427,6 +453,8 @@ namespace AncientWarfare3.core.court
                     LineageKeys.COURT_APPOINTMENT_CULTURE_LAW_LAST_CHANGE_YEAR,
                 CourtAuxiliaryLawKind.Conscription =>
                     LineageKeys.COURT_CONSCRIPTION_LAW_LAST_CHANGE_YEAR,
+                CourtAuxiliaryLawKind.FemaleSuccession =>
+                    LineageKeys.COURT_FEMALE_SUCCESSION_LAW_LAST_CHANGE_YEAR,
                 _ => ""
             };
         }

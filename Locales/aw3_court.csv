@@ -516,6 +516,11 @@ aw_court_aux_law_term,任期法,Term Law,任期法
 aw_court_aux_law_border,边防之制,Border Command Law,邊防之制
 aw_court_aux_law_appointment,用官文化,Appointment Culture,用官文化
 aw_court_aux_law_conscription,征兵法,Conscription Law,徵兵法
+aw_court_aux_law_female_succession,女主继承,Female Succession,女主繼承
+aw_court_female_succession_forbidden,禁女继承,Female Succession Forbidden,禁女繼承
+aw_court_female_succession_forbidden_desc,女性不得担任领袖、君主或继承人,Women cannot serve as leaders rulers or heirs,女性不得擔任領袖、君主或繼承人
+aw_court_female_succession_permitted,许女继承,Female Succession Permitted,許女繼承
+aw_court_female_succession_permitted_desc,女性可担任领袖、君主与继承人,Women may serve as leaders rulers and heirs,女性可擔任領袖、君主與繼承人
 aw_court_term_lifetime,终身任期,Lifetime Tenure,終身任期
 aw_court_term_lifetime_desc,官员终身任职直至卸任、失格或死亡,Officials serve for life unless dismissed disqualified or dead,官員終身任職直至卸任、失格或死亡
 aw_court_term_three,固定三年,Fixed Three Years,固定三年

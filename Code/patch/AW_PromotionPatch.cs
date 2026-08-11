@@ -25,14 +25,17 @@ namespace AncientWarfare3.patch
         {
             __state = false;
             if (AW3MultiplayerReplicaScope.IsApplying) return true;
-            if (pActor == null ||
-                (!LineageService.IsXia(pActor) && !LineageService.IsXiaKingdom(__instance?.kingdom) &&
-                 !XiaizationService.IsForeignPseudoDynasty(pActor.kingdom)))
+            if (pActor == null)
                 return true;
             if (!XiaAuthorityGenderRules.ShouldAllowSetLeader(
-                    pIsXiaActor: true,
+                    pUsesXiaLaw: LineageService.IsXia(pActor) ||
+                                 LineageService.IsXiaKingdom(
+                                     __instance?.kingdom),
                     pIsMale: pActor.isSexMale(),
-                    pIsNewAppointment: pNew))
+                    pIsNewAppointment: pNew,
+                    pFemaleSuccessionAllowed:
+                    CourtAuxiliaryLawService.AllowsFemaleSuccession(
+                        __instance?.kingdom)))
             {
                 __state = true;
                 return false;
@@ -112,10 +115,12 @@ namespace AncientWarfare3.patch
                     pActor);
                 return true;
             }
-            // Native game settings decide whether a female candidate is
-            // eligible. AW3 must not block a valid female ruler before the
-            // common genealogy and matrilocal paths can run.
-            return true;
+            return XiaAuthorityGenderRules.ShouldAllowSetKing(
+                pCandidateIsMale: pActor.isSexMale(),
+                pCandidateIsXia: LineageService.IsXia(pActor),
+                pKingdomIsXia: LineageService.IsXiaKingdom(__instance),
+                pFemaleSuccessionAllowed:
+                CourtAuxiliaryLawService.AllowsFemaleSuccession(__instance));
         }
     }
 

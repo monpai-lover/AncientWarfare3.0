@@ -99,7 +99,7 @@ namespace AncientWarfare3.core.lineage
                 MandateService.IsMandateKingdom(pKingdom)
                     ? MandatePhaseService.CurrentPhase
                     : MandatePhase.Golden,
-                HasLivingDirectSon(king), StableDynasty(pKingdom, king),
+                HasLivingDirectChild(pKingdom, king), StableDynasty(pKingdom, king),
                 SafeAtWar(pKingdom), armies, generals, officers.Count,
                 CourtInstitutionRules.Rank(
                     CourtInstitutionService.GetInstitution(pKingdom)),
@@ -360,13 +360,19 @@ namespace AncientWarfare3.core.lineage
             return count;
         }
 
-        private static bool HasLivingDirectSon(Actor pKing)
+        private static bool HasLivingDirectChild(Kingdom pKingdom,
+            Actor pKing)
         {
             if (pKing?.data == null) return false;
             try
             {
                 foreach (Actor child in pKing.getChildren(false))
-                    if (child?.data != null && child.isSexMale() &&
+                    if (child?.data != null &&
+                        XiaAuthorityGenderRules.
+                            IsSuccessionCandidateSexEligible(
+                                child.isSexMale(),
+                                CourtAuxiliaryLawService.
+                                    AllowsFemaleSuccession(pKingdom)) &&
                         child.isAlive() && !child.isRekt())
                         return true;
             }

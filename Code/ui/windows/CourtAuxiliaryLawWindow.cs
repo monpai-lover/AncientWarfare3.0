@@ -19,7 +19,7 @@ namespace AncientWarfare3.ui.windows
 
         private static long _kingdomId = -1L;
         private static bool _resetSelections = true;
-        private readonly List<LawSection> _sections = new List<LawSection>(4);
+        private readonly List<LawSection> _sections = new List<LawSection>(5);
         private Vector2 _windowSize = DefaultSize;
         private RectTransform _root;
         private RectTransform _viewport;
@@ -131,6 +131,7 @@ namespace AncientWarfare3.ui.windows
             _sections.Add(CreateLawSection(CourtAuxiliaryLawKind.BorderCommand, 3));
             _sections.Add(CreateLawSection(CourtAuxiliaryLawKind.AppointmentCulture, 3));
             _sections.Add(CreateLawSection(CourtAuxiliaryLawKind.Conscription, 4));
+            _sections.Add(CreateLawSection(CourtAuxiliaryLawKind.FemaleSuccession, 2));
         }
 
         private LawSection CreateLawSection(CourtAuxiliaryLawKind pKind,
@@ -547,7 +548,10 @@ namespace AncientWarfare3.ui.windows
                 CourtAuxiliaryLawKind.AppointmentCulture =>
                     (int)CourtAuxiliaryLawService
                         .GetAppointmentCultureLaw(pKingdom),
-                _ => (int)CourtAuxiliaryLawService.GetConscriptionLaw(pKingdom)
+                CourtAuxiliaryLawKind.Conscription =>
+                    (int)CourtAuxiliaryLawService.GetConscriptionLaw(pKingdom),
+                _ => (int)CourtAuxiliaryLawService
+                    .GetFemaleSuccessionLaw(pKingdom)
             };
         }
 
@@ -560,7 +564,9 @@ namespace AncientWarfare3.ui.windows
                     "aw_court_aux_law_border",
                 CourtAuxiliaryLawKind.AppointmentCulture =>
                     "aw_court_aux_law_appointment",
-                _ => "aw_court_aux_law_conscription"
+                CourtAuxiliaryLawKind.Conscription =>
+                    "aw_court_aux_law_conscription",
+                _ => "aw_court_aux_law_female_succession"
             }, pKind.ToString());
         }
 
@@ -588,6 +594,9 @@ namespace AncientWarfare3.ui.windows
                     2 => "aw_court_appointment_centered",
                     _ => "aw_court_appointment_preference"
                 },
+                CourtAuxiliaryLawKind.FemaleSuccession => pValue == 0
+                    ? "aw_court_female_succession_forbidden"
+                    : "aw_court_female_succession_permitted",
                 _ => pValue switch
                 {
                     0 => "aw_court_conscription_limited",
@@ -623,6 +632,9 @@ namespace AncientWarfare3.ui.windows
                     2 => "aw_court_appointment_centered_desc",
                     _ => "aw_court_appointment_preference_desc"
                 },
+                CourtAuxiliaryLawKind.FemaleSuccession => pValue == 0
+                    ? "aw_court_female_succession_forbidden_desc"
+                    : "aw_court_female_succession_permitted_desc",
                 _ => pValue switch
                 {
                     0 => "aw_court_conscription_limited_desc",
