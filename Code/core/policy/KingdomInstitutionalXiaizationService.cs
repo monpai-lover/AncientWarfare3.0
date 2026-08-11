@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
@@ -20,8 +19,8 @@ namespace AncientWarfare3.core.policy
         private static readonly HashSet<long> Enqueued =
             new HashSet<long>();
         private static bool _restored;
-        private static IEnumerator _restoreEnumerator;
-        private static MapBox _restoreWorld;
+        private static long[] _restoreKingdomIds;
+        private static int _restoreCursor;
 
         internal static void Request(Kingdom pKingdom)
         {
@@ -44,8 +43,8 @@ namespace AncientWarfare3.core.policy
             Pending.Clear();
             PendingOrder.Clear();
             Enqueued.Clear();
-            DisposeRestoreEnumerator();
-            _restoreWorld = null;
+            _restoreKingdomIds = null;
+            _restoreCursor = 0;
             _restored = false;
         }
 
@@ -134,23 +133,20 @@ namespace AncientWarfare3.core.policy
             MapBox world = World.world;
             try
             {
-                if (!ReferenceEquals(_restoreWorld, world) ||
-                    _restoreEnumerator == null)
+                if (_restoreKingdomIds == null)
                 {
-                    DisposeRestoreEnumerator();
-                    _restoreWorld = world;
-                    _restoreEnumerator = world.kingdoms.GetEnumerator();
+                    var ids = new List<long>();
+                    foreach (Kingdom kingdom in world.kingdoms)
+                        if (kingdom?.data != null && !kingdom.isRekt())
+                            ids.Add(kingdom.id);
+                    _restoreKingdomIds = ids.ToArray();
+                    _restoreCursor = 0;
                 }
                 int remaining = MaxRestoreKingdomsPerCycle;
-                while (remaining-- > 0)
+                while (remaining-- > 0 && _restoreCursor < _restoreKingdomIds.Length)
                 {
-                    if (!_restoreEnumerator.MoveNext())
-                    {
-                        DisposeRestoreEnumerator();
-                        _restored = true;
-                        return;
-                    }
-                    Kingdom kingdom = _restoreEnumerator.Current as Kingdom;
+                    long kingdomId = _restoreKingdomIds[_restoreCursor++];
+                    Kingdom kingdom = world.kingdoms.get(kingdomId);
                     if (kingdom?.data == null ||
                         !KingdomInstitutionalXiaizationRules
                             .ShouldUseXiaInstitutions(
@@ -160,7 +156,7 @@ namespace AncientWarfare3.core.policy
                         KingdomInstitutionalXiaizationStatePersistence.Load(
                             db, kingdom.id);
                     if (state == null || state.Version !=
-                            KingdomInstitutionalXiaizationStatePersistence.
+                        KingdomInstitutionalXiaizationStatePersistence.
                                 CurrentVersion)
                     {
                         Request(kingdom);
@@ -170,21 +166,17 @@ namespace AncientWarfare3.core.policy
                     Pending[kingdom.id] = kingdom;
                     Enqueue(kingdom.id);
                 }
+                if (_restoreCursor >= _restoreKingdomIds.Length)
+                    _restored = true;
             }
             catch (Exception error)
             {
-                DisposeRestoreEnumerator();
+                _restoreKingdomIds = null;
+                _restoreCursor = 0;
                 ModClass.LogWarning(
                     "Institutional Xiaization restore failed: " +
                     error.Message);
             }
-        }
-
-        private static void DisposeRestoreEnumerator()
-        {
-            if (_restoreEnumerator is IDisposable disposable)
-                disposable.Dispose();
-            _restoreEnumerator = null;
         }
 
         private static void Enqueue(long pKingdomId)

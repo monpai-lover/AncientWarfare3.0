@@ -494,6 +494,7 @@ if (args.Length == 1 && args[0] == "--actor-runtime")
     ActorDiagnosticSamplingRulesTests.Run();
     ActorAgeWorkRulesTests.Run();
     ActorDeathArchiveRulesTests.Run();
+    ActorDeathSafetyRulesTests.Run();
     CapturedMilitaryOwnershipRulesTests.Run();
     ActorPresentationDirtyRulesTests.Run();
     AWPathRequestReuseRulesTests.Run();
@@ -3239,10 +3240,10 @@ True(KingdomExtinctionRules.ShouldDeferRemovalVerification(
         cityIndexStable: false,
         actorKingdomIndexStable: true),
     "zero-city removal waits for the city index");
-True(KingdomExtinctionRules.ShouldDeferRemovalVerification(
+Equal(false, KingdomExtinctionRules.ShouldDeferRemovalVerification(
         cityIndexStable: true,
         actorKingdomIndexStable: false),
-    "zero-city removal waits for the actor kingdom index");
+    "zero-city removal ignores the actor kingdom index");
 Equal(false, KingdomExtinctionRules.ShouldDeferRemovalVerification(
         cityIndexStable: true,
         actorKingdomIndexStable: true),
@@ -8185,6 +8186,7 @@ SyntheticMobilizationRulesTests.Run();
 ActorDiagnosticSamplingRulesTests.Run();
 ActorAgeWorkRulesTests.Run();
 ActorDeathArchiveRulesTests.Run();
+ActorDeathSafetyRulesTests.Run();
 CapturedMilitaryOwnershipRulesTests.Run();
 ActorPresentationDirtyRulesTests.Run();
 AWPathRequestReuseRulesTests.Run();

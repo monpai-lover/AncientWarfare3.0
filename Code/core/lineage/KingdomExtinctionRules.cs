@@ -3,10 +3,15 @@ namespace AncientWarfare3.core.lineage
     public static class KingdomExtinctionRules
     {
         public static bool ShouldDeferRemovalVerification(
-            bool cityIndexStable,
-            bool actorKingdomIndexStable)
+            bool cityIndexStable)
         {
-            return !cityIndexStable || !actorKingdomIndexStable;
+            return !cityIndexStable;
+        }
+
+        public static bool ShouldDeferRemovalVerification(
+            bool cityIndexStable, bool actorKingdomIndexStable)
+        {
+            return !cityIndexStable;
         }
 
         public static bool ShouldDisbandSurvivors(
@@ -40,7 +45,7 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldQueueVerification(
             bool isCivilization, bool cityIndexStable, int liveCityCount)
         {
-            return isCivilization && liveCityCount <= 0;
+            return isCivilization && !cityIndexStable && liveCityCount <= 0;
         }
     }
 }

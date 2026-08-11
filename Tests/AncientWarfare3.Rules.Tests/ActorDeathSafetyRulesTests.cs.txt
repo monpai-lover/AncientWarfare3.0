@@ -1,0 +1,62 @@
+using System;
+
+internal static class ActorDeathSafetyRulesTests
+{
+    internal static void Run()
+    {
+        True(AncientWarfare3.core.lineage.ActorDeathSafetyRules
+            .ShouldRunDeathCheck(true, false, true, true),
+            "live actor with a tile reaches native death check");
+        False(AncientWarfare3.core.lineage.ActorDeathSafetyRules
+            .ShouldRunDeathCheck(false, false, true, true),
+            "actor without data is skipped");
+        False(AncientWarfare3.core.lineage.ActorDeathSafetyRules
+            .ShouldRunDeathCheck(true, true, true, true),
+            "removed actor is skipped");
+        False(AncientWarfare3.core.lineage.ActorDeathSafetyRules
+            .ShouldRunDeathCheck(true, false, false, true),
+            "dead actor is skipped");
+        False(AncientWarfare3.core.lineage.ActorDeathSafetyRules
+            .ShouldRunDeathCheck(true, false, true, false),
+            "actor without a current tile is skipped");
+        string authority = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWAuthorityCycleService.cs"));
+        False(authority.Contains("NameIntegrationMaterialization"),
+            "whole-population name migration is absent from authority stages");
+        string lineage = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageService.cs"));
+        False(lineage.Contains("NameIntegrationMaterializationService.Request"),
+            "integrating a kingdom does not enqueue living actor migration");
+        string migration = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "NameIntegrationMaterializationService.cs"));
+        False(migration.Contains("getUnits") ||
+              migration.Contains("World.world.units") ||
+              migration.Contains("ApplyNameIntegrationToActor"),
+            "name materialization has no living actor scan");
+        string institutional = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "KingdomInstitutionalXiaizationService.cs"));
+        False(institutional.Contains("GetEnumerator"),
+            "institutional restore does not retain a live kingdom enumerator");
+        string deathPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_ActorDeathCheckPatch.cs"));
+        True(deathPatch.Contains("checkDeath"),
+            "death safety gate is attached to native checkDeath");
+        False(deathPatch.Contains("\"die\""),
+            "death safety gate does not swallow native die failures");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        True(!value, message);
+    }
+}

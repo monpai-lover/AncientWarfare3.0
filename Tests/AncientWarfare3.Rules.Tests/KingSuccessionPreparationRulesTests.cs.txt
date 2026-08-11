@@ -30,8 +30,12 @@ internal static class KingSuccessionPreparationRulesTests
         CourtUsurpationEstablishesNewLegitimateAwLine();
         ImperialCourtUsurpationBindsNewShiBeforeDynastyTransition();
         InvalidCapitalRepairPrefersInstalledSuccessorHome();
+        InvalidCapitalRepairAllowsZeroPopulationOwnedCity();
         InvalidCapitalRepairFallsBackToBestRealmCity();
         InvalidCapitalRepairUsesNativeCapitalApi();
+        CitylessKingdomDoesNotQueueManagedAccession();
+        InvalidCapitalRetryWarningIsSelective();
+        ZeroCityRemovalUsesNativeBoundary();
         AccessionModeSnapshotRetriesUntilChronicleSettlement();
         ForeignReigningHeirLeavesOldThroneBeforeTransfer();
         KingLeftClearsCompletedAccessionProgress();
@@ -86,6 +90,74 @@ internal static class KingSuccessionPreparationRulesTests
             "a foreign heir home is skipped before choosing a live realm city");
     }
 
+    private static void InvalidCapitalRepairAllowsZeroPopulationOwnedCity()
+    {
+        var candidates = new[]
+        {
+            new AccessionCapitalCandidateFact(12L,
+                pOwnedByKingdom: true, pAlive: true,
+                pIsSuccessorHome: true, pPopulation: 0, pZones: 3)
+        };
+
+        Equal(12L, AccessionIdentityRules.SelectCapitalRepairCandidateId(
+                candidates),
+            "a retained zero-population realm city remains a capital candidate");
+    }
+
+    private static void CitylessKingdomDoesNotQueueManagedAccession()
+    {
+        Equal(false, KingdomExtinctionRules.ShouldQueueVerification(
+                isCivilization: true, cityIndexStable: true,
+                liveCityCount: 0),
+            "a stable cityless kingdom does not enter another deferred queue");
+        string accession = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AccessionIdentityService.cs"));
+        True(accession.Contains("HasStableOwnedCity"),
+            "accession service checks the stable owned-city boundary");
+    }
+
+    private static void InvalidCapitalRetryWarningIsSelective()
+    {
+        string accession = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "AccessionIdentityService.cs"));
+        int processStart = accession.IndexOf(
+            "internal static void ProcessDeferredInstallations()",
+            StringComparison.Ordinal);
+        int completeStart = accession.IndexOf(
+            "private static bool CompleteDeferredInstallation(", processStart,
+            StringComparison.Ordinal);
+        True(processStart >= 0 && completeStart > processStart,
+            "deferred installation source has a stable processing boundary");
+        string process = accession.Substring(processStart,
+            completeStart - processStart);
+        True(process.Contains("LastPrepareFailureReason != \"invalid_capital\""),
+            "only non-capital failures retain the exhausted warning");
+    }
+
+    private static void ZeroCityRemovalUsesNativeBoundary()
+    {
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_KingdomExtinctionPatch.cs"));
+        True(patch.Contains("__result = true",
+                StringComparison.Ordinal),
+            "stable zero-city removal returns native readiness");
+        Equal(false, patch.Contains("makeSurvivorsToNomads",
+                StringComparison.Ordinal),
+            "extinction prefix does not convert survivors directly");
+        string queue = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "KingdomExtinctionQueue.cs"));
+        Equal(false, queue.Contains("manager.removeObject",
+                StringComparison.Ordinal),
+            "extinction queue leaves destruction to the native manager");
+        Equal(false, queue.Contains("isUnitsDirty",
+                StringComparison.Ordinal),
+            "extinction queue does not wait for the actor index");
+    }
+
     private static void InvalidCapitalRepairUsesNativeCapitalApi()
     {
         string source = File.ReadAllText(Path.Combine(
@@ -103,6 +175,9 @@ internal static class KingSuccessionPreparationRulesTests
             repairEnd - repairStart);
         True(repair.Contains("Actor pSuccessor", StringComparison.Ordinal),
             "capital repair receives the installed successor home");
+        Equal(false, repair.Contains("pCity.isAlive()",
+                StringComparison.Ordinal),
+            "capital repair does not reject a retained zero-population city");
         True(repair.Contains("pKingdom.setCapital(selected)",
                 StringComparison.Ordinal),
             "capital repair commits through the native Kingdom API");

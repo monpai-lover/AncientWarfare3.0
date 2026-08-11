@@ -55,6 +55,8 @@ namespace AncientWarfare3.patch
                 return true;
             bool managedSuccession = UsesManagedSuccession(__instance);
             if (!managedSuccession) return true;
+            if (AccessionIdentityService.IsConfirmedCityless(__instance))
+                return true;
             __state.PreviousKing = __instance.king;
             HeirService.RememberPreSuccessionKing(__instance, __state.PreviousKing);
 
@@ -110,6 +112,8 @@ namespace AncientWarfare3.patch
             }
             if (!UsesManagedSuccession(__instance)) return;
             if (!setKingSucceeded) return;
+            if (AccessionIdentityService.IsConfirmedCityless(__instance))
+                return;
             AuthoritativeSuccessionService.OnSuccessorInstalled(__instance,
                 __state.PreviousKing);
             if (!__state.IdentityPrepared)
