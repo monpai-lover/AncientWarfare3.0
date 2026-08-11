@@ -15,6 +15,8 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
         CasualtiesCannotHoldAnArmyInStagingForever();
         EscortQuorumComparesTheSamePopulation();
         StagingReleaseUsesTheOperationalForceGate();
+        QuorumDoesNotDependOnTheThrottledCorrectionPath();
+        StagingDeadlinesUseWorldTimeNotRealtime();
         Assert(ArmyStallWatchdogRules.ShouldExpectFormationProgress(
                 ArmyRtsState.Rally, targetComplete: false),
             "watchdog samples stranded formation members during Rally");
@@ -134,6 +136,62 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
                     observationComplete: true, captainPresent: true),
                 ralliedFollowers: 14, captainPresent: true),
             "a fully rallied eligible formation reaches quorum");
+    }
+
+    // Under AWSimulationMode.Large the tick rate stays constant while each
+    // tick advances multiplier-scaled world time, so the realtime follower
+    // correction budget buys progressively less world-time movement. Rally
+    // therefore must not depend on that throttled path: a follower reaches
+    // the rallied band using ordinary unthrottled pathfinding, which only
+    // happens while the rallied radius is not tighter than the distance at
+    // which long-range routing hands off to local correction.
+    private static void QuorumDoesNotDependOnTheThrottledCorrectionPath()
+    {
+        const int ralliedRadiusSquared =
+            ArmyFormationRules.LocalRadius * ArmyFormationRules.LocalRadius;
+        const int escortRadiusSquared =
+            ArmyFormationRules.LooseEscortOuterRadius *
+            ArmyFormationRules.LooseEscortOuterRadius;
+        const int handoffRadiusSquared =
+            ArmySharedPathRules.LocalReconnectRadius *
+            ArmySharedPathRules.LocalReconnectRadius;
+
+        Assert(ralliedRadiusSquared >= handoffRadiusSquared,
+            "a rallied band tighter than the long-range handoff would force followers to close the gap with throttled corrections, which starves quorum under large simulation steps");
+        Assert(escortRadiusSquared >= handoffRadiusSquared,
+            "the loose escort band must also be reachable by unthrottled pathfinding");
+
+        Assert(!ArmySharedPathRules.ShouldUseLongRangeFollowerRoute(
+                targetValid: true,
+                targetDistanceSquared: ralliedRadiusSquared),
+            "a follower at the rallied boundary has already left long-range routing");
+        Assert(ArmySharedPathRules.ShouldUseLongRangeFollowerRoute(
+                targetValid: true,
+                targetDistanceSquared: ralliedRadiusSquared + 1),
+            "a follower outside the rallied band still routes at long range");
+    }
+
+    // The staging and deployment windows are denominated in world seconds.
+    // Feeding them realtime would decouple the deadline from the simulation
+    // whenever a large step advances world time faster than the wall clock,
+    // so the readiness clock must stay on the world timeline.
+    private static void StagingDeadlinesUseWorldTimeNotRealtime()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        Assert(controller.Contains("double readinessTime = CurrentWorldTime();",
+                StringComparison.Ordinal),
+            "the readiness clock must be sampled from world time");
+
+        int start = controller.IndexOf("double readinessTime =",
+            StringComparison.Ordinal);
+        int end = controller.IndexOf("return facts;", start,
+            StringComparison.Ordinal);
+        Assert(end > start, "BuildFacts must resolve its transition facts");
+        string body = controller.Substring(start, end - start);
+        Assert(!body.Contains("CurrentRealtime()", StringComparison.Ordinal),
+            "a realtime sample inside the readiness window would drift from world time under a large simulation step");
     }
 
     // Guard the wiring itself: passing departure strength into the bounded
