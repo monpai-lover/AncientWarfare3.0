@@ -17,9 +17,51 @@ namespace AncientWarfare3.core.lineage
         public long FatherId { get; }
     }
 
+    // An explicit surname edit has to decide three coupled values at once:
+    // the family name, the clan name that trails it, and whether the two are
+    // rendered as one merged token. Returning them together keeps the caller
+    // from deriving each independently and drifting out of agreement.
+    public readonly struct VisibleSurnameWritePlan
+    {
+        public VisibleSurnameWritePlan(string familyName, string clanName,
+            bool nameIntegrated)
+        {
+            FamilyName = familyName ?? string.Empty;
+            ClanName = clanName ?? string.Empty;
+            NameIntegrated = nameIntegrated;
+        }
+
+        public string FamilyName { get; }
+        public string ClanName { get; }
+        public bool NameIntegrated { get; }
+    }
+
     public static class VisibleSurnameRenameRules
     {
         public const int MaxRenameActors = 16384;
+
+        // A rename that clears the surname must also drop the merged flag,
+        // otherwise the display builder keeps rendering a separator for a
+        // family name that no longer exists. An integrated identity keeps the
+        // clan aligned with the family so the two cannot disagree after the
+        // edit; a non-integrated one preserves the clan as recorded.
+        public static VisibleSurnameWritePlan PlanSurnameWrite(
+            string pRequestedFamilyName, string pCurrentClanName,
+            bool pNameIntegrated)
+        {
+            if (!TryNormalizeFamilyName(pRequestedFamilyName,
+                    out string family))
+                return new VisibleSurnameWritePlan(string.Empty,
+                    pNameIntegrated
+                        ? string.Empty
+                        : (pCurrentClanName ?? string.Empty).Trim(),
+                    false);
+            string clan = pNameIntegrated
+                ? family
+                : (pCurrentClanName ?? string.Empty).Trim();
+            return new VisibleSurnameWritePlan(family, clan,
+                pNameIntegrated);
+        }
 
         public static bool TryNormalizeFamilyName(string pRaw,
             out string pFamilyName)
