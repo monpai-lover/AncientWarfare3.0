@@ -148,6 +148,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return false;
             return IsNativeXiaCultureActor(pActor) ||
+                   AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(
+                       pActor.asset?.id) ||
                    XiaizationService.IsNativePolicyKingdom(pActor.kingdom) ||
                    XiaizationService.UsesXiaizedInstitutionSystem(pActor.kingdom);
         }
@@ -1119,6 +1121,8 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.LINEAGE_ID, out long existingLineageId, -1L);
             pActor.data.get(LineageKeys.SHI_ID, out long existingShiId, -1L);
             bool civilizedMonkey = IsCivilizedMonkey(pActor);
+            bool nativeSinitic = AWNativeSiniticSpeciesRules
+                .IsNativeSiniticSpecies(pActor.asset?.id);
             CivMonkeyLineageIdentity monkeyIdentity = default;
             if (civilizedMonkey)
             {
@@ -1133,6 +1137,18 @@ namespace AncientWarfare3.core.lineage
             if (civilizedMonkey)
                 parts = new ForeignPseudoNameParts(parts.GivenName,
                     monkeyIdentity.FamilyName, monkeyIdentity.ClanName);
+            else if (nativeSinitic)
+            {
+                string family = !string.IsNullOrWhiteSpace(existingFamily)
+                    ? existingFamily.Trim()
+                    : chineseFamily?.Trim() ?? string.Empty;
+                if (string.IsNullOrEmpty(family)) family = parts.FamilyName;
+                string clan = string.IsNullOrWhiteSpace(existingClan)
+                    ? family
+                    : existingClan.Trim();
+                parts = new ForeignPseudoNameParts(parts.GivenName, family,
+                    clan);
+            }
             if (existingLineageId >= 0 && existingShiId < 0 && pTrigger == NobleTrigger.Official)
             {
                 GrantOfficialShiBranch(pActor, existingLineageId, pOfficeId);

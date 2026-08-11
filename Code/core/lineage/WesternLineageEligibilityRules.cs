@@ -35,6 +35,7 @@ namespace AncientWarfare3.core.lineage
             if (!hasStableLineageId) return false;
             return pProfile == NamingProfileId.Xia ||
                    pProfile == NamingProfileId.Monkey ||
+                   pProfile == NamingProfileId.NativeSinitic ||
                    pProfile == NamingProfileId.Western ||
                    pProfile == NamingProfileId.OrcNomadic;
         }
@@ -84,7 +85,8 @@ namespace AncientWarfare3.core.lineage
             bool civilized, bool parentHasLineage,
             bool requiresFullArchive)
         {
-            if (biologicalXia || monkey) return true;
+            if (biologicalXia || monkey ||
+                pProfile == NamingProfileId.NativeSinitic) return true;
             if (!civilized || !parentHasLineage) return false;
             if (pProfile == NamingProfileId.Xia) return true;
             return requiresFullArchive &&
