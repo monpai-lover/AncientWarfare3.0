@@ -27,9 +27,12 @@ internal static class NativeSiniticNamingRulesTests
                 AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(assetId),
                 (assetId ?? "null") + " stays outside the exact species set");
 
-        string lineageService = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
-            "LineageService.cs"));
+        // Read through NormalizeNewlines: git checks these sources out with
+        // CRLF on Windows, so a guard that spans two lines cannot embed a
+        // bare LF and still match. Without this the assertion below fails on
+        // every default Windows clone while passing on Linux and macOS.
+        string lineageService = ReadNormalized("Code", "core", "lineage",
+            "LineageService.cs");
         Equal(true, lineageService.Contains(
                 "bool UsesCommonGenealogy(Actor pActor)"),
             "native Sinitic species have a genealogy gate distinct from Xia naming");
@@ -200,6 +203,19 @@ internal static class NativeSiniticNamingRulesTests
                     pHasCultureContext: false),
             "native Sinitic newborn identity never depends on Xia culture");
 
+    }
+
+    // Source guards compare against literals written with LF. Normalize the
+    // file so the guard describes the code rather than the checkout's
+    // line-ending configuration.
+    private static string ReadNormalized(params string[] pParts)
+    {
+        string path = Directory.GetCurrentDirectory();
+        foreach (string part in pParts)
+            path = Path.Combine(path, part);
+        return File.ReadAllText(path)
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n");
     }
 
     private static void Equal<T>(T expected, T actual, string message)
