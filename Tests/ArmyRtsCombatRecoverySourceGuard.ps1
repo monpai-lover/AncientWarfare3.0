@@ -45,6 +45,8 @@ Require-Match $controller 'target_control_event[\s\S]{0,480}Invalidate\(armyId\)
     'City-control completion must end every matching RTS mission before patrol can own the actor.'
 Require-Contains $controller 'RoyalGuardService.EnsureProtectKingTask(pActor);' `
     'RTS release must restore royal guards to protect-the-king behavior.'
+Require-Match $controller 'ShouldOwnMilitaryActor\(Actor pActor,[\s\S]{0,160}RoyalGuardService\.IsRoyalGuard\(pActor\)' `
+    'The universal RTS ownership gate must exclude royal guards before task or decision interception.'
 Require-Contains (Get-Content -Raw (Join-Path $repo 'Code\core\lineage\AWArmyRoleRules.cs')) `
     'return pArmyRole != AWArmyRole.RoyalGuard &&' `
     'Royal Guard captains must never become RTS-owned, including kings and leaders.'

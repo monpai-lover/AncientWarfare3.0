@@ -4645,6 +4645,7 @@ namespace AncientWarfare3.core.lineage
         private static bool ShouldOwnMilitaryActor(Actor pActor,
             bool pMissionActive)
         {
+            if (RoyalGuardService.IsRoyalGuard(pActor)) return false;
             Army actorArmy = pActor?.army;
             if (pMissionActive && actorArmy?.data != null &&
                 Controllers.TryGet(actorArmy.id,
