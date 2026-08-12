@@ -63,6 +63,7 @@ namespace AncientWarfare3.ui.windows
         private int _displayedSnapshotGeneration = -1;
         private HistoricalSchoolRosterRevisionStamp _displayedSchoolRevisionStamp;
         private float _nextRefreshCheckTime;
+        private string _lastLineageDiagnosticSignature;
 
         public static void OpenSchool(string pSchoolId = CourtSchoolId.Ru)
         {
@@ -631,6 +632,7 @@ namespace AncientWarfare3.ui.windows
                 .OrderByDescending(p => p.Reputation)
                 .ThenBy(p => p.ActorId)
                 .ToArray();
+            LogLineageDiagnostic(pSchoolId, members);
 
             EnsureLineageRows(members.Length);
             float cursor = pTop;
@@ -663,6 +665,20 @@ namespace AncientWarfare3.ui.windows
                 _lineageRows[i].gameObject.SetActive(false);
             }
             return rendered == 0 ? pTop : cursor;
+        }
+
+        private void LogLineageDiagnostic(string pSchoolId,
+            SchoolMembershipRecord[] pMembers)
+        {
+            string members = string.Join(",", (pMembers ?? Array.Empty<SchoolMembershipRecord>())
+                .Select(p => p.ActorId + ":" + p.TeacherActorId + ":" + p.Generation)
+                .ToArray());
+            string signature = (pSchoolId ?? "") + "|" + members;
+            if (signature == _lastLineageDiagnosticSignature) return;
+            _lastLineageDiagnosticSignature = signature;
+            ModClass.LogInfo("[SchoolWindow.Lineage] school=" + pSchoolId +
+                " members=" + (pMembers?.Length ?? 0) +
+                " records=" + members);
         }
 
         private void EnsureLineageRows(int pRequiredCount)
@@ -790,6 +806,7 @@ namespace AncientWarfare3.ui.windows
             _displayedSnapshotGeneration = -1;
             _displayedSchoolRevisionStamp = null;
             _nextRefreshCheckTime = 0f;
+            _lastLineageDiagnosticSignature = null;
             if (_detailTitle != null) _detailTitle.text = "";
             if (_detailBody != null) _detailBody.text = "";
         }

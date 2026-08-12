@@ -16,14 +16,20 @@ if ($schoolWindow -match 'SchoolMembershipService\.AllActive\(\)') {
 if ($schoolWindow -match '\[SchoolWindow\.ShowLineage\]') {
     throw 'ShowLineage must not emit per-refresh diagnostic logs.'
 }
-if ($navigation -notmatch 'MetaType\.Unit\.getAsset\(\)') {
-    throw 'School actor navigation must resolve the unit meta inspector.'
+if ($schoolWindow -notmatch '_lastLineageDiagnosticSignature') {
+    throw 'Lineage diagnostics must be deduplicated by rendered membership state.'
 }
-if ($navigation -notmatch 'selectAndInspect\(pActor, pFromNameplate: false,\s*\r?\n\s*pCheckNameplate: false, pClearAction: false\)') {
-    throw 'School actor navigation must retain the current action while inspecting a member.'
+if ($schoolWindow -notmatch '\[SchoolWindow\.Lineage\]') {
+    throw 'Lineage diagnostics must identify the rendered school and members.'
 }
-if ($navigation -match 'ActionLibrary\.openUnitWindow\(pActor\)') {
-    throw 'School actor navigation must not clear selection through ActionLibrary.openUnitWindow.'
+if ($navigation -notmatch 'SelectedUnit\.select\(pActor\)') {
+    throw 'School actor navigation must bind the actor used by UnitWindow.'
+}
+if ($navigation -notmatch 'ScrollWindow\.showWindow\("unit"\)') {
+    throw 'School actor navigation must open the native UnitWindow after binding its actor.'
+}
+if ($navigation -match 'selectAndInspect\(pActor') {
+    throw 'School actor navigation must not open UnitWindow through a meta selection that leaves SelectedUnit stale.'
 }
 
 Write-Output 'School lineage UI source guard passed.'
