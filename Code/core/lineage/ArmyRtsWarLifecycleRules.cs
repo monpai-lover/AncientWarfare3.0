@@ -53,6 +53,18 @@ namespace AncientWarfare3.core.lineage
             return insideTargetTerritory && hostileCombatUnitNearby;
         }
 
+        public static bool ShouldTreatAsTargetTerritory(bool exactZone,
+            bool borderZone, bool adjacentTargetZone)
+        {
+            return exactZone || borderZone || adjacentTargetZone;
+        }
+
+        public static bool ShouldAllowVanillaCityAttack(
+            ArmyRtsWarPhase pPhase)
+        {
+            return pPhase == ArmyRtsWarPhase.VanillaCombat;
+        }
+
         public static bool ShouldReleaseToVanilla(
             ArmyRtsWarResolutionMode pMode,
             bool insideTargetTerritory, bool targetIsEnemy,

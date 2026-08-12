@@ -63,17 +63,23 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || pActor.isRekt() ||
                 !pActor.isAlive() || !pActor.isWarrior()) return false;
-            City city = pActor.city;
             Army army = pActor.army;
-            if (city?.data == null || army?.data == null ||
-                pActor.kingdom != city.kingdom ||
-                AWArmyService.IsSpecialArmy(army))
+            if (army?.data == null || AWArmyService.IsSpecialArmy(army) ||
+                ArmyRtsControllerService.HasActiveMission(army.id))
                 return false;
+            City anchorCity = AWArmyService.FindAnchorCity(army);
+            if (anchorCity?.data == null || pActor.kingdom != anchorCity.kingdom)
+                return false;
+            City city = anchorCity;
 
             // 原版检查：军队必须是该城市当前驻军
             // 但 RTS 军队执行任务时会离开城市，任务结束后应恢复巡逻
             // 放宽条件：只要军队曾驻扎该城市或仍在该城市领土即可
-            if (city.hasArmy() && city.getArmy() == army)
+            bool anchoredToActorCity = anchorCity?.id == city.id;
+            if (StandingArmyRules.ShouldKeepPeacetimePatrolForAnchor(
+                    actorCityMatchesAnchor: true,
+                    armyAnchoredToActorCity: anchoredToActorCity,
+                    actorInsideCityCoreZone: pActor.current_tile?.zone?.city == city))
             {
                 // 军队当前驻扎在该城 → 合格
             }
@@ -81,9 +87,7 @@ namespace AncientWarfare3.core.lineage
             {
                 // 军队不在该城，检查是否仍在该城领土内
                 // （RTS 任务结束，士兵回到边境时的情况）
-                bool inCityTerritory = pActor.current_tile?.zone?.city == city;
-                if (!inCityTerritory)
-                    return false;
+                return false;
             }
 
             pActor.data.get(LineageKeys.TEMPORARY_LEVY,
@@ -322,7 +326,7 @@ namespace AncientWarfare3.core.lineage
 
         public static WorldTile GetPatrolTile(Actor pActor)
         {
-            City city = pActor?.city;
+            City city = AWArmyService.FindAnchorCity(pActor?.army);
             if (!ShouldUsePeacetimeJob(pActor) || city?.data == null)
                 return SafeCityCenter(city);
             TryRefreshBoundaryZones(city);

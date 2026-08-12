@@ -2404,6 +2404,13 @@ namespace AncientWarfare3.core.lineage
                 !HasActiveMission(pArmyId)) return;
             Army army = FindArmy(pArmyId);
             Actor captain = SafeCaptain(army);
+            bool transportActive = ArmyRtsTransportService.
+                HasActiveVoyage(army);
+            if (captain?.data != null &&
+                ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(
+                    AWArmyMarchService.GetSharedRouteInstallStatus(captain),
+                    HasImmediateCombatPriority(captain), transportActive))
+                RequestRouteReplan(pArmyId, pAlternateEndpoint: false);
             string captainJobId = ArmyRtsContent.CaptainJobId;
             ArmyRtsState captainState = ArmyRtsState.Idle;
             if (Controllers.TryGet(pArmyId,
@@ -2757,7 +2764,8 @@ namespace AncientWarfare3.core.lineage
                 CanUseReservePool(army);
             if (commit && !reservePoolEligible)
                 ClearIneligibleReplenishmentState(army, runtime);
-            if (commit && TryHandleWarCombatOwnership(army, record,
+            if (commit && !runtime.FieldCombatReleased &&
+                TryHandleWarCombatOwnership(army, record,
                     runtime))
             {
                 // 城内攻城脱离逻辑接管战斗，野战脱离让位。
@@ -3011,8 +3019,7 @@ namespace AncientWarfare3.core.lineage
             City currentCity = null;
             try { currentCity = captain?.current_tile?.zone?.city; }
             catch { }
-            bool insideTarget = target?.data != null &&
-                                currentCity == target;
+            bool insideTarget = IsInsideTargetTerritory(captain, target);
             Kingdom kingdom = SafeKingdom(pArmy);
             War war = FindWar(pRecord.Mission.WarId);
             bool hostileInside = insideTarget &&
@@ -3161,6 +3168,12 @@ namespace AncientWarfare3.core.lineage
         private static void EnterFieldCombat(Army pArmy,
             RuntimeState pRuntime)
         {
+            if (Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) &&
+                record?.Mission != null)
+                ArmyRtsWarLifecycleService.TrySetPhase(
+                    record.Mission.WarId, pArmy.id,
+                    ArmyRtsWarPhase.VanillaCombat);
             ArmyRouteProviderService.Cancel(pArmy.id,
                 ArmyRouteCancelReason.TargetReplaced);
             AWArmyMarchService.ClearArmy(pArmy.id);
@@ -3176,6 +3189,12 @@ namespace AncientWarfare3.core.lineage
             RuntimeState pRuntime)
         {
             pRuntime.FieldCombatReleased = false;
+            if (Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) &&
+                record?.Mission != null)
+                ArmyRtsWarLifecycleService.TrySetPhase(
+                    record.Mission.WarId, pArmy.id,
+                    ArmyRtsWarPhase.StrategicMovement);
             ClearArmyAttackTargets(pArmy);
             ClearArmyCombatTasks(pArmy);
             ResetStrategicMovementRuntime(pRuntime);
@@ -4432,6 +4451,69 @@ namespace AncientWarfare3.core.lineage
         {
             if (pFirst?.data == null || pSecond?.data == null) return false;
             try { return pFirst.isSameIsland(pSecond); }
+            catch { return false; }
+        }
+
+        private static bool IsInsideTargetTerritory(Actor pActor,
+            City pTarget)
+        {
+            if (pActor?.current_tile == null || pTarget?.data == null)
+                return false;
+            TileZone currentZone = null;
+            try { currentZone = pActor.current_tile.zone; }
+            catch { }
+            bool exact = currentZone?.city == pTarget;
+            bool border = false;
+            bool adjacent = false;
+            try
+            {
+                border = currentZone != null && pTarget.border_zones != null &&
+                         pTarget.border_zones.Contains(currentZone);
+                if (!exact && !border && pTarget.zones != null)
+                {
+                    for (int i = 0; i < pTarget.zones.Count && !adjacent; i++)
+                    {
+                        TileZone zone = pTarget.zones[i];
+                        if (zone?.tiles == null) continue;
+                        for (int j = 0; j < zone.tiles.Length; j++)
+                        {
+                            WorldTile tile = zone.tiles[j];
+                            if (tile == pActor.current_tile ||
+                                tile?.zone == currentZone)
+                            {
+                                adjacent = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return ArmyRtsWarLifecycleRules.ShouldTreatAsTargetTerritory(
+                exact, border, adjacent);
+        }
+
+        internal static bool IsVanillaCombatArmy(Army pArmy)
+        {
+            if (pArmy?.data == null ||
+                !Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null) return false;
+            return ArmyRtsWarLifecycleService.TryGet(
+                       record.Mission.WarId, pArmy.id,
+                       out ArmyRtsWarLifecycleRecord lifecycle) &&
+                   ArmyRtsWarLifecycleRules.ShouldAllowVanillaCityAttack(
+                       lifecycle.Phase);
+        }
+
+        internal static bool IsVanillaCombatCity(City pCity)
+        {
+            if (pCity?.data == null) return false;
+            try
+            {
+                return pCity.hasArmy() &&
+                       IsVanillaCombatArmy(pCity.getArmy());
+            }
             catch { return false; }
         }
 

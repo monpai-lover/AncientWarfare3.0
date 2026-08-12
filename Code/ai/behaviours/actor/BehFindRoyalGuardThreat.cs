@@ -24,7 +24,7 @@ namespace AncientWarfare3.ai.behaviours.actor
                     catch { }
                 }
                 RoyalGuardService.WaitAfterGuardNoThreat(pActor);
-                return BehResult.Stop;
+                return BehResult.RepeatStep;
             }
 
             pActor.beh_actor_target = target;

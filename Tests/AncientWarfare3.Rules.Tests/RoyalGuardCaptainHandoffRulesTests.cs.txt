@@ -96,6 +96,12 @@ internal static class RoyalGuardCaptainHandoffRulesTests
             "a stable member outside the cursor remains bounded");
 
         string root = Directory.GetCurrentDirectory();
+        string threatBehaviour = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehFindRoyalGuardThreat.cs"));
+        Check(failures,
+            threatBehaviour.Contains("return BehResult.RepeatStep;") &&
+            !threatBehaviour.Contains("WaitAfterGuardNoThreat(pActor);\n                return BehResult.Stop;"),
+            "a guard without a threat keeps its follow task alive");
         string armyService = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "AWArmyService.cs"));
         string guardService = File.ReadAllText(Path.Combine(root, "Code", "core",

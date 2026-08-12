@@ -58,7 +58,7 @@ namespace AncientWarfare3.core.lineage
             bool pForceRecovery = false)
         {
             if (!ArmyRtsRuntimeModeRules.ShouldCommit(pMode) ||
-                !pOwnsActor || !pActorAlive ||
+                (!pOwnsActor && !pForceRecovery) || !pActorAlive ||
                 pImmediateCombat && !pForceRecovery ||
                 pRequiredBoatWork)
                 return false;

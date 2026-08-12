@@ -40,6 +40,13 @@ namespace AncientWarfare3.core.lineage
             return !pHasPatrolTarget || pTargetIsCurrentTile;
         }
 
+        public static bool ShouldKeepPeacetimePatrolForAnchor(
+            bool actorCityMatchesAnchor, bool armyAnchoredToActorCity,
+            bool actorInsideCityCoreZone)
+        {
+            return actorCityMatchesAnchor && armyAnchoredToActorCity;
+        }
+
         public static bool ShouldEnsureArmyMembership(
             bool isWarrior, bool hasArmyMembership)
         {

@@ -13,6 +13,11 @@ internal static class ArmyRtsCombatHandoffRulesTests
                ArmyRtsCombatControlDecision.ReleaseToVanilla,
             "target-territory hostile contact releases tactical control");
 
+        Assert(ArmyRtsWarLifecycleRules.ShouldTreatAsTargetTerritory(
+                exactZone: false, borderZone: true,
+                adjacentTargetZone: false),
+            "a target city border tile must count as target territory");
+
         Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
                 ArmyRtsWarPhase.StrategicMovement,
                 withdrawalRequired: false, insideTargetTerritory: false,
@@ -64,6 +69,17 @@ internal static class ArmyRtsCombatHandoffRulesTests
         Assert(!ArmyRtsWarLifecycleRules.OwnsTacticalActors(
                 ArmyRtsWarPhase.VanillaCombat),
             "RTS actor patches must remain disabled during vanilla combat");
+
+        Assert(ArmyRtsWarLifecycleRules.ShouldAllowVanillaCityAttack(
+                ArmyRtsWarPhase.VanillaCombat),
+            "vanilla city attack selection must resume after RTS handoff");
+
+        Assert(ArmyRtsTaskOwnershipRules.ShouldReassertMissionTask(
+                ArmyRtsMode.On, pOwnsActor: false, pActorAlive: true,
+                pExpectedJobActive: false, pExpectedTaskActive: false,
+                pImmediateCombat: false, pRequiredBoatWork: false,
+                pForceRecovery: true),
+            "watchdog recovery must repair a task after ownership was lost");
         Assert(ArmyRtsWarLifecycleRules.OwnsTacticalActors(
                 ArmyRtsWarPhase.Withdrawal),
             "RTS actor patches resume ownership for withdrawal");
@@ -90,6 +106,17 @@ internal static class ArmyRtsCombatHandoffRulesTests
             "the decision wrapper must resolve tactical ownership per actor");
 
         RuntimeModeFollowsTheLiveConfiguration(root);
+
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        Assert(controller.Contains(
+                "ArmyRtsWarPhase.VanillaCombat);\n            ArmyRouteProviderService.Cancel",
+                StringComparison.Ordinal),
+            "field combat release must persist VanillaCombat ownership");
+        Assert(controller.Contains(
+                "!runtime.FieldCombatReleased &&\n                TryHandleWarCombatOwnership",
+                StringComparison.Ordinal),
+            "city handoff must not immediately reclaim field-combat actors");
     }
 
     // AWPerformanceSettings.SwitchArmyRts changes the configuration while a

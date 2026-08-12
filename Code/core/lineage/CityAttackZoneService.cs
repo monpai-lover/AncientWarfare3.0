@@ -116,24 +116,35 @@ namespace AncientWarfare3.core.lineage
                 for (int zoneIndex = 0;
                      zoneIndex < pCity.zones.Count; zoneIndex++)
                 {
-                    TileZone zone = pCity.zones[zoneIndex];
-                    if (zone?.tiles == null) continue;
-                    for (int tileIndex = 0;
-                         tileIndex < zone.tiles.Length; tileIndex++)
-                    {
-                        WorldTile tile = zone.tiles[tileIndex];
-                        if (tile == null) continue;
-                        tile.doUnits(scan.Visit);
-                        if (scan.Found) break;
-                    }
+                    ScanZone(pCity.zones[zoneIndex], scan);
                     if (scan.Found) break;
                 }
+                if (!scan.Found && pCity.border_zones != null)
+                    foreach (TileZone borderZone in pCity.border_zones)
+                    {
+                        ScanZone(borderZone, scan);
+                        if (scan.Found) break;
+                    }
             }
             catch { return false; }
             finally { completed = true; }
             if (completed) CityMilitaryThreatFacts.Store(pWar, pCity,
                 pKingdom, scan.Found);
             return scan.Found;
+        }
+
+        private static void ScanZone(TileZone pZone,
+            HostileMilitaryScanContext pScan)
+        {
+            if (pZone?.tiles == null || pScan == null) return;
+            for (int tileIndex = 0; tileIndex < pZone.tiles.Length;
+                 tileIndex++)
+            {
+                WorldTile tile = pZone.tiles[tileIndex];
+                if (tile == null) continue;
+                tile.doUnits(pScan.Visit);
+                if (pScan.Found) break;
+            }
         }
 
         private sealed class HostileMilitaryScanContext

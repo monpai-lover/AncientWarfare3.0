@@ -639,6 +639,8 @@ namespace AncientWarfare3.patch
         {
             if (ArmyRtsRuntimeModeRules.ShouldUseLegacyStrategicWrites(
                     ArmyRtsRuntimeMode.Current)) return true;
+            if (ArmyRtsControllerService.IsVanillaCombatCity(pCity))
+                return true;
             if (pCity != null)
             {
                 pCity.target_attack_city = null;
