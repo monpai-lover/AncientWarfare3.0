@@ -2,10 +2,10 @@ namespace AncientWarfare3.core.lineage
 {
     public static class RoyalGuardActionRules
     {
-        public const float FollowIdleWaitMin = 3f;
-        public const float FollowIdleWaitMax = 6f;
-        public const float NoThreatWaitMin = 2f;
-        public const float NoThreatWaitMax = 5f;
+        public const float FollowIdleWaitMin = 0.1f;
+        public const float FollowIdleWaitMax = 0.1f;
+        public const float NoThreatWaitMin = 0.1f;
+        public const float NoThreatWaitMax = 0.1f;
 
         public static bool ShouldIssueFollowMove(bool pHasTarget, bool pTargetIsCurrentTile)
         {

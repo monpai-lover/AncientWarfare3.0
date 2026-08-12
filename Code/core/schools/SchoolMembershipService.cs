@@ -92,6 +92,11 @@ namespace AncientWarfare3.core.schools
             return Memberships.GetActive(pActorId);
         }
 
+        public static IEnumerable<SchoolMembershipRecord> AllActive()
+        {
+            return Memberships.ActiveRecords();
+        }
+
         internal static bool IsJoinPending(long pActorId)
         {
             return pActorId >= 0 && PendingMembershipActors.Contains(pActorId);

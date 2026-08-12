@@ -536,6 +536,7 @@
     <Compile Include="..\..\Code\core\lineage\OfficialShiRules.cs" Link="Production\OfficialShiRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtInfluenceRules.cs" Link="Production\CourtInfluenceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalGuardMaintenanceRules.cs" Link="Production\RoyalGuardMaintenanceRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RoyalGuardActionRules.cs" Link="Production\RoyalGuardActionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\StandingArmyRules.cs" Link="Production\StandingArmyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SoldierRetirementRules.cs" Link="Production\SoldierRetirementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActiveMilitaryLifecycleRules.cs" Link="Production\ActiveMilitaryLifecycleRules.cs" />

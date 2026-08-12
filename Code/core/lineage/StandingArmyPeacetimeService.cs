@@ -27,8 +27,11 @@ namespace AncientWarfare3.core.lineage
             "aw_reproduction_task_first_observed_year";
         private const int MaxTileChecks = 16;
         private const int MaxActorsPerWorkItem = 16;
+        private const double BoundaryRefreshRetrySeconds = 8d;
         private static readonly Dictionary<long, JobRefreshPlan>
             RefreshPlans = new Dictionary<long, JobRefreshPlan>();
+        private static readonly Dictionary<long, double>
+            BoundaryRefreshNextAllowedByCity = new Dictionary<long, double>();
 
         public static string GetJob(Actor pActor)
         {
@@ -243,6 +246,7 @@ namespace AncientWarfare3.core.lineage
         public static void ClearRuntime()
         {
             RefreshPlans.Clear();
+            BoundaryRefreshNextAllowedByCity.Clear();
             CityBoundaryPatrolService.ClearRuntime();
         }
 
@@ -319,8 +323,10 @@ namespace AncientWarfare3.core.lineage
         public static WorldTile GetPatrolTile(Actor pActor)
         {
             City city = pActor?.city;
-            if (!ShouldUsePeacetimeJob(pActor) || city?.data == null ||
-                city.border_zones.Count == 0) return SafeCityCenter(city);
+            if (!ShouldUsePeacetimeJob(pActor) || city?.data == null)
+                return SafeCityCenter(city);
+            TryRefreshBoundaryZones(city);
+            if (city.border_zones.Count == 0) return SafeCityCenter(city);
 
             pActor.data.get(PatrolCursorKey, out int cursor, 0);
             if (cursor < 0) cursor = 0;
@@ -335,6 +341,24 @@ namespace AncientWarfare3.core.lineage
                 !pActor.current_tile.isSameIsland(tile))
                 return SafeCityCenter(city);
             return tile;
+        }
+
+        private static void TryRefreshBoundaryZones(City pCity)
+        {
+            if (pCity?.data == null || pCity.isRekt() ||
+                pCity.border_zones.Count > 0) return;
+            double now = LineageService.CurTime();
+            if (BoundaryRefreshNextAllowedByCity.TryGetValue(pCity.id,
+                    out double nextAllowed) && now < nextAllowed) return;
+            BoundaryRefreshNextAllowedByCity[pCity.id] = now +
+                BoundaryRefreshRetrySeconds;
+            try { pCity.recalculateNeighbourZones(); }
+            catch { return; }
+            if (pCity.border_zones.Count > 0)
+            {
+                BoundaryRefreshNextAllowedByCity.Remove(pCity.id);
+                CityBoundaryPatrolService.Invalidate(pCity);
+            }
         }
 
         private static WorldTile FindSafeTile(TileZone pZone,

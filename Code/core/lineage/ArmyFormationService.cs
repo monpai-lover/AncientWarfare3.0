@@ -547,7 +547,7 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool TryGetFollowerRecoveryTarget(Actor pActor,
-            out WorldTile pTarget)
+            out WorldTile pTarget, bool pPreferAlternateSlot = false)
         {
             pTarget = null;
             Army army = pActor?.army;
@@ -560,7 +560,7 @@ namespace AncientWarfare3.core.lineage
             if (slot < 0) return false;
             WorldTile candidate = ResolveStrictLooseEscortTile(captainTile,
                 slot);
-            if (candidate?.data != null &&
+            if (!pPreferAlternateSlot && candidate?.data != null &&
                 IsRecoveryTileFree(candidate, pActor))
             {
                 pTarget = candidate;

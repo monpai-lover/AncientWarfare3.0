@@ -87,8 +87,6 @@ namespace AncientWarfare3.content
                 follow.setIcon("ui/Icons/iconLoyalty");
                 follow.addBeh(new BehRoyalGuardFollowKing());
                 follow.addBeh(new BehGoToTileTarget());
-                follow.addBeh(new BehRandomWait(RoyalGuardActionRules.FollowIdleWaitMin,
-                    RoyalGuardActionRules.FollowIdleWaitMax));
             }
         }
     }

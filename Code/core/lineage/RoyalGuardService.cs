@@ -471,11 +471,6 @@ namespace AncientWarfare3.core.lineage
             WorldTile patrolTile = PickPatrolTileAroundKing(pGuard, king.current_tile);
             if (patrolTile == null) return king.current_tile;
 
-            if (pGuard.current_tile != null &&
-                Toolbox.SquaredDistTile(pGuard.current_tile, king.current_tile) <= PROTECT_RADIUS * PROTECT_RADIUS &&
-                Toolbox.SquaredDistTile(pGuard.current_tile, patrolTile) <= 1)
-                return pGuard.current_tile;
-
             return patrolTile;
         }
 

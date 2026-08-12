@@ -42,7 +42,7 @@ namespace AncientWarfare3.core.lineage
     {
         public const string WAR_TIANMING = "tianming";
         public const string WAR_TIANMING_REBEL = "tianmingrebel";
-        public const string TRAIT_TIANMING = "天命";
+        public const string TRAIT_TIANMING = "aw_tianming";
 
         private const long STATE_ID = 1;
         private const int START_VALUE = 30;

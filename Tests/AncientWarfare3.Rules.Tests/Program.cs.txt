@@ -934,17 +934,54 @@ static void RunArmyRtsCommandContinuityRulesTests()
             requiresEscort: true, rosterLiving: 10,
             nearbyFollowers: 6, captainPresent: true,
             immediateCombat: false, transportOwnsMovement: false),
-        "a captain waits while fewer than eighty percent are nearby");
-    True(ArmyRtsRules.CanCaptainAdvanceWithEscort(
+        "a captain waits while fewer than ninety percent are nearby");
+    Equal(false, ArmyRtsRules.CanCaptainAdvanceWithEscort(
             requiresEscort: true, rosterLiving: 10,
             nearbyFollowers: 7, captainPresent: true,
             immediateCombat: false, transportOwnsMovement: false),
-        "a captain advances once the eighty-percent escort quorum is present");
+        "an eighty-percent escort quorum still holds the captain");
     Equal(false, ArmyRtsRules.CanCaptainAdvanceWithEscort(
-            requiresEscort: true, rosterLiving: 1,
-            nearbyFollowers: 0, captainPresent: true,
-            immediateCombat: true, transportOwnsMovement: false),
+        requiresEscort: true, rosterLiving: 1,
+        nearbyFollowers: 0, captainPresent: true,
+        immediateCombat: true, transportOwnsMovement: false),
         "an attack target cannot make an isolated captain leave his army");
+    Equal(false, ArmyRtsRules.CanCaptainAdvanceWithEscort(
+        requiresEscort: true, rosterLiving: 10, nearbyFollowers: 8,
+        captainPresent: true, immediateCombat: false,
+        transportOwnsMovement: false, observationComplete: true),
+        "89 percent escort quorum blocks land departure");
+    True(ArmyRtsRules.CanCaptainAdvanceWithEscort(
+        requiresEscort: true, rosterLiving: 10, nearbyFollowers: 9,
+        captainPresent: true, immediateCombat: false,
+        transportOwnsMovement: false, observationComplete: true),
+        "90 percent escort quorum permits land departure");
+    Equal(false, ArmyRtsRules.CanCaptainAdvanceWithEscort(
+        requiresEscort: true, rosterLiving: 10, nearbyFollowers: 10,
+        captainPresent: true, immediateCombat: false,
+        transportOwnsMovement: false, observationComplete: false),
+        "incomplete formation observation never permits captain departure");
+    True(ArmyRtsRules.ShouldHoldAfterEscortLoss(
+        departed: true, ralliedFollowers: 7, eligiblePopulation: 10,
+        secondsBelowQuorum: 3d),
+        "a sustained sub-90 percent escort loss pauses the captain");
+    Equal(false, ArmyRtsRules.ShouldHoldAfterEscortLoss(
+        departed: true, ralliedFollowers: 8, eligiblePopulation: 10,
+        secondsBelowQuorum: 1d),
+        "the escort grace window prevents one-sample march oscillation");
+    True(ArmyRtsRules.ShouldHoldAfterEscortLoss(
+        departed: true, ralliedFollowers: 8, eligiblePopulation: 10,
+        secondsBelowQuorum: 2d),
+        "a continuous two-second escort loss pauses the captain");
+    True(ArmyRtsRules.ShouldHoldAfterEscortLoss(
+        departed: true, ralliedFollowers: 7, eligiblePopulation: 10,
+        secondsBelowQuorum: 0d),
+        "the seventy-five-percent escort safety floor pauses immediately");
+    Equal(false, ArmyRtsRules.ShouldForcePreDeparture(
+        authoritative: true, state: ArmyRtsState.Rally,
+        minimumForceReady: true, captainPresent: true,
+        escortQuorum: false, issuedWorldTime: 0d,
+        currentWorldTime: 120d),
+        "the pre-departure timeout cannot bypass an incomplete escort");
     Equal(false, ArmyRtsRules.IsViableAttackAssignment(
             attackAssignment: true, warActive: true,
             objectiveState: ArmyRtsObjectiveState.OpenAttack,
@@ -1069,14 +1106,31 @@ static void RunArmyRtsCommandContinuityRulesTests()
             transportActive: false),
         "a stationary follower first receives a route reset");
     for (int i = 0;
-         i < ArmyFollowerStallRecoveryRules.TeleportAfterSeconds - 6;
+         i < ArmyFollowerStallRecoveryRules.AlternateSlotAfterSeconds -
+             ArmyFollowerStallRecoveryRules.RouteResetAfterSeconds - 1;
          i++)
         Equal(ArmyFollowerStallRecoveryAction.None,
             ArmyFollowerStallRecoveryRules.Observe(followerRecovery,
                 actorId: 17L, positionX: 40d, positionY: 12d,
                 recoveryEligible: true, combatActive: false,
                 transportActive: false),
-            "the fallback waits until the complete long-stall window elapses");
+            "the fallback waits until the alternate-slot recovery window elapses");
+    Equal(ArmyFollowerStallRecoveryAction.AlternateSlot,
+        ArmyFollowerStallRecoveryRules.Observe(followerRecovery,
+            actorId: 17L, positionX: 40d, positionY: 12d,
+            recoveryEligible: true, combatActive: false,
+            transportActive: false),
+        "a stranded follower switches to an alternate formation slot after ten seconds");
+    for (int i = 0;
+         i < ArmyFollowerStallRecoveryRules.TeleportAfterSeconds -
+             ArmyFollowerStallRecoveryRules.AlternateSlotAfterSeconds - 1;
+         i++)
+        Equal(ArmyFollowerStallRecoveryAction.None,
+            ArmyFollowerStallRecoveryRules.Observe(followerRecovery,
+                actorId: 17L, positionX: 40d, positionY: 12d,
+                recoveryEligible: true, combatActive: false,
+                transportActive: false),
+            "the teleport fallback waits until the complete long-stall window elapses");
     Equal(ArmyFollowerStallRecoveryAction.TeleportToCaptain,
         ArmyFollowerStallRecoveryRules.Observe(followerRecovery,
             actorId: 17L, positionX: 40d, positionY: 12d,
@@ -1123,6 +1177,18 @@ static void RunArmyRtsCommandContinuityRulesTests()
             combatActive: false, transportActive: false,
             observedRealtime: 105d),
         "the second follower receives recovery without waiting for the first");
+    Equal(ArmyFollowerStallRecoveryAction.AlternateSlot,
+        concurrentFollowerRecovery.Observe(actorId: 21L,
+            positionX: 11d, positionY: 12d, recoveryEligible: true,
+            combatActive: false, transportActive: false,
+            observedRealtime: 110d),
+        "each follower independently changes slot after ten real seconds");
+    Equal(ArmyFollowerStallRecoveryAction.AlternateSlot,
+        concurrentFollowerRecovery.Observe(actorId: 22L,
+            positionX: 21d, positionY: 22d, recoveryEligible: true,
+            combatActive: false, transportActive: false,
+            observedRealtime: 110d),
+        "the second follower receives its own alternate-slot recovery");
     Equal(ArmyFollowerStallRecoveryAction.TeleportToCaptain,
         concurrentFollowerRecovery.Observe(actorId: 21L,
             positionX: 11d, positionY: 12d, recoveryEligible: true,
@@ -4274,6 +4340,20 @@ True(StandingArmyRules.ShouldAllowGuardRecruitment(
         standingCoreReady: true,
         militaryEmergency: true),
     "mobilization still permits replacement royal guards");
+True(StandingArmyRules.ShouldRetryPeacetimePatrol(
+        pHasPatrolTarget: false,
+        pTargetIsCurrentTile: false),
+    "an unavailable boundary target keeps the patrol task active for a short retry");
+True(StandingArmyRules.ShouldRetryPeacetimePatrol(
+        pHasPatrolTarget: true,
+        pTargetIsCurrentTile: true),
+    "arriving at a boundary point keeps the patrol task active for the next point");
+Equal(false, StandingArmyRules.ShouldRetryPeacetimePatrol(
+        pHasPatrolTarget: true,
+        pTargetIsCurrentTile: false),
+    "a reachable boundary target advances into movement");
+True(StandingArmyRules.PeacetimePatrolRetrySeconds <= 0.25f,
+    "peacetime patrol retries stay responsive to newly calculated city borders");
 Equal(5, XiaFertilityRules.HumanOffspring,
     "human offspring baseline remains five");
 Equal(3, XiaFertilityRules.HumanBirthRate,

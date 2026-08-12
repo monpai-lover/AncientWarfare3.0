@@ -34,7 +34,7 @@ namespace AncientWarfare3.content
             figure.base_stats["stewardship"] = 10f;
 
             // 天命:政务+150、外交+15、战争+14、智力+14；状态检定由 MandateService 统一执行。
-            var tianming = NewTrait("天命", "ui/Icons/traits/iconTianming", XiaTraitGroups.AW2);
+            var tianming = NewTrait("aw_tianming", "ui/Icons/traits/iconTianming", XiaTraitGroups.AW2);
             tianming.base_stats["stewardship"] = 150f;
             tianming.base_stats["diplomacy"] = 15f;
             tianming.base_stats["warfare"] = 14f;
@@ -60,7 +60,7 @@ namespace AncientWarfare3.content
             armyCommander.base_stats["warfare"] = 1f;
 
             // 禁卫军:小幅精锐加成，避免 AW2 版本的超模伤害/速度。
-            var jinwei = NewTrait("禁卫军", "ui/Icons/traits/iconjinwei", XiaTraitGroups.AW2);
+            var jinwei = NewTrait(LineageKeys.TRAIT_GUARD, "ui/Icons/traits/iconjinwei", XiaTraitGroups.AW2);
             jinwei.base_stats["scale"] = 0.02f;
             jinwei.base_stats["health"] = 8f;
             jinwei.base_stats["damage"] = 4f;

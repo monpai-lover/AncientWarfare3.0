@@ -553,6 +553,8 @@ namespace AncientWarfare3.core.lineage
             internal long RosterVersion;
             internal long LastTargetCityId = -1L;
             internal double LastTargetChangeTime = -1d;
+            internal double EscortBelowQuorumSinceWorldTime = double.NaN;
+            internal bool EscortHoldActive;
             internal double NextJobOwnershipRepairWorldTime =
                 double.PositiveInfinity;
             internal ArmyRtsState MobilizationStatusState =
@@ -1245,7 +1247,11 @@ namespace AncientWarfare3.core.lineage
             int pReplenishmentBudget)
         {
             ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
-            if (!ArmyRtsRuntimeModeRules.ShouldPlan(mode)) return;
+            // Director planning is intentionally throttled by large-step
+            // scheduling. Controller work owns live tasks and bounded
+            // follower recovery, so it must consume every admitted logical
+            // pass while RTS remains enabled.
+            if (mode == ArmyRtsMode.Off) return;
             if (ArmyRtsWarDoctrine.IsAbstractDecisive) return;
             ProcessPendingReplenishmentArrivals(pReplenishmentBudget);
             ArmyRtsTransportService.ProcessFrame();
@@ -1535,13 +1541,32 @@ namespace AncientWarfare3.core.lineage
                 ArmyRtsTransportService.OwnsActorTask(pActor);
             ArmyFormationCounters escort = ArmyFormationService.
                 GetIncrementalFollowerCounters(army);
+            ArmyFormationObservationProgress observation =
+                ArmyFormationService.GetObservationProgress(army);
             bool captainPresent = pActor?.data != null &&
                                   pActor.isAlive() && !pActor.isRekt() &&
                                   pActor.current_tile?.data != null;
-            if (!ArmyRtsRules.CanCaptainAdvanceWithEscort(
-                    requiresEscort, SafeUnitCount(army), escort.Rallied,
-                    captainPresent, HasImmediateCombatPriority(pActor),
-                    transportOwnsMovement)) return false;
+            bool immediateCombat = HasImmediateCombatPriority(pActor);
+            if (requiresEscort && !transportOwnsMovement &&
+                !immediateCombat)
+            {
+                int escortPopulation = ArmyRtsRules.ResolveEscortPopulation(
+                    SafeUnitCount(army), escort.Living, observation.Complete,
+                    captainPresent);
+                UpdateEscortHold(runtime, record.State, observation.Complete,
+                    escortPopulation, escort.Rallied, CurrentWorldTime());
+                if (!observation.Complete || runtime.EscortHoldActive)
+                    return false;
+                bool departureCommitted = runtime.RouteSubmitted ||
+                    record.State != ArmyRtsState.Rally;
+                if (!departureCommitted && !ArmyRtsRules.
+                        CanCaptainAdvanceWithEscort(requiresEscort,
+                            escortPopulation, escort.Rallied,
+                            captainPresent, immediateCombat,
+                            transportOwnsMovement,
+                            observationComplete: observation.Complete))
+                    return false;
+            }
             if (ArmyRtsTransportService.TryGetTarget(army,
                     out WorldTile activeTransportTarget) &&
                 (ArmyRtsTransportRules.ShouldUseTransportBeforeLandRoute(
@@ -2427,6 +2452,13 @@ namespace AncientWarfare3.core.lineage
         public static void RecoverFormationMember(long pArmyId,
             long pActorId)
         {
+            RecoverFormationMember(pArmyId, pActorId,
+                pPreferAlternateSlot: false);
+        }
+
+        public static void RecoverFormationMember(long pArmyId,
+            long pActorId, bool pPreferAlternateSlot)
+        {
             if (!ArmyRtsRuntimeMode.ShouldCommit ||
                 !HasActiveMission(pArmyId)) return;
             Army army = FindArmy(pArmyId);
@@ -2438,7 +2470,8 @@ namespace AncientWarfare3.core.lineage
             AWArmyMarchService.ResetActorSharedRoute(actor);
             SetJob(actor, ArmyRtsContent.FollowerJobId,
                 pForceReassert: true);
-            TrySubmitIndependentFollowerRecoveryRoute(actor, army);
+            TrySubmitIndependentFollowerRecoveryRoute(actor, army,
+                pPreferAlternateSlot);
             Controllers.Requeue(pArmyId);
         }
 
@@ -2471,7 +2504,7 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static void TrySubmitIndependentFollowerRecoveryRoute(
-            Actor pActor, Army pArmy)
+            Actor pActor, Army pArmy, bool pPreferAlternateSlot = false)
         {
             Actor captain = SafeCaptain(pArmy);
             bool sharedRouteAvailable = AWArmyMarchService.
@@ -2484,7 +2517,7 @@ namespace AncientWarfare3.core.lineage
             try { transportActive |= pActor?.data?.transportID >= 0L; }
             catch { }
             if (!ArmyFormationService.TryGetFollowerRecoveryTarget(pActor,
-                    out WorldTile target) ||
+                    out WorldTile target, pPreferAlternateSlot) ||
                 !SafeSameIsland(pActor?.current_tile, target) ||
                 !ArmySharedPathRules.
                     ShouldSubmitIndependentFollowerRecoveryRoute(
@@ -3214,6 +3247,8 @@ namespace AncientWarfare3.core.lineage
             pRuntime.AlternateTargetTileId = -1;
             pRuntime.FollowerRouteInstallCursor = 0;
             pRuntime.PursuitRoute.Reset();
+            pRuntime.EscortBelowQuorumSinceWorldTime = double.NaN;
+            pRuntime.EscortHoldActive = false;
         }
 
         private static void ClearArmyAttackTargets(Army pArmy)
@@ -3250,6 +3285,37 @@ namespace AncientWarfare3.core.lineage
             if (city?.data == null || pRecord?.Mission == null) return;
             ArmyRtsWarLifecycleService.BeginReplenishing(
                 pRecord.Mission.WarId, pArmy, city);
+        }
+
+        private static void UpdateEscortHold(RuntimeState pRuntime,
+            ArmyRtsState pState, bool pObservationComplete,
+            int pEscortPopulation, int pRalliedFollowers, double pWorldTime)
+        {
+            if (pRuntime == null) return;
+            bool departed = pRuntime.RouteSubmitted ||
+                            pState == ArmyRtsState.March ||
+                            pState == ArmyRtsState.Deploy ||
+                            pState == ArmyRtsState.Assault ||
+                            pState == ArmyRtsState.Pursue;
+            if (!departed || !pObservationComplete ||
+                ArmyRtsRules.HasLandEscortQuorum(pEscortPopulation,
+                    pRalliedFollowers, captainPresent: true))
+            {
+                pRuntime.EscortBelowQuorumSinceWorldTime = double.NaN;
+                pRuntime.EscortHoldActive = false;
+                return;
+            }
+            double now = double.IsNaN(pWorldTime) ||
+                         double.IsInfinity(pWorldTime)
+                ? 0d
+                : Math.Max(0d, pWorldTime);
+            if (double.IsNaN(pRuntime.EscortBelowQuorumSinceWorldTime))
+                pRuntime.EscortBelowQuorumSinceWorldTime = now;
+            double secondsBelowQuorum = Math.Max(0d, now -
+                pRuntime.EscortBelowQuorumSinceWorldTime);
+            pRuntime.EscortHoldActive = ArmyRtsRules.ShouldHoldAfterEscortLoss(
+                departed, pRalliedFollowers, pEscortPopulation,
+                secondsBelowQuorum);
         }
 
         private static ArmyRtsTransitionFacts BuildFacts(Army pArmy,
@@ -3295,7 +3361,7 @@ namespace AncientWarfare3.core.lineage
                 rosterLiving, rallyFollowers.Living, observation.Complete,
                 captainPresent);
             bool escortQuorum = observation.Complete &&
-                ArmyRtsRules.HasIncrementalEscortQuorum(escortPopulation,
+                ArmyRtsRules.HasLandEscortQuorum(escortPopulation,
                     rallyFollowers.Rallied, captainPresent);
             bool minimumForceReady =
                 ArmyLogisticsRules.HasMinimumOperationalForce(
@@ -3342,6 +3408,10 @@ namespace AncientWarfare3.core.lineage
                      pRuntime.ReplenishmentRequested, rosterLiving,
                      targetStrength, replenishmentReserveAvailable));
             double readinessTime = CurrentWorldTime();
+            if (pCommit)
+                UpdateEscortHold(pRuntime, pRecord.State,
+                    observation.Complete, escortPopulation,
+                    rallyFollowers.Rallied, readinessTime);
             bool replenishmentStalled = pRuntime.ReplenishmentProgress.
                 Observe(replenishWindow &&
                      pRuntime.ReplenishmentRequested &&
@@ -3422,9 +3492,9 @@ namespace AncientWarfare3.core.lineage
             facts.TargetValid = targetValid;
             facts.FormationObservationComplete = observation.Complete;
             facts.RallyReady = observation.Complete &&
-                ArmyRtsRules.HasIncrementalRallyReadiness(
-                    departureStrengthReady, escortPopulation,
-                    rallyFollowers.Rallied, captainPresent) ||
+                    ArmyRtsRules.HasIncrementalRallyReadiness(
+                        departureStrengthReady, escortPopulation,
+                        rallyFollowers.Rallied, captainPresent) ||
                 forcePreDeparture;
             facts.RouteArrived = pCommit && pRuntime.RouteArrived;
             bool deploymentBaselineReady = pCommit &&

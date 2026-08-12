@@ -10,6 +10,7 @@ namespace AncientWarfare3.core.lineage
         public const int MaxAppointmentsPerPass = 2;
         public const int MaxReductionsPerPass = 2;
         public const int MaxReplacementsPerPass = 1;
+        public const float PeacetimePatrolRetrySeconds = 0.15f;
 
         public static int PeacetimeCore(int pWarriorSlots)
         {
@@ -31,6 +32,12 @@ namespace AncientWarfare3.core.lineage
         {
             return isCareerStandingSoldier &&
                    !militaryEmergency && !inCombat && !cityAttackOrder;
+        }
+
+        public static bool ShouldRetryPeacetimePatrol(
+            bool pHasPatrolTarget, bool pTargetIsCurrentTile)
+        {
+            return !pHasPatrolTarget || pTargetIsCurrentTile;
         }
 
         public static bool ShouldEnsureArmyMembership(

@@ -69,5 +69,7 @@
   "aw_military_governorate_failure_already_capital": "首都无法设为军镇",
   "aw_military_governorate_failure_already_governorate": "此城已是军镇",
   "aw_military_governorate_success": "节度使已任命",
-  "aw_military_governorate_window": "节度使府"
+  "aw_military_governorate_window": "节度使府",
+  "trait_aw_royal_guard": "禁卫军",
+  "trait_aw_tianming": "天命"
 }

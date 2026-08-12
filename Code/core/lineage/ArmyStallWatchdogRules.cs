@@ -18,7 +18,8 @@ namespace AncientWarfare3.core.lineage
     {
         None = 0,
         ResetRoute = 1,
-        TeleportToCaptain = 2
+        AlternateSlot = 2,
+        TeleportToCaptain = 3
     }
 
     public sealed class ArmyFollowerStallRecoveryState
@@ -30,6 +31,7 @@ namespace AncientWarfare3.core.lineage
         internal double LastY;
         internal double LastProgressRealtime;
         internal bool RouteResetIssued;
+        internal bool AlternateSlotIssued;
         public double NoProgressSeconds { get; internal set; }
     }
 
@@ -47,6 +49,7 @@ namespace AncientWarfare3.core.lineage
     {
         public const double MinimumProgressTiles = 0.25d;
         public const int RouteResetAfterSeconds = 5;
+        public const int AlternateSlotAfterSeconds = 10;
         public const int TeleportAfterSeconds = 20;
 
         public static ArmyFollowerStallRecoveryAction Observe(
@@ -70,6 +73,7 @@ namespace AncientWarfare3.core.lineage
                 pState.HasPosition = true;
                 pState.NoProgressSeconds = 0d;
                 pState.RouteResetIssued = false;
+                pState.AlternateSlotIssued = false;
                 return ArmyFollowerStallRecoveryAction.None;
             }
 
@@ -82,6 +86,7 @@ namespace AncientWarfare3.core.lineage
             {
                 pState.NoProgressSeconds = 0d;
                 pState.RouteResetIssued = false;
+                pState.AlternateSlotIssued = false;
                 return ArmyFollowerStallRecoveryAction.None;
             }
 
@@ -92,6 +97,12 @@ namespace AncientWarfare3.core.lineage
             {
                 pState.RouteResetIssued = true;
                 return ArmyFollowerStallRecoveryAction.ResetRoute;
+            }
+            if (!pState.AlternateSlotIssued && pState.NoProgressSeconds >=
+                AlternateSlotAfterSeconds)
+            {
+                pState.AlternateSlotIssued = true;
+                return ArmyFollowerStallRecoveryAction.AlternateSlot;
             }
             return pState.NoProgressSeconds >= TeleportAfterSeconds
                 ? ArmyFollowerStallRecoveryAction.TeleportToCaptain
@@ -126,6 +137,7 @@ namespace AncientWarfare3.core.lineage
                 pState.LastProgressRealtime = now;
                 pState.NoProgressSeconds = 0d;
                 pState.RouteResetIssued = false;
+                pState.AlternateSlotIssued = false;
                 return ArmyFollowerStallRecoveryAction.None;
             }
 
@@ -140,6 +152,7 @@ namespace AncientWarfare3.core.lineage
                 pState.LastProgressRealtime = now;
                 pState.NoProgressSeconds = 0d;
                 pState.RouteResetIssued = false;
+                pState.AlternateSlotIssued = false;
                 return ArmyFollowerStallRecoveryAction.None;
             }
 
@@ -158,6 +171,12 @@ namespace AncientWarfare3.core.lineage
                 pState.RouteResetIssued = true;
                 return ArmyFollowerStallRecoveryAction.ResetRoute;
             }
+            if (!pState.AlternateSlotIssued && pState.NoProgressSeconds >=
+                AlternateSlotAfterSeconds)
+            {
+                pState.AlternateSlotIssued = true;
+                return ArmyFollowerStallRecoveryAction.AlternateSlot;
+            }
             return ArmyFollowerStallRecoveryAction.None;
         }
 
@@ -172,6 +191,7 @@ namespace AncientWarfare3.core.lineage
             pState.LastProgressRealtime = 0d;
             pState.NoProgressSeconds = 0d;
             pState.RouteResetIssued = false;
+            pState.AlternateSlotIssued = false;
         }
     }
 

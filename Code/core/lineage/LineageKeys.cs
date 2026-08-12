@@ -286,7 +286,7 @@ namespace AncientWarfare3.core.lineage
         public const string TRAIT_ZHUHOU = "zhuhou";
         public const string TRAIT_SLAVE = "slave";
         public const string TRAIT_VETERAN = "veteran";
-        public const string TRAIT_GUARD = "\u7981\u536B\u519B";
+        public const string TRAIT_GUARD = "aw_royal_guard";
         public const string TRAIT_FORMER_KING = "formerking";
         public const string TRAIT_GENERAL = "aw_general";
         public const string TRAIT_ARMY_COMMANDER = "aw_army_commander";

@@ -277,6 +277,12 @@ namespace AncientWarfare3.core.lineage
                         sample.ActorId);
                     continue;
                 }
+                if (action == ArmyFollowerStallRecoveryAction.AlternateSlot)
+                {
+                    ArmyRtsControllerService.RecoverFormationMember(pArmyId,
+                        sample.ActorId, pPreferAlternateSlot: true);
+                    continue;
+                }
                 if (action !=
                     ArmyFollowerStallRecoveryAction.TeleportToCaptain)
                     continue;
@@ -441,6 +447,8 @@ namespace AncientWarfare3.core.lineage
                 " route_arrived=" + (pSample?.RouteArrived ?? false) +
                 " formation_observed=" +
                 (pSample?.FormationObserved ?? false) +
+                " formation_observation_pending=" +
+                (!formationProgress.Complete) +
                 " formation_scan_members=" +
                 formationProgress.MemberCount +
                 " formation_scan_cursor=" + formationProgress.Cursor +

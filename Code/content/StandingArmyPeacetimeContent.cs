@@ -17,7 +17,6 @@ namespace AncientWarfare3.content
                 {
                     id = JobId
                 });
-                job.addTask("make_decision");
                 job.addTask(PatrolTaskId);
             }
 
@@ -27,14 +26,13 @@ namespace AncientWarfare3.content
                 {
                     id = PatrolTaskId,
                     cancellable_by_reproduction = true,
-                    cancellable_by_socialize = true,
+                    cancellable_by_socialize = false,
                     speed_multiplier = 0.8f,
                     locale_key = "task_unit_move"
                 });
             patrol.setIcon("ui/Icons/iconCity");
             patrol.addBeh(new BehStandingArmyPeacetimePatrol());
             patrol.addBeh(new BehGoToTileTarget());
-            patrol.addBeh(new BehRandomWait(2f, 5f));
         }
     }
 }

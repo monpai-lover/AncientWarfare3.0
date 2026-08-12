@@ -66,6 +66,75 @@ internal static class ArmySharedPathRecoveryRulesTests
         Assert(recoveryBody.Contains("RequestRouteReplan(pArmyId",
                 StringComparison.Ordinal),
             "a stale captain path clears the controller anchor and replans");
+
+        int captainTargetStart = controller.IndexOf(
+            "public static bool TryGetCaptainTarget(Actor pActor,",
+            StringComparison.Ordinal);
+        int captainTargetEnd = controller.IndexOf(
+            "public static ArmyFollowerTargetResult ResolveFollowerTarget(",
+            captainTargetStart, StringComparison.Ordinal);
+        string captainTargetBody = controller.Substring(captainTargetStart,
+            captainTargetEnd - captainTargetStart);
+        Assert(captainTargetBody.Contains(
+                "ArmyFormationService.GetObservationProgress(army)",
+                StringComparison.Ordinal) &&
+            captainTargetBody.Contains(
+                "observationComplete: observation.Complete",
+                StringComparison.Ordinal),
+            "captain movement blocks departure until the bounded formation observation completes");
+        Assert(controller.Contains("HasLandEscortQuorum(escortPopulation",
+                StringComparison.Ordinal),
+            "controller rally readiness uses the ninety-percent land escort quorum");
+
+        string watchdog = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyStallWatchdogService.cs"));
+        Assert(watchdog.Contains("formation_observation_pending",
+                StringComparison.Ordinal),
+            "incomplete formation observation has an explicit diagnostic instead of an ambiguous zero count");
+
+        int escortHoldStart = controller.IndexOf(
+            "private static void UpdateEscortHold(",
+            StringComparison.Ordinal);
+        Assert(escortHoldStart >= 0,
+            "the controller tracks continuous escort loss per army");
+        int escortHoldEnd = controller.IndexOf(
+            "private static ArmyRtsTransitionFacts BuildFacts(",
+            escortHoldStart, StringComparison.Ordinal);
+        string escortHoldBody = controller.Substring(escortHoldStart,
+            escortHoldEnd - escortHoldStart);
+        Assert(escortHoldBody.Contains("ShouldHoldAfterEscortLoss",
+                StringComparison.Ordinal) &&
+            !escortHoldBody.Contains("Invalidate(",
+                StringComparison.Ordinal) &&
+            !escortHoldBody.Contains("OnArmyChanged(",
+                StringComparison.Ordinal) &&
+            !escortHoldBody.Contains("EnsureOffensiveContinuity",
+                StringComparison.Ordinal),
+            "escort hold is tactical and leaves the strategic mission intact");
+        Assert(captainTargetBody.Contains("runtime.EscortHoldActive",
+                StringComparison.Ordinal),
+            "captain target publication consumes the tactical escort hold");
+
+        Assert(controller.Contains("pPreferAlternateSlot",
+                StringComparison.Ordinal) &&
+            controller.Contains("RecoverFormationMember(pArmyId,",
+                StringComparison.Ordinal),
+            "follower recovery has a member-scoped alternate-slot stage");
+
+        int processFrameStart = controller.IndexOf(
+            "public static void ProcessFrame(int pControllerBudget,",
+            StringComparison.Ordinal);
+        int processFrameEnd = controller.IndexOf(
+            "private static void ProcessOne(", processFrameStart,
+            StringComparison.Ordinal);
+        string processFrameBody = controller.Substring(processFrameStart,
+            processFrameEnd - processFrameStart);
+        Assert(!processFrameBody.Contains(
+                "ArmyRtsRuntimeModeRules.ShouldPlan(mode)",
+                StringComparison.Ordinal) &&
+            processFrameBody.Contains("mode == ArmyRtsMode.Off",
+                StringComparison.Ordinal),
+            "controller recovery runs on admitted large-step logical passes while planning stays separately throttled");
     }
 
     private static void Assert(bool condition, string message)

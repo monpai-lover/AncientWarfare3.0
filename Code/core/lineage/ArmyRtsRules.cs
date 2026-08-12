@@ -132,6 +132,9 @@ namespace AncientWarfare3.core.lineage
         public const int OrdinaryAssaultReservationCap = 3;
         public const int StrategicAssaultReservationCap = 4;
         public const int DeploymentQuorumPercent = 80;
+        public const int LandEscortQuorumPercent = 90;
+        public const int LandEscortSafetyFloorPercent = 75;
+        public const double EscortLossGraceSeconds = 2d;
         public const int RetreatOrganization =
             ArmyOperationalThresholds.RetreatOrganization;
         public const int RegroupOrganization =
@@ -280,7 +283,7 @@ namespace AncientWarfare3.core.lineage
             int ralliedFollowers, bool captainPresent)
         {
             return departureStrengthReady &&
-                   HasIncrementalEscortQuorum(rosterLiving,
+                   HasLandEscortQuorum(rosterLiving,
                        ralliedFollowers, captainPresent);
         }
 
@@ -321,15 +324,43 @@ namespace AncientWarfare3.core.lineage
         public static bool CanCaptainAdvanceWithEscort(
             bool requiresEscort, int rosterLiving, int nearbyFollowers,
             bool captainPresent, bool immediateCombat,
-            bool transportOwnsMovement)
+            bool transportOwnsMovement, bool observationComplete = true)
         {
             if (!requiresEscort || transportOwnsMovement || immediateCombat)
                 return true;
+            if (!observationComplete) return false;
             if (!captainPresent || rosterLiving <
                     ArmyLogisticsRules.MinimumOperationalForce ||
                 nearbyFollowers <= 0) return false;
-            return HasIncrementalEscortQuorum(rosterLiving,
-                nearbyFollowers, captainPresent);
+            return HasLandEscortQuorum(rosterLiving, nearbyFollowers,
+                captainPresent);
+        }
+
+        public static bool HasLandEscortQuorum(int eligiblePopulation,
+            int ralliedFollowers, bool captainPresent)
+        {
+            if (!captainPresent || eligiblePopulation <= 0) return false;
+            int followers = Math.Max(0, ralliedFollowers);
+            int rallied = followers == int.MaxValue
+                ? int.MaxValue
+                : followers + 1;
+            return (long)Math.Min(rallied, eligiblePopulation) * 100L >=
+                   (long)eligiblePopulation * LandEscortQuorumPercent;
+        }
+
+        public static bool ShouldHoldAfterEscortLoss(bool departed,
+            int ralliedFollowers, int eligiblePopulation,
+            double secondsBelowQuorum)
+        {
+            if (!departed || eligiblePopulation <= 0) return false;
+            int rallied = Math.Max(0, ralliedFollowers);
+            int floor = (int)Math.Ceiling(
+                eligiblePopulation * LandEscortSafetyFloorPercent / 100d);
+            if (rallied < floor) return true;
+            return rallied * 100L <
+                       (long)eligiblePopulation * LandEscortQuorumPercent &&
+                   Math.Max(0d, secondsBelowQuorum) >=
+                       EscortLossGraceSeconds;
         }
 
         public static bool IsViableAttackAssignment(
@@ -373,6 +404,7 @@ namespace AncientWarfare3.core.lineage
             double issuedWorldTime, double currentWorldTime)
         {
             if (!authoritative || !minimumForceReady || !captainPresent ||
+                !escortQuorum ||
                 (state != ArmyRtsState.Rally &&
                  state != ArmyRtsState.Replenish) ||
                 double.IsNaN(issuedWorldTime) ||
