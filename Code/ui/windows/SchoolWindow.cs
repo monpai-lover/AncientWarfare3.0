@@ -682,8 +682,22 @@ namespace AncientWarfare3.ui.windows
                 if (item.Record.ActorId >= 0) seenActors.Add(item.Record.ActorId);
             }
 
-            var members = SchoolMembershipService.Members(pSchoolId)
-                .Select(p => SchoolMembershipService.GetActive(p))
+            // The runtime book is normally authoritative, but a window can be
+            // refreshed during world-load before that index has been rebuilt.
+            // Read the durable active rows as a fallback so a populated school
+            // never renders as an empty lineage during that short interval.
+            var memberRecords = new Dictionary<long, SchoolMembershipRecord>();
+            foreach (SchoolMembershipRecord record in
+                     HistoricalSchoolStore.LoadActiveMemberships())
+                if (record != null && string.Equals(record.SchoolId, pSchoolId,
+                        StringComparison.Ordinal))
+                    memberRecords[record.ActorId] = record;
+            foreach (long actorId in SchoolMembershipService.Members(pSchoolId))
+            {
+                SchoolMembershipRecord record = SchoolMembershipService.GetActive(actorId);
+                if (record != null) memberRecords[actorId] = record;
+            }
+            var members = memberRecords.Values
                 .Where(p => p != null && !seenActors.Contains(p.ActorId))
                 .OrderByDescending(p => p.Reputation)
                 .ThenBy(p => p.ActorId)
