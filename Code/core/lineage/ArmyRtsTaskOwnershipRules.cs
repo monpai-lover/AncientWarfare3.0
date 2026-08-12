@@ -64,5 +64,17 @@ namespace AncientWarfare3.core.lineage
                 return false;
             return !pExpectedJobActive || !pExpectedTaskActive;
         }
+
+        public static bool ShouldRecoverMissingCaptainTarget(
+            ArmyRtsState pState, bool missionActive, bool targetAvailable,
+            bool transportOwned, bool captainPresent)
+        {
+            if (!missionActive || targetAvailable || transportOwned ||
+                !captainPresent) return false;
+            return pState == ArmyRtsState.March ||
+                   pState == ArmyRtsState.Assault ||
+                   pState == ArmyRtsState.Pursue ||
+                   pState == ArmyRtsState.Retreat;
+        }
     }
 }

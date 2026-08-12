@@ -78,6 +78,22 @@ internal static class ArmyRtsSchedulingRulesTests
         });
         Assert(work.PendingCount == 1,
             "controller pending count includes priority wartime missions");
+
+        Assert(ArmyRtsTaskOwnershipRules.ShouldRecoverMissingCaptainTarget(
+                ArmyRtsState.March, missionActive: true,
+                targetAvailable: false, transportOwned: false,
+                captainPresent: true),
+            "a live marching captain with a missing target requests bounded recovery");
+        Assert(!ArmyRtsTaskOwnershipRules.ShouldRecoverMissingCaptainTarget(
+                ArmyRtsState.Rally, missionActive: true,
+                targetAvailable: false, transportOwned: false,
+                captainPresent: true),
+            "rally waits for formation instead of repeatedly clearing its route");
+        Assert(!ArmyRtsTaskOwnershipRules.ShouldRecoverMissingCaptainTarget(
+                ArmyRtsState.March, missionActive: true,
+                targetAvailable: false, transportOwned: true,
+                captainPresent: true),
+            "transport ownership keeps the captain target recovery dormant");
     }
 
     private static void Assert(bool condition, string message)

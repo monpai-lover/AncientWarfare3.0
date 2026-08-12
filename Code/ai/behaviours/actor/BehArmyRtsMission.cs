@@ -31,6 +31,8 @@ namespace AncientWarfare3.ai.behaviours.actor
             if (!ArmyRtsControllerService.TryGetCaptainTarget(pActor,
                     out WorldTile target))
             {
+                ArmyRtsControllerService.TryRecoverMissingCaptainTarget(
+                    pActor);
                 pActor?.makeWait(0.1f);
                 return BehResult.RepeatStep;
             }

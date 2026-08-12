@@ -45,6 +45,13 @@ $controller = Read-Source 'Code\core\lineage\ArmyRtsControllerService.cs'
 Require-Contains $controller 'ShouldRecoverStaleInstalledRoute(' 'Controller must detect stale installed routes.'
 Require-Contains $controller 'RequestRouteReplan(pArmyId,' 'Stale routes must request bounded replanning.'
 Require-Contains $controller 'HasReachedStrategicDestination(' 'Controller must accept validated strategic endpoints.'
+Require-Contains $controller 'TryRecoverMissingCaptainTarget(' 'Captain mission must recover a missing target through the controller.'
+Require-Contains $controller 'NextMissingTargetRecoveryWorldTime' 'Missing-target recovery must be time-bounded under large-step scheduling.'
+Require-Contains $controller 'ShouldRecoverMissingCaptainTarget(' 'Missing-target recovery must be limited to active movement states.'
+Require-Contains (Read-Source 'Code\ai\behaviours\actor\BehArmyRtsMission.cs') 'TryRecoverMissingCaptainTarget(' 'Captain task must request recovery instead of waiting forever.'
+if ($controller -match 'if\s*\(!exact\s*&&\s*!border\s*&&\s*currentZone\s*==\s*null\)') {
+    throw 'target territory adjacency must be checked even when the current tile has a non-null zone.'
+}
 
 $scheduler = Read-Source 'Code\core\performance\ArmyRtsSchedulingService.cs'
 Require-Contains $scheduler 'ArmyRtsExecutionBudgetRules.Capture(simulationMode,' 'RTS logical passes must use one stable pending snapshot.'

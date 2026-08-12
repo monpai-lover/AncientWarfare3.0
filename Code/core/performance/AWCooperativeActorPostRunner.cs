@@ -2276,7 +2276,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             if (job.current_skips > 0)
             {
                 job.current_skips--;
-                work.ConfigureSkipped(batch, job);
+                ObjectContainer<Actor> priorityContainer = job.container;
+                priorityContainer.checkAddRemove();
+                work.ConfigurePriorityOnly(batch, job,
+                    priorityContainer.getFastSimpleArray(),
+                    priorityContainer.Count);
                 continue;
             }
 
@@ -2321,7 +2325,18 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         long startedAt = StartBenchmarkMeasurement();
         int actorsChecked;
-        if (work.Fallback)
+        if (work.PriorityOnly)
+        {
+            actorsChecked = work.Checked;
+            for (int i = 0; i < work.Count; i++)
+            {
+                PathMovementWorkEntry entry = work.Entries[i];
+                if (entry.Kind == PathMovementWorkKind.RequiresSerial)
+                    AWPathMovementBridge.CommitPreparedPathMovement(
+                        work.Actors[i], entry.Prepared);
+            }
+        }
+        else if (work.Fallback)
         {
             RunPathMovementJob(job.container, out actorsChecked);
         }
@@ -2421,7 +2436,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             if (job.current_skips > 0)
             {
                 job.current_skips--;
-                work.ConfigureSkipped(batch, job);
+                ObjectContainer<Actor> priorityContainer = job.container;
+                priorityContainer.checkAddRemove();
+                work.ConfigurePriorityOnly(batch, job,
+                    priorityContainer.getFastSimpleArray(),
+                    priorityContainer.Count, elapsed);
                 continue;
             }
 
@@ -3943,6 +3962,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         internal int Checked { get; private set; }
         internal bool Fallback { get; private set; }
         internal bool Skipped { get; private set; }
+        internal bool PriorityOnly { get; private set; }
         internal PathMovementWorkEntry[] Entries { get; private set; } =
             Array.Empty<PathMovementWorkEntry>();
 
@@ -3958,6 +3978,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Checked = 0;
             Fallback = false;
             Skipped = false;
+            PriorityOnly = false;
             if (Entries.Length < count)
                 Entries = new PathMovementWorkEntry[Math.Max(
                     AWPerformanceSettings.SimulationBatchSize, count)];
@@ -3971,6 +3992,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Checked = 0;
             Fallback = true;
             Skipped = false;
+            PriorityOnly = false;
         }
 
         internal void ConfigureSkipped(BatchActors batch, Job<Actor> job)
@@ -3981,6 +4003,22 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Checked = 0;
             Fallback = false;
             Skipped = true;
+            PriorityOnly = false;
+        }
+
+        internal void ConfigurePriorityOnly(BatchActors batch, Job<Actor> job,
+            Actor[] actors, int count)
+        {
+            Job = job;
+            Actors = actors;
+            Count = count;
+            Checked = 0;
+            Fallback = false;
+            Skipped = false;
+            PriorityOnly = true;
+            if (Entries.Length < count)
+                Entries = new PathMovementWorkEntry[Math.Max(
+                    AWPerformanceSettings.SimulationBatchSize, count)];
         }
 
         internal void RunParallel()
@@ -3992,6 +4030,16 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 Actor actor = Actors[i];
                 ref PathMovementWorkEntry entry = ref Entries[i];
                 entry.Prepared = default;
+                if (PriorityOnly && !ArmyRtsMovementCadenceRules.
+                        ShouldRunDuringSkippedPathBatch(
+                            AWPerformanceSettings.Mode ==
+                            AWSimulationMode.Large,
+                            actor?.army?.data != null,
+                            AWPathMovementBridge.HasOwnership(actor)))
+                {
+                    entry.Kind = PathMovementWorkKind.Retain;
+                    continue;
+                }
                 if (actor._update_done || actor._beh_skip)
                 {
                     entry.Kind = PathMovementWorkKind.Inactive;
@@ -4031,6 +4079,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Checked = 0;
             Fallback = false;
             Skipped = false;
+            PriorityOnly = false;
             if (previousCount > 0) Array.Clear(Entries, 0, previousCount);
         }
     }
@@ -4058,6 +4107,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         internal int Checked { get; private set; }
         internal int SerialCount { get; private set; }
         internal bool Skipped { get; private set; }
+        internal bool PriorityOnly { get; private set; }
         internal float Elapsed { get; private set; }
         internal AWPathMovementBridge.AWPreparedSmoothMovement[] Entries { get; private set; } =
             Array.Empty<AWPathMovementBridge.AWPreparedSmoothMovement>();
@@ -4075,6 +4125,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Checked = 0;
             SerialCount = 0;
             Skipped = false;
+            PriorityOnly = false;
             Elapsed = elapsed;
             if (Entries.Length < count)
             {
@@ -4092,6 +4143,28 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Skipped = true;
             Elapsed = 0f;
             Actors = null;
+            PriorityOnly = false;
+        }
+
+        internal void ConfigurePriorityOnly(BatchActors batch, Job<Actor> job,
+            Actor[] actors, int count, float elapsed)
+        {
+            Job = job;
+            Actors = actors;
+            Count = count;
+            Checked = 0;
+            SerialCount = 0;
+            Skipped = false;
+            PriorityOnly = true;
+            Elapsed = elapsed;
+            if (Entries.Length < count)
+            {
+                int capacity = Math.Max(AWPerformanceSettings.SimulationBatchSize,
+                    count);
+                SerialActors = new Actor[capacity];
+                Entries = new AWPathMovementBridge.AWPreparedSmoothMovement[
+                    capacity];
+            }
         }
 
         internal void RunParallel()
@@ -4100,9 +4173,19 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             int serialCount = 0;
             for (int i = 0; i < Count; i++)
             {
+                Actor actor = Actors[i];
+                if (PriorityOnly && !ArmyRtsMovementCadenceRules.
+                        ShouldRunDuringSkippedMovementBatch(
+                            AWPerformanceSettings.Mode ==
+                            AWSimulationMode.Large,
+                            actor?.army?.data != null,
+                            actor?.is_moving == true,
+                            actor?.isFollowingLocalPath() == true,
+                            AWPathMovementBridge.HasOwnership(actor)))
+                    continue;
                 AWPathMovementBridge.AWParallelSmoothMovementResult result =
                     AWPathMovementBridge.TryRunParallelSafeSmoothMovement(
-                        Actors[i], Elapsed,
+                        actor, Elapsed,
                         out AWPathMovementBridge.AWPreparedSmoothMovement prepared);
                 if (result == AWPathMovementBridge.AWParallelSmoothMovementResult.RequiresSerial)
                 {
@@ -4122,6 +4205,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Count = 0;
             Checked = 0;
             Skipped = false;
+            PriorityOnly = false;
             Elapsed = 0f;
             if (SerialCount > 0)
             {
