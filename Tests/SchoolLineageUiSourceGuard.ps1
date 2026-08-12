@@ -5,6 +5,8 @@ $schoolWindow = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/windows/
 $navigation = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/SchoolActorNavigation.cs')
 $rosterWindow = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/windows/SchoolRosterWindow.cs')
 $traitPatch = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/patch/AW_TraitWindowSafetyPatch.cs')
+$rosterReadModel = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/core/schools/SchoolRosterReadModelService.cs')
+$rosterNode = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/items/SchoolRosterNodeView.cs')
 
 if ($schoolWindow -notmatch '\.Take\(_lineageRows\.Count\)') {
     throw 'ShowLineage must keep the v1.1.2 fixed-row rendering contract.'
@@ -39,23 +41,29 @@ if ($schoolWindow -match '\[SchoolWindow\.ShowLineage\]') {
 if ($navigation -notmatch 'MetaType\.Unit\.getAsset\(\)') {
     throw 'School actor navigation must use the native unit MetaType path.'
 }
+if ($navigation -notmatch 'SelectedUnit\.clear\(\);\s*SelectedUnit\.select\(pActor\);') {
+    throw 'School actor navigation must bind SelectedUnit before UnitWindow enables.'
+}
+if ($navigation -notmatch 'unitMeta\.selectAndInspect\(pActor') {
+    throw 'School actor navigation must use the native unit MetaType inspection path after binding.'
+}
 if ($navigation -notmatch 'pClearAction: false') {
-    throw 'School actor navigation must preserve the school window action context.'
-}
-if ($navigation -notmatch 'ScrollWindow\.finishAnimations\(\)') {
-    throw 'School actor navigation must finish the current window transition before inspection.'
-}
-if ($navigation -match 'ActionLibrary\.openUnitWindow|SelectedUnit\.(clear|select)|ScrollWindow\.showWindow\("unit"\)|SchoolMapModeService\.EndWindowMode') {
-    throw 'School actor navigation must not clear school state or use the stateless unit-window protocol.'
+    throw 'School actor navigation must retain the native inspection window transition.'
 }
 if ($rosterWindow -notmatch '(?s)private void Refresh\(\).*CancelPendingRender\(\);\s*HideNodesAndLinks\(\);\s*UpdateSchoolSelector\(\);') {
     throw 'The school roster must clear pending rendering at refresh start like v1.1.2.'
 }
-if ($rosterWindow -match 'needsInitialModel') {
-    throw 'The school roster must not add a second initial synchronous apply path.'
+if ($rosterWindow -notmatch '(?s)private void Refresh\(\).*SchoolRosterReadModelService\.Build\(\s*_selectedSchool, HorizontalSpacing, VerticalSpacing,\s*ColumnsPerRow\)') {
+    throw 'The school roster must synchronously materialize every refresh.'
 }
-if ($rosterWindow -notmatch '(?s)SchoolRosterLayout synchronousLayout = shadow\s*\?.*if \(shadow\)\s*ApplyRosterModel') {
-    throw 'The school roster must keep synchronous materialization limited to shadow mode.'
+if ($rosterWindow -match 'AWAsyncRuntime\.TrySchedule\(request\)') {
+    throw 'The school roster must not leave visible content dependent on the async UI queue.'
+}
+if ($rosterReadModel -notmatch '(?s)private static Actor FindActor\(long pActorId\).*foreach \(Actor actor in World\.world\.units') {
+    throw 'Roster capture must fall back to enumerating actors when the ID dictionary misses.'
+}
+if ($rosterNode -notmatch '(?s)private static Actor FindActor\(long pActorId\).*foreach \(Actor actor in World\.world\.units') {
+    throw 'Roster node actions must use the same actor lookup fallback as capture.'
 }
 if ($rosterWindow -match '(?s)private void ApplyRosterModel\(SchoolRosterReadModel model\)\s*\{\s*if \(model == null\) return;\s*CancelPendingRender\(\);\s*HideNodesAndLinks\(\);') {
     throw 'The school roster must not clear an accepted model again while applying it.'

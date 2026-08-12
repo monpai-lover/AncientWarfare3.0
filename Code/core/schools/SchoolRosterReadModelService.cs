@@ -213,8 +213,19 @@ namespace AncientWarfare3.core.schools
         private static Actor FindActor(long pActorId)
         {
             if (pActorId < 0) return null;
-            try { return World.world?.units?.get(pActorId); }
-            catch { return null; }
+            try
+            {
+                Actor direct = World.world?.units?.get(pActorId);
+                if (direct?.data != null) return direct;
+                if (World.world?.units == null) return null;
+                // ActorManager's ID dictionary can lag one frame behind the
+                // deserialized list. Use the list only as a miss fallback.
+                foreach (Actor actor in World.world.units)
+                    if (actor?.data != null && actor.data.id == pActorId)
+                        return actor;
+            }
+            catch { }
+            return null;
         }
 
         private static float Learning(Actor pActor)

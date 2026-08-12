@@ -2,10 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.schools;
-using AncientWarfare3.core.uiquery;
 using AncientWarfare3.ui.items;
 using NeoModLoader.api;
 using UnityEngine;
@@ -43,9 +41,6 @@ namespace AncientWarfare3.ui.windows
         private readonly List<SchoolRosterNodeView> _nodePool =
             new List<SchoolRosterNodeView>();
         private readonly List<GameObject> _linkPool = new List<GameObject>();
-        private readonly AWUiQueryState _queryState =
-            new AWUiQueryState(AW_LineageWindowIds.SCHOOL_ROSTER);
-
         private Vector2 _windowSize = new Vector2(DefaultWidth, DefaultHeight);
         private RectTransform _selectorPanel;
         private RectTransform _selectorViewport;
@@ -69,7 +64,6 @@ namespace AncientWarfare3.ui.windows
         private int _activeLinkCount;
         private bool _resetCanvasOnRefresh;
         private float _nextPortraitCullTime;
-        private bool _queryPending;
 
         public static void Open(string pSchoolId = CourtSchoolId.Ru)
         {
@@ -101,8 +95,6 @@ namespace AncientWarfare3.ui.windows
 
         public override void OnNormalDisable()
         {
-            _queryState.Close();
-            _queryPending = false;
             CancelPendingRender();
             HideNodesAndLinks();
         }
@@ -110,7 +102,6 @@ namespace AncientWarfare3.ui.windows
         private void Update()
         {
             if (!isActiveAndEnabled || World.world == null) return;
-            if (_queryPending) return;
             if (_displayedRevisionStamp == null ||
                 !_displayedRevisionStamp.IsCurrent(_selectedSchool,
                     HistoricalSchoolRevisionService.Source))
@@ -347,94 +338,12 @@ namespace AncientWarfare3.ui.windows
             CancelPendingRender();
             HideNodesAndLinks();
             UpdateSchoolSelector();
-
-            bool shadow = AWAsyncRuntime.ShadowEnabled;
-            if (!AWAsyncRuntime.UiEnabled && !shadow)
-            {
-                _queryPending = false;
-                ApplyRosterModel(SchoolRosterReadModelService.Build(
-                    _selectedSchool, HorizontalSpacing, VerticalSpacing,
-                    ColumnsPerRow));
-                return;
-            }
-
-            SchoolRosterCapture capture = SchoolRosterReadModelService
-                .Capture(_selectedSchool);
-            long revision = SchoolQueryRevision(_selectedSchool);
-            AWUiQueryKey key = _queryState.Begin(
-                _selectedSchool.GetHashCode(), _selectedSchool, revision);
-            _queryPending = true;
-            var execution = new SchoolRosterLayoutExecution(
-                capture.SchoolId, capture.Candidates, HorizontalSpacing,
-                VerticalSpacing, ColumnsPerRow);
-            SchoolRosterLayout synchronousLayout = shadow
-                ? SchoolRosterRules.Build(capture.SchoolId,
-                    capture.Candidates, HorizontalSpacing, VerticalSpacing,
-                    ColumnsPerRow)
-                : null;
-            string expectedShadow = shadow
-                ? RosterShadowSummary(synchronousLayout)
-                : null;
-            var commit = new SchoolRosterLayoutCommit(this, key, capture,
-                expectedShadow);
-            var request = new AWAsyncWorkRequest(
-                "ui:school-roster:" + _selectedSchool,
-                AWAsyncLane.Ui,
-                new AWAsyncStamp(AWAsyncRuntime.WorldGeneration,
-                    Time.frameCount, revision), execution.Execute,
-                commit.Commit,
-                error => HandleRosterFault(key, error));
-            if (!AWAsyncRuntime.TrySchedule(request))
-                ApplyRosterResult(key, capture,
-                    execution.Execute(System.Threading.CancellationToken.None)
-                        as SchoolRosterLayout, expectedShadow);
-            if (shadow)
-                ApplyRosterModel(SchoolRosterReadModelService.Materialize(
-                    capture, synchronousLayout));
-        }
-
-        private void ApplyRosterResult(AWUiQueryKey pKey,
-            SchoolRosterCapture pCapture, SchoolRosterLayout pLayout,
-            string pExpectedShadow)
-        {
-            if (!_queryState.Accept(pKey)) return;
-            _queryPending = false;
-            if (pCapture == null ||
-                pCapture.RevisionStamp == null ||
-                !pCapture.RevisionStamp.IsCurrent(pCapture.SchoolId,
-                    HistoricalSchoolRevisionService.Source)) return;
-            if (AWAsyncRuntime.ShadowEnabled)
-            {
-                AWAsyncShadowRuntime.CompareSummary("ui_school_roster",
-                    "school-roster:" + pCapture.SchoolId,
-                    pExpectedShadow, RosterShadowSummary(pLayout));
-                return;
-            }
-            if (pLayout == null) return;
-            ApplyRosterModel(SchoolRosterReadModelService.Materialize(
-                pCapture, pLayout));
-        }
-
-        private void HandleRosterFault(AWUiQueryKey pKey, Exception pError)
-        {
-            if (!_queryState.Accept(pKey)) return;
-            _queryState.Close();
-            _queryPending = false;
-            _displayedRevisionStamp = null;
-        }
-
-        private static string RosterShadowSummary(SchoolRosterLayout pLayout)
-        {
-            if (pLayout == null) return "missing";
-            var actorIds = new long[pLayout.Nodes.Count];
-            var points = new AWUiLayoutPoint[pLayout.Nodes.Count];
-            for (int index = 0; index < pLayout.Nodes.Count; index++)
-            {
-                SchoolRosterNode node = pLayout.Nodes[index];
-                actorIds[index] = node.ActorId;
-                points[index] = new AWUiLayoutPoint(node.X, node.Y);
-            }
-            return AWUiShadowRules.SummarizeLayout(actorIds, points);
+            // A school roster is small and already captures actors on this
+            // thread. Rendering it synchronously prevents a revision race
+            // from replacing a populated roster with an empty canvas.
+            ApplyRosterModel(SchoolRosterReadModelService.Build(
+                _selectedSchool, HorizontalSpacing, VerticalSpacing,
+                ColumnsPerRow));
         }
 
         private void ApplyRosterModel(SchoolRosterReadModel model)
@@ -471,30 +380,6 @@ namespace AncientWarfare3.ui.windows
                 revision = revision * 397L ^ source.ScoreRevision(schoolId);
                 revision = revision * 397L ^ source.ActivityRevision(schoolId);
                 return revision;
-            }
-        }
-
-        private sealed class SchoolRosterLayoutCommit
-        {
-            private readonly SchoolRosterWindow _owner;
-            private readonly AWUiQueryKey _key;
-            private readonly SchoolRosterCapture _capture;
-            private readonly string _expectedShadow;
-
-            public SchoolRosterLayoutCommit(SchoolRosterWindow pOwner,
-                AWUiQueryKey pKey, SchoolRosterCapture pCapture,
-                string pExpectedShadow)
-            {
-                _owner = pOwner;
-                _key = pKey;
-                _capture = pCapture;
-                _expectedShadow = pExpectedShadow;
-            }
-
-            public void Commit(object pResult)
-            {
-                _owner.ApplyRosterResult(_key, _capture,
-                    pResult as SchoolRosterLayout, _expectedShadow);
             }
         }
 
@@ -749,8 +634,6 @@ namespace AncientWarfare3.ui.windows
 
         private void ResetWorldState()
         {
-            _queryState.Close();
-            _queryPending = false;
             CancelPendingRender();
             HideNodesAndLinks();
             _displayedSchool = "";

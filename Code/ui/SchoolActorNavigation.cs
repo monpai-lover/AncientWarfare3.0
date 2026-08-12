@@ -7,10 +7,12 @@ namespace AncientWarfare3.ui
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return;
             MetaTypeAsset unitMeta = MetaType.Unit.getAsset();
             if (unitMeta == null) return;
-            // Keep the school window action context while using the native
-            // MetaType inspection path to bind the actor before UnitWindow
-            // enables its trait containers.
+            // UnitWindow reads only SelectedUnit.unit during OnEnable. The
+            // school map mode can leave a stale city selection behind, so
+            // establish the native unit selection before it is shown.
             ScrollWindow.finishAnimations();
+            SelectedUnit.clear();
+            SelectedUnit.select(pActor);
             unitMeta.selectAndInspect(pActor, pFromNameplate: false,
                 pCheckNameplate: false, pClearAction: false);
         }
