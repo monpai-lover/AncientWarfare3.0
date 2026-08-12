@@ -171,8 +171,17 @@ namespace AncientWarfare3.core.lineage
             get
             {
                 long pending = DiscoveryQueue.Count;
-                foreach (DiscoveryWork work in
-                         DiscoveryByParticipant.Values)
+                List<DiscoveryWork> snapshot;
+                lock (DiscoveryByParticipant)
+                {
+                    try
+                    {
+                        snapshot = new List<DiscoveryWork>(
+                            DiscoveryByParticipant.Values);
+                    }
+                    catch { return (int)Math.Max(0L, pending); }
+                }
+                foreach (DiscoveryWork work in snapshot)
                 {
                     if (work.Cursor == null)
                     {
@@ -351,12 +360,15 @@ namespace AncientWarfare3.core.lineage
         {
             if (pWar?.data == null || pKingdom?.data == null) return;
             var key = (pWar.data.id, pKingdom.id);
-            if (!DiscoveryByParticipant.ContainsKey(key))
-                DiscoveryByParticipant[key] = new DiscoveryWork
-                {
-                    WarId = pWar.data.id,
-                    KingdomId = pKingdom.id
-                };
+            lock (DiscoveryByParticipant)
+            {
+                if (!DiscoveryByParticipant.ContainsKey(key))
+                    DiscoveryByParticipant[key] = new DiscoveryWork
+                    {
+                        WarId = pWar.data.id,
+                        KingdomId = pKingdom.id
+                    };
+            }
             QueueDiscovery(key);
         }
 

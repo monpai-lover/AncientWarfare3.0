@@ -322,7 +322,7 @@ namespace AncientWarfare3.core.policy
                     pPlacement.Centroid.y + centerOffset,
                     pCountry ? LabelZ : LabelZ - 0.02f),
                 size, color, outlineColor, pCountry, pPlacement.Angle,
-                pCountryLabelGap);
+                pCountryLabelGap, pCity);
         }
 
         internal static void HideRuntimeLabelsExcept(
@@ -475,6 +475,7 @@ namespace AncientWarfare3.core.policy
             private readonly TextMesh _text;
             private bool _country;
             private bool _hasLayout;
+            private City _city;
             private string _lastValue = string.Empty;
             private Vector3 _lastPosition;
             private float _lastSize;
@@ -499,9 +500,10 @@ namespace AncientWarfare3.core.policy
 
             internal void Apply(string pValue, Vector3 pPosition,
                 float pSize, Color pColor, Color pOutlineColor,
-                bool pCountry, float pAngle, int pCountryLabelGap)
+                bool pCountry, float pAngle, int pCountryLabelGap, City pCity)
             {
                 _root.SetActive(true);
+                _city = pCity;
                 string value = pValue?.Trim() ?? string.Empty;
                 if (HasEquivalentLayout(value, pPosition, pSize, pCountry,
                         pAngle, pCountryLabelGap))
@@ -594,9 +596,20 @@ namespace AncientWarfare3.core.policy
                         _secondOutlines[index].color = pOutlineColor;
                 }
                 if (_background == null || _country) return;
-                Color backgroundColor = Color.Lerp(pOutlineColor,
-                    Color.black, 0.7f);
-                backgroundColor.a = 0.2f;
+                bool isCapital = _city != null &&
+                                 _city.kingdom?.capital == _city;
+                Color backgroundColor;
+                if (isCapital)
+                {
+                    backgroundColor = new Color(1f, 0.95f, 0.5f, 0.35f);
+                }
+                else
+                {
+                    backgroundColor = Color.Lerp(pOutlineColor,
+                        Color.black, 0.7f);
+                    backgroundColor.a = 0.2f;
+                }
+                _background.color = backgroundColor;
                 _background.color = backgroundColor;
             }
 
@@ -777,9 +790,19 @@ namespace AncientWarfare3.core.policy
                 // the terrain. City names get a small readability plate.
                 _background.enabled = !pCountry;
                 if (pCountry) return;
-                Color backgroundColor = Color.Lerp(pOutlineColor,
-                    Color.black, 0.7f);
-                backgroundColor.a = 0.2f;
+                bool isCapital = _city != null &&
+                                 _city.kingdom?.capital == _city;
+                Color backgroundColor;
+                if (isCapital)
+                {
+                    backgroundColor = new Color(1f, 0.95f, 0.5f, 0.35f);
+                }
+                else
+                {
+                    backgroundColor = Color.Lerp(pOutlineColor,
+                        Color.black, 0.7f);
+                    backgroundColor.a = 0.2f;
+                }
                 _background.color = backgroundColor;
 
                 float width = pSize * Mathf.Max(1f,
