@@ -112,6 +112,19 @@ namespace AncientWarfare3.core.lineage
             return actorIsCaptain || ShouldUseFormationQuorum(pMode);
         }
 
+        public static bool CanClaimDeploymentActor(bool actorIsCaptain,
+            bool actorIsWarrior, bool isRoyalGuard, bool isLiving)
+        {
+            return isLiving && !isRoyalGuard &&
+                   (actorIsCaptain || actorIsWarrior);
+        }
+
+        public static bool ShouldReassertDeploymentControl(
+            bool hasExpectedJob, bool hasExpectedTask)
+        {
+            return !hasExpectedJob || !hasExpectedTask;
+        }
+
         public static bool CanBeginDeployment(bool canSendArmy,
             bool discoveryComplete)
         {

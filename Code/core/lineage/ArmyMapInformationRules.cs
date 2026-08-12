@@ -103,6 +103,19 @@ namespace AncientWarfare3.core.lineage
                 memberCount, minimumOperationalForce);
         }
 
+        public static ArmyRtsState ResolvePendingState(bool hasProjection,
+            ArmyRtsState projectionState, int memberCount,
+            int minimumOperationalForce, bool hasCombatActivity,
+            bool hasReplenishmentOperation)
+        {
+            if (hasProjection) return projectionState;
+            if (hasCombatActivity) return ArmyRtsState.Assault;
+            return hasReplenishmentOperation
+                ? ResolvePendingState(hasProjection, projectionState,
+                    memberCount, minimumOperationalForce)
+                : ArmyRtsState.Idle;
+        }
+
         public static string PendingOperationLocalizationKey(
             ArmyRtsState pState)
         {

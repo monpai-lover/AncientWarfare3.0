@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -25,10 +26,22 @@ namespace AncientWarfare3.core.lineage
                 UpdateBranchName(pShiId, clanName);
 
             int changed = 0;
+            var vanillaClans = new Dictionary<Clan, Actor>();
             foreach (long id in ids)
             {
+                Actor live = FindActor(id);
+                if (live?.clan != null &&
+                    !vanillaClans.ContainsKey(live.clan))
+                    vanillaClans.Add(live.clan, live);
                 if (RenameActor(id, clanName))
                     changed++;
+            }
+            foreach (KeyValuePair<Clan, Actor> pair in vanillaClans)
+            {
+                Actor leader = null;
+                try { leader = pair.Key.getChief(); } catch { }
+                LineageService.RenameClanByLeader(pair.Key,
+                    leader ?? pair.Value);
             }
             return changed;
         }
@@ -74,11 +87,10 @@ namespace AncientWarfare3.core.lineage
         private static bool RenameActor(long pActorId, string pClanName)
         {
             bool changed = false;
-            Actor live = World.world?.units?.get(pActorId);
+            Actor live = FindActor(pActorId);
             if (live?.data != null && !live.isRekt())
             {
-                live.data.set(LineageKeys.CLAN_NAME, pClanName);
-                LineageService.ApplyDisplayName(live);
+                ActorManualRenameService.ApplyExplicitClan(live, pClanName);
                 LineageService.ArchiveActor(live, pAlive: live.isAlive());
                 try { live.clearGraphicsFully(); } catch { }
                 changed = true;
@@ -92,6 +104,15 @@ namespace AncientWarfare3.core.lineage
             }
 
             return changed;
+        }
+
+        private static Actor FindActor(long pActorId)
+        {
+            try
+            {
+                return pActorId >= 0 ? World.world?.units?.get(pActorId) : null;
+            }
+            catch { return null; }
         }
 
         private static void UpdateBranchName(long pShiId, string pClanName)

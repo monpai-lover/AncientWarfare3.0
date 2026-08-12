@@ -37,11 +37,11 @@ internal static class RecruitmentLifecycleRemovalRulesTests
             !warPatch.Contains("TemporaryLevyService.OnEmergencyChanged",
                 StringComparison.Ordinal),
             "war lifecycle must not start AW3 levy preparation");
-        Assert(!notice.Contains("TemporaryLevyService.OnEmergencyChanged",
-            StringComparison.Ordinal) &&
-            !notice.Contains("TemporaryLevyService.OnNoticeClosed",
-                StringComparison.Ordinal),
-            "war notices must not schedule AW3 levy preparation");
+        Assert(notice.Contains("TemporaryLevyService.OnEmergencyChanged",
+                   StringComparison.Ordinal) &&
+               notice.Contains("TemporaryLevyService.OnNoticeClosed",
+                   StringComparison.Ordinal),
+            "war notices alone own bounded preparation recruitment startup and cleanup");
         Assert(!deathPatch.Contains("TemporaryLevyService.OnMilitaryCasualty",
             StringComparison.Ordinal),
             "casualty events must not start the retired levy recovery plan");

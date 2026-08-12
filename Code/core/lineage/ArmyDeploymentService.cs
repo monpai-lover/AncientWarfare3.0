@@ -746,7 +746,8 @@ namespace AncientWarfare3.core.lineage
                         mode, actorIsCaptain: true))
                     AssignDeploymentActor(assignments, captain, pSignature,
                         pTargetCityId, targetTile,
-                        WarMobilizationContent.DeploymentJobId);
+                        WarMobilizationContent.DeploymentJobId,
+                        pActorIsCaptain: true);
                 assignments.NextActorIndexByArmy[pArmyId] = count;
                 return;
             }
@@ -764,9 +765,7 @@ namespace AncientWarfare3.core.lineage
                 Actor actor = null;
                 try { actor = army.units[i]; }
                 catch { }
-                if (actor?.data == null || actor.isRekt() ||
-                    !actor.isAlive() || !actor.isWarrior() ||
-                    RoyalGuardService.IsRoyalGuard(actor)) continue;
+                if (actor?.data == null) continue;
                 bool actorIsCaptain = actor == captain;
                 if (!ArmyDeploymentRules.ShouldAssignDeploymentActor(
                         mode, actorIsCaptain)) continue;
@@ -776,7 +775,7 @@ namespace AncientWarfare3.core.lineage
                     ? ArmyRtsContent.FollowerJobId
                     : WarMobilizationContent.DeploymentJobId;
                 AssignDeploymentActor(assignments, actor, pSignature,
-                    pTargetCityId, targetTile, jobId);
+                    pTargetCityId, targetTile, jobId, actorIsCaptain);
             }
             assignments.NextActorIndexByArmy[pArmyId] = end;
             if (end < count)
@@ -787,13 +786,14 @@ namespace AncientWarfare3.core.lineage
         private static void AssignDeploymentActor(
             NoticeAssignments pAssignments, Actor pActor,
             string pSignature, long pTargetCityId, WorldTile pTargetTile,
-            string pJobId)
+            string pJobId, bool pActorIsCaptain)
         {
             if (pAssignments == null || pActor?.data == null ||
-                pTargetTile?.data == null ||
-                pActor.isRekt() || !pActor.isAlive() ||
-                !pActor.isWarrior() ||
-                RoyalGuardService.IsRoyalGuard(pActor)) return;
+                pTargetTile?.data == null) return;
+            bool living = !pActor.isRekt() && pActor.isAlive();
+            if (!ArmyDeploymentRules.CanClaimDeploymentActor(
+                    pActorIsCaptain, pActor.isWarrior(),
+                    RoyalGuardService.IsRoyalGuard(pActor), living)) return;
             pActor.data.get(LineageKeys.DEPLOYMENT_NOTICE_SIGNATURE,
                 out string currentSignature, "");
             pActor.data.get(LineageKeys.DEPLOYMENT_TARGET_CITY_ID,
@@ -819,8 +819,16 @@ namespace AncientWarfare3.core.lineage
             pAssignments.ActorIds.Add(pActor.data.id);
             try
             {
-                if (pActor.ai?.job?.id != pJobId)
-                    pActor.ai?.setJob(pJobId);
+                if (pActor.ai == null) return;
+                string taskId = pJobId == ArmyRtsContent.FollowerJobId
+                    ? ArmyRtsContent.FormationTaskId
+                    : WarMobilizationContent.DeploymentTaskId;
+                bool expectedJob = pActor.ai.job?.id == pJobId;
+                bool expectedTask = pActor.isTask(taskId);
+                if (!ArmyDeploymentRules.ShouldReassertDeploymentControl(
+                        expectedJob, expectedTask)) return;
+                if (!expectedJob) pActor.ai.setJob(pJobId);
+                pActor.ai.setTask(taskId);
             }
             catch { }
         }

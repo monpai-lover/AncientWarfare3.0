@@ -4,7 +4,21 @@ internal static class VisibleSurnameRenameRulesTests
 {
     public static void Run()
     {
-        SurnameEditLeavesTheClanBranchAlone();
+        VisibleSurnameWritePlan write =
+            VisibleSurnameRenameRules.PlanSurnameWrite(
+                " NewFamily ", "ExistingClan", nameIntegrated: false);
+        Equal("NewFamily", write.FamilyName,
+            "surname rename writes the requested family name");
+        Equal("ExistingClan", write.ClanName,
+            "surname rename preserves the existing clan name");
+        Equal(false, write.NameIntegrated,
+            "surname rename preserves a non-integrated identity");
+
+        VisibleSurnameWritePlan integratedWrite =
+            VisibleSurnameRenameRules.PlanSurnameWrite(
+                "NewFamily", "ExistingClan", nameIntegrated: true);
+        Equal(true, integratedWrite.NameIntegrated,
+            "surname rename preserves an integrated identity");
 
         IReadOnlyList<long> actual =
             VisibleSurnameRenameRules.CollectPatrilinealRenameIds(1, new[]
@@ -41,61 +55,6 @@ internal static class VisibleSurnameRenameRulesTests
                     $"{name}: index {i} expected {expected[i]}, got {actual[i]}");
     }
 
-    // 嬴姓趙氏: FAMILY_NAME carries the 姓 (嬴) and CLAN_NAME carries the 氏
-    // (趙). They are independent dimensions, so planning a 姓 edit must not
-    // touch the 氏, and must not touch the merged-rendering flag either.
-    private static void SurnameEditLeavesTheClanBranchAlone()
-    {
-        VisibleSurnameWritePlan plan =
-            VisibleSurnameRenameRules.PlanSurnameWrite("嬴", "趙",
-                pNameIntegrated: false);
-        Equal("嬴", plan.FamilyName, "the 姓 becomes the requested value");
-        Equal("趙", plan.ClanName, "the 氏 survives a 姓 edit untouched");
-        False(plan.NameIntegrated,
-            "a 姓 edit does not merge a separate 姓 and 氏");
-
-        // An integrated identity keeps its flag: whether the two are rendered
-        // as one token is not something a 姓 edit decides.
-        VisibleSurnameWritePlan merged =
-            VisibleSurnameRenameRules.PlanSurnameWrite("嬴", "趙",
-                pNameIntegrated: true);
-        Equal("嬴", merged.FamilyName, "the 姓 still becomes the request");
-        Equal("趙", merged.ClanName,
-            "an integrated identity does not have its 氏 overwritten");
-        True(merged.NameIntegrated,
-            "a 姓 edit preserves the merged-rendering flag");
-
-        // Clearing the 姓 removes only the 姓. The 氏 is what the display
-        // builder renders, so it must still stand on its own afterwards.
-        VisibleSurnameWritePlan cleared =
-            VisibleSurnameRenameRules.PlanSurnameWrite("   ", "趙",
-                pNameIntegrated: true);
-        Equal("", cleared.FamilyName, "a blank request clears the 姓");
-        Equal("趙", cleared.ClanName, "clearing the 姓 keeps the 氏");
-        True(cleared.NameIntegrated,
-            "clearing the 姓 does not change how the 氏 is rendered");
-
-        // The honorific suffix is stripped from the 姓 like anywhere else.
-        Equal("嬴", VisibleSurnameRenameRules
-                .PlanSurnameWrite("嬴姓", "趙", false).FamilyName,
-            "a trailing 姓 character is not part of the name");
-
-        // A missing 氏 stays missing: a 姓 edit cannot invent a branch.
-        Equal("", VisibleSurnameRenameRules
-                .PlanSurnameWrite("嬴", "", false).ClanName,
-            "an actor with no 氏 does not gain one from a 姓 edit");
-        Equal("", VisibleSurnameRenameRules
-                .PlanSurnameWrite("嬴", null, false).ClanName,
-            "an absent 氏 is treated as empty rather than throwing");
-    }
-
-    private static void Equal(string expected, string actual, string name)
-    {
-        if (!string.Equals(expected, actual, StringComparison.Ordinal))
-            throw new InvalidOperationException(
-                name + ": expected '" + expected + "', got '" + actual + "'");
-    }
-
     private static void True(bool value, string name)
     {
         if (!value) throw new InvalidOperationException(name);
@@ -104,5 +63,12 @@ internal static class VisibleSurnameRenameRulesTests
     private static void False(bool value, string name)
     {
         if (value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
     }
 }

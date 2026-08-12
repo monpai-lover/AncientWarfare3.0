@@ -69,6 +69,25 @@ namespace AncientWarfare3.core.lineage
 
     public static class DiplomaticWarAvailabilityRules
     {
+        public static int[] StableAvailableFirstOrder(
+            IReadOnlyList<DiplomaticWarAvailabilityCandidate> pCandidates)
+        {
+            if (pCandidates == null || pCandidates.Count == 0)
+                return Array.Empty<int>();
+
+            var order = new int[pCandidates.Count];
+            int cursor = 0;
+            for (int i = 0; i < pCandidates.Count; i++)
+            {
+                if (pCandidates[i].Available) order[cursor++] = i;
+            }
+            for (int i = 0; i < pCandidates.Count; i++)
+            {
+                if (!pCandidates[i].Available) order[cursor++] = i;
+            }
+            return order;
+        }
+
         public static DiplomaticWarAvailabilityResult Resolve(
             bool pHasPendingForPair,
             IReadOnlyList<DiplomaticWarAvailabilityCandidate> pCandidates)

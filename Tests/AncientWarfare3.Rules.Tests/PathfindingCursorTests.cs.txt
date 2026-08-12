@@ -8,6 +8,7 @@ internal static class PathfindingCursorTests
         SubmissionDispositionExplainsPendingReplacement();
         PriorityRequestsRunAheadOfQueuedCivilianWork();
         QueuedRequestExposesWorkerWaitState();
+        StreamingStepWakesActorBeforeWorkerCompletes();
         BoundedRegionalPathsContinueUntilFinalTarget();
 
         var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
@@ -186,6 +187,41 @@ internal static class PathfindingCursorTests
         finder.StopAndDrain();
     }
 
+    private static void StreamingStepWakesActorBeforeWorkerCompletes()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(5, 1, 1,
+            new[] { tile });
+        var generator = new StreamingGateGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+
+        var request = new AWPathRequest(91, 0, 0,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        Assert(finder.Request(request, out bool reused) && !reused &&
+               generator.Started.Wait(TimeSpan.FromSeconds(3)),
+            "the streaming request reaches the worker");
+        Assert(finder.OpenReadyCursor(91, out _).Kind ==
+               AWPathPollKind.Waiting,
+            "the actor first observes the running worker as waiting");
+
+        generator.Publish.Set();
+        Assert(generator.StepPublished.Wait(TimeSpan.FromSeconds(3)),
+            "the worker publishes a path step before completing");
+        AWPathPollResult streamed = finder.OpenReadyCursor(91,
+            out var cursor);
+        Assert(streamed.Kind == AWPathPollKind.StepReady &&
+               streamed.Step.TileId == 12 && cursor.IsValid,
+            "a streamed path step wakes the actor while the worker is still running");
+
+        cursor.Consume();
+        generator.Release.Set();
+        finder.StopAndDrain();
+    }
+
     private static bool SpinUntil(Func<bool> condition)
     {
         var timeout = System.Diagnostics.Stopwatch.StartNew();
@@ -232,6 +268,26 @@ internal static class PathfindingCursorTests
                 Release.Wait(cancellation);
             }
             cancellation.ThrowIfCancellationRequested();
+            request.Stream.Complete();
+        }
+    }
+
+    private sealed class StreamingGateGenerator : IAWPathGenerator
+    {
+        public readonly ManualResetEventSlim Started = new(false);
+        public readonly ManualResetEventSlim Publish = new(false);
+        public readonly ManualResetEventSlim StepPublished = new(false);
+        public readonly ManualResetEventSlim Release = new(false);
+
+        public void Generate(AWPathRequest request,
+            CancellationToken cancellation)
+        {
+            Started.Set();
+            Publish.Wait(cancellation);
+            request.Stream.AddStep(new AWPathStep(12,
+                AWMovementMethod.Walk, AWTraversalEstimate.Direct));
+            StepPublished.Set();
+            Release.Wait(cancellation);
             request.Stream.Complete();
         }
     }

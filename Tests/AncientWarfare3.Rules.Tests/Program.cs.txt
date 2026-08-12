@@ -812,6 +812,20 @@ static void RunArmyRtsCommandContinuityRulesTests()
             unitCount: 20, captainAlive: true, royalGuard: false,
             dedicatedGarrison: false, specialArmy: true),
         "a special army never enters ordinary defense-to-attack conversion");
+    IReadOnlyList<WarArmyAssignment> depletedRecovery =
+        KingdomWarDirectorRules.AllocateWars(
+            new[]
+            {
+                new WarAllocationFacts(3L, capitalThreat: false,
+                    warGoalThreat: true, signedWarScore: 0,
+                    requiredArmies: 1, localTerritoryThreat: false)
+            },
+            new[]
+            {
+                new ArmyAllocationFacts(22L, 0, requiresRecovery: true)
+            });
+    Equal(1, depletedRecovery.Count,
+        "a depleted ordinary army remains allocatable for wartime recovery");
     True(KingdomWarDirectorRules.ShouldUsePriorityDefenseTarget(
             ArmyRtsObjectiveState.OpenDefense),
         "an active capital threat keeps the priority defense target");
@@ -7139,6 +7153,24 @@ Equal(false, ArmyDeploymentRules.ShouldAssignDeploymentActor(
 Equal(true, ArmyDeploymentRules.ShouldAssignDeploymentActor(
         ArmyRtsMode.On, actorIsCaptain: false),
     "live RTS deployment gives soldiers an escort assignment while the captain keeps the long-range route");
+True(ArmyDeploymentRules.CanClaimDeploymentActor(
+        actorIsCaptain: true, actorIsWarrior: false,
+        isRoyalGuard: false, isLiving: true),
+    "the current army captain receives deployment control even when a loaded save has a stale warrior flag");
+Equal(false, ArmyDeploymentRules.CanClaimDeploymentActor(
+        actorIsCaptain: false, actorIsWarrior: false,
+        isRoyalGuard: false, isLiving: true),
+    "ordinary civilians never receive an army deployment task");
+Equal(false, ArmyDeploymentRules.CanClaimDeploymentActor(
+        actorIsCaptain: true, actorIsWarrior: true,
+        isRoyalGuard: true, isLiving: true),
+    "royal guards remain owned by their protect-king task");
+True(ArmyDeploymentRules.ShouldReassertDeploymentControl(
+        hasExpectedJob: true, hasExpectedTask: false),
+    "a captain whose job is correct but task fell back to social is reclaimed");
+Equal(false, ArmyDeploymentRules.ShouldReassertDeploymentControl(
+        hasExpectedJob: true, hasExpectedTask: true),
+    "an active deployment task is not restarted every maintenance pass");
 Equal(false, ArmyMarchRules.ShouldRecordLeaderStep(
         pHasArmy: true, pIsLeader: false, pHasValidTarget: true),
     "ordinary soldiers never publish long-path steps");

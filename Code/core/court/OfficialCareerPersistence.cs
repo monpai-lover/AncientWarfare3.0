@@ -360,7 +360,6 @@ namespace AncientWarfare3.core.court
                 "END_REASON=@dReason,UPDATED_TIME=@dUpdated" +
                 " WHERE OFFICER_ID=@oId AND KINGDOM_ID=@oKingdom AND ACTOR_ID=@oActor" +
                 " AND IFNULL(LAYER,'')=@oLayer" +
-                " AND IFNULL(INSTITUTION_AT_APPOINTMENT,'')=@oInstitution" +
                 " AND ACTIVE=1";
             command.Parameters.AddWithValue("@dActive", desired.Active);
             command.Parameters.AddWithValue("@dEndedYear", desired.EndedYear);
@@ -371,8 +370,6 @@ namespace AncientWarfare3.core.court
             command.Parameters.AddWithValue("@oKingdom", original.KingdomId);
             command.Parameters.AddWithValue("@oActor", original.ActorId);
             command.Parameters.AddWithValue("@oLayer", original.Layer ?? "");
-            command.Parameters.AddWithValue("@oInstitution",
-                original.InstitutionAtAppointment ?? "");
             if (command.ExecuteNonQuery() != 1)
                 throw new InvalidOperationException("active career close failed");
         }

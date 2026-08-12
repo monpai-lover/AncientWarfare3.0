@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using System.IO;
 
 internal static class VisibleClanRenameRulesTests
 {
@@ -12,6 +13,18 @@ internal static class VisibleClanRenameRulesTests
             VisibleClanRenameRules.MergeMemberIds(7,
                 new long[] { 8, 7 }, new long[] { 9, 8 }),
             "the founder is retained and duplicate archive/live IDs are removed");
+
+        string familyTreeSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "FamilyTreeWindow.cs"));
+        True(familyTreeSource.Contains("currentName = rootNode.ClanName;"),
+            "clan editor starts from the raw clan name instead of its origin-prefixed display");
+
+        string serviceSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "VisibleClanRenameService.cs"));
+        True(serviceSource.Contains("LineageService.RenameClanByLeader"),
+            "renaming a Shi branch also refreshes the vanilla clan display");
     }
 
     private static void Equal<T>(T expected, T actual, string name)
@@ -31,5 +44,10 @@ internal static class VisibleClanRenameRulesTests
             if (expected[i] != actual[i])
                 throw new InvalidOperationException(
                     $"{name}: index {i} expected {expected[i]}, got {actual[i]}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
     }
 }

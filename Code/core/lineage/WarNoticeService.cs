@@ -106,6 +106,8 @@ namespace AncientWarfare3.core.lineage
             if (state == null) return;
             if (Index(state))
             {
+                TemporaryLevyService.OnEmergencyChanged(pAttacker);
+                TemporaryLevyService.OnEmergencyChanged(defender);
                 TemporarySlaveVanguardService.OnEmergencyChanged(pAttacker);
                 TemporarySlaveVanguardService.OnEmergencyChanged(defender);
                 StandingArmyPeacetimeService
@@ -433,6 +435,8 @@ namespace AncientWarfare3.core.lineage
                 return;
             RemoveIndex(state);
             ArmyDeploymentService.CancelNotice(pSignature, restoreJobs: true);
+            TemporaryLevyService.OnNoticeClosed(state.AttackerId);
+            TemporaryLevyService.OnNoticeClosed(state.DefenderId);
             Kingdom attacker = ResolveKingdom(state.AttackerId);
             Kingdom defender = ResolveKingdom(state.DefenderId);
             WartimeGarrisonService.OnKingdomWarStateChanged(attacker);

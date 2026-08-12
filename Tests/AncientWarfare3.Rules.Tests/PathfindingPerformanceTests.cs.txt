@@ -55,8 +55,8 @@ internal static class PathfindingPerformanceTests
         ActorGateHotPathDoesNotUseGlobalLifecycleLock();
         PathfinderSubmissionDoesNotUseGlobalLifecycleLock();
         PathfinderStopLinearizesAgainstNewSubmissions();
-        WaitingPathPollingSkipsUnchangedWorkerState();
-        PathWorkersYieldCpuToTheFrameScheduler();
+        WaitingPathPollingPreservesStreamingProgress();
+        PathWorkersMatchCultiwayRuntimePriority();
         ConcurrentDisposeWaitsForTheActiveDrain();
         RecoveryStateSupportsIndependentActorWorkers();
         NativeMovementHotPathShortCircuitsBeforeOwnershipLookup();
@@ -120,46 +120,34 @@ internal static class PathfindingPerformanceTests
             "AW3 PERF identifies the main-thread commit responsible for a drain spike");
     }
 
-    private static void WaitingPathPollingSkipsUnchangedWorkerState()
+    private static void WaitingPathPollingPreservesStreamingProgress()
     {
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
             "AWPathFinder.cs"));
-        Assert(source.Contains("WaitingInitialized") &&
-               source.Contains("HasWorkerUpdate") &&
-               source.Contains("ClearWorkerUpdate") &&
-               source.Contains("MarkWaitingInitialized") &&
-               source.Contains("ResetWaitingInitialized"),
-            "path tasks retain Cultiway-style waiting and worker-update state");
         int openStart = source.IndexOf("OpenReadyCursor(",
             StringComparison.Ordinal);
         int openEnd = source.IndexOf("public bool Consume(", openStart,
             StringComparison.Ordinal);
         Assert(openStart >= 0 && openEnd > openStart &&
                source.Substring(openStart, openEnd - openStart).Contains(
-                   "WaitingInitialized && !task.HasWorkerUpdate",
-                   StringComparison.Ordinal),
-            "unchanged waiting paths return before polling the stream or actor gate");
-        Assert(source.Substring(openStart, openEnd - openStart).Contains(
-                   "Volatile.Read(ref record.Latest)",
-                   StringComparison.Ordinal),
-            "unchanged waiting paths read the published task without taking the session gate");
-        Assert(source.Substring(openStart, openEnd - openStart).Contains(
-                   "task != null && task.WaitingInitialized",
+                   "PollOwned(pActorId, task)", StringComparison.Ordinal),
+            "each actor poll observes path steps published before worker completion");
+        string openCursor = source.Substring(openStart, openEnd - openStart);
+        Assert(!openCursor.Contains("WaitingInitialized",
                    StringComparison.Ordinal) &&
-               source.Substring(openStart, openEnd - openStart).Contains(
-                   "if (task == null)", StringComparison.Ordinal),
-            "session publication races cannot dereference an unpublished path task");
+               !openCursor.Contains("HasWorkerUpdate", StringComparison.Ordinal),
+            "worker completion markers cannot hide streamed path steps");
     }
 
-    private static void PathWorkersYieldCpuToTheFrameScheduler()
+    private static void PathWorkersMatchCultiwayRuntimePriority()
     {
         string finder = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
             "AWPathFinder.cs"));
-        Assert(finder.Contains("Priority = ThreadPriority.BelowNormal",
+        Assert(finder.Contains("Priority = ThreadPriority.Normal",
                 StringComparison.Ordinal),
-            "Cultiway-perf worker allocation requires path workers to yield CPU to Unity and foreground simulation");
+            "path workers use the Cultiway master runtime priority");
     }
 
     private static void InitialTraversalBuildCarriesWorkerTopology()

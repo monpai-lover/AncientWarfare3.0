@@ -5,10 +5,10 @@ internal static class CityArmyReinforcementRulesTests
 {
     public static void Run()
     {
-        Equal(35, CityArmyReinforcementRules.CityCapacity(100, 80),
-            "city capacity uses the thirty-five percent population cap");
+        Equal(80, CityArmyReinforcementRules.CityCapacity(100, 80),
+            "city warrior slots are the full reinforcement target");
         Equal(20, CityArmyReinforcementRules.CityCapacity(100, 20),
-            "warrior slots remain a city capacity ceiling");
+            "a smaller city warrior limit remains the capacity ceiling");
 
         CityArmyReinforcementAllocation[] allocations =
             CityArmyReinforcementRules.Allocate(60, new[]

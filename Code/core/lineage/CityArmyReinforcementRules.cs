@@ -43,15 +43,11 @@ namespace AncientWarfare3.core.lineage
 
     public static class CityArmyReinforcementRules
     {
-        public const int PopulationPercent = 35;
-
         public static int CityCapacity(int pPopulation,
             int pEffectiveWarriorSlots)
         {
-            int populationCap = Math.Max(0, pPopulation) *
-                                PopulationPercent / 100;
-            return Math.Min(Math.Max(0, pEffectiveWarriorSlots),
-                populationCap);
+            _ = pPopulation;
+            return Math.Max(0, pEffectiveWarriorSlots);
         }
 
         public static int Shortage(int pLiving, int pApprovedTarget)

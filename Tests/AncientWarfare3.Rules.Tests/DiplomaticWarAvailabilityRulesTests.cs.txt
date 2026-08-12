@@ -76,6 +76,27 @@ internal static class DiplomaticWarAvailabilityRulesTests
                     "missing_claim_target")
             }, 0), "no available row has no selection");
 
+        int[] availableFirst = DiplomaticWarAvailabilityRules.
+            StableAvailableFirstOrder(new[]
+            {
+                new DiplomaticWarAvailabilityCandidate(false,
+                    "cannot_force_vassal"),
+                new DiplomaticWarAvailabilityCandidate(true, ""),
+                new DiplomaticWarAvailabilityCandidate(true, ""),
+                new DiplomaticWarAvailabilityCandidate(false,
+                    "cannot_force_tributary")
+            });
+        Equal(4, availableFirst.Length,
+            "availability ordering retains every declaration reason");
+        Equal(1, availableFirst[0],
+            "first available declaration reason moves to the top");
+        Equal(2, availableFirst[1],
+            "available declaration reasons preserve source order");
+        Equal(0, availableFirst[2],
+            "first blocked declaration reason follows available reasons");
+        Equal(3, availableFirst[3],
+            "blocked declaration reasons preserve source order");
+
         DiplomaticWarSubmissionResolution cityChanged =
             DiplomaticWarSubmissionRules.Resolve(
                 pTargetCityIdentityValid: false,
@@ -236,6 +257,8 @@ internal static class DiplomaticWarAvailabilityRulesTests
         True(declaration.Contains(
                 "ProposalFailure(pAvailability.FailureReason)"),
             "blocked declaration rows explain their specific reason");
+        True(declaration.Contains("StableAvailableFirstOrder("),
+            "available declaration reasons are rendered before blocked reasons");
         True(decision.Contains("ProposalFailure(failureReason)"),
             "legacy war target rows explain their specific reason");
         True(decision.Contains("CanIssue(") &&

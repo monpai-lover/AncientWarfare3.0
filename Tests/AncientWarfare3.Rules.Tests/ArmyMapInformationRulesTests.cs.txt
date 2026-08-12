@@ -39,6 +39,24 @@ internal static class ArmyMapInformationRulesTests
                 minimumOperationalForce: 2,
                 hasCombatActivity: true),
             "a missionless army with an active combat target is shown fighting");
+        Equal(ArmyRtsState.Idle,
+            ArmyMapInformationRules.ResolvePendingState(
+                hasProjection: false,
+                projectionState: ArmyRtsState.Idle,
+                memberCount: 1,
+                minimumOperationalForce: 2,
+                hasCombatActivity: false,
+                hasReplenishmentOperation: false),
+            "a shortage without a real operation must not claim replenishment");
+        Equal(ArmyRtsState.Replenish,
+            ArmyMapInformationRules.ResolvePendingState(
+                hasProjection: false,
+                projectionState: ArmyRtsState.Idle,
+                memberCount: 1,
+                minimumOperationalForce: 2,
+                hasCombatActivity: false,
+                hasReplenishmentOperation: true),
+            "a pending operation keeps the replenishment label");
         Equal("aw_army_rts_state_replenish",
             ArmyMapInformationRules.PendingOperationLocalizationKey(
                 ArmyRtsState.Replenish),

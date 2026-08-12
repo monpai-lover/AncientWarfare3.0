@@ -134,15 +134,27 @@ namespace AncientWarfare3.ui.windows
             List<DiplomaticWarTargetAvailability> targets =
                 DiplomaticWarDeclarationService.BuildTargetAvailabilities(
                     attacker, defender);
+            var sourceCandidates = new List<DiplomaticWarAvailabilityCandidate>(
+                targets.Count);
+            for (int i = 0; i < targets.Count; i++)
+                sourceCandidates.Add(targets[i].ToCandidate());
+            int[] displayOrder = DiplomaticWarAvailabilityRules.
+                StableAvailableFirstOrder(sourceCandidates);
+            var orderedTargets = new List<DiplomaticWarTargetAvailability>(
+                targets.Count);
             var candidates = new List<DiplomaticWarAvailabilityCandidate>(
                 targets.Count);
             int preferredIndex = -1;
-            for (int i = 0; i < targets.Count; i++)
+            for (int i = 0; i < displayOrder.Length; i++)
             {
-                candidates.Add(targets[i].ToCandidate());
-                if (Signature(targets[i].Option) == _selectedSignature)
+                DiplomaticWarTargetAvailability target =
+                    targets[displayOrder[i]];
+                orderedTargets.Add(target);
+                candidates.Add(target.ToCandidate());
+                if (Signature(target.Option) == _selectedSignature)
                     preferredIndex = i;
             }
+            targets = orderedTargets;
             int selectedIndex = DiplomaticWarAvailabilityRules.
                 ResolveSelectedGoalIndex(candidates, preferredIndex);
             _selectedOption = null;

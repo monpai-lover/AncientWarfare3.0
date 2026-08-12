@@ -1,8 +1,8 @@
 {
     "name": "Ancient Warfare 3",
     "author": "GoatDie#4068",
-    "version": "1.2.3",
-    "description": "Ancient Warfare 3.0 v1.2.3 - RTS continuity, mandate lifecycle, pathfinding maintenance, and runtime performance fixes.",
+    "version": "1.2.4",
+    "description": "Ancient Warfare 3.0 v1.2.4 - Large-mode freeze fix: thread-safe enemy-relation caches and school career-close persistence hardening.",
     "iconPath": "icon.png",
     "RepoUrl": "https://github.com/monpai-lover/AncientWarfare3.0",
     "GUID": "ANCIENTWARFARE3",

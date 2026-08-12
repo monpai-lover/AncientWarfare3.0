@@ -303,14 +303,17 @@ namespace AncientWarfare3.core.lineage
 
     public sealed class ArmyAllocationFacts
     {
-        public ArmyAllocationFacts(long armyId, int effectiveForce)
+        public ArmyAllocationFacts(long armyId, int effectiveForce,
+            bool requiresRecovery = false)
         {
             ArmyId = armyId;
             EffectiveForce = Math.Max(0, effectiveForce);
+            RequiresRecovery = requiresRecovery;
         }
 
         public long ArmyId { get; }
         public int EffectiveForce { get; }
+        public bool RequiresRecovery { get; }
     }
 
     public sealed class WarArmyAssignment
@@ -521,7 +524,7 @@ namespace AncientWarfare3.core.lineage
                 {
                     ArmyAllocationFacts army = pArmies[i];
                     if (army != null && army.ArmyId >= 0 &&
-                        army.EffectiveForce > 0)
+                        (army.EffectiveForce > 0 || army.RequiresRecovery))
                         armies.Add(army);
                 }
             }

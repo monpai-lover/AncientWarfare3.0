@@ -610,7 +610,7 @@ namespace AncientWarfare3.ui.windows
                 if (_bulkSnapshot != null &&
                     _bulkSnapshot.TryGetNode(_rootActorId,
                         out LineageTreeNodeSnapshot rootNode))
-                    currentName = rootNode.ShiDisplay;
+                    currentName = rootNode.ClanName;
                 _renameClanInput.text = currentName ?? string.Empty;
                 if (_renameClanInput.placeholder is Text placeholder)
                     placeholder.text = AW_L10n.Text(

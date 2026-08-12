@@ -114,7 +114,7 @@ namespace AncientWarfare3.core.lineage
             Actor live = FindActor(pActorId);
             if (live?.data != null && !live.isRekt())
             {
-                ActorManualRenameService.ApplyInheritedFamily(live,
+                ActorManualRenameService.ApplyExplicitSurname(live,
                     pFamilyName);
                 LineageService.ArchiveActor(live, pAlive: live.isAlive());
                 try { live.clearGraphicsFully(); } catch { }
@@ -123,7 +123,11 @@ namespace AncientWarfare3.core.lineage
 
             ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
             if (row == null) return changed;
-            string displayName = BuildArchivedDisplayName(row, pFamilyName);
+            VisibleSurnameWritePlan write = VisibleSurnameRenameRules
+                .PlanSurnameWrite(pFamilyName, row.clan_name,
+                    row.name_integrated != 0);
+            string displayName = BuildArchivedDisplayName(row,
+                write.FamilyName);
             HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
                 () => DB.UpdateValue(
                     ActorArchiveTableItem.GetTableName(),
@@ -131,9 +135,7 @@ namespace AncientWarfare3.core.lineage
                     {
                         SimpleColumnConstraint.CreateEq("ID", pActorId)
                     },
-                    ColumnVal.Create("FAMILY_NAME", pFamilyName),
-                    ColumnVal.Create("CLAN_NAME", pFamilyName),
-                    ColumnVal.Create("NAME_INTEGRATED", 1),
+                    ColumnVal.Create("FAMILY_NAME", write.FamilyName),
                     ColumnVal.Create("DISPLAY_NAME", displayName)));
             return true;
         }
@@ -145,8 +147,9 @@ namespace AncientWarfare3.core.lineage
             if (string.IsNullOrEmpty(given)) given = pRow?.display_name ?? "";
             if (string.IsNullOrEmpty(given)) return "";
             return LineageDisplayNameRules.Build(given, pFamilyName,
-                pFamilyName, pRow?.status == LineageStatus.NOBLE,
-                pRow?.sex == 0, isNameIntegrated: true);
+                pRow?.clan_name ?? "",
+                pRow?.status == LineageStatus.NOBLE,
+                pRow?.sex == 0, pRow?.name_integrated != 0);
         }
 
         private static Actor FindActor(long pActorId)

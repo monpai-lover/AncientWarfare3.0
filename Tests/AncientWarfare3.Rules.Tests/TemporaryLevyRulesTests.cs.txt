@@ -84,12 +84,29 @@ internal static class TemporaryLevyRulesTests
 
     private static void PreparationRuntimeUsesEventDrivenNoticeScheduling()
     {
+        string root = Directory.GetCurrentDirectory();
         string source = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            root, "Code", "core", "lineage",
             "TemporaryLevyService.cs"));
+        string notice = File.ReadAllText(Path.Combine(
+            root, "Code", "core", "lineage", "WarNoticeService.cs"));
         Assert(source.Contains("ScheduleCurrentPreparation(pKingdom)",
                 StringComparison.Ordinal),
             "notice invalidation must enqueue initial mobilization immediately");
+        Assert(notice.Contains(
+                   "TemporaryLevyService.OnEmergencyChanged(pAttacker)",
+                   StringComparison.Ordinal) &&
+               notice.Contains(
+                   "TemporaryLevyService.OnEmergencyChanged(defender)",
+                   StringComparison.Ordinal),
+            "creating a war notice must wake bounded vanilla preparation recruitment for both sides");
+        Assert(notice.Contains(
+                   "TemporaryLevyService.OnNoticeClosed(state.AttackerId)",
+                   StringComparison.Ordinal) &&
+               notice.Contains(
+                   "TemporaryLevyService.OnNoticeClosed(state.DefenderId)",
+                   StringComparison.Ordinal),
+            "closing a war notice must cancel and clean its preparation recruitment");
         int monthlyStart = source.IndexOf(
             "private static void ProcessPreparationMonth(Kingdom pKingdom,",
             StringComparison.Ordinal);

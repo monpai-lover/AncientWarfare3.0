@@ -53,15 +53,15 @@ namespace AncientWarfare3.core.lineage
         // name. That is the intended reading of 嬴姓趙氏, not an omission.
         public static VisibleSurnameWritePlan PlanSurnameWrite(
             string pRequestedFamilyName, string pCurrentClanName,
-            bool pNameIntegrated)
+            bool nameIntegrated)
         {
             string clan = (pCurrentClanName ?? string.Empty).Trim();
             if (!TryNormalizeFamilyName(pRequestedFamilyName,
                     out string family))
                 return new VisibleSurnameWritePlan(string.Empty, clan,
-                    pNameIntegrated);
+                    nameIntegrated);
             return new VisibleSurnameWritePlan(family, clan,
-                pNameIntegrated);
+                nameIntegrated);
         }
 
         public static bool TryNormalizeFamilyName(string pRaw,

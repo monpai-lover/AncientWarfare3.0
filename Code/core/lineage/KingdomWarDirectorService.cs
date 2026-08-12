@@ -873,7 +873,14 @@ namespace AncientWarfare3.core.lineage
                         new ArmyOperationalDirectorFacts(army.UnitCount,
                             army.Supply, army.Organization));
                 armyFacts.Add(new ArmyAllocationFacts(army.ArmyId,
-                    operational.EffectiveForce));
+                    operational.EffectiveForce,
+                    requiresRecovery:
+                        KingdomWarDirectorRules.
+                            ShouldRequestDepletedArmyRecovery(
+                                army.UnitCount, army.CaptainAlive,
+                                army.RoyalGuard, army.DedicatedGarrison,
+                                ArmyRtsRuntimeModeRules.ShouldCommit(
+                                    ArmyRtsRuntimeMode.Current))));
             }
             pWork.Assignments = KingdomWarDirectorRules.AllocateWars(
                 warFacts, armyFacts);
@@ -1816,11 +1823,17 @@ namespace AncientWarfare3.core.lineage
 
         private static bool IsEligibleFieldArmy(ArmyStrategicFacts pArmy)
         {
-            return pArmy != null && pArmy.ArmyId >= 0L &&
-                   KingdomWarDirectorRules.ShouldAllocateFieldArmy(
+            if (pArmy == null || pArmy.ArmyId < 0L) return false;
+            bool recoveryCandidate =
+                KingdomWarDirectorRules.ShouldRequestDepletedArmyRecovery(
+                    pArmy.UnitCount, pArmy.CaptainAlive,
+                    pArmy.RoyalGuard, pArmy.DedicatedGarrison,
+                    ArmyRtsRuntimeModeRules.ShouldCommit(
+                        ArmyRtsRuntimeMode.Current) && !pArmy.SpecialArmy);
+            return KingdomWarDirectorRules.ShouldAllocateFieldArmy(
                        pArmy.UnitCount, pArmy.CaptainAlive,
                        pArmy.RoyalGuard, pArmy.DedicatedGarrison,
-                       pArmy.SpecialArmy);
+                       pArmy.SpecialArmy) || recoveryCandidate;
         }
 
         private static void RequestDepletedArmyRecovery(Kingdom pKingdom,

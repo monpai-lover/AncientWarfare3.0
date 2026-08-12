@@ -215,11 +215,22 @@ namespace AncientWarfare3.core.performance
                 exception = _operationException;
                 if (exception == null &&
                     result.ExecutedItems != result.ScheduledItems)
+                {
+                    // 无捕获异常却仍有未执行项：通常意味着某个 worker 线程在原版非线程安全代码里
+                    // 静默撕裂（如并发写普通 Dictionary）。附带索引游标与停止标记，便于定位停在何处。
+                    int stoppedAtIndex = Volatile.Read(ref _nextIndex);
+                    int endIndex = Volatile.Read(ref _endIndex);
+                    int stopRequested = Volatile.Read(ref _stopRequested);
                     exception = ExceptionDispatchInfo.Capture(
                         new InvalidOperationException(
                             "Simulation worker did not execute all scheduled work: " +
                             result.ExecutedItems + "/" +
-                            result.ScheduledItems));
+                            result.ScheduledItems +
+                            " (nextIndex=" + stoppedAtIndex +
+                            ", endIndex=" + endIndex +
+                            ", stopRequested=" + stopRequested +
+                            ", workers=" + result.WorkerSlots + ")"));
+                }
                 _operationAction = null;
                 _operationException = null;
                 _operationActive = false;

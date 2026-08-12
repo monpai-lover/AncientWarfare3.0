@@ -173,6 +173,8 @@ namespace AncientWarfare3.core.presentation
                         out ArmyRtsStrategicProjection projection);
                 bool hasMission = ArmyRtsControllerService.TryGetMission(
                     army, out ArmyRtsMission mission);
+                bool hasReplenishmentOperation =
+                    ArmyReplenishmentOperationService.TryRead(army, out _);
                 int memberCount = 0;
                 try { memberCount = army.countUnits(); }
                 catch { }
@@ -182,7 +184,10 @@ namespace AncientWarfare3.core.presentation
                             ? projection.State
                             : ArmyRtsState.Idle,
                         memberCount,
-                        ArmyLogisticsRules.MinimumOperationalForce);
+                        ArmyLogisticsRules.MinimumOperationalForce,
+                        hasCombatActivity: false,
+                        hasReplenishmentOperation:
+                            hasReplenishmentOperation);
                 ArmyRtsVisualizationRules.TryAddVisibleCandidate(
                     CandidateScratch,
                     new ArmyRtsVisualizationCandidate(army.id,
@@ -322,6 +327,8 @@ namespace AncientWarfare3.core.presentation
                     pArmy, out ArmyRtsMission mission);
                 bool nativeCombatActivity = HasNativeCombatActivity(pArmy,
                     pCaptain);
+                bool hasReplenishmentOperation =
+                    ArmyReplenishmentOperationService.TryRead(pArmy, out _);
                 bool royalGuardArmy = IsRoyalGuardArmy(pArmy, pCaptain);
                 bool activeDeployment = !royalGuardArmy &&
                     ArmyDeploymentService.HasActiveAssignment(pCaptain);
@@ -353,7 +360,8 @@ namespace AncientWarfare3.core.presentation
                                 : ArmyRtsState.Idle,
                             memberCount,
                             ArmyLogisticsRules.MinimumOperationalForce,
-                            nativeCombatActivity);
+                            nativeCombatActivity,
+                            hasReplenishmentOperation);
                     string pendingOperation = Localize(
                         ArmyMapInformationRules.
                             PendingOperationLocalizationKey(pendingState,
