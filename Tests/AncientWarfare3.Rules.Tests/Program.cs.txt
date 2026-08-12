@@ -101,6 +101,7 @@ if (args.Length == 1 && args[0] == "--xiaization-naming-transition")
 if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
 {
     ArmyRtsWarLifecycleRulesTests.Run();
+    ArmyRtsFieldCombatRulesTests.Run();
     PreparationRecruitmentProtectionRulesTests.Run();
     ArmyRtsWarLifecycleStateTests.Run();
     ArmyRtsCombatHandoffRulesTests.Run();
@@ -844,6 +845,14 @@ static void RunArmyRtsCommandContinuityRulesTests()
             forceReady: true, friendlyDefenseTarget: true,
             ArmyRtsProposalKind.Defend),
         "an actively contested homeland city still receives a defense mission");
+    Equal(false, ArmyRtsRules.ShouldAssignOffensiveContinuity(
+            shouldCommit: true, hasViableAttack: false,
+            hasActiveMission: true),
+        "the offensive continuity fallback cannot overwrite a freshly published defense mission");
+    Equal(true, ArmyRtsRules.ShouldAssignOffensiveContinuity(
+            shouldCommit: true, hasViableAttack: false,
+            hasActiveMission: false),
+        "the offensive continuity fallback still restores a missing national attack");
 
     True(ArmyRtsTaskOwnershipRules.HasImmediateCombatPriority(
             hasAttackTarget: true, targetAlive: true,
@@ -8205,6 +8214,7 @@ ArmyLogisticsSustainmentRulesTests.Run();
 ArmyRtsRouteChoiceRulesTests.Run();
 ArmyRtsReplenishmentArrivalRulesTests.Run();
 ArmyRtsWarLifecycleRulesTests.Run();
+ArmyRtsFieldCombatRulesTests.Run();
 ArmyRtsWarDoctrineRulesTests.Run();
 ArmyAbstractBattleRulesTests.Run();
 ArmyRtsMissionTargetRulesTests.Run();

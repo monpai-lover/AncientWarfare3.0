@@ -56,19 +56,19 @@ Require-Text $fill 'HasExaminationSystem(pKingdom)' `
 if (-not [regex]::IsMatch($fill,
         'FindBestCandidate\(\s*pKingdom,\s*pRoster,\s*pOfficeId,\s*' +
         'pPreferredSchool,\s*pAllowVacancyPromotion:\s*true,\s*' +
-        'pUnavailableActorIds\)')) {
+        'pUnavailableActorIds,\s*pLayer\)')) {
     $failures.Add(
         'vacant central offices must promote qualified domestic candidates outside the bounded index')
 }
 if (-not [regex]::IsMatch($fill,
-        'FindBestCandidate\([\s\S]*?pUnavailableActorIds\);\s*' +
+        'FindBestCandidate\([\s\S]*?pUnavailableActorIds,\s*pLayer\);\s*' +
         'vacancyPromotion\s*=\s*candidate\s*!=\s*null;')) {
     $failures.Add(
         'full-roster vacancy promotions must persist their promotion state')
 }
 Require-Text $fill 'allowActing: pAllowActing' `
     'local acting fallback runs only during the explicit acting pass'
-Require-Text $court 'BuildActiveCentralActorSet()' `
+Require-Text $court 'BuildActiveOfficerActorSet()' `
     'central vacancy filling reads authoritative occupied actor ids'
 Require-Text $court 'pUnavailableActorIds.Contains(pActor.data.id)' `
     'all central candidate paths reject an actor already holding a central office'
@@ -98,13 +98,13 @@ $examFill = if ($examFillStart -ge 0 -and
     $examFillEnd -gt $examFillStart) {
     $court.Substring($examFillStart, $examFillEnd - $examFillStart)
 } else { '' }
-Require-Text $examFill 'HashSet<long> occupiedActors = BuildActiveCentralActorSet();' `
+Require-Text $examFill 'HashSet<long> occupiedActors = BuildActiveOfficerActorSet();' `
     'exam vacancy pass starts from authoritative occupied actors'
 $guestIndex = $examFill.LastIndexOf(
     'SchoolGuestOfficeService.FillVacanciesAfterCivilServiceExam(',
     [StringComparison]::Ordinal)
 $rebuiltActorIndex = if ($guestIndex -ge 0) {
-    $examFill.IndexOf('occupiedActors = BuildActiveCentralActorSet();',
+    $examFill.IndexOf('occupiedActors = BuildActiveOfficerActorSet();',
         $guestIndex, [StringComparison]::Ordinal)
 } else { -1 }
 $actingFillIndex = if ($rebuiltActorIndex -ge 0) {

@@ -4,8 +4,8 @@ namespace AncientWarfare3.core.schools
 {
     public static class HistoricalSchoolRecoveryRules
     {
-        public const int MinimumLivingMembers = 4;
-        public const int MaxSchoolsPerYear = 4;
+        public const int MinimumLivingMembers = 8;
+        public const int MaxSchoolsPerYear = 8;
         public const int MaxTeachersPerSchoolAttempt = 8;
         public const int MaxCandidatesPerSchoolAttempt = 8;
 

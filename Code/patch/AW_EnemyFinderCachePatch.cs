@@ -1,4 +1,6 @@
 ﻿
+using System;
+using System.Threading;
 using AncientWarfare3.core.performance;
 using HarmonyLib;
 
@@ -14,6 +16,7 @@ internal static class AW_EnemyFinderCachePatch
         AccessTools.FieldRefAccess<
             EnemyFinderContainer,
             Kingdom>("_kingdom");
+    private static int _recoveredNullReferences;
 
     [HarmonyPrefix]
     [HarmonyPatch(
@@ -25,6 +28,14 @@ internal static class AW_EnemyFinderCachePatch
         int pRange,
         ref EnemyFinderData __result)
     {
+        if (__instance == null || pChunk == null ||
+            __instance.dict_data == null)
+        {
+            __result = AWEnemyPresenceCache.SharedEmptyResult;
+            RecordRecoveredNullReference();
+            return false;
+        }
+
         int key =
             pChunk.id * 10000 +
             pRange;
@@ -37,25 +48,30 @@ internal static class AW_EnemyFinderCachePatch
             return false;
         }
 
-        Kingdom kingdom =
-            KingdomField(__instance);
+        Kingdom kingdom;
+        try
+        {
+            kingdom = KingdomField(__instance);
+        }
+        catch (NullReferenceException)
+        {
+            __result = AWEnemyPresenceCache.SharedEmptyResult;
+            RecordRecoveredNullReference();
+            return false;
+        }
         if (kingdom != null &&
             AWEnemyPresenceCache.TryGetNegativeResult(
                 kingdom,
                 key))
         {
             EnemiesFinder.counter_reused++;
-            __result =
-                AWEnemyPresenceCache
-                    .SharedEmptyResult;
+            __result = AWEnemyPresenceCache.SharedEmptyResult;
             return false;
         }
 
-        if (!AWEnemyPresenceCache
-                .IsPreparationActive ||
+        if (!AWEnemyPresenceCache.IsPreparationActive ||
             kingdom == null ||
-            AWEnemyPresenceCache
-                .HasPopulatedEnemy(kingdom))
+            AWEnemyPresenceCache.HasPopulatedEnemy(kingdom))
         {
             return true;
         }
@@ -64,10 +80,34 @@ internal static class AW_EnemyFinderCachePatch
             kingdom,
             key,
             pRange);
-        __result =
-            AWEnemyPresenceCache
-                .SharedEmptyResult;
+        __result = AWEnemyPresenceCache.SharedEmptyResult;
         return false;
+    }
+
+    [HarmonyFinalizer]
+    [HarmonyPatch(
+        typeof(EnemyFinderContainer),
+        nameof(EnemyFinderContainer.getData))]
+    private static Exception RecoverGetDataNullReference(
+        Exception __exception,
+        ref EnemyFinderData __result)
+    {
+        if (!(__exception is NullReferenceException))
+            return __exception;
+
+        __result = AWEnemyPresenceCache.SharedEmptyResult;
+        RecordRecoveredNullReference();
+        return null;
+    }
+
+    private static void RecordRecoveredNullReference()
+    {
+        if (Interlocked.Increment(ref _recoveredNullReferences) == 1)
+        {
+            ModClass.LogWarning(
+                "AW recovered an invalid EnemyFinderContainer during " +
+                "simulation; the affected enemy search returned empty.");
+        }
     }
 
     [HarmonyPostfix]

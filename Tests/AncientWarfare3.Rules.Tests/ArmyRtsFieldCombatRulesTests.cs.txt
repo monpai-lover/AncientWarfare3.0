@@ -1,0 +1,82 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsFieldCombatRulesTests
+{
+    public static void Run()
+    {
+        // 队长交战始终触发释放，无论比例或已释放状态。
+        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: false, pEngagedCombatants: 0,
+                pLiveCombatants: 10, pCaptainEngaged: true),
+            "captain engaged forces release from strategic movement");
+        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: true, pEngagedCombatants: 0,
+                pLiveCombatants: 10, pCaptainEngaged: true),
+            "captain engaged keeps the army in field combat");
+
+        // 未释放：达到 25% 触发，低于则不触发。
+        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: false, pEngagedCombatants: 2,
+                pLiveCombatants: 10, pCaptainEngaged: false),
+            "20 percent engaged stays under the release threshold");
+        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: false, pEngagedCombatants: 3,
+                pLiveCombatants: 10, pCaptainEngaged: false),
+            "30 percent engaged crosses the release threshold");
+        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: false, pEngagedCombatants: 25,
+                pLiveCombatants: 100, pCaptainEngaged: false),
+            "exactly 25 percent engaged releases to field combat");
+
+        // 滞后：已释放后要降到 5% 以下才收回。
+        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: true, pEngagedCombatants: 1,
+                pLiveCombatants: 10, pCaptainEngaged: false),
+            "10 percent still engaged keeps field combat active (hysteresis)");
+        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: true, pEngagedCombatants: 6,
+                pLiveCombatants: 100, pCaptainEngaged: false),
+            "6 percent stays engaged above the resume threshold");
+        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: true, pEngagedCombatants: 5,
+                pLiveCombatants: 100, pCaptainEngaged: false),
+            "5 percent engaged reacquires control (not strictly above 5)");
+        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: true, pEngagedCombatants: 0,
+                pLiveCombatants: 10, pCaptainEngaged: false),
+            "a cleared field reacquires RTS control");
+
+        // 阈值不对称：25% 触发但已释放时不会因刚好 25% 而反复——
+        // 已释放用 5% 低阈维持，未释放用 25% 高阈触发。
+        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: false, pEngagedCombatants: 6,
+                pLiveCombatants: 100, pCaptainEngaged: false),
+            "6 percent does not trigger an initial release");
+
+        // 边界：无活跃战斗员且队长未交战 → 不释放，不除零。
+        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: false, pEngagedCombatants: 0,
+                pLiveCombatants: 0, pCaptainEngaged: false),
+            "no live combatants and idle captain must not release");
+        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: true, pEngagedCombatants: 0,
+                pLiveCombatants: 0, pCaptainEngaged: false),
+            "no live combatants reacquires without dividing by zero");
+
+        // 负值与溢出防护。
+        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: false, pEngagedCombatants: -5,
+                pLiveCombatants: 10, pCaptainEngaged: false),
+            "negative engaged count clamps to zero");
+        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pAlreadyReleased: false, pEngagedCombatants: 999,
+                pLiveCombatants: 10, pCaptainEngaged: false),
+            "engaged exceeding live count clamps to full release");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

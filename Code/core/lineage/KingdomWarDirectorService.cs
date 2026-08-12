@@ -518,11 +518,15 @@ namespace AncientWarfare3.core.lineage
 
         internal static void EnsureOffensiveContinuity(Kingdom pKingdom)
         {
-            if (!ArmyRtsRuntimeModeRules.ShouldCommit(
-                    ArmyRtsRuntimeMode.Current) ||
+            bool shouldCommit = ArmyRtsRuntimeModeRules.ShouldCommit(
+                ArmyRtsRuntimeMode.Current);
+            bool hasViableAttack = IsLiveKingdom(pKingdom) &&
+                ArmyReplenishmentCompletionService.HasViableAttack(pKingdom);
+            bool hasActiveMission = IsLiveKingdom(pKingdom) &&
+                ArmyRtsControllerService.HasActiveMissionForKingdom(pKingdom);
+            if (!ArmyRtsRules.ShouldAssignOffensiveContinuity(shouldCommit,
+                    hasViableAttack, hasActiveMission) ||
                 !IsLiveKingdom(pKingdom) ||
-                ArmyReplenishmentCompletionService.HasViableAttack(
-                    pKingdom) ||
                 !ArmyReplenishmentCompletionService.
                     TrySelectOffensivePrimary(pKingdom,
                         out Army candidate) ||

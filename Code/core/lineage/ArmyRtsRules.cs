@@ -345,6 +345,13 @@ namespace AncientWarfare3.core.lineage
                        minimumReady, replenishmentBypassActive: false);
         }
 
+        public static bool ShouldAssignOffensiveContinuity(
+            bool shouldCommit, bool hasViableAttack,
+            bool hasActiveMission)
+        {
+            return shouldCommit && !hasViableAttack && !hasActiveMission;
+        }
+
         public static bool HasRallyReadiness(bool departureStrengthReady)
         {
             return departureStrengthReady;

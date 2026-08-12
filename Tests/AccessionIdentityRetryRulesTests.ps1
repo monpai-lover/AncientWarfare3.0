@@ -6,7 +6,8 @@ $sourcePath = Join-Path $repo 'Code/core/lineage/AccessionIdentityService.cs'
 if (-not [IO.File]::Exists($rulesPath)) { throw 'AccessionIdentityRules.cs is missing.' }
 if (-not [IO.File]::Exists($sourcePath)) { throw 'AccessionIdentityService.cs is missing.' }
 
-Add-Type -TypeDefinition ([IO.File]::ReadAllText($rulesPath)) -Language CSharp
+$rulesText = [IO.File]::ReadAllText($rulesPath) -replace 'public readonly struct', 'public struct'
+Add-Type -TypeDefinition $rulesText -Language CSharp
 $rules = [AncientWarfare3.core.lineage.AccessionIdentityRules]
 
 function Assert-Equal([string]$name, $expected, $actual) {

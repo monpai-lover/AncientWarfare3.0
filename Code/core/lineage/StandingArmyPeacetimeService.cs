@@ -63,9 +63,25 @@ namespace AncientWarfare3.core.lineage
             City city = pActor.city;
             Army army = pActor.army;
             if (city?.data == null || army?.data == null ||
-                pActor.kingdom != city.kingdom || !city.hasArmy() ||
-                city.getArmy() != army || AWArmyService.IsSpecialArmy(army))
+                pActor.kingdom != city.kingdom ||
+                AWArmyService.IsSpecialArmy(army))
                 return false;
+
+            // 原版检查：军队必须是该城市当前驻军
+            // 但 RTS 军队执行任务时会离开城市，任务结束后应恢复巡逻
+            // 放宽条件：只要军队曾驻扎该城市或仍在该城市领土即可
+            if (city.hasArmy() && city.getArmy() == army)
+            {
+                // 军队当前驻扎在该城 → 合格
+            }
+            else
+            {
+                // 军队不在该城，检查是否仍在该城领土内
+                // （RTS 任务结束，士兵回到边境时的情况）
+                bool inCityTerritory = pActor.current_tile?.zone?.city == city;
+                if (!inCityTerritory)
+                    return false;
+            }
 
             pActor.data.get(LineageKeys.TEMPORARY_LEVY,
                 out bool temporaryLevy, false);

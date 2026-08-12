@@ -66,18 +66,23 @@ namespace AncientWarfare3.core.lineage
             int limit = System.Math.Max(0, pMaximum);
             int processed = ProcessPendingCaptains(limit);
             int kingdomVisits = Pending.Count;
+            var toRemove = new List<long>();
             while (processed < limit && Pending.Count > 0 &&
                    kingdomVisits-- > 0)
             {
-                using IEnumerator<KeyValuePair<long, Work>> iterator =
-                    Pending.GetEnumerator();
-                if (!iterator.MoveNext()) break;
-                long kingdomId = iterator.Current.Key;
-                Work work = iterator.Current.Value;
+                long kingdomId = -1L;
+                Work work = null;
+                foreach (KeyValuePair<long, Work> pair in Pending)
+                {
+                    kingdomId = pair.Key;
+                    work = pair.Value;
+                    break;
+                }
+                if (kingdomId < 0L || work == null) break;
                 Kingdom kingdom = FindKingdom(kingdomId);
                 if (!IsCurrent(kingdom, work))
                 {
-                    Pending.Remove(kingdomId);
+                    toRemove.Add(kingdomId);
                     continue;
                 }
 
@@ -105,9 +110,11 @@ namespace AncientWarfare3.core.lineage
                 }
                 if (!complete) break;
                 CompletedKingByKingdom[kingdomId] = work.KingId;
-                Pending.Remove(kingdomId);
+                toRemove.Add(kingdomId);
                 KingdomWarDirectorService.QueueArmyChanged(kingdom);
             }
+            for (int i = 0; i < toRemove.Count; i++)
+                Pending.Remove(toRemove[i]);
             return processed;
         }
 

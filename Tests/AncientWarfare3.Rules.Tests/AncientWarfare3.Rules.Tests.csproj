@@ -227,6 +227,7 @@
     <Compile Include="ArmyRtsPreDepartureDeadlineRulesTests.cs.txt" />
     <Compile Include="ArmyRtsReplenishmentArrivalRulesTests.cs.txt" />
     <Compile Include="ArmyRtsWarLifecycleRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsFieldCombatRulesTests.cs.txt" />
     <Compile Include="ArmyRtsWarDoctrineRulesTests.cs.txt" />
     <Compile Include="ArmyAbstractBattleRulesTests.cs.txt" />
     <Compile Include="ArmyAbstractBattleTransactionRulesTests.cs.txt" />
@@ -482,6 +483,7 @@
     <Compile Include="..\..\Code\core\lineage\ArmyCaptainContinuityRules.cs" Link="Production\ArmyCaptainContinuityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRuntimeMode.cs" Link="Production\ArmyRtsRuntimeMode.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsTaskOwnershipRules.cs" Link="Production\ArmyRtsTaskOwnershipRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsFieldCombatRules.cs" Link="Production\ArmyRtsFieldCombatRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyStallWatchdogRules.cs" Link="Production\ArmyStallWatchdogRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyFormationRules.cs" Link="Production\ArmyFormationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRetreatRules.cs" Link="Production\ArmyRetreatRules.cs" />

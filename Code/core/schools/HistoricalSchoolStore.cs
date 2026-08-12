@@ -96,12 +96,16 @@ namespace AncientWarfare3.core.schools
             string pPayload, int pImportance, double pWorldTime)
         {
             if (DB == null || string.IsNullOrWhiteSpace(pEventType) || pActorId < 0) return false;
-            long eventId = TableIdAllocator.Next(DB, EventTable, "EVENT_ID");
-            if (eventId < 0) return false;
             SQLiteTransaction transaction = null;
             try
             {
                 transaction = DB.BeginTransaction();
+                long eventId = NextIdInTransaction(transaction, EventTable, "EVENT_ID");
+                if (eventId < 0)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
                 using (var command = new SQLiteCommand(DB) { Transaction = transaction })
                 {
                     command.CommandText = "INSERT INTO " + EventTable +
@@ -410,13 +414,17 @@ namespace AncientWarfare3.core.schools
             if (DB == null || string.IsNullOrWhiteSpace(pWorkKey) ||
                 string.IsNullOrWhiteSpace(pSchoolId) || pAuthorActorId < 0) return false;
             if (HasPreservedWork(pWorkKey, pSchoolId)) return false;
-            long workId = TableIdAllocator.Next(DB, WorkTable, "WORK_ID");
-            long eventId = TableIdAllocator.Next(DB, EventTable, "EVENT_ID");
-            if (workId < 0 || eventId < 0) return false;
             double worldTime = World.world?.getCurWorldTime() ?? 0d;
             using SQLiteTransaction transaction = DB.BeginTransaction();
             try
             {
+                long workId = NextIdInTransaction(transaction, WorkTable, "WORK_ID");
+                long eventId = NextIdInTransaction(transaction, EventTable, "EVENT_ID");
+                if (workId < 0 || eventId < 0)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
                 using (var work = new SQLiteCommand(DB) { Transaction = transaction })
                 {
                     work.CommandText = "INSERT INTO " + WorkTable +
@@ -678,14 +686,17 @@ namespace AncientWarfare3.core.schools
             City residence = HistoricalAffiliationService.ResidenceCity(founder);
             if (residence?.data == null || residence.data.id != pCityId) return false;
 
-            long institutionId = TableIdAllocator.Next(DB, InstitutionTable, "INSTITUTION_ID");
-            long eventId = TableIdAllocator.Next(DB, EventTable, "EVENT_ID");
-            if (institutionId < 0 || eventId < 0) return false;
-
             SQLiteTransaction transaction = null;
             try
             {
                 transaction = DB.BeginTransaction();
+                long institutionId = NextIdInTransaction(transaction, InstitutionTable, "INSTITUTION_ID");
+                long eventId = NextIdInTransaction(transaction, EventTable, "EVENT_ID");
+                if (institutionId < 0 || eventId < 0)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
                 // Idempotent: an active institution is unique within a city/school.
                 if (HasActiveInstitutionCommand(transaction, pMaster, pCityId) ||
                     !HasFounderEvidenceCommand(transaction, pFounderActorId, pCityId,

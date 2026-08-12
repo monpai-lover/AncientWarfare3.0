@@ -17,8 +17,8 @@ function Get-Slice([string] $start, [string] $end) {
 $refresh = Get-Slice 'private static Actor RefreshHeirAndReturn' `
     'private static long ResolveReferenceKingId'
 $prepare = Get-Slice `
-    'public static void PrepareSuccessionBeforeKingDeath' `
-    'public static bool HasSuccessionCandidate'
+    'public static Actor ReconcileHeir' `
+    'public static void MarkSuccessionDirtyForActor'
 $manual = Get-Slice 'public static void StoreSelectedHeir' `
     'public static string ResolveSuccessionModeForCandidate'
 $store = Get-Slice 'private static Actor StoreHeirSelection' `

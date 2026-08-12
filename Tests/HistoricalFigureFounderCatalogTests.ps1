@@ -7,6 +7,8 @@ $rulesPath = Join-Path $repo `
     'Code/content/figures/HistoricalFigureSpawnRules.cs'
 $displayRulesPath = Join-Path $repo `
     'Code/core/lineage/LineageDisplayNameRules.cs'
+$givenNameRulesPath = Join-Path $repo `
+    'Code/core/lineage/LineageGivenNameNormalizationRules.cs'
 $servicePath = Join-Path $repo `
     'Code/content/figures/HistoricalFigureService.cs'
 $stateStorePath = Join-Path $repo `
@@ -82,7 +84,8 @@ $supportPath = Join-Path ([IO.Path]::GetTempPath()) `
 try {
     [IO.File]::WriteAllText($supportPath, $displayCompileSupport,
         [Text.UTF8Encoding]::new($false))
-    Add-Type -Path $supportPath, $definitionPath, $rulesPath, $displayRulesPath
+    Add-Type -Path $supportPath, $definitionPath, $rulesPath, `
+        $displayRulesPath, $givenNameRulesPath
 } finally {
     Remove-Item -LiteralPath $supportPath -Force -ErrorAction SilentlyContinue
 }
