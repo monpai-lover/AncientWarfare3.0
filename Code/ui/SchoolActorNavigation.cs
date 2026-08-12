@@ -4,7 +4,7 @@ namespace AncientWarfare3.ui
     {
         public static void Open(Actor pActor)
         {
-            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return;
+            if (pActor == null || pActor.isRekt()) return;
             ActionLibrary.openUnitWindow(pActor);
         }
     }

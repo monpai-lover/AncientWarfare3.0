@@ -20,6 +20,12 @@ if ($schoolWindow -match '\[SchoolWindow\.ShowLineage\]') {
 if ($navigation -notmatch 'ActionLibrary\.openUnitWindow\(pActor\)') {
     throw 'School actor navigation must match FamilyTreeWindow and use ActionLibrary.openUnitWindow.'
 }
+if ($navigation -notmatch 'if \(pActor == null \|\| pActor\.isRekt\(\)\) return;') {
+    throw 'School actor navigation must use the same null/rekts guard as FamilyTreeWindow.'
+}
+if ($navigation -match 'pActor\?\.data|pActor\.isAlive\(\)') {
+    throw 'School actor navigation must not impose liveness or data guards that FamilyTreeWindow does not use.'
+}
 if ($navigation -match 'selectAndInspect|SelectedUnit\.(clear|select)|ScrollWindow\.finishAnimations\(\)|ScrollWindow\.showWindow\("unit"\)|SchoolMapModeService\.EndWindowMode') {
     throw 'School actor navigation must not add a second window-selection protocol beside FamilyTreeWindow.'
 }
