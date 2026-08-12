@@ -17,17 +17,11 @@ if ($schoolWindow -match 'SchoolMembershipService\.AllActive\(\)') {
 if ($schoolWindow -match '\[SchoolWindow\.ShowLineage\]') {
     throw 'ShowLineage must not emit per-refresh diagnostic logs.'
 }
-if ($navigation -notmatch 'MetaType\.Unit\.getAsset\(\)') {
-    throw 'School actor navigation must use the native Unit meta inspector.'
+if ($navigation -notmatch 'ActionLibrary\.openUnitWindow\(pActor\)') {
+    throw 'School actor navigation must match FamilyTreeWindow and use ActionLibrary.openUnitWindow.'
 }
-if ($navigation -notmatch 'ScrollWindow\.finishAnimations\(\)') {
-    throw 'School actor navigation must finish the school window transition before inspection.'
-}
-if ($navigation -notmatch '(?s)unitMeta\.selectAndInspect\(pActor, pFromNameplate: false,\s*pCheckNameplate: false, pClearAction: false\)') {
-    throw 'School actor navigation must use the complete v1.1.2 selection and inspection protocol.'
-}
-if ($navigation -match 'SelectedUnit\.(clear|select)|ScrollWindow\.showWindow\("unit"\)|SchoolMapModeService\.EndWindowMode') {
-    throw 'School actor navigation must not replace native meta inspection with manual UnitWindow state changes.'
+if ($navigation -match 'selectAndInspect|SelectedUnit\.(clear|select)|ScrollWindow\.finishAnimations\(\)|ScrollWindow\.showWindow\("unit"\)|SchoolMapModeService\.EndWindowMode') {
+    throw 'School actor navigation must not add a second window-selection protocol beside FamilyTreeWindow.'
 }
 if ($rosterWindow -notmatch '(?s)private void Refresh\(\).*CancelPendingRender\(\);\s*HideNodesAndLinks\(\);\s*UpdateSchoolSelector\(\);') {
     throw 'The school roster must clear pending rendering at refresh start like v1.1.2.'
