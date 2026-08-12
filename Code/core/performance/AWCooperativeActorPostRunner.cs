@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.patch;
 using UnityEngine;
@@ -3963,6 +3964,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         internal bool Fallback { get; private set; }
         internal bool Skipped { get; private set; }
         internal bool PriorityOnly { get; private set; }
+        internal bool[] SharedRouteActive { get; private set; } =
+            Array.Empty<bool>();
         internal PathMovementWorkEntry[] Entries { get; private set; } =
             Array.Empty<PathMovementWorkEntry>();
 
@@ -4019,6 +4022,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             if (Entries.Length < count)
                 Entries = new PathMovementWorkEntry[Math.Max(
                     AWPerformanceSettings.SimulationBatchSize, count)];
+            if (SharedRouteActive.Length < count)
+                SharedRouteActive = new bool[Entries.Length];
+            for (int i = 0; i < count; i++)
+                SharedRouteActive[i] =
+                    AWArmyMarchService.HasActiveCompleteSharedRoute(
+                        actors[i]);
         }
 
         internal void RunParallel()
@@ -4035,7 +4044,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                             AWPerformanceSettings.Mode ==
                             AWSimulationMode.Large,
                             actor?.army?.data != null,
-                            AWPathMovementBridge.HasOwnership(actor)))
+                            AWPathMovementBridge.HasOwnership(actor),
+                            SharedRouteActive[i]))
                 {
                     entry.Kind = PathMovementWorkKind.Retain;
                     continue;
@@ -4080,7 +4090,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Fallback = false;
             Skipped = false;
             PriorityOnly = false;
-            if (previousCount > 0) Array.Clear(Entries, 0, previousCount);
+            if (previousCount > 0)
+                Array.Clear(Entries, 0, previousCount);
         }
     }
 
@@ -4108,6 +4119,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         internal int SerialCount { get; private set; }
         internal bool Skipped { get; private set; }
         internal bool PriorityOnly { get; private set; }
+        internal bool[] SharedRouteActive { get; private set; } =
+            Array.Empty<bool>();
         internal float Elapsed { get; private set; }
         internal AWPathMovementBridge.AWPreparedSmoothMovement[] Entries { get; private set; } =
             Array.Empty<AWPathMovementBridge.AWPreparedSmoothMovement>();
@@ -4165,6 +4178,13 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 Entries = new AWPathMovementBridge.AWPreparedSmoothMovement[
                     capacity];
             }
+            if (SharedRouteActive.Length < count)
+                SharedRouteActive = new bool[Math.Max(
+                    AWPerformanceSettings.SimulationBatchSize, count)];
+            for (int i = 0; i < count; i++)
+                SharedRouteActive[i] =
+                    AWArmyMarchService.HasActiveCompleteSharedRoute(
+                        actors[i]);
         }
 
         internal void RunParallel()
@@ -4181,7 +4201,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                             actor?.army?.data != null,
                             actor?.is_moving == true,
                             actor?.isFollowingLocalPath() == true,
-                            AWPathMovementBridge.HasOwnership(actor)))
+                            AWPathMovementBridge.HasOwnership(actor),
+                            SharedRouteActive[i]))
                     continue;
                 AWPathMovementBridge.AWParallelSmoothMovementResult result =
                     AWPathMovementBridge.TryRunParallelSafeSmoothMovement(
@@ -4200,6 +4221,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         internal void Reset()
         {
+            int previousCount = Count;
             Job = null;
             Actors = null;
             Count = 0;

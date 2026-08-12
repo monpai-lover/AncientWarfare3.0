@@ -61,6 +61,10 @@ Require-Contains $rules 'ShouldAllowVanillaCityAttack(' `
     'Only a persisted VanillaCombat lifecycle phase may release a target city.'
 Require-Contains $runner 'ConfigurePriorityOnly(batch, job,' `
     'Skipped large-scheduler movement batches must retain a restricted RTS path pulse.'
+Require-Contains $runner 'AWArmyMarchService.HasActiveCompleteSharedRoute(' `
+    'Skipped large-scheduler movement batches must also retain native RTS shared routes.'
+Require-Contains $runner 'SharedRouteActive[i]' `
+    'Shared-route priority eligibility must be captured before parallel movement work begins.'
 Require-Contains $cadence 'actorInArmy && actorIsMoving' `
     'Skipped smooth-movement priority must remain limited to moving army actors.'
 
