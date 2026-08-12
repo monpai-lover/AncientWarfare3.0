@@ -57,35 +57,45 @@ namespace AncientWarfare3.core.performance
             CityMilitaryThreatFacts.BeginAuthorityCycle();
             try
             {
-                Measure(RecentFeatureBenchmarkRules.ArmyRtsCoalitionIndex,
-                    CoalitionWarTaskService.ProcessFrame);
-                Measure(RecentFeatureBenchmarkRules.ArmyRtsDirectorIndex,
-                    () => KingdomWarDirectorService.ProcessFrame(
-                        budget.FirstOrders));
-                ArmyAbstractBattleService.ProcessFrame(
-                    budget.AbstractBattles);
-                Measure(RecentFeatureBenchmarkRules.PathfindingIndex,
-                    ArmyRouteProviderService.ProcessFrame);
-                Measure(RecentFeatureBenchmarkRules.ArmyRtsControllerIndex,
-                    () => ArmyRtsControllerService.ProcessFrame(
-                        budget.ControllerArmies, budget.ReplenishmentArrivals));
-                Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
-                    ArmyLogisticsService.ProcessFrame);
-                Measure(RecentFeatureBenchmarkRules.ArmyRtsWatchdogIndex,
-                    () => ArmyStallWatchdogService.ProcessFrame(
-                        budget.WatchdogArmies,
-                        pForceSample: simulationMode ==
-                                      AWSimulationMode.Large));
+                Guard("coalition", () =>
+                    Measure(RecentFeatureBenchmarkRules.ArmyRtsCoalitionIndex,
+                        CoalitionWarTaskService.ProcessFrame));
+                Guard("war_director", () =>
+                    Measure(RecentFeatureBenchmarkRules.ArmyRtsDirectorIndex,
+                        () => KingdomWarDirectorService.ProcessFrame(
+                            budget.FirstOrders)));
+                Guard("abstract_battle", () =>
+                    ArmyAbstractBattleService.ProcessFrame(
+                        budget.AbstractBattles));
+                Guard("route_provider", () =>
+                    Measure(RecentFeatureBenchmarkRules.PathfindingIndex,
+                        ArmyRouteProviderService.ProcessFrame));
+                Guard("controller", () =>
+                    Measure(RecentFeatureBenchmarkRules.ArmyRtsControllerIndex,
+                        () => ArmyRtsControllerService.ProcessFrame(
+                            budget.ControllerArmies, budget.ReplenishmentArrivals)));
+                Guard("logistics", () =>
+                    Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
+                        ArmyLogisticsService.ProcessFrame));
+                Guard("watchdog", () =>
+                    Measure(RecentFeatureBenchmarkRules.ArmyRtsWatchdogIndex,
+                        () => ArmyStallWatchdogService.ProcessFrame(
+                            budget.WatchdogArmies,
+                            pForceSample: simulationMode ==
+                                          AWSimulationMode.Large)));
                 if (simulationMode == AWSimulationMode.Large)
                 {
-                    ArmyRtsWarLifecycleService.ProcessAuthorityCycle(
-                        budget.LifecycleDiscoveries);
-                    ArmyRtsAssignmentReconciliationService.
-                        ProcessAuthorityCycle(
-                            budget.AssignmentReconciliations);
-                    ArmyRtsSuccessionRecoveryService.
-                        ProcessPendingRecoveries(
-                            budget.SuccessionRecoveries);
+                    Guard("war_lifecycle", () =>
+                        ArmyRtsWarLifecycleService.ProcessAuthorityCycle(
+                            budget.LifecycleDiscoveries));
+                    Guard("assignment_reconciliation", () =>
+                        ArmyRtsAssignmentReconciliationService.
+                            ProcessAuthorityCycle(
+                                budget.AssignmentReconciliations));
+                    Guard("succession_recovery", () =>
+                        ArmyRtsSuccessionRecoveryService.
+                            ProcessPendingRecoveries(
+                                budget.SuccessionRecoveries));
                 }
             }
             finally
@@ -126,6 +136,23 @@ namespace AncientWarfare3.core.performance
             finally
             {
                 RecentFeatureBenchmark.End(pIndex, benchmark);
+            }
+        }
+
+        // 隔离单个子服务：某子服务本周期抛异常时，只跳过它并记警告，
+        // 不让异常冒泡到 ArmyManager.update 后缀而触发全局静默暂停。
+        private static void Guard(string pName, System.Action pAction)
+        {
+            try
+            {
+                pAction();
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning(
+                    "AW army RTS sub-service '" + pName +
+                    "' faulted this cycle; skipped to avoid global pause: " +
+                    error);
             }
         }
     }
