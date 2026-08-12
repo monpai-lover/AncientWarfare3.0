@@ -4469,21 +4469,21 @@ namespace AncientWarfare3.core.lineage
             {
                 border = currentZone != null && pTarget.border_zones != null &&
                          pTarget.border_zones.Contains(currentZone);
-                if (!exact && !border && pTarget.zones != null)
+                if (!exact && !border && currentZone == null)
                 {
-                    for (int i = 0; i < pTarget.zones.Count && !adjacent; i++)
+                    WorldTile[] neighbours = pActor.current_tile.neighboursAll;
+                    int count = Math.Min(8, neighbours?.Length ?? 0);
+                    for (int i = 0; i < count; i++)
                     {
-                        TileZone zone = pTarget.zones[i];
-                        if (zone?.tiles == null) continue;
-                        for (int j = 0; j < zone.tiles.Length; j++)
+                        TileZone neighbourZone = null;
+                        try { neighbourZone = neighbours[i]?.zone; }
+                        catch { }
+                        if (neighbourZone?.city == pTarget ||
+                            pTarget.border_zones != null &&
+                            pTarget.border_zones.Contains(neighbourZone))
                         {
-                            WorldTile tile = zone.tiles[j];
-                            if (tile == pActor.current_tile ||
-                                tile?.zone == currentZone)
-                            {
-                                adjacent = true;
-                                break;
-                            }
+                            adjacent = true;
+                            break;
                         }
                     }
                 }

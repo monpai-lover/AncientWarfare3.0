@@ -109,6 +109,19 @@ internal static class ArmyRtsCombatHandoffRulesTests
 
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"));
+        int territoryStart = controller.IndexOf(
+            "private static bool IsInsideTargetTerritory(",
+            StringComparison.Ordinal);
+        int territoryEnd = controller.IndexOf(
+            "internal static bool IsVanillaCombatArmy(", territoryStart,
+            StringComparison.Ordinal);
+        string territoryBody = controller.Substring(territoryStart,
+            territoryEnd - territoryStart);
+        Assert(territoryBody.Contains("pTarget.border_zones.Contains(currentZone)",
+                StringComparison.Ordinal) &&
+            territoryBody.Contains("neighboursAll", StringComparison.Ordinal) &&
+            !territoryBody.Contains("pTarget.zones.Count", StringComparison.Ordinal),
+            "target handoff checks border contact without scanning all city tiles");
         Assert(controller.Contains(
                 "ArmyRtsWarPhase.VanillaCombat);\n            ArmyRouteProviderService.Cancel",
                 StringComparison.Ordinal),
