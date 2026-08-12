@@ -5,8 +5,10 @@ $controllerPath = Join-Path $repo 'Code\core\lineage\ArmyRtsControllerService.cs
 $rulesPath = Join-Path $repo 'Code\core\lineage\ArmyRtsWarLifecycleRules.cs'
 $runnerPath = Join-Path $repo 'Code\core\performance\AWCooperativeActorPostRunner.cs'
 $cadencePath = Join-Path $repo 'Code\core\performance\ArmyRtsMovementCadenceRules.cs'
+$armySafetyPath = Join-Path $repo 'Code\patch\AW_ArmySafetyPatch.cs'
 
-foreach ($path in @($controllerPath, $rulesPath, $runnerPath, $cadencePath)) {
+foreach ($path in @($controllerPath, $rulesPath, $runnerPath, $cadencePath,
+        $armySafetyPath)) {
     if (-not (Test-Path $path)) { throw "Missing source: $path" }
 }
 
@@ -14,6 +16,7 @@ $controller = Get-Content -Raw $controllerPath
 $rules = Get-Content -Raw $rulesPath
 $runner = Get-Content -Raw $runnerPath
 $cadence = Get-Content -Raw $cadencePath
+$armySafety = Get-Content -Raw $armySafetyPath
 
 function Require-Contains([string] $text, [string] $needle,
     [string] $message) {
@@ -49,6 +52,8 @@ Require-Contains $controller 'RoyalGuardService.EnsureProtectKingTask(pActor);' 
     'RTS release must restore royal guards to protect-the-king behavior.'
 Require-Match $controller 'ShouldOwnMilitaryActor\(Actor pActor,[\s\S]{0,160}RoyalGuardService\.IsRoyalGuard\(pActor\)' `
     'The universal RTS ownership gate must exclude royal guards before task or decision interception.'
+Require-Match $armySafety 'MakeDecisionFor_Prefix\([\s\S]{0,260}RoyalGuardService\.IsRoyalGuard\(pActor\)[\s\S]{0,180}EnsureProtectKingTask\(pActor\)' `
+    'The universal decision writer must restore royal-guard protection before it can assign social work.'
 Require-Contains (Get-Content -Raw (Join-Path $repo 'Code\core\lineage\AWArmyRoleRules.cs')) `
     'return pArmyRole != AWArmyRole.RoyalGuard &&' `
     'Royal Guard captains must never become RTS-owned, including kings and leaders.'

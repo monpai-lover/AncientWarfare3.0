@@ -656,6 +656,13 @@ namespace AncientWarfare3.patch
         public static bool MakeDecisionFor_Prefix(Actor pActor,
             ref string pLastDecisionID, ref bool __result)
         {
+            if (RoyalGuardService.IsRoyalGuard(pActor))
+            {
+                RoyalGuardService.EnsureProtectKingTask(pActor);
+                pLastDecisionID = string.Empty;
+                __result = false;
+                return false;
+            }
             bool rtsOwnsActor =
                 ArmyRtsControllerService.OwnsLiveActor(pActor);
             if (ArmyRtsRuntimeModeRules.
