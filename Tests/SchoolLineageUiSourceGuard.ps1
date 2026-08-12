@@ -4,6 +4,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $schoolWindow = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/windows/SchoolWindow.cs')
 $navigation = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/SchoolActorNavigation.cs')
 $rosterWindow = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/windows/SchoolRosterWindow.cs')
+$traitPatch = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/patch/AW_TraitWindowSafetyPatch.cs')
 
 if ($schoolWindow -notmatch '\.Take\(_lineageRows\.Count\)') {
     throw 'ShowLineage must keep the v1.1.2 fixed-row rendering contract.'
@@ -13,6 +14,21 @@ if ($schoolWindow -match 'EnsureLineageRows|LogLineageDiagnostic|_lastLineageDia
 }
 if ($schoolWindow -match 'SchoolMembershipService\.AllActive\(\)') {
     throw 'ShowLineage must use the per-school membership index, not enumerate all active records.'
+}
+if ($schoolWindow -notmatch '(?s)private float ShowLineage\(string pSchoolId, float pTop\).*HistoricalSchoolMasterRegistry\.All') {
+    throw 'ShowLineage must include historical school masters in the lineage display.'
+}
+if ($schoolWindow -notmatch '(?s)private float ShowLineage\(string pSchoolId, float pTop\).*HistoricalSchoolStore\.LoadMasterStates\(\)') {
+    throw 'ShowLineage must use persisted master state to render deceased founders.'
+}
+if ($schoolWindow -notmatch 'LineageRowPoolSize\s*=\s*32') {
+    throw 'The school detail lineage row pool must be large enough for founders and members.'
+}
+if ($traitPatch -notmatch 'TraitsContainer<ActorTrait, ActorTraitButton>') {
+    throw 'Trait window safety must target the concrete unit trait container.'
+}
+if ($traitPatch -notmatch 'Finalizer|Exception') {
+    throw 'Trait window safety must suppress the initialization-only null trait exception.'
 }
 if ($schoolWindow -match '\[SchoolWindow\.ShowLineage\]') {
     throw 'ShowLineage must not emit per-refresh diagnostic logs.'

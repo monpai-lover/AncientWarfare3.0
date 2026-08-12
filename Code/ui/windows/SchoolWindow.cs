@@ -36,6 +36,19 @@ namespace AncientWarfare3.ui.windows
             public float Influence;
         }
 
+        private sealed class LineageDisplayRow
+        {
+            public string StudentName;
+            public string TeacherName;
+            public int Generation;
+            public float Reputation;
+            public bool Alive;
+            public long ActorId;
+            public int SortOrder;
+        }
+
+        private const int LineageRowPoolSize = 32;
+
         private static string _requestedSchool = CourtSchoolId.Ru;
         private static long _requestedCity = -1L;
         private readonly List<SchoolListItem> _listItems = new List<SchoolListItem>();
@@ -268,7 +281,7 @@ namespace AncientWarfare3.ui.windows
                 card.gameObject.SetActive(false);
                 _masterCards.Add(card);
             }
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < LineageRowPoolSize; i++)
             {
                 SchoolInstitutionRowView row = SchoolInstitutionRowView.Create(_detailContent);
                 row.gameObject.SetActive(false);
@@ -625,42 +638,95 @@ namespace AncientWarfare3.ui.windows
 
         private float ShowLineage(string pSchoolId, float pTop)
         {
+            var rows = new List<LineageDisplayRow>();
+            var historicalDefinitions = HistoricalSchoolMasterRegistry.All
+                .Where(p => p != null && string.Equals(p.SchoolId, pSchoolId,
+                    StringComparison.Ordinal))
+                .ToDictionary(p => p.Id, p => p, StringComparer.Ordinal);
+            var historical = HistoricalSchoolStore.LoadMasterStates()
+                .Where(p => p != null && !string.IsNullOrEmpty(p.MasterId))
+                .GroupBy(p => p.MasterId, StringComparer.Ordinal)
+                .Select(p => p.OrderByDescending(v => v.SpawnYear).First())
+                .Select(p => new
+                {
+                    Record = p,
+                    Definition = historicalDefinitions.TryGetValue(p.MasterId,
+                        out HistoricalSchoolMasterDefinition definition)
+                        ? definition
+                        : null
+                })
+                .Where(p => p.Definition != null &&
+                            string.Equals(p.Definition.SchoolId, pSchoolId,
+                                StringComparison.Ordinal))
+                .OrderBy(p => p.Definition.Order)
+                .ToArray();
+            var seenActors = new HashSet<long>();
+            int order = 0;
+            foreach (var item in historical)
+            {
+                Actor actor = item.Record.ActorId >= 0
+                    ? World.world?.units?.get(item.Record.ActorId)
+                    : null;
+                bool alive = actor?.data != null && actor.isAlive() && !actor.isRekt() &&
+                             !item.Record.Dead;
+                rows.Add(new LineageDisplayRow
+                {
+                    StudentName = item.Definition.CanonicalName,
+                    TeacherName = "",
+                    Generation = 0,
+                    Reputation = 0f,
+                    Alive = alive,
+                    ActorId = item.Record.ActorId,
+                    SortOrder = order++
+                });
+                if (item.Record.ActorId >= 0) seenActors.Add(item.Record.ActorId);
+            }
+
             var members = SchoolMembershipService.Members(pSchoolId)
                 .Select(p => SchoolMembershipService.GetActive(p))
-                .Where(p => p != null)
+                .Where(p => p != null && !seenActors.Contains(p.ActorId))
                 .OrderByDescending(p => p.Reputation)
                 .ThenBy(p => p.ActorId)
-                .Take(_lineageRows.Count)
                 .ToArray();
-            float cursor = pTop;
-            int rendered = 0;
-            for (int i = 0; i < _lineageRows.Count; i++)
+            foreach (SchoolMembershipRecord membership in members)
             {
-                SchoolLineageRowView row = _lineageRows[i];
-                if (i >= members.Length)
-                {
-                    row.gameObject.SetActive(false);
-                    continue;
-                }
-                SchoolMembershipRecord membership = members[i];
                 Actor student = World.world?.units?.get(membership.ActorId);
                 Actor teacher = membership.TeacherActorId >= 0
                     ? World.world?.units?.get(membership.TeacherActorId)
                     : null;
-                string studentName = student?.data != null
-                    ? SafeActorName(student)
-                    : HistoricalSchoolMasterRegistry.Find(membership.SourceId)?.CanonicalName ??
-                      ("actor " + membership.ActorId);
-                string teacherName = teacher?.data != null ? SafeActorName(teacher) : "";
+                rows.Add(new LineageDisplayRow
+                {
+                    StudentName = student?.data != null
+                        ? SafeActorName(student)
+                        : HistoricalSchoolMasterRegistry.Find(membership.SourceId)?.CanonicalName ??
+                          ("actor " + membership.ActorId),
+                    TeacherName = teacher?.data != null ? SafeActorName(teacher) : "",
+                    Generation = membership.Generation,
+                    Reputation = membership.Reputation,
+                    Alive = student?.data != null && student.isAlive() && !student.isRekt(),
+                    ActorId = membership.ActorId,
+                    SortOrder = order++
+                });
+            }
+
+            LineageDisplayRow[] visibleRows = rows.Take(_lineageRows.Count).ToArray();
+            float cursor = pTop;
+            for (int i = 0; i < _lineageRows.Count; i++)
+            {
+                SchoolLineageRowView row = _lineageRows[i];
+                if (i >= visibleRows.Length)
+                {
+                    row.gameObject.SetActive(false);
+                    continue;
+                }
+                LineageDisplayRow display = visibleRows[i];
                 RectTransform rect = row.GetComponent<RectTransform>();
                 rect.anchoredPosition = new Vector2(12f, -cursor);
-                row.Bind(studentName, teacherName, membership.Generation,
-                    membership.Reputation, student?.data != null && student.isAlive() &&
-                    !student.isRekt());
+                row.Bind(display.StudentName, display.TeacherName, display.Generation,
+                    display.Reputation, display.Alive);
                 cursor += row.LayoutHeight(DetailWidth()) + 4f;
-                rendered++;
             }
-            return rendered == 0 ? pTop : cursor;
+            return rows.Count == 0 ? pTop : cursor;
         }
 
         private static string RecentHistory(string pSchoolId)
