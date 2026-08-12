@@ -549,7 +549,10 @@ namespace AncientWarfare3.core.lineage
             internal bool MobilizationStatusCatchupPending;
             internal bool MobilizationStatusSweepHasPendingAssembly;
             internal int FollowerRouteInstallCursor;
+            internal bool FieldCombatReleased;
             internal long RosterVersion;
+            internal long LastTargetCityId = -1L;
+            internal double LastTargetChangeTime = -1d;
             internal double NextJobOwnershipRepairWorldTime =
                 double.PositiveInfinity;
             internal ArmyRtsState MobilizationStatusState =
@@ -989,6 +992,25 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRtsControllerRecord previousRecord))
                 previousMission = ArmyRtsControllerRules.CopyMission(
                     previousRecord.Mission);
+
+            // 目标城市变更冷却：防止频繁振荡
+            bool targetCityChanged = previousMission != null &&
+                previousMission.TargetCityId != pMission.TargetCityId;
+            if (targetCityChanged &&
+                RuntimeByArmy.TryGetValue(pArmy.id, out RuntimeState cooldownCheck))
+            {
+                double now = CurrentWorldTime();
+                double timeSinceLastChange = now - cooldownCheck.LastTargetChangeTime;
+                const double MinChangeIntervalSeconds = 30d;
+                if (cooldownCheck.LastTargetCityId == pMission.TargetCityId &&
+                    timeSinceLastChange < MinChangeIntervalSeconds)
+                {
+                    // 冷却期内切回旧目标 → 拒绝变更，保持当前目标
+                    pMission.TargetCityId = previousMission.TargetCityId;
+                    targetCityChanged = false;
+                }
+            }
+
             pMission.TargetStrength = ArmyRtsRules.
                 ResolveMissionTargetStrength(pMission.TargetStrength,
                     Math.Max(previousMission?.TargetStrength ?? 0,
@@ -1046,6 +1068,15 @@ namespace AncientWarfare3.core.lineage
                 };
             RuntimeByArmy[pArmy.id].DirectorGeneration =
                 pDirectorGeneration;
+
+            // 记录目标城市变更时间（用于冷却期检测）
+            if (targetCityChanged)
+            {
+                RuntimeState runtime = RuntimeByArmy[pArmy.id];
+                runtime.LastTargetCityId = previousMission.TargetCityId;
+                runtime.LastTargetChangeTime = CurrentWorldTime();
+            }
+
             if (changed)
             {
                 LogMissionChanged(pArmy, previousMission, pMission,
@@ -1221,7 +1252,19 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyList<long> batch = Controllers.Take(Math.Min(
                 Math.Max(0, pControllerBudget), Controllers.PendingCount));
             for (int i = 0; i < batch.Count; i++)
-                ProcessOne(batch[i], mode);
+            {
+                try
+                {
+                    ProcessOne(batch[i], mode);
+                }
+                catch (System.Exception error)
+                {
+                    ModClass.LogWarning(
+                        "AW army RTS controller faulted on army " +
+                        batch[i] + "; requeued to avoid orphaning: " + error);
+                    Controllers.Requeue(batch[i]);
+                }
+            }
         }
 
         public static int PendingControllerCount =>
@@ -2684,6 +2727,13 @@ namespace AncientWarfare3.core.lineage
             if (commit && TryHandleWarCombatOwnership(army, record,
                     runtime))
             {
+                // 城内攻城脱离逻辑接管战斗，野战脱离让位。
+                runtime.FieldCombatReleased = false;
+                Controllers.Requeue(pArmyId);
+                return;
+            }
+            if (commit && TryHandleFieldCombat(army, runtime))
+            {
                 Controllers.Requeue(pArmyId);
                 return;
             }
@@ -2898,6 +2948,7 @@ namespace AncientWarfare3.core.lineage
                     record.Mission.WarId, pArmyId,
                     record.Mission.TargetCityId);
                 KingdomWarDirectorService.OnArmyChanged(SafeKingdom(army));
+                Controllers.Requeue(pArmyId);
                 return;
             }
             Controllers.Requeue(pArmyId);
@@ -2997,6 +3048,126 @@ namespace AncientWarfare3.core.lineage
                     return true;
                 default:
                     return false;
+            }
+        }
+
+        // 野战脱离：两军在任意位置交火时把 actor 交给原版战斗 AI，
+        // 战斗打完再收回 RTS 控制。返回 true 表示本 tick 已释放、
+        // 应跳过后续行军/编队命令；返回 false 表示未释放或已收回，继续正常流程。
+        private static bool TryHandleFieldCombat(Army pArmy,
+            RuntimeState pRuntime)
+        {
+            if (pArmy?.data == null || pRuntime == null) return false;
+            // 运输中禁止野战脱离：运输是不可中断的高优先级移动，
+            // 释放会丢失船只分配和登船进度导致永久卡住。
+            if (ArmyRtsTransportService.HasActiveVoyage(pArmy))
+                return false;
+
+            // 队长正在行军时强制收回控制，防止队长走远、士兵脱节
+            Actor captain = SafeCaptain(pArmy);
+            if (captain != null && AWArmyMarchService.HasActiveMarch(captain))
+            {
+                if (pRuntime.FieldCombatReleased)
+                    ExitFieldCombat(pArmy, pRuntime);
+                return false;
+            }
+
+            // 抽象决战模式不接管 actor，与 ResolveCombatControl 保持一致。
+            if (ArmyRtsWarDoctrine.IsAbstractDecisive)
+            {
+                if (pRuntime.FieldCombatReleased)
+                    ExitFieldCombat(pArmy, pRuntime);
+                return false;
+            }
+
+            CountFieldCombatEngagement(pArmy, out int engaged,
+                out int liveCombatants, out bool captainEngaged);
+            bool release = ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+                pRuntime.FieldCombatReleased, engaged, liveCombatants,
+                captainEngaged);
+
+            if (release)
+            {
+                if (!pRuntime.FieldCombatReleased)
+                    EnterFieldCombat(pArmy, pRuntime);
+                return true;
+            }
+            if (pRuntime.FieldCombatReleased)
+                ExitFieldCombat(pArmy, pRuntime);
+            return false;
+        }
+
+        private static void CountFieldCombatEngagement(Army pArmy,
+            out int pEngaged, out int pLiveCombatants,
+            out bool pCaptainEngaged)
+        {
+            pEngaged = 0;
+            pLiveCombatants = 0;
+            pCaptainEngaged = false;
+            Actor captain = SafeCaptain(pArmy);
+            if (captain?.data != null && HasImmediateCombatPriority(captain))
+                pCaptainEngaged = true;
+            int count;
+            try { count = pArmy?.units?.Count ?? 0; }
+            catch { count = 0; }
+            for (int i = 0; i < count; i++)
+            {
+                Actor actor;
+                try { actor = pArmy.units[i]; }
+                catch { continue; }
+                if (actor == captain) continue;
+                if (!IsLiveCombatantActor(actor)) continue;
+                pLiveCombatants++;
+                if (HasImmediateCombatPriority(actor)) pEngaged++;
+            }
+        }
+
+        // 进入野战战斗：执行释放动作，但不改持久 phase——
+        // 若设成 VanillaCombat，下一 tick 因 insideTargetTerritory==false
+        // 会被 ResolveCombatControl 立刻收回，退化成拉锯。
+        private static void EnterFieldCombat(Army pArmy,
+            RuntimeState pRuntime)
+        {
+            ArmyRouteProviderService.Cancel(pArmy.id,
+                ArmyRouteCancelReason.TargetReplaced);
+            AWArmyMarchService.ClearArmy(pArmy.id);
+            ArmyRtsTransportService.ReleaseArmy(pArmy);
+            ArmyFormationService.RemoveArmy(pArmy.id);
+            ResetStrategicMovementRuntime(pRuntime);
+            ReleaseArmyActors(pArmy);
+            pRuntime.FieldCombatReleased = true;
+        }
+
+        // 战场已清，收回 RTS 控制：重开 job 分配，让正常流程重新接管。
+        private static void ExitFieldCombat(Army pArmy,
+            RuntimeState pRuntime)
+        {
+            pRuntime.FieldCombatReleased = false;
+            ClearArmyAttackTargets(pArmy);
+            ClearArmyCombatTasks(pArmy);
+            ResetStrategicMovementRuntime(pRuntime);
+            pRuntime.JobCursor.Reopen();
+        }
+
+        private static void ClearArmyCombatTasks(Army pArmy)
+        {
+            int count;
+            try { count = pArmy?.units?.Count ?? 0; }
+            catch { count = 0; }
+            for (int i = 0; i < count; i++)
+            {
+                Actor actor;
+                try { actor = pArmy.units[i]; }
+                catch { continue; }
+                if (actor?.data == null) continue;
+                try { actor.cancelAllBeh(); }
+                catch { }
+            }
+            Actor captain = SafeCaptain(pArmy);
+            if (captain?.data != null)
+            {
+                try { captain.cancelAllBeh(); }
+                catch { }
             }
         }
 
@@ -3218,10 +3389,6 @@ namespace AncientWarfare3.core.lineage
                     operational.Organization, operational.Supply,
                     readinessTime,
                     ArmyRtsRules.ReadinessStallTimeoutSeconds);
-            ArmyRtsState pursuitState = pRecord.State ==
-                                        ArmyRtsState.Pursue
-                ? ResolvePursuitState(captain, pRuntime, operational)
-                : ArmyRtsState.Pursue;
             bool survivalException = pRecord.Mission.Role ==
                                      ArmyRtsRole.Defense &&
                                      target?.data != null &&
@@ -3229,6 +3396,11 @@ namespace AncientWarfare3.core.lineage
             bool hostileWarriorInsideTargetCity = complete &&
                 CityAttackZoneService.HasHostileMilitaryInside(
                     missionWar, target, kingdom);
+            ArmyRtsState pursuitState = pRecord.State ==
+                                        ArmyRtsState.Pursue
+                ? ResolvePursuitState(captain, pRuntime, operational,
+                    missionWar, target, kingdom)
+                : ArmyRtsState.Pursue;
             bool pursuitAllowed = ArmyRtsRules.
                 ShouldPursueCompletedTarget(
                     complete,
@@ -3238,7 +3410,7 @@ namespace AncientWarfare3.core.lineage
                         ArmyLogisticsRules.CriticalSupply,
                     operational.InCorridor,
                     hostileWarriorInsideTargetCity) &&
-                TryPreparePursuitRoute(pArmy, pRuntime);
+                TryPreparePursuitRoute(pArmy, pRuntime, target);
             ArmyRtsTransitionFacts facts = pRuntime.TransitionFacts;
             facts.CurrentState = pRecord.State;
             facts.Role = pRecord.Mission.Role;
@@ -3606,10 +3778,16 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static ArmyRtsState ResolvePursuitState(Actor pCaptain,
-            RuntimeState pRuntime, ArmyOperationalStateView pOperational)
+            RuntimeState pRuntime, ArmyOperationalStateView pOperational,
+            War pMissionWar, City pTargetCity, Kingdom pKingdom)
         {
             if (!pRuntime.PursuitRoute.Active ||
                 pCaptain?.current_tile == null)
+                return ArmyRtsState.Hold;
+            // 虚空追击防护：如果目标城市已无敌军，立即停止追击
+            if (pTargetCity?.data != null && pKingdom?.data != null &&
+                !CityAttackZoneService.HasHostileMilitaryInside(
+                    pMissionWar, pTargetCity, pKingdom))
                 return ArmyRtsState.Hold;
             WorldTile start = FindTile(pRuntime.PursuitRoute.StartTileId);
             double distance = start == null
@@ -3629,17 +3807,28 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool TryPreparePursuitRoute(Army pArmy,
-            RuntimeState pRuntime)
+            RuntimeState pRuntime, City pTargetCity)
         {
             if (pRuntime.PursuitRoute.Active) return true;
             if (pRuntime.PursuitRoute.Completed) return false;
             Actor captain = SafeCaptain(pArmy);
             WorldTile start = captain?.current_tile;
+            WorldTile targetTile = pTargetCity?.getTile();
             if (start?.data == null)
             {
                 pRuntime.PursuitRoute.Complete();
                 return false;
             }
+
+            // 计算目标方向向量（用于过滤候选点）
+            int targetDx = 0, targetDy = 0;
+            if (targetTile?.data != null)
+            {
+                targetDx = targetTile.x - start.x;
+                targetDy = targetTile.y - start.y;
+            }
+            bool hasTargetDirection = targetDx != 0 || targetDy != 0;
+
             var candidates = new List<ArmyPursuitEndpointCandidate>();
             int budget = (int)ArmyLogisticsRules.PursuitDistanceBudget;
             for (int y = -budget; y <= budget; y++)
@@ -3650,6 +3839,15 @@ namespace AncientWarfare3.core.lineage
                     double distance = Math.Sqrt(x * x + y * y);
                     if (distance > ArmyLogisticsRules.
                             PursuitDistanceBudget) continue;
+
+                    // 方向过滤：只选择朝向目标方向的候选点
+                    // 通过点积判定：候选向量与目标向量的点积应为正
+                    if (hasTargetDirection)
+                    {
+                        int dotProduct = x * targetDx + y * targetDy;
+                        if (dotProduct <= 0) continue;
+                    }
+
                     WorldTile candidate;
                     try
                     {

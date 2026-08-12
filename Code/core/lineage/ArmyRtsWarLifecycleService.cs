@@ -330,10 +330,37 @@ namespace AncientWarfare3.core.lineage
             {
                 ArmyRtsWarLifecycleRecord record = records[i];
                 if (record?.WarId == warId)
-                    ClearPersisted(FindArmy(record.ArmyId));
+                {
+                    Army army = FindArmy(record.ArmyId);
+                    ClearPersisted(army);
+                    ClearWarCombatState(army);
+                }
             }
             Store.ClearWar(warId);
             RemoveDiscoveryWar(warId);
+        }
+
+        private static void ClearWarCombatState(Army pArmy)
+        {
+            if (pArmy?.units == null) return;
+            int count;
+            try { count = pArmy.units.Count; }
+            catch { return; }
+            for (int i = 0; i < count; i++)
+            {
+                Actor actor;
+                try { actor = pArmy.units[i]; }
+                catch { continue; }
+                if (actor?.data == null) continue;
+                try
+                {
+                    actor.cancelAllBeh();
+                    if (actor.has_attack_target)
+                        actor.clearAttackTarget();
+                    StandingArmyPeacetimeService.RefreshJob(actor);
+                }
+                catch { }
+            }
         }
 
         public static void ClearRuntime()

@@ -15,7 +15,7 @@ namespace AncientWarfare3.core.lineage
         private const int MAX_GUARDS_PER_KINGDOM = 20;
         private const int REFILL_SEARCH_THRESHOLD = 12;
         private const int RECRUITMENT_BATCH_LIMIT = 4;
-        private const int RUNTIME_REFRESH_BATCH_LIMIT = 4;
+        private const int RUNTIME_REFRESH_BATCH_LIMIT = 8;
         private const int GFX_REBUILD_BUDGET = 2;
         private const int DISMISS_BATCH_LIMIT = 2;
         private const int STALE_GUARD_ARMY_CLEANUP_LIMIT = 4;
@@ -297,6 +297,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
             if (pNewKing == null) return;
+            List<Actor> guards = CollectActiveGuards(pKingdom);
+            for (int i = 0; i < guards.Count; i++)
+                RepairProtectKingTaskIfNeeded(guards[i]);
             EnsureKingdomGuard(pKingdom, pForce: true);
         }
 
@@ -460,6 +463,11 @@ namespace AncientWarfare3.core.lineage
             if (king?.current_tile == null || king.isRekt()) return null;
 
             RemoveFromNormalArmy(pGuard);
+
+            // 国王在船上时禁卫军原地待命，不尝试跟随到水域
+            if (king.is_inside_boat)
+                return pGuard.current_tile;
+
             WorldTile patrolTile = PickPatrolTileAroundKing(pGuard, king.current_tile);
             if (patrolTile == null) return king.current_tile;
 
@@ -469,6 +477,12 @@ namespace AncientWarfare3.core.lineage
                 return pGuard.current_tile;
 
             return patrolTile;
+        }
+
+        public static void EnsureGuardNotInNormalArmy(Actor pGuard)
+        {
+            if (!IsRoyalGuard(pGuard)) return;
+            RemoveFromNormalArmy(pGuard);
         }
 
         public static Actor FindThreatNearKing(Actor pGuard)
