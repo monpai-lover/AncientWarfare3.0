@@ -63,7 +63,6 @@ namespace AncientWarfare3.ui.windows
         private int _displayedSnapshotGeneration = -1;
         private HistoricalSchoolRosterRevisionStamp _displayedSchoolRevisionStamp;
         private float _nextRefreshCheckTime;
-        private string _lastLineageDiagnosticSignature;
 
         public static void OpenSchool(string pSchoolId = CourtSchoolId.Ru)
         {
@@ -631,15 +630,18 @@ namespace AncientWarfare3.ui.windows
                 .Where(p => p != null)
                 .OrderByDescending(p => p.Reputation)
                 .ThenBy(p => p.ActorId)
+                .Take(_lineageRows.Count)
                 .ToArray();
-            LogLineageDiagnostic(pSchoolId, members);
-
-            EnsureLineageRows(members.Length);
             float cursor = pTop;
             int rendered = 0;
-            for (int i = 0; i < members.Length; i++)
+            for (int i = 0; i < _lineageRows.Count; i++)
             {
                 SchoolLineageRowView row = _lineageRows[i];
+                if (i >= members.Length)
+                {
+                    row.gameObject.SetActive(false);
+                    continue;
+                }
                 SchoolMembershipRecord membership = members[i];
                 Actor student = World.world?.units?.get(membership.ActorId);
                 Actor teacher = membership.TeacherActorId >= 0
@@ -650,46 +652,15 @@ namespace AncientWarfare3.ui.windows
                     : HistoricalSchoolMasterRegistry.Find(membership.SourceId)?.CanonicalName ??
                       ("actor " + membership.ActorId);
                 string teacherName = teacher?.data != null ? SafeActorName(teacher) : "";
-
                 RectTransform rect = row.GetComponent<RectTransform>();
                 rect.anchoredPosition = new Vector2(12f, -cursor);
                 row.Bind(studentName, teacherName, membership.Generation,
                     membership.Reputation, student?.data != null && student.isAlive() &&
                     !student.isRekt());
-                row.gameObject.SetActive(true);
                 cursor += row.LayoutHeight(DetailWidth()) + 4f;
                 rendered++;
             }
-            for (int i = members.Length; i < _lineageRows.Count; i++)
-            {
-                _lineageRows[i].gameObject.SetActive(false);
-            }
             return rendered == 0 ? pTop : cursor;
-        }
-
-        private void LogLineageDiagnostic(string pSchoolId,
-            SchoolMembershipRecord[] pMembers)
-        {
-            string members = string.Join(",", (pMembers ?? Array.Empty<SchoolMembershipRecord>())
-                .Select(p => p.ActorId + ":" + p.TeacherActorId + ":" + p.Generation)
-                .ToArray());
-            string signature = (pSchoolId ?? "") + "|" + members;
-            if (signature == _lastLineageDiagnosticSignature) return;
-            _lastLineageDiagnosticSignature = signature;
-            ModClass.LogInfo("[SchoolWindow.Lineage] school=" + pSchoolId +
-                " members=" + (pMembers?.Length ?? 0) +
-                " records=" + members);
-        }
-
-        private void EnsureLineageRows(int pRequiredCount)
-        {
-            int required = Math.Max(0, pRequiredCount);
-            while (_lineageRows.Count < required)
-            {
-                SchoolLineageRowView row = SchoolLineageRowView.Create(_detailContent);
-                row.gameObject.SetActive(false);
-                _lineageRows.Add(row);
-            }
         }
 
         private static string RecentHistory(string pSchoolId)
@@ -806,7 +777,6 @@ namespace AncientWarfare3.ui.windows
             _displayedSnapshotGeneration = -1;
             _displayedSchoolRevisionStamp = null;
             _nextRefreshCheckTime = 0f;
-            _lastLineageDiagnosticSignature = null;
             if (_detailTitle != null) _detailTitle.text = "";
             if (_detailBody != null) _detailBody.text = "";
         }

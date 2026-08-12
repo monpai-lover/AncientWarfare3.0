@@ -344,6 +344,8 @@ namespace AncientWarfare3.ui.windows
         private void Refresh()
         {
             if (_canvasRect == null || CourtSchoolRegistry.Find(_selectedSchool) == null) return;
+            CancelPendingRender();
+            HideNodesAndLinks();
             UpdateSchoolSelector();
 
             bool shadow = AWAsyncRuntime.ShadowEnabled;
@@ -365,8 +367,7 @@ namespace AncientWarfare3.ui.windows
             var execution = new SchoolRosterLayoutExecution(
                 capture.SchoolId, capture.Candidates, HorizontalSpacing,
                 VerticalSpacing, ColumnsPerRow);
-            bool needsInitialModel = _displayedRevisionStamp == null;
-            SchoolRosterLayout synchronousLayout = shadow || needsInitialModel
+            SchoolRosterLayout synchronousLayout = shadow
                 ? SchoolRosterRules.Build(capture.SchoolId,
                     capture.Candidates, HorizontalSpacing, VerticalSpacing,
                     ColumnsPerRow)
@@ -387,7 +388,7 @@ namespace AncientWarfare3.ui.windows
                 ApplyRosterResult(key, capture,
                     execution.Execute(System.Threading.CancellationToken.None)
                         as SchoolRosterLayout, expectedShadow);
-            if (shadow || needsInitialModel)
+            if (shadow)
                 ApplyRosterModel(SchoolRosterReadModelService.Materialize(
                     capture, synchronousLayout));
         }
@@ -439,8 +440,6 @@ namespace AncientWarfare3.ui.windows
         private void ApplyRosterModel(SchoolRosterReadModel model)
         {
             if (model == null) return;
-            CancelPendingRender();
-            HideNodesAndLinks();
             bool switchedSchool = !string.Equals(_displayedSchool, model.SchoolId,
                 StringComparison.Ordinal);
             _displayedSchool = model.SchoolId;

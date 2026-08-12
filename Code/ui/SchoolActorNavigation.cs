@@ -1,5 +1,3 @@
-using AncientWarfare3.core.policy;
-
 namespace AncientWarfare3.ui
 {
     internal static class SchoolActorNavigation
@@ -7,10 +5,11 @@ namespace AncientWarfare3.ui
         public static void Open(Actor pActor)
         {
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return;
-            SchoolMapModeService.EndWindowMode();
-            SelectedUnit.clear();
-            SelectedUnit.select(pActor);
-            ScrollWindow.showWindow("unit");
+            MetaTypeAsset unitMeta = MetaType.Unit.getAsset();
+            if (unitMeta == null) return;
+            ScrollWindow.finishAnimations();
+            unitMeta.selectAndInspect(pActor, pFromNameplate: false,
+                pCheckNameplate: false, pClearAction: false);
         }
     }
 }
