@@ -647,13 +647,11 @@ namespace AncientWarfare3.core.lineage
                 return ArmyStallRecoveryAction.ChangeTarget;
             bool objectiveAdvanced = ObserveObjectiveProgress(pState,
                 objectiveProgressExpected, objectiveProgress);
-            bool routeAdvanced = pState.LastRouteCursor != int.MinValue &&
-                                 routeCursor != pState.LastRouteCursor;
             pState.LastRouteCursor = routeCursor;
             bool progressExpected = routeReady || routePending ||
                                     commandExpected ||
                                     objectiveProgressExpected;
-            if (!progressExpected || routeAdvanced || objectiveAdvanced)
+            if (!progressExpected || objectiveAdvanced)
             {
                 pState.ConsecutiveSlowSamples = 0;
                 pState.CommandRecoveryIssued = false;

@@ -1039,6 +1039,20 @@ static void RunArmyRtsCommandContinuityRulesTests()
             0d, 0, routeReady: false, routePending: false,
             commandExpected: true, commandOwned: false),
         "three stationary assault samples reassert command before replanning");
+
+    var advancingRouteStall = new ArmyWatchdogRecoveryFlow();
+    advancingRouteStall.AssignMission();
+    advancingRouteStall.ObserveSample(true,
+        ArmyWatchdogPositionSource.Captain, 0d, 1,
+        routeReady: true, commandExpected: true, commandOwned: true);
+    advancingRouteStall.ObserveSample(true,
+        ArmyWatchdogPositionSource.Captain, 0d, 2,
+        routeReady: true, commandExpected: true, commandOwned: true);
+    Equal(ArmyStallRecoveryAction.ReassertCommand,
+        advancingRouteStall.ObserveSample(true,
+            ArmyWatchdogPositionSource.Captain, 0d, 3,
+            routeReady: true, commandExpected: true, commandOwned: true),
+        "route polling does not hide a stationary captain");
     flow.ObserveSample(true, ArmyWatchdogPositionSource.Captain,
         0d, 0, routeReady: false, routePending: false,
         commandExpected: true, commandOwned: true);
