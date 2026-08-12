@@ -35,6 +35,8 @@ Require-Contains $controller 'source.target_attack_city = pTarget;' `
     'The released RTS army anchor city must receive the exact target city.'
 Require-Contains $controller 'source.target_attack_zone = pTarget.hasZones()' `
     'The released RTS army anchor city must receive a target-city attack zone.'
+Require-Contains $controller '[AW3 RTS handoff] army=' `
+    'Diagnostics must record each successful target-city vanilla combat handoff.'
 Require-Contains $controller 'RefreshReleasedArmyPeacetimeJobs(army);' `
     'Invalidating an RTS mission must immediately restore released standing-army jobs.'
 Require-Contains $controller 'StandingArmyPeacetimeService.RefreshJob(actor);' `

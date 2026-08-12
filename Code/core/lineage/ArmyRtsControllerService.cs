@@ -3266,6 +3266,21 @@ namespace AncientWarfare3.core.lineage
             ArmyFormationService.RemoveArmy(pArmy.id);
             ResetStrategicMovementRuntime(pRuntime);
             ReleaseArmyActors(pArmy);
+            LogVanillaCombatHandoff(pArmy, pRecord.Mission);
+        }
+
+        private static void LogVanillaCombatHandoff(Army pArmy,
+            ArmyRtsMission pMission)
+        {
+            if (!AWPerformanceSettings.ArmyRtsDiagnosticsEnabled) return;
+            City source = AWArmyService.FindAnchorCity(pArmy);
+            City target = FindCity(pMission?.TargetCityId ?? -1L);
+            ModClass.LogInfo("[AW3 RTS handoff] army=" +
+                             (pArmy?.id ?? -1L) +
+                             " source_city=" + (source?.id ?? -1L) +
+                             " target_city=" + (target?.id ?? -1L) +
+                             " attack_zone=" +
+                             (source?.target_attack_zone?.id ?? -1L));
         }
 
         private static bool TryIssueVanillaCityAttackOrder(Army pArmy,
