@@ -135,6 +135,9 @@ internal static class ArmySharedPathRecoveryRulesTests
             processFrameBody.Contains("mode == ArmyRtsMode.Off",
                 StringComparison.Ordinal),
             "controller recovery runs on admitted large-step logical passes while planning stays separately throttled");
+        Assert(watchdog.Contains("follower_recovery_action",
+                StringComparison.Ordinal),
+            "follower recovery stages are available in sampled RTS diagnostics");
     }
 
     private static void Assert(bool condition, string message)

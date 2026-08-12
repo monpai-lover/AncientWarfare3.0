@@ -271,6 +271,7 @@ namespace AncientWarfare3.core.lineage
                         sample.PositionX, sample.PositionY,
                         sample.RecoveryEligible, sample.CombatActive,
                         sample.TransportActive, pRealtime);
+                LogFollowerRecoveryAction(pArmyId, sample, action);
                 if (action == ArmyFollowerStallRecoveryAction.ResetRoute)
                 {
                     ArmyRtsControllerService.RecoverFormationMember(pArmyId,
@@ -292,6 +293,21 @@ namespace AncientWarfare3.core.lineage
                         sample.ActorId);
                 pState.FollowerRecovery.Remove(sample.ActorId);
             }
+        }
+
+        private static void LogFollowerRecoveryAction(long pArmyId,
+            ArmyFollowerStallSample pSample,
+            ArmyFollowerStallRecoveryAction pAction)
+        {
+            if (!AWPerformanceSettings.ArmyRtsDiagnosticsEnabled ||
+                pAction == ArmyFollowerStallRecoveryAction.None) return;
+            AncientWarfare3.ModClass.LogWarning(
+                "[Army RTS follower recovery] army=" + pArmyId +
+                " actor=" + (pSample?.ActorId ?? -1L) +
+                " follower_recovery_action=" + pAction +
+                " combat_active=" + (pSample?.CombatActive ?? false) +
+                " transport_active=" +
+                (pSample?.TransportActive ?? false));
         }
 
         private static void ResetSampleBatch()

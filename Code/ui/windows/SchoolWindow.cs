@@ -625,29 +625,9 @@ namespace AncientWarfare3.ui.windows
 
         private float ShowLineage(string pSchoolId, float pTop)
         {
-            // 方案 A：使用 Members() + GetActive() (可能有数据不一致)
-            var allActorIds = SchoolMembershipService.Members(pSchoolId);
-            var membersA = allActorIds
+            var members = SchoolMembershipService.Members(pSchoolId)
                 .Select(p => SchoolMembershipService.GetActive(p))
                 .Where(p => p != null)
-                .ToArray();
-
-            // 方案 B：直接从 ActiveRecords() 过滤 (保证一致性)
-            SchoolMembershipRecord[] allActive = SchoolMembershipService.AllActive().ToArray();
-            SchoolMembershipRecord[] membersB = allActive
-                .Where(p => p.SchoolId == pSchoolId)
-                .ToArray();
-
-            // 诊断：输出详细信息
-            ModClass.LogInfo($"[SchoolWindow.ShowLineage] School={pSchoolId}, Members()={allActorIds.Length}, GetActive()={membersA.Length}, AllActive().Total={allActive.Length}, AllActive().Filtered={membersB.Length}");
-
-            if (allActorIds.Length > 0 && membersA.Length == 0 && membersB.Length > 0)
-            {
-                ModClass.LogWarning($"[SchoolWindow] Data mismatch! School {pSchoolId}: Members()={allActorIds.Length}, GetActive()={membersA.Length}, ActiveRecords()={membersB.Length}. Using ActiveRecords().");
-            }
-
-            // 使用方案 B (保证一致性)
-            var members = membersB
                 .OrderByDescending(p => p.Reputation)
                 .ThenBy(p => p.ActorId)
                 .ToArray();
@@ -668,9 +648,6 @@ namespace AncientWarfare3.ui.windows
                     : HistoricalSchoolMasterRegistry.Find(membership.SourceId)?.CanonicalName ??
                       ("actor " + membership.ActorId);
                 string teacherName = teacher?.data != null ? SafeActorName(teacher) : "";
-
-                // 诊断：记录每个成员的名字和状态
-                ModClass.LogInfo($"[SchoolWindow.ShowLineage] Member[{i}]: ActorId={membership.ActorId}, studentName='{studentName}', teacherName='{teacherName}', student.alive={student?.isAlive()}, student.data!=null={student?.data != null}");
 
                 RectTransform rect = row.GetComponent<RectTransform>();
                 rect.anchoredPosition = new Vector2(12f, -cursor);
