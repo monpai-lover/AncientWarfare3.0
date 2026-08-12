@@ -248,6 +248,25 @@ namespace AncientWarfare3.core.performance
         private static void ExecuteStage(CooperativeAuthorityStage pStage,
             long pCycleToken, bool pPaused)
         {
+            // 隔离单个权限阶段：某阶段本周期抛异常时，只跳过它并记警告，
+            // 不让异常冒泡到 RunNativeAuthorityAfterSimulation 而触发全局
+            // 静默暂停（学派讲学、王国/外交/历史等阶段就在这条链上）。
+            try
+            {
+                ExecuteStageCore(pStage, pCycleToken, pPaused);
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning(
+                    "AW authority stage '" + pStage +
+                    "' faulted this cycle; skipped to avoid global pause: " +
+                    error);
+            }
+        }
+
+        private static void ExecuteStageCore(CooperativeAuthorityStage pStage,
+            long pCycleToken, bool pPaused)
+        {
             switch (pStage)
             {
                 case CooperativeAuthorityStage.SuccessionRelationships:
