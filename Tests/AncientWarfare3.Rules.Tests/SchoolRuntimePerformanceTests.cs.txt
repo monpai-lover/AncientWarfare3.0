@@ -94,20 +94,18 @@ internal static class SchoolRuntimePerformanceTests
             Directory.GetCurrentDirectory(), "Code", "core", "schools",
             "SchoolMembershipService.cs"));
         True(membershipSource.Contains(
-                "IHistoricalSchoolWriteOperation,\r\n" +
-                "            IHistoricalSchoolAsyncWriteOperation") ||
+                "MembershipWriteOperation :\r\n" +
+                "            IHistoricalSchoolWriteOperation") ||
              membershipSource.Contains(
-                "IHistoricalSchoolWriteOperation,\n" +
-                "            IHistoricalSchoolAsyncWriteOperation"),
-            "school membership persistence detaches from the simulation thread");
-        True(membershipSource.Contains("MembershipWriteEpochs"),
-            "queued membership writes expose an actor-scoped invalidation epoch");
-        True(membershipSource.Contains("IsMembershipWriteCurrent"),
-            "background membership writes revalidate the frozen epoch");
-        True(membershipSource.Contains("TryQueueCompensation"),
-            "a post-commit actor invalidation closes the durable membership");
-        True(membershipSource.Contains("RollbackConversionInTransaction"),
-            "invalidated conversions restore the original membership before death cleanup");
+                "MembershipWriteOperation :\n" +
+                "            IHistoricalSchoolWriteOperation"),
+            "school membership persistence remains on the buffered commit operation");
+        True(!membershipSource.Contains("IHistoricalSchoolAsyncWriteOperation"),
+            "school membership writes do not detach from their actor projection");
+        True(!membershipSource.Contains("MembershipWriteEpochs"),
+            "school membership writes do not invalidate a selected disciple by epoch");
+        True(membershipSource.Contains("CanPersistPendingActor"),
+            "buffered membership writes still reject invalid actors before commit");
 
         string writeBufferServiceSource = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "schools",
