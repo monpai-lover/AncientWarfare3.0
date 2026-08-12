@@ -4,8 +4,12 @@ namespace AncientWarfare3.ui
     {
         public static void Open(Actor pActor)
         {
-            if (pActor == null || pActor.isRekt()) return;
-            ActionLibrary.openUnitWindow(pActor);
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return;
+            MetaTypeAsset unitMeta = MetaType.Unit.getAsset();
+            if (unitMeta == null) return;
+            ScrollWindow.finishAnimations();
+            unitMeta.selectAndInspect(pActor, pFromNameplate: false,
+                pCheckNameplate: false, pClearAction: false);
         }
     }
 }

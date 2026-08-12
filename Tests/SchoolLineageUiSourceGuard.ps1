@@ -17,17 +17,17 @@ if ($schoolWindow -match 'SchoolMembershipService\.AllActive\(\)') {
 if ($schoolWindow -match '\[SchoolWindow\.ShowLineage\]') {
     throw 'ShowLineage must not emit per-refresh diagnostic logs.'
 }
-if ($navigation -notmatch 'ActionLibrary\.openUnitWindow\(pActor\)') {
-    throw 'School actor navigation must match FamilyTreeWindow and use ActionLibrary.openUnitWindow.'
+if ($navigation -notmatch 'MetaType\.Unit\.getAsset\(\)') {
+    throw 'School actor navigation must use the v1.0 unit MetaType path.'
 }
-if ($navigation -notmatch 'if \(pActor == null \|\| pActor\.isRekt\(\)\) return;') {
-    throw 'School actor navigation must use the same null/rekts guard as FamilyTreeWindow.'
+if ($navigation -notmatch 'pClearAction: false') {
+    throw 'School actor navigation must preserve the school window action context.'
 }
-if ($navigation -match 'pActor\?\.data|pActor\.isAlive\(\)') {
-    throw 'School actor navigation must not impose liveness or data guards that FamilyTreeWindow does not use.'
+if ($navigation -notmatch 'ScrollWindow\.finishAnimations\(\)') {
+    throw 'School actor navigation must finish the current window transition before inspection.'
 }
-if ($navigation -match 'selectAndInspect|SelectedUnit\.(clear|select)|ScrollWindow\.finishAnimations\(\)|ScrollWindow\.showWindow\("unit"\)|SchoolMapModeService\.EndWindowMode') {
-    throw 'School actor navigation must not add a second window-selection protocol beside FamilyTreeWindow.'
+if ($navigation -match 'ActionLibrary\.openUnitWindow|SelectedUnit\.(clear|select)|ScrollWindow\.showWindow\("unit"\)|SchoolMapModeService\.EndWindowMode') {
+    throw 'School actor navigation must not clear school state or use the stateless unit-window protocol.'
 }
 if ($rosterWindow -notmatch '(?s)private void Refresh\(\).*CancelPendingRender\(\);\s*HideNodesAndLinks\(\);\s*UpdateSchoolSelector\(\);') {
     throw 'The school roster must clear pending rendering at refresh start like v1.1.2.'
