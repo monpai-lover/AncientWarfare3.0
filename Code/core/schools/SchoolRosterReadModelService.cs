@@ -105,7 +105,23 @@ namespace AncientWarfare3.core.schools
 
         public static SchoolRosterCapture Capture(string pSchoolId)
         {
-            long[] memberIds = SchoolMembershipService.Members(pSchoolId);
+            // Keep the durable membership rows as the source of truth for the
+            // roster capture. The runtime book can briefly retain its actor
+            // index while an actor record is being rehydrated; using only
+            // GetActive in that window turns every visible member into an
+            // invalid candidate and renders an empty tree.
+            var records = new Dictionary<long, SchoolMembershipRecord>();
+            foreach (SchoolMembershipRecord record in
+                     HistoricalSchoolStore.LoadActiveMemberships())
+                if (record != null && string.Equals(record.SchoolId, pSchoolId,
+                        StringComparison.Ordinal))
+                    records[record.ActorId] = record;
+            foreach (long actorId in SchoolMembershipService.Members(pSchoolId))
+            {
+                SchoolMembershipRecord record = SchoolMembershipService.GetActive(actorId);
+                if (record != null) records[actorId] = record;
+            }
+            long[] memberIds = records.Keys.OrderBy(p => p).ToArray();
             Dictionary<long, SchoolLectureSeniority> lectureSeniority =
                 HistoricalSchoolStore.LoadEarliestLectureSeniority(pSchoolId);
             var candidates = new List<SchoolRosterCandidate>(memberIds.Length);
@@ -113,7 +129,7 @@ namespace AncientWarfare3.core.schools
 
             foreach (long actorId in memberIds)
             {
-                SchoolMembershipRecord membership = SchoolMembershipService.GetActive(actorId);
+                records.TryGetValue(actorId, out SchoolMembershipRecord membership);
                 Actor actor = FindActor(actorId);
                 bool live = actor?.data != null && actor.isAlive() && !actor.isRekt();
                 bool membershipValid = membership != null && membership.Active &&

@@ -27,6 +27,9 @@ if ($schoolWindow -notmatch 'LineageRowPoolSize\s*=\s*32') {
 if ($traitPatch -notmatch 'TraitsContainer<ActorTrait, ActorTraitButton>') {
     throw 'Trait window safety must target the concrete unit trait container.'
 }
+if ($traitPatch -notmatch 'HarmonyPrefix|_trait_window') {
+    throw 'Trait window safety must guard sortTraits before UnitWindow owner binding.'
+}
 if ($traitPatch -notmatch 'Finalizer|Exception') {
     throw 'Trait window safety must suppress the initialization-only null trait exception.'
 }
@@ -34,7 +37,7 @@ if ($schoolWindow -match '\[SchoolWindow\.ShowLineage\]') {
     throw 'ShowLineage must not emit per-refresh diagnostic logs.'
 }
 if ($navigation -notmatch 'MetaType\.Unit\.getAsset\(\)') {
-    throw 'School actor navigation must use the v1.0 unit MetaType path.'
+    throw 'School actor navigation must use the native unit MetaType path.'
 }
 if ($navigation -notmatch 'pClearAction: false') {
     throw 'School actor navigation must preserve the school window action context.'
