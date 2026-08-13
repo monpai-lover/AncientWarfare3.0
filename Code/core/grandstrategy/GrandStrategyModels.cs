@@ -35,6 +35,22 @@ namespace AncientWarfare3.core.grandstrategy
         {
             if (!string.IsNullOrEmpty(key)) _committedTransactions.Add(key);
         }
+
+        internal static GrandStrategyKingdomLedger Restore(long kingdomId,
+            int available, int raised, int wounded, int dispersed,
+            int deaths, int prisoners)
+        {
+            var ledger = new GrandStrategyKingdomLedger(kingdomId, 0)
+            {
+                AvailableManpower = Math.Max(0, available),
+                RaisedManpower = Math.Max(0, raised),
+                WoundedManpower = Math.Max(0, wounded),
+                DispersedManpower = Math.Max(0, dispersed),
+                PermanentDeaths = Math.Max(0, deaths),
+                Prisoners = Math.Max(0, prisoners)
+            };
+            return ledger;
+        }
     }
 
     public enum GrandStrategyTroopType

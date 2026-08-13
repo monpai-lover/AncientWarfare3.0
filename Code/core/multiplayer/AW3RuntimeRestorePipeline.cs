@@ -9,6 +9,7 @@ using AncientWarfare3.core.naming;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui.windows;
+using AncientWarfare3.core.grandstrategy;
 #endif
 
 namespace AncientWarfare3.core.multiplayer
@@ -241,6 +242,16 @@ namespace AncientWarfare3.core.multiplayer
                     if (!restored && !string.IsNullOrEmpty(snapshotError))
                         ModClass.LogWarning("Synthetic mobilization snapshot " +
                             "reconciliation fallback: " + snapshotError);
+                }),
+                new AW3RestoreStage("grand_strategy_armies", () =>
+                {
+                    if (!GrandStrategyRuntimeHost.Active) return;
+                    if (!GrandStrategyRuntimeHost.TryRestoreSnapshot(
+                            directory, out string grandStrategyError) &&
+                        !string.IsNullOrEmpty(grandStrategyError))
+                        throw new InvalidOperationException(
+                            "grand strategy restore failed: " +
+                            grandStrategyError);
                 }),
                 new AW3RestoreStage("army_replenishment_operations",
                     ArmyReplenishmentOperationService.RebuildRuntime),

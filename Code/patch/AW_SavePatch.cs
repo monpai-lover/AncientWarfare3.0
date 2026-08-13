@@ -9,6 +9,7 @@ using AncientWarfare3.content;
 using AncientWarfare3.ui.windows;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.presentation;
+using AncientWarfare3.core.grandstrategy;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -73,6 +74,11 @@ namespace AncientWarfare3.patch
                     ModClass.LogWarning(error);
                 }
                 ArmyRtsPlanSnapshotService.PublishToSave(pFolder);
+                if (!GrandStrategyRuntimeHost.TryWriteSnapshot(pFolder,
+                        out string grandStrategyError) &&
+                    !string.IsNullOrEmpty(grandStrategyError))
+                    ModClass.LogWarning("Grand strategy snapshot write failed: " +
+                        grandStrategyError);
                 AW3SaveDirectoryRegistry.Observe(pFolder);
             }
             finally

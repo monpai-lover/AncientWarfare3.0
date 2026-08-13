@@ -25,6 +25,12 @@ namespace AncientWarfare3.core.grandstrategy
         public int LedgerCount => _ledgers.Count;
         public int ArmyCount => _armies.Count;
         public int BattleCount => _battles.Count;
+        public IReadOnlyCollection<GrandStrategyKingdomLedger> Ledgers =>
+            _ledgers.Values;
+        public IReadOnlyCollection<GrandStrategyArmy> Armies =>
+            _armies.Values;
+        public IReadOnlyCollection<GrandStrategyBattleState> Battles =>
+            _battles.Values;
 
         public GrandStrategyKingdomLedger EnsureLedger(long kingdomId,
             int initialManpower)
@@ -88,6 +94,12 @@ namespace AncientWarfare3.core.grandstrategy
                 foreach (GrandStrategyBattleState battle in battles)
                     if (battle != null && battle.Phase != GrandStrategyBattlePhase.Completed)
                         _battles[battle.BattleId] = battle;
+        }
+
+        public bool TryGetLedger(long kingdomId,
+            out GrandStrategyKingdomLedger ledger)
+        {
+            return _ledgers.TryGetValue(kingdomId, out ledger);
         }
     }
 }

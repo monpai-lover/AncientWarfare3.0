@@ -4,6 +4,7 @@ using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.presentation;
+using AncientWarfare3.core.grandstrategy;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -127,6 +128,7 @@ namespace AncientWarfare3.patch
             DiplomacyConversationService.RecordWarStarted(__result);
             VassalMapModeService.DirtyMapIfActive();
             ArmyRtsPlanSnapshotService.OnWarStarted(__result);
+            GrandStrategyRuntimeHost.OnWarStarted(__result);
 
             Kingdom atk = __result.getMainAttacker();
             Kingdom def = __result.getMainDefender();
@@ -280,6 +282,7 @@ namespace AncientWarfare3.patch
             DiplomaticWarDeclarationService.OnWarEnded(pWar);
             KingdomWarDirectorService.OnWarEnded(pWar);
             ArmyRtsWarLifecycleService.OnWarEnded(pWar);
+            GrandStrategyRuntimeHost.OnWarEnded(pWar);
             CoalitionWarTaskService.OnWarEnded(pWar);
             WarMilitaryFactsService.OnWarEnded(pWar);
             ArmyLogisticsService.OnWarEnded(pWar);

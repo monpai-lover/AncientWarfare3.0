@@ -15,6 +15,7 @@ using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.presentation;
 using AncientWarfare3.patch;
+using AncientWarfare3.core.grandstrategy;
 
 namespace AncientWarfare3
 {
@@ -77,6 +78,7 @@ namespace AncientWarfare3
                         : "no"));
             AWPathfindingBootstrap.AfterPatchesRegistered();
             AW3WorldLoadCoordinator.Initialize();
+            GrandStrategyRuntimeHost.Initialize();
 
             // 通用夺舍工具:扫描 [MethodReplace] 用 Transpiler 重定向目标方法体(保留 Prefix/Postfix 链)
             utils.HarmonyTools.ReplaceMethods();
