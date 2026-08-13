@@ -20,15 +20,27 @@ function Require-Text([string]$source, [string]$needle,
 function Method-Body([string]$source, [string]$startToken,
     [string]$endToken, [string]$name) {
     $start = $source.IndexOf($startToken, [StringComparison]::Ordinal)
-    $end = if ($start -lt 0) { -1 } else {
-        $source.IndexOf($endToken, $start + $startToken.Length,
-            [StringComparison]::Ordinal)
-    }
-    if ($start -lt 0 -or $end -le $start) {
+    if ($start -lt 0) {
         $failures.Add("unable to inspect $name")
         return ''
     }
-    return $source.Substring($start, $end - $start)
+    $open = $source.IndexOf('{', $start + $startToken.Length)
+    if ($open -lt 0) {
+        $failures.Add("unable to inspect $name")
+        return ''
+    }
+    $depth = 0
+    for ($index = $open; $index -lt $source.Length; $index++) {
+        if ($source[$index] -eq '{') { $depth++ }
+        elseif ($source[$index] -eq '}') {
+            $depth--
+            if ($depth -eq 0) {
+                return $source.Substring($start, $index - $start + 1)
+            }
+        }
+    }
+    $failures.Add("unable to inspect $name")
+    return ''
 }
 
 function Require-DiagnosticGate([string]$source, [string]$startToken,
