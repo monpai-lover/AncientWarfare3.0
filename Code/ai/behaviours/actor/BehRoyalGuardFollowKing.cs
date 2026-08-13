@@ -1,5 +1,6 @@
 using AncientWarfare3.content;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 using ai.behaviours;
 
 namespace AncientWarfare3.ai.behaviours.actor
@@ -18,6 +19,8 @@ namespace AncientWarfare3.ai.behaviours.actor
             WorldTile tile = RoyalGuardService.GetFollowTile(pActor);
             if (tile == null)
             {
+                ArmyMilitaryMovementPriorityIndex.Unregister(
+                    pActor?.data?.id ?? -1L);
                 // 没有有效目标时等待而不是停止，避免 task 被清除
                 RoyalGuardService.WaitAfterGuardFollowIdle(pActor);
                 return BehResult.Continue;
@@ -32,6 +35,13 @@ namespace AncientWarfare3.ai.behaviours.actor
             }
 
             pActor.beh_tile_target = tile;
+            if (RoyalGuardService.HasLandFollowPriority(pActor))
+            {
+                ArmyMilitaryMovementPriorityIndex.Register(pActor.data.id,
+                    ArmyMilitaryMovementPriorityKind.RoyalGuard);
+                try { pActor.goTo(tile, pLimitPathfindingRegions: 0); }
+                catch { }
+            }
             return BehResult.Continue;
         }
     }

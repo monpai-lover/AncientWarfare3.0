@@ -4145,6 +4145,13 @@ namespace AncientWarfare3.core.lineage
                     frontHold ? ArmyRtsContent.HoldTaskId
                         : ArmyRtsContent.ResolveCaptainTaskId(pState,
                             ArmyRtsTransportService.GetPhase(pArmy)));
+                if (pState != ArmyRtsState.Rally)
+                {
+                    ArmyMilitaryMovementPriorityIndex.Register(
+                        captain.data.id,
+                        ArmyMilitaryMovementPriorityKind.RtsMember);
+                    TrySubmitCaptainObjectiveRoute(captain, pRuntime);
+                }
             }
             else
                 ReleaseActor(captain);
@@ -4170,7 +4177,12 @@ namespace AncientWarfare3.core.lineage
                 {
                     SetJob(actor, ArmyRtsContent.FollowerJobId);
                     if (pState != ArmyRtsState.Rally)
+                    {
+                        ArmyMilitaryMovementPriorityIndex.Register(
+                            actor.data.id,
+                            ArmyMilitaryMovementPriorityKind.RtsMember);
                         TrySubmitMemberObjectiveRoute(actor, pRuntime);
+                    }
                 }
                 else
                     ReleaseActor(actor);
@@ -4186,8 +4198,22 @@ namespace AncientWarfare3.core.lineage
             RuntimeState pRuntime)
         {
             if (ResolveFollowerTarget(pActor, out WorldTile target) !=
-                    ArmyFollowerTargetResult.Move ||
-                !SafeSameIsland(pActor?.current_tile, target)) return;
+                    ArmyFollowerTargetResult.Move) return;
+            TrySubmitActorObjectiveRoute(pActor, target, pRuntime);
+        }
+
+        private static void TrySubmitCaptainObjectiveRoute(Actor pActor,
+            RuntimeState pRuntime)
+        {
+            if (!TryGetCaptainTarget(pActor, out WorldTile target) ||
+                target == pActor?.current_tile) return;
+            TrySubmitActorObjectiveRoute(pActor, target, pRuntime);
+        }
+
+        private static void TrySubmitActorObjectiveRoute(Actor pActor,
+            WorldTile target, RuntimeState pRuntime)
+        {
+            if (!SafeSameIsland(pActor?.current_tile, target)) return;
             int targetTileId = target.data?.tile_id ?? -1;
             long actorId = pActor?.data?.id ?? -1L;
             bool ownsPath = AWPathMovementBridge.HasOwnership(pActor);

@@ -56,6 +56,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private readonly Action<int> searchWorkItemAction;
     private readonly Action<int> pathMovementWorkItemAction;
     private readonly Action<int> smoothMovementWorkItemAction;
+    private readonly List<long> militaryP0ActorIds = new List<long>();
 
     private enum PostStage
     {
@@ -207,6 +208,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         float cycleElapsed,
         ParallelOptions pParallelOptions)
     {
+        RunMilitaryP0Slice(cycleElapsed);
         AWDeferredPathRequestBatch.StartCycle();
         AWDeferredPathRequestBatch.BeginCapture();
         AWEnemyPresenceCache.EndPreparation();
@@ -320,6 +322,47 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         }
 
         stage = PostStage.BeforeDeadCheck;
+    }
+
+    private void RunMilitaryP0Slice(float cycleElapsed)
+    {
+        if (AWPerformanceSettings.Mode != AWSimulationMode.Large ||
+            World.world?.isPaused() == true) return;
+        ArmyMilitaryMovementPriorityIndex.BeginCycle();
+        int sliceCount = ArmyMilitaryMovementPriorityIndex.TakeNextSlice(
+            AWPerformanceSettings.SimulationBatchSize, militaryP0ActorIds);
+        for (int i = 0; i < sliceCount; i++)
+        {
+            Actor actor = null;
+            long actorId = militaryP0ActorIds[i];
+            try { actor = World.world?.units?.get(actorId); }
+            catch { }
+            if (actor?.data == null || actor.isRekt() || !actor.isAlive() ||
+                !ArmyMilitaryMovementPriorityIndex.TryGetKind(actorId,
+                    out ArmyMilitaryMovementPriorityKind kind) ||
+                !HasLiveMilitaryP0Objective(actor, kind))
+            {
+                ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+                continue;
+            }
+            try
+            {
+                actor.updatePathMovement();
+                actor.updateMovement(cycleElapsed);
+                actor.skipBehaviour();
+                ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
+            }
+            catch { }
+        }
+    }
+
+    private static bool HasLiveMilitaryP0Objective(Actor actor,
+        ArmyMilitaryMovementPriorityKind kind)
+    {
+        return kind == ArmyMilitaryMovementPriorityKind.RtsMember
+            ? ArmyRtsControllerService.HasActiveCaptainObjective(actor) ||
+              ArmyRtsControllerService.HasActiveMemberObjective(actor)
+            : RoyalGuardService.HasLandFollowPriority(actor);
     }
 
     public bool WaitingForBackgroundWork =>
@@ -4042,6 +4085,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 Actor actor = Actors[i];
                 ref PathMovementWorkEntry entry = ref Entries[i];
                 entry.Prepared = default;
+                if (ArmyMilitaryMovementPriorityIndex.WasProcessed(
+                        actor?.data?.id ?? -1L))
+                {
+                    entry.Kind = PathMovementWorkKind.Retain;
+                    continue;
+                }
                 if (PriorityOnly && !ArmyRtsMovementCadenceRules.
                         ShouldRunDuringSkippedPathBatch(
                             AWPerformanceSettings.Mode ==
@@ -4198,6 +4247,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             for (int i = 0; i < Count; i++)
             {
                 Actor actor = Actors[i];
+                if (ArmyMilitaryMovementPriorityIndex.WasProcessed(
+                        actor?.data?.id ?? -1L)) continue;
                 if (PriorityOnly && !ArmyRtsMovementCadenceRules.
                         ShouldRunDuringSkippedMovementBatch(
                             AWPerformanceSettings.Mode ==

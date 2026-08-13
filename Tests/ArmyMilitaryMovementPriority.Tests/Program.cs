@@ -26,5 +26,14 @@ Require(!ArmyMilitaryMovementPriorityRules.IsActiveRtsObjectiveOwner(
 Require(!ArmyMilitaryMovementPriorityRules.IsActiveRtsObjectiveOwner(
         controllerActive: true, ownsObjective: false),
     "a controller in rally without a physical objective must not enter P0");
+Require(ArmyMilitaryMovementPriorityRules.ResolveP0SliceCount(
+        registeredCount: 91, simulationBatchSize: 32) == 32,
+    "P0 must use a bounded actor-ID slice");
+Require(!ArmyMilitaryMovementPriorityRules.CanAdmitOrdinaryActorWork(
+        p0SlicePending: true),
+    "ordinary actor work must wait until the selected P0 slice completes");
+Require(ArmyMilitaryMovementPriorityRules.CanAdmitOrdinaryActorWork(
+        p0SlicePending: false),
+    "ordinary actor work may resume after the P0 slice completes");
 
 Console.WriteLine("ArmyMilitaryMovementPriority.Tests: PASS");
