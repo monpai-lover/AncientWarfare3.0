@@ -3964,7 +3964,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         internal bool Fallback { get; private set; }
         internal bool Skipped { get; private set; }
         internal bool PriorityOnly { get; private set; }
-        internal bool[] SharedRouteActive { get; private set; } =
+        internal bool[] MilitaryPriorityActive { get; private set; } =
             Array.Empty<bool>();
         internal PathMovementWorkEntry[] Entries { get; private set; } =
             Array.Empty<PathMovementWorkEntry>();
@@ -4022,12 +4022,15 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             if (Entries.Length < count)
                 Entries = new PathMovementWorkEntry[Math.Max(
                     AWPerformanceSettings.SimulationBatchSize, count)];
-            if (SharedRouteActive.Length < count)
-                SharedRouteActive = new bool[Entries.Length];
+            if (MilitaryPriorityActive.Length < count)
+                MilitaryPriorityActive = new bool[Entries.Length];
             for (int i = 0; i < count; i++)
-                SharedRouteActive[i] =
-                    AWArmyMarchService.HasActiveCompleteSharedRoute(
-                        actors[i]);
+            {
+                MilitaryPriorityActive[i] =
+                    ArmyRtsControllerService.HasCaptainMission(actors[i]) ||
+                    ArmyRtsControllerService.HasFollowerMission(actors[i]) ||
+                    RoyalGuardService.HasLandFollowPriority(actors[i]);
+            }
         }
 
         internal void RunParallel()
@@ -4042,10 +4045,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 if (PriorityOnly && !ArmyRtsMovementCadenceRules.
                         ShouldRunDuringSkippedPathBatch(
                             AWPerformanceSettings.Mode ==
-                            AWSimulationMode.Large,
-                            actor?.army?.data != null,
-                            AWPathMovementBridge.HasOwnership(actor),
-                            SharedRouteActive[i]))
+                                AWSimulationMode.Large,
+                            MilitaryPriorityActive[i]))
                 {
                     entry.Kind = PathMovementWorkKind.Retain;
                     continue;
@@ -4119,7 +4120,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         internal int SerialCount { get; private set; }
         internal bool Skipped { get; private set; }
         internal bool PriorityOnly { get; private set; }
-        internal bool[] SharedRouteActive { get; private set; } =
+        internal bool[] MilitaryPriorityActive { get; private set; } =
             Array.Empty<bool>();
         internal float Elapsed { get; private set; }
         internal AWPathMovementBridge.AWPreparedSmoothMovement[] Entries { get; private set; } =
@@ -4178,13 +4179,16 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 Entries = new AWPathMovementBridge.AWPreparedSmoothMovement[
                     capacity];
             }
-            if (SharedRouteActive.Length < count)
-                SharedRouteActive = new bool[Math.Max(
+            if (MilitaryPriorityActive.Length < count)
+                MilitaryPriorityActive = new bool[Math.Max(
                     AWPerformanceSettings.SimulationBatchSize, count)];
             for (int i = 0; i < count; i++)
-                SharedRouteActive[i] =
-                    AWArmyMarchService.HasActiveCompleteSharedRoute(
-                        actors[i]);
+            {
+                MilitaryPriorityActive[i] =
+                    ArmyRtsControllerService.HasCaptainMission(actors[i]) ||
+                    ArmyRtsControllerService.HasFollowerMission(actors[i]) ||
+                    RoyalGuardService.HasLandFollowPriority(actors[i]);
+            }
         }
 
         internal void RunParallel()
@@ -4197,12 +4201,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 if (PriorityOnly && !ArmyRtsMovementCadenceRules.
                         ShouldRunDuringSkippedMovementBatch(
                             AWPerformanceSettings.Mode ==
-                            AWSimulationMode.Large,
-                            actor?.army?.data != null,
-                            actor?.is_moving == true,
-                            actor?.isFollowingLocalPath() == true,
-                            AWPathMovementBridge.HasOwnership(actor),
-                            SharedRouteActive[i]))
+                                AWSimulationMode.Large,
+                            MilitaryPriorityActive[i]))
                     continue;
                 AWPathMovementBridge.AWParallelSmoothMovementResult result =
                     AWPathMovementBridge.TryRunParallelSafeSmoothMovement(

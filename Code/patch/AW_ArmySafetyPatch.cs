@@ -709,9 +709,11 @@ namespace AncientWarfare3.patch
             long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
-                ArmyFollowerTargetResult targetResult =
-                    AWArmyMarchService.ResolveFollowerTarget(
-                        pActor, out WorldTile correctionTarget);
+                ArmyFollowerTargetResult targetResult = ownedFormation
+                    ? ArmyRtsControllerService.ResolveFollowerTarget(
+                        pActor, out WorldTile correctionTarget)
+                    : AWArmyMarchService.ResolveFollowerTarget(
+                        pActor, out correctionTarget);
                 if (targetResult != ArmyFollowerTargetResult.Move)
                 {
                     if (ArmyMarchRules.ShouldUseIdleFollowerTarget(

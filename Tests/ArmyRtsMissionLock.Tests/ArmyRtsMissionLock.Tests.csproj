@@ -8,5 +8,7 @@
   <ItemGroup>
     <Compile Include="..\..\Code\core\lineage\ArmyRtsMissionLockRules.cs"
              Link="Production\ArmyRtsMissionLockRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsMemberObjectiveRules.cs"
+             Link="Production\ArmyRtsMemberObjectiveRules.cs" />
   </ItemGroup>
 </Project>

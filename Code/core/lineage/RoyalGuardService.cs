@@ -480,6 +480,18 @@ namespace AncientWarfare3.core.lineage
             RemoveFromNormalArmy(pGuard);
         }
 
+        internal static bool HasLandFollowPriority(Actor pGuard)
+        {
+            if (!IsRoyalGuard(pGuard) || pGuard?.data == null ||
+                pGuard.current_tile?.data == null || pGuard.is_inside_boat)
+                return false;
+            Actor king = pGuard.kingdom?.king;
+            if (king?.current_tile?.data == null || king.isRekt() ||
+                king.is_inside_boat) return false;
+            return pGuard.isTask(GuardContent.TASK_PROTECT_KING) ||
+                   pGuard.isTask(GuardContent.TASK_FOLLOW_KING);
+        }
+
         public static Actor FindThreatNearKing(Actor pGuard)
         {
             if (!IsRoyalGuard(pGuard)) return null;

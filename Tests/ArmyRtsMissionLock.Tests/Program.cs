@@ -22,4 +22,24 @@ Require(ArmyRtsMissionLockRules.CanReplaceTarget(
         ArmyRtsMissionReleaseCause.WarEnded),
     "war end may release the strategic lock");
 
+Require(ArmyRtsMemberObjectiveRules.ResolveTargetCityId(
+        missionTargetCityId: 42L, routeFailureTargetCityId: 9L) == 42L,
+    "member routing must retain the mission target city");
+Require(ArmyRtsMemberObjectiveRules.ShouldSubmitMemberPath(
+        hasObjective: true, ownsPath: false, nativeLocalPath: false,
+        pathPending: false),
+    "a member with a new objective must submit its own path");
+Require(!ArmyRtsMemberObjectiveRules.ShouldSubmitMemberPath(
+        hasObjective: true, ownsPath: true, nativeLocalPath: false,
+        pathPending: false),
+    "an owning member must not submit a duplicate path");
+Require(ArmyRtsMemberObjectiveRules.ShouldOwnMemberObjective(
+        missionActive: true, isCaptain: false, actorEligible: true,
+        immediateCombat: false, transportActive: false),
+    "an eligible RTS member must own its objective without formation state");
+Require(!ArmyRtsMemberObjectiveRules.ShouldOwnMemberObjective(
+        missionActive: true, isCaptain: false, actorEligible: true,
+        immediateCombat: false, transportActive: true),
+    "transport retains movement ownership until disembarkation");
+
 Console.WriteLine("ArmyRtsMissionLock.Tests: PASS");
