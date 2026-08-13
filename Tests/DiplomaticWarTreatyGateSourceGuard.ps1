@@ -7,12 +7,12 @@ $declaration = Get-Content -Raw -LiteralPath `
 $warDecision = Get-Content -Raw -LiteralPath `
     (Join-Path $root 'Code/core/lineage/WarDecisionService.cs')
 
-foreach ($needle in @(
-        'ReconcilePendingDeclarationsForActiveTreaty(pFirst, pSecond);',
-        'ClearPendingForPair(pFirst, pSecond, "active_war_blocker");',
-        'ClearPendingForPair(pSecond, pFirst, "active_war_blocker");')) {
-    if (-not $proposal.Contains($needle)) {
-        throw "missing truce declaration reconciliation: $needle"
+foreach ($pattern in @(
+        'ReconcilePendingDeclarationsForActiveTreaty\s*\(\s*pFirst,\s*pSecond\s*\);',
+        'ClearPendingForPair\s*\(\s*pFirst,\s*pSecond,\s*"active_war_blocker"\s*\);',
+        'ClearPendingForPair\s*\(\s*pSecond,\s*pFirst,\s*"active_war_blocker"\s*\);')) {
+    if ($proposal -notmatch $pattern) {
+        throw "missing truce declaration reconciliation: $pattern"
     }
 }
 
@@ -29,8 +29,7 @@ $insert = $method.IndexOf(
     'DB.Insert(DiplomacyProposalTableItem.GetTableName()')
 $notify = $method.IndexOf('NotifyPair(pFirst.id, pSecond.id);')
 $calls = [regex]::Matches($method,
-    [regex]::Escape(
-        'ReconcilePendingDeclarationsForActiveTreaty(pFirst, pSecond);'))
+    'ReconcilePendingDeclarationsForActiveTreaty\s*\(\s*pFirst,\s*pSecond\s*\);')
 if ($existing -lt 0 -or $insert -lt 0 -or $notify -lt 0 -or
     $calls.Count -ne 2) {
     throw 'truce registration must reconcile existing and inserted rows'

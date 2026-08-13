@@ -1774,7 +1774,12 @@ namespace AncientWarfare3.core.lineage
                     existing.Parameters.AddWithValue("@b", pSecond.id);
                     existing.Parameters.AddWithValue("@required_until",
                         treatyUntil);
-                    if (existing.ExecuteScalar() != null) return true;
+                    if (existing.ExecuteScalar() != null)
+                    {
+                        ReconcilePendingDeclarationsForActiveTreaty(
+                            pFirst, pSecond);
+                        return true;
+                    }
                 }
 
                 long proposalId = TableIdAllocator.Next(DB,
@@ -1832,6 +1837,8 @@ namespace AncientWarfare3.core.lineage
                 DiplomacyConversationService.RecordProposal(pFirst,
                     pSecond, proposalId);
                 NotifyPair(pFirst.id, pSecond.id);
+                ReconcilePendingDeclarationsForActiveTreaty(
+                    pFirst, pSecond);
                 return true;
             }
             catch (Exception exception)
@@ -1839,6 +1846,26 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("Diplomacy truce write failed: " +
                                     exception.Message);
                 return false;
+            }
+        }
+
+        private static void ReconcilePendingDeclarationsForActiveTreaty(
+            Kingdom pFirst, Kingdom pSecond)
+        {
+            if (pFirst?.data == null || pSecond?.data == null ||
+                pFirst == pSecond) return;
+            try
+            {
+                DiplomaticWarDeclarationService.ClearPendingForPair(
+                    pFirst, pSecond, "active_war_blocker");
+                DiplomaticWarDeclarationService.ClearPendingForPair(
+                    pSecond, pFirst, "active_war_blocker");
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning(
+                    "Diplomacy truce declaration reconciliation failed: " +
+                    exception.Message);
             }
         }
 
