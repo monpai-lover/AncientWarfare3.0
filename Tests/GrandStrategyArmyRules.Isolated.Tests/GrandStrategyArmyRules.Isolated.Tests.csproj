@@ -22,5 +22,13 @@
              Link="Production\GrandStrategyArmyRules.cs" />
     <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyArmyService.cs"
              Link="Production\GrandStrategyArmyService.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyCommanderRules.cs"
+             Link="Production\GrandStrategyCommanderRules.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyPathRules.cs"
+             Link="Production\GrandStrategyPathRules.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyBattleRules.cs"
+             Link="Production\GrandStrategyBattleRules.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategySiegeRules.cs"
+             Link="Production\GrandStrategySiegeRules.cs" />
   </ItemGroup>
 </Project>

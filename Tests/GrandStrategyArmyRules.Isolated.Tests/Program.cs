@@ -24,6 +24,8 @@ internal static class Program
                 "grand strategy predicate");
             LedgerConservesManpower();
             ArmyOrganizationConservesManpower();
+            CommanderSuccessionIsDeterministic();
+            MovementBattleAndSiegeRulesAreDeterministic();
             Console.WriteLine("Grand strategy mode tests passed.");
             return 0;
         }
@@ -32,6 +34,59 @@ internal static class Program
             Console.Error.WriteLine(error);
             return 1;
         }
+    }
+
+    private static void MovementBattleAndSiegeRulesAreDeterministic()
+    {
+        True(GrandStrategyPathRules.IsLowerCost(12, 8, 4),
+            "road-adjusted route comparison");
+        Equal(GrandStrategyMovementState.Fleet,
+            GrandStrategyPathRules.NextMovementState(
+                GrandStrategyMovementState.Land, reachedCoast: true,
+                validLanding: false), "coast enters fleet projection");
+        Equal(4, GrandStrategyBattleRules.Roll(3, 4, 5, 2),
+            "battle roll is stable");
+        Equal(30, GrandStrategyBattleRules.ResolveFrontline(100, 30),
+            "frontage caps committed troops");
+        False(GrandStrategyBattleRules.IsRout(0.2, 0.5),
+            "morale above rout threshold");
+        True(GrandStrategyBattleRules.IsRout(0.0, 0.5),
+            "zero morale routes");
+        var siege = new GrandStrategySiegeState(1, 10, 25, 100);
+        var first = GrandStrategySiegeRules.ResolveRound(siege,
+            engineers: 20, equipment: 3, officerSkill: 4,
+            manpower: 800, supply: 0.9, technology: 3,
+            assault: false, roll: 6);
+        True(first.Progress > 0 && first.Defense < 100,
+            "steady siege advances");
+        var assault = GrandStrategySiegeRules.ResolveRound(siege,
+            engineers: 20, equipment: 3, officerSkill: 4,
+            manpower: 800, supply: 0.9, technology: 3,
+            assault: true, roll: 6);
+        True(assault.Progress > first.Progress,
+            "assault advances faster");
+    }
+
+    private static void CommanderSuccessionIsDeterministic()
+    {
+        var assignments = new List<GrandStrategyCommanderAssignment>
+        {
+            new GrandStrategyCommanderAssignment(12,
+                GrandStrategyCommanderPosition.Commander, 90, true),
+            new GrandStrategyCommanderAssignment(24,
+                GrandStrategyCommanderPosition.Vanguard, 70, true),
+            new GrandStrategyCommanderAssignment(31,
+                GrandStrategyCommanderPosition.RearGuard, 80, true)
+        };
+        var successor = GrandStrategyCommanderRules.SelectSuccessor(
+            assignments, unavailableActorId: 12);
+        Equal(24L, successor.ActorId, "vanguard succeeds commander");
+        Equal(GrandStrategyCommanderOutcome.Captured,
+            GrandStrategyCommanderRules.ResolveRisk(9, routed: true,
+                prowess: 2, lossesPercent: .7), "routed commander captured");
+        Equal(GrandStrategyCommanderOutcome.Safe,
+            GrandStrategyCommanderRules.ResolveRisk(0, routed: false,
+                prowess: 10, lossesPercent: .1), "strong commander safe");
     }
 
     private static void ArmyOrganizationConservesManpower()

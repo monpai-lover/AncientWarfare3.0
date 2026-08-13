@@ -57,6 +57,43 @@ namespace AncientWarfare3.core.grandstrategy
         Disband = 6
     }
 
+    public enum GrandStrategyCommanderPosition
+    {
+        Commander = 0,
+        Vanguard = 1,
+        LeftWing = 2,
+        RightWing = 3,
+        RearGuard = 4,
+        SiegeOfficer = 5
+    }
+
+    public enum GrandStrategyCommanderOutcome
+    {
+        Safe = 0,
+        Wounded = 1,
+        SeverelyWounded = 2,
+        Captured = 3,
+        Killed = 4
+    }
+
+    public sealed class GrandStrategyCommanderAssignment
+    {
+        public GrandStrategyCommanderAssignment(long actorId,
+            GrandStrategyCommanderPosition position, int prowess,
+            bool eligible)
+        {
+            ActorId = actorId;
+            Position = position;
+            Prowess = prowess;
+            Eligible = eligible;
+        }
+
+        public long ActorId { get; }
+        public GrandStrategyCommanderPosition Position { get; set; }
+        public int Prowess { get; }
+        public bool Eligible { get; set; }
+    }
+
     public sealed class GrandStrategyTroopComposition
     {
         private readonly int[] _counts = new int[5];
