@@ -26,6 +26,7 @@ internal static class Program
             ArmyOrganizationConservesManpower();
             CommanderSuccessionIsDeterministic();
             MovementBattleAndSiegeRulesAreDeterministic();
+            BattleRoundsArePersistentAndIdempotent();
             Console.WriteLine("Grand strategy mode tests passed.");
             return 0;
         }
@@ -34,6 +35,47 @@ internal static class Program
             Console.Error.WriteLine(error);
             return 1;
         }
+    }
+
+    private static void BattleRoundsArePersistentAndIdempotent()
+    {
+        var state = new GrandStrategyBattleState(9, 77, 101, 202,
+            attackerStrength: 500, defenderStrength: 480, frontage: 100);
+        var service = new GrandStrategyBattleService();
+        var first = service.ResolveRound(state, new GrandStrategyBattleRoundInput(
+            worldSeed: 3, terrainModifier: 0, attackerTechnology: 2,
+            defenderTechnology: 2, attackerTraining: 60,
+            defenderTraining: 60, attackerEquipment: 1,
+            defenderEquipment: 1, attackerCommanderBonus: 2,
+            defenderCommanderBonus: 2, weatherModifier: 0));
+        True(first.AttackerLosses > 0 && first.DefenderLosses > 0,
+            "round produces numeric losses");
+        int attackerAfter = state.AttackerStrength;
+        int defenderAfter = state.DefenderStrength;
+        var duplicate = service.ResolveRound(state, new GrandStrategyBattleRoundInput(
+            worldSeed: 3, terrainModifier: 0, attackerTechnology: 2,
+            defenderTechnology: 2, attackerTraining: 60,
+            defenderTraining: 60, attackerEquipment: 1,
+            defenderEquipment: 1, attackerCommanderBonus: 2,
+            defenderCommanderBonus: 2, weatherModifier: 0));
+        Equal(attackerAfter, state.AttackerStrength,
+            "duplicate round does not repeat attacker loss");
+        Equal(defenderAfter, state.DefenderStrength,
+            "duplicate round does not repeat defender loss");
+        Equal(first.AttackerLosses, duplicate.AttackerLosses,
+            "duplicate returns committed result");
+        True(service.AddReinforcement(state, 303, 100, isAttacker: true,
+            arriveRound: 2), "reinforcement queued");
+        Equal(1, state.PendingReinforcements.Count,
+            "reinforcement waits for next round");
+        service.OrderWithdrawal(state, isAttacker: true);
+        Equal(GrandStrategyBattlePhase.Rout, state.Phase,
+            "withdrawal enters rout");
+        True(service.ResolvePursuit(state), "pursuit completes rout");
+        Equal(GrandStrategyBattlePhase.Completed, state.Phase,
+            "battle report is completed");
+        True(state.Report != null && state.Report.Rounds.Count == 1,
+            "report retains committed rounds only");
     }
 
     private static void MovementBattleAndSiegeRulesAreDeterministic()

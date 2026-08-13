@@ -30,5 +30,9 @@
              Link="Production\GrandStrategyBattleRules.cs" />
     <Compile Include="..\..\Code\core\grandstrategy\GrandStrategySiegeRules.cs"
              Link="Production\GrandStrategySiegeRules.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyBattleModels.cs"
+             Link="Production\GrandStrategyBattleModels.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyBattleService.cs"
+             Link="Production\GrandStrategyBattleService.cs" />
   </ItemGroup>
 </Project>
