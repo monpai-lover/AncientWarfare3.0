@@ -7,6 +7,8 @@ AW3_ENABLE_AI_VASSAL_ACTIONS,允许 AI 主动附庸/朝贡,Allow AI vassal and t
 AW3_ENABLE_AI_VASSAL_ACTIONS Description,允许 AI 提出附庸、朝贡、保护关系或发动征服附庸战争；不影响玩家外交,Allow AI to propose vassalage; tributary status; protection; or subjugation wars; player diplomacy remains available,允許 AI 提出附庸、朝貢、保護關係或發動征服附庸戰爭；不影響玩家外交
 AW3_ENABLE_ARMY_RTS,启用 AW3 RTS 军队,Enable AW3 Army RTS,啟用 AW3 RTS 軍隊
 AW3_ENABLE_ARMY_RTS Description,由 AW3 接管军队战略任务和行动；关闭时使用原版军队 AI；重启游戏后生效,Let AW3 control army strategy missions and movement; off uses the native army AI; takes effect after restart,由 AW3 接管軍隊戰略任務和行動；關閉時使用原版軍隊 AI；重新啟動遊戲後生效
+AW3_ENABLE_GRAND_STRATEGY_ARMY,启用 AW3 大战略军队,Enable AW3 Grand Strategy Army,啟用 AW3 大戰略軍隊
+AW3_ENABLE_GRAND_STRATEGY_ARMY Description,与 AW3 RTS 军队互斥；使用 CK3 式数字军团、抽象战斗和攻城；重启或重新加载世界后生效,Mutually exclusive with AW3 Army RTS; use CK3-style numeric armies, abstract battles, and sieges; takes effect after restart or world load,與 AW3 RTS 軍隊互斥；使用 CK3 式數字軍團、抽象戰鬥和攻城；重新啟動或重新載入世界後生效
 AW3_ARMY_RTS_WAR_RESOLUTION_MODE,RTS 战争决议模式,RTS war resolution mode,RTS 戰爭決議模式
 AW3_ARMY_RTS_WAR_RESOLUTION_MODE Description,循环选择标准原版战斗交接；站至最后一刻（关闭自动撤退）或抽象决胜（远程数值卡牌对决）；重启游戏后生效,Cycle between Standard vanilla handoff; Last Stand with automatic withdrawal disabled; and Abstract Decisive remote numerical-card duels; takes effect after restart,循環選擇標準原版戰鬥交接；站至最後一刻（關閉自動撤退）或抽象決勝（遠程數值卡牌對決）；重新啟動遊戲後生效
 AW3_ARMY_RTS_WAR_RESOLUTION_MODE Option 0,标准,Standard,標準

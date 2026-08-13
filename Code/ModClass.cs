@@ -44,6 +44,12 @@ namespace AncientWarfare3
             LogInfo("AW3 Army RTS feature: " +
                     ArmyRtsRuntimeMode.LogName +
                     " (AW3_ENABLE_ARMY_RTS setting; restart required)." );
+            LogInfo("AW3 Army mode: " +
+                    AncientWarfare3.core.grandstrategy.
+                        GrandStrategyArmyModeRules.LogName(
+                            AWPerformanceSettings.CurrentArmyMode) +
+                    " (Grand Strategy Army and RTS are mutually exclusive; " +
+                    "restart required)." );
             LogInfo("AW3 Army RTS scheduler: " +
                     ArmyRtsSchedulingMode.Current.ToString().ToLowerInvariant() +
                     " (AW3_USE_AW3_ARMY_RTS_SCHEDULER setting; restart required)." );

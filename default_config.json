@@ -13,6 +13,12 @@
       "Callback": "AWPerformanceSettings:SwitchArmyRts"
     },
     {
+      "Id": "AW3_ENABLE_GRAND_STRATEGY_ARMY",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchGrandStrategyArmy"
+    },
+    {
       "Id": "AW3_ARMY_RTS_WAR_RESOLUTION_MODE",
       "Type": "SELECT",
       "IntVal": 0,

@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.grandstrategy;
 
 namespace AncientWarfare3.core.performance
 {
@@ -6,6 +7,7 @@ namespace AncientWarfare3.core.performance
     {
         private static bool _configSchedulerEnabled;
         private static bool _configArmyRtsEnabled = true;
+        private static bool _configGrandStrategyArmyEnabled;
         private static int _configArmyRtsWarResolutionMode;
         private static bool _configShowArmyRtsVisuals;
         private static bool _configShowArmyMapInformation;
@@ -33,6 +35,11 @@ namespace AncientWarfare3.core.performance
         public static bool EnableAsyncShadowChecks { get; private set; }
         public static bool ArmyRtsDiagnosticsEnabled { get; private set; }
         public static bool EnableArmyRts => _configArmyRtsEnabled;
+        public static bool EnableGrandStrategyArmy =>
+            _configGrandStrategyArmyEnabled;
+        public static GrandStrategyArmyMode CurrentArmyMode =>
+            GrandStrategyArmyModeRules.Resolve(
+                _configArmyRtsEnabled, _configGrandStrategyArmyEnabled);
         public static int ArmyRtsWarResolutionModeIndex =>
             _configArmyRtsWarResolutionMode;
         public static bool ShowArmyRtsVisuals =>
@@ -99,6 +106,13 @@ namespace AncientWarfare3.core.performance
         public static void SwitchArmyRts(bool pValue)
         {
             _configArmyRtsEnabled = pValue;
+            if (pValue) _configGrandStrategyArmyEnabled = false;
+        }
+
+        public static void SwitchGrandStrategyArmy(bool pValue)
+        {
+            _configGrandStrategyArmyEnabled = pValue;
+            if (pValue) _configArmyRtsEnabled = false;
         }
 
         public static void SetArmyRtsWarResolutionMode(int pValue)
