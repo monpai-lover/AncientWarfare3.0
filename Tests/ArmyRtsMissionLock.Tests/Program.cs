@@ -41,5 +41,15 @@ Require(!ArmyRtsMemberObjectiveRules.ShouldOwnMemberObjective(
         missionActive: true, isCaptain: false, actorEligible: true,
         immediateCombat: false, transportActive: true),
     "transport retains movement ownership until disembarkation");
+Require(!ArmyRtsMemberObjectiveRules.ShouldReplaceMemberPath(
+        hasObjective: true, recordedTargetTileId: 17,
+        resolvedTargetTileId: 17, ownsPath: true,
+        nativeLocalPath: true),
+    "an unchanged member objective must retain its existing route");
+Require(ArmyRtsMemberObjectiveRules.ShouldReplaceMemberPath(
+        hasObjective: true, recordedTargetTileId: 17,
+        resolvedTargetTileId: 23, ownsPath: true,
+        nativeLocalPath: true),
+    "a changed member objective must replace its old route");
 
 Console.WriteLine("ArmyRtsMissionLock.Tests: PASS");

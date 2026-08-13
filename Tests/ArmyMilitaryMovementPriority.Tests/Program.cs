@@ -17,5 +17,14 @@ Require(!ArmyMilitaryMovementPriorityRules.ShouldRunP0(
         largeSchedulerActive: true, ownsRtsObjective: false,
         isLandGuardFollow: false),
     "ordinary army membership must not receive military P0");
+Require(ArmyMilitaryMovementPriorityRules.IsActiveRtsObjectiveOwner(
+        controllerActive: true, ownsObjective: true),
+    "a controller-owned RTS objective must enter P0");
+Require(!ArmyMilitaryMovementPriorityRules.IsActiveRtsObjectiveOwner(
+        controllerActive: false, ownsObjective: true),
+    "pre-deployment escort ownership must not enter P0");
+Require(!ArmyMilitaryMovementPriorityRules.IsActiveRtsObjectiveOwner(
+        controllerActive: true, ownsObjective: false),
+    "a controller in rally without a physical objective must not enter P0");
 
 Console.WriteLine("ArmyMilitaryMovementPriority.Tests: PASS");

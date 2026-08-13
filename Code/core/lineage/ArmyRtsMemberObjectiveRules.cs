@@ -15,6 +15,16 @@ namespace AncientWarfare3.core.lineage
                    !pathPending;
         }
 
+        internal static bool ShouldReplaceMemberPath(bool hasObjective,
+            int recordedTargetTileId, int resolvedTargetTileId,
+            bool ownsPath, bool nativeLocalPath)
+        {
+            return hasObjective && resolvedTargetTileId >= 0 &&
+                   recordedTargetTileId >= 0 &&
+                   recordedTargetTileId != resolvedTargetTileId &&
+                   (ownsPath || nativeLocalPath);
+        }
+
         internal static bool ShouldOwnMemberObjective(bool missionActive,
             bool isCaptain, bool actorEligible, bool immediateCombat,
             bool transportActive)

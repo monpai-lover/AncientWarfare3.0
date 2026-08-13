@@ -574,6 +574,8 @@ namespace AncientWarfare3.core.lineage
             internal bool PursuitCompleted => PursuitRoute.Completed;
             internal readonly ArmyRtsJobAssignmentCursor JobCursor =
                 new ArmyRtsJobAssignmentCursor();
+            internal readonly Dictionary<long, int> MemberObjectiveTileByActor =
+                new Dictionary<long, int>();
             internal readonly ArmyRtsTransitionFacts TransitionFacts =
                 new ArmyRtsTransitionFacts();
         }
@@ -1047,6 +1049,7 @@ namespace AncientWarfare3.core.lineage
             if (clearSharedRoute)
             {
                 AWArmyMarchService.ClearArmy(pArmy);
+                ClearIndependentMemberPaths(pArmy, previousRuntime);
                 if (previousRuntime != null)
                 {
                     previousRuntime.RouteSubmitted = false;
@@ -1663,9 +1666,65 @@ namespace AncientWarfare3.core.lineage
                    ShouldOwnMilitaryActor(pActor, missionActive);
         }
 
+        internal static bool HasActiveCaptainObjective(Actor pActor)
+        {
+            Army army = pActor?.army;
+            if (pActor?.data == null || army?.data == null ||
+                !Controllers.TryGet(army.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null || record.State == ArmyRtsState.Rally)
+                return false;
+            return IsCaptain(pActor, army) &&
+                   ShouldOwnMilitaryActor(pActor, pMissionActive: true);
+        }
+
         public static bool ShouldHoldDeploymentMove(Actor pActor)
         {
-            return false;
+            Army army = pActor?.army;
+            if (!ArmyRtsRuntimeMode.ShouldCommit || pActor?.data == null ||
+                army?.data == null || !IsCaptain(pActor, army) ||
+                !Controllers.TryGet(army.id,
+                    out ArmyRtsControllerRecord record)) return false;
+            bool captainPresent = pActor.isAlive() && !pActor.isRekt() &&
+                                  pActor.current_tile?.data != null;
+            if (ArmyRtsRules.ShouldForcePreDeparture(
+                    authoritative: true, state: ArmyRtsState.Rally,
+                    minimumForceReady: ArmyLogisticsRules.
+                        HasMinimumOperationalForce(SafeUnitCount(army)),
+                    captainPresent: captainPresent,
+                    issuedWorldTime: record?.Mission?.IssuedTime ?? 0d,
+                    currentWorldTime: CurrentWorldTime())) return false;
+            ArmyFormationObservationProgress observation =
+                ArmyFormationService.GetObservationProgress(army);
+            if (!observation.Complete) return true;
+            ArmyFormationCounters counters =
+                ArmyFormationService.GetIncrementalFollowerCounters(army);
+            bool transportOwnsMovement = pActor.is_inside_boat ||
+                ArmyRtsTransportService.OwnsActorTask(pActor);
+            return !ArmyRtsRules.CanCaptainAdvanceWithEscort(
+                requiresEscort: true,
+                rosterLiving: ArmyRtsRules.ResolveEscortPopulation(
+                    SafeUnitCount(army), counters.Living,
+                    observation.Complete, captainPresent),
+                nearbyFollowers: counters.Rallied,
+                captainPresent: captainPresent,
+                immediateCombat: HasImmediateCombatPriority(pActor),
+                transportOwnsMovement: transportOwnsMovement);
+        }
+
+        internal static bool HasActiveMemberObjective(Actor pActor)
+        {
+            Army army = pActor?.army;
+            if (pActor?.data == null || army?.data == null ||
+                !Controllers.TryGet(army.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null || record.State == ArmyRtsState.Rally)
+                return false;
+            bool transportOwned = pActor.is_inside_boat ||
+                ArmyRtsTransportService.OwnsActorTask(pActor);
+            return ArmyRtsMemberObjectiveRules.ShouldOwnMemberObjective(
+                true, IsCaptain(pActor, army), IsLiveWarriorActor(pActor),
+                HasImmediateCombatPriority(pActor), transportOwned);
         }
 
         public static bool HasFrontHoldMission(Actor pActor)
@@ -2214,6 +2273,7 @@ namespace AncientWarfare3.core.lineage
             ArmyRouteProviderService.Cancel(pArmyId,
                 ArmyRouteCancelReason.TargetReplaced);
             AWArmyMarchService.ClearArmy(pArmyId);
+            ClearIndependentMemberPaths(army, runtime);
             runtime.RouteSubmitted = false;
             runtime.RouteArrived = false;
             runtime.TransportRouteConfirmed = false;
@@ -2228,6 +2288,7 @@ namespace AncientWarfare3.core.lineage
             if (pAlternateEndpoint && alternateTargetTileId >= 0 &&
                 runtime.PursuitRoute.ReplaceEndpoint(alternateTargetTileId))
                 runtime.AlternateTargetTileId = -1;
+            runtime.JobCursor.Reopen();
             Controllers.Requeue(pArmyId);
             return !pAlternateEndpoint ||
                    alternateTargetTileId >= 0;
@@ -4108,7 +4169,8 @@ namespace AncientWarfare3.core.lineage
                 if (ownsObjective)
                 {
                     SetJob(actor, ArmyRtsContent.FollowerJobId);
-                    TrySubmitMemberObjectiveRoute(actor);
+                    if (pState != ArmyRtsState.Rally)
+                        TrySubmitMemberObjectiveRoute(actor, pRuntime);
                 }
                 else
                     ReleaseActor(actor);
@@ -4120,19 +4182,68 @@ namespace AncientWarfare3.core.lineage
                     ArmyRtsRules.JobOwnershipRepairIntervalSeconds;
         }
 
-        private static void TrySubmitMemberObjectiveRoute(Actor pActor)
+        private static void TrySubmitMemberObjectiveRoute(Actor pActor,
+            RuntimeState pRuntime)
         {
             if (ResolveFollowerTarget(pActor, out WorldTile target) !=
                     ArmyFollowerTargetResult.Move ||
                 !SafeSameIsland(pActor?.current_tile, target)) return;
+            int targetTileId = target.data?.tile_id ?? -1;
+            long actorId = pActor?.data?.id ?? -1L;
             bool ownsPath = AWPathMovementBridge.HasOwnership(pActor);
             bool nativeLocalPath = pActor?.isFollowingLocalPath() == true ||
                                    pActor?.current_path_global != null;
+            int recordedTargetTileId = pRuntime != null &&
+                pRuntime.MemberObjectiveTileByActor.TryGetValue(actorId,
+                    out int recorded) ? recorded : -1;
+            if (ArmyRtsMemberObjectiveRules.ShouldReplaceMemberPath(
+                    targetTileId >= 0, recordedTargetTileId, targetTileId,
+                    ownsPath, nativeLocalPath))
+            {
+                ClearIndependentMemberPath(pActor, pRuntime);
+                ownsPath = false;
+                nativeLocalPath = false;
+            }
             if (!ArmyRtsMemberObjectiveRules.ShouldSubmitMemberPath(
-                    target?.data != null, ownsPath, nativeLocalPath,
-                    pathPending: ownsPath)) return;
-            try { pActor.goTo(target, pLimitPathfindingRegions: 0); }
+                target?.data != null, ownsPath, nativeLocalPath,
+                pathPending: ownsPath)) return;
+            try
+            {
+                pActor.goTo(target, pLimitPathfindingRegions: 0);
+                if (pRuntime != null && actorId >= 0L)
+                    pRuntime.MemberObjectiveTileByActor[actorId] =
+                        targetTileId;
+            }
             catch { }
+        }
+
+        private static void ClearIndependentMemberPaths(Army pArmy,
+            RuntimeState pRuntime)
+        {
+            if (pArmy?.data == null || pRuntime == null) return;
+            long[] actorIds = new long[
+                pRuntime.MemberObjectiveTileByActor.Count];
+            pRuntime.MemberObjectiveTileByActor.Keys.CopyTo(actorIds, 0);
+            foreach (long actorId in actorIds)
+            {
+                Actor actor = FindActor(actorId);
+                if (actor?.army == pArmy && !actor.is_inside_boat)
+                    ClearIndependentMemberPath(actor, pRuntime);
+            }
+            pRuntime.MemberObjectiveTileByActor.Clear();
+        }
+
+        private static void ClearIndependentMemberPath(Actor pActor,
+            RuntimeState pRuntime)
+        {
+            if (pActor?.data == null) return;
+            if (AWPathMovementBridge.HasOwnership(pActor))
+                AWPathMovementBridge.Cancel(pActor,
+                    AWPathFailureReason.CancelledByNewRequest);
+            pActor.stopMovement();
+            pActor.clearOldPath();
+            pActor.clearTileTarget();
+            pRuntime?.MemberObjectiveTileByActor.Remove(pActor.data.id);
         }
 
         private static void SetJob(Actor pActor, string pJobId,

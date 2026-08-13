@@ -4027,8 +4027,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             for (int i = 0; i < count; i++)
             {
                 MilitaryPriorityActive[i] =
-                    ArmyRtsControllerService.HasCaptainMission(actors[i]) ||
-                    ArmyRtsControllerService.HasFollowerMission(actors[i]) ||
+                    ArmyRtsControllerService.HasActiveCaptainObjective(actors[i]) ||
+                    ArmyRtsControllerService.HasActiveMemberObjective(actors[i]) ||
                     RoyalGuardService.HasLandFollowPriority(actors[i]);
             }
         }
@@ -4185,8 +4185,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             for (int i = 0; i < count; i++)
             {
                 MilitaryPriorityActive[i] =
-                    ArmyRtsControllerService.HasCaptainMission(actors[i]) ||
-                    ArmyRtsControllerService.HasFollowerMission(actors[i]) ||
+                    ArmyRtsControllerService.HasActiveCaptainObjective(actors[i]) ||
+                    ArmyRtsControllerService.HasActiveMemberObjective(actors[i]) ||
                     RoyalGuardService.HasLandFollowPriority(actors[i]);
             }
         }
