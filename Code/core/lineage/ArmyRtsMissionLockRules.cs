@@ -25,5 +25,11 @@ namespace AncientWarfare3.core.lineage
                    pCause == ArmyRtsMissionReleaseCause.ExplicitPlayerOrder ||
                    pCause == ArmyRtsMissionReleaseCause.ExplicitRetreat;
         }
+
+        internal static bool CanHandoffAfterRecovery(
+            ArmyRtsMissionReleaseCause pCause, bool objectiveOpen)
+        {
+            return !objectiveOpen && CanReplaceTarget(pCause);
+        }
     }
 }

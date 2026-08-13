@@ -24,4 +24,14 @@ Require(ArmyStallWatchdogRules.RecordReplanResult(replanState,
         succeeded: false) == ArmyStallRecoveryAction.AlternateEndpoint,
     "failed same-target replans must not change target");
 
+Require(!ArmyRtsMissionLockRules.CanHandoffAfterRecovery(
+        ArmyRtsMissionReleaseCause.PathFailed, objectiveOpen: true),
+    "a failed transport recovery must retain an open strategic target");
+Require(!ArmyRtsMissionLockRules.CanHandoffAfterRecovery(
+        ArmyRtsMissionReleaseCause.TargetInvalid, objectiveOpen: true),
+    "an open target cannot be handed off by watchdog recovery");
+Require(ArmyRtsMissionLockRules.CanHandoffAfterRecovery(
+        ArmyRtsMissionReleaseCause.TargetInvalid, objectiveOpen: false),
+    "a closed target may be handed off");
+
 Console.WriteLine("ArmyRtsWatchdogLock.Tests: PASS");
