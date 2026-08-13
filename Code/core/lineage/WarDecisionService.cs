@@ -62,8 +62,7 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
-            Kingdom queueDefender =
-                ResolveMilitaryGovernorateMainDefender(pDefender);
+            Kingdom queueDefender = ResolveWarMainDefender(pDefender);
             if (!CanPassAllianceWarRules(pAttacker, queueDefender, type,
                     pSystemWar: false, out pReason)) return false;
             if (queueDefender != pDefender && World.world?.wars?.getWar(
@@ -118,8 +117,7 @@ namespace AncientWarfare3.core.lineage
             if (!pSystemWar &&
                 !CanPassVassalWarRules(pAttacker, pDefender, type,
                     out pReason)) return false;
-            Kingdom queueDefender =
-                ResolveMilitaryGovernorateMainDefender(pDefender);
+            Kingdom queueDefender = ResolveWarMainDefender(pDefender);
             if (!CanPassAllianceWarRules(pAttacker, queueDefender, type,
                     pSystemWar, out pReason)) return false;
             try
@@ -353,8 +351,11 @@ namespace AncientWarfare3.core.lineage
                 return null;
             }
             bool independenceWar = type == "independence_war";
+            Kingdom mainDefender = ResolveWarMainDefender(declaredDefender);
             bool activeTreaty = DiplomacyProposalService.HasActiveWarBlocker(
-                pAttacker, pDefender);
+                pAttacker, pDefender) || mainDefender != pDefender &&
+                DiplomacyProposalService.HasActiveWarBlocker(
+                    pAttacker, mainDefender);
             if (DiplomaticWarDeclarationLedgerRules
                     .ShouldBlockWarWithActiveTreaty(activeTreaty,
                         independenceWar, pTreatyExemptInternalWar))
@@ -372,8 +373,6 @@ namespace AncientWarfare3.core.lineage
             if (revalidateMutableEligibility && !pSystemWar &&
                 !CanPassVassalWarRules(pAttacker, pDefender, type,
                     out pFailureReason)) return null;
-            Kingdom mainDefender =
-                ResolveMilitaryGovernorateMainDefender(declaredDefender);
             if (!IsCivilKingdom(mainDefender) || mainDefender == pAttacker)
             {
                 pFailureReason = "invalid_main_defender";
@@ -439,7 +438,7 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static Kingdom ResolveMilitaryGovernorateMainDefender(
+        internal static Kingdom ResolveWarMainDefender(
             Kingdom pDeclaredDefender)
         {
             if (VassalService.GetSubjectKind(pDeclaredDefender) !=

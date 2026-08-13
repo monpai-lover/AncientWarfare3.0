@@ -186,8 +186,12 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             bool independenceWar = pWarType == "independence_war";
+            Kingdom mainDefender =
+                WarDecisionService.ResolveWarMainDefender(pDefender);
             bool activeTreaty = DiplomacyProposalService.HasActiveWarBlocker(
-                pAttacker, pDefender);
+                pAttacker, pDefender) || mainDefender != pDefender &&
+                DiplomacyProposalService.HasActiveWarBlocker(
+                    pAttacker, mainDefender);
             if (DiplomaticWarDeclarationLedgerRules
                     .ShouldBlockWarWithActiveTreaty(activeTreaty,
                         independenceWar,

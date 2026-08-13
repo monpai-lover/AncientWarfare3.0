@@ -40,6 +40,34 @@ if ($calls[0].Index -lt $existing -or $calls[0].Index -gt $insert) {
 if ($calls[1].Index -lt $notify) {
     throw 'a newly inserted truce must reconcile after notification'
 }
+foreach ($pattern in @(
+        'existing\.Contains\(pairKey\)[\s\S]{0,220}ReconcilePendingDeclarationsForActiveTreaty',
+        'existing\.Contains\(TreatyPairKey\(requesterId, responderId\)\)[\s\S]{0,220}ReconcilePendingDeclarationsForActiveTreaty')) {
+    if ($proposal -notmatch $pattern) {
+        throw "authoritative truce path lacks declaration cleanup: $pattern"
+    }
+}
+$breakStart = $proposal.IndexOf(
+    'private static bool TryBreakNonAggression(')
+$breakEnd = $proposal.IndexOf(
+    'private static bool EnsureAllianceWithdrawalTruce(', $breakStart)
+$withdrawalEnd = $proposal.IndexOf(
+    'private static string TypeId(', $breakEnd)
+if ($breakStart -lt 0 -or $breakEnd -le $breakStart -or
+    $withdrawalEnd -le $breakEnd) {
+    throw 'could not isolate treaty-breaking methods'
+}
+$breakMethod = $proposal.Substring($breakStart, $breakEnd - $breakStart)
+$withdrawalMethod = $proposal.Substring(
+    $breakEnd, $withdrawalEnd - $breakEnd)
+if ($breakMethod -notmatch
+        'BreakNonAggression\([\s\S]*ReconcilePendingDeclarationsForActiveTreaty') {
+    throw 'breaking non-aggression must reconcile pending declarations'
+}
+if ($withdrawalMethod -notmatch
+        'EnsureProposalTruce\([\s\S]*ReconcilePendingDeclarationsForActiveTreaty') {
+    throw 'alliance withdrawal truce must reconcile pending declarations'
+}
 if (-not $declaration.Contains(
         'ShouldBlockWarWithActiveTreaty(activeTreaty,') -or
     -not $warDecision.Contains(
@@ -65,6 +93,12 @@ foreach ($externalNeedle in @(
 }
 if (-not $zhulu.Contains('TryStartSystemWar(attacker, defender,')) {
     throw 'external zhulu war must retain the treaty-gated system route'
+}
+if ($declaration -notmatch
+        'ResolveWarMainDefender\s*\(\s*pDefender\s*\)[\s\S]{0,300}HasActiveWarBlocker\s*\(\s*pAttacker,\s*mainDefender\s*\)' -or
+    $warDecision -notmatch
+        'ResolveWarMainDefender\s*\(\s*declaredDefender\s*\)[\s\S]{0,300}HasActiveWarBlocker\s*\(\s*pAttacker,\s*mainDefender\s*\)') {
+    throw 'governorate declarations must validate the actual main defender treaty'
 }
 
 Write-Host 'Diplomatic war treaty gate source guard passed.'
