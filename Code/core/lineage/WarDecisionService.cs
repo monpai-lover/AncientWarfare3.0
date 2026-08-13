@@ -341,11 +341,12 @@ namespace AncientWarfare3.core.lineage
                 pFailureReason = "mandate_contest_closed";
                 return null;
             }
-            if (revalidateMutableEligibility &&
-                DiplomacyProposalRules.BlocksWarWithActivePact(
-                    DiplomacyProposalService.HasActiveWarBlocker(
-                        pAttacker, pDefender), pSystemWar,
-                    independenceWar: type == "independence_war"))
+            bool independenceWar = type == "independence_war";
+            bool activeTreaty = DiplomacyProposalService.HasActiveWarBlocker(
+                pAttacker, pDefender);
+            if (DiplomaticWarDeclarationLedgerRules
+                    .ShouldBlockWarWithActiveTreaty(activeTreaty, pSystemWar,
+                        independenceWar, pCasusBelliLocked))
             {
                 pFailureReason = "active_war_blocker";
                 return null;

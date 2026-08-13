@@ -185,6 +185,17 @@ namespace AncientWarfare3.core.lineage
                 pFailureReason = "invalid_participants";
                 return false;
             }
+            bool independenceWar = pWarType == "independence_war";
+            bool activeTreaty = DiplomacyProposalService.HasActiveWarBlocker(
+                pAttacker, pDefender);
+            if (DiplomaticWarDeclarationLedgerRules
+                    .ShouldBlockWarWithActiveTreaty(activeTreaty,
+                        systemWar: IsSystemGoal(pGoalType), independenceWar,
+                        declarationLocked: true))
+            {
+                pFailureReason = "active_war_blocker";
+                return false;
+            }
             if (DiplomaticWarDeclarationLedgerService.HasPendingForPair(
                     pAttacker, pDefender))
             {
