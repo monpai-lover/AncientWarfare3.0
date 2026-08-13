@@ -10,5 +10,17 @@
     <Compile Include="Program.cs" />
     <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyArmyMode.cs"
              Link="Production\GrandStrategyArmyMode.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyModels.cs"
+             Link="Production\GrandStrategyModels.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyLedgerRules.cs"
+             Link="Production\GrandStrategyLedgerRules.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyIds.cs"
+             Link="Production\GrandStrategyIds.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyTroopRules.cs"
+             Link="Production\GrandStrategyTroopRules.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyArmyRules.cs"
+             Link="Production\GrandStrategyArmyRules.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyArmyService.cs"
+             Link="Production\GrandStrategyArmyService.cs" />
   </ItemGroup>
 </Project>
