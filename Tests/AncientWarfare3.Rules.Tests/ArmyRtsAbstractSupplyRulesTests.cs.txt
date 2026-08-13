@@ -31,6 +31,18 @@ internal static class ArmyRtsAbstractSupplyRulesTests
         Equal(true, ArmyRtsAbstractSupplyRules.ShouldSuppressVanillaFoodTask(
                 supplied: true),
             "successful supply suppresses the vanilla city-food task");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanConsume(
+                eligible: false, hasSuitableFood: true, hasFoodItem: true),
+            "ineligible actors preserve vanilla hunger even if a city has food");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanConsume(
+                eligible: true, hasSuitableFood: false, hasFoodItem: true),
+            "an empty home city preserves vanilla hunger");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanConsume(
+                eligible: true, hasSuitableFood: true, hasFoodItem: false),
+            "a failed food selection preserves vanilla hunger");
+        Equal(true, ArmyRtsAbstractSupplyRules.CanConsume(
+                eligible: true, hasSuitableFood: true, hasFoodItem: true),
+            "one resolved suitable ration may be consumed");
     }
 
     private static void Equal<T>(T expected, T actual, string name)
