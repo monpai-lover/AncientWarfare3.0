@@ -414,7 +414,8 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
-                war = WarDecisionService.TryStartSystemWar(pOld, pRebel, asset.id, "mandate_rebel");
+                war = WarDecisionService.TryStartInternalSystemWar(pOld,
+                    pRebel, asset.id, "mandate_rebel");
                 if (pOld.hasAlliance())
                 {
                     foreach (Kingdom ally in pOld.getAlliance().kingdoms_hashset)

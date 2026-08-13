@@ -1692,10 +1692,15 @@ namespace AncientWarfare3.core.lineage
                 {
                     long defenderId = defenders[defenderIndex];
                     string pairKey = TreatyPairKey(attackerId, defenderId);
-                    if (existing.Contains(pairKey)) continue;
-                    if (!pWriteMissing) return false;
                     Kingdom attacker = FindKingdom(attackerId);
                     Kingdom defender = FindKingdom(defenderId);
+                    if (existing.Contains(pairKey))
+                    {
+                        ReconcilePendingDeclarationsForActiveTreaty(
+                            attacker, defender);
+                        continue;
+                    }
+                    if (!pWriteMissing) return false;
                     if (!RegisterTrucePair(pProposal.WarId, attacker,
                             defender, DiplomacyProposalRules.TruceYears,
                             "war_settlement", treatyStartYear,
@@ -1722,7 +1727,11 @@ namespace AncientWarfare3.core.lineage
                     requiredUntil, out HashSet<string> existing))
                 return false;
             if (existing.Contains(TreatyPairKey(requesterId, responderId)))
+            {
+                ReconcilePendingDeclarationsForActiveTreaty(
+                    FindKingdom(requesterId), FindKingdom(responderId));
                 return true;
+            }
             if (!pWriteMissing) return false;
             return RegisterTrucePair(pProposal.WarId,
                 FindKingdom(requesterId), FindKingdom(responderId),
@@ -1774,7 +1783,12 @@ namespace AncientWarfare3.core.lineage
                     existing.Parameters.AddWithValue("@b", pSecond.id);
                     existing.Parameters.AddWithValue("@required_until",
                         treatyUntil);
-                    if (existing.ExecuteScalar() != null) return true;
+                    if (existing.ExecuteScalar() != null)
+                    {
+                        ReconcilePendingDeclarationsForActiveTreaty(
+                            pFirst, pSecond);
+                        return true;
+                    }
                 }
 
                 long proposalId = TableIdAllocator.Next(DB,
@@ -1832,6 +1846,8 @@ namespace AncientWarfare3.core.lineage
                 DiplomacyConversationService.RecordProposal(pFirst,
                     pSecond, proposalId);
                 NotifyPair(pFirst.id, pSecond.id);
+                ReconcilePendingDeclarationsForActiveTreaty(
+                    pFirst, pSecond);
                 return true;
             }
             catch (Exception exception)
@@ -1839,6 +1855,26 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("Diplomacy truce write failed: " +
                                     exception.Message);
                 return false;
+            }
+        }
+
+        internal static void ReconcilePendingDeclarationsForActiveTreaty(
+            Kingdom pFirst, Kingdom pSecond)
+        {
+            if (pFirst?.data == null || pSecond?.data == null ||
+                pFirst == pSecond) return;
+            try
+            {
+                DiplomaticWarDeclarationService.ClearPendingForPair(
+                    pFirst, pSecond, "active_war_blocker");
+                DiplomaticWarDeclarationService.ClearPendingForPair(
+                    pSecond, pFirst, "active_war_blocker");
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning(
+                    "Diplomacy truce declaration reconciliation failed: " +
+                    exception.Message);
             }
         }
 
@@ -6333,6 +6369,8 @@ namespace AncientWarfare3.core.lineage
             DiplomacyConversationService.RecordNonAggressionBroken(
                 pRequester, pResponder, truceUntil);
             NotifyPair(pRequester.id, pResponder.id);
+            ReconcilePendingDeclarationsForActiveTreaty(
+                pRequester, pResponder);
             pReason = "";
             return true;
         }
@@ -6356,10 +6394,15 @@ namespace AncientWarfare3.core.lineage
                 DiplomacyConversationRules.LetterToneId(
                     ResolveLetterTone(pRequester, pResponder)),
                 pProposal?.PlayerInitiated == true);
-            return pProposal != null &&
-                   DiplomacyTreatyPersistence.EnsureProposalTruce(DB,
-                       DiplomacyProposalTableItem.GetTableName(),
-                       pProposal.ProposalId, request, out _);
+            bool committed = pProposal != null &&
+                             DiplomacyTreatyPersistence.EnsureProposalTruce(
+                                 DB,
+                                 DiplomacyProposalTableItem.GetTableName(),
+                                 pProposal.ProposalId, request, out _);
+            if (committed)
+                ReconcilePendingDeclarationsForActiveTreaty(
+                    pRequester, pResponder);
+            return committed;
         }
 
         private static string TypeId(DiplomacyProposalType pType)

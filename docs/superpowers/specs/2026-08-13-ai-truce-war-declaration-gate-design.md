@@ -114,7 +114,7 @@ Rules and source-guard tests will cover:
    normal declaration termination path.
 
 The focused rule suite, war/peace integration tests, source guards, and the
-`net481` project build must all pass before deployment.
+`net48` project build must all pass before deployment.
 
 ## Scope
 

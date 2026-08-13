@@ -62,8 +62,7 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
-            Kingdom queueDefender =
-                ResolveMilitaryGovernorateMainDefender(pDefender);
+            Kingdom queueDefender = ResolveWarMainDefender(pDefender);
             if (!CanPassAllianceWarRules(pAttacker, queueDefender, type,
                     pSystemWar: false, out pReason)) return false;
             if (queueDefender != pDefender && World.world?.wars?.getWar(
@@ -118,8 +117,7 @@ namespace AncientWarfare3.core.lineage
             if (!pSystemWar &&
                 !CanPassVassalWarRules(pAttacker, pDefender, type,
                     out pReason)) return false;
-            Kingdom queueDefender =
-                ResolveMilitaryGovernorateMainDefender(pDefender);
+            Kingdom queueDefender = ResolveWarMainDefender(pDefender);
             if (!CanPassAllianceWarRules(pAttacker, queueDefender, type,
                     pSystemWar, out pReason)) return false;
             try
@@ -140,7 +138,8 @@ namespace AncientWarfare3.core.lineage
             string pReasonKey, bool pNoCb = false)
         {
             War war = StartWar(pAttacker, pDefender, pWarType, pReasonKey,
-                pNoCb, pSystemWar: false, pCasusBelliLocked: false, out _);
+                pNoCb, pSystemWar: false, pCasusBelliLocked: false,
+                pTreatyExemptInternalWar: false, out _);
             return war?.data != null;
         }
 
@@ -148,7 +147,8 @@ namespace AncientWarfare3.core.lineage
             string pReasonKey, bool pNoCb = false)
         {
             return StartWar(pAttacker, pDefender, pWarType, pReasonKey,
-                pNoCb, pSystemWar: false, pCasusBelliLocked: false, out _);
+                pNoCb, pSystemWar: false, pCasusBelliLocked: false,
+                pTreatyExemptInternalWar: false, out _);
         }
 
         public static War TryStartSystemWar(Kingdom pAttacker, Kingdom pDefender, string pWarType,
@@ -156,7 +156,15 @@ namespace AncientWarfare3.core.lineage
         {
             return StartWar(pAttacker, pDefender, pWarType, pReasonKey,
                 pNoCb: false, pSystemWar: true, pCasusBelliLocked: false,
-                out _);
+                pTreatyExemptInternalWar: false, out _);
+        }
+
+        public static War TryStartInternalSystemWar(Kingdom pAttacker,
+            Kingdom pDefender, string pWarType, string pReasonKey)
+        {
+            return StartWar(pAttacker, pDefender, pWarType, pReasonKey,
+                pNoCb: false, pSystemWar: true, pCasusBelliLocked: false,
+                pTreatyExemptInternalWar: true, out _);
         }
 
         public static War TryStartNotifiedWarWithResult(Kingdom pAttacker,
@@ -165,7 +173,7 @@ namespace AncientWarfare3.core.lineage
         {
             return StartWar(pAttacker, pDefender, pWarType, pReasonKey,
                 pNoCb, pSystemWar, pCasusBelliLocked: true,
-                out pFailureReason);
+                pTreatyExemptInternalWar: false, out pFailureReason);
         }
 
         public static bool HasValidCasusBelli(Kingdom pAttacker, Kingdom pDefender, string pWarType)
@@ -320,7 +328,8 @@ namespace AncientWarfare3.core.lineage
 
         private static War StartWar(Kingdom pAttacker, Kingdom pDefender,
             string pWarType, string pReasonKey, bool pNoCb, bool pSystemWar,
-            bool pCasusBelliLocked, out string pFailureReason)
+            bool pCasusBelliLocked, bool pTreatyExemptInternalWar,
+            out string pFailureReason)
         {
             pFailureReason = "";
             if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender) ||
@@ -341,11 +350,15 @@ namespace AncientWarfare3.core.lineage
                 pFailureReason = "mandate_contest_closed";
                 return null;
             }
-            if (revalidateMutableEligibility &&
-                DiplomacyProposalRules.BlocksWarWithActivePact(
-                    DiplomacyProposalService.HasActiveWarBlocker(
-                        pAttacker, pDefender), pSystemWar,
-                    independenceWar: type == "independence_war"))
+            bool independenceWar = type == "independence_war";
+            Kingdom mainDefender = ResolveWarMainDefender(declaredDefender);
+            bool activeTreaty = DiplomacyProposalService.HasActiveWarBlocker(
+                pAttacker, pDefender) || mainDefender != pDefender &&
+                DiplomacyProposalService.HasActiveWarBlocker(
+                    pAttacker, mainDefender);
+            if (DiplomaticWarDeclarationLedgerRules
+                    .ShouldBlockWarWithActiveTreaty(activeTreaty,
+                        independenceWar, pTreatyExemptInternalWar))
             {
                 pFailureReason = "active_war_blocker";
                 return null;
@@ -360,8 +373,6 @@ namespace AncientWarfare3.core.lineage
             if (revalidateMutableEligibility && !pSystemWar &&
                 !CanPassVassalWarRules(pAttacker, pDefender, type,
                     out pFailureReason)) return null;
-            Kingdom mainDefender =
-                ResolveMilitaryGovernorateMainDefender(declaredDefender);
             if (!IsCivilKingdom(mainDefender) || mainDefender == pAttacker)
             {
                 pFailureReason = "invalid_main_defender";
@@ -427,7 +438,7 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static Kingdom ResolveMilitaryGovernorateMainDefender(
+        internal static Kingdom ResolveWarMainDefender(
             Kingdom pDeclaredDefender)
         {
             if (VassalService.GetSubjectKind(pDeclaredDefender) !=

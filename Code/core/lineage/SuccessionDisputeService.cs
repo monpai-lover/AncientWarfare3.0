@@ -918,7 +918,8 @@ namespace AncientWarfare3.core.lineage
                     CountLiveCities(rival)))
                 return false;
             War war = FindDisputeWar(pRow) ??
-                      WarDecisionService.TryStartSystemWar(rival, original,
+                      WarDecisionService.TryStartInternalSystemWar(rival,
+                          original,
                           SuccessionDisputeRules.WarTypeId,
                           "succession_dispute");
             if (war?.data == null) return false;

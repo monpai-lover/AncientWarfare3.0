@@ -36,6 +36,14 @@ namespace AncientWarfare3.core.lineage
             return !declarationLocked;
         }
 
+        public static bool ShouldBlockWarWithActiveTreaty(
+            bool activeTreaty, bool independenceWar,
+            bool treatyExemptInternalWar)
+        {
+            return activeTreaty && !independenceWar &&
+                   !treatyExemptInternalWar;
+        }
+
         public static long ResolveTargetCityId(bool storedCityValid,
             long storedCityId, long capitalCityId, long firstCityId)
         {

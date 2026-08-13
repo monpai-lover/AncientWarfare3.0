@@ -6,7 +6,7 @@
 
 **Architecture:** Add one pure treaty-gate rule that distinguishes notified external declarations from direct internal system wars. Use it at declaration issue time and immediately before engine war start. Reconcile both directed declaration ledgers whenever a truce pair is found or inserted so coalition, separate-peace, and restored-save paths share the same cleanup.
 
-**Tech Stack:** C#/.NET 9 rules executable, net481 mod build, PowerShell source guards, System.Data.SQLite-backed diplomacy persistence.
+**Tech Stack:** C#/.NET 9 rules executable, net48 mod build, PowerShell source guards, System.Data.SQLite-backed diplomacy persistence.
 
 ---
 
@@ -361,7 +361,7 @@ Expected: exit code 0 and the final all-rules success message.
 - [ ] **Step 3: Build the mod target**
 
 ```powershell
-dotnet build AncientWarfare3.csproj -c Release -f net481 --no-restore
+dotnet build AncientWarfare3.csproj -c Release -f net48 --no-restore
 ```
 
 Expected: build succeeds with 0 errors.

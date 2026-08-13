@@ -14,6 +14,13 @@ AWThirdPartySchedulerFaultRulesTests.Run();
 ActorVisualRoleRulesTests.Run();
 MilitaryGovernorateCourtRulesTests.Run();
 if (args.Length == 1 &&
+    args[0] == "--diplomatic-war-treaty-gate")
+{
+    DiplomaticWarDeclarationLockRulesTests.Run();
+    Console.WriteLine("Diplomatic war treaty gate rules passed.");
+    return;
+}
+if (args.Length == 1 &&
     args[0] == "--military-governorate-warrior-appearance")
 {
     Console.WriteLine(
