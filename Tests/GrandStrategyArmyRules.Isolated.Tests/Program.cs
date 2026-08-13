@@ -1,4 +1,5 @@
 using AncientWarfare3.core.grandstrategy;
+using AncientWarfare3.api.commands;
 
 internal static class Program
 {
@@ -27,6 +28,10 @@ internal static class Program
             CommanderSuccessionIsDeterministic();
             MovementBattleAndSiegeRulesAreDeterministic();
             BattleRoundsArePersistentAndIdempotent();
+            RuntimeModeIsolationIsExplicit();
+            PathAndSiegeServicesCommitOnce();
+            CommandsAreAuthorizedAndIdempotent();
+            SnapshotRoundTripsAuthoritativeState();
             Console.WriteLine("Grand strategy mode tests passed.");
             return 0;
         }
@@ -35,6 +40,111 @@ internal static class Program
             Console.Error.WriteLine(error);
             return 1;
         }
+    }
+
+    private static void SnapshotRoundTripsAuthoritativeState()
+    {
+        var ledger = new GrandStrategyKingdomLedger(9, 900);
+        GrandStrategyLedgerRules.TryRaise(ledger, 300, out _);
+        var army = new GrandStrategyArmy(44, 9, 12,
+            GrandStrategyTroopRules.Compose(300, 3)) { PositionTileId = 18 };
+        var battle = new GrandStrategyBattleState(55, 12, 44, 45,
+            300, 280, 100);
+        var snapshot = GrandStrategyPersistence.CreateSnapshot(
+            schemaVersion: 1, worldGeneration: 8,
+            new[] { ledger }, new[] { army }, new[] { battle },
+            committedTransactions: new[] { "battle:55:1" });
+        string json = GrandStrategyPersistence.Serialize(snapshot);
+        var restored = GrandStrategyPersistence.Deserialize(json,
+            expectedWorldGeneration: 8);
+        Equal(1, restored.Ledgers.Count, "ledger restored");
+        Equal(1, restored.Armies.Count, "army restored");
+        Equal(18, restored.Armies[0].PositionTileId,
+            "data coordinate restored");
+        Equal("battle:55:1", restored.CommittedTransactions[0],
+            "transaction key restored");
+        bool mismatchThrown = false;
+        try { GrandStrategyPersistence.Deserialize(json, 9); }
+        catch (InvalidOperationException) { mismatchThrown = true; }
+        True(mismatchThrown, "world generation mismatch rejected");
+    }
+
+    private static void CommandsAreAuthorizedAndIdempotent()
+    {
+        var army = new GrandStrategyArmy(88, 7, 9,
+            GrandStrategyTroopRules.Compose(200, 2)) { PositionTileId = 5 };
+        var paths = new GrandStrategyPathService();
+        var service = new GrandStrategyArmyCommandService(paths,
+            (start, target) => new[] { start, target });
+        var foreign = service.Execute(army, new GrandStrategyArmyCommand(
+            armyId: 88, kingdomId: 2, worldGeneration: 1,
+            clientSequence: 1, expectedRevision: 0,
+            kind: GrandStrategyArmyCommandKind.Move, targetTileId: 10));
+        False(foreign.Accepted, "foreign kingdom command rejected");
+        var move = service.Execute(army, new GrandStrategyArmyCommand(
+            armyId: 88, kingdomId: 7, worldGeneration: 1,
+            clientSequence: 2, expectedRevision: 0,
+            kind: GrandStrategyArmyCommandKind.Move, targetTileId: 10));
+        True(move.Accepted, "authorized move accepted");
+        var duplicate = service.Execute(army, new GrandStrategyArmyCommand(
+            armyId: 88, kingdomId: 7, worldGeneration: 1,
+            clientSequence: 2, expectedRevision: 0,
+            kind: GrandStrategyArmyCommandKind.Move, targetTileId: 10));
+        True(duplicate.Accepted && duplicate.Duplicate,
+            "duplicate sequence is idempotent");
+        Equal(1, paths.ActiveRequestCount, "duplicate does not submit route");
+    }
+
+    private static void PathAndSiegeServicesCommitOnce()
+    {
+        var army = new GrandStrategyArmy(1001, 8, 11,
+            GrandStrategyTroopRules.Compose(500, 3)) { PositionTileId = 10 };
+        var paths = new GrandStrategyPathService();
+        True(paths.TrySubmit(army, targetTileId: 20,
+            new[] { 10, 11, 15, 20 }, estimatedArrival: 4.5,
+            supplyCost: 12), "path accepted");
+        False(paths.TrySubmit(army, targetTileId: 30,
+            new[] { 10, 30 }, estimatedArrival: 1, supplyCost: 1),
+            "second active request rejected");
+        Equal(1, paths.ActiveRequestCount, "one route per army");
+        True(paths.TryAdvance(army), "route advances");
+        Equal(11, army.PositionTileId, "army moves from data coordinate");
+
+        int occupationCommits = 0;
+        var sieges = new GrandStrategySiegeService(
+            (siegeId, warId, cityId, armyId) =>
+            {
+                occupationCommits++;
+                return true;
+            });
+        var siege = sieges.Start(5001, warId: 11, cityId: 99,
+            armyId: army.Id, defense: 20, maximumProgress: 10);
+        var resolved = sieges.ResolveMonthlyRound(siege.SiegeId,
+            engineers: 50, equipment: 3, officerSkill: 5,
+            manpower: 500, supply: 1, technology: 3,
+            assault: true, roll: 10);
+        True(resolved.Complete, "assault completes weak siege");
+        True(sieges.CommitOccupationOnce(siege.SiegeId),
+            "occupation commits");
+        True(sieges.CommitOccupationOnce(siege.SiegeId),
+            "duplicate occupation is idempotent");
+        Equal(1, occupationCommits, "occupation bridge called once");
+    }
+
+    private static void RuntimeModeIsolationIsExplicit()
+    {
+        False(GrandStrategyRuntimeRules.ShouldRun(
+            GrandStrategyArmyMode.Vanilla), "vanilla is isolated");
+        False(GrandStrategyRuntimeRules.ShouldRun(
+            GrandStrategyArmyMode.ArmyRts), "RTS is isolated");
+        True(GrandStrategyRuntimeRules.ShouldRun(
+            GrandStrategyArmyMode.GrandStrategy), "grand strategy runs");
+        True(GrandStrategyRuntimeRules.ShouldRaiseLevies(
+            GrandStrategyArmyMode.GrandStrategy, warIsActive: true),
+            "active war raises levies");
+        False(GrandStrategyRuntimeRules.ShouldRaiseLevies(
+            GrandStrategyArmyMode.GrandStrategy, warIsActive: false),
+            "peace has no numeric armies");
     }
 
     private static void BattleRoundsArePersistentAndIdempotent()

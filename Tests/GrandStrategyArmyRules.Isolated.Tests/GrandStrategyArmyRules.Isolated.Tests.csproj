@@ -34,5 +34,17 @@
              Link="Production\GrandStrategyBattleModels.cs" />
     <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyBattleService.cs"
              Link="Production\GrandStrategyBattleService.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyRuntimeRules.cs"
+             Link="Production\GrandStrategyRuntimeRules.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyPathService.cs"
+             Link="Production\GrandStrategyPathService.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategySiegeService.cs"
+             Link="Production\GrandStrategySiegeService.cs" />
+    <Compile Include="..\..\Code\api\commands\GrandStrategyArmyCommandModels.cs"
+             Link="Production\GrandStrategyArmyCommandModels.cs" />
+    <Compile Include="..\..\Code\api\commands\GrandStrategyArmyCommandService.cs"
+             Link="Production\GrandStrategyArmyCommandService.cs" />
+    <Compile Include="..\..\Code\core\grandstrategy\GrandStrategyPersistence.cs"
+             Link="Production\GrandStrategyPersistence.cs" />
   </ItemGroup>
 </Project>
