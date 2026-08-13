@@ -61,11 +61,11 @@ Require-Contains $rules 'ShouldAllowVanillaCityAttack(' `
     'Only a persisted VanillaCombat lifecycle phase may release a target city.'
 Require-Contains $runner 'ConfigurePriorityOnly(batch, job,' `
     'Skipped large-scheduler movement batches must retain a restricted RTS path pulse.'
-Require-Contains $runner 'AWArmyMarchService.HasActiveCompleteSharedRoute(' `
-    'Skipped large-scheduler movement batches must also retain native RTS shared routes.'
-Require-Contains $runner 'SharedRouteActive[i]' `
-    'Shared-route priority eligibility must be captured before parallel movement work begins.'
-Require-Contains $cadence 'actorInArmy && actorIsMoving' `
-    'Skipped smooth-movement priority must remain limited to moving army actors.'
+Require-Contains $controller 'TrySubmitMemberObjectiveRoute(' `
+    'RTS members must retain their independent objective routes.'
+Require-Contains $runner 'ArmyMilitaryMovementPriorityIndex.WasProcessed(' `
+    'P0-processed RTS members must not be processed a second time.'
+Require-Contains $cadence 'ArmyMilitaryMovementPriorityRules.ShouldRunP0(' `
+    'Skipped movement batches must retain military P0 eligibility.'
 
 Write-Output 'ArmyRtsCombatRecoverySourceGuard: PASS'

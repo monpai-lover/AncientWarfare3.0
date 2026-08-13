@@ -1,0 +1,54 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsAbstractSupplyRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, ArmyRtsAbstractSupplyRules.CanAttempt(
+                actorAlive: true, ownsLiveRtsActor: true,
+                hasAnchorCity: true, anchorInActorKingdom: true),
+            "a live RTS member may consume an anchor-city ration");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanAttempt(
+                actorAlive: true, ownsLiveRtsActor: false,
+                hasAnchorCity: true, anchorInActorKingdom: true),
+            "ordinary actors cannot consume RTS rations");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanAttempt(
+                actorAlive: false, ownsLiveRtsActor: true,
+                hasAnchorCity: true, anchorInActorKingdom: true),
+            "dead actors cannot consume RTS rations");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanAttempt(
+                actorAlive: true, ownsLiveRtsActor: true,
+                hasAnchorCity: false, anchorInActorKingdom: true),
+            "a missing anchor city preserves vanilla hunger");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanAttempt(
+                actorAlive: true, ownsLiveRtsActor: true,
+                hasAnchorCity: true, anchorInActorKingdom: false),
+            "a foreign anchor city cannot supply the army");
+        Equal(false, ArmyRtsAbstractSupplyRules.ShouldSuppressVanillaFoodTask(
+                supplied: false),
+            "failed supply preserves the vanilla city-food task");
+        Equal(true, ArmyRtsAbstractSupplyRules.ShouldSuppressVanillaFoodTask(
+                supplied: true),
+            "successful supply suppresses the vanilla city-food task");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanConsume(
+                eligible: false, hasSuitableFood: true, hasFoodItem: true),
+            "ineligible actors preserve vanilla hunger even if a city has food");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanConsume(
+                eligible: true, hasSuitableFood: false, hasFoodItem: true),
+            "an empty home city preserves vanilla hunger");
+        Equal(false, ArmyRtsAbstractSupplyRules.CanConsume(
+                eligible: true, hasSuitableFood: true, hasFoodItem: false),
+            "a failed food selection preserves vanilla hunger");
+        Equal(true, ArmyRtsAbstractSupplyRules.CanConsume(
+                eligible: true, hasSuitableFood: true, hasFoodItem: true),
+            "one resolved suitable ration may be consumed");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", got " + actual);
+    }
+}

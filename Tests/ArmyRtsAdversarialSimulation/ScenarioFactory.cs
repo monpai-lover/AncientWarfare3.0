@@ -579,9 +579,6 @@ internal static class ScenarioFactory
         AddCity(state, 301L, home: 2L, controller: 2L,
             island: 0, position: 50, frontId: 1,
             enemyMilitary: true, warGoal: false, capital: false);
-        AddCity(state, 302L, home: 2L, controller: 2L,
-            island: 0, position: 14, frontId: 2,
-            enemyMilitary: true, warGoal: true, capital: true);
         AddArmy(state, 31L, captainId: 311L, living: 12,
             rallied: 12, targetStrength: 12,
             position: state.Random.Next(1, 4));
@@ -635,11 +632,6 @@ internal static class ScenarioFactory
             return;
         }
 
-        if (army.TargetCityId < 0L)
-        {
-            AssignRouteRecoveryTarget(state, army);
-            return;
-        }
         if (army.TargetCityId < 0L ||
             !state.Cities.TryGetValue(army.TargetCityId,
                 out SimCity target)) return;
@@ -669,30 +661,6 @@ internal static class ScenarioFactory
             Organization = army.Organization
         };
         SetState(army, ArmyRtsRules.ResolveState(facts));
-    }
-
-    private static void AssignRouteRecoveryTarget(ScenarioState state,
-        SimArmy army)
-    {
-        SimCity target = state.Cities.Values
-            .Where(city => city.EligibleTarget &&
-                           city.HomeKingdomId ==
-                           state.War.DefenderKingdomId &&
-                           city.ControllerKingdomId != army.KingdomId)
-            .Where(city => !state.Runtime.TargetCooldownUntil.TryGetValue(
-                               city.Id, out long until) ||
-                           !ArmyStallWatchdogRules.IsCoolingDown(
-                               state.ActiveTicks, until))
-            .OrderByDescending(city => city.WarGoal)
-            .ThenBy(city => Math.Abs(city.Position - army.Position))
-            .FirstOrDefault();
-        if (target == null) return;
-        target.ReservedArmyIds.Add(army.Id);
-        army.TargetCityId = target.Id;
-        army.RouteDestinationPosition = target.Position;
-        army.RouteState = SimRouteState.Ready;
-        SetState(army, ArmyRtsState.Rally);
-        state.Runtime.RoutePhase = 4;
     }
 
     private static void AdvanceRouteWorld(ScenarioState state)
@@ -725,30 +693,18 @@ internal static class ScenarioFactory
                 ArmyStallRecoveryAction action =
                     ArmyStallWatchdogRules.RecordRouteFailure(watchdog);
                 RecordRecovery(state, army, action);
-                if (action != ArmyStallRecoveryAction.ChangeTarget)
+                if (action != ArmyStallRecoveryAction.AlternateEndpoint)
                     break;
 
-                long failedTargetId = army.TargetCityId;
-                state.Runtime.TargetCooldownUntil[failedTargetId] =
-                    ArmyStallWatchdogRules.CooldownUntil(
-                        state.ActiveTicks);
-                SimCity failedTarget = state.Cities[failedTargetId];
-                failedTarget.EligibleTarget = false;
-                failedTarget.ReservedArmyIds.Remove(army.Id);
-                army.TargetCityId = -1L;
-                army.RouteDestinationPosition = army.Position;
-                army.RouteState = SimRouteState.None;
-                SetState(army, ArmyRtsState.Idle);
+                // Local endpoint recovery must not release the mission city.
+                army.RouteDestinationPosition =
+                    state.Cities[army.TargetCityId].Position;
+                army.RouteState = SimRouteState.Ready;
                 state.Runtime.RoutePhase = 3;
                 break;
             }
             case 3:
-                AdvanceRetreatRoute(state, army);
-                if (army.State == ArmyRtsState.Regroup)
-                    army.Organization = Math.Min(100,
-                        army.Organization +
-                        ArmyOperationalDirectorRules.
-                            RegroupRecoveryForSupply(army.Supply));
+                AdvanceRecoveredOffense(state, army);
                 break;
             default:
                 AdvanceRecoveredOffense(state, army);
@@ -1129,6 +1085,7 @@ internal static class ScenarioFactory
                 ForceReady = ArmyLogisticsRules.
                     HasMinimumOperationalForce(army.Living),
                 NeedsReplenishment = needsReplenishment,
+                WartimeRecovery = army.ReplenishmentRequested,
                 TargetComplete = targetComplete,
                 Supply = army.Supply,
                 Organization = army.Organization
@@ -1427,7 +1384,11 @@ internal static class ScenarioFactory
                 ForceReady = ArmyLogisticsRules.HasMinimumOperationalForce(
                     army.Living),
                 NeedsReplenishment = ArmyRtsRules.NeedsReplenishment(
-                    army.Living, army.TargetStrength),
+                    army.Living, army.TargetStrength) ||
+                    ArmyRtsRules.ShouldContinueRequestedReplenishment(
+                        army.ReplenishmentRequested, army.Living,
+                        army.TargetStrength),
+                WartimeRecovery = army.ReplenishmentRequested,
                 TargetComplete = complete,
                 HoldRequired = complete && !target.EnemyMilitaryPresent,
                 PursuitAllowed = pursuitAllowed,
@@ -1436,6 +1397,10 @@ internal static class ScenarioFactory
                 Organization = army.Organization
             };
             ArmyRtsState next = ArmyRtsRules.ResolveState(facts);
+            if (army.State == ArmyRtsState.Replenish &&
+                next != ArmyRtsState.Replenish &&
+                army.Living >= army.TargetStrength)
+                army.ReplenishmentRequested = false;
             SetState(army, next);
             if (next == ArmyRtsState.Idle && complete &&
                 !target.EnemyMilitaryPresent)
@@ -1585,6 +1550,9 @@ internal static class ScenarioFactory
             throw new InvalidOperationException(
                 "production rules did not protect a civilian target");
         target.Occupation = Math.Min(100, target.Occupation + 10);
+        if (state.Kind == ScenarioKind.LandContinuation &&
+            !state.Runtime.CasualtiesInjected && target.Occupation >= 90)
+            InjectLandCasualties(state, army);
         if (target.Occupation < 100) return;
         if (IsLandCampaign(state))
         {
@@ -1635,8 +1603,6 @@ internal static class ScenarioFactory
         {
             state.Result.CompletedObjectives =
                 state.Runtime.CompletedCityIds.Count;
-            if (state.Kind == ScenarioKind.LandContinuation)
-                InjectLandCasualties(state, army);
         }
 
         if (state.Cities.Values.All(city =>
@@ -1663,6 +1629,7 @@ internal static class ScenarioFactory
         }
         army.Living = survivors;
         army.Rallied = Math.Min(army.Rallied, survivors);
+        army.ReplenishmentRequested = true;
     }
 
     private static void QueuePeace(ScenarioState state)

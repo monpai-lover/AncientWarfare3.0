@@ -19,6 +19,8 @@
              Link="Production\ArmyRtsTaskOwnershipRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRules.cs"
              Link="Production\ArmyRtsRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsMissionLockRules.cs"
+             Link="Production\ArmyRtsMissionLockRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyLogisticsRules.cs"
              Link="Production\ArmyLogisticsRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyMarchRules.cs"

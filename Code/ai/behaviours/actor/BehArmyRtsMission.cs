@@ -49,8 +49,6 @@ namespace AncientWarfare3.ai.behaviours.actor
                 pActor.makeWait(0.2f);
                 return BehResult.RepeatStep;
             }
-            if (AWArmyMarchService.TryStartCompleteSharedRoute(pActor))
-                return BehResult.RepeatStep;
             pActor.beh_tile_target = target;
             return BehResult.Continue;
         }
@@ -73,11 +71,6 @@ namespace AncientWarfare3.ai.behaviours.actor
                 pActor.makeWait(0.2f);
                 return BehResult.Stop;
             }
-            if (AWArmyMarchService.HasActiveCompleteSharedRoute(pActor))
-            {
-                pActor.timer_action = 0.1f;
-                return BehResult.RepeatStep;
-            }
             ArmyFollowerTargetResult targetResult =
                 ArmyRtsControllerService.ResolveFollowerTarget(pActor,
                     out WorldTile target);
@@ -85,34 +78,6 @@ namespace AncientWarfare3.ai.behaviours.actor
                 targetResult == ArmyFollowerTargetResult.Hold)
             {
                 pActor?.makeWait(0.15f);
-                return BehResult.RepeatStep;
-            }
-            if (ArmySharedPathRules.ShouldUseLongRangeFollowerRoute(
-                    target?.data != null,
-                    target?.data != null
-                        ? Toolbox.SquaredDistTile(pActor.current_tile,
-                            target)
-                        : -1f))
-            {
-                pActor.beh_tile_target = target;
-                return BehResult.Continue;
-            }
-            ArmyFollowerStepResult stepResult =
-                AWArmyMarchService.TryStepFollowerDirect(pActor, target);
-            if (stepResult == ArmyFollowerStepResult.Stepped)
-            {
-                return BehResult.RepeatStep;
-            }
-            if (ArmySharedPathRules.ShouldPreserveInFlightMovement(
-                    stepResult, pActor?.is_moving == true))
-            {
-                if (pActor != null) pActor.timer_action = 0.1f;
-                return BehResult.RepeatStep;
-            }
-            if (stepResult == ArmyFollowerStepResult.Hold ||
-                !ArmySharedPathRules.ShouldUseLocalReconnect(stepResult))
-            {
-                pActor?.makeWait(0.1f);
                 return BehResult.RepeatStep;
             }
             pActor.beh_tile_target = target;

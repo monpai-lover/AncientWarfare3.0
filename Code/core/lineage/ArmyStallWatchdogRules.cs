@@ -693,7 +693,7 @@ namespace AncientWarfare3.core.lineage
                 pState.LastRecoveryStage < 4)
             {
                 pState.LastRecoveryStage = 4;
-                return ArmyStallRecoveryAction.ChangeTarget;
+                return ArmyStallRecoveryAction.AlternateEndpoint;
             }
             if (pState.NoProgressSeconds >= 6d &&
                 pState.LastRecoveryStage < 2)
@@ -757,7 +757,7 @@ namespace AncientWarfare3.core.lineage
             {
                 pState.LastRecoveryStage = Math.Max(4,
                     pState.LastRecoveryStage);
-                return ArmyStallRecoveryAction.ChangeTarget;
+                return ArmyStallRecoveryAction.AlternateEndpoint;
             }
             pState.LastRecoveryStage = Math.Max(3,
                 pState.LastRecoveryStage);
@@ -783,7 +783,7 @@ namespace AncientWarfare3.core.lineage
                 pState.AwaitingReplanResult = false;
                 pState.LastRecoveryStage = Math.Max(4,
                     pState.LastRecoveryStage);
-                return ArmyStallRecoveryAction.ChangeTarget;
+                return ArmyStallRecoveryAction.AlternateEndpoint;
             }
             pState.LastRecoveryStage = Math.Max(3,
                 pState.LastRecoveryStage);

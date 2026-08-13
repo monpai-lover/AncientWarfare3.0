@@ -517,7 +517,6 @@ namespace AncientWarfare3.core.lineage
     internal static class ArmyRtsControllerService
     {
         private const int MaximumJobMutationsPerController = 128;
-        private const int MaximumFollowerRouteChecksPerController = 4;
         private const int MaximumRoutePollsPerController = 64;
 
         private sealed class RuntimeState
@@ -575,6 +574,8 @@ namespace AncientWarfare3.core.lineage
             internal bool PursuitCompleted => PursuitRoute.Completed;
             internal readonly ArmyRtsJobAssignmentCursor JobCursor =
                 new ArmyRtsJobAssignmentCursor();
+            internal readonly Dictionary<long, int> MemberObjectiveTileByActor =
+                new Dictionary<long, int>();
             internal readonly ArmyRtsTransitionFacts TransitionFacts =
                 new ArmyRtsTransitionFacts();
         }
@@ -1048,6 +1049,7 @@ namespace AncientWarfare3.core.lineage
             if (clearSharedRoute)
             {
                 AWArmyMarchService.ClearArmy(pArmy);
+                ClearIndependentMemberPaths(pArmy, previousRuntime);
                 if (previousRuntime != null)
                 {
                     previousRuntime.RouteSubmitted = false;
@@ -1530,45 +1532,6 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRtsControllerRecord record) ||
                 !RuntimeByArmy.TryGetValue(army.id,
                     out RuntimeState runtime)) return false;
-            bool requiresEscort =
-                (record.State == ArmyRtsState.March ||
-                 record.State == ArmyRtsState.Deploy ||
-                 record.State == ArmyRtsState.Assault ||
-                 record.State == ArmyRtsState.Pursue) &&
-                record.Mission?.ProposalKind !=
-                    ArmyRtsProposalKind.Retreat;
-            bool transportOwnsMovement =
-                ArmyRtsTransportService.HasActiveVoyage(army) ||
-                pActor.is_inside_boat ||
-                ArmyRtsTransportService.OwnsActorTask(pActor);
-            ArmyFormationCounters escort = ArmyFormationService.
-                GetIncrementalFollowerCounters(army);
-            ArmyFormationObservationProgress observation =
-                ArmyFormationService.GetObservationProgress(army);
-            bool captainPresent = pActor?.data != null &&
-                                  pActor.isAlive() && !pActor.isRekt() &&
-                                  pActor.current_tile?.data != null;
-            bool immediateCombat = HasImmediateCombatPriority(pActor);
-            if (requiresEscort && !transportOwnsMovement &&
-                !immediateCombat)
-            {
-                int escortPopulation = ArmyRtsRules.ResolveEscortPopulation(
-                    SafeUnitCount(army), escort.Living, observation.Complete,
-                    captainPresent);
-                UpdateEscortHold(runtime, record.State, observation.Complete,
-                    escortPopulation, escort.Rallied, CurrentWorldTime());
-                if (!observation.Complete || runtime.EscortHoldActive)
-                    return false;
-                bool departureCommitted = runtime.RouteSubmitted ||
-                    record.State != ArmyRtsState.Rally;
-                if (!departureCommitted && !ArmyRtsRules.
-                        CanCaptainAdvanceWithEscort(requiresEscort,
-                            escortPopulation, escort.Rallied,
-                            captainPresent, immediateCombat,
-                            transportOwnsMovement,
-                            observationComplete: observation.Complete))
-                    return false;
-            }
             if (ArmyRtsTransportService.TryGetTarget(army,
                     out WorldTile activeTransportTarget) &&
                 (ArmyRtsTransportRules.ShouldUseTransportBeforeLandRoute(
@@ -1649,24 +1612,42 @@ namespace AncientWarfare3.core.lineage
             out WorldTile pTarget)
         {
             Army army = pActor?.army;
-            if (!HasFollowerMission(pActor))
+            if (!HasFollowerMission(pActor) || army?.data == null)
             {
                 pTarget = null;
                 return ArmyFollowerTargetResult.Unavailable;
             }
-            ArmyFollowerTargetResult sharedResult =
-                AWArmyMarchService.ResolveFollowerTarget(pActor,
-                    out pTarget);
-            if (sharedResult != ArmyFollowerTargetResult.Unavailable)
-                return sharedResult;
-            bool formationTargetAvailable =
-                ArmyFormationService.TryGetFollowerTarget(pActor,
-                    out pTarget);
-            bool formationTargetReached = formationTargetAvailable &&
-                pTarget == pActor?.current_tile;
-            return ArmySharedPathRules.ResolveFollowerTargetSource(
-                sharedResult, formationTargetAvailable,
-                formationTargetReached);
+            if (!Controllers.TryGet(army.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null ||
+                !RuntimeByArmy.TryGetValue(army.id,
+                    out RuntimeState runtime))
+            {
+                ArmyFollowerTargetResult sharedResult =
+                    AWArmyMarchService.ResolveFollowerTarget(pActor,
+                        out pTarget);
+                if (sharedResult != ArmyFollowerTargetResult.Unavailable)
+                    return sharedResult;
+                bool formationTargetAvailable =
+                    ArmyFormationService.TryGetFollowerTarget(pActor,
+                        out pTarget);
+                return ArmySharedPathRules.ResolveFollowerTargetSource(
+                    sharedResult, formationTargetAvailable,
+                    pTarget == pActor.current_tile);
+            }
+            City targetCity = FindCity(
+                ArmyRtsMemberObjectiveRules.ResolveTargetCityId(
+                    record.Mission.TargetCityId,
+                    routeFailureTargetCityId: -1L));
+            pTarget = runtime.PursuitRoute.Active
+                ? FindTile(runtime.PursuitRoute.EndpointTileId)
+                : FindTile(runtime.AlternateTargetTileId) ??
+                  ResolveStableStrategicEndpoint(army, targetCity, runtime);
+            if (pTarget?.data == null)
+                return ArmyFollowerTargetResult.Unavailable;
+            return pTarget == pActor.current_tile
+                ? ArmyFollowerTargetResult.Hold
+                : ArmyFollowerTargetResult.Move;
         }
 
         public static bool TryGetFollowerTarget(Actor pActor,
@@ -1685,6 +1666,18 @@ namespace AncientWarfare3.core.lineage
                    ShouldOwnMilitaryActor(pActor, missionActive);
         }
 
+        internal static bool HasActiveCaptainObjective(Actor pActor)
+        {
+            Army army = pActor?.army;
+            if (pActor?.data == null || army?.data == null ||
+                !Controllers.TryGet(army.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null || record.State == ArmyRtsState.Rally)
+                return false;
+            return IsCaptain(pActor, army) &&
+                   ShouldOwnMilitaryActor(pActor, pMissionActive: true);
+        }
+
         public static bool ShouldHoldDeploymentMove(Actor pActor)
         {
             Army army = pActor?.army;
@@ -1694,9 +1687,6 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRtsControllerRecord record)) return false;
             bool captainPresent = pActor.isAlive() && !pActor.isRekt() &&
                                   pActor.current_tile?.data != null;
-            // The prewar move must never outlive the same bounded staging
-            // window the RTS rally uses, or a stalled observation would
-            // strand the army instead of only delaying its departure.
             if (ArmyRtsRules.ShouldForcePreDeparture(
                     authoritative: true, state: ArmyRtsState.Rally,
                     minimumForceReady: ArmyLogisticsRules.
@@ -1711,7 +1701,6 @@ namespace AncientWarfare3.core.lineage
                 ArmyFormationService.GetIncrementalFollowerCounters(army);
             bool transportOwnsMovement = pActor.is_inside_boat ||
                 ArmyRtsTransportService.OwnsActorTask(pActor);
-            bool immediateCombat = HasImmediateCombatPriority(pActor);
             return !ArmyRtsRules.CanCaptainAdvanceWithEscort(
                 requiresEscort: true,
                 rosterLiving: ArmyRtsRules.ResolveEscortPopulation(
@@ -1719,8 +1708,23 @@ namespace AncientWarfare3.core.lineage
                     observation.Complete, captainPresent),
                 nearbyFollowers: counters.Rallied,
                 captainPresent: captainPresent,
-                immediateCombat: immediateCombat,
+                immediateCombat: HasImmediateCombatPriority(pActor),
                 transportOwnsMovement: transportOwnsMovement);
+        }
+
+        internal static bool HasActiveMemberObjective(Actor pActor)
+        {
+            Army army = pActor?.army;
+            if (pActor?.data == null || army?.data == null ||
+                !Controllers.TryGet(army.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null || record.State == ArmyRtsState.Rally)
+                return false;
+            bool transportOwned = pActor.is_inside_boat ||
+                ArmyRtsTransportService.OwnsActorTask(pActor);
+            return ArmyRtsMemberObjectiveRules.ShouldOwnMemberObjective(
+                true, IsCaptain(pActor, army), IsLiveWarriorActor(pActor),
+                HasImmediateCombatPriority(pActor), transportOwned);
         }
 
         public static bool HasFrontHoldMission(Actor pActor)
@@ -1736,9 +1740,7 @@ namespace AncientWarfare3.core.lineage
         public static bool HasFollowerMission(Actor pActor)
         {
             Army army = pActor?.army;
-            if (pActor?.data == null || army?.data == null ||
-                IsCaptain(pActor, army) ||
-                !ArmyFormationService.HasFollower(pActor)) return false;
+            if (pActor?.data == null || army?.data == null) return false;
             bool controllerActive = Controllers.TryGet(army.id,
                 out ArmyRtsControllerRecord record);
             bool missionActive = controllerActive ||
@@ -1747,8 +1749,17 @@ namespace AncientWarfare3.core.lineage
             if (!ShouldOwnMilitaryActor(pActor, missionActive)) return false;
             bool transportOwned = pActor.is_inside_boat ||
                 ArmyRtsTransportService.OwnsActorTask(pActor);
-            return ArmyFormationRules.ShouldOwnEscortFollow(
-                controllerActive ? record.State : ArmyRtsState.Rally,
+            if (!controllerActive)
+            {
+                return !IsCaptain(pActor, army) &&
+                       ArmyFormationService.HasFollower(pActor) &&
+                       ArmyFormationRules.ShouldOwnEscortFollow(
+                           ArmyRtsState.Rally,
+                           HasImmediateCombatPriority(pActor),
+                           transportOwned);
+            }
+            return ArmyRtsMemberObjectiveRules.ShouldOwnMemberObjective(
+                missionActive, IsCaptain(pActor, army), actorEligible: true,
                 HasImmediateCombatPriority(pActor), transportOwned);
         }
 
@@ -2262,6 +2273,7 @@ namespace AncientWarfare3.core.lineage
             ArmyRouteProviderService.Cancel(pArmyId,
                 ArmyRouteCancelReason.TargetReplaced);
             AWArmyMarchService.ClearArmy(pArmyId);
+            ClearIndependentMemberPaths(army, runtime);
             runtime.RouteSubmitted = false;
             runtime.RouteArrived = false;
             runtime.TransportRouteConfirmed = false;
@@ -2276,6 +2288,7 @@ namespace AncientWarfare3.core.lineage
             if (pAlternateEndpoint && alternateTargetTileId >= 0 &&
                 runtime.PursuitRoute.ReplaceEndpoint(alternateTargetTileId))
                 runtime.AlternateTargetTileId = -1;
+            runtime.JobCursor.Reopen();
             Controllers.Requeue(pArmyId);
             return !pAlternateEndpoint ||
                    alternateTargetTileId >= 0;
@@ -2405,13 +2418,6 @@ namespace AncientWarfare3.core.lineage
                 !HasActiveMission(pArmyId)) return;
             Army army = FindArmy(pArmyId);
             Actor captain = SafeCaptain(army);
-            bool transportActive = ArmyRtsTransportService.
-                HasActiveVoyage(army);
-            if (captain?.data != null &&
-                ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(
-                    AWArmyMarchService.GetSharedRouteInstallStatus(captain),
-                    HasImmediateCombatPriority(captain), transportActive))
-                RequestRouteReplan(pArmyId, pAlternateEndpoint: false);
             string captainJobId = ArmyRtsContent.CaptainJobId;
             ArmyRtsState captainState = ArmyRtsState.Idle;
             if (Controllers.TryGet(pArmyId,
@@ -2432,7 +2438,11 @@ namespace AncientWarfare3.core.lineage
                 pForceReassert: true);
             if (RuntimeByArmy.TryGetValue(pArmyId,
                     out RuntimeState runtime))
+            {
+                if (HasActiveCaptainObjective(captain))
+                    TrySubmitCaptainObjectiveRoute(captain, runtime);
                 runtime.JobCursor.Reopen();
+            }
             Controllers.Requeue(pArmyId);
         }
 
@@ -2496,14 +2506,24 @@ namespace AncientWarfare3.core.lineage
             Army army = FindArmy(pArmyId);
             Actor actor = FindActor(pActorId);
             if (actor?.army != army || IsCaptain(actor, army) ||
-                !ArmyFormationService.HasFollower(actor) ||
-                !ShouldOwnMilitaryActor(actor, pMissionActive: true))
+                !HasActiveMemberObjective(actor))
                 return;
-            AWArmyMarchService.ResetActorSharedRoute(actor);
+            if (!RuntimeByArmy.TryGetValue(pArmyId, out RuntimeState runtime))
+                return;
+            bool transportActive = ArmyRtsTransportService.
+                HasActiveVoyage(army) || actor.is_inside_boat ||
+                ArmyRtsTransportService.OwnsActorTask(actor);
+            if (!ArmyRtsMemberObjectiveRules.ShouldRecoverToMissionObjective(
+                    hasActiveMission: true, actorEligible: true,
+                    combatActive: HasImmediateCombatPriority(actor),
+                    transportActive: transportActive)) return;
+            ClearIndependentMemberPath(actor, runtime);
             SetJob(actor, ArmyRtsContent.FollowerJobId,
                 pForceReassert: true);
-            TrySubmitIndependentFollowerRecoveryRoute(actor, army,
-                pPreferAlternateSlot);
+            if (pPreferAlternateSlot)
+                RequestRouteReplan(pArmyId, pAlternateEndpoint: true);
+            else
+                TrySubmitMemberObjectiveRoute(actor, runtime);
             Controllers.Requeue(pArmyId);
         }
 
@@ -2522,44 +2542,16 @@ namespace AncientWarfare3.core.lineage
                 if (actor.data.transportID >= 0L) return false;
             }
             catch { return false; }
-            ArmySharedRouteInstallStatus status = AWArmyMarchService.
-                GetSharedRouteInstallStatus(actor);
-            if (!ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(
-                    status, combatActive: false, transportActive: false) ||
-                !AWArmyMarchService.ResetActorSharedRoute(actor))
-                return false;
             if (IsCaptain(actor, army))
                 return RequestRouteReplan(pArmyId,
                     pAlternateEndpoint: false);
+            if (!HasActiveMemberObjective(actor) ||
+                !RuntimeByArmy.TryGetValue(pArmyId,
+                    out RuntimeState runtime)) return false;
+            ClearIndependentMemberPath(actor, runtime);
             ReassertMissionCommand(pArmyId, pActorId);
+            TrySubmitMemberObjectiveRoute(actor, runtime);
             return true;
-        }
-
-        private static void TrySubmitIndependentFollowerRecoveryRoute(
-            Actor pActor, Army pArmy, bool pPreferAlternateSlot = false)
-        {
-            Actor captain = SafeCaptain(pArmy);
-            bool sharedRouteAvailable = AWArmyMarchService.
-                GetSharedRouteInstallStatus(pActor) !=
-                ArmySharedRouteInstallStatus.Unavailable;
-            bool combatActive = HasImmediateCombatPriority(pActor) ||
-                                HasImmediateCombatPriority(captain);
-            bool transportActive = ArmyRtsTransportService.
-                HasActiveVoyage(pArmy);
-            try { transportActive |= pActor?.data?.transportID >= 0L; }
-            catch { }
-            if (!ArmyFormationService.TryGetFollowerRecoveryTarget(pActor,
-                    out WorldTile target, pPreferAlternateSlot) ||
-                !SafeSameIsland(pActor?.current_tile, target) ||
-                !ArmySharedPathRules.
-                    ShouldSubmitIndependentFollowerRecoveryRoute(
-                        sharedRouteAvailable, target?.data != null,
-                        combatActive, transportActive)) return;
-            try
-            {
-                pActor.goTo(target, pLimitPathfindingRegions: 0);
-            }
-            catch { }
         }
 
         public static bool TryTeleportFormationMember(long pArmyId,
@@ -2823,7 +2815,6 @@ namespace AncientWarfare3.core.lineage
                 {
                     TryReopenJobOwnershipRepair(runtime);
                     EnsureJobs(army, runtime, record.Mission, record.State);
-                    InstallFollowerSharedRoutes(army, runtime, record.State);
                 }
                 finally
                 {
@@ -3873,8 +3864,6 @@ namespace AncientWarfare3.core.lineage
                     pRuntime.TransportRouteConfirmed = false;
                     pRuntime.ForceTransportRoute = false;
                     pRuntime.AnchorTileId = targetTileId;
-                    AWArmyMarchService.TryStartCompleteSharedRoute(
-                        captain);
                     if (pRuntime.RouteProgress < int.MaxValue)
                         pRuntime.RouteProgress++;
                     return;
@@ -4135,6 +4124,13 @@ namespace AncientWarfare3.core.lineage
                     frontHold ? ArmyRtsContent.HoldTaskId
                         : ArmyRtsContent.ResolveCaptainTaskId(pState,
                             ArmyRtsTransportService.GetPhase(pArmy)));
+                if (pState != ArmyRtsState.Rally)
+                {
+                    ArmyMilitaryMovementPriorityIndex.Register(
+                        captain.data.id,
+                        ArmyMilitaryMovementPriorityKind.RtsMember);
+                    TrySubmitCaptainObjectiveRoute(captain, pRuntime);
+                }
             }
             else
                 ReleaseActor(captain);
@@ -4150,12 +4146,23 @@ namespace AncientWarfare3.core.lineage
                 if (actor == captain) continue;
                 bool transportOwned = actor?.is_inside_boat == true ||
                     ArmyRtsTransportService.OwnsActorTask(actor);
-                bool ownsEscort = IsLiveWarriorActor(actor) &&
-                    ArmyFormationRules.ShouldOwnEscortFollow(pState,
-                        HasImmediateCombatPriority(actor),
-                        transportOwned);
-                if (ownsEscort)
+                bool ownsObjective = ArmyRtsMemberObjectiveRules.
+                    ShouldOwnMemberObjective(missionActive: true,
+                        isCaptain: false,
+                        actorEligible: IsLiveWarriorActor(actor),
+                        immediateCombat: HasImmediateCombatPriority(actor),
+                        transportActive: transportOwned);
+                if (ownsObjective)
+                {
                     SetJob(actor, ArmyRtsContent.FollowerJobId);
+                    if (pState != ArmyRtsState.Rally)
+                    {
+                        ArmyMilitaryMovementPriorityIndex.Register(
+                            actor.data.id,
+                            ArmyMilitaryMovementPriorityKind.RtsMember);
+                        TrySubmitMemberObjectiveRoute(actor, pRuntime);
+                    }
+                }
                 else
                     ReleaseActor(actor);
             }
@@ -4166,39 +4173,82 @@ namespace AncientWarfare3.core.lineage
                     ArmyRtsRules.JobOwnershipRepairIntervalSeconds;
         }
 
-        private static void InstallFollowerSharedRoutes(Army pArmy,
-            RuntimeState pRuntime, ArmyRtsState pState)
+        private static void TrySubmitMemberObjectiveRoute(Actor pActor,
+            RuntimeState pRuntime)
+        {
+            if (ResolveFollowerTarget(pActor, out WorldTile target) !=
+                    ArmyFollowerTargetResult.Move) return;
+            TrySubmitActorObjectiveRoute(pActor, target, pRuntime);
+        }
+
+        private static void TrySubmitCaptainObjectiveRoute(Actor pActor,
+            RuntimeState pRuntime)
+        {
+            if (!TryGetCaptainTarget(pActor, out WorldTile target) ||
+                target == pActor?.current_tile) return;
+            TrySubmitActorObjectiveRoute(pActor, target, pRuntime);
+        }
+
+        private static void TrySubmitActorObjectiveRoute(Actor pActor,
+            WorldTile target, RuntimeState pRuntime)
+        {
+            if (!SafeSameIsland(pActor?.current_tile, target)) return;
+            int targetTileId = target.data?.tile_id ?? -1;
+            long actorId = pActor?.data?.id ?? -1L;
+            bool ownsPath = AWPathMovementBridge.HasOwnership(pActor);
+            bool nativeLocalPath = pActor?.isFollowingLocalPath() == true ||
+                                   pActor?.current_path_global != null;
+            int recordedTargetTileId = pRuntime != null &&
+                pRuntime.MemberObjectiveTileByActor.TryGetValue(actorId,
+                    out int recorded) ? recorded : -1;
+            if (ArmyRtsMemberObjectiveRules.ShouldReplaceMemberPath(
+                    targetTileId >= 0, recordedTargetTileId, targetTileId,
+                    ownsPath, nativeLocalPath))
+            {
+                ClearIndependentMemberPath(pActor, pRuntime);
+                ownsPath = false;
+                nativeLocalPath = false;
+            }
+            if (!ArmyRtsMemberObjectiveRules.ShouldSubmitMemberPath(
+                target?.data != null, ownsPath, nativeLocalPath,
+                pathPending: ownsPath)) return;
+            try
+            {
+                pActor.goTo(target, pLimitPathfindingRegions: 0);
+                if (pRuntime != null && actorId >= 0L)
+                    pRuntime.MemberObjectiveTileByActor[actorId] =
+                        targetTileId;
+            }
+            catch { }
+        }
+
+        private static void ClearIndependentMemberPaths(Army pArmy,
+            RuntimeState pRuntime)
         {
             if (pArmy?.data == null || pRuntime == null) return;
-            int count;
-            try { count = pArmy.units.Count; }
-            catch { count = 0; }
-            if (count <= 0)
+            long[] actorIds = new long[
+                pRuntime.MemberObjectiveTileByActor.Count];
+            pRuntime.MemberObjectiveTileByActor.Keys.CopyTo(actorIds, 0);
+            foreach (long actorId in actorIds)
             {
-                pRuntime.FollowerRouteInstallCursor = 0;
-                return;
+                Actor actor = FindActor(actorId);
+                if (actor?.army == pArmy && !actor.is_inside_boat)
+                    ClearIndependentMemberPath(actor, pRuntime);
             }
-            int start = Math.Max(0, Math.Min(
-                pRuntime.FollowerRouteInstallCursor, count));
-            int end = Math.Min(count, start +
-                MaximumFollowerRouteChecksPerController);
-            Actor captain = SafeCaptain(pArmy);
-            for (int i = start; i < end; i++)
-            {
-                Actor actor;
-                try { actor = pArmy.units[i]; }
-                catch { continue; }
-                if (actor == captain || !IsLiveWarriorActor(actor))
-                    continue;
-                bool transportOwned = actor.is_inside_boat ||
-                    ArmyRtsTransportService.OwnsActorTask(actor);
-                if (!ArmyFormationRules.ShouldOwnEscortFollow(pState,
-                        HasImmediateCombatPriority(actor), transportOwned) ||
-                    !AWArmyMarchService.NeedsCompleteSharedRoute(actor))
-                    continue;
-                AWArmyMarchService.TryStartCompleteSharedRoute(actor);
-            }
-            pRuntime.FollowerRouteInstallCursor = end >= count ? 0 : end;
+            pRuntime.MemberObjectiveTileByActor.Clear();
+        }
+
+        private static void ClearIndependentMemberPath(Actor pActor,
+            RuntimeState pRuntime)
+        {
+            if (pActor?.data == null) return;
+            if (AWPathMovementBridge.HasOwnership(pActor))
+                AWPathMovementBridge.Cancel(pActor,
+                    AWPathFailureReason.CancelledByNewRequest);
+            pActor.stopMovement();
+            pActor.clearOldPath();
+            pActor.clearTileTarget();
+            pRuntime?.MemberObjectiveTileByActor.Remove(pActor.data.id);
         }
 
         private static void SetJob(Actor pActor, string pJobId,

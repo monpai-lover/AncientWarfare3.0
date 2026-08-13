@@ -30,7 +30,8 @@ if (-not $config.Contains('"AW3_ARMY_RTS_WAR_RESOLUTION_MODE"') -or
 }
 if (-not $patch.Contains('pItem.Id + " Option " +') -or
     -not $patch.Contains('ModeCount = 3') -or
-    -not $patch.Contains('ArmyRtsWarDoctrineRules.Normalize')) {
+    -not $patch.Contains('ArmyRtsWarDoctrineRules.') -or
+    -not $patch.Contains('Normalize(pIndex)')) {
     throw 'RTS war resolution selector does not dynamically render normalized options.'
 }
 foreach ($locale in @('en.json', 'ch.json', 'cz.json')) {

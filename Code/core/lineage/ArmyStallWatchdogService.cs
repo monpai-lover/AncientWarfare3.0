@@ -214,18 +214,6 @@ namespace AncientWarfare3.core.lineage
                 state.Flow.SuspendForExternalOwnership();
                 return;
             }
-            if (!sample.CombatActive && sample.PositionActorId >= 0L &&
-                Enum.TryParse(sample.LocalPathStatus,
-                    out ArmySharedRouteInstallStatus localPathStatus) &&
-                ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(
-                    localPathStatus, combatActive: false,
-                    transportActive: false) &&
-                ArmyRtsControllerService.RecoverEmptySharedRoute(pArmyId,
-                    sample.PositionActorId))
-            {
-                state.Flow.SuspendForExternalOwnership();
-                return;
-            }
             if (hadPosition &&
                 !sample.CombatActive &&
                 (sample.RouteReady || sample.RoutePending ||
@@ -287,10 +275,8 @@ namespace AncientWarfare3.core.lineage
                 if (action !=
                     ArmyFollowerStallRecoveryAction.TeleportToCaptain)
                     continue;
-                if (!ArmyRtsControllerService.TryTeleportFormationMember(
-                        pArmyId, sample.ActorId))
-                    ArmyRtsControllerService.RecoverFormationMember(pArmyId,
-                        sample.ActorId);
+                ArmyRtsControllerService.RecoverFormationMember(pArmyId,
+                    sample.ActorId, pPreferAlternateSlot: true);
                 pState.FollowerRecovery.Remove(sample.ActorId);
             }
         }
@@ -342,7 +328,8 @@ namespace AncientWarfare3.core.lineage
             }
             if (pAction == ArmyStallRecoveryAction.ChangeTarget)
             {
-                CoolDownAndHandoff(pSample, pArmyId);
+                TryCoolDownAndHandoff(pSample, pArmyId,
+                    ArmyRtsMissionReleaseCause.TargetInvalid);
                 return;
             }
             if (pAction == ArmyStallRecoveryAction.EnterTransport)
@@ -353,7 +340,8 @@ namespace AncientWarfare3.core.lineage
                     ArmyRtsBenchmark.RecordReplan();
                     return;
                 }
-                CoolDownAndHandoff(pSample, pArmyId);
+                TryCoolDownAndHandoff(pSample, pArmyId,
+                    ArmyRtsMissionReleaseCause.PathFailed);
                 return;
             }
             if (pAction == ArmyStallRecoveryAction.Retreat)
@@ -377,7 +365,8 @@ namespace AncientWarfare3.core.lineage
             LogRecoveryAction(pArmyId, pState, failed, pSample);
             if (failed == ArmyStallRecoveryAction.ChangeTarget)
             {
-                CoolDownAndHandoff(pSample, pArmyId);
+                TryCoolDownAndHandoff(pSample, pArmyId,
+                    ArmyRtsMissionReleaseCause.PathFailed);
                 return;
             }
             if (failed == ArmyStallRecoveryAction.Retreat)
@@ -387,9 +376,13 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static void CoolDownAndHandoff(
-            ArmyWatchdogControllerSample pSample, long pArmyId)
+        private static bool TryCoolDownAndHandoff(
+            ArmyWatchdogControllerSample pSample, long pArmyId,
+            ArmyRtsMissionReleaseCause pCause)
         {
+            if (!ArmyRtsMissionLockRules.CanHandoffAfterRecovery(pCause,
+                    pSample?.ObjectiveOpen == true))
+                return false;
             if (pSample != null)
             {
                 TargetCooldowns.CoolDown(pSample.KingdomId,
@@ -397,7 +390,7 @@ namespace AncientWarfare3.core.lineage
                 WarByCooledTarget[(pSample.KingdomId,
                     pSample.TargetCityId)] = pSample.WarId;
             }
-            ArmyRtsControllerService.RequestObjectiveHandoff(pArmyId);
+            return ArmyRtsControllerService.RequestObjectiveHandoff(pArmyId);
         }
 
         private static void LogRecoveryAction(long pArmyId,

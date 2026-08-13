@@ -20,6 +20,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnLeaderPathSubmitted(Actor pActor, WorldTile pTarget,
             int pGenerationId)
         {
+            if (ArmyRtsControllerService.HasCaptainMission(pActor)) return;
             if (!TryGetMarchLeader(pActor, out Army army) || pTarget?.data == null) return;
             int targetId = pTarget.data.tile_id;
             if (States.TryGetValue(army.id, out MarchState current) &&
