@@ -140,16 +140,19 @@ static void ValidateAllScenarioResult(string scenario,
                 "roster churn never creates an empty mission shell");
             break;
         case "route":
+            Check.Equal(false, ArmyRtsMissionLockRules.CanReplaceTarget(
+                    ArmyRtsMissionReleaseCause.PathFailed),
+                "path failure cannot release an RTS mission target");
             Check.True(result.RecoveryActions >= 3,
                 "route failures exercise every recovery rung");
             Check.True(result.RouteRecoverySequence.StartsWith(
-                    "RebuildRoute,AlternateEndpoint,ChangeTarget",
+                    "RebuildRoute,AlternateEndpoint,AlternateEndpoint",
                     StringComparison.Ordinal),
-                "route recovery escalates in order");
+                "route recovery stays on the original target while escalating");
             Check.Equal(0, result.RepeatedRecoveryCycles,
                 "route recovery never repeats its full failure cycle");
-            RequireVisitedStates(result, ArmyRtsState.Rally,
-                ArmyRtsState.March, ArmyRtsState.Deploy,
+            RequireVisitedStates(result, ArmyRtsState.March,
+                ArmyRtsState.Deploy,
                 ArmyRtsState.Assault);
             break;
         case "transport":
@@ -357,17 +360,20 @@ static void RunRouteProbe(int seed)
     ScenarioResult result = ScenarioRunner.Run(
         "route", seed, maxActiveTicks: 10_000);
     Check.True(result.ValidSettlement,
-        "a later valid target resumes the war");
+        "the original target is settled after same-target recovery");
+    Check.Equal(false, ArmyRtsMissionLockRules.CanReplaceTarget(
+            ArmyRtsMissionReleaseCause.PathFailed),
+        "path failure cannot release an RTS mission target");
     Check.True(result.RecoveryActions >= 3,
         "waiting, no movement, and endpoint failure all recover");
     Check.True(result.RouteRecoverySequence.StartsWith(
-            "RebuildRoute,AlternateEndpoint,ChangeTarget",
+            "RebuildRoute,AlternateEndpoint,AlternateEndpoint",
             StringComparison.Ordinal),
-        "recovery cools down an unreachable target without resetting the failure ladder");
+        "recovery retries alternate endpoints without replacing the mission target");
     Check.Equal(0, result.RepeatedRecoveryCycles,
         "the route failure ladder cannot cycle forever");
-    RequireVisitedStates(result, ArmyRtsState.Rally,
-        ArmyRtsState.March, ArmyRtsState.Deploy,
+    RequireVisitedStates(result, ArmyRtsState.March,
+        ArmyRtsState.Deploy,
         ArmyRtsState.Assault);
     Console.WriteLine(
         $"PASS route seed={seed} ticks={result.Ticks} " +

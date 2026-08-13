@@ -25,6 +25,14 @@ namespace AncientWarfare3.core.lineage
                    (ownsPath || nativeLocalPath);
         }
 
+        internal static bool ShouldRecoverToMissionObjective(
+            bool hasActiveMission, bool actorEligible, bool combatActive,
+            bool transportActive)
+        {
+            return hasActiveMission && actorEligible && !combatActive &&
+                   !transportActive;
+        }
+
         internal static bool ShouldOwnMemberObjective(bool missionActive,
             bool isCaptain, bool actorEligible, bool immediateCombat,
             bool transportActive)

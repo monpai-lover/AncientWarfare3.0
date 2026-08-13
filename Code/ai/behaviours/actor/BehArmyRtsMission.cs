@@ -49,8 +49,6 @@ namespace AncientWarfare3.ai.behaviours.actor
                 pActor.makeWait(0.2f);
                 return BehResult.RepeatStep;
             }
-            if (AWArmyMarchService.TryStartCompleteSharedRoute(pActor))
-                return BehResult.RepeatStep;
             pActor.beh_tile_target = target;
             return BehResult.Continue;
         }

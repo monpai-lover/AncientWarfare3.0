@@ -214,18 +214,6 @@ namespace AncientWarfare3.core.lineage
                 state.Flow.SuspendForExternalOwnership();
                 return;
             }
-            if (!sample.CombatActive && sample.PositionActorId >= 0L &&
-                Enum.TryParse(sample.LocalPathStatus,
-                    out ArmySharedRouteInstallStatus localPathStatus) &&
-                ArmySharedPathRules.ShouldRecoverStaleInstalledRoute(
-                    localPathStatus, combatActive: false,
-                    transportActive: false) &&
-                ArmyRtsControllerService.RecoverEmptySharedRoute(pArmyId,
-                    sample.PositionActorId))
-            {
-                state.Flow.SuspendForExternalOwnership();
-                return;
-            }
             if (hadPosition &&
                 !sample.CombatActive &&
                 (sample.RouteReady || sample.RoutePending ||
@@ -287,10 +275,8 @@ namespace AncientWarfare3.core.lineage
                 if (action !=
                     ArmyFollowerStallRecoveryAction.TeleportToCaptain)
                     continue;
-                if (!ArmyRtsControllerService.TryTeleportFormationMember(
-                        pArmyId, sample.ActorId))
-                    ArmyRtsControllerService.RecoverFormationMember(pArmyId,
-                        sample.ActorId);
+                ArmyRtsControllerService.RecoverFormationMember(pArmyId,
+                    sample.ActorId, pPreferAlternateSlot: true);
                 pState.FollowerRecovery.Remove(sample.ActorId);
             }
         }

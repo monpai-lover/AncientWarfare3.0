@@ -51,5 +51,13 @@ Require(ArmyRtsMemberObjectiveRules.ShouldReplaceMemberPath(
         resolvedTargetTileId: 23, ownsPath: true,
         nativeLocalPath: true),
     "a changed member objective must replace its old route");
+Require(ArmyRtsMemberObjectiveRules.ShouldRecoverToMissionObjective(
+        hasActiveMission: true, actorEligible: true,
+        combatActive: false, transportActive: false),
+    "a stalled member must recover toward its active mission objective");
+Require(!ArmyRtsMemberObjectiveRules.ShouldRecoverToMissionObjective(
+        hasActiveMission: true, actorEligible: true,
+        combatActive: false, transportActive: true),
+    "transport must retain ownership during member recovery");
 
 Console.WriteLine("ArmyRtsMissionLock.Tests: PASS");
