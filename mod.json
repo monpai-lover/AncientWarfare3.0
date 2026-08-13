@@ -1,8 +1,8 @@
 {
     "name": "Ancient Warfare 3",
     "author": "GoatDie#4068",
-    "version": "1.2.6",
-    "description": "Ancient Warfare 3.0 v1.2.6 - Critical RTS army liveness fixes: WarLifecycle race condition fix, succession recovery already robust (defer-remove pattern verified), royal guard succession immediate sync, capital city yellow highlighting in hierarchical vassal map mode.",
+    "version": "1.2.5",
+    "description": "Ancient Warfare 3.0 v1.2.5 - RTS large-step movement, target-city combat handoff, peacetime patrol, and royal guard task fixes.",
     "iconPath": "icon.png",
     "RepoUrl": "https://github.com/monpai-lover/AncientWarfare3.0",
     "GUID": "ANCIENTWARFARE3",
