@@ -324,6 +324,8 @@ namespace AncientWarfare3.core.lineage
             if (baseCity?.data == null || baseCity.kingdom != pOldKingdom || baseCity == pOldKingdom.capital) return false;
             Kingdom neighbor = FindStrongNeighbor(pGeneral, pOldKingdom);
             if (neighbor?.data == null) return false;
+            if (DiplomacyProposalService.HasActiveWarBlocker(neighbor,
+                    pOldKingdom)) return false;
 
             try
             {
@@ -333,7 +335,7 @@ namespace AncientWarfare3.core.lineage
                 baseCity.joinAnotherKingdom(neighbor);
                 pGeneral.joinCity(baseCity);
                 baseCity.setLeader(pGeneral, pNew: true);
-                WarDecisionService.TryStartInternalSystemWar(neighbor,
+                WarDecisionService.TryStartSystemWar(neighbor,
                     pOldKingdom, WAR_GENERAL_REBELLION,
                     "general_defection");
                 RecordDefection(pGeneral, pOldKingdom, neighbor, baseCity, pRisk);

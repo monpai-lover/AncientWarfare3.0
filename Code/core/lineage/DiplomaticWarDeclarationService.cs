@@ -370,9 +370,16 @@ namespace AncientWarfare3.core.lineage
             List<DiplomaticWarDeclarationRecord> records =
                 DiplomaticWarDeclarationLedgerService.GetPending(pAttacker);
             for (int i = 0; i < records.Count; i++)
-                if (records[i].DefenderId == pDefender.id)
-                    TerminateRecord(pAttacker, records[i], "cancelled",
-                        pReason);
+            {
+                DiplomaticWarDeclarationRecord record = records[i];
+                Kingdom declaredDefender = FindKingdom(
+                    record?.DefenderId ?? -1L);
+                Kingdom mainDefender = WarDecisionService
+                    .ResolveWarMainDefender(declaredDefender);
+                if (record?.DefenderId != pDefender.id &&
+                    mainDefender != pDefender) continue;
+                TerminateRecord(pAttacker, record, "cancelled", pReason);
+            }
             RefreshCompatibilityProjection(pAttacker);
         }
 

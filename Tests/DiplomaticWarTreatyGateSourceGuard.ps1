@@ -100,5 +100,46 @@ if ($declaration -notmatch
         'ResolveWarMainDefender\s*\(\s*declaredDefender\s*\)[\s\S]{0,300}HasActiveWarBlocker\s*\(\s*pAttacker,\s*mainDefender\s*\)') {
     throw 'governorate declarations must validate the actual main defender treaty'
 }
+if ($declaration -notmatch
+        'ClearPendingForPair\s*\([\s\S]{0,800}ResolveWarMainDefender\s*\([\s\S]{0,250}record\?\.DefenderId') {
+    throw 'truce cleanup must match pending governorate declarations by actual defender'
+}
+
+$rebellion = Get-Content -Raw -LiteralPath `
+    (Join-Path $root 'Code/core/lineage/GeneralRebellionService.cs')
+$defectionStart = $rebellion.IndexOf(
+    'private static bool TryDefectToNeighbor(')
+$defectionEnd = $rebellion.IndexOf(
+    'private static bool TrySupportRestoration(', $defectionStart)
+if ($defectionStart -lt 0 -or $defectionEnd -le $defectionStart) {
+    throw 'could not isolate foreign general defection'
+}
+$defection = $rebellion.Substring(
+    $defectionStart, $defectionEnd - $defectionStart)
+$blocker = [regex]::Match($defection,
+    'HasActiveWarBlocker\s*\(\s*neighbor,\s*pOldKingdom\s*\)').Index
+$transfer = $defection.IndexOf('baseCity.joinAnotherKingdom(neighbor);')
+if ($blocker -lt 0 -or $transfer -lt 0 -or $blocker -gt $transfer -or
+    $defection -notmatch
+        'TryStartSystemWar\s*\(\s*neighbor,\s*pOldKingdom' -or
+    $defection -match 'TryStartInternalSystemWar\s*\(\s*neighbor,') {
+    throw 'foreign-backed defection must validate treaties before transfer'
+}
+
+$restorationStart = $territory.IndexOf(
+    'TryDeclareAutonomousRestorationCoreWar(')
+$restorationEnd = $territory.IndexOf(
+    'TryDeclareMandateWar(', $restorationStart)
+if ($restorationStart -lt 0 -or $restorationEnd -le $restorationStart) {
+    throw 'could not isolate autonomous restoration core war'
+}
+$restoration = $territory.Substring(
+    $restorationStart, $restorationEnd - $restorationStart)
+if ($restoration -notmatch
+        'TryStartSystemWar\s*\(\s*pAttacker,\s*defender' -or
+    $restoration -match
+        'TryStartInternalSystemWar\s*\(\s*pAttacker,') {
+    throw 'follow-up restoration core wars must obey external treaties'
+}
 
 Write-Host 'Diplomatic war treaty gate source guard passed.'
