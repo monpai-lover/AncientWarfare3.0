@@ -112,7 +112,8 @@ namespace AncientWarfare3.core.lineage
             War war = null;
             try
             {
-                war = WarDecisionService.TryStartSystemWar(rebel, pKingdom,
+                war = WarDecisionService.TryStartInternalSystemWar(rebel,
+                    pKingdom,
                     CoupRestorationRules.WarTypeId,
                     "ministerial_coup_loyalist_restoration");
             }

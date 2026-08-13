@@ -608,7 +608,8 @@ namespace AncientWarfare3.core.lineage
                 source_core_id = FindCoreId(pAttacker.id, pTargetCity.data.id),
                 claimant = pClaimant
             };
-            War war = WarDecisionService.TryStartSystemWar(pAttacker, defender,
+            War war = WarDecisionService.TryStartInternalSystemWar(pAttacker,
+                defender,
                 WarDecisionService.WAR_RESTORATION, "self_restoration_core");
             if (war?.data == null) return null;
             return TryPersistGoalOrEndWar(war, goal).Success ? war : null;

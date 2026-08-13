@@ -124,7 +124,8 @@ namespace AncientWarfare3.core.lineage
             War war = null;
             try
             {
-                war = WarDecisionService.TryStartSystemWar(rebel, pKingdom,
+                war = WarDecisionService.TryStartInternalSystemWar(rebel,
+                    pKingdom,
                     GeneralRebellionService.WAR_GENERAL_REBELLION,
                     "mandate_decline_rebellion");
             }

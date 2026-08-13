@@ -43,8 +43,28 @@ if ($calls[1].Index -lt $notify) {
 if (-not $declaration.Contains(
         'ShouldBlockWarWithActiveTreaty(activeTreaty,') -or
     -not $warDecision.Contains(
-        'ShouldBlockWarWithActiveTreaty(activeTreaty, pSystemWar,')) {
+        'ShouldBlockWarWithActiveTreaty(activeTreaty,')) {
     throw 'declaration issue and execution must both use the live treaty gate'
+}
+if (-not $warDecision.Contains('TryStartInternalSystemWar(') -or
+    -not $warDecision.Contains('pTreatyExemptInternalWar: true')) {
+    throw 'internal system wars must use an explicit treaty exemption'
+}
+
+$territory = Get-Content -Raw -LiteralPath `
+    (Join-Path $root 'Code/core/lineage/WarTerritoryService.cs')
+$zhulu = Get-Content -Raw -LiteralPath `
+    (Join-Path $root 'Code/core/lineage/ZhuluWarService.cs')
+foreach ($externalNeedle in @(
+        'TryStartSystemWar(pAttacker,',
+        'MandateService.WAR_TIANMING, "tianming"',
+        '"mandate_conquest"')) {
+    if (-not $territory.Contains($externalNeedle)) {
+        throw "external mandate war lost its treaty-gated route: $externalNeedle"
+    }
+}
+if (-not $zhulu.Contains('TryStartSystemWar(attacker, defender,')) {
+    throw 'external zhulu war must retain the treaty-gated system route'
 }
 
 Write-Host 'Diplomatic war treaty gate source guard passed.'

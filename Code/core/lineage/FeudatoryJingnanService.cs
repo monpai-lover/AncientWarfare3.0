@@ -111,7 +111,8 @@ namespace AncientWarfare3.core.lineage
             }
             else
             {
-                war = WarDecisionService.TryStartSystemWar(rebel, empire,
+                war = WarDecisionService.TryStartInternalSystemWar(rebel,
+                    empire,
                     FeudatoryJingnanRules.WarTypeId, "jingnan");
             }
             if (war?.data == null)

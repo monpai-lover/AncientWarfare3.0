@@ -190,8 +190,8 @@ namespace AncientWarfare3.core.lineage
                 pAttacker, pDefender);
             if (DiplomaticWarDeclarationLedgerRules
                     .ShouldBlockWarWithActiveTreaty(activeTreaty,
-                        systemWar: IsSystemGoal(pGoalType), independenceWar,
-                        declarationLocked: true))
+                        independenceWar,
+                        treatyExemptInternalWar: false))
             {
                 pFailureReason = "active_war_blocker";
                 return false;

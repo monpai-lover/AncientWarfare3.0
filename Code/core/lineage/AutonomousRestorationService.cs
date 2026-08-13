@@ -680,7 +680,7 @@ namespace AncientWarfare3.core.lineage
             if (!IsLiveKingdom(pRestored) || !IsLiveKingdom(pFormerOwner) ||
                 pFormerOwner == pRestored || pSeed?.data == null ||
                 HasActiveWar(pRestored)) return false;
-            War war = WarDecisionService.TryStartSystemWar(
+            War war = WarDecisionService.TryStartInternalSystemWar(
                 pRestored, pFormerOwner, WarDecisionService.WAR_RESTORATION,
                 "self_restoration_uprising");
             if (war?.data == null) return false;
