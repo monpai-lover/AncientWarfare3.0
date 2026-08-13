@@ -5,8 +5,7 @@ namespace AncientWarfare3.core.performance
         internal static int ResolveP0SliceCount(int registeredCount,
             int simulationBatchSize)
         {
-            return System.Math.Min(System.Math.Max(0, registeredCount),
-                System.Math.Max(1, simulationBatchSize));
+            return System.Math.Max(0, registeredCount);
         }
 
         internal static bool CanAdmitOrdinaryActorWork(bool p0SlicePending)
