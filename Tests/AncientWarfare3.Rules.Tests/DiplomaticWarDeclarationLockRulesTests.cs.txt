@@ -24,37 +24,38 @@ internal static class DiplomaticWarDeclarationLockRulesTests
         True(DiplomaticWarDeclarationLedgerRules
                 .ShouldBlockWarWithActiveTreaty(
                     activeTreaty: true,
-                    systemWar: false,
                     independenceWar: false,
-                    declarationLocked: true),
+                    treatyExemptInternalWar: false),
             "a locked ordinary declaration still obeys a live treaty");
         True(DiplomaticWarDeclarationLedgerRules
                 .ShouldBlockWarWithActiveTreaty(
                     activeTreaty: true,
-                    systemWar: true,
                     independenceWar: false,
-                    declarationLocked: true),
+                    treatyExemptInternalWar: false),
             "a notified mandate system war still obeys a live treaty");
+        True(DiplomaticWarDeclarationLedgerRules
+                .ShouldBlockWarWithActiveTreaty(
+                    activeTreaty: true,
+                    independenceWar: false,
+                    treatyExemptInternalWar: false),
+            "a direct external system war still obeys a live treaty");
         False(DiplomaticWarDeclarationLedgerRules
                 .ShouldBlockWarWithActiveTreaty(
                     activeTreaty: true,
-                    systemWar: false,
                     independenceWar: true,
-                    declarationLocked: true),
+                    treatyExemptInternalWar: false),
             "an independence declaration retains its treaty exemption");
         False(DiplomaticWarDeclarationLedgerRules
                 .ShouldBlockWarWithActiveTreaty(
                     activeTreaty: true,
-                    systemWar: true,
                     independenceWar: false,
-                    declarationLocked: false),
+                    treatyExemptInternalWar: true),
             "a direct internal system war retains its treaty exemption");
         False(DiplomaticWarDeclarationLedgerRules
                 .ShouldBlockWarWithActiveTreaty(
                     activeTreaty: false,
-                    systemWar: false,
                     independenceWar: false,
-                    declarationLocked: true),
+                    treatyExemptInternalWar: false),
             "an inactive treaty does not block a declaration");
         Equal(12L, DiplomaticWarDeclarationLedgerRules.ResolveTargetCityId(
                 true, 12L, 21L, 22L),
