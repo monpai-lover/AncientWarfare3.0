@@ -38,6 +38,12 @@ namespace AncientWarfare3.core.policy
 
         public static void ProcessFrame()
         {
+            if (ScrollWindow.getCurrentWindow() != null)
+            {
+                if (_visibleOrPending) Hide();
+                return;
+            }
+
             if (!SchoolMapModeService.IsActive())
             {
                 if (_visibleOrPending) Hide();

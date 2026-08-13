@@ -92,18 +92,32 @@ namespace AncientWarfare3.ui.items
                 cell.Background.color = Color.Lerp(Parse(definition.ColorHex), Color.black, .68f);
                 cell.Button.onClick.RemoveAllListeners();
                 string schoolId = definition.Id;
-                cell.Button.onClick.AddListener(() => SchoolWindow.OpenSchool(schoolId));
+                cell.Button.onClick.AddListener(() => OpenSchoolWindow(schoolId));
                 cell.Root.SetActive(true);
             }
 
             long cityId = pCity.data.id;
             _detailsButton.onClick.RemoveAllListeners();
-            _detailsButton.onClick.AddListener(() => SchoolWindow.OpenCity(cityId));
+            _detailsButton.onClick.AddListener(() => OpenSchoolWindow(cityId));
             int hidden = Math.Max(0, scores.Length - visibleScores.Length);
             _detailsText.text = AW_L10n.Text("aw_school_details", "Details") +
                                 (hidden > 0 ? " +" + hidden : "");
             Layout(visibleScores.Length);
             gameObject.SetActive(true);
+        }
+
+        private static void OpenSchoolWindow(string pSchoolId)
+        {
+            // The selected-city tab owns the map-mode composition UI. It must
+            // be closed before the school window can open a native UnitWindow.
+            SchoolMapBottomBarController.Hide();
+            SchoolWindow.OpenSchool(pSchoolId);
+        }
+
+        private static void OpenSchoolWindow(long pCityId)
+        {
+            SchoolMapBottomBarController.Hide();
+            SchoolWindow.OpenCity(pCityId);
         }
 
         private void Build()
