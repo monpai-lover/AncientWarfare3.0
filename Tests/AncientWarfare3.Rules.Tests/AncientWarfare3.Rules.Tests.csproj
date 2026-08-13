@@ -243,6 +243,7 @@
     <Compile Include="BackgroundThreadCrashBoundaryRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyDiagnosticSamplingTests.cs.txt" />
     <Compile Include="ArmyLogisticsSustainmentRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsAbstractSupplyRulesTests.cs.txt" />
     <Compile Include="ArmyRtsRouteChoiceRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyRulesTests.cs.txt" />
     <Compile Include="RecruitmentLifecycleRemovalRulesTests.cs.txt" />
@@ -541,6 +542,7 @@
     <Compile Include="..\..\Code\core\lineage\SoldierRetirementRules.cs" Link="Production\SoldierRetirementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActiveMilitaryLifecycleRules.cs" Link="Production\ActiveMilitaryLifecycleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WartimeMilitaryTaskRules.cs" Link="Production\WartimeMilitaryTaskRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsAbstractSupplyRules.cs" Link="Production\ArmyRtsAbstractSupplyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarArmyReturnRules.cs" Link="Production\WarArmyReturnRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarArmyReturnQueueCore.cs" Link="Production\WarArmyReturnQueueCore.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsControllerService.cs" Link="Production\ArmyRtsControllerService.cs" />

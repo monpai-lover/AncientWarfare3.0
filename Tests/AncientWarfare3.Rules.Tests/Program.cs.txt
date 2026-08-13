@@ -664,8 +664,16 @@ if (args.Length == 1 && args[0] == "--rts-predeparture-deadline-slice")
 if (args.Length == 1 && args[0] == "--rts-logistics-sustainment-slice")
 {
     ArmyLogisticsSustainmentRulesTests.Run();
+    ArmyRtsAbstractSupplyRulesTests.Run();
     ArmyRtsRouteChoiceRulesTests.Run();
     Console.WriteLine("AW3 RTS logistics sustainment rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--rts-abstract-supply-slice")
+{
+    ArmyRtsAbstractSupplyRulesTests.Run();
+    Console.WriteLine("AW3 RTS abstract supply rules passed.");
     return;
 }
 
@@ -8305,6 +8313,7 @@ WartimeMilitaryTaskRulesTests.Run();
 WarArmyReturnRulesTests.Run();
 WarRuntimeDisplayRulesTests.Run();
 ArmyLogisticsSustainmentRulesTests.Run();
+ArmyRtsAbstractSupplyRulesTests.Run();
 ArmyRtsRouteChoiceRulesTests.Run();
 ArmyRtsReplenishmentArrivalRulesTests.Run();
 ArmyRtsWarLifecycleRulesTests.Run();
