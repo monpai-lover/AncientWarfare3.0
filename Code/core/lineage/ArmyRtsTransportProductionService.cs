@@ -41,6 +41,12 @@ namespace AncientWarfare3.core.lineage
             NextRequestAtByKingdom = new Dictionary<long, double>();
         private static readonly HashSet<string> LoggedOutcomes =
             new HashSet<string>(StringComparer.Ordinal);
+        private static readonly Dictionary<long, Actor> TemporaryBoatIds =
+            new Dictionary<long, Actor>();
+        private static readonly HashSet<long> PendingTemporaryBoatRemovalIds =
+            new HashSet<long>();
+        private static readonly HashSet<long> TemporaryBoatBuildCityIds =
+            new HashSet<long>();
 
         internal static int ActiveDemandCount
         {
@@ -126,10 +132,116 @@ namespace AncientWarfare3.core.lineage
             return FindRouteDock(pKingdom, pPickup, pTarget) != null;
         }
 
+        // RTS voyages own a new boat for their entire lifetime. The normal
+        // production queue remains available to non-RTS travel systems.
+        internal static bool TryProvisionAndBind(Kingdom pKingdom,
+            TaxiRequest pRequest, out Actor pBoatActor)
+        {
+            pBoatActor = null;
+            if (!IsPendingFor(pRequest, pKingdom)) return false;
+            WorldTile pickup;
+            WorldTile target;
+            try
+            {
+                pickup = pRequest.getTileStart();
+                target = pRequest.getTileTarget();
+            }
+            catch { return false; }
+            if (pickup?.data == null || target?.data == null) return false;
+
+            ProductionDock routeDock = FindRouteDock(pKingdom, pickup,
+                target, pIgnoreDemand: true, pAllowFullDock: true);
+            if (routeDock?.City?.data == null || routeDock.Dock == null)
+                return false;
+            Actor boatActor = null;
+            try
+            {
+                TemporaryBoatBuildCityIds.Add(routeDock.City.id);
+                try
+                {
+                    boatActor = routeDock.Dock.buildBoatFromHere(
+                        routeDock.City);
+                }
+                finally
+                {
+                    TemporaryBoatBuildCityIds.Remove(routeDock.City.id);
+                }
+                if (boatActor?.data == null) return false;
+                boatActor.joinKingdom(pKingdom);
+                boatActor.joinCity(routeDock.City);
+                Boat boat = boatActor.getSimpleComponent<Boat>();
+                if (boat == null) return false;
+                TemporaryBoatIds[boatActor.data.id] = boatActor;
+                boat.taxi_request = pRequest;
+                pRequest.assign(boat);
+                boatActor.setTask("boat_transport_go_load", pClean: true,
+                    pCleanJob: false, pForceAction: true);
+                pBoatActor = boatActor;
+                LogOutcomeOnce(pKingdom.id, "temporary_boat_bound",
+                    routeDock.City, pRequest,
+                    " boat=" + boatActor.data.id);
+                return true;
+            }
+            catch
+            {
+                if (boatActor?.data != null)
+                    DestroyTemporaryTransportBoat(boatActor.data.id);
+                return false;
+            }
+        }
+
+        internal static bool IsTemporaryTransportBoat(long pBoatId)
+        {
+            return pBoatId >= 0L && TemporaryBoatIds.ContainsKey(pBoatId);
+        }
+
+        internal static void DestroyTemporaryTransportBoat(long pBoatId)
+        {
+            if (!TemporaryBoatIds.TryGetValue(pBoatId,
+                    out Actor boatActor)) return;
+            Boat boat = null;
+            try { boat = boatActor?.getSimpleComponent<Boat>(); }
+            catch { }
+            try
+            {
+                // A live passenger must finish disembarking before the boat
+                // can be removed without stranding the army at sea.
+                if (boat?.hasPassengers() == true)
+                {
+                    PendingTemporaryBoatRemovalIds.Add(pBoatId);
+                    return;
+                }
+                if (boat?.taxi_request != null)
+                {
+                    TaxiManager.cancelRequest(boat.taxi_request);
+                    boat.taxi_request = null;
+                }
+                ActionLibrary.removeUnit(boatActor);
+            }
+            catch { }
+            finally
+            {
+                if (boat?.hasPassengers() != true)
+                {
+                    TemporaryBoatIds.Remove(pBoatId);
+                    PendingTemporaryBoatRemovalIds.Remove(pBoatId);
+                }
+            }
+        }
+
+        internal static void ProcessTemporaryBoatDisposals()
+        {
+            if (PendingTemporaryBoatRemovalIds.Count == 0) return;
+            var pending = new List<long>(PendingTemporaryBoatRemovalIds);
+            for (int i = 0; i < pending.Count; i++)
+                DestroyTemporaryTransportBoat(pending[i]);
+        }
+
         internal static bool HasDemand(City pCity)
         {
             if (pCity?.data == null || pCity.kingdom?.data == null)
                 return false;
+            if (TemporaryBoatBuildCityIds.Contains(pCity.id)) return true;
             double now = CurrentRealtime();
             Prune(now);
             return DemandsByDockCity.TryGetValue(pCity.id,
@@ -154,6 +266,9 @@ namespace AncientWarfare3.core.lineage
             DemandsByDockCity.Clear();
             NextRequestAtByKingdom.Clear();
             LoggedOutcomes.Clear();
+            TemporaryBoatIds.Clear();
+            PendingTemporaryBoatRemovalIds.Clear();
+            TemporaryBoatBuildCityIds.Clear();
         }
 
         private static bool TryRefreshExisting(TaxiRequest pRequest,
@@ -303,7 +418,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static ProductionDock FindRouteDock(Kingdom pKingdom,
-            WorldTile pPickup, WorldTile pTarget)
+            WorldTile pPickup, WorldTile pTarget,
+            bool pIgnoreDemand = false, bool pAllowFullDock = false)
         {
             List<City> cities = pKingdom?.cities;
             int cityCount = cities?.Count ?? 0;
@@ -313,7 +429,8 @@ namespace AncientWarfare3.core.lineage
                 try { city = cities[cityIndex]; }
                 catch { continue; }
                 if (city?.data == null || city.kingdom != pKingdom ||
-                    DemandsByDockCity.ContainsKey(city.id)) continue;
+                    (!pIgnoreDemand && DemandsByDockCity.ContainsKey(
+                        city.id))) continue;
                 List<Building> buildings = city.buildings;
                 int buildingCount = buildings?.Count ?? 0;
                 for (int buildingIndex = 0;
@@ -326,7 +443,8 @@ namespace AncientWarfare3.core.lineage
                     Docks docks = building.component_docks;
                     try
                     {
-                        if (docks.isFull(TransportBoatType)) continue;
+                        if (!pAllowFullDock &&
+                            docks.isFull(TransportBoatType)) continue;
                         if (docks.tiles_ocean == null ||
                             docks.tiles_ocean.Count == 0)
                             docks.recalculateOceanTiles();

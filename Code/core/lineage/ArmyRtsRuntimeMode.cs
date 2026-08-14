@@ -49,11 +49,12 @@ namespace AncientWarfare3.core.lineage
                 case "warrior_army_captain_idle_walking_city":
                 case "warrior_army_captain_waiting":
                 case "warrior_army_leader_move_random":
+                case "warrior_random_move":
+                    return false;
                 case "warrior_army_leader_move_to_attack_target":
                 case "warrior_army_follow_leader":
-                case "warrior_random_move":
                 case "check_warrior_transport":
-                    return false;
+                    return true;
                 default:
                     return true;
             }
@@ -70,6 +71,15 @@ namespace AncientWarfare3.core.lineage
             ArmyRtsMode pMode, bool rtsOwnsActor)
         {
             return !ShouldCommit(pMode) || !rtsOwnsActor;
+        }
+
+        public static bool ShouldAllowVanillaDecisionEvaluation(
+            ArmyRtsMode pMode, bool rtsOwnsActor,
+            bool nativeMilitaryMovement)
+        {
+            return nativeMilitaryMovement ||
+                   ShouldAllowVanillaDecisionEvaluation(pMode,
+                       rtsOwnsActor);
         }
 
         public static string LogName(ArmyRtsMode pMode)

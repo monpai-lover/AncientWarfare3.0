@@ -189,7 +189,8 @@ namespace AncientWarfare3.core.presentation
             ArmyRtsProposalKind pProposalKind =
                 ArmyRtsProposalKind.Attack,
             ArmyRtsRole pRole = ArmyRtsRole.Assault,
-            ArmyRtsPosture pPosture = ArmyRtsPosture.Automatic)
+            ArmyRtsPosture pPosture = ArmyRtsPosture.Automatic,
+            IReadOnlyList<ArmyRtsPlanPoint> pActualPath = null)
         {
             ArmyId = pArmyId;
             KingdomId = pKingdomId;
@@ -206,6 +207,9 @@ namespace AncientWarfare3.core.presentation
             ProposalKind = pProposalKind;
             Role = pRole;
             Posture = pPosture;
+            ActualPath = pActualPath == null
+                ? Array.Empty<ArmyRtsPlanPoint>()
+                : new List<ArmyRtsPlanPoint>(pActualPath).ToArray();
         }
 
         public long ArmyId { get; }
@@ -223,6 +227,7 @@ namespace AncientWarfare3.core.presentation
         public ArmyRtsProposalKind ProposalKind { get; }
         public ArmyRtsRole Role { get; }
         public ArmyRtsPosture Posture { get; }
+        public IReadOnlyList<ArmyRtsPlanPoint> ActualPath { get; }
     }
 
     public sealed class ArmyRtsPlanFront

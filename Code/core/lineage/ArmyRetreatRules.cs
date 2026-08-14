@@ -464,6 +464,13 @@ namespace AncientWarfare3.core.lineage
             return pRetreatUntilYear > pCurrentYear;
         }
 
+        public static bool ShouldStandAndFightWhenNoSafeCity(
+            ArmyRtsRole pRole, ArmyRtsPosture pPosture,
+            bool hasSafeRetreatCity, bool explicitPlayerRetreat)
+        {
+            return !hasSafeRetreatCity;
+        }
+
         public static bool ProtectUncontestedOccupation(bool attackerIsDominant, bool activeCaptureUnits,
             bool noDefenders, bool hostileRivalActive, bool ownershipChanged)
         {

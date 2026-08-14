@@ -388,9 +388,12 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static bool AppointGeneral(Actor pActor, int pScore)
+        private static bool AppointGeneral(Actor pActor, int pScore,
+            bool pBypassEligibility = false)
         {
-            if (pActor?.data == null || pActor.kingdom?.data == null || !CanRemainGeneral(pActor, pActor.kingdom)) return false;
+            if (pActor?.data == null || pActor.kingdom?.data == null ||
+                !pBypassEligibility && !CanRemainGeneral(pActor, pActor.kingdom))
+                return false;
             bool already = IsGeneral(pActor);
             pActor.data.set(LineageKeys.GENERAL_ACTIVE, true);
             ApplyGeneralTrait(pActor);
@@ -420,6 +423,14 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Actor(pActor));
             CourtDirectionService.MarkDirty(pActor.kingdom);
             return true;
+        }
+
+        internal static bool PromoteToGeneral(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.kingdom?.data == null)
+                return false;
+            return AppointGeneral(pActor, CandidateScore(pActor),
+                pBypassEligibility: true);
         }
 
         private static List<GeneralCandidate> CollectCandidates(Kingdom pKingdom, List<Actor> pActive)

@@ -1,11 +1,159 @@
 using System;
 using System.IO;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 
 internal static class ArmyRtsCombatHandoffRulesTests
 {
     public static void Run()
     {
+        Assert(ArmyRtsP0Rules.ShouldTraceDiagnosticActor(
+                isCaptain: true, isRoyalGuard: false, actorId: 17,
+                anomaly: false, memberSampleModulo: 16),
+            "captain diagnostics are never sampled out");
+        Assert(ArmyRtsP0Rules.ShouldTraceDiagnosticActor(
+                isCaptain: false, isRoyalGuard: false, actorId: 224,
+                anomaly: false, memberSampleModulo: 16) &&
+               !ArmyRtsP0Rules.ShouldTraceDiagnosticActor(
+                isCaptain: false, isRoyalGuard: false, actorId: 225,
+                anomaly: false, memberSampleModulo: 16),
+            "ordinary followers use a stable one-in-sixteen diagnostic sample");
+        Assert(ArmyRtsP0Rules.ShouldTraceDiagnosticActor(
+                isCaptain: false, isRoyalGuard: false, actorId: 225,
+                anomaly: true, memberSampleModulo: 16),
+            "anomalies bypass follower diagnostic sampling");
+        Assert(ArmyMilitaryMovementPriorityRules.ShouldRetainCombatP0(
+                largeSchedulerActive: true, militaryOwnerActive: true,
+                immediateCombat: true),
+            "an RTS combatant keeps military P0 while vanilla combat owns its actions");
+        Assert(!ArmyMilitaryMovementPriorityRules.ShouldRetainCombatP0(
+                largeSchedulerActive: true, militaryOwnerActive: false,
+                immediateCombat: true),
+            "an unrelated combatant is not admitted to military P0");
+        Assert(!ArmyMilitaryMovementPriorityRules.ShouldRetainCombatP0(
+                largeSchedulerActive: false, militaryOwnerActive: true,
+                immediateCombat: true),
+            "native scheduling does not need the large-step combat lane");
+        Assert(ArmyMilitaryMovementPriorityRules.
+                ShouldAdvanceNewFightTaskInSameP0(
+                    hasAttackTarget: true, isFightingTask: true,
+                    actionIndexBeforeAi: 0, actionIndexAfterAi: 1,
+                    behaviourSkipped: false, alreadyMoving: false),
+            "a newly acquired distant enemy advances from validation into the native approach action in one P0 slice");
+        Assert(!ArmyMilitaryMovementPriorityRules.
+                ShouldAdvanceNewFightTaskInSameP0(
+                    hasAttackTarget: true, isFightingTask: true,
+                    actionIndexBeforeAi: 0, actionIndexAfterAi: 1,
+                    behaviourSkipped: true, alreadyMoving: false),
+            "an in-range combat action that already consumed the native slice is not advanced again");
+        Assert(!ArmyMilitaryMovementPriorityRules.
+                ShouldAdvanceNewFightTaskInSameP0(
+                    hasAttackTarget: true, isFightingTask: true,
+                    actionIndexBeforeAi: 1, actionIndexAfterAi: 2,
+                    behaviourSkipped: false, alreadyMoving: false),
+            "only the fighting validation-to-approach transition is coalesced");
+        Assert(ArmyMilitaryMovementPriorityRules.
+                ShouldAdvanceMemberCombatApproachInSameP0(
+                    hasAttackTarget: true, isMemberCombatTask: true,
+                    actionIndexBeforeAi: 0, actionIndexAfterAi: 1,
+                    behaviourSkipped: false, alreadyMoving: false),
+            "the custom soldier combat task reaches its original approach action without waiting for another large step");
+        Assert(ArmyMilitaryMovementPriorityRules.
+                ShouldResumeNativeCombatAfterEnemyAcquisition(
+                    hadAttackTargetBeforeSearch: false,
+                    hasAttackTargetAfterSearch: true,
+                    behaviourSkippedBySearch: true),
+            "a P0 enemy acquisition must advance the native fighting task instead of leaving it skipped");
+        Assert(!ArmyMilitaryMovementPriorityRules.
+                ShouldResumeNativeCombatAfterEnemyAcquisition(
+                    hadAttackTargetBeforeSearch: true,
+                    hasAttackTargetAfterSearch: true,
+                    behaviourSkippedBySearch: true),
+            "an existing combat target keeps native cooldown and attack skip semantics");
+        Assert(ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
+                "combat_p0", anomaly: false),
+            "combat ownership transitions remain visible");
+        Assert(ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
+                "combat_after_move_command", anomaly: false),
+            "the native fighting approach command remains visible during large-step diagnosis");
+        Assert(ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
+                "follower_after_ai", anomaly: false),
+            "native follower target publication remains visible during large-step diagnosis");
+        Assert(!ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
+                "native_enemy_check", anomaly: false),
+            "normal per-stage actor diagnostics are suppressed");
+        Assert(ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
+                "native_enemy_check", anomaly: true),
+            "anomalies bypass stage suppression");
+        Assert(ArmyRtsP0Rules.ShouldRateLimitDiagnostic(
+                anomaly: false, elapsedSeconds: 0.25d,
+                minimumIntervalSeconds: 2d),
+            "normal repeated diagnostics are rate limited");
+        Assert(!ArmyRtsP0Rules.ShouldRateLimitDiagnostic(
+                anomaly: true, elapsedSeconds: 0.25d,
+                minimumIntervalSeconds: 2d),
+            "anomalies are emitted immediately");
+        Assert(ArmyRtsControllerRules.ShouldUseVanillaArmyMovement(
+                ArmyRtsProposalKind.Attack, targetIsEnemy: true),
+            "an open enemy-city attack uses vanilla army movement");
+        Assert(!ArmyRtsControllerRules.ShouldUseVanillaArmyMovement(
+                ArmyRtsProposalKind.Defend, targetIsEnemy: false),
+            "friendly defense does not publish a vanilla city attack order");
+        Assert(!ArmyRtsControllerRules.ShouldUseVanillaArmyMovement(
+                ArmyRtsProposalKind.Retreat, targetIsEnemy: false),
+            "retreat cannot be published as a vanilla enemy-city attack");
+        Assert(ArmyRtsControllerRules.ShouldUseVanillaRetreatMovement(
+                ArmyRtsProposalKind.Retreat, targetIsEnemy: false),
+            "a friendly retreat uses the vanilla-style return-city task");
+        Assert(ArmyRtsControllerRules.ShouldUseVanillaFollowerMovement(
+                ArmyRtsProposalKind.Retreat, targetIsEnemy: false),
+            "retreat soldiers use vanilla follow-leader movement");
+        Assert(ArmyRtsControllerRules.ShouldUseVanillaFollowerMovement(
+                ArmyRtsProposalKind.Attack, targetIsEnemy: true),
+            "attack soldiers use vanilla follow-leader movement");
+        Assert(ArmyRtsControllerRules.ShouldUseVanillaFollowerMovement(
+                ArmyRtsProposalKind.Defend, targetIsEnemy: false),
+            "defense soldiers use vanilla follow-leader movement");
+        Assert(ArmyRtsControllerRules.ShouldUseVanillaFollowerMovement(
+                ArmyRtsProposalKind.Attack, targetIsEnemy: false),
+            "a transient target ownership change cannot reopen custom follower movement");
+        Assert(!ArmyRtsControllerRules.ShouldUseVanillaFollowerMovement(
+                ArmyRtsProposalKind.FrontHold, targetIsEnemy: false),
+            "a front-hold task remains stationary rather than following a leader");
+        Assert(ArmyRtsControllerRules.ShouldUseNativeMissionExecution(
+                ArmyRtsProposalKind.Attack, ArmyRtsState.March,
+                targetIsEnemy: true),
+            "attack marches must use the original captain attack path");
+        Assert(ArmyRtsControllerRules.ShouldUseNativeMissionExecution(
+                ArmyRtsProposalKind.Defend, ArmyRtsState.Deploy,
+                targetIsEnemy: false),
+            "defense deployment must use original army movement");
+        Assert(ArmyRtsControllerRules.ShouldUseNativeMissionExecution(
+                ArmyRtsProposalKind.Retreat, ArmyRtsState.Retreat,
+                targetIsEnemy: false),
+            "retreat movement must use original movement and taxi ownership");
+        Assert(!ArmyRtsControllerRules.ShouldUseNativeMissionExecution(
+                ArmyRtsProposalKind.Attack, ArmyRtsState.Rally,
+                targetIsEnemy: true),
+            "rally remains an RTS-owned preparation phase");
+        Assert(ArmyRtsControllerRules.ShouldResetNativeMovement(
+                previousMissionExists: true,
+                operationalProgressChanged: true),
+            "a replaced strategic command clears its old native path once");
+        Assert(!ArmyRtsControllerRules.ShouldResetNativeMovement(
+                previousMissionExists: true,
+                operationalProgressChanged: false),
+            "an unchanged strategic command preserves its active native path");
+        Assert(ArmyRtsControllerRules.
+                ShouldPrimeForcedTransportBeforeNativeAttack(
+                    isCaptain: true, usesVanillaAttack: true,
+                    sameIsland: false, transportOwned: false),
+            "a cross-island attack captain must start transport before the land-only native selector");
+        Assert(!ArmyRtsControllerRules.
+                ShouldPrimeForcedTransportBeforeNativeAttack(
+                    isCaptain: true, usesVanillaAttack: true,
+                    sameIsland: true, transportOwned: false),
+            "a same-island attack captain must continue through native land movement");
         Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
                 ArmyRtsWarPhase.StrategicMovement,
                 withdrawalRequired: false, insideTargetTerritory: true,
@@ -49,8 +197,15 @@ internal static class ArmyRtsCombatHandoffRulesTests
                 ArmyRtsWarPhase.VanillaCombat,
                 withdrawalRequired: false, insideTargetTerritory: true,
                 hostileCombatUnitNearby: false, objectiveOpen: true) ==
-               ArmyRtsCombatControlDecision.ReacquireStrategicControl,
-            "RTS resumes strategic control when defenders are driven away");
+               ArmyRtsCombatControlDecision.KeepVanillaControl,
+            "a temporary lull must not let RTS reclaim actors before the target city is occupied");
+
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.VanillaCombat,
+                withdrawalRequired: false, insideTargetTerritory: false,
+                hostileCombatUnitNearby: false, objectiveOpen: true) ==
+               ArmyRtsCombatControlDecision.KeepVanillaControl,
+            "vanilla combat ownership remains locked while the strategic objective is open");
 
         Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
                 ArmyRtsWarPhase.VanillaCombat,
@@ -90,17 +245,37 @@ internal static class ArmyRtsCombatHandoffRulesTests
                     "warrior_army_leader_move_to_attack_target",
                     rtsOwnsActor: false),
             "released combat actors retain vanilla attack decisions");
-        Assert(!ArmyRtsRuntimeModeRules.
+        Assert(ArmyRtsRuntimeModeRules.
                 ShouldAllowVanillaStrategicDecision(
                     ArmyRtsMode.On,
                     "warrior_army_leader_move_to_attack_target",
                     rtsOwnsActor: true),
-            "RTS-owned actors still reject vanilla strategic movement");
+            "RTS-owned captains use vanilla attack-target movement");
+        Assert(ArmyRtsRuntimeModeRules.
+                ShouldAllowVanillaStrategicDecision(
+                    ArmyRtsMode.On, "warrior_army_follow_leader",
+                    rtsOwnsActor: true),
+            "RTS-owned soldiers use vanilla follow-leader movement");
+        Assert(ArmyRtsRuntimeModeRules.
+                ShouldAllowVanillaStrategicDecision(
+                    ArmyRtsMode.On, "check_warrior_transport",
+                    rtsOwnsActor: true),
+            "RTS-owned armies use vanilla cross-island transport");
+        Assert(ArmyRtsRuntimeModeRules.
+                ShouldAllowVanillaDecisionEvaluation(
+                    ArmyRtsMode.On, rtsOwnsActor: true,
+                    nativeMilitaryMovement: true),
+            "native military movement must not be blocked by the RTS decision gate");
+        Assert(!ArmyRtsRuntimeModeRules.
+                ShouldAllowVanillaDecisionEvaluation(
+                    ArmyRtsMode.On, rtsOwnsActor: true,
+                    nativeMilitaryMovement: false),
+            "custom RTS actors remain protected from unrelated vanilla decisions");
 
         string root = Directory.GetCurrentDirectory();
-        string content = File.ReadAllText(Path.Combine(root, "Code",
+        string rtsContent = File.ReadAllText(Path.Combine(root, "Code",
             "content", "ArmyRtsContent.cs"));
-        Assert(content.Contains(
+        Assert(rtsContent.Contains(
                 "ArmyRtsControllerService.OwnsLiveActor(pActor)",
                 StringComparison.Ordinal),
             "the decision wrapper must resolve tactical ownership per actor");
@@ -109,6 +284,190 @@ internal static class ArmyRtsCombatHandoffRulesTests
 
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"));
+        string behaviours = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehArmyRtsMission.cs"));
+        int missionStart = behaviours.IndexOf(
+            "public sealed class BehArmyRtsMission",
+            StringComparison.Ordinal);
+        int sharedRoute = behaviours.IndexOf(
+            "TryStartCompleteSharedRoute(pActor)", missionStart,
+            StringComparison.Ordinal);
+        int missionTarget = behaviours.IndexOf(
+            "pActor.beh_tile_target = target", missionStart,
+            StringComparison.Ordinal);
+        Assert(sharedRoute >= 0 && missionTarget > sharedRoute,
+            "the release-version shared route is started before native tile movement");
+        string safetyPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ArmySafetyPatch.cs"));
+        string watchdog = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyStallWatchdogService.cs"));
+        int ensureJobsStart = controller.IndexOf(
+            "private static void EnsureJobs(", StringComparison.Ordinal);
+        int ensureJobsEnd = controller.IndexOf(
+            "private static void TrySubmitMemberObjectiveRoute(",
+            ensureJobsStart, StringComparison.Ordinal);
+        Assert(ensureJobsStart >= 0 && ensureJobsEnd > ensureJobsStart,
+            "RTS job ownership section must remain discoverable");
+        string ensureJobsBody = controller.Substring(ensureJobsStart,
+            ensureJobsEnd - ensureJobsStart);
+        int vanillaAttackStart = ensureJobsBody.IndexOf(
+            "if (UsesVanillaArmyMovement(pArmy, pMission))",
+            StringComparison.Ordinal);
+        int vanillaAttackEnd = ensureJobsBody.IndexOf(
+            "if (UsesVanillaRetreatMovement(pArmy, pMission))",
+            vanillaAttackStart, StringComparison.Ordinal);
+        string vanillaAttackBody = vanillaAttackStart >= 0 &&
+            vanillaAttackEnd > vanillaAttackStart
+            ? ensureJobsBody.Substring(vanillaAttackStart,
+                vanillaAttackEnd - vanillaAttackStart)
+            : string.Empty;
+        Assert(vanillaAttackBody.Contains("EnsureVanillaMarchJobs(",
+                StringComparison.Ordinal) &&
+            !vanillaAttackBody.Contains("ReleaseArmyActors(pArmy)",
+                StringComparison.Ordinal),
+            "strategic enemy-city movement must remain in military P0 until combat handoff");
+        Assert(ensureJobsBody.Contains("TryIssueVanillaCityAttackOrder(",
+                StringComparison.Ordinal),
+            "normal RTS missions must publish the locked target to vanilla AI");
+        Assert(ensureJobsBody.Contains("EnsureVanillaRetreatJobs(",
+                StringComparison.Ordinal),
+            "friendly retreat must use its dedicated vanilla-style job path");
+        Assert(ensureJobsBody.Contains("EnsureVanillaMarchJobs(",
+                StringComparison.Ordinal),
+            "non-attack RTS marches must use the native leader-and-follower path");
+        int customMovementStart = ensureJobsBody.IndexOf(
+            "private static void EnsureCustomMovementJobs(",
+            StringComparison.Ordinal);
+        string vanillaJobBody = customMovementStart >= 0
+            ? ensureJobsBody.Substring(0, customMovementStart)
+            : ensureJobsBody;
+        Assert(!vanillaJobBody.Contains("TrySubmitCaptainObjectiveRoute(",
+                StringComparison.Ordinal),
+            "normal RTS missions must not submit a custom captain route");
+        Assert(!vanillaJobBody.Contains("TrySubmitMemberObjectiveRoute(",
+                StringComparison.Ordinal),
+            "normal RTS missions must not submit custom follower routes");
+        Assert(!vanillaJobBody.Contains("ArmyRtsContent.FollowerJobId",
+                StringComparison.Ordinal),
+            "normal RTS missions must not install the custom follower job");
+        Assert(ensureJobsBody.Contains("ArmyRtsContent.VanillaFollowerJobId",
+                StringComparison.Ordinal) &&
+            ensureJobsBody.Contains("\"warrior_army_follow_leader\"",
+                StringComparison.Ordinal),
+            "native RTS marches install the original follower task for every soldier");
+        int nativeMarchStart = ensureJobsBody.IndexOf(
+            "private static void EnsureVanillaMarchJobs(",
+            StringComparison.Ordinal);
+        int nativeMarchEnd = ensureJobsBody.IndexOf(
+            "private static void EnsureVanillaRetreatJobs(",
+            nativeMarchStart, StringComparison.Ordinal);
+        string nativeMarchBody = nativeMarchStart >= 0 &&
+            nativeMarchEnd > nativeMarchStart
+            ? ensureJobsBody.Substring(nativeMarchStart,
+                nativeMarchEnd - nativeMarchStart)
+            : string.Empty;
+        Assert(nativeMarchBody.Contains(
+                "ArmyMilitaryMovementPriorityIndex.Register(",
+                StringComparison.Ordinal),
+            "native leader and follower jobs must register their actors in military P0");
+        Assert(!nativeMarchBody.Contains("ReleaseActor(captain)",
+                StringComparison.Ordinal) &&
+            nativeMarchBody.Contains("ArmyRtsContent.CaptainJobId",
+                StringComparison.Ordinal) &&
+            nativeMarchBody.Contains("ResolveCaptainTaskId",
+                StringComparison.Ordinal),
+            "an attack captain keeps the RTS captain job after rally and restores the release-version task chain");
+        int retreatJobsStart = ensureJobsBody.IndexOf(
+            "private static void EnsureVanillaRetreatJobs(",
+            StringComparison.Ordinal);
+        int retreatJobsEnd = ensureJobsBody.IndexOf(
+            "private static void EnsureCustomMovementJobs(",
+            retreatJobsStart, StringComparison.Ordinal);
+        string retreatJobsBody = retreatJobsStart >= 0 &&
+            retreatJobsEnd > retreatJobsStart
+            ? ensureJobsBody.Substring(retreatJobsStart,
+                retreatJobsEnd - retreatJobsStart)
+            : string.Empty;
+        Assert(!retreatJobsBody.Contains(
+                "ArmyRtsTransportService.ReleaseArmy",
+                StringComparison.Ordinal),
+            "retreat job repair must not cancel live vanilla taxi requests");
+        Assert(!watchdog.Contains("SampleFollowerRecovery(pArmyId",
+                StringComparison.Ordinal),
+            "the watchdog must not recover soldiers owned by vanilla follow-leader AI");
+        Assert(!controller.Contains(
+                "TrySubmitMemberObjectiveRoute(actor, pRuntime);",
+                StringComparison.Ordinal) ||
+            controller.Contains("private static void EnsureCustomMovementJobs(",
+                StringComparison.Ordinal),
+            "only the isolated legacy custom branch may retain per-soldier path submission");
+        Assert(rtsContent.Contains("RetreatCaptainJobId",
+                StringComparison.Ordinal) &&
+            rtsContent.Contains("new BehArmyRtsRetreatTarget()",
+                StringComparison.Ordinal) &&
+            rtsContent.Contains("limit_pathfinding_regions = 6",
+                StringComparison.Ordinal),
+            "retreat captain movement mirrors the vanilla leader path task");
+        Assert(rtsContent.Contains("RetreatFollowerJobId",
+                StringComparison.Ordinal) &&
+            rtsContent.Contains(
+                "job.addTask(\"warrior_army_follow_leader\")",
+                StringComparison.Ordinal),
+            "retreat soldiers run the unmodified vanilla follow-leader task");
+        Assert(safetyPatch.Contains(
+                "UsesVanillaFollowerMovement(pActor)",
+                StringComparison.Ordinal),
+            "the follower Harmony patch must not replace vanilla retreat following");
+        int retreatBehaviourStart = behaviours.IndexOf(
+            "public sealed class BehArmyRtsRetreatTarget",
+            StringComparison.Ordinal);
+        int retreatBehaviourEnd = behaviours.IndexOf(
+            "public sealed class BehArmyRtsFormation",
+            retreatBehaviourStart, StringComparison.Ordinal);
+        string retreatBehaviourBody = retreatBehaviourStart >= 0 &&
+            retreatBehaviourEnd > retreatBehaviourStart
+            ? behaviours.Substring(retreatBehaviourStart,
+                retreatBehaviourEnd - retreatBehaviourStart)
+            : string.Empty;
+        Assert(retreatBehaviourBody.Contains(
+                "TaxiManager.newRequest(actor, pTarget)",
+                StringComparison.Ordinal) &&
+            !retreatBehaviourBody.Contains(
+                "ArmyRtsTransportService.TryHandleActor",
+                StringComparison.Ordinal),
+            "cross-island retreat uses the vanilla taxi system");
+        Assert(controller.Contains(
+                "HasMilitaryTransportOwnership(pActor)",
+                StringComparison.Ordinal),
+            "RTS task repair must yield through the shared transport ownership predicate");
+        Assert(controller.Contains(
+                "jobId == ArmyRtsContent.RetreatFollowerJobId",
+                StringComparison.Ordinal),
+            "retreat follower jobs must be released when the mission ends");
+        int advanceStart = controller.IndexOf(
+            "private static void AdvanceRoute(", StringComparison.Ordinal);
+        int advanceEnd = controller.IndexOf(
+            "private static void LogStrategicRouteFailure(", advanceStart,
+            StringComparison.Ordinal);
+        Assert(advanceStart >= 0 && advanceEnd > advanceStart,
+            "RTS route advancement section must remain discoverable");
+        string advanceBody = controller.Substring(advanceStart,
+            advanceEnd - advanceStart);
+        Assert(advanceBody.Contains("TryIssueVanillaCityAttackOrder(",
+                StringComparison.Ordinal),
+            "route advancement must keep the vanilla city target published");
+        Assert(advanceBody.Contains(
+                "pMission.ProposalKind == ArmyRtsProposalKind.Attack",
+                StringComparison.Ordinal),
+            "only attacks may publish a vanilla city attack order");
+        Assert(!advanceBody.Contains("SubmitStrategicRoute(",
+                StringComparison.Ordinal),
+            "normal marching must not use the AW3 route provider");
+        Assert(!advanceBody.Contains("TryHandleActor(",
+                StringComparison.Ordinal),
+            "normal marching must not use the AW3 transport controller");
+        string retreat = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRetreatService.cs"));
         int territoryStart = controller.IndexOf(
             "private static bool IsInsideTargetTerritory(",
             StringComparison.Ordinal);
@@ -122,14 +481,293 @@ internal static class ArmyRtsCombatHandoffRulesTests
             territoryBody.Contains("neighboursAll", StringComparison.Ordinal) &&
             !territoryBody.Contains("pTarget.zones.Count", StringComparison.Ordinal),
             "target handoff checks border contact without scanning all city tiles");
-        Assert(controller.Contains(
-                "ArmyRtsWarPhase.VanillaCombat);\n            ArmyRouteProviderService.Cancel",
+        Assert(controller.Contains("CaptainCombatTaskId",
+                StringComparison.Ordinal) &&
+            controller.Contains("SetJob(captain, ArmyRtsContent.CaptainJobId",
                 StringComparison.Ordinal),
-            "field combat release must persist VanillaCombat ownership");
-        Assert(controller.Contains(
+            "field contact keeps the captain under RTS ownership with a dedicated combat task");
+        string content = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "ArmyRtsContent.cs"));
+        Assert(content.Contains("CaptainSiegeAdvanceTaskId",
+                StringComparison.Ordinal) &&
+            content.Contains("new BehArmyRtsSiegeAdvance()",
+                StringComparison.Ordinal) &&
+            content.Contains("new BehGoToTileTarget", StringComparison.Ordinal) &&
+            controller.Contains("SetCaptainTacticalTask", StringComparison.Ordinal),
+            "target-city combat advances through the original tile-follow behaviour until a local RTS combat target appears");
+        Assert(!controller.Contains(
                 "!runtime.FieldCombatReleased &&\n                TryHandleWarCombatOwnership",
                 StringComparison.Ordinal),
-            "city handoff must not immediately reclaim field-combat actors");
+            "the lifecycle gate must evaluate released combat armies instead of bypassing their lock");
+        Assert(controller.Contains("currentCity == target", StringComparison.Ordinal),
+            "entering the target city must hand off before a defender scan");
+        int releaseCaseStart = controller.IndexOf(
+            "case ArmyRtsCombatControlDecision.ReleaseToVanilla:",
+            StringComparison.Ordinal);
+        int keepVanillaCaseStart = controller.IndexOf(
+            "case ArmyRtsCombatControlDecision.KeepVanillaControl:",
+            releaseCaseStart, StringComparison.Ordinal);
+        string releaseCaseBody = releaseCaseStart >= 0 &&
+            keepVanillaCaseStart > releaseCaseStart
+            ? controller.Substring(releaseCaseStart,
+                keepVanillaCaseStart - releaseCaseStart)
+            : string.Empty;
+        Assert(releaseCaseBody.Contains("bool attackOrderPublished",
+                StringComparison.Ordinal) &&
+            releaseCaseBody.Contains(
+                "TryIssueVanillaCityAttackOrder(",
+                StringComparison.Ordinal) &&
+            releaseCaseBody.Contains(
+                "EnterTargetCitySiegeCombat(pArmy, pRecord,",
+                StringComparison.Ordinal) &&
+            !releaseCaseBody.Contains("EnterFieldCombat(pArmy, pRuntime)",
+                StringComparison.Ordinal),
+            "target-city entry enters a city-scoped RTS siege task rather than field or vanilla combat");
+        Assert(content.Contains("SiegeCombatTaskId", StringComparison.Ordinal) &&
+               content.Contains("new BehArmyRtsSiegeCombat()",
+                   StringComparison.Ordinal) &&
+               controller.Contains("SiegeCombatActive", StringComparison.Ordinal) &&
+               controller.Contains("SiegeTargetActorId", StringComparison.Ordinal),
+            "city siege has an explicit task and cached target state separate from field combat");
+        string behaviour = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
+        Assert(behaviour.Contains("FindSiegeCombatTarget", StringComparison.Ordinal) &&
+               behaviour.Contains("IsValidSiegeCombatTarget", StringComparison.Ordinal) &&
+               controller.Contains("FindTargetCitySiegeTarget", StringComparison.Ordinal),
+            "siege tasks select only cached hostile targets from the target city");
+        Assert(retreat.Contains(
+                "PrepareForRetreatSelection(pArmy)", StringComparison.Ordinal),
+            "retreat selection must cancel the old route before async work");
+        Assert(controller.Contains(
+                "runtime.NoSafeRetreat)", StringComparison.Ordinal),
+            "a no-safe-city army must not use the old mission endpoint");
+        int retreatTargetStart = controller.IndexOf(
+            "public static bool TryGetRetreatTarget(Actor pActor,",
+            StringComparison.Ordinal);
+        int retreatTargetEnd = controller.IndexOf(
+            "public static bool TrySetFormationAnchor(", retreatTargetStart,
+            StringComparison.Ordinal);
+        string retreatTargetBody = retreatTargetStart >= 0 &&
+            retreatTargetEnd > retreatTargetStart
+            ? controller.Substring(retreatTargetStart,
+                retreatTargetEnd - retreatTargetStart)
+            : string.Empty;
+        Assert(retreatTargetBody.Contains(
+                   "runtime.RetreatSelectionPending || runtime.NoSafeRetreat",
+                   StringComparison.Ordinal),
+            "the vanilla retreat selector must not reuse a stale city while retreat selection is pending or unavailable");
+
+        string postRunner = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        string movementDiagnostic = File.ReadAllText(Path.Combine(root,
+            "Code", "core", "lineage", "ArmyRtsMovementDiagnostic.cs"));
+        Assert(postRunner.Contains("TryPrepareMilitaryP0Actor(actor)",
+                StringComparison.Ordinal),
+            "military P0 prepares strategic state before running native actor stages");
+        int p0Start = postRunner.IndexOf(
+            "private void ProcessMilitaryP0Actor(",
+            StringComparison.Ordinal);
+        int p0End = postRunner.IndexOf(
+            "private static bool HasLiveMilitaryP0Objective", p0Start,
+            StringComparison.Ordinal);
+        string p0Body = p0Start >= 0 && p0End > p0Start
+            ? postRunner.Substring(p0Start, p0End - p0Start)
+            : string.Empty;
+        int currentEnemy = p0Body.IndexOf(
+            "actor.b2_checkCurrentEnemyTarget(cycleElapsed)",
+            StringComparison.Ordinal);
+        int findEnemy = p0Body.IndexOf(
+            "actor.b3_findEnemyTarget(cycleElapsed)",
+            StringComparison.Ordinal);
+        int verifyTask = p0Body.IndexOf(
+            "actor.b4_checkTaskVerifier(cycleElapsed)",
+            StringComparison.Ordinal);
+        int pathMovement = p0Body.IndexOf(
+            "actor.b5_checkPathMovement(cycleElapsed)",
+            StringComparison.Ordinal);
+        int updateAi = p0Body.IndexOf(
+            "actor.b6_updateAI(cycleElapsed)",
+            StringComparison.Ordinal);
+        int smoothMovement = p0Body.IndexOf(
+            "actor.u10_checkSmoothMovement(cycleElapsed)",
+            StringComparison.Ordinal);
+        Assert(currentEnemy >= 0 && findEnemy > currentEnemy &&
+               verifyTask > findEnemy && pathMovement > verifyTask &&
+               updateAi > pathMovement && smoothMovement > updateAi,
+            "military P0 preserves the original actor pipeline order");
+        Assert(!p0Body.Contains("Selector.execute", StringComparison.Ordinal) &&
+               !p0Body.Contains("actor.goTo(", StringComparison.Ordinal) &&
+               !p0Body.Contains("actor.updatePathMovement(",
+                   StringComparison.Ordinal) &&
+               !p0Body.Contains("actor.updateMovement(",
+                   StringComparison.Ordinal),
+            "military P0 never substitutes manual target selection or movement");
+        Assert(p0Body.Contains(
+                   "ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId)",
+                   StringComparison.Ordinal),
+            "native P0 actors are skipped by later path and smooth stages");
+        Assert(p0Body.Contains("RunMilitaryP0Combat(",
+                   StringComparison.Ordinal) &&
+               p0Body.Contains("\"combat_p0\"", StringComparison.Ordinal),
+            "native enemy acquisition keeps actors in the military P0 combat lane");
+        int combatMethodStart = postRunner.IndexOf(
+            "private static void RunMilitaryP0Combat(",
+            StringComparison.Ordinal);
+        int combatMethodEnd = postRunner.IndexOf(
+            "private static bool YieldMilitaryP0Ownership", combatMethodStart,
+            StringComparison.Ordinal);
+        string combatMethodBody = combatMethodStart >= 0 &&
+            combatMethodEnd > combatMethodStart
+            ? postRunner.Substring(combatMethodStart,
+                combatMethodEnd - combatMethodStart)
+            : string.Empty;
+        Assert(combatMethodBody.Contains(
+                   "actor.b2_checkCurrentEnemyTarget(cycleElapsed)",
+                   StringComparison.Ordinal) &&
+               combatMethodBody.Contains(
+                   "ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId)",
+                   StringComparison.Ordinal) &&
+               !combatMethodBody.Contains(
+                   "ArmyMilitaryMovementPriorityIndex.Unregister(actorId)",
+                   StringComparison.Ordinal),
+            "combat P0 runs vanilla attacks without dropping military priority");
+        int liveObjectiveStart = postRunner.IndexOf(
+            "private static bool HasLiveMilitaryP0Objective(",
+            StringComparison.Ordinal);
+        int liveObjectiveEnd = postRunner.IndexOf(
+            "public bool WaitingForBackgroundWork", liveObjectiveStart,
+            StringComparison.Ordinal);
+        string liveObjectiveBody = liveObjectiveStart >= 0 &&
+            liveObjectiveEnd > liveObjectiveStart
+            ? postRunner.Substring(liveObjectiveStart,
+                liveObjectiveEnd - liveObjectiveStart)
+            : string.Empty;
+        Assert(liveObjectiveBody.Contains("? militaryOwnerActive",
+                StringComparison.Ordinal),
+            "an RTS army keeps P0 through temporary lulls in vanilla combat");
+        Assert(movementDiagnostic.Contains(
+                    "ArmyRtsP0Rules.ShouldTraceDiagnosticActor(",
+                    StringComparison.Ordinal),
+            "movement diagnostics must sample ordinary followers before building log state");
+        Assert(movementDiagnostic.Contains(
+                    "ArmyRtsP0Rules.ShouldWriteDiagnosticStage(",
+                    StringComparison.Ordinal) &&
+               movementDiagnostic.Contains(
+                    "ArmyRtsP0Rules.ShouldRateLimitDiagnostic(",
+                    StringComparison.Ordinal),
+            "movement diagnostics suppress normal stages and rate limit repeated state");
+        Assert(p0Body.Contains("\"native_enemy_check\"",
+                   StringComparison.Ordinal) &&
+               p0Body.Contains("\"native_ai\"",
+                   StringComparison.Ordinal) &&
+               postRunner.Contains("\"p0_chunk_begin\"",
+                   StringComparison.Ordinal) &&
+               p0Body.Contains("\"transport_yield\"",
+                   StringComparison.Ordinal) &&
+               p0Body.Contains("\"combat_p0\"",
+                   StringComparison.Ordinal),
+            "military P0 diagnostics expose chunk, native AI, and combat boundaries");
+        string globalPathPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_GlobalPathfindingPatch.cs"));
+        Assert(globalPathPatch.Contains(
+                   "ShouldUseNativeMilitaryPath(__instance)",
+                   StringComparison.Ordinal) &&
+               globalPathPatch.Contains(
+                   "AWPathMovementBridge.Cancel(__instance",
+                   StringComparison.Ordinal),
+            "RTS armies and Royal Guards bypass the AW3 actor path bridge before native goTo");
+        Assert(p0Body.Contains("actor.b3_findEnemyTarget(cycleElapsed)",
+                StringComparison.Ordinal) &&
+            p0Body.Contains("actor.b6_updateAI(cycleElapsed)",
+                StringComparison.Ordinal),
+            "the large scheduler adapter invokes the original actor pipeline instead of selector instances");
+        Assert(controller.Contains(
+                "TryIssueVanillaCityAttackOrder(pActor.city,",
+                StringComparison.Ordinal) &&
+            controller.Contains(
+                "private static bool TryIssueVanillaCityAttackOrder(City pSource,",
+                StringComparison.Ordinal),
+            "the native captain selector must receive its attack zone on the actor city it reads");
+        int nativePrimeStart = controller.IndexOf(
+            "internal static bool TryPrepareMilitaryP0Actor(Actor pActor)",
+            StringComparison.Ordinal);
+        int nativePrimeEnd = controller.IndexOf(
+            "private static bool IsMissionTargetEnemy(", nativePrimeStart,
+            StringComparison.Ordinal);
+        string nativePrimeBody = nativePrimeStart >= 0 &&
+            nativePrimeEnd > nativePrimeStart
+            ? controller.Substring(nativePrimeStart,
+                nativePrimeEnd - nativePrimeStart)
+            : string.Empty;
+        int forcedTransportCall = nativePrimeBody.IndexOf(
+            "ArmyRtsTransportService.TryHandleActor(",
+            StringComparison.Ordinal);
+        Assert(forcedTransportCall >= 0 &&
+               nativePrimeBody.Contains("pForceTransport: true",
+                   StringComparison.Ordinal),
+            "cross-island attack can enter forced transport before native AI movement");
+        Assert(nativePrimeBody.Contains("\"prepare_enter\"",
+                   StringComparison.Ordinal) &&
+               nativePrimeBody.Contains("\"transport_check\"",
+                   StringComparison.Ordinal) &&
+               nativePrimeBody.Contains("\"transport_result\"",
+                   StringComparison.Ordinal),
+            "RTS preparation diagnostics expose strategic and transport state");
+        Assert(!nativePrimeBody.Contains("Selector.execute",
+                   StringComparison.Ordinal) &&
+               !nativePrimeBody.Contains("pActor.goTo(",
+                   StringComparison.Ordinal),
+            "RTS preparation publishes orders without manually moving actors");
+        Assert(controller.Contains(
+                   "internal static bool HasMilitaryTransportOwnership(Actor actor)",
+                   StringComparison.Ordinal) &&
+               controller.Contains(
+                   "ArmyMilitaryMovementPriorityRules.ShouldYieldToTransport(",
+                   StringComparison.Ordinal) &&
+               controller.Contains(
+                   "ArmyMilitaryMovementPriorityIndex.HasVanillaTaxiOwnership(",
+                   StringComparison.Ordinal) &&
+               controller.Contains(
+                   "internal static bool RefreshMilitaryTransportOwnership(Actor actor)",
+                   StringComparison.Ordinal) &&
+               controller.Contains(
+                   "TaxiManager.getRequestForActor(actor) != null",
+                   StringComparison.Ordinal),
+            "RTS uses the cycle taxi index normally and scans only when native AI may have created a request");
+        Assert(postRunner.Contains(
+                   "RefreshMilitaryTransportOwnership(actor)",
+                   StringComparison.Ordinal),
+            "the native AI boundary incrementally records a newly created vanilla taxi request");
+        Assert(!controller.Contains("NativeAttackTargetSelector",
+                   StringComparison.Ordinal) &&
+               !controller.Contains("NativeFollowerTargetSelector",
+                   StringComparison.Ordinal) &&
+               !controller.Contains("NativeMissionTargetSelector",
+                   StringComparison.Ordinal) &&
+               !controller.Contains("NativeRetreatTargetSelector",
+                   StringComparison.Ordinal),
+            "the controller no longer retains manual native-selector instances");
+        Assert(controller.Contains(
+                   "ClearNativeMovementForMissionReplacement(pArmy)",
+                   StringComparison.Ordinal) &&
+               controller.Contains(
+                   "AWPathFailureReason.CancelledByNewRequest",
+                   StringComparison.Ordinal),
+            "a real mission replacement cancels stale native and asynchronous path ownership");
+        int reassertStart = controller.IndexOf(
+            "public static void ReassertCaptainCommand(",
+            StringComparison.Ordinal);
+        int reassertEnd = controller.IndexOf(
+            "public static void RecoverFormationMember(", reassertStart,
+            StringComparison.Ordinal);
+        string reassertBody = reassertStart >= 0 && reassertEnd > reassertStart
+            ? controller.Substring(reassertStart, reassertEnd - reassertStart)
+            : string.Empty;
+        Assert(!reassertBody.Contains("ReleaseActor(captain)",
+                StringComparison.Ordinal) &&
+            reassertBody.Contains("ArmyRtsContent.CaptainJobId",
+                StringComparison.Ordinal),
+            "attack captain stall recovery must reassert the RTS captain job instead of releasing the actor");
     }
 
     // AWPerformanceSettings.SwitchArmyRts changes the configuration while a

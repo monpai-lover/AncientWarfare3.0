@@ -109,5 +109,41 @@ internal static class ActorKingdomSafetyRulesTests
                 actorAssetExists: true,
                 tileExists: false),
             "a unit without a current tile must be skipped by minimap rendering");
+
+        Equal(true, ActorKingdomSafetyRules.ShouldUseFallbackKingdomColor(
+                kingdomObjectExists: true,
+                kingdomDataExists: true,
+                kingdomAssetExists: false),
+            "a destroyed kingdom must use a stable fallback color instead of " +
+            "throwing from the parallel renderer");
+        Equal(false, ActorKingdomSafetyRules.ShouldUseFallbackKingdomColor(
+                kingdomObjectExists: true,
+                kingdomDataExists: true,
+                kingdomAssetExists: true),
+            "a live kingdom must retain its normal color path");
+        Equal(false, ActorKingdomSafetyRules.ShouldUseFallbackKingdomColor(
+                kingdomObjectExists: false,
+                kingdomDataExists: false,
+                kingdomAssetExists: false),
+            "a null receiver is not a recoverable kingdom color request");
+        Equal(true, ActorKingdomSafetyRules.ShouldUseFallbackKingdomColor(
+                kingdomObjectExists: true,
+                kingdomDataExists: false,
+                kingdomAssetExists: true),
+            "a kingdom with missing data must not enter vanilla color lookup " +
+            "from a parallel renderer");
+        Equal(true,
+            ActorKingdomSafetyRules.ShouldSuppressKingdomDependentPresentation(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomObjectExists: false),
+            "a kingdomless actor must skip presentation paths that would " +
+            "dereference its kingdom in a render worker");
+        Equal(false,
+            ActorKingdomSafetyRules.ShouldSuppressKingdomDependentPresentation(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomObjectExists: true),
+            "a fully initialized actor keeps normal presentation");
     }
 }

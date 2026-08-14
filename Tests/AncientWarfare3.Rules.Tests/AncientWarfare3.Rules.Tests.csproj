@@ -64,6 +64,7 @@
     <Compile Include="ActorScalePerformanceRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\ActorScalePerformanceRules.cs" Link="Production\ActorScalePerformanceRules.cs" />
     <Compile Include="PathMovementExecutorRulesTests.cs.txt" />
+    <Compile Include="PathMovementSafetyRulesTests.cs.txt" />
     <Compile Include="RuntimePerformanceBudgetRulesTests.cs.txt" />
     <Compile Include="MonthlyAuthorityWorkQueueTests.cs.txt" />
     <Compile Include="CourtReplacementSqlTests.cs.txt" />
@@ -235,6 +236,10 @@
     <Compile Include="PreparationRecruitmentProtectionRulesTests.cs.txt" />
     <Compile Include="ArmyRtsWarLifecycleStateTests.cs.txt" />
     <Compile Include="ArmyRtsCombatHandoffRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsCaptainCombatRulesTests.cs.txt" />
+    <Compile Include="RoyalGuardTaskRecoveryRulesTests.cs.txt" />
+    <Compile Include="ArmyNativeRouteLockRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsEndToEndFlowTests.cs.txt" />
     <Compile Include="ArmyRtsSyntheticRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAssignmentReconciliationRulesTests.cs.txt" />
     <Compile Include="ArmyMissionPersistenceRulesTests.cs.txt" />
@@ -464,6 +469,7 @@
     <Compile Include="..\..\Code\core\lineage\ArmyLogisticsService.cs" Link="Production\ArmyLogisticsService.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsObjectiveRules.cs" Link="Production\ArmyRtsObjectiveRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsModels.cs" Link="Production\ArmyRtsModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsMissionLockRules.cs" Link="Production\ArmyRtsMissionLockRules.cs" />
     <Compile Include="..\..\Code\core\lineage\KingdomWarDirectorRules.cs" Link="Production\KingdomWarDirectorRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRouteChoiceRules.cs" Link="Production\ArmyRtsRouteChoiceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsAttackSpeechBubbleRules.cs" Link="Production\ArmyRtsAttackSpeechBubbleRules.cs" />
@@ -485,6 +491,7 @@
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRuntimeMode.cs" Link="Production\ArmyRtsRuntimeMode.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsTaskOwnershipRules.cs" Link="Production\ArmyRtsTaskOwnershipRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsFieldCombatRules.cs" Link="Production\ArmyRtsFieldCombatRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsCaptainCombatRules.cs" Link="Production\ArmyRtsCaptainCombatRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyStallWatchdogRules.cs" Link="Production\ArmyStallWatchdogRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyFormationRules.cs" Link="Production\ArmyFormationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRetreatRules.cs" Link="Production\ArmyRetreatRules.cs" />
@@ -538,6 +545,7 @@
     <Compile Include="..\..\Code\core\court\CourtInfluenceRules.cs" Link="Production\CourtInfluenceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalGuardMaintenanceRules.cs" Link="Production\RoyalGuardMaintenanceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalGuardActionRules.cs" Link="Production\RoyalGuardActionRules.cs" />
+    <Compile Include="..\..\Code\core\performance\ArmyMilitaryMovementPriorityRules.cs" Link="Production\ArmyMilitaryMovementPriorityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\StandingArmyRules.cs" Link="Production\StandingArmyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SoldierRetirementRules.cs" Link="Production\SoldierRetirementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActiveMilitaryLifecycleRules.cs" Link="Production\ActiveMilitaryLifecycleRules.cs" />
@@ -546,6 +554,8 @@
     <Compile Include="..\..\Code\core\lineage\WarArmyReturnRules.cs" Link="Production\WarArmyReturnRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarArmyReturnQueueCore.cs" Link="Production\WarArmyReturnQueueCore.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsControllerService.cs" Link="Production\ArmyRtsControllerService.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyNativeRouteLock.cs" Link="Production\ArmyNativeRouteLock.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyNativeRouteLockRules.cs" Link="Production\ArmyNativeRouteLockRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarRuntimeDisplayRules.cs" Link="Production\WarRuntimeDisplayRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MilitaryRecruitmentScope.cs" Link="Production\MilitaryRecruitmentScope.cs" />
     <Compile Include="..\..\Code\core\lineage\KingdomMilitaryReadinessRules.cs" Link="Production\KingdomMilitaryReadinessRules.cs" />

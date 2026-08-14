@@ -21,6 +21,56 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.getColor))]
+        private static bool KingdomGetColor_Prefix(Kingdom __instance,
+            ref ColorAsset __result)
+        {
+            if (!ActorKingdomSafetyRules.ShouldUseFallbackKingdomColor(
+                    __instance != null, __instance?.data != null,
+                    __instance?.asset != null))
+                return true;
+
+            ColorAsset fallback = AssetManager.kingdom_colors_library?.list?
+                .Count > 0
+                ? AssetManager.kingdom_colors_library.getColorByIndex(0)
+                : null;
+            if (fallback == null) return true;
+            __result = fallback;
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.checkHasRenderedItem))]
+        private static bool ActorRenderedItem_Prefix(Actor __instance,
+            ref bool __result)
+        {
+            if (!ActorKingdomSafetyRules.
+                    ShouldSuppressKingdomDependentPresentation(
+                        __instance?.data != null, __instance?.asset != null,
+                        __instance?.kingdom != null)) return true;
+            __result = false;
+            ActorKingdomSafetyService.QueueRepair(__instance);
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.hasColoredSprite))]
+        private static bool ActorColoredSprite_Prefix(Actor __instance,
+            ref bool __result)
+        {
+            if (!ActorKingdomSafetyRules.
+                    ShouldSuppressKingdomDependentPresentation(
+                        __instance?.data != null, __instance?.asset != null,
+                        __instance?.kingdom != null)) return true;
+            __result = false;
+            ActorKingdomSafetyService.QueueRepair(__instance);
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(Actor), nameof(Actor.isAllowedToLookForEnemies))]
         private static bool ActorEnemyCheck_Prefix(Actor __instance,
             ref bool __result)

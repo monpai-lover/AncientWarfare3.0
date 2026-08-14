@@ -43,6 +43,22 @@ internal static class ArmyRtsAbstractSupplyRulesTests
         Equal(true, ArmyRtsAbstractSupplyRules.CanConsume(
                 eligible: true, hasSuitableFood: true, hasFoodItem: true),
             "one resolved suitable ration may be consumed");
+        Equal(true, ArmyRtsAbstractSupplyRules.ShouldRunScheduledCheck(
+                actorAlive: true, activeMilitaryOwner: true,
+                hungry: true, currentTime: 10d, nextAllowedTime: 9d),
+            "a hungry active military actor receives proactive abstract supply");
+        Equal(false, ArmyRtsAbstractSupplyRules.ShouldRunScheduledCheck(
+                actorAlive: true, activeMilitaryOwner: true,
+                hungry: false, currentTime: 10d, nextAllowedTime: 9d),
+            "a fed soldier does not consume city food");
+        Equal(false, ArmyRtsAbstractSupplyRules.ShouldRunScheduledCheck(
+                actorAlive: true, activeMilitaryOwner: true,
+                hungry: true, currentTime: 10d, nextAllowedTime: 11d),
+            "the proactive supply check is rate limited");
+        Equal(false, ArmyRtsAbstractSupplyRules.ShouldRunScheduledCheck(
+                actorAlive: true, activeMilitaryOwner: false,
+                hungry: true, currentTime: 10d, nextAllowedTime: 9d),
+            "ordinary hungry actors cannot use military abstract supply");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

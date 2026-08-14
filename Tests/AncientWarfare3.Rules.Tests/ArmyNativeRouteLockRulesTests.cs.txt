@@ -1,0 +1,46 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyNativeRouteLockRulesTests
+{
+    public static void Run()
+    {
+        Assert(ArmyNativeRouteLockRules.ShouldReuse(
+            locked: true, targetUnchanged: true, endpointUnchanged: true,
+            captainSame: true, explicitFailure: false),
+            "an unchanged native route remains locked");
+        Assert(!ArmyNativeRouteLockRules.ShouldReuse(
+            locked: true, targetUnchanged: true, endpointUnchanged: true,
+            captainSame: true, explicitFailure: true),
+            "an explicit native failure invalidates the route");
+        Assert(!ArmyNativeRouteLockRules.ShouldReuse(
+            locked: true, targetUnchanged: false, endpointUnchanged: true,
+            captainSame: true, explicitFailure: false),
+            "a target replacement invalidates the route");
+        Assert(ArmyNativeRouteLockRules.ShouldInvalidate(
+            targetChanged: false, transportCompleted: true,
+            routeFailed: false, captainReplaced: false,
+            missionEnded: false, worldCleared: false),
+            "transport completion invalidates the land route");
+        var route = new ArmyNativeRouteLock();
+        int[] source = { 11, 22, 33 };
+        route.Capture(7L, 9L, 33, 17L, source, 0);
+        source[0] = 99;
+        Assert(route.TileIds[0] == 11,
+            "the locked route copies native path values");
+        route.AdvanceTo(1);
+        Assert(route.Cursor == 1 && !route.Completed,
+            "route progress advances without replacing the lock");
+        route.MarkMovementInterrupted();
+        Assert(route.NeedsNativeResume,
+            "combat interruption requests one native movement resume");
+        route.ObserveNativeResume();
+        Assert(!route.NeedsNativeResume,
+            "observing a resumed native path clears the resume marker");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

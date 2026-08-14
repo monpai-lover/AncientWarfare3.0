@@ -117,6 +117,34 @@ namespace AncientWarfare3.core.presentation
                 postureMask);
         }
 
+        public static IReadOnlyList<int> SelectRemainingPathIndices(
+            int pPathCount, int pCurrentIndex, int pMaximumPoints)
+        {
+            int count = Math.Max(0, pPathCount);
+            int start = Math.Max(0, Math.Min(count, pCurrentIndex));
+            int remaining = count - start;
+            int maximum = Math.Max(0, pMaximumPoints);
+            if (remaining == 0 || maximum == 0) return Array.Empty<int>();
+            if (remaining <= maximum)
+            {
+                var exact = new int[remaining];
+                for (int i = 0; i < remaining; i++) exact[i] = start + i;
+                return exact;
+            }
+            if (maximum == 1) return new[] { start };
+            var sampled = new int[maximum];
+            long span = remaining - 1L;
+            long divisor = maximum - 1L;
+            for (int i = 0; i < maximum; i++)
+                sampled[i] = start + (int)(i * span / divisor);
+            return sampled;
+        }
+
+        public static bool ShouldPreferLockedRoute(bool hasLockedRoute)
+        {
+            return hasLockedRoute;
+        }
+
         public static ulong Fingerprint(ArmyRtsPlanSnapshot pSnapshot)
         {
             if (pSnapshot == null) return 0UL;
@@ -187,6 +215,12 @@ namespace AncientWarfare3.core.presentation
                 Add(ref hash, army.TransportActive);
                 Add(ref hash, army.PlayerOrder);
                 Add(ref hash, army.Stalled);
+                Add(ref hash, army.ActualPath.Count);
+                for (int i = 0; i < army.ActualPath.Count; i++)
+                {
+                    Add(ref hash, army.ActualPath[i].X);
+                    Add(ref hash, army.ActualPath[i].Y);
+                }
             }
 
             var fronts = new List<ArmyRtsPlanFront>(pSnapshot.Fronts);

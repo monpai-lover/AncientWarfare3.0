@@ -27,6 +27,7 @@ namespace AncientWarfare3.ai.behaviours.actor
                 return BehResult.RepeatStep;
             }
 
+            RoyalGuardService.ReleaseFollowPathForCombat(pActor);
             pActor.beh_actor_target = target;
             return BehResult.Continue;
         }

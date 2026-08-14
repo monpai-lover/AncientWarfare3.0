@@ -51,8 +51,6 @@ namespace AncientWarfare3.content
             });
             job.addTask(TASK_PROTECT_KING);
             job.addTask(TASK_FOLLOW_KING);
-            job.addTask("wait");
-            job.addTask("check_if_stuck_on_small_land");
         }
 
         private static void RegisterTasks()
@@ -86,7 +84,10 @@ namespace AncientWarfare3.content
                 });
                 follow.setIcon("ui/Icons/iconLoyalty");
                 follow.addBeh(new BehRoyalGuardFollowKing());
-                follow.addBeh(new BehGoToTileTarget());
+                follow.addBeh(new BehGoToTileTarget
+                {
+                    limit_pathfinding_regions = 6
+                });
             }
         }
     }

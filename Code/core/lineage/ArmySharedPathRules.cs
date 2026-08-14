@@ -264,6 +264,14 @@ namespace AncientWarfare3.core.lineage
             return x <= 1 && y <= 1 && x + y > 0;
         }
 
+        public static bool IsProviderStepSpatiallyValid(
+            bool hasPreviousTile, bool transportStep,
+            int deltaX, int deltaY)
+        {
+            return transportStep || hasPreviousTile &&
+                   AreRouteTilesAdjacent(deltaX, deltaY);
+        }
+
         public static bool ShouldAppendAdjacentProviderStep(
             bool providerStepIsAdjacent, bool providerStepValidated)
         {

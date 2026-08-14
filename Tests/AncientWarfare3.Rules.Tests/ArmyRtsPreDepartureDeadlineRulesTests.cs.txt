@@ -10,7 +10,7 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
         MissionStrengthSurvivesMissingAnchorsAndCasualties();
         ReplenishmentBypassCannotLeaveTheReplenishmentState();
         UnderstrengthArmiesRetryTheirReplenishmentRequest();
-        ForceDepartureRetainsMissingEscortAfterDeadline();
+        ForceDepartureReleasesMissingEscortAfterDeadline();
         ForceDeploymentRequiresEscortQuorum();
         CasualtiesCannotHoldAnArmyInStagingForever();
         EscortQuorumComparesTheSamePopulation();
@@ -28,11 +28,11 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
                 minimumForceReady: true, captainPresent: true,
                 issuedWorldTime: 100d, currentWorldTime: 219.9d),
             "rally must retain its readiness checks before two years");
-        Assert(!ArmyRtsRules.ShouldForcePreDeparture(
+        Assert(ArmyRtsRules.ShouldForcePreDeparture(
                 authoritative: true, state: ArmyRtsState.Rally,
                 minimumForceReady: true, captainPresent: true,
                 issuedWorldTime: 100d, currentWorldTime: 220d),
-            "the legacy timeout overload cannot bypass escort readiness");
+            "the timeout releases an operational army when escort assembly stalls");
         Assert(ArmyRtsRules.ShouldForcePreDeparture(
                 authoritative: true, state: ArmyRtsState.Replenish,
                 minimumForceReady: true, captainPresent: true,
@@ -92,13 +92,13 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
             "a depleted army has not recovered its departure strength");
         Assert(ArmyLogisticsRules.HasMinimumOperationalForce(30),
             "a 30-strong remnant is still an operational force");
-        Assert(!ArmyRtsRules.ShouldForcePreDeparture(
+        Assert(ArmyRtsRules.ShouldForcePreDeparture(
                 authoritative: true, state: ArmyRtsState.Rally,
                 minimumForceReady: ArmyLogisticsRules.
                     HasMinimumOperationalForce(30),
                 captainPresent: true,
                 issuedWorldTime: 100d, currentWorldTime: 220d),
-            "an operational remnant without escort remains in staging");
+            "an operational remnant leaves staging after the bounded wait");
         Assert(!ArmyRtsRules.ShouldForcePreDeparture(
                 authoritative: true, state: ArmyRtsState.Rally,
                 minimumForceReady: ArmyLogisticsRules.
@@ -398,7 +398,7 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
             "an army already at the deployment quorum must not repeatedly enqueue replacement work");
     }
 
-    private static void ForceDepartureRetainsMissingEscortAfterDeadline()
+    private static void ForceDepartureReleasesMissingEscortAfterDeadline()
     {
         MethodInfo method = typeof(ArmyRtsRules).GetMethod(
             "ShouldForcePreDeparture", new[]
@@ -417,8 +417,8 @@ internal static class ArmyRtsPreDepartureDeadlineRulesTests
         Assert(!(bool)method.Invoke(null, common),
             "Rally still requires normal readiness before its deadline");
         common[6] = 220d;
-        Assert(!(bool)method.Invoke(null, common),
-            "expired Rally retains a captain whose follower quorum is broken");
+        Assert((bool)method.Invoke(null, common),
+            "expired Rally releases an operational captain from a broken follower quorum");
     }
 
     private static void ForceDeploymentRequiresEscortQuorum()

@@ -140,20 +140,36 @@ namespace AncientWarfare3.core.presentation
                 ArmyRtsPlanArrowStyle style = ArmyRtsPlanRules.ArrowStyle(
                     army);
                 byte color = Index(ColorFor(style));
-                bool dashed = style == ArmyRtsPlanArrowStyle.Transport ||
-                              style == ArmyRtsPlanArrowStyle.Redeploy;
                 int thickness = style == ArmyRtsPlanArrowStyle.Recovery
                     ? 2
                     : 1;
-                if (anchor != captain)
+                ArmyRtsPlanPoint routeCursor = captain;
+                ArmyRtsPlanPoint arrowStart = captain;
+                for (int pathIndex = 0;
+                     pathIndex < army.ActualPath.Count; pathIndex++)
+                {
+                    ArmyRtsPlanPoint point = pCanvas.ProjectPoint(
+                        army.ActualPath[pathIndex]);
+                    if (point == routeCursor) continue;
                     DrawLine(pPixels, pCanvas.Width, pCanvas.Height,
-                        captain, anchor, color, thickness, dashed);
+                        routeCursor, point, color, thickness, false);
+                    arrowStart = routeCursor;
+                    routeCursor = point;
+                }
+                if (anchor != routeCursor)
+                {
+                    DrawLine(pPixels, pCanvas.Width, pCanvas.Height,
+                        routeCursor, anchor, color, thickness, true);
+                    arrowStart = routeCursor;
+                }
                 if (target != anchor)
+                {
                     DrawLine(pPixels, pCanvas.Width, pCanvas.Height,
-                        anchor, target, color, thickness, dashed);
+                        anchor, target, color, thickness, true);
+                    arrowStart = anchor;
+                }
                 DrawArrowHead(pPixels, pCanvas.Width, pCanvas.Height,
-                    target != anchor ? anchor : captain, target, color,
-                    thickness);
+                    arrowStart, target, color, thickness);
                 DrawMarker(pPixels, pCanvas.Width, pCanvas.Height, captain,
                     color);
                 if (army.Stalled)

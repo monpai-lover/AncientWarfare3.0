@@ -15,9 +15,36 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool ShouldEnqueueCaptainRecovery(bool armyValid,
-            bool actorWasCaptain, bool missionActive)
+            bool actorWasCaptain, bool missionActive,
+            bool wartimeEmergency, bool royalGuard)
         {
-            return armyValid && actorWasCaptain && missionActive;
+            return armyValid && actorWasCaptain && !royalGuard &&
+                   (missionActive || wartimeEmergency);
+        }
+
+        public static bool ShouldEnqueueCaptainVacancy(bool armyValid,
+            long previousCaptainId, long currentCaptainId,
+            bool missionActive, bool wartimeEmergency, bool royalGuard,
+            bool disposalScope)
+        {
+            return armyValid && previousCaptainId >= 0L &&
+                   currentCaptainId < 0L && !royalGuard && !disposalScope &&
+                   (missionActive || wartimeEmergency);
+        }
+
+        public static bool ShouldRetryCaptainRecovery(bool armyValid,
+            bool captainOperational, int liveWarriorCount,
+            bool missionActive, bool wartimeEmergency)
+        {
+            return armyValid && !captainOperational &&
+                   liveWarriorCount > 0 &&
+                   (missionActive || wartimeEmergency);
+        }
+
+        public static bool ShouldInstallWarriorCaptain(bool candidateEligible,
+            bool captainAlreadyOperational)
+        {
+            return candidateEligible && !captainAlreadyOperational;
         }
     }
 }

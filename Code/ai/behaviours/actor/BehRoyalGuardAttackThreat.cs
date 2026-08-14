@@ -11,7 +11,9 @@ namespace AncientWarfare3.ai.behaviours.actor
             if (!RoyalGuardService.IsValidThreatForGuard(pActor, target))
             {
                 pActor.beh_actor_target = null;
-                return BehResult.Stop;
+                RoyalGuardService.EnsureProtectKingTask(pActor);
+                pActor.makeWait(0.1f);
+                return BehResult.RepeatStep;
             }
 
             if (pActor.isInAttackRange(target))

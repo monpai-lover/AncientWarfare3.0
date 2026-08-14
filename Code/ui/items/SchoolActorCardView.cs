@@ -165,6 +165,7 @@ namespace AncientWarfare3.ui.items
             }
 
             _avatar = Instantiate(prefab, _avatarHolder.transform);
+            DisablePortraitInteraction(_avatar);
             RectTransform avatarRect = _avatar.GetComponent<RectTransform>();
             if (avatarRect != null)
             {
@@ -198,6 +199,22 @@ namespace AncientWarfare3.ui.items
                 _avatar = null;
             }
             _avatarHolder?.SetActive(false);
+        }
+
+        private static void DisablePortraitInteraction(UiUnitAvatarElement pAvatar)
+        {
+            if (pAvatar == null) return;
+            CanvasGroup inputBlocker = pAvatar.GetComponent<CanvasGroup>() ??
+                                       pAvatar.gameObject.AddComponent<CanvasGroup>();
+            inputBlocker.blocksRaycasts = false;
+            inputBlocker.interactable = false;
+            foreach (Button button in pAvatar.GetComponentsInChildren<Button>(true))
+            {
+                button.onClick.RemoveAllListeners();
+                button.interactable = false;
+            }
+            foreach (Graphic graphic in pAvatar.GetComponentsInChildren<Graphic>(true))
+                graphic.raycastTarget = false;
         }
 
         private Text Text(string pName, Vector2 pPosition, Vector2 pSize, int pFontSize,

@@ -321,6 +321,30 @@ static void RunWarProbe(int seed)
 
 static void RunTransportProbe(int seed)
 {
+    Check.True(ArmyRtsMissionLockRules.ShouldRetainLockedStrategicMission(
+            currentMissionValid: true, targetComplete: false,
+            targetCoolingDown: false, proposedHomelandEmergency: false),
+        "an active strategic target remains locked until completion");
+    Check.True(!ArmyRtsMissionLockRules.ShouldRetainLockedStrategicMission(
+            currentMissionValid: true, targetComplete: true,
+            targetCoolingDown: false, proposedHomelandEmergency: false),
+        "a completed target may release its strategic lock");
+    Check.True(!ArmyRtsMissionLockRules.ShouldRetainLockedStrategicMission(
+            currentMissionValid: true, targetComplete: false,
+            targetCoolingDown: false, proposedHomelandEmergency: true),
+        "a homeland emergency may replace the strategic target");
+    Check.True(!ArmyRtsTransportRules.ShouldAllowVanillaLandAttack(
+            sourceTileValid: true, targetTileValid: true,
+            sameIsland: false),
+        "a cross-island target cannot receive a vanilla land attack order");
+    Check.True(ArmyRtsTransportRules.ShouldAllowVanillaLandAttack(
+            sourceTileValid: true, targetTileValid: true,
+            sameIsland: true),
+        "a same-island target may receive a vanilla land attack order");
+    Check.True(!ArmyRtsTransportRules.ShouldAllowVanillaLandAttack(
+            sourceTileValid: false, targetTileValid: true,
+            sameIsland: true),
+        "an invalid source tile cannot receive a vanilla land attack order");
     Check.True(ArmyRtsTransportRules.ShouldRetainActiveVoyageMission(
             activeVoyage: true, currentMissionValid: true,
             currentTargetComplete: false, currentTargetCoolingDown: false,

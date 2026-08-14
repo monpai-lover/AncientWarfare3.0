@@ -78,6 +78,15 @@ internal static class SyntheticLevyRulesTests
         Equal(true, SyntheticLevyRules.ShouldClearSyntheticFields(
             SyntheticLevyDisposition.PromotePermanent),
             "promotion clears synthetic provenance");
+        Equal(true, SyntheticLevyRules.ShouldPromoteForCaptain(
+                synthetic: true, selectedAsCaptain: true),
+            "a selected synthetic levy is made permanent before receiving captain authority");
+        Equal(false, SyntheticLevyRules.ShouldPromoteForCaptain(
+                synthetic: true, selectedAsCaptain: false),
+            "an unselected synthetic levy remains subject to wartime cleanup");
+        Equal(false, SyntheticLevyRules.ShouldPromoteForCaptain(
+                synthetic: false, selectedAsCaptain: true),
+            "normal soldiers do not receive synthetic cleanup work");
         Equal(true, SyntheticLevyRules.ShouldRemoveActor(
             SyntheticLevyDisposition.RemoveActor),
             "remove disposition destroys the temporary actor");
@@ -175,10 +184,18 @@ internal static class SyntheticLevyRulesTests
         string root = RepositoryRoot();
         string source = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "ArmyReplenishmentOperationService.cs"));
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
         Equal(true, source.Contains(
-                "SyntheticLevyService.CreateBatch(",
+                "SyntheticLevyService.CreateBatchAtTile(",
                 StringComparison.Ordinal),
-            "formal-war replenishment materializes the city war reserve");
+            "formal-war replenishment materializes the city war reserve at the frontline");
+        Equal(true, source.Contains(
+                "CreateBatchAtTile(", StringComparison.Ordinal),
+            "formal-war replenishment materializes synthetic soldiers at the field army");
+        Equal(false, controller.Contains(
+                "currentCity == pSourceCity", StringComparison.Ordinal),
+            "frontline replenishment must not require the army to return to its source city");
         Equal(true, source.Contains(
                 "SyntheticMobilizationLedgerService.TryReserveReplacement(",
                 StringComparison.Ordinal),

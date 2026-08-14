@@ -32,6 +32,27 @@ internal static class ArmyRtsRouteChoiceRulesTests
                 routeRequiresTransport: true, voyageAlreadyActive: false,
                 captainCanBeginTransport: false),
             "an invalid captain cannot manufacture a transport request");
+        Assert(!ArmyRtsTransportRules.CanCreateVoyageState(
+                actorInsideBoat: false, physicalRouteAvailable: false),
+            "a cross-island objective without a real dock route must not create transport ownership");
+        Assert(ArmyRtsTransportRules.CanCreateVoyageState(
+                actorInsideBoat: false, physicalRouteAvailable: true),
+            "a confirmed dock route may create transport ownership");
+        Assert(ArmyRtsTransportRules.CanCreateVoyageState(
+                actorInsideBoat: true, physicalRouteAvailable: false),
+            "an already embarked actor must retain transport ownership while its route is active");
+        Assert(!ArmyRtsTransportRules.ShouldCountAsLanded(
+                sameTargetIsland: true, actorOnStableLand: false,
+                targetOnStableLand: true),
+            "a water tile must never complete a landing even when island identity matches");
+        Assert(!ArmyRtsTransportRules.ShouldCountAsLanded(
+                sameTargetIsland: true, actorOnStableLand: true,
+                targetOnStableLand: false),
+            "an invalid target tile must never complete a landing");
+        Assert(ArmyRtsTransportRules.ShouldCountAsLanded(
+                sameTargetIsland: true, actorOnStableLand: true,
+                targetOnStableLand: true),
+            "only stable land on the target island completes a landing");
         Assert(!ArmyRtsTransportRules.ShouldReplaceActiveVoyageTarget(
                 activeTargetMatches: false, callerMayBegin: true,
                 callerIsCaptain: false, forceTransport: false,
@@ -73,6 +94,7 @@ internal static class ArmyRtsRouteChoiceRulesTests
                 lockedTileId: 41, lockedEndpointLive: false,
                 candidateTileId: 77) == 77,
             "an invalidated endpoint must fall back to the current city candidate");
+        TransportRecoveryUsesLockedStrategicEndpoint();
         Assert(ArmyRtsControllerRules.HasReachedStrategicDestination(
                 captainTileId: 41, destinationTileId: 41,
                 distanceSquared: 0, sameTargetZone: false,
@@ -127,6 +149,36 @@ internal static class ArmyRtsRouteChoiceRulesTests
                 ArmyRtsTransportPhase.None) ==
                "aw_army_rts_formation",
             "a sampled formation member must be checked against the formation task");
+    }
+
+    private static void TransportRecoveryUsesLockedStrategicEndpoint()
+    {
+        string root = Directory.GetCurrentDirectory();
+        while (!File.Exists(Path.Combine(root, "AncientWarfare3.csproj")))
+        {
+            DirectoryInfo parent = Directory.GetParent(root);
+            if (parent == null)
+                throw new InvalidOperationException("project root unavailable");
+            root = parent.FullName;
+        }
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        int start = controller.IndexOf(
+            "public static bool RequestTransportRecovery(long pArmyId)",
+            StringComparison.Ordinal);
+        int end = controller.IndexOf(
+            "public static bool TryBeginCrossIslandTransportAfterRouteFailure(",
+            start, StringComparison.Ordinal);
+        Assert(start >= 0 && end > start,
+            "transport recovery source must be discoverable");
+        string body = controller.Substring(start, end - start);
+        Assert(body.Contains("ResolveStableStrategicEndpoint(",
+                StringComparison.Ordinal) &&
+               !body.Contains("target?.getTile()", StringComparison.Ordinal),
+            "transport recovery must reuse the mission-locked strategic endpoint instead of switching to the city center");
+        Assert(body.Contains("TryGetRouteEstimate(",
+                StringComparison.Ordinal),
+            "transport recovery must verify a physical boat or provisionable dock route before taking movement ownership");
     }
 
     private static void RetainForwardFrontHoldAfterAllAttackObjectivesClose()

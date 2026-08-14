@@ -6,6 +6,18 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
 {
     internal static void Run()
     {
+        Assert(ArmyCaptainContinuityRules.ShouldPreferLevyPromotion(
+                currentBestScore: 50f, currentBestActorId: 10L,
+                candidateScore: 80f, candidateActorId: 20L),
+            "captain fallback must prefer the strongest levy over actor ordering");
+        Assert(!ArmyCaptainContinuityRules.ShouldPreferLevyPromotion(
+                currentBestScore: 80f, currentBestActorId: 10L,
+                candidateScore: 50f, candidateActorId: 5L),
+            "a smaller actor id cannot displace a stronger levy");
+        Assert(ArmyCaptainContinuityRules.ShouldPreferLevyPromotion(
+                currentBestScore: 80f, currentBestActorId: 20L,
+                candidateScore: 80f, candidateActorId: 10L),
+            "actor id is only the deterministic tie breaker for equal strength");
         Assert(ArmyRtsSuccessionRecoveryRules.ShouldEnqueue(
                 kingdomValid: true, kingValid: true, fromLoad: false,
                 currentKingId: 9L, requestedKingId: 9L,
@@ -23,14 +35,62 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
             "a superseded successor cannot rebind military state");
         Assert(ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainRecovery(
                 armyValid: true, actorWasCaptain: true,
-                missionActive: true),
+                missionActive: true, wartimeEmergency: false,
+                royalGuard: false),
             "death of an active RTS captain queues recovery");
         Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainRecovery(
-                true, actorWasCaptain: false, missionActive: true),
+                true, actorWasCaptain: false, missionActive: true,
+                wartimeEmergency: true, royalGuard: false),
             "death of an RTS follower does not queue captain recovery");
+        Assert(ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainRecovery(
+                true, actorWasCaptain: true, missionActive: false,
+                wartimeEmergency: true, royalGuard: false),
+            "a wartime field army recovers a second captain after mission handoff");
         Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainRecovery(
-                true, actorWasCaptain: true, missionActive: false),
-            "an ordinary army does not enter the RTS recovery queue");
+                true, actorWasCaptain: true, missionActive: false,
+                wartimeEmergency: false, royalGuard: false),
+            "a peacetime ordinary army does not enter the RTS recovery queue");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainRecovery(
+                true, actorWasCaptain: true, missionActive: true,
+                wartimeEmergency: true, royalGuard: true),
+            "a royal guard captain remains outside field-army succession");
+        Assert(ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainVacancy(
+                armyValid: true, previousCaptainId: 17L,
+                currentCaptainId: -1L, missionActive: false,
+                wartimeEmergency: true, royalGuard: false,
+                disposalScope: false),
+            "a wartime army queues recovery when captain removal bypasses the death prefix");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainVacancy(
+                true, 17L, -1L, missionActive: true,
+                wartimeEmergency: true, royalGuard: false,
+                disposalScope: true),
+            "army disposal cannot schedule a replacement captain");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldEnqueueCaptainVacancy(
+                true, 17L, -1L, missionActive: true,
+                wartimeEmergency: true, royalGuard: true,
+                disposalScope: false),
+            "royal guard captain vacancy remains outside field-army recovery");
+        Assert(ArmyRtsSuccessionRecoveryRules.ShouldRetryCaptainRecovery(
+                armyValid: true, captainOperational: false,
+                liveWarriorCount: 1, missionActive: true,
+                wartimeEmergency: false),
+            "a commandless active army with a remaining warrior keeps its recovery work queued");
+        Assert(ArmyRtsSuccessionRecoveryRules.ShouldRetryCaptainRecovery(
+                armyValid: true, captainOperational: false,
+                liveWarriorCount: 26, missionActive: false,
+                wartimeEmergency: true),
+            "a wartime commandless army retries after a failed captain assignment");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldRetryCaptainRecovery(
+                armyValid: true, captainOperational: false,
+                liveWarriorCount: 0, missionActive: true,
+                wartimeEmergency: true),
+            "an empty army does not retain a captain recovery item");
+        Assert(ArmyRtsSuccessionRecoveryRules.ShouldInstallWarriorCaptain(
+                candidateEligible: true, captainAlreadyOperational: false),
+            "a valid army warrior receives the captain lease even when general appointment is unavailable");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldInstallWarriorCaptain(
+                candidateEligible: false, captainAlreadyOperational: false),
+            "an invalid roster candidate is never installed as captain");
         SourceBoundariesExist();
     }
 
@@ -63,9 +123,71 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
         Assert(service.Contains("GetActiveGeneralsForReadModel(",
                 StringComparison.Ordinal),
             "captain recovery uses the bounded general read model");
+        Assert(service.Contains("TryPromoteExistingLevyCaptain(",
+                StringComparison.Ordinal),
+            "captain death recovery promotes an existing levy before recruiting");
+        Assert(service.Contains("pArmy.getUnits()", StringComparison.Ordinal),
+            "captain recovery can select a replacement from the army roster");
+        int memberEligibilityStart = service.IndexOf(
+            "private static bool IsEligibleArmyMember", StringComparison.Ordinal);
+        int memberEligibilityEnd = service.IndexOf(
+            "private static float CombatScore", memberEligibilityStart,
+            StringComparison.Ordinal);
+        string memberEligibility = memberEligibilityStart >= 0 &&
+            memberEligibilityEnd > memberEligibilityStart
+            ? service.Substring(memberEligibilityStart,
+                memberEligibilityEnd - memberEligibilityStart)
+            : string.Empty;
+        Assert(memberEligibility.Contains("pActor.is_profession_warrior",
+                   StringComparison.Ordinal) &&
+               !memberEligibility.Contains("pActor.isWarrior()",
+                   StringComparison.Ordinal) &&
+               !memberEligibility.Contains("GeneralService.IsGeneral",
+                   StringComparison.Ordinal) &&
+               !memberEligibility.Contains("SyntheticLevyService.IsSynthetic",
+                   StringComparison.Ordinal),
+            "any living roster warrior, including a general or synthetic levy, remains eligible for captain succession");
+        Assert(service.Contains("PromoteSyntheticCaptainIfNeeded",
+                StringComparison.Ordinal),
+            "a synthetic levy selected as captain is made permanent before command assignment");
+        string synthetic = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "SyntheticLevyService.cs"));
+        Assert(synthetic.Contains("PromoteToPermanentCommand",
+                StringComparison.Ordinal) &&
+               synthetic.Contains("LineageKeys.SYNTHETIC_LEVY, false",
+                StringComparison.Ordinal),
+            "captain promotion clears the synthetic levy marker so later demobilization cannot remove the commander");
+        Assert(service.Contains("PromoteToGeneral", StringComparison.Ordinal),
+            "an army member fallback receives permanent general authority");
+        Assert(service.Contains("SnapshotMissions", StringComparison.Ordinal),
+            "captain recovery discovers commandless missions even after death callback ordering");
+        Assert(service.Contains("MinimumOperationalForce", StringComparison.Ordinal) &&
+               service.Contains("AssignArmyRetreat", StringComparison.Ordinal),
+            "understrength armies are sent to a safe city before continuing combat");
+        Assert(service.Contains("RequestOffensiveRecovery", StringComparison.Ordinal),
+            "a missing field army requests reserve-backed establishment");
+        string armyService = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "AWArmyService.cs"));
+        Assert(armyService.Contains("SetCaptainAfterSuccession", StringComparison.Ordinal),
+            "succession can assign a normal warrior without school captain gating");
+        string levy = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "TemporaryLevyService.cs"));
+        Assert(levy.Contains("LineageKeys.TEMPORARY_LEVY, false",
+                StringComparison.Ordinal),
+            "promoted levy is explicitly removed from temporary levy identity");
         Assert(service.Contains("RehydrateAfterAuthorityChange",
                 StringComparison.Ordinal),
             "succession recovery rebuilds one controller without loading");
+        Assert(service.Contains("HasOperationalCaptain(army, kingdom)",
+                StringComparison.Ordinal),
+            "an alive but ineligible captain is recovered as commandless");
+        int nativeMaintenanceEnd = service.IndexOf(
+            "army.checkCaptainExistence()", StringComparison.Ordinal);
+        int postNativeRepair = service.IndexOf(
+            "EnsureNonSyntheticCaptain(army, kingdom)",
+            nativeMaintenanceEnd + 1, StringComparison.Ordinal);
+        Assert(nativeMaintenanceEnd >= 0 && postNativeRepair > nativeMaintenanceEnd,
+            "captain recovery revalidates replacement after native maintenance");
         Assert(!service.Contains("World.world.armies",
                 StringComparison.Ordinal),
             "succession recovery never scans all world armies");
@@ -85,6 +207,22 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
                    "ArmyRtsSuccessionRecoveryService.OnCaptainDied(",
                    StringComparison.Ordinal),
             "actor death hands the captured captain army to RTS recovery");
+        string guardService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "RoyalGuardService.cs"));
+        int guardCandidateStart = guardService.IndexOf(
+            "private static bool IsGuardCandidate", StringComparison.Ordinal);
+        int guardCandidateEnd = guardService.IndexOf(
+            "private static void FillNobleQuota", guardCandidateStart,
+            StringComparison.Ordinal);
+        string guardCandidate = guardService.Substring(guardCandidateStart,
+            guardCandidateEnd - guardCandidateStart);
+        Assert(guardCandidate.Contains(
+                "MilitaryEmergencyService.HasAny(pKingdom) &&\n                pActor.hasArmy()",
+                StringComparison.Ordinal),
+            "war-time royal guard recruitment preserves every field-army roster");
+        Assert(armyService.Contains("!RoyalGuardService.IsRoyalGuard(pActor)",
+                StringComparison.Ordinal),
+            "warrior succession cannot appoint a royal guard as a field captain");
     }
 
     private static void Assert(bool condition, string message)

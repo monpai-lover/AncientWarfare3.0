@@ -20,5 +20,13 @@ namespace AncientWarfare3.core.lineage
         {
             return eligible && hasSuitableFood && hasFoodItem;
         }
+
+        public static bool ShouldRunScheduledCheck(bool actorAlive,
+            bool activeMilitaryOwner, bool hungry, double currentTime,
+            double nextAllowedTime)
+        {
+            return actorAlive && activeMilitaryOwner && hungry &&
+                   currentTime >= nextAllowedTime;
+        }
     }
 }

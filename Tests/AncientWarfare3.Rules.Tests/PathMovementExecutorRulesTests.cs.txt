@@ -22,6 +22,15 @@ internal static class PathMovementExecutorRulesTests
                 hasVanillaLocalPath: true,
                 hasVanillaGlobalPath: false),
             "a vanilla local path wins over stale AW3 ownership");
+        False(AWPathLifecycleRules.ShouldAdvanceSmoothMovement(
+                actorMoving: false, nextStepValid: true),
+            "a stopped actor must never move toward the vanilla empty vector");
+        False(AWPathLifecycleRules.ShouldAdvanceSmoothMovement(
+                actorMoving: true, nextStepValid: false),
+            "an invalid next step must not advance custom smooth movement");
+        True(AWPathLifecycleRules.ShouldAdvanceSmoothMovement(
+                actorMoving: true, nextStepValid: true),
+            "a moving actor with a valid next step may advance");
     }
 
     private static void True(bool value, string message)

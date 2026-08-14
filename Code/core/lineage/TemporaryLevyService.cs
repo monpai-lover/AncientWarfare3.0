@@ -244,11 +244,11 @@ namespace AncientWarfare3.core.lineage
             if (pArmy?.data == null || AWArmyService.IsSpecialArmy(pArmy) ||
                 HasOperationalCaptain(pArmy)) return false;
             Kingdom kingdom = AWArmyService.GetIntendedKingdom(pArmy);
-            if (kingdom?.data == null || kingdom.isRekt() ||
-                !MilitaryEmergencyService.HasAny(kingdom)) return false;
+            if (kingdom?.data == null || kingdom.isRekt()) return false;
 
             Actor candidate = null;
             long candidateId = -1L;
+            float candidateScore = float.MinValue;
             try
             {
                 foreach (Actor member in pArmy.getUnits())
@@ -256,27 +256,20 @@ namespace AncientWarfare3.core.lineage
                     if (!CanPromoteExistingLevyCaptain(kingdom, pArmy,
                             member)) continue;
                     long memberId = member.data.id;
-                    if (!ArmyCaptainContinuityRules.ShouldPreferReplacement(
-                            candidateId, memberId)) continue;
+                    float memberScore = LevyCaptainCombatScore(member);
+                    if (!ArmyCaptainContinuityRules.
+                            ShouldPreferLevyPromotion(candidateScore,
+                                candidateId, memberScore, memberId))
+                        continue;
                     candidate = member;
                     candidateId = memberId;
+                    candidateScore = memberScore;
                 }
             }
             catch { candidate = null; }
             if (candidate?.data == null) return false;
 
-            candidate.data.get(LineageKeys.TEMPORARY_LEVY_KINGDOM_ID,
-                out long levyKingdomId, -1L);
-            if (levyKingdomId >= 0 && Pools.TryGetValue(levyKingdomId,
-                    out LevyPool pool))
-            {
-                pool.ActorIds.Remove(candidate.data.id);
-                if (pool.ActorIds.Count == 0) Pools.Remove(levyKingdomId);
-            }
-            ClearFields(candidate);
-            candidate.data.set(LineageKeys.MILITARY_BIOGRAPHY_ACTIVE, true);
-            candidate.data.set(LineageKeys.SOLDIER_SERVICE_START_TIME,
-                (float)LineageService.CurTime());
+            PromoteToPermanentMilitary(candidate);
             AWArmyService.SetCaptainIfChanged(pArmy, candidate);
             if (!HasOperationalCaptain(pArmy)) return false;
 
@@ -284,6 +277,23 @@ namespace AncientWarfare3.core.lineage
                 pRosterExpanded: false);
             KingdomWarDirectorService.OnArmyChanged(kingdom);
             return true;
+        }
+
+        internal static void PromoteToPermanentMilitary(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.get(LineageKeys.TEMPORARY_LEVY_KINGDOM_ID,
+                out long levyKingdomId, -1L);
+            if (levyKingdomId >= 0 && Pools.TryGetValue(levyKingdomId,
+                    out LevyPool pool))
+            {
+                pool.ActorIds.Remove(pActor.data.id);
+                if (pool.ActorIds.Count == 0) Pools.Remove(levyKingdomId);
+            }
+            ClearFields(pActor);
+            pActor.data.set(LineageKeys.MILITARY_BIOGRAPHY_ACTIVE, true);
+            pActor.data.set(LineageKeys.SOLDIER_SERVICE_START_TIME,
+                (float)LineageService.CurTime());
         }
 
         public static void OnActorInvalidated(Actor pActor)
@@ -2334,6 +2344,22 @@ namespace AncientWarfare3.core.lineage
                        pArmy) &&
                    HistoricalMasterVocationService.CanEnter(pActor,
                        HistoricalMasterMilitaryContext.ArmyCaptain);
+        }
+
+        private static float LevyCaptainCombatScore(Actor pActor)
+        {
+            if (pActor?.stats == null) return 0f;
+            return ReadCombatStat(pActor, "damage") +
+                   ReadCombatStat(pActor, "warfare") * 2f +
+                   ReadCombatStat(pActor, "health") * 0.1f +
+                   ReadCombatStat(pActor, "armor") * 2f +
+                   ReadCombatStat(pActor, "speed") * 0.25f;
+        }
+
+        private static float ReadCombatStat(Actor pActor, string pStat)
+        {
+            try { return pActor.stats[pStat]; }
+            catch { return 0f; }
         }
 
         private static bool ScanCityForCaptainRecovery(Kingdom pKingdom,

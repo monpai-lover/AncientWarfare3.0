@@ -30,6 +30,9 @@ namespace AncientWarfare3.core.lineage
         internal double LastX;
         internal double LastY;
         internal double LastProgressRealtime;
+        internal bool HasLocalPathSample;
+        internal int LastLocalPathIndex;
+        internal int LastLocalTargetTileId = -1;
         internal bool RouteResetIssued;
         internal bool AlternateSlotIssued;
         public double NoProgressSeconds { get; internal set; }
@@ -43,6 +46,9 @@ namespace AncientWarfare3.core.lineage
         public bool RecoveryEligible { get; set; }
         public bool CombatActive { get; set; }
         public bool TransportActive { get; set; }
+        public bool LocalPathFollowing { get; set; }
+        public int LocalPathIndex { get; set; }
+        public int LocalTargetTileId { get; set; } = -1;
     }
 
     public static class ArmyFollowerStallRecoveryRules
@@ -113,7 +119,8 @@ namespace AncientWarfare3.core.lineage
             ArmyFollowerStallRecoveryState pState, long actorId,
             double positionX, double positionY, bool recoveryEligible,
             bool combatActive, bool transportActive,
-            double observedRealtime)
+            double observedRealtime, bool localPathFollowing = false,
+            int localPathIndex = 0, int localTargetTileId = -1)
         {
             if (pState == null) return ArmyFollowerStallRecoveryAction.None;
             if (actorId < 0L || !recoveryEligible || combatActive ||
@@ -145,8 +152,18 @@ namespace AncientWarfare3.core.lineage
             double deltaY = positionY - pState.LastY;
             pState.LastX = positionX;
             pState.LastY = positionY;
+            bool localPathAdvanced = pState.HasLocalPathSample &&
+                localPathFollowing &&
+                pState.LastLocalTargetTileId == localTargetTileId &&
+                localPathIndex > pState.LastLocalPathIndex;
+            pState.HasLocalPathSample = localPathFollowing;
+            pState.LastLocalPathIndex = localPathIndex;
+            pState.LastLocalTargetTileId = localPathFollowing
+                ? localTargetTileId
+                : -1;
             if (deltaX * deltaX + deltaY * deltaY >=
-                MinimumProgressTiles * MinimumProgressTiles)
+                    MinimumProgressTiles * MinimumProgressTiles ||
+                localPathAdvanced)
             {
                 pState.HasProgressRealtime = true;
                 pState.LastProgressRealtime = now;
@@ -189,6 +206,9 @@ namespace AncientWarfare3.core.lineage
             pState.LastX = 0d;
             pState.LastY = 0d;
             pState.LastProgressRealtime = 0d;
+            pState.HasLocalPathSample = false;
+            pState.LastLocalPathIndex = 0;
+            pState.LastLocalTargetTileId = -1;
             pState.NoProgressSeconds = 0d;
             pState.RouteResetIssued = false;
             pState.AlternateSlotIssued = false;
@@ -209,7 +229,8 @@ namespace AncientWarfare3.core.lineage
         public ArmyFollowerStallRecoveryAction Observe(long actorId,
             double positionX, double positionY, bool recoveryEligible,
             bool combatActive, bool transportActive,
-            double observedRealtime)
+            double observedRealtime, bool localPathFollowing = false,
+            int localPathIndex = 0, int localTargetTileId = -1)
         {
             if (actorId < 0L || !recoveryEligible || combatActive ||
                 transportActive)
@@ -225,7 +246,8 @@ namespace AncientWarfare3.core.lineage
             }
             return ArmyFollowerStallRecoveryRules.ObserveAt(state, actorId,
                 positionX, positionY, recoveryEligible, combatActive,
-                transportActive, observedRealtime);
+                transportActive, observedRealtime, localPathFollowing,
+                localPathIndex, localTargetTileId);
         }
 
         public void Remove(long actorId)
@@ -253,6 +275,10 @@ namespace AncientWarfare3.core.lineage
         internal bool CommandRecoveryIssued;
         internal bool HasObjectiveProgress;
         internal double BestObjectiveProgress;
+        internal bool HasLocalPathSample;
+        internal long LastLocalPathOwnerId = -1L;
+        internal int LastLocalPathIndex;
+        internal int LastLocalTargetTileId = -1;
         public double NoProgressSeconds { get; internal set; }
         internal double CombatNoProgressSeconds;
         internal int LastRecoveryStage;
@@ -427,7 +453,12 @@ namespace AncientWarfare3.core.lineage
             bool commandOwned = false, bool combatActive = false,
             bool objectiveOpen = true, bool requiresTransport = false,
             bool objectiveProgressExpected = false,
-            double objectiveProgress = 0d)
+            double objectiveProgress = 0d,
+            long localPathOwnerId = -1L,
+            bool localPathFollowing = false,
+            bool localPathMoving = false,
+            int localPathIndex = 0,
+            int localTargetTileId = -1)
         {
             ArmyWatchdogPositionSource source = _lifecycle.ResolveSample(
                 missionValid,
@@ -463,7 +494,9 @@ namespace AncientWarfare3.core.lineage
             return ArmyStallWatchdogRules.Observe(_stall, movementTiles,
                 routeCursor, routeReady, routePending, commandExpected,
                 commandOwned, objectiveOpen, requiresTransport,
-                objectiveProgressExpected, objectiveProgress);
+                objectiveProgressExpected, objectiveProgress,
+                localPathOwnerId, localPathFollowing, localPathMoving,
+                localPathIndex, localTargetTileId);
         }
 
         public ArmyStallRecoveryAction RecordRouteFailure()
@@ -635,7 +668,12 @@ namespace AncientWarfare3.core.lineage
             bool commandExpected = false, bool commandOwned = false,
             bool objectiveOpen = true, bool requiresTransport = false,
             bool objectiveProgressExpected = false,
-            double objectiveProgress = 0d)
+            double objectiveProgress = 0d,
+            long localPathOwnerId = -1L,
+            bool localPathFollowing = false,
+            bool localPathMoving = false,
+            int localPathIndex = 0,
+            int localTargetTileId = -1)
         {
             if (pState == null) return ArmyStallRecoveryAction.None;
             pState.HasRoutePhase = true;
@@ -647,6 +685,9 @@ namespace AncientWarfare3.core.lineage
                 return ArmyStallRecoveryAction.ChangeTarget;
             bool objectiveAdvanced = ObserveObjectiveProgress(pState,
                 objectiveProgressExpected, objectiveProgress);
+            bool localPathAdvanced = ObserveLocalPathProgress(pState,
+                localPathOwnerId, localPathFollowing, localPathMoving,
+                localPathIndex, localTargetTileId);
             pState.LastRouteCursor = routeCursor;
             bool progressExpected = routeReady || routePending ||
                                     commandExpected ||
@@ -659,7 +700,8 @@ namespace AncientWarfare3.core.lineage
                 pState.LastRecoveryStage = 0;
                 return ArmyStallRecoveryAction.None;
             }
-            if (movementTiles >= MinimumProgressTiles)
+            if (movementTiles >= MinimumProgressTiles ||
+                localPathAdvanced)
             {
                 ResetAfterMovement(pState);
                 return ArmyStallRecoveryAction.None;
@@ -710,6 +752,44 @@ namespace AncientWarfare3.core.lineage
                 return ArmyStallRecoveryAction.ReassertCommand;
             }
             return ArmyStallRecoveryAction.None;
+        }
+
+        public static bool IsLocalPathCursorProgress(
+            bool hasPreviousSample, long previousOwnerId,
+            int previousPathIndex, int previousTargetTileId,
+            long ownerId, bool following, int pathIndex,
+            int targetTileId)
+        {
+            return hasPreviousSample && following && ownerId >= 0L &&
+                   ownerId == previousOwnerId &&
+                   targetTileId == previousTargetTileId &&
+                   pathIndex > previousPathIndex;
+        }
+
+        private static bool ObserveLocalPathProgress(
+            ArmyStallWatchdogState pState, long pOwnerId,
+            bool pFollowing, bool pMoving, int pPathIndex,
+            int pTargetTileId)
+        {
+            _ = pMoving;
+            bool advanced = IsLocalPathCursorProgress(
+                pState.HasLocalPathSample, pState.LastLocalPathOwnerId,
+                pState.LastLocalPathIndex,
+                pState.LastLocalTargetTileId, pOwnerId, pFollowing,
+                pPathIndex, pTargetTileId);
+            if (!pFollowing || pOwnerId < 0L)
+            {
+                pState.HasLocalPathSample = false;
+                pState.LastLocalPathOwnerId = -1L;
+                pState.LastLocalPathIndex = 0;
+                pState.LastLocalTargetTileId = -1;
+                return false;
+            }
+            pState.HasLocalPathSample = true;
+            pState.LastLocalPathOwnerId = pOwnerId;
+            pState.LastLocalPathIndex = pPathIndex;
+            pState.LastLocalTargetTileId = pTargetTileId;
+            return advanced;
         }
 
         private static bool ObserveObjectiveProgress(
@@ -816,6 +896,10 @@ namespace AncientWarfare3.core.lineage
             pState.HasRoutePhase = false;
             pState.HasObjectiveProgress = false;
             pState.BestObjectiveProgress = 0d;
+            pState.HasLocalPathSample = false;
+            pState.LastLocalPathOwnerId = -1L;
+            pState.LastLocalPathIndex = 0;
+            pState.LastLocalTargetTileId = -1;
             pState.NoProgressSeconds = 0d;
             pState.CombatNoProgressSeconds = 0d;
             pState.LastRecoveryStage = 0;

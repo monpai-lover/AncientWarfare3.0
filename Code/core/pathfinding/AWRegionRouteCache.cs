@@ -45,7 +45,7 @@ namespace AncientWarfare3.core.pathfinding
                     builder = new RegionBuilder();
                     builders.Add(tile.RegionId, builder);
                 }
-                if (builder.CenterTileId < 0) builder.CenterTileId = tile.Id;
+                builder.Observe(tile);
             }
 
             for (int tileId = 0; tileId < tileCount; tileId++)
@@ -78,7 +78,8 @@ namespace AncientWarfare3.core.pathfinding
                 pair.Value.Neighbours.CopyTo(neighbours);
                 Array.Sort(neighbours);
                 result.Add(pair.Key, new AWRegionNode(pair.Key,
-                    pair.Value.CenterTileId, neighbours));
+                    pair.Value.CenterTileId, pair.Value.LandTileId,
+                    neighbours));
             }
             return new AWRegionTopologySnapshot(1, result);
         }
@@ -103,7 +104,7 @@ namespace AncientWarfare3.core.pathfinding
                     builder = new RegionBuilder();
                     builders.Add(tile.RegionId, builder);
                 }
-                if (builder.CenterTileId < 0) builder.CenterTileId = tile.Id;
+                builder.Observe(tile);
             }
 
             for (int tileId = 0; tileId < tileCount; tileId++)
@@ -133,7 +134,8 @@ namespace AncientWarfare3.core.pathfinding
                 pair.Value.Neighbours.CopyTo(neighbours);
                 Array.Sort(neighbours);
                 result.Add(pair.Key, new AWRegionNode(pair.Key,
-                    pair.Value.CenterTileId, neighbours));
+                    pair.Value.CenterTileId, pair.Value.LandTileId,
+                    neighbours));
             }
             return new AWRegionTopologySnapshot(1, result);
         }
@@ -165,21 +167,33 @@ namespace AncientWarfare3.core.pathfinding
         private sealed class RegionBuilder
         {
             internal int CenterTileId = -1;
+            internal int LandTileId = -1;
             internal readonly HashSet<int> Neighbours = new HashSet<int>();
+
+            internal void Observe(AWTileTraversalSnapshot pTile)
+            {
+                if (CenterTileId < 0) CenterTileId = pTile.Id;
+                if (LandTileId < 0 && pTile.Ground && !pTile.Liquid &&
+                    !pTile.Ocean && !pTile.Lava && !pTile.Block)
+                    LandTileId = pTile.Id;
+            }
         }
     }
 
     internal readonly struct AWRegionNode
     {
-        internal AWRegionNode(int pId, int pCenterTileId, int[] pNeighbours)
+        internal AWRegionNode(int pId, int pCenterTileId, int pLandTileId,
+            int[] pNeighbours)
         {
             Id = pId;
             CenterTileId = pCenterTileId;
+            LandTileId = pLandTileId;
             Neighbours = pNeighbours ?? Array.Empty<int>();
         }
 
         internal int Id { get; }
         internal int CenterTileId { get; }
+        internal int LandTileId { get; }
         internal int[] Neighbours { get; }
     }
 

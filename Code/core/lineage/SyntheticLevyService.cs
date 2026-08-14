@@ -44,7 +44,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         internal static Actor TryCreate(City city, Kingdom kingdom,
-            Army army, Actor template, long emergencyId)
+            Army army, Actor template, long emergencyId,
+            WorldTile pSpawnTile = null)
         {
             if (city?.data == null || kingdom?.data == null ||
                 army?.data == null || template?.asset == null ||
@@ -57,8 +58,9 @@ namespace AncientWarfare3.core.lineage
             {
                 using (SyntheticLevySpawnScope.Open())
                 {
+                    WorldTile spawnTile = pSpawnTile ?? city.getTile();
                     actor = World.world.units.createNewUnit(
-                        template.asset.id, city.getTile(), false, 0f,
+                        template.asset.id, spawnTile, false, 0f,
                         template.subspecies, null, true, true);
                     if (actor?.data == null) return null;
                     Mark(actor, city, kingdom, emergencyId);
@@ -91,6 +93,27 @@ namespace AncientWarfare3.core.lineage
         {
             return CreateBatch(city, kingdom, army, requested,
                 emergencyId, null);
+        }
+
+        internal static int CreateBatchAtTile(City city, Kingdom kingdom,
+            Army army, WorldTile pSpawnTile, int requested,
+            long emergencyId, List<Actor> createdActors)
+        {
+            int limit = Math.Min(Math.Max(0, requested),
+                TemporaryLevyRules.MaxRecruitsPerWorkItem);
+            Actor template = ResolveTemplate(city, army);
+            if (pSpawnTile?.data == null || template?.asset == null)
+                return 0;
+            int created = 0;
+            while (created < limit)
+            {
+                Actor actor = TryCreate(city, kingdom, army, template,
+                    emergencyId, pSpawnTile);
+                if (actor == null) break;
+                createdActors?.Add(actor);
+                created++;
+            }
+            return created;
         }
 
         internal static int CreateBatch(City city, Kingdom kingdom,
@@ -145,6 +168,24 @@ namespace AncientWarfare3.core.lineage
             catch { }
             SyntheticMobilizationLedgerService.OnSyntheticMaterialized(
                 actor);
+        }
+
+        // A synthetic soldier selected for command becomes a permanent
+        // military actor before captain appointment and levy cleanup.
+        internal static void PromoteToPermanentCommand(Actor actor)
+        {
+            if (actor?.data == null || !SyntheticLevyRules.
+                    ShouldPromoteForCaptain(IsSynthetic(actor),
+                        selectedAsCaptain: true)) return;
+            ReleaseLiveLedgerOnce(actor);
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY, false);
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY_PROMOTED, false);
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY_SOURCE_CITY_ID, -1L);
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY_SOURCE_KINGDOM_ID,
+                -1L);
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID, -1L);
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED,
+                false);
         }
 
         internal static void RemoveWithoutPersonalHistory(Actor actor)

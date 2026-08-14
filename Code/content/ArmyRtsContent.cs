@@ -11,6 +11,12 @@ namespace AncientWarfare3.content
         public const string CaptainJobId = "aw_army_rts_captain";
         public const string HoldJobId = "aw_army_rts_front_hold";
         public const string FollowerJobId = "aw_army_rts_follower";
+        public const string VanillaFollowerJobId =
+            "aw_army_rts_vanilla_follower";
+        public const string RetreatCaptainJobId =
+            "aw_army_rts_retreat_captain";
+        public const string RetreatFollowerJobId =
+            "aw_army_rts_retreat_follower";
         public const string MissionTaskId = "aw_army_rts_mission";
         public const string RallyTaskId = "aw_army_rts_rally";
         public const string ReplenishTaskId = "aw_army_rts_replenish";
@@ -29,6 +35,15 @@ namespace AncientWarfare3.content
         public const string LandingTaskId =
             "aw_army_rts_transport_landing";
         public const string HoldMissionTaskId = "aw_army_rts_hold";
+        public const string CaptainCombatTaskId =
+            "aw_army_rts_captain_combat";
+        public const string CaptainSiegeAdvanceTaskId =
+            "aw_army_rts_captain_siege_advance";
+        public const string SiegeCombatTaskId =
+            "aw_army_rts_siege_combat";
+        public const string MemberCombatJobId = "aw_army_rts_member_combat";
+        public const string MemberCombatTaskId =
+            "aw_army_rts_member_combat";
         public const string HoldTaskId = "aw_army_rts_front_hold";
         public const string FormationTaskId = "aw_army_rts_formation";
         public const string MobilizationSpeedStatusId =
@@ -71,6 +86,23 @@ namespace AncientWarfare3.content
                 });
                 job.addTask(FormationTaskId);
             }
+            if (!AssetManager.job_actor.has(VanillaFollowerJobId))
+            {
+                ActorJob job = AssetManager.job_actor.add(new ActorJob
+                {
+                    id = VanillaFollowerJobId
+                });
+                job.addTask("warrior_army_follow_leader");
+            }
+            if (!AssetManager.job_actor.has(MemberCombatJobId))
+            {
+                ActorJob job = AssetManager.job_actor.add(new ActorJob
+                {
+                    id = MemberCombatJobId
+                });
+                job.addTask(MemberCombatTaskId);
+                job.addTask(SiegeCombatTaskId);
+            }
             if (!AssetManager.job_actor.has(HoldJobId))
             {
                 ActorJob job = AssetManager.job_actor.add(new ActorJob
@@ -78,6 +110,22 @@ namespace AncientWarfare3.content
                     id = HoldJobId
                 });
                 job.addTask(HoldTaskId);
+            }
+            if (!AssetManager.job_actor.has(RetreatCaptainJobId))
+            {
+                ActorJob job = AssetManager.job_actor.add(new ActorJob
+                {
+                    id = RetreatCaptainJobId
+                });
+                job.addTask(RetreatTaskId);
+            }
+            if (!AssetManager.job_actor.has(RetreatFollowerJobId))
+            {
+                ActorJob job = AssetManager.job_actor.add(new ActorJob
+                {
+                    id = RetreatFollowerJobId
+                });
+                job.addTask("warrior_army_follow_leader");
             }
 
             RegisterCaptainTask(MissionTaskId,
@@ -97,8 +145,7 @@ namespace AncientWarfare3.content
             RegisterCaptainTask(PursueTaskId,
                 "task_unit_aw_army_rts_pursue",
                 "ui/Icons/iconArrowAttackTarget");
-            RegisterCaptainTask(RetreatTaskId,
-                "task_unit_aw_army_rts_retreat", "ui/Icons/iconLoyalty");
+            RegisterRetreatTask();
             RegisterCaptainTask(RegroupTaskId,
                 "task_unit_aw_army_rts_regroup", "ui/Icons/iconLoyalty");
             RegisterCaptainTask(AwaitingPickupTaskId,
@@ -115,6 +162,10 @@ namespace AncientWarfare3.content
                 "ui/Icons/iconArrowAttackTarget");
             RegisterCaptainTask(HoldMissionTaskId,
                 "task_unit_aw_army_rts_front_hold", "ui/Icons/iconLoyalty");
+            RegisterCaptainCombatTask();
+            RegisterCaptainSiegeAdvanceTask();
+            RegisterSiegeCombatTask();
+            RegisterMemberCombatTask();
 
             if (!AssetManager.tasks_actor.has(FormationTaskId))
             {
@@ -198,6 +249,91 @@ namespace AncientWarfare3.content
             pJob.addTask(SailingTaskId);
             pJob.addTask(LandingTaskId);
             pJob.addTask(HoldMissionTaskId);
+            pJob.addTask(CaptainCombatTaskId);
+            pJob.addTask(CaptainSiegeAdvanceTaskId);
+            pJob.addTask(SiegeCombatTaskId);
+        }
+
+        private static void RegisterCaptainCombatTask()
+        {
+            if (AssetManager.tasks_actor.has(CaptainCombatTaskId)) return;
+            var task = AssetManager.tasks_actor.add(new BehaviourTaskActor
+            {
+                id = CaptainCombatTaskId,
+                cancellable_by_reproduction = false,
+                cancellable_by_socialize = false,
+                in_combat = true,
+                speed_multiplier = 1f,
+                locale_key = "task_unit_aw_army_rts_captain_combat"
+            });
+            task.setIcon("ui/Icons/iconWar");
+            task.addBeh(new BehArmyRtsCaptainCombat());
+            task.addBeh(new BehGoToActorTarget(
+                GoToActorTargetType.RaycastWithAttackRange,
+                false, true, true));
+            task.addBeh(new BehArmyRtsCaptainAttack());
+        }
+
+        private static void RegisterMemberCombatTask()
+        {
+            if (AssetManager.tasks_actor.has(MemberCombatTaskId)) return;
+            var task = AssetManager.tasks_actor.add(new BehaviourTaskActor
+            {
+                id = MemberCombatTaskId,
+                cancellable_by_reproduction = false,
+                cancellable_by_socialize = false,
+                in_combat = true,
+                speed_multiplier = 1f,
+                locale_key = "task_unit_aw_army_rts_member_combat"
+            });
+            task.setIcon("ui/Icons/iconWar");
+            task.addBeh(new BehArmyRtsMemberCombat());
+            task.addBeh(new BehGoToActorTarget(
+                GoToActorTargetType.RaycastWithAttackRange,
+                false, true, true));
+            task.addBeh(new BehArmyRtsCaptainAttack());
+        }
+
+        private static void RegisterSiegeCombatTask()
+        {
+            if (AssetManager.tasks_actor.has(SiegeCombatTaskId)) return;
+            var task = AssetManager.tasks_actor.add(new BehaviourTaskActor
+            {
+                id = SiegeCombatTaskId,
+                cancellable_by_reproduction = false,
+                cancellable_by_socialize = false,
+                in_combat = true,
+                speed_multiplier = 1f,
+                locale_key = "task_unit_aw_army_rts_siege_combat"
+            });
+            task.setIcon("ui/Icons/iconWar");
+            task.addBeh(new BehArmyRtsSiegeCombat());
+            task.addBeh(new BehGoToActorTarget(
+                GoToActorTargetType.RaycastWithAttackRange,
+                false, true, true));
+            task.addBeh(new BehArmyRtsCaptainAttack());
+        }
+
+        private static void RegisterCaptainSiegeAdvanceTask()
+        {
+            if (AssetManager.tasks_actor.has(CaptainSiegeAdvanceTaskId))
+                return;
+            var task = AssetManager.tasks_actor.add(new BehaviourTaskActor
+            {
+                id = CaptainSiegeAdvanceTaskId,
+                cancellable_by_reproduction = false,
+                cancellable_by_socialize = false,
+                in_combat = true,
+                speed_multiplier = 1f,
+                locale_key = "task_unit_aw_army_rts_captain_siege_advance"
+            });
+            task.setIcon("ui/Icons/iconWar");
+            task.addBeh(new BehArmyRtsSiegeAdvance());
+            task.addBeh(new BehGoToTileTarget
+            {
+                limit_pathfinding_regions = 0
+            });
+            task.addBeh(new BehRandomWait(0.1f, 0.25f));
         }
 
         private static void RegisterCaptainTask(string pId, string pLocaleKey,
@@ -219,6 +355,27 @@ namespace AncientWarfare3.content
                 limit_pathfinding_regions = 0
             });
             task.addBeh(new BehRandomWait(0.1f, 0.25f));
+        }
+
+        private static void RegisterRetreatTask()
+        {
+            if (AssetManager.tasks_actor.has(RetreatTaskId)) return;
+            var task = AssetManager.tasks_actor.add(new BehaviourTaskActor
+            {
+                id = RetreatTaskId,
+                cancellable_by_reproduction = false,
+                cancellable_by_socialize = false,
+                speed_multiplier = 0.8f,
+                locale_key = "task_unit_aw_army_rts_retreat"
+            });
+            task.setIcon("ui/Icons/iconLoyalty");
+            task.addBeh(new BehArmyRtsRetreatTarget());
+            task.addBeh(new BehGoToTileTarget
+            {
+                limit_pathfinding_regions = 6
+            });
+            task.addBeh(new BehWarriorCaptainWait());
+            task.addBeh(new BehRestartTask());
         }
 
         private static void RegisterMobilizationStatus()

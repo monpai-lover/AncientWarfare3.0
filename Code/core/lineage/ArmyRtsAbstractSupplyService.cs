@@ -1,7 +1,49 @@
+using System.Collections.Generic;
+using UnityEngine;
+
 namespace AncientWarfare3.core.lineage
 {
     internal static class ArmyRtsAbstractSupplyService
     {
+        private const double ScheduledCheckIntervalSeconds = 1d;
+        private const int MaximumTrackedActors = 8192;
+        private static readonly Dictionary<long, double> NextScheduledCheck =
+            new Dictionary<long, double>();
+
+        internal static void ClearRuntime()
+        {
+            NextScheduledCheck.Clear();
+        }
+
+        internal static bool TryConsumeHomeRationScheduled(Actor pActor)
+        {
+            bool actorAlive = pActor?.data != null && pActor.isAlive() &&
+                              !pActor.isRekt();
+            long actorId = pActor?.data?.id ?? -1L;
+            bool activeMilitaryOwner = actorAlive &&
+                (ArmyRtsControllerService.HasActiveMilitaryP0Owner(pActor) ||
+                 RoyalGuardService.IsRoyalGuard(pActor));
+            double now;
+            try { now = Time.realtimeSinceStartupAsDouble; }
+            catch { now = 0d; }
+            double nextAllowed = actorId >= 0L &&
+                                 NextScheduledCheck.TryGetValue(actorId,
+                                     out double next)
+                ? next
+                : 0d;
+            bool hungry = false;
+            try { hungry = actorAlive && pActor.needsFood() && pActor.isHungry(); }
+            catch { }
+            if (!ArmyRtsAbstractSupplyRules.ShouldRunScheduledCheck(
+                    actorAlive, activeMilitaryOwner, hungry, now,
+                    nextAllowed)) return false;
+            if (NextScheduledCheck.Count >= MaximumTrackedActors)
+                NextScheduledCheck.Clear();
+            NextScheduledCheck[actorId] = now +
+                                          ScheduledCheckIntervalSeconds;
+            return TryConsumeHomeRation(pActor);
+        }
+
         public static bool TryConsumeHomeRation(Actor pActor)
         {
             try
@@ -9,7 +51,9 @@ namespace AncientWarfare3.core.lineage
                 bool actorAlive = pActor?.data != null &&
                                   pActor.isAlive() && !pActor.isRekt();
                 bool ownsLiveRtsActor = actorAlive &&
-                    ArmyRtsControllerService.OwnsLiveActor(pActor);
+                    (ArmyRtsControllerService.
+                         HasActiveMilitaryP0Owner(pActor) ||
+                     RoyalGuardService.IsRoyalGuard(pActor));
                 City home = ownsLiveRtsActor
                     ? AWArmyService.FindAnchorCity(pActor.army)
                     : null;

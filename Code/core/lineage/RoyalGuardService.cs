@@ -4,6 +4,7 @@ using System.Reflection;
 using AncientWarfare3.content;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
@@ -34,6 +35,11 @@ namespace AncientWarfare3.core.lineage
         private const int MAP_CHUNK_SIZE = 16;
         private const int SEARCH_COOLDOWN_PRUNE_THRESHOLD = 256;
         private const double THREAT_SEARCH_MISS_COOLDOWN = 2.0;
+        private static readonly (int X, int Y)[] FollowOffsets =
+        {
+            (-2, -2), (0, -2), (2, -2), (-3, 0),
+            (3, 0), (-2, 2), (0, 2), (2, 2)
+        };
         private static readonly MethodInfo NewArmyObjectMethod = ResolveNewArmyObjectMethod();
         private static readonly NewArmyObjectDelegate NewArmyObjectInvoker =
             ReflectionDelegateFactory.TryCreate<NewArmyObjectDelegate>(
@@ -226,6 +232,7 @@ namespace AncientWarfare3.core.lineage
             RefreshGuardIdentity(captain, pKingdom, guardName, pCaptain: true, guardArmy,
                 ref runtimeRefreshesApplied, RUNTIME_REFRESH_BATCH_LIMIT);
             RepairProtectKingTaskIfNeeded(captain);
+            TryRegisterMilitaryPriority(captain);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefreshCaptain, CityMaintenanceBenchmarkRules.Group);
             pKingdom.data.get(LineageKeys.ROYAL_GUARD_REFRESH_CURSOR, out int refreshCursor, 0);
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardRefreshBatch, CityMaintenanceBenchmarkRules.Group);
@@ -247,6 +254,7 @@ namespace AncientWarfare3.core.lineage
                 RefreshGuardIdentity(guard, pKingdom, guardName, pCaptain: false, guardArmy,
                     ref runtimeRefreshesApplied, RUNTIME_REFRESH_BATCH_LIMIT);
                 RepairProtectKingTaskIfNeeded(guard);
+                TryRegisterMilitaryPriority(guard);
             }
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefreshBatch, CityMaintenanceBenchmarkRules.Group);
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_REFRESH_CURSOR,
@@ -468,10 +476,101 @@ namespace AncientWarfare3.core.lineage
             if (king.is_inside_boat)
                 return pGuard.current_tile;
 
-            WorldTile patrolTile = PickPatrolTileAroundKing(pGuard, king.current_tile);
-            if (patrolTile == null) return king.current_tile;
+            return ResolveGuardOffsetTile(pGuard, king.current_tile) ??
+                   king.current_tile;
+        }
 
-            return patrolTile;
+        internal static bool TryPublishKingFollowTarget(Actor pGuard)
+        {
+            if (!HasLandFollowPriority(pGuard)) return false;
+            Actor king = pGuard.kingdom?.king;
+            if (king?.current_tile?.data == null) return false;
+            RemoveFromNormalArmy(pGuard);
+
+            WorldTile followTile = ResolveGuardOffsetTile(pGuard,
+                king.current_tile) ?? king.current_tile;
+            if (followTile?.data == null) return false;
+            bool shouldMove = RoyalGuardActionRules.ShouldIssueFollowMove(
+                pHasTarget: true,
+                pTargetIsCurrentTile: pGuard.current_tile?.data?.tile_id ==
+                    followTile.data.tile_id);
+            if (!shouldMove)
+            {
+                try
+                {
+                    pGuard.stopMovement();
+                    pGuard.clearOldPath();
+                    pGuard.clearTileTarget();
+                }
+                catch { }
+                pGuard.beh_tile_target = null;
+                ArmyMilitaryMovementPriorityIndex.Register(pGuard.data.id,
+                    ArmyMilitaryMovementPriorityKind.RoyalGuard);
+                return false;
+            }
+            if (pGuard.beh_tile_target?.data?.tile_id !=
+                followTile.data.tile_id)
+                pGuard.beh_tile_target = followTile;
+            ArmyMilitaryMovementPriorityIndex.Register(pGuard.data.id,
+                ArmyMilitaryMovementPriorityKind.RoyalGuard);
+            return true;
+        }
+
+        internal static bool TryRegisterMilitaryPriority(Actor pGuard)
+        {
+            return TryRefreshMilitaryPriority(pGuard);
+        }
+
+        // Runs at the actor-post boundary. It deliberately never repairs or
+        // rebinds tasks; it only mirrors the king's latest land position into
+        // the native movement target and refreshes the P0 membership.
+        internal static bool TryRefreshMilitaryPriority(Actor pGuard)
+        {
+            if (!IsRoyalGuard(pGuard)) return false;
+            if (HasLandFollowPriority(pGuard))
+            {
+                TryPublishKingFollowTarget(pGuard);
+                return true;
+            }
+            if (HasLandProtectionProbePriority(pGuard))
+            {
+                ArmyMilitaryMovementPriorityIndex.Register(pGuard.data.id,
+                    ArmyMilitaryMovementPriorityKind.RoyalGuard);
+                return true;
+            }
+            if (pGuard?.data != null)
+                ArmyMilitaryMovementPriorityIndex.Unregister(pGuard.data.id);
+            return false;
+        }
+
+        internal static void ReleaseFollowPathForCombat(Actor pGuard)
+        {
+            if (pGuard?.data == null) return;
+            try { pGuard.clearTileTarget(); }
+            catch { }
+            pGuard.beh_tile_target = null;
+            ArmyMilitaryMovementPriorityIndex.Register(pGuard.data.id,
+                ArmyMilitaryMovementPriorityKind.RoyalGuard);
+        }
+
+        private static WorldTile ResolveGuardOffsetTile(Actor pGuard,
+            WorldTile pKingTile)
+        {
+            if (pGuard?.data == null || pKingTile?.data == null) return null;
+            int index = RoyalGuardActionRules.ResolveFollowOffsetIndex(
+                pGuard.data.id, FollowOffsets.Length);
+            if (index < 0) return null;
+            (int x, int y) = FollowOffsets[index];
+            WorldTile candidate;
+            try
+            {
+                candidate = World.world?.GetTileSimple(pKingTile.x + x,
+                    pKingTile.y + y);
+            }
+            catch { candidate = null; }
+            return IsGoodGuardPatrolTile(candidate, pKingTile)
+                ? candidate
+                : null;
         }
 
         public static void EnsureGuardNotInNormalArmy(Actor pGuard)
@@ -482,14 +581,49 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool HasLandFollowPriority(Actor pGuard)
         {
+            bool canFollowKingOnLand = CanUseLandKingPriority(pGuard);
+            return RoyalGuardActionRules.ShouldKeepMilitaryP0(
+                canFollowKingOnLand,
+                pGuard?.beh_actor_target != null,
+                immediateCombat: false);
+        }
+
+        internal static bool HasMilitaryP0Objective(Actor pGuard)
+        {
+            bool canFollowKingOnLand = CanUseLandKingPriority(pGuard);
+            bool hasThreatTarget = pGuard?.beh_actor_target != null;
+            bool immediateCombat = pGuard?.has_attack_target == true ||
+                                   hasThreatTarget;
+            return RoyalGuardActionRules.ShouldKeepMilitaryP0(
+                canFollowKingOnLand, hasThreatTarget, immediateCombat);
+        }
+
+        internal static bool TryPrepareMilitaryP0Actor(Actor pGuard)
+        {
+            if (!HasMilitaryP0Objective(pGuard)) return false;
+            if (pGuard.has_attack_target || pGuard.beh_actor_target != null)
+                return true;
+            EnsureProtectKingTask(pGuard);
+            TryPublishKingFollowTarget(pGuard);
+            return true;
+        }
+
+        internal static bool HasLandProtectionProbePriority(Actor pGuard)
+        {
+            if (!CanUseLandKingPriority(pGuard)) return false;
+            return RoyalGuardActionRules.ShouldProbeProtectionInP0(
+                pGuard.isTask(GuardContent.TASK_PROTECT_KING),
+                pGuard.beh_actor_target != null);
+        }
+
+        private static bool CanUseLandKingPriority(Actor pGuard)
+        {
             if (!IsRoyalGuard(pGuard) || pGuard?.data == null ||
                 pGuard.current_tile?.data == null || pGuard.is_inside_boat)
                 return false;
             Actor king = pGuard.kingdom?.king;
-            if (king?.current_tile?.data == null || king.isRekt() ||
-                king.is_inside_boat) return false;
-            return pGuard.isTask(GuardContent.TASK_PROTECT_KING) ||
-                   pGuard.isTask(GuardContent.TASK_FOLLOW_KING);
+            return king?.current_tile?.data != null && !king.isRekt() &&
+                   !king.is_inside_boat;
         }
 
         public static Actor FindThreatNearKing(Actor pGuard)
@@ -565,12 +699,14 @@ namespace AncientWarfare3.core.lineage
                 RebindGuardJob(pActor);
 
             if (pActor.isTask(GuardContent.TASK_PROTECT_KING) ||
-                pActor.isTask(GuardContent.TASK_FOLLOW_KING)) return;
-            try
+                pActor.isTask(GuardContent.TASK_FOLLOW_KING))
             {
-                pActor.ai.setTask(GuardContent.TASK_FOLLOW_KING);
+                TryRegisterMilitaryPriority(pActor);
+                return;
             }
-            catch { }
+            try { pActor.ai.setTask(GuardContent.TASK_FOLLOW_KING); }
+            catch { return; }
+            TryRegisterMilitaryPriority(pActor);
         }
 
         private static void RepairProtectKingTaskIfNeeded(Actor pActor)
@@ -1097,6 +1233,11 @@ namespace AncientWarfare3.core.lineage
         private static bool IsGuardCandidate(Actor pActor, Kingdom pKingdom)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
+            // During war, preserve every field-army roster unchanged. Peace
+            // time may still transfer a soldier into the royal household.
+            if (MilitaryEmergencyService.HasAny(pKingdom) &&
+                pActor.hasArmy())
+                return false;
             if (!RoyalAsylumRules.CanPerformProtectedRole(
                     RoyalAsylumService.IsActive(pActor))) return false;
             if (!HistoricalMasterVocationService.CanEnter(pActor,

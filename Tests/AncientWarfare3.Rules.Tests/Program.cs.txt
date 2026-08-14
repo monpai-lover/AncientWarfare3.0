@@ -112,6 +112,10 @@ if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
     PreparationRecruitmentProtectionRulesTests.Run();
     ArmyRtsWarLifecycleStateTests.Run();
     ArmyRtsCombatHandoffRulesTests.Run();
+    ArmyRtsCaptainCombatRulesTests.Run();
+    RoyalGuardTaskRecoveryRulesTests.Run();
+    ArmyNativeRouteLockRulesTests.Run();
+    ArmyRtsEndToEndFlowTests.Run();
     ArmyRtsSyntheticRecoveryRulesTests.Run();
     ArmyRtsAssignmentReconciliationRulesTests.Run();
     ArmySharedPathRecoveryRulesTests.Run();
@@ -991,12 +995,12 @@ static void RunArmyRtsCommandContinuityRulesTests()
         departed: true, ralliedFollowers: 7, eligiblePopulation: 10,
         secondsBelowQuorum: 0d),
         "the seventy-five-percent escort safety floor pauses immediately");
-    Equal(false, ArmyRtsRules.ShouldForcePreDeparture(
+    Equal(true, ArmyRtsRules.ShouldForcePreDeparture(
         authoritative: true, state: ArmyRtsState.Rally,
         minimumForceReady: true, captainPresent: true,
         escortQuorum: false, issuedWorldTime: 0d,
         currentWorldTime: 120d),
-        "the pre-departure timeout cannot bypass an incomplete escort");
+        "the pre-departure timeout releases an operational incomplete escort");
     Equal(false, ArmyRtsRules.IsViableAttackAssignment(
             attackAssignment: true, warActive: true,
             objectiveState: ArmyRtsObjectiveState.OpenAttack,
@@ -1068,6 +1072,34 @@ static void RunArmyRtsCommandContinuityRulesTests()
             ArmyWatchdogPositionSource.Captain, 0d, 3,
             routeReady: true, commandExpected: true, commandOwned: true),
         "route polling does not hide a stationary captain");
+    var localPathProgress = new ArmyWatchdogRecoveryFlow();
+    localPathProgress.AssignMission();
+    for (int localIndex = 0; localIndex < 6; localIndex++)
+        Equal(ArmyStallRecoveryAction.None,
+            localPathProgress.ObserveSample(true,
+                ArmyWatchdogPositionSource.Captain, 0d, 0,
+                routeReady: true, commandExpected: true,
+                commandOwned: true, localPathOwnerId: 77L,
+                localPathFollowing: true, localPathMoving: true,
+                localPathIndex: localIndex, localTargetTileId: 900),
+            "an advancing local-path cursor is physical progress");
+    for (int sample = 0; sample < 2; sample++)
+        Equal(ArmyStallRecoveryAction.None,
+            localPathProgress.ObserveSample(true,
+                ArmyWatchdogPositionSource.Captain, 0d, 0,
+                routeReady: true, commandExpected: true,
+                commandOwned: true, localPathOwnerId: 77L,
+                localPathFollowing: true, localPathMoving: true,
+                localPathIndex: 5, localTargetTileId: 900),
+            "a merely moving flag does not immediately recover a stuck local path");
+    Equal(ArmyStallRecoveryAction.ReassertCommand,
+        localPathProgress.ObserveSample(true,
+            ArmyWatchdogPositionSource.Captain, 0d, 0,
+            routeReady: true, commandExpected: true,
+            commandOwned: true, localPathOwnerId: 77L,
+            localPathFollowing: true, localPathMoving: true,
+            localPathIndex: 5, localTargetTileId: 900),
+        "a local path with no cursor or position progress still recovers");
     flow.ObserveSample(true, ArmyWatchdogPositionSource.Captain,
         0d, 0, routeReady: false, routePending: false,
         commandExpected: true, commandOwned: true);
@@ -1182,6 +1214,17 @@ static void RunArmyRtsCommandContinuityRulesTests()
         "fallback recovery remains bounded even when no nearby tile is usable");
 
     var concurrentFollowerRecovery = new ArmyFollowerStallRecoveryIndex();
+    var advancingFollowerPath = new ArmyFollowerStallRecoveryState();
+    for (int pathIndex = 0; pathIndex < 8; pathIndex++)
+        Equal(ArmyFollowerStallRecoveryAction.None,
+            ArmyFollowerStallRecoveryRules.ObserveAt(
+                advancingFollowerPath, actorId: 20L,
+                positionX: 11d, positionY: 12d,
+                recoveryEligible: true, combatActive: false,
+                transportActive: false, observedRealtime: 100d + pathIndex,
+                localPathFollowing: true, localPathIndex: pathIndex,
+                localTargetTileId: 700),
+            "an advancing follower local path must not be cleared by the separation watchdog");
     Equal(ArmyFollowerStallRecoveryAction.None,
         concurrentFollowerRecovery.Observe(actorId: 21L,
             positionX: 11d, positionY: 12d, recoveryEligible: true,
@@ -8222,6 +8265,7 @@ PathfindingMigrationRulesTests.Run();
 AWPathSessionTests.Run();
 AWDockRouteRegistryTests.Run();
 PathMovementExecutorRulesTests.Run();
+PathMovementSafetyRulesTests.Run();
 RuntimePerformanceBudgetRulesTests.Run();
 RuntimePerformanceDiagnosticRulesTests.Run();
 PathfindingCursorTests.Run();
@@ -8331,6 +8375,9 @@ ArmyRtsMissionTargetRulesTests.Run();
 PreparationRecruitmentProtectionRulesTests.Run();
 ArmyRtsWarLifecycleStateTests.Run();
 ArmyRtsCombatHandoffRulesTests.Run();
+ArmyRtsCaptainCombatRulesTests.Run();
+RoyalGuardTaskRecoveryRulesTests.Run();
+ArmyRtsEndToEndFlowTests.Run();
 ArmyRtsSyntheticRecoveryRulesTests.Run();
 ArmyRtsAssignmentReconciliationRulesTests.Run();
 ArmyMissionPersistenceRulesTests.Run();

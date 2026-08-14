@@ -132,5 +132,16 @@ namespace AncientWarfare3.core.lineage
                    (currentBestActorId < 0L ||
                     candidateActorId < currentBestActorId);
         }
+
+        public static bool ShouldPreferLevyPromotion(
+            float currentBestScore, long currentBestActorId,
+            float candidateScore, long candidateActorId)
+        {
+            if (candidateActorId < 0L) return false;
+            if (currentBestActorId < 0L) return true;
+            int scoreOrder = candidateScore.CompareTo(currentBestScore);
+            return scoreOrder > 0 ||
+                   scoreOrder == 0 && candidateActorId < currentBestActorId;
+        }
     }
 }

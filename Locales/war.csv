@@ -95,6 +95,10 @@ task_unit_aw_army_rts_retreat,撤退整补,Retreating to recover,撤退整補
 task_unit_aw_army_rts_regroup,重整军队,Regrouping the army,重整軍隊
 task_unit_aw_army_rts_formation,保持军队阵型,Holding army formation,保持軍隊陣型
 task_unit_aw_army_rts_front_hold,前线驻守,Front hold,前線駐守
+task_unit_aw_army_rts_captain_combat,将领交战,Commander combat,將領交戰
+task_unit_aw_army_rts_member_combat,士兵交战,Soldier combat,士兵交戰
+task_unit_aw_army_rts_captain_siege_advance,攻城推进,Siege advance,攻城推進
+task_unit_aw_army_rts_siege_combat,攻城战斗,Siege combat,攻城戰鬥
 war_type_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
 war_name_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
 aw_war_goal_zhulu_annexation,逐鹿天下,Contest All Under Heaven,逐鹿天下

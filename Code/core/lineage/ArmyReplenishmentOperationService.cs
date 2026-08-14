@@ -364,8 +364,12 @@ namespace AncientWarfare3.core.lineage
                 ArmyMobilizationPhase.War, requested, available);
             int reserved = SyntheticMobilizationLedgerService.TryReserveReplacement(
                 emergencyId, sourceCity.id, syntheticRequest);
-            int synthetic = SyntheticLevyService.CreateBatch(
-                sourceCity, kingdom, army, reserved, emergencyId, recruits);
+            WorldTile spawnTile = null;
+            try { spawnTile = army.getCaptain()?.current_tile; }
+            catch { }
+            int synthetic = SyntheticLevyService.CreateBatchAtTile(
+                sourceCity, kingdom, army, spawnTile, reserved, emergencyId,
+                recruits);
             SyntheticMobilizationLedgerService.ConfirmReplacementCreated(
                 emergencyId, sourceCity.id, synthetic);
             SyntheticMobilizationLedgerService.ReleaseUncreatedReplacement(

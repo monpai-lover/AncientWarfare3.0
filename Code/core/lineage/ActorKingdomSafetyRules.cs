@@ -29,6 +29,22 @@ namespace AncientWarfare3.core.lineage
             return actorExists && actorAssetExists && tileExists;
         }
 
+        public static bool ShouldUseFallbackKingdomColor(
+            bool kingdomObjectExists, bool kingdomDataExists,
+            bool kingdomAssetExists)
+        {
+            return kingdomObjectExists &&
+                   (!kingdomDataExists || !kingdomAssetExists);
+        }
+
+        public static bool ShouldSuppressKingdomDependentPresentation(
+            bool actorExists, bool actorAssetExists,
+            bool kingdomObjectExists)
+        {
+            return actorExists && actorAssetExists &&
+                   !kingdomObjectExists;
+        }
+
         public static bool IsCityKingdomRepairable(
             bool cityKingdomAssetExists, bool cityKingdomIsRekt)
         {

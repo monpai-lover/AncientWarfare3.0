@@ -403,8 +403,8 @@ namespace AncientWarfare3.core.lineage
             bool captainPresent, bool escortQuorum,
             double issuedWorldTime, double currentWorldTime)
         {
+            _ = escortQuorum;
             if (!authoritative || !minimumForceReady || !captainPresent ||
-                !escortQuorum ||
                 (state != ArmyRtsState.Rally &&
                  state != ArmyRtsState.Replenish) ||
                 double.IsNaN(issuedWorldTime) ||

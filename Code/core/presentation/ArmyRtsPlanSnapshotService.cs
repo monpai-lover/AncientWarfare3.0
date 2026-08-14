@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.presentation
         private const double PeriodicAuditSeconds =
             ArmyRtsPlanRules.DefaultCaptureCadenceSeconds;
         private const int MaximumArmiesPerSnapshot = 2048;
+        private const int MaximumPathPointsPerArmy = 512;
 
         private sealed class PendingRequest
         {
@@ -498,6 +499,8 @@ namespace AncientWarfare3.core.presentation
                 routeAnchor = Point(anchor);
             bool friendlyRecovery = IsFriendlyRecovery(pWar, pKingdom,
                 targetCity, mission);
+            IReadOnlyList<ArmyRtsPlanPoint> actualPath =
+                CaptureRoute(pArmy, captain);
             return new ArmyRtsPlanArmy(pArmy.id, pKingdom.id,
                 Point(origin), mission.TargetCityId, Point(target),
                 routeAnchor, mission.FrontId, OperationOf(projection.State,
@@ -505,7 +508,64 @@ namespace AncientWarfare3.core.presentation
                 ArmyRtsTransportService.HasActiveVoyage(pArmy),
                 mission.PlayerOrder,
                 projection.State == ArmyRtsState.Idle || captain == null,
-                mission.ProposalKind, mission.Role, mission.Posture);
+                mission.ProposalKind, mission.Role, mission.Posture,
+                actualPath);
+        }
+
+        private static IReadOnlyList<ArmyRtsPlanPoint> CaptureRoute(
+            Army pArmy, Actor pCaptain)
+        {
+            IReadOnlyList<ArmyRtsPlanPoint> locked =
+                CaptureLockedRoute(pArmy);
+            return locked ?? CaptureRemainingPath(pCaptain);
+        }
+
+        private static IReadOnlyList<ArmyRtsPlanPoint> CaptureLockedRoute(
+            Army pArmy)
+        {
+            if (!ArmyRtsControllerService.TryGetLockedCaptainRoute(pArmy,
+                    out IReadOnlyList<int> tileIds, out int cursor,
+                    out _)) return null;
+            IReadOnlyList<int> indices = ArmyRtsPlanRules.
+                SelectRemainingPathIndices(tileIds.Count, cursor,
+                    MaximumPathPointsPerArmy);
+            if (indices.Count == 0)
+                return Array.Empty<ArmyRtsPlanPoint>();
+            var result = new ArmyRtsPlanPoint[indices.Count];
+            WorldTile[] tiles = World.world?.tiles_list;
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int tileId = tileIds[indices[i]];
+                if (tiles == null || tileId < 0 || tileId >= tiles.Length ||
+                    tiles[tileId]?.data == null)
+                    return Array.Empty<ArmyRtsPlanPoint>();
+                result[i] = Point(tiles[tileId]);
+            }
+            return result;
+        }
+
+        private static IReadOnlyList<ArmyRtsPlanPoint> CaptureRemainingPath(
+            Actor pCaptain)
+        {
+            if (pCaptain?.current_path == null) return
+                Array.Empty<ArmyRtsPlanPoint>();
+            try
+            {
+                IReadOnlyList<int> indices = ArmyRtsPlanRules.
+                    SelectRemainingPathIndices(pCaptain.current_path.Count,
+                        pCaptain.current_path_index,
+                        MaximumPathPointsPerArmy);
+                if (indices.Count == 0)
+                    return Array.Empty<ArmyRtsPlanPoint>();
+                var result = new ArmyRtsPlanPoint[indices.Count];
+                for (int i = 0; i < indices.Count; i++)
+                    result[i] = Point(pCaptain.current_path[indices[i]]);
+                return result;
+            }
+            catch
+            {
+                return Array.Empty<ArmyRtsPlanPoint>();
+            }
         }
 
         private static bool IsFriendlyRecovery(War pWar,

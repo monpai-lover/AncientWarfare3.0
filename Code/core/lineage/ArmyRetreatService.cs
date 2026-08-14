@@ -386,6 +386,8 @@ namespace AncientWarfare3.core.lineage
                 SelectionPending = true
             };
             RetreatStates[pArmy.id] = state;
+            if (ArmyRtsRuntimeMode.ShouldCommit)
+                ArmyRtsControllerService.PrepareForRetreatSelection(pArmy);
             EnsureSafeCityIndex(kingdom, out int generation);
             state.ObservedIndexGeneration = generation;
             EnqueueRetreatSelection(pArmy.id);

@@ -472,7 +472,16 @@ namespace AncientWarfare3.core.lineage
         public static void SetCaptainIfChanged(Army pArmy, Actor pCaptain)
         {
             SetCaptainIfChangedCore(pArmy, pCaptain,
-                pRoyalGuardRoleOwnsCaptain: false);
+                pRoyalGuardRoleOwnsCaptain: false,
+                pBypassHistoricalCaptainGate: false);
+        }
+
+        internal static void SetCaptainAfterSuccession(Army pArmy,
+            Actor pCaptain)
+        {
+            SetCaptainIfChangedCore(pArmy, pCaptain,
+                pRoyalGuardRoleOwnsCaptain: false,
+                pBypassHistoricalCaptainGate: true);
         }
 
         public static void SetRoyalGuardCaptainIfChanged(Army pArmy,
@@ -481,18 +490,27 @@ namespace AncientWarfare3.core.lineage
             if (!IsRoleArmy(pArmy, AWArmyRole.RoyalGuard)) return;
             using (RoyalGuardCaptainHandoffScope.Open(pArmy))
                 SetCaptainIfChangedCore(pArmy, pCaptain,
-                    pRoyalGuardRoleOwnsCaptain: true);
+                    pRoyalGuardRoleOwnsCaptain: true,
+                    pBypassHistoricalCaptainGate: false);
         }
 
         private static void SetCaptainIfChangedCore(Army pArmy, Actor pCaptain,
-            bool pRoyalGuardRoleOwnsCaptain)
+            bool pRoyalGuardRoleOwnsCaptain,
+            bool pBypassHistoricalCaptainGate)
         {
             if (pArmy?.data == null || pCaptain?.data == null || pCaptain.isRekt()) return;
-            if (!IsCaptainLeaseEligible(pArmy, pCaptain,
-                    requireMembership: false)) return;
-            if (!HistoricalMasterVocationService.CanJoinArmy(pCaptain, pArmy) ||
-                !HistoricalMasterVocationService.CanEnter(pCaptain,
-                    HistoricalMasterMilitaryContext.ArmyCaptain)) return;
+            if (pBypassHistoricalCaptainGate)
+            {
+                if (!IsSuccessionCaptainEligible(pArmy, pCaptain)) return;
+            }
+            else
+            {
+                if (!IsCaptainLeaseEligible(pArmy, pCaptain,
+                        requireMembership: false)) return;
+                if (!HistoricalMasterVocationService.CanJoinArmy(pCaptain, pArmy) ||
+                    !HistoricalMasterVocationService.CanEnter(pCaptain,
+                        HistoricalMasterMilitaryContext.ArmyCaptain)) return;
+            }
             long currentId = -1L;
             Actor current = null;
             try
@@ -546,6 +564,24 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
             DedupePastCaptains(pArmy);
+        }
+
+        private static bool IsSuccessionCaptainEligible(Army pArmy,
+            Actor pActor)
+        {
+            try
+            {
+                return pArmy?.data != null && pActor?.data != null &&
+                       pActor.kingdom == GetIntendedKingdom(pArmy) &&
+                       pActor.isWarrior() &&
+                       pActor.isAlive() && !pActor.isRekt() &&
+                       !pActor.isKing() && !pActor.isCityLeader() &&
+                       !SlaveService.IsSlave(pActor) &&
+                       !SyntheticLevyService.IsSynthetic(pActor) &&
+                       !RoyalGuardService.IsRoyalGuard(pActor) &&
+                       pActor.army == pArmy && pArmy.units.Contains(pActor);
+            }
+            catch { return false; }
         }
 
         internal static bool IsCaptainLeaseEligible(Army pArmy,

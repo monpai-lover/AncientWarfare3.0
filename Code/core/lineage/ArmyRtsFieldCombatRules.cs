@@ -16,10 +16,6 @@ namespace AncientWarfare3.core.lineage
             bool pAlreadyReleased, int pEngagedCombatants,
             int pLiveCombatants, bool pCaptainEngaged)
         {
-            // 队长交战始终视为需要释放：队长是行军/编队锚点，
-            // 它一旦被拖入战斗，整队必须停止行军去应战。
-            if (pCaptainEngaged) return true;
-
             int engaged = pEngagedCombatants < 0 ? 0 : pEngagedCombatants;
             if (pLiveCombatants <= 0) return false;
             if (engaged > pLiveCombatants) engaged = pLiveCombatants;
@@ -31,6 +27,24 @@ namespace AncientWarfare3.core.lineage
             return pAlreadyReleased
                 ? percent > threshold
                 : percent >= threshold;
+        }
+
+        // 野战交接以将领为锚点。若将领没有当前可交战的敌人，成员的
+        // 残留 attack_target 不足以让整军持续取消战略路线。
+        public static bool ShouldKeepFieldCombat(bool pAlreadyReleased,
+            bool pCaptainHasCombatTarget, int pEngagedCombatants,
+            int pLiveCombatants, bool pCaptainEngaged)
+        {
+            if (!pCaptainHasCombatTarget) return false;
+            if (pAlreadyReleased) return true;
+            return ShouldReleaseToFieldCombat(false, pEngagedCombatants,
+                pLiveCombatants, pCaptainEngaged);
+        }
+
+        public static bool ShouldAbortFieldCombatFromP0(
+            bool pFieldCombatReleased, bool pCaptainHasCombatTarget)
+        {
+            return pFieldCombatReleased && !pCaptainHasCombatTarget;
         }
     }
 }

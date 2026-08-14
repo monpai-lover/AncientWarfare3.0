@@ -848,6 +848,24 @@ namespace AncientWarfare3.core.pathfinding
                 Cancel(pActor, AWPathFailureReason.CancelledByNewRequest);
                 return;
             }
+            Vector2 initialNextStep = pActor.next_step_position;
+            bool nextStepValid = !float.IsNaN(initialNextStep.x) &&
+                                 !float.IsNaN(initialNextStep.y) &&
+                                 !float.IsInfinity(initialNextStep.x) &&
+                                 !float.IsInfinity(initialNextStep.y) &&
+                                 initialNextStep.x > -99999f &&
+                                 initialNextStep.y > -9999f;
+            if (!AWPathLifecycleRules.ShouldAdvanceSmoothMovement(
+                    pActor.is_moving, nextStepValid))
+            {
+                if (pActor.is_moving)
+                {
+                    Cancel(pActor,
+                        AWPathFailureReason.CancelledByNewRequest);
+                    pActor.stopMovement();
+                }
+                return;
+            }
             pElapsed = AWPathLifecycleRules.NormalizeMovementElapsed(
                 pElapsed, World.world?.delta_time ?? 0.02f,
                 schedulerActive: AWPerformanceSettings.Mode ==

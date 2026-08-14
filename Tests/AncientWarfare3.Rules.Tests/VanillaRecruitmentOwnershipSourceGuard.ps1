@@ -21,6 +21,9 @@ $reserve = Read-Source 'Code/core/lineage/CityReservePoolService.cs'
 $replenishment = Read-Source `
     'Code/core/lineage/ArmyReplenishmentOperationService.cs'
 $synthetic = Read-Source 'Code/core/lineage/SyntheticLevyService.cs'
+$transport = Read-Source 'Code/core/lineage/ArmyRtsTransportService.cs'
+$transportProduction = Read-Source `
+    'Code/core/lineage/ArmyRtsTransportProductionService.cs'
 $temporary = Read-Source 'Code/core/lineage/TemporaryLevyService.cs'
 $standing = Read-Source 'Code/patch/AW_StandingArmyPatch.cs'
 $armySafety = Read-Source 'Code/patch/AW_ArmySafetyPatch.cs'
@@ -74,10 +77,25 @@ Reject $authorityBody '.units' `
 Require $replenishment `
     'SyntheticMobilizationLedgerService.TryReserveReplacement(' `
     'replenishment must reserve from the synthetic city-war ledger'
-Require $replenishment 'SyntheticLevyService.CreateBatch(' `
-    'replenishment must materialize bounded synthetic soldiers'
+Require $replenishment 'SyntheticLevyService.CreateBatchAtTile(' `
+    'replenishment must materialize bounded synthetic soldiers at the field army'
 Reject $replenishment 'CityReservePoolService.TryReserveWarManpower(' `
     'replenishment must not use the retired city reserve war ledger'
+
+$boatWake = Section $transport 'private static void TryWakeTransportBoat(' `
+    'private static bool TryBindBoat('
+Reject $boatWake 'SafeCityBoats(' `
+    'RTS transport wake must not scan and reuse city boats'
+Reject $boatWake 'TryBindBoat(' `
+    'RTS transport wake must not bind an existing boat'
+Require $boatWake 'TryProvisionAndBind(' `
+    'RTS transport wake must provision a fresh temporary boat'
+Require $transportProduction 'TemporaryBoatIds' `
+    'temporary RTS transport boats must be tracked explicitly'
+Require $transportProduction 'DestroyTemporaryTransportBoat(' `
+    'temporary RTS transport boats need a destruction lifecycle'
+Require $transport 'DestroyTemporaryTransportBoat(' `
+    'transport completion and cancellation must clean up temporary boats'
 
 foreach ($token in @('TemporaryLevyService.RegisterSyntheticLevy(',
         'TemporaryLevyService.OnActorInvalidated(',

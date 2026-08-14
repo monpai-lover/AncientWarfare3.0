@@ -51,6 +51,18 @@ internal static class ArmySharedPathRecoveryRulesTests
         Assert(ArmySharedPathRules.ShouldUseLongRangeFollowerRoute(
                 targetValid: true, targetDistanceSquared: 2500f),
             "a fifty-tile target uses the long-range follower route");
+        Assert(ArmySharedPathRules.IsProviderStepSpatiallyValid(
+                hasPreviousTile: true, transportStep: false,
+                deltaX: 1, deltaY: -1),
+            "an adjacent provider step is valid");
+        Assert(!ArmySharedPathRules.IsProviderStepSpatiallyValid(
+                hasPreviousTile: true, transportStep: false,
+                deltaX: 255, deltaY: 0),
+            "a world-edge jump cannot enter a shared local path");
+        Assert(ArmySharedPathRules.IsProviderStepSpatiallyValid(
+                hasPreviousTile: true, transportStep: true,
+                deltaX: 255, deltaY: 0),
+            "transport owns its non-local spatial transition");
 
         string root = Directory.GetCurrentDirectory();
         string controller = File.ReadAllText(Path.Combine(root, "Code",
@@ -59,7 +71,7 @@ internal static class ArmySharedPathRecoveryRulesTests
             "internal static bool RecoverEmptySharedRoute(",
             StringComparison.Ordinal);
         int recoveryEnd = controller.IndexOf(
-            "private static void TrySubmitIndependentFollowerRecoveryRoute(",
+            "public static bool TryTeleportFormationMember(",
             recoveryStart, StringComparison.Ordinal);
         string recoveryBody = controller.Substring(recoveryStart,
             recoveryEnd - recoveryStart);
@@ -75,16 +87,9 @@ internal static class ArmySharedPathRecoveryRulesTests
             captainTargetStart, StringComparison.Ordinal);
         string captainTargetBody = controller.Substring(captainTargetStart,
             captainTargetEnd - captainTargetStart);
-        Assert(captainTargetBody.Contains(
-                "ArmyFormationService.GetObservationProgress(army)",
-                StringComparison.Ordinal) &&
-            captainTargetBody.Contains(
-                "observationComplete: observation.Complete",
+        Assert(controller.Contains("TryIssueVanillaCityAttackOrder(pArmy,",
                 StringComparison.Ordinal),
-            "captain movement blocks departure until the bounded formation observation completes");
-        Assert(controller.Contains("HasLandEscortQuorum(escortPopulation",
-                StringComparison.Ordinal),
-            "controller rally readiness uses the ninety-percent land escort quorum");
+            "RTS movement publishes its locked city target to vanilla AI");
 
         string watchdog = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyStallWatchdogService.cs"));
@@ -111,15 +116,16 @@ internal static class ArmySharedPathRecoveryRulesTests
             !escortHoldBody.Contains("EnsureOffensiveContinuity",
                 StringComparison.Ordinal),
             "escort hold is tactical and leaves the strategic mission intact");
-        Assert(captainTargetBody.Contains("runtime.EscortHoldActive",
-                StringComparison.Ordinal),
-            "captain target publication consumes the tactical escort hold");
+        Assert(!controller.Substring(controller.IndexOf(
+                    "private static void EnsureJobs(",
+                    StringComparison.Ordinal), 1800)
+                .Contains("ArmyRtsContent.FollowerJobId",
+                    StringComparison.Ordinal),
+            "formation observation no longer installs a custom follower job");
 
-        Assert(controller.Contains("pPreferAlternateSlot",
-                StringComparison.Ordinal) &&
-            controller.Contains("RecoverFormationMember(pArmyId,",
+        Assert(!watchdog.Contains("SampleFollowerRecovery(pArmyId",
                 StringComparison.Ordinal),
-            "follower recovery has a member-scoped alternate-slot stage");
+            "vanilla follow-leader soldiers are not sampled for custom route recovery");
 
         int processFrameStart = controller.IndexOf(
             "public static void ProcessFrame(int pControllerBudget,",
@@ -135,9 +141,20 @@ internal static class ArmySharedPathRecoveryRulesTests
             processFrameBody.Contains("mode == ArmyRtsMode.Off",
                 StringComparison.Ordinal),
             "controller recovery runs on admitted large-step logical passes while planning stays separately throttled");
-        Assert(watchdog.Contains("follower_recovery_action",
+        Assert(!watchdog.Contains("SampleFollowerRecovery(pArmyId",
                 StringComparison.Ordinal),
-            "follower recovery stages are available in sampled RTS diagnostics");
+            "large-step diagnostics do not mutate vanilla follower movement");
+
+        int advanceStart = controller.IndexOf(
+            "private static void AdvanceRoute(", StringComparison.Ordinal);
+        int advanceEnd = controller.IndexOf(
+            "private static void LogStrategicRouteFailure(", advanceStart,
+            StringComparison.Ordinal);
+        string advanceBody = controller.Substring(advanceStart,
+            advanceEnd - advanceStart);
+        Assert(!advanceBody.Contains("SubmitStrategicRoute(",
+                StringComparison.Ordinal),
+            "normal RTS marching cannot install a provider route over vanilla movement");
     }
 
     private static void Assert(bool condition, string message)

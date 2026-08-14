@@ -7,6 +7,10 @@ $rosterWindow = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/windows/
 $traitPatch = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/patch/AW_TraitWindowSafetyPatch.cs')
 $rosterReadModel = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/core/schools/SchoolRosterReadModelService.cs')
 $rosterNode = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/items/SchoolRosterNodeView.cs')
+$actorCard = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/items/SchoolActorCardView.cs')
+$masterCard = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/items/SchoolMasterCardView.cs')
+$composition = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/items/SchoolCompositionElement.cs')
+$mapBottomBar = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/core/policy/SchoolMapBottomBarController.cs')
 
 if ($schoolWindow -notmatch '\.Take\(_lineageRows\.Count\)') {
     throw 'ShowLineage must keep the v1.1.2 fixed-row rendering contract.'
@@ -38,17 +42,32 @@ if ($traitPatch -notmatch 'Finalizer|Exception') {
 if ($schoolWindow -match '\[SchoolWindow\.ShowLineage\]') {
     throw 'ShowLineage must not emit per-refresh diagnostic logs.'
 }
-if ($navigation -notmatch 'MetaType\.Unit\.getAsset\(\)') {
-    throw 'School actor navigation must use the native unit MetaType path.'
+if ($navigation -notmatch 'ActionLibrary\.openUnitWindow\(pActor\)') {
+    throw 'School actor navigation must use the null-safe native unit-window entry point.'
 }
-if ($navigation -notmatch 'SelectedUnit\.clear\(\);\s*SelectedUnit\.select\(pActor\);') {
-    throw 'School actor navigation must bind SelectedUnit before UnitWindow enables.'
+if ($navigation -match 'selectAndInspect\(') {
+    throw 'School actor navigation must not dereference a missing previous meta selection.'
 }
-if ($navigation -notmatch 'unitMeta\.selectAndInspect\(pActor') {
-    throw 'School actor navigation must use the native unit MetaType inspection path after binding.'
+if ($composition -notmatch '(?s)private static void OpenSchoolWindow\(string pSchoolId\).*SchoolMapBottomBarController\.Hide\(\);\s*SchoolWindow\.OpenSchool\(pSchoolId\)') {
+    throw 'School map-mode percentage buttons must close the selected-city tab before opening a school.'
 }
-if ($navigation -notmatch 'pClearAction: false') {
-    throw 'School actor navigation must retain the native inspection window transition.'
+if ($composition -notmatch '(?s)private static void OpenSchoolWindow\(long pCityId\).*SchoolMapBottomBarController\.Hide\(\);\s*SchoolWindow\.OpenCity\(pCityId\)') {
+    throw 'School map-mode details must close the selected-city tab before opening city school details.'
+}
+if ($mapBottomBar -notmatch '(?s)public static void ProcessFrame\(\).*ScrollWindow\.getCurrentWindow\(\) != null.*Hide\(\);\s*return;') {
+    throw 'The school map selected-city tab must stay hidden while a regular window is open.'
+}
+if ($actorCard -notmatch 'DisablePortraitInteraction\(_avatar\);') {
+    throw 'School detail member portraits must be display-only so they cannot use the prefab unit-window click handler.'
+}
+if ($actorCard -notmatch 'blocksRaycasts\s*=\s*false') {
+    throw 'School detail member portraits must block prefab pointer events at the avatar root.'
+}
+if ($masterCard -notmatch 'DisablePortraitInteraction\(_avatar\);') {
+    throw 'School detail master portraits must be display-only so they cannot use the prefab unit-window click handler.'
+}
+if ($masterCard -notmatch 'blocksRaycasts\s*=\s*false') {
+    throw 'School detail master portraits must block prefab pointer events at the avatar root.'
 }
 if ($rosterWindow -notmatch '(?s)private void Refresh\(\).*CancelPendingRender\(\);\s*HideNodesAndLinks\(\);\s*UpdateSchoolSelector\(\);') {
     throw 'The school roster must clear pending rendering at refresh start like v1.1.2.'

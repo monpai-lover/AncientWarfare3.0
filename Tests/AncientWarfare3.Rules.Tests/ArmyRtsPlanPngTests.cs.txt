@@ -26,11 +26,15 @@ internal static class ArmyRtsPlanGifTests
         ArrowStylesExposeAllMissionSemantics();
         ProjectionPreservesWorldAspectRatio();
         FingerprintTracksPlansButNotMovement();
+        FingerprintTracksNativePathChanges();
+        LockedRouteSelectionPrefersStableRoute();
+        RemainingPathSamplingPreservesExecutionOrderAndEndpoint();
         FingerprintTracksCompleteStrategicIntent();
         RevisionLedgerDefersExpensiveCaptureUntilCadence();
         RevisionLedgerSuppressesDuplicatesAndReleasesNewestPending();
         TerrainComposerTintsKingdomZonesAndDrawsBoundaries();
         IndexedPaletteAndRasterPreserveTerrainAndPlanColors();
+        RasterDrawsNativePathInsteadOfStrategicShortcut();
         SequenceLedgerBoundsFramesAndPreservesEndpoints();
         GifEncoderWritesDecodableAnimatedGif89a();
         WriterCreatesNothingUntilShutdown();
@@ -91,6 +95,76 @@ internal static class ArmyRtsPlanGifTests
         NotEqual(ArmyRtsPlanRules.Fingerprint(SnapshotWithTerrain(7)),
             ArmyRtsPlanRules.Fingerprint(SnapshotWithTerrain(8)),
             "sampled terrain color change is material");
+    }
+
+    private static void FingerprintTracksNativePathChanges()
+    {
+        ArmyRtsPlanSnapshot first = Snapshot(Army(actualPath: new[]
+        {
+            new ArmyRtsPlanPoint(20, 10),
+            new ArmyRtsPlanPoint(30, 20)
+        }));
+        ArmyRtsPlanSnapshot changed = Snapshot(Army(actualPath: new[]
+        {
+            new ArmyRtsPlanPoint(20, 11),
+            new ArmyRtsPlanPoint(30, 20)
+        }));
+        NotEqual(ArmyRtsPlanRules.Fingerprint(first),
+            ArmyRtsPlanRules.Fingerprint(changed),
+            "native path change is material to a diagnostic frame");
+    }
+
+    private static void LockedRouteSelectionPrefersStableRoute()
+    {
+        True(ArmyRtsPlanRules.ShouldPreferLockedRoute(
+                hasLockedRoute: true),
+            "locked route is preferred over the mutable actor path");
+        Equal(false, ArmyRtsPlanRules.ShouldPreferLockedRoute(
+                hasLockedRoute: false),
+            "native path is only a pre-lock fallback");
+    }
+
+    private static void RemainingPathSamplingPreservesExecutionOrderAndEndpoint()
+    {
+        IReadOnlyList<int> indices = ArmyRtsPlanRules.
+            SelectRemainingPathIndices(pPathCount: 20, pCurrentIndex: 3,
+                pMaximumPoints: 5);
+        SequenceEqual(new[] { 3, 7, 11, 15, 19 }, indices,
+            "bounded native path sampling");
+        SequenceEqual(new[] { 4, 5, 6 }, ArmyRtsPlanRules.
+            SelectRemainingPathIndices(7, 4, 8),
+            "short native path remains exact");
+    }
+
+    private static void RasterDrawsNativePathInsteadOfStrategicShortcut()
+    {
+        var army = new ArmyRtsPlanArmy(20, 1,
+            new ArmyRtsPlanPoint(5, 5), 30,
+            new ArmyRtsPlanPoint(50, 5), null, 4,
+            ArmyRtsPlanOperation.Attack, false, false, false, false,
+            pActualPath: new[]
+            {
+                new ArmyRtsPlanPoint(5, 20),
+                new ArmyRtsPlanPoint(50, 20)
+            });
+        ArmyRtsPlanIndexedRaster raster = ArmyRtsPlanRasterizer.Render(
+            new ArmyRtsPlanSnapshot(9, 42, 64, 64, "native-path",
+                Array.Empty<ArmyRtsPlanKingdom>(),
+                Array.Empty<ArmyRtsPlanZone>(),
+                Array.Empty<ArmyRtsPlanCity>(), new[] { army },
+                Array.Empty<ArmyRtsPlanFront>()), maximumLongEdge: 64);
+        byte attack = ArmyRtsPlanPalette.IndexOf(
+            ArmyRtsPlanRasterizer.AttackColor);
+        ArmyRtsPlanCanvas canvas = ArmyRtsPlanRules.Project(64, 64, 64);
+        ArmyRtsPlanPoint bend = canvas.ProjectPoint(
+            new ArmyRtsPlanPoint(25, 20));
+        ArmyRtsPlanPoint shortcut = canvas.ProjectPoint(
+            new ArmyRtsPlanPoint(25, 5));
+        Equal(attack, raster.Pixels[bend.Y * raster.Width + bend.X],
+            "native path bend is rendered");
+        NotEqual(attack,
+            raster.Pixels[shortcut.Y * raster.Width + shortcut.X],
+            "obsolete direct strategic shortcut is not rendered solid");
     }
 
     private static void FingerprintTracksCompleteStrategicIntent()
@@ -538,7 +612,8 @@ internal static class ArmyRtsPlanGifTests
         bool pStalled = false, long pArmyId = 20,
         ArmyRtsProposalKind proposalKind = ArmyRtsProposalKind.Attack,
         ArmyRtsRole role = ArmyRtsRole.Assault,
-        ArmyRtsPosture posture = ArmyRtsPosture.Automatic)
+        ArmyRtsPosture posture = ArmyRtsPosture.Automatic,
+        IReadOnlyList<ArmyRtsPlanPoint> actualPath = null)
     {
         return new ArmyRtsPlanArmy(pArmyId, 1,
             new ArmyRtsPlanPoint(captainX, Math.Min(28, captainX)),
@@ -547,7 +622,7 @@ internal static class ArmyRtsPlanGifTests
                 targetCityId == 30 ? 20 : 26),
             new ArmyRtsPlanPoint(32, 15), 4, operation,
             friendlyRecovery, transportActive, false, pStalled,
-            proposalKind, role, posture);
+            proposalKind, role, posture, actualPath);
     }
 
     private static ArmyRtsPlanSnapshot Snapshot(ArmyRtsPlanArmy pArmy)

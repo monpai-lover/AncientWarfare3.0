@@ -99,6 +99,12 @@ namespace AncientWarfare3.core.lineage
                    SyntheticLevyDisposition.PromotePermanent;
         }
 
+        public static bool ShouldPromoteForCaptain(bool synthetic,
+            bool selectedAsCaptain)
+        {
+            return synthetic && selectedAsCaptain;
+        }
+
         public static bool ShouldRemoveActor(
             SyntheticLevyDisposition disposition)
         {

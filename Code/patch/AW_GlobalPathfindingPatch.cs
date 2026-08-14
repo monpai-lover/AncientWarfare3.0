@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
@@ -34,6 +35,29 @@ namespace AncientWarfare3.patch
             ref ExecuteEvent __result)
         {
             if (!PathfindingOwnershipService.ShouldIntercept) return true;
+            if (ArmyRtsControllerService.
+                    ShouldUseNativeMilitaryPath(__instance))
+            {
+                if (ArmyRtsControllerService.
+                        ShouldBlockLiquidMilitaryMovement(__instance,
+                            pTile))
+                {
+                    try
+                    {
+                        __instance.stopMovement();
+                        __instance.clearOldPath();
+                        __instance.clearTileTarget();
+                        __instance.beh_tile_target = null;
+                    }
+                    catch { }
+                    __result = ExecuteEvent.False;
+                    return false;
+                }
+                if (AWPathMovementBridge.HasOwnership(__instance))
+                    AWPathMovementBridge.Cancel(__instance,
+                        AWPathFailureReason.CancelledByNewRequest);
+                return true;
+            }
             long benchmark = RecentFeatureBenchmark.Begin();
             RuntimePerformanceDiagnostic.ActorRaceScopeToken raceToken =
                 RuntimePerformanceDiagnostic.BeginActorRaceScope(__instance);
@@ -215,19 +239,97 @@ namespace AncientWarfare3.patch
         private static void UpdateMovementDirect(Actor pActor, float pElapsed,
             float pWalkedDistance)
         {
+            if (!TryPrepareMovementTarget(pActor))
+            {
+                ArmyRtsMovementDiagnostic.LogOutOfBounds(
+                    pActor, "updateMovement_direct_after_guard");
+                return;
+            }
+            ArmyRtsMovementDiagnostic.LogOutOfBounds(
+                pActor, "updateMovement_direct_before");
             if (!AWPerformanceSettings.EnableFramePriorityScheduler)
             {
                 pActor.updateMovement(pElapsed, pWalkedDistance);
+                ArmyRtsMovementDiagnostic.LogOutOfBounds(
+                    pActor, "updateMovement_direct_after_native");
                 return;
             }
             if (PathfindingOwnershipService.ShouldIntercept &&
                 AWPathMovementBridge.ShouldUseCustomSmoothMovement(pActor))
             {
                 UpdateCustomSmoothMovement(pActor, pElapsed, pWalkedDistance);
+                ArmyRtsMovementDiagnostic.LogOutOfBounds(
+                    pActor, "updateMovement_direct_after_aw");
                 return;
             }
 
             pActor.updateMovement(pElapsed, pWalkedDistance);
+            ArmyRtsMovementDiagnostic.LogOutOfBounds(
+                pActor, "updateMovement_direct_after_native");
+        }
+
+        private static bool TryPrepareMovementTarget(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            ReanchorOutOfBoundsActor(pActor);
+            Vector2 next = pActor.next_step_position;
+            bool mapReady = MapBox.width > 0 && MapBox.height > 0;
+            if (AWPathLifecycleRules.IsValidMovementTarget(next.x, next.y) &&
+                (!mapReady || AWPathLifecycleRules.IsInsideMap(next.x, next.y,
+                    MapBox.width, MapBox.height)))
+                return true;
+
+            // updateMovement has no sentinel or map-boundary guard. When the
+            // vanilla path cursor has not supplied a step yet, advance the
+            // cursor once; otherwise clear the stale moving flag before the
+            // empty vector can be consumed as a world position.
+            try
+            {
+                if (pActor.isFollowingLocalPath() ||
+                    pActor.current_path_global != null)
+                {
+                    pActor.updatePathMovement();
+                }
+                else if (pActor.is_moving)
+                {
+                    pActor.stopMovement();
+                }
+            }
+            catch
+            {
+                try { pActor.stopMovement(); }
+                catch { }
+            }
+            return false;
+        }
+
+        private static void ReanchorOutOfBoundsActor(Actor pActor)
+        {
+            try
+            {
+                Vector2 current = pActor.current_position;
+                if (AWPathLifecycleRules.IsInsideMap(current.x, current.y,
+                        MapBox.width, MapBox.height))
+                    return;
+                WorldTile tile = pActor.current_tile;
+                if (tile != null &&
+                    AWPathLifecycleRules.IsInsideMap(tile.x + 0.5f,
+                        tile.y + 0.5f, MapBox.width, MapBox.height))
+                {
+                    pActor.current_position = tile.posV3;
+                    ArmyRtsMovementDiagnostic.Log(
+                        "movement", "position_reanchored", pActor,
+                        "from=" + current.x.ToString("0.###") + "," +
+                            current.y.ToString("0.###"));
+                    return;
+                }
+                pActor.stopMovement();
+            }
+            catch
+            {
+                try { pActor.stopMovement(); }
+                catch { }
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

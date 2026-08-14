@@ -143,12 +143,24 @@ namespace AncientWarfare3.core.lineage
                    transportSelected;
         }
 
+        public static bool ShouldAllowVanillaLandAttack(
+            bool sourceTileValid, bool targetTileValid, bool sameIsland)
+        {
+            return sourceTileValid && targetTileValid && sameIsland;
+        }
+
         public static bool ShouldInitiateTransportImmediately(
             bool routeRequiresTransport, bool voyageAlreadyActive,
             bool captainCanBeginTransport)
         {
             return routeRequiresTransport && !voyageAlreadyActive &&
                    captainCanBeginTransport;
+        }
+
+        public static bool CanCreateVoyageState(bool actorInsideBoat,
+            bool physicalRouteAvailable)
+        {
+            return actorInsideBoat || physicalRouteAvailable;
         }
 
         public static bool ShouldReplaceActiveVoyageTarget(
@@ -195,6 +207,13 @@ namespace AncientWarfare3.core.lineage
             return landedOnTargetIsland
                 ? ArmyRtsTransportExpectedMemberAction.HoldLanded
                 : ArmyRtsTransportExpectedMemberAction.AwaitTransport;
+        }
+
+        public static bool ShouldCountAsLanded(bool sameTargetIsland,
+            bool actorOnStableLand, bool targetOnStableLand)
+        {
+            return sameTargetIsland && actorOnStableLand &&
+                   targetOnStableLand;
         }
 
         public static ArmyRtsTransportVoyageAction ResolveVoyageAction(

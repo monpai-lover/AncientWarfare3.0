@@ -1,0 +1,42 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class PathMovementSafetyRulesTests
+{
+    public static void Run()
+    {
+        False(AWPathLifecycleRules.IsValidMovementTarget(-100000f, -10000f),
+            "vanilla empty vector must never be consumed as a movement target");
+        False(AWPathLifecycleRules.IsValidMovementTarget(float.NaN, 1f),
+            "NaN movement targets must be rejected");
+        True(AWPathLifecycleRules.IsValidMovementTarget(12.5f, 3.5f),
+            "finite movement targets remain valid");
+        False(AWPathLifecycleRules.IsInsideMap(-0.01f, 4f, 256f, 256f),
+            "negative actor positions are outside the map");
+        False(AWPathLifecycleRules.IsInsideMap(256f, 4f, 256f, 256f),
+            "the map upper bound is exclusive");
+        True(AWPathLifecycleRules.IsInsideMap(0.5f, 4f, 256f, 256f),
+            "tile-center positions inside the map remain valid");
+        True(AWPathLifecycleRules.ShouldReportMovementAnomaly(
+                currentOutside: false, nextOutside: false,
+                nextTargetEmpty: true, actorMoving: true),
+            "an empty target is anomalous only while an actor is moving");
+        False(AWPathLifecycleRules.ShouldReportMovementAnomaly(
+                currentOutside: false, nextOutside: false,
+                nextTargetEmpty: true, actorMoving: false),
+            "a stopped actor normally owns the vanilla empty target");
+        True(AWPathLifecycleRules.ShouldReportMovementAnomaly(
+                currentOutside: true, nextOutside: false,
+                nextTargetEmpty: true, actorMoving: false),
+            "an out-of-bounds current position is always anomalous");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

@@ -1,0 +1,182 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
+
+internal static class ArmyRtsEndToEndFlowTests
+{
+    public static void Run()
+    {
+        ArmyRtsState state = ArmyRtsState.Rally;
+
+        state = Resolve(state, routeArrived: false,
+            deploymentReady: false, targetComplete: false);
+        Equal(ArmyRtsState.March, state,
+            "A-city army leaves rally and enters the locked march");
+        Require(ArmyRtsControllerRules.ShouldAdvanceRoute(
+                ArmyRtsState.Rally, state, rallyReady: true),
+            "the Rally-to-March transition publishes the B-city route");
+
+        state = Resolve(state, routeArrived: false,
+            deploymentReady: false, targetComplete: false);
+        Equal(ArmyRtsState.March, state,
+            "the army retains March while B city has not been reached");
+        Require(!ArmyRtsMissionLockRules.CanReplaceTarget(
+                ArmyRtsMissionReleaseCause.PathFailed),
+            "a path failure cannot replace the locked B-city objective");
+
+        state = Resolve(state, routeArrived: true,
+            deploymentReady: false, targetComplete: false);
+        Equal(ArmyRtsState.Deploy, state,
+            "arrival at B-city territory enters deployment");
+
+        state = Resolve(state, routeArrived: true,
+            deploymentReady: true, targetComplete: false);
+        Equal(ArmyRtsState.Assault, state,
+            "a deployed assault army enters the attack state");
+
+        Equal(ArmyRtsCombatControlDecision.KeepStrategicControl,
+            ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.StrategicMovement,
+                withdrawalRequired: false,
+                insideTargetTerritory: false,
+                hostileCombatUnitNearby: true,
+                objectiveOpen: true),
+            "contact before B-city territory does not discard the strategic mission");
+
+        Equal(ArmyRtsCombatControlDecision.KeepStrategicControl,
+            ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.StrategicMovement,
+                withdrawalRequired: false,
+                insideTargetTerritory: false,
+                hostileCombatUnitNearby: true,
+                objectiveOpen: true),
+            "field contact does not discard the locked RTS mission");
+
+        Equal(ArmyRtsCombatControlDecision.KeepVanillaControl,
+            ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.VanillaCombat,
+                withdrawalRequired: false,
+                insideTargetTerritory: true,
+                hostileCombatUnitNearby: false,
+                objectiveOpen: true),
+            "a short combat lull cannot pull the army back into RTS movement");
+
+        Equal(ArmyRtsCombatControlDecision.ReacquireStrategicControl,
+            ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarPhase.VanillaCombat,
+                withdrawalRequired: false,
+                insideTargetTerritory: true,
+                hostileCombatUnitNearby: false,
+                objectiveOpen: false),
+            "RTS reacquires only after B-city ownership closes the objective");
+
+        state = Resolve(state, routeArrived: true,
+            deploymentReady: true, targetComplete: true);
+        Equal(ArmyRtsState.Idle, state,
+            "the completed B-city objective leaves the assault state");
+        Require(ArmyRtsRules.ShouldHandoffObjective(state,
+                targetComplete: true, targetValid: true),
+            "objective completion releases the locked mission claim");
+
+        Require(ArmyRtsControllerRules.
+                ShouldPrimeForcedTransportBeforeNativeAttack(
+                    isCaptain: true, usesVanillaAttack: true,
+                    sameIsland: false, transportOwned: false),
+            "an island-separated B city starts transport before land AI");
+        Require(ArmyMilitaryMovementPriorityRules.ShouldYieldToTransport(
+                insideBoat: false, customTransportOwned: false,
+                vanillaTaxiOwned: true),
+            "P0 yields while vanilla transport owns the actor");
+        Equal(256,
+            ArmyMilitaryMovementPriorityRules.ResolveP0ChunkCount(600, 256),
+            "a 600-soldier army advances through bounded priority chunks");
+
+        VerifyRuntimeCallOrder();
+    }
+
+    private static ArmyRtsState Resolve(ArmyRtsState current,
+        bool routeArrived, bool deploymentReady, bool targetComplete)
+    {
+        return ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+        {
+            CurrentState = current,
+            Role = ArmyRtsRole.Assault,
+            Posture = ArmyRtsPosture.Attack,
+            HasMission = true,
+            TargetValid = true,
+            TargetComplete = targetComplete,
+            ForceReady = true,
+            MinimumForceReady = true,
+            RallyReady = true,
+            RouteArrived = routeArrived,
+            DeploymentReady = deploymentReady,
+            Supply = 100,
+            Organization = 100
+        });
+    }
+
+    private static void VerifyRuntimeCallOrder()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        int processStart = controller.IndexOf("private static void ProcessOne(",
+            StringComparison.Ordinal);
+        int processEnd = controller.IndexOf("private static void ObserveFormation(",
+            processStart, StringComparison.Ordinal);
+        string process = processStart >= 0 && processEnd > processStart
+            ? controller.Substring(processStart, processEnd - processStart)
+            : string.Empty;
+        int formation = process.IndexOf("ObserveFormation(army, record.State)",
+            StringComparison.Ordinal);
+        int combat = process.IndexOf("TryHandleWarCombatOwnership(",
+            StringComparison.Ordinal);
+        int jobs = process.IndexOf("EnsureJobs(", StringComparison.Ordinal);
+        int facts = process.IndexOf("BuildFacts(", StringComparison.Ordinal);
+        int route = process.IndexOf("AdvanceRoute(", StringComparison.Ordinal);
+        int handoff = process.IndexOf("ShouldHandoffObjective(",
+            StringComparison.Ordinal);
+        Require(formation >= 0 && formation < combat && jobs > combat &&
+                facts > jobs && route > facts && handoff > route,
+            "formation observation precedes combat early returns, then jobs, facts, route, and objective release");
+
+        string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeActorPostRunner.cs"));
+        int p0Start = runner.IndexOf("private void ProcessMilitaryP0Actor(",
+            StringComparison.Ordinal);
+        int p0End = runner.IndexOf(
+            "private static bool YieldMilitaryP0Ownership", p0Start,
+            StringComparison.Ordinal);
+        string p0 = p0Start >= 0 && p0End > p0Start
+            ? runner.Substring(p0Start, p0End - p0Start)
+            : string.Empty;
+        int b2 = p0.IndexOf("actor.b2_checkCurrentEnemyTarget(cycleElapsed)",
+            StringComparison.Ordinal);
+        int b3 = p0.IndexOf("actor.b3_findEnemyTarget(cycleElapsed)",
+            StringComparison.Ordinal);
+        int b4 = p0.IndexOf("actor.b4_checkTaskVerifier(cycleElapsed)",
+            StringComparison.Ordinal);
+        int b5 = p0.IndexOf("actor.b5_checkPathMovement(cycleElapsed)",
+            StringComparison.Ordinal);
+        int b6 = p0.IndexOf("actor.b6_updateAI(cycleElapsed)",
+            StringComparison.Ordinal);
+        int u10 = p0.IndexOf("actor.u10_checkSmoothMovement(cycleElapsed)",
+            StringComparison.Ordinal);
+        Require(b2 >= 0 && b3 > b2 && b4 > b3 && b5 > b4 &&
+                b6 > b5 && u10 > b6,
+            "each prioritized soldier runs the original actor pipeline in order");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $"; expected={expected}, actual={actual}");
+    }
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

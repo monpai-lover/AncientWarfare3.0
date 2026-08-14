@@ -29,7 +29,8 @@ namespace AncientWarfare3.patch
                 long pPreviousCaptainId, long pRequestedCaptainId,
                 bool pPreviousAlive, bool pPreviousIsMember,
                 bool pDisposalScope, bool pReplicaApply,
-                bool pPreviousIsAuthority, bool pMutationAllowed)
+                bool pPreviousIsAuthority, bool pPreviousIsRoyalGuard,
+                bool pMutationAllowed)
             {
                 ArmyId = pArmyId;
                 PreviousCaptainId = pPreviousCaptainId;
@@ -39,6 +40,7 @@ namespace AncientWarfare3.patch
                 DisposalScope = pDisposalScope;
                 ReplicaApply = pReplicaApply;
                 PreviousIsAuthority = pPreviousIsAuthority;
+                PreviousIsRoyalGuard = pPreviousIsRoyalGuard;
                 MutationAllowed = pMutationAllowed;
             }
 
@@ -50,6 +52,7 @@ namespace AncientWarfare3.patch
             public bool DisposalScope { get; }
             public bool ReplicaApply { get; }
             public bool PreviousIsAuthority { get; }
+            public bool PreviousIsRoyalGuard { get; }
             public bool MutationAllowed { get; }
         }
 
@@ -123,7 +126,8 @@ namespace AncientWarfare3.patch
                 __instance?.id ?? -1L, ActorId(current), ActorId(pActor),
                 currentAlive, IsArmyMember(__instance, current),
                 disposalScope, replicaApply,
-                currentAuthority, mutationAllowed);
+                currentAuthority, RoyalGuardService.IsRoyalGuard(current),
+                mutationAllowed);
             return mutationAllowed;
         }
 
@@ -144,6 +148,19 @@ namespace AncientWarfare3.patch
             long currentCaptainId = ActorId(RawCaptain(__instance));
             if (currentCaptainId == __state.PreviousCaptainId) return;
             ArmyRtsControllerService.OnCaptainChanged(__instance);
+            Kingdom kingdom = SafeKingdom(__instance, SafeCity(__instance),
+                null);
+            if (ArmyRtsSuccessionRecoveryRules.
+                    ShouldEnqueueCaptainVacancy(
+                        __instance?.data != null,
+                        __state.PreviousCaptainId, currentCaptainId,
+                        ArmyRtsControllerService.HasActiveMission(
+                            __instance?.id ?? -1L),
+                        MilitaryEmergencyService.HasAny(kingdom),
+                        __state.PreviousIsRoyalGuard,
+                        __state.DisposalScope))
+                ArmyRtsSuccessionRecoveryService.OnCaptainVacated(
+                    __instance, __state.PreviousCaptainId);
             if (!AWPerformanceSettings.ArmyRtsDiagnosticsEnabled) return;
             if (ArmyRtsRuntimeMode.Current != ArmyRtsMode.On) return;
             ModClass.LogWarning("[Army captain change] army=" +
@@ -639,8 +656,11 @@ namespace AncientWarfare3.patch
         {
             if (ArmyRtsRuntimeModeRules.ShouldUseLegacyStrategicWrites(
                     ArmyRtsRuntimeMode.Current)) return true;
-            if (ArmyRtsControllerService.IsVanillaCombatCity(pCity))
-                return true;
+            if (ArmyRtsControllerService.IsVanillaMovementCity(pCity))
+            {
+                __result = BehResult.Continue;
+                return false;
+            }
             if (pCity != null)
             {
                 pCity.target_attack_city = null;
@@ -665,9 +685,13 @@ namespace AncientWarfare3.patch
             }
             bool rtsOwnsActor =
                 ArmyRtsControllerService.OwnsLiveActor(pActor);
+            bool nativeMilitaryMovement =
+                ArmyRtsControllerService.ShouldUseNativeMilitaryPath(
+                    pActor);
             if (ArmyRtsRuntimeModeRules.
                     ShouldAllowVanillaDecisionEvaluation(
-                        ArmyRtsRuntimeMode.Current, rtsOwnsActor))
+                        ArmyRtsRuntimeMode.Current, rtsOwnsActor,
+                        nativeMilitaryMovement))
                 return true;
             pLastDecisionID = string.Empty;
             __result = false;
@@ -695,6 +719,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(BehFindTileNearbyGroupLeader), nameof(BehFindTileNearbyGroupLeader.execute))]
         public static bool FindTileNearbyGroupLeader_Prefix(Actor pActor, ref BehResult __result)
         {
+            if (ArmyRtsControllerService.
+                    UsesVanillaFollowerMovement(pActor)) return true;
             if (AWPathMovementBridge.HasOwnership(pActor))
             {
                 __result = BehResult.Stop;

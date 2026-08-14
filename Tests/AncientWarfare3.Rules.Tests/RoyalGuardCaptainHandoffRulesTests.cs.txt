@@ -1,3 +1,4 @@
+using System.Reflection;
 using AncientWarfare3.core.lineage;
 
 internal static class RoyalGuardCaptainHandoffRulesTests
@@ -60,6 +61,54 @@ internal static class RoyalGuardCaptainHandoffRulesTests
             RoyalGuardActionRules.FollowIdleWaitMax <= 0.1f &&
             RoyalGuardActionRules.NoThreatWaitMax <= 0.1f,
             "royal guards recheck their king immediately instead of idling for seconds");
+        Check(failures,
+            RoyalGuardActionRules.ResolveFollowOffsetIndex(17L, 8) ==
+            RoyalGuardActionRules.ResolveFollowOffsetIndex(17L, 8),
+            "a guard keeps one deterministic formation offset around the king");
+        Check(failures,
+            RoyalGuardActionRules.ShouldProbeProtectionInP0(
+                isProtectTask: true, hasThreatTarget: false),
+            "a protect task receives one prioritized native AI probe");
+        Check(failures,
+            !RoyalGuardActionRules.ShouldProbeProtectionInP0(
+                isProtectTask: true, hasThreatTarget: true),
+            "a guard with a threat leaves follow P0 for combat");
+        Check(failures,
+            RoyalGuardActionRules.ShouldUseFollowP0(
+                isFollowTask: true, isProtectTask: false,
+                hasThreatTarget: false),
+            "only the follow task is owned by movement P0");
+        Check(failures,
+            !RoyalGuardActionRules.ShouldUseFollowP0(
+                isFollowTask: false, isProtectTask: true,
+                hasThreatTarget: false),
+            "protect mode must not be flattened into follow movement");
+        Check(failures,
+            RoyalGuardActionRules.ShouldKeepMilitaryP0(
+                canFollowKingOnLand: true, hasThreatTarget: false,
+                immediateCombat: false),
+            "a land guard stays in P0 even between follow task iterations");
+        MethodInfo cooldownRule = typeof(RoyalGuardActionRules).GetMethod(
+            "ShouldIssueFollowMoveAfterCooldown",
+            new[] { typeof(bool), typeof(bool), typeof(bool) });
+        Check(failures, cooldownRule != null &&
+            !(bool)cooldownRule.Invoke(null,
+                new object[] { true, true, true }),
+            "a guard at its offset must pause instead of republishing movement during cooldown");
+        Check(failures, cooldownRule != null &&
+            (bool)cooldownRule.Invoke(null,
+                new object[] { true, true, false }),
+            "a guard may re-evaluate its offset after the pause expires");
+        Check(failures,
+            RoyalGuardActionRules.ShouldKeepMilitaryP0(
+                canFollowKingOnLand: true, hasThreatTarget: true,
+                immediateCombat: true),
+            "a fighting guard keeps the military P0 combat lane");
+        Check(failures,
+            !RoyalGuardActionRules.ShouldKeepMilitaryP0(
+                canFollowKingOnLand: false, hasThreatTarget: false,
+                immediateCombat: false),
+            "a guard without a valid land king target leaves movement P0");
 
         Check(failures,
             !AWArmyRoleRules.ShouldRtsOwnCaptain(
@@ -102,6 +151,12 @@ internal static class RoyalGuardCaptainHandoffRulesTests
             threatBehaviour.Contains("return BehResult.RepeatStep;") &&
             !threatBehaviour.Contains("WaitAfterGuardNoThreat(pActor);\n                return BehResult.Stop;"),
             "a guard without a threat keeps its follow task alive");
+        string followTaskBehaviour = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehRoyalGuardFollowKing.cs"));
+        Check(failures,
+            followTaskBehaviour.Contains("WaitAfterGuardFollowIdle(pActor);") &&
+            followTaskBehaviour.Contains("return BehResult.RepeatStep;"),
+            "a guard without a follow tile must keep the follow task alive");
         string armyService = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "AWArmyService.cs"));
         string guardService = File.ReadAllText(Path.Combine(root, "Code", "core",
@@ -133,6 +188,82 @@ internal static class RoyalGuardCaptainHandoffRulesTests
             guardService.Contains("pActor.setCitizenJob(GuardContent.KingGuardJob)") &&
             guardService.Contains("pActor.ai.setJob(GuardContent.ACTOR_JOB_KING_GUARD)"),
             "job drift repair clears stale movement/tasks and rebinds citizen and actor jobs");
+        int ensureGuardTaskStart = guardService.IndexOf(
+            "internal static void EnsureProtectKingTask(Actor pActor)",
+            StringComparison.Ordinal);
+        int ensureGuardTaskEnd = guardService.IndexOf(
+            "private static void RepairProtectKingTaskIfNeeded",
+            ensureGuardTaskStart, StringComparison.Ordinal);
+        string ensureGuardTask = ensureGuardTaskStart >= 0 &&
+            ensureGuardTaskEnd > ensureGuardTaskStart
+            ? guardService.Substring(ensureGuardTaskStart,
+                ensureGuardTaskEnd - ensureGuardTaskStart)
+            : "";
+        Check(failures,
+            ensureGuardTask.Contains("TryRegisterMilitaryPriority(pActor)"),
+            "guard task repair immediately registers follow or protection priority for the large scheduler");
+        Check(failures,
+            guardService.Contains("RepairProtectKingTaskIfNeeded(captain);") &&
+            guardService.Contains("TryRegisterMilitaryPriority(captain);") &&
+            guardService.Contains("RepairProtectKingTaskIfNeeded(guard);") &&
+            guardService.Contains("TryRegisterMilitaryPriority(guard);"),
+            "scheduled guard identity refresh must proactively seed military P0");
+        string postRunner = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeActorPostRunner.cs"));
+        int militaryActorStart = postRunner.IndexOf(
+            "private void ProcessMilitaryP0Actor(",
+            StringComparison.Ordinal);
+        int militaryActorEnd = postRunner.IndexOf(
+            "private static bool HasLiveMilitaryP0Objective",
+            militaryActorStart, StringComparison.Ordinal);
+        string militaryActorBody = militaryActorStart >= 0 &&
+            militaryActorEnd > militaryActorStart
+            ? postRunner.Substring(militaryActorStart,
+                militaryActorEnd - militaryActorStart)
+            : string.Empty;
+        Check(failures,
+            militaryActorBody.Contains(
+                "kind == ArmyMilitaryMovementPriorityKind.RoyalGuard") &&
+            militaryActorBody.Contains("actor.b6_updateAI(cycleElapsed)") &&
+            militaryActorBody.Contains(
+                "kind == ArmyMilitaryMovementPriorityKind.RoyalGuard &&") &&
+            militaryActorBody.Contains("actor.beh_actor_target != null") &&
+            !militaryActorBody.Contains("ShouldIssueNativeFollowMove(") &&
+            !militaryActorBody.Contains("actor.goTo("),
+            "Royal Guard P0 uses native AI, yields a discovered threat immediately, and never moves directly");
+        int followPriorityStart = guardService.IndexOf(
+            "internal static bool HasLandFollowPriority(Actor pGuard)",
+            StringComparison.Ordinal);
+        int followPriorityEnd = guardService.IndexOf(
+            "internal static bool HasLandProtectionProbePriority",
+            followPriorityStart, StringComparison.Ordinal);
+        string followPriorityBody = followPriorityStart >= 0 &&
+            followPriorityEnd > followPriorityStart
+            ? guardService.Substring(followPriorityStart,
+                followPriorityEnd - followPriorityStart)
+            : string.Empty;
+        Check(failures,
+            followPriorityBody.Contains(
+                "RoyalGuardActionRules.ShouldKeepMilitaryP0(") &&
+            followPriorityBody.Contains("CanUseLandKingPriority(pGuard)"),
+            "Royal Guard P0 survives task completion while a land king target remains valid");
+        int releasePathStart = guardService.IndexOf(
+            "internal static void ReleaseFollowPathForCombat(",
+            StringComparison.Ordinal);
+        int releasePathEnd = guardService.IndexOf(
+            "private static WorldTile ResolveGuardOffsetTile(",
+            releasePathStart, StringComparison.Ordinal);
+        string releasePathBody = releasePathStart >= 0 &&
+            releasePathEnd > releasePathStart
+            ? guardService.Substring(releasePathStart,
+                releasePathEnd - releasePathStart)
+            : string.Empty;
+        Check(failures,
+            releasePathBody.Contains(
+                "ArmyMilitaryMovementPriorityIndex.Register(") &&
+            !releasePathBody.Contains(
+                "ArmyMilitaryMovementPriorityIndex.Unregister("),
+            "entering guard combat releases the follow path without dropping P0 priority");
         int rtsGuardOwnershipChecks = rtsService.Split(
             "AWArmyRoleRules.ShouldRtsOwnCaptain(").Length - 1;
         Check(failures,
@@ -148,9 +279,35 @@ internal static class RoyalGuardCaptainHandoffRulesTests
             "bounded Royal Guard maintenance repairs task drift for the captain and member batch");
         string guardContent = File.ReadAllText(Path.Combine(root, "Code", "content",
             "GuardContent.cs"));
+        string followBehaviour = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehRoyalGuardFollowKing.cs"));
         Check(failures,
             !guardContent.Contains("new BehRandomWait(RoyalGuardActionRules.FollowIdleWaitMin"),
             "the guard follow task does not append a long random idle step");
+        Check(failures,
+            followBehaviour.Contains("TryPublishKingFollowTarget(pActor)") &&
+            followBehaviour.Contains("return BehResult.Continue;") &&
+            !followBehaviour.Contains("pActor.goTo("),
+            "the guard behaviour publishes a formation target without issuing movement");
+        Check(failures,
+            guardContent.IndexOf("follow.addBeh(new BehRoyalGuardFollowKing())", StringComparison.Ordinal) >= 0 &&
+            guardContent.IndexOf("new BehGoToTileTarget", StringComparison.Ordinal) >
+                guardContent.IndexOf("follow.addBeh(new BehRoyalGuardFollowKing())", StringComparison.Ordinal) &&
+            guardContent.Contains("limit_pathfinding_regions = 6"),
+            "the follow task publishes its target before native tile movement runs");
+        Check(failures,
+            guardService.Contains("TryPublishKingFollowTarget") &&
+            guardService.Contains("ResolveGuardOffsetTile") &&
+            guardService.Contains("pGuard.beh_tile_target?.data?.tile_id !=") &&
+            !guardService.Contains("current_path.Add") &&
+            !guardService.Contains("updatePathMovement()") &&
+            !guardService.Contains("TryInstallMirroredKingPath") &&
+            !guardService.Contains("InstalledKingPathTargetByGuard"),
+            "the guard service keeps the stable offset but never mirrors or drives the king path");
+        Check(failures,
+            guardService.Contains("pGuard.clearTileTarget()") &&
+            guardService.Contains("pGuard.beh_tile_target = null"),
+            "combat release removes the old follow target before combat takes movement ownership");
 
         if (failures.Count > 0)
             throw new InvalidOperationException(string.Join(Environment.NewLine, failures));

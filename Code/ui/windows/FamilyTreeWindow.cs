@@ -2685,8 +2685,7 @@ namespace AncientWarfare3.ui.windows
             }
             // 小树:活人 inspect
             var actor = World.world?.units?.get(pActorId);
-            if (actor != null && !actor.isRekt())
-                ActionLibrary.openUnitWindow(actor);
+            SchoolActorNavigation.Open(actor);
         }
 
         // 小树非根节点:父母/子女/同辈节点点击都切换为目标作为新根,便于连续溯源。

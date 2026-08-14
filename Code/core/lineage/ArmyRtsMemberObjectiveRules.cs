@@ -19,10 +19,9 @@ namespace AncientWarfare3.core.lineage
             int recordedTargetTileId, int resolvedTargetTileId,
             bool ownsPath, bool nativeLocalPath)
         {
-            return hasObjective && resolvedTargetTileId >= 0 &&
-                   recordedTargetTileId >= 0 &&
-                   recordedTargetTileId != resolvedTargetTileId &&
-                   (ownsPath || nativeLocalPath);
+            _ = recordedTargetTileId;
+            _ = resolvedTargetTileId;
+            return hasObjective && !ownsPath && !nativeLocalPath;
         }
 
         internal static bool ShouldRecoverToMissionObjective(

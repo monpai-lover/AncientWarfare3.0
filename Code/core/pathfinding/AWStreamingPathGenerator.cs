@@ -127,7 +127,7 @@ namespace AncientWarfare3.core.pathfinding
                     {
                         regionCorridor = AWRegionCorridor.Create(
                             pRequest.Generation.RegionTopology, route);
-                        int waypoint = ResolveRegionLookahead(pRequest.Generation,
+                        int waypoint = ResolveRegionLookahead(pRequest,
                             route, start, _config.RegionCorridorLookaheadTiles);
                         if (waypoint >= 0 && pRequest.Generation.TryGet(waypoint,
                                 out AWTileTraversalSnapshot resolvedWaypoint))
@@ -140,6 +140,23 @@ namespace AncientWarfare3.core.pathfinding
 #if !AW3_RULES_TESTS
                 AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(result.ExpandedNodes);
 #endif
+                if (!result.Success && regionCorridor != null)
+                {
+#if !AW3_RULES_TESTS
+                    AWPathfindingBootstrap.PathDiagnostics.OnFallback();
+#endif
+                    result = Search(pRequest, start, target,
+                        Math.Max(_config.MaxNodesLongFallback,
+                            _config.MaxNodesLong),
+                        float.PositiveInfinity, null, 1f,
+                        pCancellation, workspace);
+                    objective = target;
+                    regionCorridor = null;
+#if !AW3_RULES_TESTS
+                    AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(
+                        result.ExpandedNodes);
+#endif
+                }
                 if (!result.Success && result.HitNodeLimit && longRange)
                 {
 #if !AW3_RULES_TESTS
@@ -293,21 +310,30 @@ namespace AncientWarfare3.core.pathfinding
             return value;
         }
 
-        private static int ResolveRegionLookahead(AWTraversalGeneration pGeneration,
+        private static int ResolveRegionLookahead(AWPathRequest pRequest,
             int[] pRoute, AWTileTraversalSnapshot pStart, int pLookaheadTiles)
         {
+            AWTraversalGeneration pGeneration = pRequest?.Generation;
             if (pGeneration?.RegionTopology == null || pRoute == null)
                 return -1;
             int selected = -1;
             for (int index = 1; index < pRoute.Length; index++)
             {
                 if (!pGeneration.RegionTopology.TryGetRegion(pRoute[index],
-                        out AWRegionNode region) || region.CenterTileId < 0)
+                        out AWRegionNode region))
                     continue;
-                selected = region.CenterTileId;
-                if (pGeneration.TryGet(selected,
-                        out AWTileTraversalSnapshot candidate) &&
-                    AWTraversalRules.Distance(pStart.X, pStart.Y,
+                int candidateId = pRequest.Profile.IsBoat ||
+                                  pRequest.Profile.IsWaterCreature
+                    ? region.CenterTileId
+                    : region.LandTileId;
+                if (candidateId < 0 ||
+                    !pGeneration.TryGet(candidateId,
+                        out AWTileTraversalSnapshot candidate) ||
+                    !AWTraversalRules.CanEnter(candidate, pRequest.Profile,
+                        pRequest.Options))
+                    continue;
+                selected = candidateId;
+                if (AWTraversalRules.Distance(pStart.X, pStart.Y,
                         candidate.X, candidate.Y) >= Math.Max(1,
                         pLookaheadTiles)) break;
             }

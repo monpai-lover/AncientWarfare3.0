@@ -50,11 +50,13 @@ namespace AncientWarfare3.patch
             }
             catch { }
             if (ArmyRtsSuccessionRecoveryRules.
-                    ShouldEnqueueCaptainRecovery(
+                ShouldEnqueueCaptainRecovery(
                         dyingArmy?.data != null, wasCaptain,
                         dyingArmy?.data != null &&
                         ArmyRtsControllerService.HasActiveMission(
-                            dyingArmy.id)))
+                            dyingArmy.id),
+                        MilitaryEmergencyService.HasAny(__instance.kingdom),
+                        RoyalGuardService.IsRoyalGuard(__instance)))
             {
                 __state.DyingCaptainArmy = dyingArmy;
                 __state.DyingCaptainActorId = __instance.data.id;

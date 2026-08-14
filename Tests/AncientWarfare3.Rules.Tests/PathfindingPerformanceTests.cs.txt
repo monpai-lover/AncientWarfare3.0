@@ -24,6 +24,8 @@ internal static class PathfindingPerformanceTests
         LongPathEmitsOneCompletePlan();
         RegionWaypointDoesNotCompleteFinalTarget();
         RegionWaypointCacheKeepsContinuation();
+        RegionWaypointSkipsAnUnwalkableRegionRepresentative();
+        RegionCorridorRetriesAfterUnreachableGuidance();
         TraversalRevisionMustMatchBeforeConsumption();
         StaleTraversalRequestIsRejectedBeforeSearch();
         RegionRouteCacheReusesOnlyMatchingSnapshotVersion();
@@ -63,6 +65,7 @@ internal static class PathfindingPerformanceTests
         IncrementalTraversalBuildSkipsGlobalConnectivityPass();
         TraversalTopologyReuseIsExplicitForTerrainOnlyChanges();
         ActorRunnerSupportsSpecializedPostAndParallelStages();
+        MilitaryP0UsesBoundedCooperativeChunks();
         ActorParallelJobsUseOneWorkerLayer();
         IncrementalZoneInsertionRepairsStaleTileMembers();
         ActorPostPipelineKeepsEnemySearchOrdered();
@@ -1548,6 +1551,141 @@ internal static class PathfindingPerformanceTests
         Assert(first.Succeeded && !first.ReachedTarget &&
                cached.Succeeded && !cached.ReachedTarget,
             "draining a cached waypoint route still requires the final-target continuation");
+    }
+
+    private static void MilitaryP0UsesBoundedCooperativeChunks()
+    {
+        Assert(ArmyMilitaryMovementPriorityRules.ResolveP0ChunkCount(
+                   1000, 256) == 256,
+            "military P0 yields after one bounded chunk");
+        Assert(ArmyMilitaryMovementPriorityRules.ResolveP0ChunkCount(
+                   100, 256) == 100,
+            "the final military P0 chunk drains its remaining actors");
+        Assert(ArmyMilitaryMovementPriorityRules.ShouldYieldToTransport(
+                   insideBoat: false, customTransportOwned: false,
+                   vanillaTaxiOwned: true),
+            "a vanilla taxi request suspends military P0");
+        Assert(!ArmyMilitaryMovementPriorityRules.CanAdmitOrdinaryActorWork(
+                   p0SlicePending: true),
+            "ordinary actor post work waits for the military snapshot");
+
+        string root = Directory.GetCurrentDirectory();
+        string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeActorPostRunner.cs"));
+        string index = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "ArmyMilitaryMovementPriorityIndex.cs"));
+        int start = runner.IndexOf("public void Start(",
+            StringComparison.Ordinal);
+        int step = runner.IndexOf("public bool Step()", start,
+            StringComparison.Ordinal);
+        string startBody = start >= 0 && step > start
+            ? runner.Substring(start, step - start)
+            : string.Empty;
+        Assert(runner.Contains("PostStage.MilitaryP0",
+                   StringComparison.Ordinal) &&
+               runner.Contains("militaryP0Cursor",
+                   StringComparison.Ordinal) &&
+               runner.Contains(".post.military_p0.chunk",
+                   StringComparison.Ordinal),
+            "actor post exposes a cooperative military P0 stage, cursor, and phase diagnostic");
+        Assert(startBody.Contains(
+                   "ArmyMilitaryMovementPriorityIndex.CopySnapshot(",
+                   StringComparison.Ordinal) &&
+               !startBody.Contains("RunMilitaryP0Slice(cycleElapsed)",
+                   StringComparison.Ordinal),
+            "Start snapshots military work without draining it synchronously");
+        Assert(index.Contains(
+                   "internal static void CopySnapshot(List<long> destination)",
+                   StringComparison.Ordinal),
+            "the military priority index publishes a stable cycle snapshot");
+        Assert(index.Contains(
+                   "internal static void RefreshVanillaTaxiSnapshot()",
+                   StringComparison.Ordinal) &&
+               index.Contains("request.getActors()",
+                   StringComparison.Ordinal) &&
+               runner.Contains(
+                   "ArmyMilitaryMovementPriorityIndex.RefreshVanillaTaxiSnapshot()",
+                   StringComparison.Ordinal),
+            "vanilla taxi ownership is indexed per actor-post boundary instead of scanned per soldier");
+    }
+
+    private static void RegionWaypointSkipsAnUnwalkableRegionRepresentative()
+    {
+        var tiles = new[]
+        {
+            new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+                regionId: 0, islandId: 1, pNeighbors: new[] { 4 }),
+            new AWTileTraversalSnapshot(1, 1, 0, liquid: true, ocean: true,
+                regionId: 1, islandId: -1, pNeighbors: Array.Empty<int>()),
+            new AWTileTraversalSnapshot(2, 2, 0, liquid: true, ocean: true,
+                regionId: 1, islandId: -1, pNeighbors: Array.Empty<int>()),
+            new AWTileTraversalSnapshot(3, 3, 0, ground: true,
+                regionId: 2, islandId: 1, pNeighbors: new[] { 7 }),
+            new AWTileTraversalSnapshot(4, 0, 1, ground: true,
+                regionId: 0, islandId: 1, pNeighbors: new[] { 0, 5 }),
+            new AWTileTraversalSnapshot(5, 1, 1, ground: true,
+                regionId: 1, islandId: 1, pNeighbors: new[] { 4, 6 }),
+            new AWTileTraversalSnapshot(6, 2, 1, ground: true,
+                regionId: 1, islandId: 1, pNeighbors: new[] { 5, 7 }),
+            new AWTileTraversalSnapshot(7, 3, 1, ground: true,
+                regionId: 2, islandId: 1, pNeighbors: new[] { 6, 3 })
+        };
+        using var generation = AWTraversalGeneration.FromTiles(903, 4, 2,
+            tiles);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 1,
+            RegionCorridorLookaheadTiles = 1,
+            MaxNodesLong = 64
+        };
+        using var request = new AWPathRequest(93, 0, 3,
+            AWPathRequestOptions.Default.WithBoundedMilitaryWater(0),
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        AWPathGenerationResult result = new AWStreamingPathGenerator(config)
+            .GenerateSegment(request, CancellationToken.None, 16);
+
+        Assert(result.Succeeded && result.EndTileId >= 5,
+            "regional lookahead must choose a walkable tile instead of the first water tile in the region");
+    }
+
+    private static void RegionCorridorRetriesAfterUnreachableGuidance()
+    {
+        var tiles = new[]
+        {
+            new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+                regionId: 0, islandId: 1, pNeighbors: new[] { 1, 3 }),
+            new AWTileTraversalSnapshot(1, 1, 0, liquid: true, ocean: true,
+                regionId: 1, islandId: -1, pNeighbors: new[] { 0, 2 }),
+            new AWTileTraversalSnapshot(2, 2, 0, ground: true,
+                regionId: 2, islandId: 1, pNeighbors: new[] { 1, 5 }),
+            new AWTileTraversalSnapshot(3, 0, 1, ground: true,
+                regionId: 3, islandId: 1, pNeighbors: new[] { 0, 4 }),
+            new AWTileTraversalSnapshot(4, 1, 1, ground: true,
+                regionId: 3, islandId: 1, pNeighbors: new[] { 3, 5 }),
+            new AWTileTraversalSnapshot(5, 2, 1, ground: true,
+                regionId: 3, islandId: 1, pNeighbors: new[] { 4, 2 })
+        };
+        using var generation = AWTraversalGeneration.FromTiles(904, 3, 2,
+            tiles);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 1,
+            RegionCorridorLookaheadTiles = 1,
+            MaxNodesLong = 64,
+            MaxNodesLongFallback = 128
+        };
+        using var request = new AWPathRequest(94, 0, 2,
+            AWPathRequestOptions.Default.WithBoundedMilitaryWater(0),
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        AWPathGenerationResult result = new AWStreamingPathGenerator(config)
+            .GenerateSegment(request, CancellationToken.None, 16);
+
+        Assert(result.Succeeded && result.ReachedTarget,
+            "an unreachable regional corridor must expand to the valid land branch before failing the route");
     }
 
     private static void StaleTraversalRequestIsRejectedBeforeSearch()

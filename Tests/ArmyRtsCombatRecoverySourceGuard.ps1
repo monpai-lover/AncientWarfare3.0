@@ -6,6 +6,7 @@ $rulesPath = Join-Path $repo 'Code\core\lineage\ArmyRtsWarLifecycleRules.cs'
 $runnerPath = Join-Path $repo 'Code\core\performance\AWCooperativeActorPostRunner.cs'
 $cadencePath = Join-Path $repo 'Code\core\performance\ArmyRtsMovementCadenceRules.cs'
 $armySafetyPath = Join-Path $repo 'Code\patch\AW_ArmySafetyPatch.cs'
+$retreatPath = Join-Path $repo 'Code\core\lineage\ArmyRetreatService.cs'
 
 foreach ($path in @($controllerPath, $rulesPath, $runnerPath, $cadencePath,
         $armySafetyPath)) {
@@ -13,6 +14,7 @@ foreach ($path in @($controllerPath, $rulesPath, $runnerPath, $cadencePath,
 }
 
 $controller = Get-Content -Raw $controllerPath
+$retreat = Get-Content -Raw $retreatPath
 $rules = Get-Content -Raw $rulesPath
 $runner = Get-Content -Raw $runnerPath
 $cadence = Get-Content -Raw $cadencePath
@@ -38,6 +40,12 @@ Require-Contains $controller 'source.target_attack_city = pTarget;' `
     'The released RTS army anchor city must receive the exact target city.'
 Require-Contains $controller 'source.target_attack_zone = pTarget.hasZones()' `
     'The released RTS army anchor city must receive a target-city attack zone.'
+Require-Contains $controller 'currentCity == target' `
+    'Entering the selected enemy city must hand off even before a hostile-unit scan observes a defender.'
+Require-Contains $retreat 'PrepareForRetreatSelection(pArmy)' `
+    'Retreat selection must cancel the old route before asynchronous candidate selection.'
+Require-Contains $controller 'runtime.NoSafeRetreat)' `
+    'A no-safe-city army must not resolve the old mission endpoint.'
 Require-Contains $controller '[AW3 RTS handoff] army=' `
     'Diagnostics must record each successful target-city vanilla combat handoff.'
 Require-Contains $controller 'RefreshReleasedArmyPeacetimeJobs(army);' `

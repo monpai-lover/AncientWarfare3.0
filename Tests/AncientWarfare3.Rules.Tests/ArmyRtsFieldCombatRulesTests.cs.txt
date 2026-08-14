@@ -5,15 +5,15 @@ internal static class ArmyRtsFieldCombatRulesTests
 {
     public static void Run()
     {
-        // 队长交战始终触发释放，无论比例或已释放状态。
-        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+        // 将领单独接敌可以自行还击，但不能中断全军的战略推进。
+        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
                 pAlreadyReleased: false, pEngagedCombatants: 0,
                 pLiveCombatants: 10, pCaptainEngaged: true),
-            "captain engaged forces release from strategic movement");
-        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+            "a lone captain contact does not release strategic movement");
+        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
                 pAlreadyReleased: true, pEngagedCombatants: 0,
                 pLiveCombatants: 10, pCaptainEngaged: true),
-            "captain engaged keeps the army in field combat");
+            "a lone captain contact does not retain a released field battle");
 
         // 未释放：达到 25% 触发，低于则不触发。
         Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
@@ -46,6 +46,31 @@ internal static class ArmyRtsFieldCombatRulesTests
                 pAlreadyReleased: true, pEngagedCombatants: 0,
                 pLiveCombatants: 10, pCaptainEngaged: false),
             "a cleared field reacquires RTS control");
+
+        // 野战交接必须保有将领可实际攻击的目标。成员的陈旧交战状态
+        // 不能让整军在两军相距很远时无限停留在 captain_combat。
+        Assert(!ArmyRtsFieldCombatRules.ShouldKeepFieldCombat(
+                pAlreadyReleased: true, pCaptainHasCombatTarget: false,
+                pEngagedCombatants: 1, pLiveCombatants: 10,
+                pCaptainEngaged: false),
+            "a released army without a captain target resumes strategic control");
+        Assert(ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
+                pFieldCombatReleased: true,
+                pCaptainHasCombatTarget: false),
+            "large-step P0 immediately restores a cleared field battle");
+        Assert(!ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
+                pFieldCombatReleased: true,
+                pCaptainHasCombatTarget: true),
+            "large-step P0 preserves a field battle with a captain target");
+        Assert(!ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
+                pFieldCombatReleased: false,
+                pCaptainHasCombatTarget: false),
+            "P0 does not alter normal strategic movement");
+        Assert(ArmyRtsFieldCombatRules.ShouldKeepFieldCombat(
+                pAlreadyReleased: true, pCaptainHasCombatTarget: true,
+                pEngagedCombatants: 1, pLiveCombatants: 10,
+                pCaptainEngaged: false),
+            "a released army retains field combat while the captain has a target");
 
         // 阈值不对称：25% 触发但已释放时不会因刚好 25% 而反复——
         // 已释放用 5% 低阈维持，未释放用 25% 高阈触发。

@@ -1,0 +1,100 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
+
+internal static class RoyalGuardTaskRecoveryRulesTests
+{
+    public static void Run()
+    {
+        Assert(!RoyalGuardActionRules.ShouldIssueFollowMove(
+                pHasTarget: true, pTargetIsCurrentTile: true),
+            "a guard already on its offset tile does not republish movement");
+        Assert(RoyalGuardActionRules.ShouldKeepMilitaryP0(
+                canFollowKingOnLand: true, hasThreatTarget: false,
+                immediateCombat: false),
+            "an idle follow guard remains in military P0 for the next step");
+        Assert(ArmyMilitaryMovementPriorityRules.ResolveP0PriorityRank(
+                isRoyalGuard: true) <
+            ArmyMilitaryMovementPriorityRules.ResolveP0PriorityRank(
+                isRoyalGuard: false),
+            "royal guards receive the first military P0 slice");
+        Assert(RoyalGuardMaintenanceRules.ShouldRepairGuardTask(
+                pProtectTaskActive: false, pFollowTaskActive: false),
+            "an empty or unknown guard task repairs directly to follow");
+
+        string root = Directory.GetCurrentDirectory();
+        string follow = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehRoyalGuardFollowKing.cs"));
+        string attack = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehRoyalGuardAttackThreat.cs"));
+        string service = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "RoyalGuardService.cs"));
+        string rtsService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        string priorityIndex = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "ArmyMilitaryMovementPriorityIndex.cs"));
+        string postRunner = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        string content = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "GuardContent.cs"));
+        Assert(follow.Contains("return BehResult.RepeatStep;",
+                   StringComparison.Ordinal),
+            "follow idle/current-tile cases keep the task alive");
+        Assert(follow.Contains("EnsureProtectKingTask(pActor);\n                return BehResult.RepeatStep;",
+                   StringComparison.Ordinal),
+            "job drift repairs the guard task before native movement resumes");
+        Assert(attack.Contains("EnsureProtectKingTask(pActor)",
+                   StringComparison.Ordinal) &&
+               !attack.Contains("return BehResult.Stop;",
+                   StringComparison.Ordinal),
+            "invalid threat targets recover to follow without terminating the task");
+        Assert(service.Contains("pActor.ai.setTask(GuardContent.TASK_FOLLOW_KING)",
+                   StringComparison.Ordinal),
+            "unknown guard tasks are repaired directly to follow");
+        Assert(priorityIndex.Contains("ResolveP0PriorityRank", StringComparison.Ordinal),
+            "military P0 snapshot puts royal guards ahead of RTS followers");
+        Assert(postRunner.Contains(
+                "RefreshRoyalGuardMilitaryPriorities(activeBatches);\n        ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);",
+                StringComparison.Ordinal),
+            "every actor-post cycle refreshes guards before freezing the military P0 snapshot");
+        Assert(postRunner.Contains(
+                "RoyalGuardService.TryRefreshMilitaryPriority(actors[",
+                StringComparison.Ordinal),
+            "the priority refresh observes each active guard and its king movement target");
+        Assert(service.Contains(
+                "internal static bool TryRefreshMilitaryPriority(Actor pGuard)",
+                StringComparison.Ordinal),
+            "guard priority refresh has a dedicated non-task-rebinding entry point");
+        int guardRefreshStart = service.IndexOf(
+            "internal static bool TryRefreshMilitaryPriority(Actor pGuard)",
+            StringComparison.Ordinal);
+        int guardRefreshEnd = service.IndexOf(
+            "internal static void ReleaseFollowPathForCombat", guardRefreshStart,
+            StringComparison.Ordinal);
+        string guardRefresh = service.Substring(guardRefreshStart,
+            guardRefreshEnd - guardRefreshStart);
+        Assert(guardRefresh.Contains(
+                "if (!IsRoyalGuard(pGuard)) return false;",
+                StringComparison.Ordinal),
+            "guard priority refresh never unregisters a non-guard RTS actor");
+        Assert(postRunner.Contains(
+                "ArmyRtsControllerService.TryRefreshMilitaryPriority(actors[",
+                StringComparison.Ordinal),
+            "every actor-post cycle re-admits RTS captains and followers before the P0 snapshot");
+        Assert(rtsService.Contains(
+                "internal static bool TryRefreshMilitaryPriority(Actor pActor)",
+                StringComparison.Ordinal),
+            "RTS priority refresh has a dedicated non-task-rebinding entry point");
+        Assert(!content.Contains("job.addTask(\"wait\")",
+                   StringComparison.Ordinal) &&
+               !content.Contains("job.addTask(\"check_if_stuck_on_small_land\")",
+                   StringComparison.Ordinal),
+            "the guard job cannot fall through to generic wait or stuck tasks");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

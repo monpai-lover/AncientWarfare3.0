@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using life.taxi;
 
 namespace AncientWarfare3.core.performance
 {
@@ -16,7 +17,8 @@ namespace AncientWarfare3.core.performance
         private static readonly List<long> Order = new List<long>();
         private static readonly HashSet<long> ProcessedThisCycle =
             new HashSet<long>();
-        private static int Cursor;
+        private static readonly HashSet<long> VanillaTaxiActors =
+            new HashSet<long>();
 
         internal static void Register(long actorId,
             ArmyMilitaryMovementPriorityKind kind)
@@ -36,23 +38,58 @@ namespace AncientWarfare3.core.performance
             if (!Entries.Remove(actorId)) return;
             int index = Order.IndexOf(actorId);
             if (index >= 0) Order.RemoveAt(index);
-            if (Order.Count == 0) Cursor = 0;
-            else if (Cursor >= Order.Count) Cursor %= Order.Count;
         }
 
-        internal static int TakeNextSlice(int simulationBatchSize,
-            List<long> destination)
+        internal static void CopySnapshot(List<long> destination)
         {
-            if (destination == null) return 0;
+            if (destination == null) return;
             destination.Clear();
-            int count = ArmyMilitaryMovementPriorityRules.ResolveP0SliceCount(
-                Order.Count, simulationBatchSize);
-            for (int i = 0; i < count && Order.Count > 0; i++)
+            for (int pass = 0; pass < 2; pass++)
             {
-                if (Cursor >= Order.Count) Cursor = 0;
-                destination.Add(Order[Cursor++]);
+                for (int i = 0; i < Order.Count; i++)
+                {
+                    long actorId = Order[i];
+                    if (!Entries.TryGetValue(actorId,
+                            out ArmyMilitaryMovementPriorityKind kind))
+                        continue;
+                    bool isGuard = ArmyMilitaryMovementPriorityRules
+                        .ResolveP0PriorityRank(kind ==
+                            ArmyMilitaryMovementPriorityKind.RoyalGuard) == 0;
+                    if ((pass == 0) != isGuard) continue;
+                    destination.Add(actorId);
+                }
             }
-            return destination.Count;
+        }
+
+        internal static void RefreshVanillaTaxiSnapshot()
+        {
+            VanillaTaxiActors.Clear();
+            try
+            {
+                for (int i = 0; i < TaxiManager.list.Count; i++)
+                {
+                    TaxiRequest request = TaxiManager.list[i];
+                    if (request == null) continue;
+                    HashSet<Actor> actors = request.getActors();
+                    if (actors == null) continue;
+                    foreach (Actor actor in actors)
+                    {
+                        if (actor?.data != null)
+                            VanillaTaxiActors.Add(actor.data.id);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static bool HasVanillaTaxiOwnership(long actorId)
+        {
+            return actorId >= 0L && VanillaTaxiActors.Contains(actorId);
+        }
+
+        internal static void MarkVanillaTaxiOwnership(long actorId)
+        {
+            if (actorId >= 0L) VanillaTaxiActors.Add(actorId);
         }
 
         internal static bool TryGetKind(long actorId,
@@ -81,7 +118,7 @@ namespace AncientWarfare3.core.performance
             Entries.Clear();
             Order.Clear();
             ProcessedThisCycle.Clear();
-            Cursor = 0;
+            VanillaTaxiActors.Clear();
         }
     }
 }

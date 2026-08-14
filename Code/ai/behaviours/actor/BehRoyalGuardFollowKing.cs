@@ -13,35 +13,18 @@ namespace AncientWarfare3.ai.behaviours.actor
             if (pActor?.ai != null && pActor.ai.job?.id != GuardContent.ACTOR_JOB_KING_GUARD)
             {
                 RoyalGuardService.EnsureProtectKingTask(pActor);
-                return BehResult.Continue;
+                return BehResult.RepeatStep;
             }
 
-            WorldTile tile = RoyalGuardService.GetFollowTile(pActor);
-            if (tile == null)
+            if (!RoyalGuardService.TryPublishKingFollowTarget(pActor))
             {
                 ArmyMilitaryMovementPriorityIndex.Unregister(
                     pActor?.data?.id ?? -1L);
                 // 没有有效目标时等待而不是停止，避免 task 被清除
                 RoyalGuardService.WaitAfterGuardFollowIdle(pActor);
-                return BehResult.Continue;
+                return BehResult.RepeatStep;
             }
 
-            if (!RoyalGuardActionRules.ShouldIssueFollowMove(
-                    pHasTarget: true,
-                    pTargetIsCurrentTile: tile == pActor.current_tile))
-            {
-                RoyalGuardService.WaitAfterGuardFollowIdle(pActor);
-                return BehResult.Continue;
-            }
-
-            pActor.beh_tile_target = tile;
-            if (RoyalGuardService.HasLandFollowPriority(pActor))
-            {
-                ArmyMilitaryMovementPriorityIndex.Register(pActor.data.id,
-                    ArmyMilitaryMovementPriorityKind.RoyalGuard);
-                try { pActor.goTo(tile, pLimitPathfindingRegions: 0); }
-                catch { }
-            }
             return BehResult.Continue;
         }
     }

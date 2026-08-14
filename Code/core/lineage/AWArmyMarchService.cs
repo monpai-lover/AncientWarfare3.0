@@ -493,7 +493,9 @@ namespace AncientWarfare3.core.lineage
             var state = new MarchState(pArmy.id,
                 pTarget.data.tile_id,
                 AWPathfindingBootstrap.Cache.GenerationId,
-                pUsesProvider: true);
+                pUsesProvider: true,
+                pProviderStartTileId:
+                    captain.current_tile.data.tile_id);
             state.LandTrailPausedForTransport =
                 ArmyRtsTransportService.HasActiveVoyage(pArmy);
             if (States.TryGetValue(pArmy.id,
@@ -511,8 +513,18 @@ namespace AncientWarfare3.core.lineage
             if (!States.TryGetValue(pArmy.id, out MarchState state) ||
                 !state.UsesProvider) return poll;
             if (poll.Kind == ArmyRoutePollKind.StepReady)
-                AppendProviderStep(pArmy, state, poll.TileId,
-                    poll.MovementMethod, poll.Estimate);
+            {
+                if (!AppendProviderStep(pArmy, state, poll.TileId,
+                        poll.MovementMethod, poll.Estimate))
+                {
+                    ArmyRouteProviderService.Cancel(pArmy.id,
+                        ArmyRouteCancelReason.MissionCancelled);
+                    CancelInstalledActorPaths(state);
+                    States.Remove(pArmy.id);
+                    return new ArmyRoutePoll(ArmyRoutePollKind.Failed,
+                        failureReason: "invalid_provider_step");
+                }
+            }
             else if (poll.Kind == ArmyRoutePollKind.Completed)
             {
                 if (!state.ProviderComplete &&
@@ -544,25 +556,31 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        private static void AppendProviderStep(Army pArmy,
+        private static bool AppendProviderStep(Army pArmy,
             MarchState pState, int pTileId,
             AWMovementMethod pMovementMethod,
             AWTraversalEstimate pEstimate)
         {
             WorldTile[] tiles = World.world?.tiles_list;
             if (tiles == null || pTileId < 0 || pTileId >= tiles.Length)
-                return;
-            if (pState.Route.Count > 0)
+                return false;
+            WorldTile current = tiles[pTileId];
+            if (current?.data == null) return false;
+            int previousId = pState.ProviderLastTileId;
+            bool hasPrevious = previousId >= 0 &&
+                               previousId < tiles.Length &&
+                               tiles[previousId]?.data != null;
+            WorldTile previous = hasPrevious ? tiles[previousId] : null;
+            if (!ArmySharedPathRules.IsProviderStepSpatiallyValid(
+                    hasPrevious,
+                    pMovementMethod == AWMovementMethod.Transport,
+                    hasPrevious ? current.x - previous.x : 0,
+                    hasPrevious ? current.y - previous.y : 0))
+                return false;
+            if (hasPrevious)
             {
-                int previousId = pState.Route[pState.Route.Count - 1].TileId;
-                if (previousId >= 0 && previousId < tiles.Length &&
-                    tiles[previousId] != null && tiles[pTileId] != null)
-                {
-                    pState.DirectionX = Math.Sign(
-                        tiles[pTileId].x - tiles[previousId].x);
-                    pState.DirectionY = Math.Sign(
-                        tiles[pTileId].y - tiles[previousId].y);
-                }
+                pState.DirectionX = Math.Sign(current.x - previous.x);
+                pState.DirectionY = Math.Sign(current.y - previous.y);
             }
             if (ArmySharedPathRules.ShouldTrimRecordedRoute(
                     pState.UsesProvider, pState.Route.Count,
@@ -570,6 +588,7 @@ namespace AncientWarfare3.core.lineage
                 TrimRecordedRoute(pState);
             pState.Route.Add(new AWPathStep(pTileId, pMovementMethod,
                 pEstimate));
+            pState.ProviderLastTileId = pTileId;
             if (pMovementMethod == AWMovementMethod.Transport)
                 pState.ContainsTransportStep = true;
             else
@@ -580,6 +599,7 @@ namespace AncientWarfare3.core.lineage
                     pState.LandRouteCost += stepCost;
             }
             pState.HasPlan = true;
+            return true;
         }
 
         private static void TrimRecordedRoute(MarchState pState)
@@ -705,6 +725,14 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
+            if (!IsRouteSpatiallyValid(pActor.current_tile, route))
+            {
+                state.SharedRouteAttemptRevisionByActor[pActor.data.id] =
+                    revision;
+                RecordInstallStatus(state, pActor,
+                    ArmySharedRouteInstallStatus.BuildFailed);
+                return false;
+            }
             if (AWPathMovementBridge.HasOwnership(pActor))
                 AWPathMovementBridge.Cancel(pActor,
                     AWPathFailureReason.CancelledByNewRequest);
@@ -1141,6 +1169,21 @@ namespace AncientWarfare3.core.lineage
                        pSecond.x - pFirst.x, pSecond.y - pFirst.y);
         }
 
+        private static bool IsRouteSpatiallyValid(WorldTile pStart,
+            List<WorldTile> pRoute)
+        {
+            if (pStart?.data == null || pRoute == null ||
+                pRoute.Count == 0) return false;
+            WorldTile previous = pStart;
+            for (int i = 0; i < pRoute.Count; i++)
+            {
+                WorldTile current = pRoute[i];
+                if (!IsAdjacent(previous, current)) return false;
+                previous = current;
+            }
+            return true;
+        }
+
         private static bool SafeSameIsland(WorldTile pFirst,
             WorldTile pSecond)
         {
@@ -1526,13 +1569,15 @@ namespace AncientWarfare3.core.lineage
         private sealed class MarchState
         {
             public MarchState(long pArmyId, int pTargetTileId,
-                int pGenerationId, bool pUsesProvider = false)
+                int pGenerationId, bool pUsesProvider = false,
+                int pProviderStartTileId = -1)
             {
                 ArmyId = pArmyId;
                 TargetTileId = pTargetTileId;
                 GenerationId = pGenerationId;
                 HasPlan = true;
                 UsesProvider = pUsesProvider;
+                ProviderLastTileId = pProviderStartTileId;
             }
 
             public readonly long ArmyId;
@@ -1573,6 +1618,7 @@ namespace AncientWarfare3.core.lineage
             public bool HasPlan;
             public readonly bool UsesProvider;
             public bool ProviderComplete;
+            public int ProviderLastTileId;
             public bool ContainsTransportStep;
             public float LandRouteCost;
             public int SharedRouteRevision;

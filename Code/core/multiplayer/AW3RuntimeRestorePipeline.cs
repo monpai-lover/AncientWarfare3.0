@@ -433,6 +433,8 @@ namespace AncientWarfare3.core.multiplayer
                     ArmyStallWatchdogService.ClearRuntime),
                 new AW3RestoreStage("army_rts_controllers",
                     ArmyRtsControllerService.ClearRuntime),
+                new AW3RestoreStage("army_rts_supply",
+                    ArmyRtsAbstractSupplyService.ClearRuntime),
                 new AW3RestoreStage("army_war_return",
                     WarArmyReturnService.ClearRuntime),
                 new AW3RestoreStage("aw_armies",

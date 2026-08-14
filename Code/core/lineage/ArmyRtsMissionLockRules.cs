@@ -31,5 +31,13 @@ namespace AncientWarfare3.core.lineage
         {
             return !objectiveOpen && CanReplaceTarget(pCause);
         }
+
+        internal static bool ShouldRetainLockedStrategicMission(
+            bool currentMissionValid, bool targetComplete,
+            bool targetCoolingDown, bool proposedHomelandEmergency)
+        {
+            return currentMissionValid && !targetComplete &&
+                   !targetCoolingDown && !proposedHomelandEmergency;
+        }
     }
 }

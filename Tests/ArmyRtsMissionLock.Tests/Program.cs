@@ -46,11 +46,11 @@ Require(!ArmyRtsMemberObjectiveRules.ShouldReplaceMemberPath(
         resolvedTargetTileId: 17, ownsPath: true,
         nativeLocalPath: true),
     "an unchanged member objective must retain its existing route");
-Require(ArmyRtsMemberObjectiveRules.ShouldReplaceMemberPath(
+Require(!ArmyRtsMemberObjectiveRules.ShouldReplaceMemberPath(
         hasObjective: true, recordedTargetTileId: 17,
         resolvedTargetTileId: 23, ownsPath: true,
         nativeLocalPath: true),
-    "a changed member objective must replace its old route");
+    "a moving formation target must not replace a member route that is still executing");
 Require(ArmyRtsMemberObjectiveRules.ShouldRecoverToMissionObjective(
         hasActiveMission: true, actorEligible: true,
         combatActive: false, transportActive: false),

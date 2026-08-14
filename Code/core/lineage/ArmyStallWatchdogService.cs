@@ -195,7 +195,6 @@ namespace AncientWarfare3.core.lineage
                     OnArmyInvalidated(pArmyId);
                 return;
             }
-            SampleFollowerRecovery(pArmyId, state, CurrentRealtime());
             bool hadPosition = state.HasPosition &&
                 state.LastPositionActorId == sample.PositionActorId &&
                 state.LastPositionSource == sample.PositionSource;
@@ -220,7 +219,14 @@ namespace AncientWarfare3.core.lineage
                  sample.CommandExpected) &&
                 previousRouteCursor != int.MinValue &&
                 previousRouteCursor == sample.RouteCursor &&
-                movement < ArmyStallWatchdogRules.MinimumProgressTiles)
+                movement < ArmyStallWatchdogRules.MinimumProgressTiles &&
+                !ArmyStallWatchdogRules.IsLocalPathCursorProgress(
+                    state.Flow.StallState.HasLocalPathSample,
+                    state.Flow.StallState.LastLocalPathOwnerId,
+                    state.Flow.StallState.LastLocalPathIndex,
+                    state.Flow.StallState.LastLocalTargetTileId,
+                    sample.PositionActorId, sample.LocalPathFollowing,
+                    sample.LocalPathIndex, sample.LocalTargetTileId))
                 ArmyRtsBenchmark.RecordNoProgressSeconds(
                     ArmyStallWatchdogRules.SampleIntervalSeconds);
             ArmyStallRecoveryAction action = state.Flow.ObserveSample(
@@ -233,7 +239,12 @@ namespace AncientWarfare3.core.lineage
                 objectiveOpen: sample.ObjectiveOpen,
                 requiresTransport: sample.RequiresTransport,
                 objectiveProgressExpected: sample.ObjectiveProgressExpected,
-                objectiveProgress: sample.ObjectiveProgress);
+                objectiveProgress: sample.ObjectiveProgress,
+                localPathOwnerId: sample.PositionActorId,
+                localPathFollowing: sample.LocalPathFollowing,
+                localPathMoving: sample.LocalPathMoving,
+                localPathIndex: sample.LocalPathIndex,
+                localTargetTileId: sample.LocalTargetTileId);
             HandleRecoveryAction(pArmyId, state, action, sample);
         }
 
@@ -258,7 +269,9 @@ namespace AncientWarfare3.core.lineage
                     pState.FollowerRecovery.Observe(sample.ActorId,
                         sample.PositionX, sample.PositionY,
                         sample.RecoveryEligible, sample.CombatActive,
-                        sample.TransportActive, pRealtime);
+                        sample.TransportActive, pRealtime,
+                        sample.LocalPathFollowing, sample.LocalPathIndex,
+                        sample.LocalTargetTileId);
                 LogFollowerRecoveryAction(pArmyId, sample, action);
                 if (action == ArmyFollowerStallRecoveryAction.ResetRoute)
                 {

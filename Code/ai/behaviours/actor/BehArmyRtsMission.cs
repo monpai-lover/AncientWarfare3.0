@@ -1,5 +1,6 @@
 using AncientWarfare3.core.lineage;
 using ai.behaviours;
+using life.taxi;
 
 namespace AncientWarfare3.ai.behaviours.actor
 {
@@ -49,8 +50,55 @@ namespace AncientWarfare3.ai.behaviours.actor
                 pActor.makeWait(0.2f);
                 return BehResult.RepeatStep;
             }
+            if (AWArmyMarchService.TryStartCompleteSharedRoute(pActor))
+                return BehResult.RepeatStep;
             pActor.beh_tile_target = target;
             return BehResult.Continue;
+        }
+    }
+
+    public sealed class BehArmyRtsRetreatTarget : BehaviourActionActor
+    {
+        public override BehResult execute(Actor pActor)
+        {
+            if (!ArmyRtsControllerService.TryGetRetreatTarget(pActor,
+                    out WorldTile target))
+            {
+                pActor?.makeWait(0.2f);
+                return BehResult.RepeatStep;
+            }
+            if (pActor.current_tile?.isSameIsland(target) != true)
+            {
+                RequestArmyTaxi(pActor, target);
+                pActor.makeWait(1f);
+                return BehResult.RepeatStep;
+            }
+            pActor.beh_tile_target = target;
+            return BehResult.Continue;
+        }
+
+        private static void RequestArmyTaxi(Actor pActor,
+            WorldTile pTarget)
+        {
+            Army army = pActor?.army;
+            int count;
+            try { count = army?.units?.Count ?? 0; }
+            catch { count = 0; }
+            for (int i = 0; i < count; i++)
+            {
+                Actor actor;
+                try { actor = army.units[i]; }
+                catch { continue; }
+                if (actor?.data == null || actor.isRekt() ||
+                    !actor.isAlive() || actor.is_inside_boat ||
+                    actor.current_tile?.data == null ||
+                    actor.current_tile.isSameIsland(pTarget) ||
+                    TaxiManager.getRequestForActor(actor) != null) continue;
+                TaxiManager.newRequest(actor, pTarget);
+            }
+            if (TaxiManager.getRequestForActor(pActor) == null &&
+                pActor?.is_inside_boat != true)
+                TaxiManager.newRequest(pActor, pTarget);
         }
     }
 

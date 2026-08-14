@@ -1,4 +1,8 @@
+using System;
 using System.Collections.Generic;
+using AncientWarfare3.content.schools;
+using AncientWarfare3.core.performance;
+using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -16,6 +20,10 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<long, long>();
         private static readonly SortedSet<long> PendingCaptainArmies =
             new SortedSet<long>();
+        private static readonly SortedSet<long> PendingLowForceArmies =
+            new SortedSet<long>();
+        private static readonly HashSet<long> MissingArmyRecoveryQueued =
+            new HashSet<long>();
         private static readonly List<long> ArmyIds = new List<long>(
             ArmyRtsSuccessionRecoveryRules.MaximumArmiesPerCycle);
 
@@ -46,7 +54,9 @@ namespace AncientWarfare3.core.lineage
         {
             get
             {
+                DiscoverMissionContinuity();
                 long pending = PendingCaptainArmies.Count + Pending.Count;
+                pending += PendingLowForceArmies.Count;
                 foreach (KeyValuePair<long, Work> pair in Pending)
                 {
                     Kingdom kingdom = FindKingdom(pair.Key);
@@ -63,8 +73,11 @@ namespace AncientWarfare3.core.lineage
         {
             if (pRequireRuntimeCommit &&
                 !ArmyRtsRuntimeMode.ShouldCommit) return 0;
+            DiscoverMissionContinuity();
             int limit = System.Math.Max(0, pMaximum);
             int processed = ProcessPendingCaptains(limit);
+            processed += ProcessPendingLowForceArmies(
+                System.Math.Max(0, limit - processed));
             int kingdomVisits = Pending.Count;
             var toRemove = new List<long>();
             while (processed < limit && Pending.Count > 0 &&
@@ -123,10 +136,88 @@ namespace AncientWarfare3.core.lineage
 
         internal static void OnCaptainDied(Army pArmy, long pCaptainId)
         {
-            if (pArmy?.data == null || pCaptainId < 0L ||
-                !ArmyRtsControllerService.HasActiveMission(pArmy.id))
+            if (pArmy?.data == null || pCaptainId < 0L)
                 return;
             PendingCaptainArmies.Add(pArmy.id);
+            LogCaptainRecovery("captain_vacancy_enqueued", pArmy,
+                "source=death previous=" + pCaptainId);
+        }
+
+        internal static void OnCaptainVacated(Army pArmy,
+            long pPreviousCaptainId)
+        {
+            if (pArmy?.data == null || pPreviousCaptainId < 0L)
+                return;
+            PendingCaptainArmies.Add(pArmy.id);
+            LogCaptainRecovery("captain_vacancy_enqueued", pArmy,
+                "source=vacated previous=" + pPreviousCaptainId);
+        }
+
+        private static void DiscoverMissionContinuity()
+        {
+            IReadOnlyList<ArmyRtsMission> missions =
+                ArmyRtsControllerService.SnapshotMissions();
+            for (int i = 0; i < missions.Count; i++)
+            {
+                ArmyRtsMission mission = missions[i];
+                if (mission == null || mission.ArmyId < 0L) continue;
+                Army army = FindArmy(mission.ArmyId);
+                Kingdom kingdom = FindKingdom(mission.KingdomId);
+                if (army?.data == null || kingdom?.data == null ||
+                    kingdom.isRekt())
+                {
+                    TryRequestMissingFieldArmy(mission, kingdom);
+                    continue;
+                }
+                MissingArmyRecoveryQueued.Remove(mission.ArmyId);
+                if (!ArmyRtsControllerService.HasActiveMission(army.id))
+                    continue;
+                int living = SafeUnitCount(army);
+                if (!HasOperationalCaptain(army, kingdom) && living > 0)
+                    PendingCaptainArmies.Add(army.id);
+                if (living < ArmyLogisticsRules.MinimumOperationalForce &&
+                    mission.ProposalKind != ArmyRtsProposalKind.Retreat)
+                    PendingLowForceArmies.Add(army.id);
+                else
+                    PendingLowForceArmies.Remove(army.id);
+            }
+        }
+
+        private static int ProcessPendingLowForceArmies(int pMaximum)
+        {
+            int processed = 0;
+            while (processed < pMaximum && PendingLowForceArmies.Count > 0)
+            {
+                long armyId = PendingLowForceArmies.Min;
+                PendingLowForceArmies.Remove(armyId);
+                Army army = FindArmy(armyId);
+                if (army?.data != null &&
+                    ArmyRtsControllerService.HasActiveMission(army.id) &&
+                    SafeUnitCount(army) < ArmyLogisticsRules.MinimumOperationalForce)
+                {
+                    ArmyRetreatService.AssignArmyRetreat(army, -1L,
+                        ArmyRtsWithdrawalOrigin.MinimumForce);
+                }
+                processed++;
+            }
+            return processed;
+        }
+
+        private static void TryRequestMissingFieldArmy(
+            ArmyRtsMission pMission, Kingdom pKingdom)
+        {
+            if (pMission == null || pKingdom?.data == null ||
+                pMission.WarId < 0L ||
+                !MissingArmyRecoveryQueued.Add(pMission.ArmyId)) return;
+            City source = pKingdom.capital;
+            if (source?.data == null && pKingdom.cities?.Count > 0)
+                source = pKingdom.cities[0];
+            if (source?.data == null) return;
+            if (ArmyFieldIndexService.TryGetCityArmy(source, out _)) return;
+            TemporaryLevyService.RequestOffensiveRecovery(
+                pKingdom, source,
+                ArmyLogisticsRules.MinimumOperationalForce,
+                pForceEstablishment: true);
         }
 
         internal static int ProcessPendingCaptains(int pMaximum)
@@ -140,20 +231,43 @@ namespace AncientWarfare3.core.lineage
                 PendingCaptainArmies.Remove(armyId);
                 Army army = FindArmy(armyId);
                 Kingdom kingdom = AWArmyService.GetIntendedKingdom(army);
+                bool missionActive = ArmyRtsControllerService.
+                    HasActiveMission(armyId);
+                bool wartimeEmergency = MilitaryEmergencyService.
+                    HasAny(kingdom);
                 if (army?.data == null || kingdom?.data == null ||
-                    !ArmyRtsControllerService.HasActiveMission(armyId))
+                    !missionActive && !wartimeEmergency)
                 {
                     processed++;
                     continue;
                 }
+                LogCaptainRecovery("captain_recovery_dequeued", army,
+                    "mission=" + missionActive + " emergency=" +
+                    wartimeEmergency);
                 EnsureNonSyntheticCaptain(army, kingdom);
                 try { army.checkCaptainExistence(); }
                 catch { }
+                EnsureNonSyntheticCaptain(army, kingdom);
                 ArmyRtsControllerService.
                     RehydrateAfterAuthorityChange(army);
                 ArmyRtsAssignmentReconciliationService.Enqueue(army);
-                if (!HasLiveCaptain(army))
+                bool captainOperational = HasOperationalCaptain(army,
+                    kingdom);
+                if (ArmyRtsSuccessionRecoveryRules.ShouldRetryCaptainRecovery(
+                        armyValid: army?.data != null,
+                        captainOperational: captainOperational,
+                        liveWarriorCount: SafeUnitCount(army),
+                        missionActive: missionActive,
+                        wartimeEmergency: wartimeEmergency))
+                {
                     PendingCaptainArmies.Add(armyId);
+                    LogCaptainRecovery("captain_recovery_retry", army,
+                        "mission=" + missionActive + " emergency=" +
+                        wartimeEmergency);
+                }
+                else
+                    LogCaptainRecovery("captain_recovery_complete", army,
+                        "operational=" + captainOperational);
                 processed++;
             }
             return processed;
@@ -166,12 +280,11 @@ namespace AncientWarfare3.core.lineage
             Actor current = null;
             try { current = pArmy.getCaptain(); }
             catch { }
+            PromoteSyntheticCaptainIfNeeded(current);
             bool currentValid = IsEligibleCaptain(pArmy, pKingdom, current);
             if (currentValid) return;
 
-            if (current?.data != null &&
-                (SyntheticLevyService.IsSynthetic(current) ||
-                 !currentValid))
+            if (current?.data != null && !currentValid)
             {
                 using (ArmyCaptainDisposalScope.Open(pArmy))
                 {
@@ -179,6 +292,9 @@ namespace AncientWarfare3.core.lineage
                     catch { }
                 }
             }
+
+            if (TemporaryLevyService.TryPromoteExistingLevyCaptain(pArmy))
+                return;
 
             List<GeneralReadModelEntry> generals = GeneralService.
                 GetActiveGeneralsForReadModel(pKingdom,
@@ -190,6 +306,7 @@ namespace AncientWarfare3.core.lineage
                 if (general.army != null && general.army != pArmy) continue;
                 if (general.army != pArmy)
                     AWArmyService.AddToArmy(general, pArmy);
+                PromoteSyntheticCaptainIfNeeded(general);
                 AWArmyService.SetCaptainIfChanged(pArmy, general);
                 try
                 {
@@ -197,6 +314,44 @@ namespace AncientWarfare3.core.lineage
                 }
                 catch { }
             }
+
+            Actor replacement = FindStrongestArmyMember(pArmy, pKingdom,
+                out string candidateDiagnostics);
+            LogCaptainRecovery("captain_candidate_scan", pArmy,
+                "selected=" + (replacement?.data?.id ?? -1L) +
+                " candidates=" + candidateDiagnostics);
+            if (replacement?.data == null) return;
+            replacement.data.get(LineageKeys.TEMPORARY_LEVY,
+                out bool temporaryLevy, false);
+            if (temporaryLevy)
+                TemporaryLevyService.PromoteToPermanentMilitary(replacement);
+            PromoteSyntheticCaptainIfNeeded(replacement);
+            bool candidateEligible = IsEligibleArmyMember(pArmy, pKingdom,
+                replacement);
+            if (!ArmyRtsSuccessionRecoveryRules.ShouldInstallWarriorCaptain(
+                    candidateEligible,
+                    HasOperationalCaptain(pArmy, pKingdom))) return;
+            AWArmyService.SetCaptainAfterSuccession(pArmy, replacement);
+            LogCaptainRecovery("captain_promoted", pArmy,
+                "candidate=" + replacement.data.id + " installed=" +
+                (CurrentCaptainId(pArmy) == replacement.data.id));
+            GeneralService.PromoteToGeneral(replacement);
+        }
+
+        private static long CurrentCaptainId(Army pArmy)
+        {
+            try { return pArmy?.getCaptain()?.data?.id ?? -1L; }
+            catch { return -1L; }
+        }
+
+        private static void LogCaptainRecovery(string pStage, Army pArmy,
+            string pDetails)
+        {
+            if (!AWPerformanceSettings.ArmyRtsDiagnosticsEnabled) return;
+            ModClass.LogWarning("[AW3 RTS succession] stage=" + pStage +
+                " army=" + (pArmy?.id ?? -1L) + " captain=" +
+                CurrentCaptainId(pArmy) + " units=" + SafeUnitCount(pArmy) +
+                " " + pDetails);
         }
 
         private static bool IsEligibleCaptain(Army pArmy,
@@ -206,7 +361,6 @@ namespace AncientWarfare3.core.lineage
             {
                 return pActor?.data != null && pActor.kingdom == pKingdom &&
                        pActor.isAlive() && !pActor.isRekt() &&
-                       !SyntheticLevyService.IsSynthetic(pActor) &&
                        AWArmyService.IsCaptainLeaseEligible(pArmy, pActor,
                            requireMembership: true);
             }
@@ -221,7 +375,6 @@ namespace AncientWarfare3.core.lineage
                 return pActor?.data != null && pActor.kingdom == pKingdom &&
                        pActor.isAlive() && !pActor.isRekt() &&
                        GeneralService.IsGeneral(pActor) &&
-                       !SyntheticLevyService.IsSynthetic(pActor) &&
                        AWArmyService.IsCaptainLeaseEligible(pArmy, pActor,
                            requireMembership: false);
             }
@@ -233,6 +386,8 @@ namespace AncientWarfare3.core.lineage
             Pending.Clear();
             CompletedKingByKingdom.Clear();
             PendingCaptainArmies.Clear();
+            PendingLowForceArmies.Clear();
+            MissingArmyRecoveryQueued.Clear();
             ArmyIds.Clear();
         }
 
@@ -264,6 +419,121 @@ namespace AncientWarfare3.core.lineage
         {
             try { return World.world?.armies?.get(pArmyId); }
             catch { return null; }
+        }
+
+        private static int SafeUnitCount(Army pArmy)
+        {
+            try { return System.Math.Max(0, pArmy?.countUnits() ?? 0); }
+            catch { return 0; }
+        }
+
+        private static Actor FindStrongestArmyMember(Army pArmy,
+            Kingdom pKingdom, out string pDiagnostics)
+        {
+            Actor best = null;
+            float bestScore = float.MinValue;
+            long bestId = -1L;
+            var rejected = new List<string>();
+            try
+            {
+                foreach (Actor member in pArmy.getUnits())
+                {
+                    if (!IsEligibleArmyMember(pArmy, pKingdom, member))
+                    {
+                        if (rejected.Count < 8)
+                            rejected.Add(DescribeIneligibleArmyMember(
+                                pArmy, pKingdom, member));
+                        continue;
+                    }
+                    float score = CombatScore(member);
+                    long id = member.data.id;
+                    if (!ArmyCaptainContinuityRules.ShouldPreferLevyPromotion(
+                            bestScore, bestId, score, id)) continue;
+                    best = member;
+                    bestScore = score;
+                    bestId = id;
+                }
+            }
+            catch { }
+            pDiagnostics = rejected.Count == 0
+                ? "eligible"
+                : string.Join(";", rejected);
+            return best;
+        }
+
+        private static string DescribeIneligibleArmyMember(Army pArmy,
+            Kingdom pKingdom, Actor pActor)
+        {
+            long id = pActor?.data?.id ?? -1L;
+            try
+            {
+                return "id=" + id +
+                       ",army=" + (pActor?.army == pArmy) +
+                       ",kingdom=" + (pActor?.kingdom == pKingdom) +
+                       ",alive=" + (pActor?.isAlive() == true) +
+                       ",adult=" + (pActor?.isAdult() == true) +
+                       ",profession=" +
+                           (pActor?.is_profession_warrior == true) +
+                       ",king=" + (pActor?.isKing() == true) +
+                       ",city_leader=" +
+                           (pActor?.isCityLeader() == true) +
+                       ",slave=" + SlaveService.IsSlave(pActor) +
+                       ",guard=" + RoyalGuardService.IsRoyalGuard(pActor) +
+                       ",garrison=" +
+                           WartimeGarrisonService.IsActive(pActor) +
+                       ",vanguard=" +
+                           TemporarySlaveVanguardService.IsMember(pActor) +
+                       ",synthetic=" +
+                           SyntheticLevyService.IsSynthetic(pActor);
+            }
+            catch { return "id=" + id + ",inspection_error=true"; }
+        }
+
+        private static bool IsEligibleArmyMember(Army pArmy,
+            Kingdom pKingdom, Actor pActor)
+        {
+            try
+            {
+                return pActor?.data != null && pActor.army == pArmy &&
+                       pActor.kingdom == pKingdom && pActor.isAlive() &&
+                       !pActor.isRekt() && pActor.isAdult() &&
+                       pActor.is_profession_warrior && !pActor.isKing() &&
+                       !pActor.isCityLeader() && !SlaveService.IsSlave(pActor) &&
+                       !RoyalGuardService.IsRoyalGuard(pActor) &&
+                       !WartimeGarrisonService.IsActive(pActor) &&
+                       !TemporarySlaveVanguardService.IsMember(pActor);
+            }
+            catch { return false; }
+        }
+
+        private static void PromoteSyntheticCaptainIfNeeded(Actor pActor)
+        {
+            SyntheticLevyService.PromoteToPermanentCommand(pActor);
+        }
+
+        private static bool HasOperationalCaptain(Army pArmy,
+            Kingdom pKingdom)
+        {
+            Actor captain = null;
+            try { captain = pArmy?.getCaptain(); }
+            catch { }
+            return IsEligibleCaptain(pArmy, pKingdom, captain);
+        }
+
+        private static float CombatScore(Actor pActor)
+        {
+            if (pActor?.stats == null) return 0f;
+            return ReadCombatStat(pActor, "damage") +
+                   ReadCombatStat(pActor, "warfare") * 2f +
+                   ReadCombatStat(pActor, "health") * 0.1f +
+                   ReadCombatStat(pActor, "armor") * 2f +
+                   ReadCombatStat(pActor, "speed") * 0.25f;
+        }
+
+        private static float ReadCombatStat(Actor pActor, string pStat)
+        {
+            try { return pActor.stats[pStat]; }
+            catch { return 0f; }
         }
     }
 }

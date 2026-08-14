@@ -1,0 +1,111 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsCaptainCombatRulesTests
+{
+    public static void Run()
+    {
+        Assert(ArmyRtsCaptainCombatRules.ShouldRetainTarget(
+                targetAlive: true, targetHostile: true,
+                withinEnvelope: true),
+            "a live hostile target inside the encounter envelope is retained");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainTarget(
+                targetAlive: false, targetHostile: true,
+                withinEnvelope: true),
+            "a dead combat target is cleared");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainTarget(
+                targetAlive: true, targetHostile: false,
+                withinEnvelope: true),
+            "a friendly target is cleared");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainTarget(
+                targetAlive: true, targetHostile: true,
+                withinEnvelope: false),
+            "a target outside the bounded encounter envelope is cleared");
+        Assert(ArmyRtsCaptainCombatRules.ShouldEnterCombat(
+                alreadyInCombat: false, engagedCombatants: 3,
+                liveCombatants: 10, captainEngaged: false),
+            "a 25 percent field contact enters captain combat");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldEnterCombat(
+                alreadyInCombat: false, engagedCombatants: 0,
+                liveCombatants: 10, captainEngaged: true),
+            "a lone captain contact does not stop strategic movement");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldEnterCombat(
+                alreadyInCombat: false, engagedCombatants: 2,
+                liveCombatants: 10, captainEngaged: false),
+            "sub-threshold contact does not interrupt strategic movement");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
+                missionActive: true, actorIsCaptain: false,
+                fieldCombatReleased: false, hasValidCombatTarget: true),
+            "a marching soldier keeps native follow even when it has an enemy target");
+        Assert(ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
+                missionActive: true, actorIsCaptain: false,
+                fieldCombatReleased: true, hasValidCombatTarget: true),
+            "a soldier enters the dedicated RTS combat task only after field combat begins");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
+                missionActive: true, actorIsCaptain: true,
+                fieldCombatReleased: true, hasValidCombatTarget: true),
+            "the captain keeps the captain-specific combat task");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
+                missionActive: true, actorIsCaptain: false,
+                fieldCombatReleased: true, hasValidCombatTarget: false),
+            "a follower without a live combat target stays on follow duty");
+        Assert(ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
+                missionActive: true, actorIsCaptain: false,
+                fieldCombatReleased: true, hasValidCombatTarget: false),
+            "a field soldier without a close target remains on follow duty instead of entering vanilla fighting");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRestoreVanillaMemberFollow(
+                suppressVanillaFight: true,
+                isDedicatedMemberCombatTask: true),
+            "a transient target miss must not replace the dedicated member combat task with follow");
+        Assert(ArmyRtsCaptainCombatRules.ShouldRestoreVanillaMemberFollow(
+                suppressVanillaFight: true,
+                isDedicatedMemberCombatTask: false),
+            "only a vanilla fighting task is restored to native follow when its target becomes invalid");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
+                missionActive: true, actorIsCaptain: false,
+                fieldCombatReleased: true, hasValidCombatTarget: true),
+            "a field soldier with a close target receives member combat rather than suppressing combat");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
+                missionActive: true, actorIsCaptain: false,
+                fieldCombatReleased: false, hasValidCombatTarget: false),
+            "strategic marching does not suppress the original follow pipeline");
+
+        string root = Directory.GetCurrentDirectory();
+        string content = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "ArmyRtsContent.cs"));
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        string behaviour = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
+        Assert(content.Contains("CaptainCombatTaskId", StringComparison.Ordinal) &&
+               content.Contains("new BehArmyRtsCaptainCombat()",
+                   StringComparison.Ordinal),
+            "the captain combat task is registered in the RTS captain job");
+        Assert(content.Contains("MemberCombatTaskId", StringComparison.Ordinal) &&
+               content.Contains("new BehArmyRtsMemberCombat()",
+                   StringComparison.Ordinal),
+            "field soldiers receive a dedicated RTS combat task rather than the unstable vanilla fighting task");
+        string warLocale = File.ReadAllText(Path.Combine(root, "Locales",
+            "war.csv"));
+        Assert(warLocale.Contains("task_unit_aw_army_rts_captain_combat",
+                StringComparison.Ordinal) &&
+               warLocale.Contains("task_unit_aw_army_rts_member_combat",
+                StringComparison.Ordinal),
+            "both RTS combat task labels are localized");
+        Assert(controller.Contains("SetCaptainCombatTask",
+                   StringComparison.Ordinal) &&
+               !controller.Contains("ReleaseArmyActors(pArmy);\n            pRuntime.FieldCombatReleased",
+                   StringComparison.Ordinal),
+            "field contact does not release the army into an unowned vanilla gap");
+        Assert(behaviour.Contains("beh_actor_target", StringComparison.Ordinal) &&
+               behaviour.Contains("tryToAttack", StringComparison.Ordinal) &&
+               behaviour.Contains("RepeatStep", StringComparison.Ordinal),
+            "captain combat retains a bounded target and never terminates on a transient miss");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

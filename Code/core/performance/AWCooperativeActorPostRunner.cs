@@ -5,10 +5,12 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using AncientWarfare3.content;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.patch;
 using UnityEngine;
+using ai;
 using ai.behaviours;
 
 namespace AncientWarfare3.core.performance;
@@ -61,6 +63,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private enum PostStage
     {
         Idle,
+        MilitaryP0,
         BeforeDeadCheck,
         BeforeTileAction,
         ScheduleTileAction,
@@ -116,6 +119,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private PostStage stage;
     private float elapsed;
     private int deadCheckJobIndex;
+    private int militaryP0Cursor;
     private int tileActionJobIndex;
     private int frozenCheckJobIndex;
     private int updateTimersJobIndex;
@@ -208,7 +212,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         float cycleElapsed,
         ParallelOptions pParallelOptions)
     {
-        RunMilitaryP0Slice(cycleElapsed);
+        ArmyMilitaryMovementPriorityIndex.BeginCycle();
+        ArmyMilitaryMovementPriorityIndex.RefreshVanillaTaxiSnapshot();
+        RefreshRoyalGuardMilitaryPriorities(activeBatches);
+        ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);
+        militaryP0Cursor = 0;
         AWDeferredPathRequestBatch.StartCycle();
         AWDeferredPathRequestBatch.BeginCapture();
         AWEnemyPresenceCache.EndPreparation();
@@ -242,7 +250,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         if (batches.Count == 0)
         {
             enemySearchJobIndex = -1;
-            stage = PostStage.Finish;
+            stage = ShouldRunMilitaryP0Stage()
+                ? PostStage.MilitaryP0
+                : PostStage.Finish;
             return;
         }
 
@@ -321,48 +331,280 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 "Actor post jobs 中 u10_checkSmoothMovement 顺序无效");
         }
 
-        stage = PostStage.BeforeDeadCheck;
+        stage = ShouldRunMilitaryP0Stage()
+            ? PostStage.MilitaryP0
+            : PostStage.BeforeDeadCheck;
     }
 
-    private void RunMilitaryP0Slice(float cycleElapsed)
+    private static void RefreshRoyalGuardMilitaryPriorities(
+        List<BatchActors> activeBatches)
     {
-        if (AWPerformanceSettings.Mode != AWSimulationMode.Large ||
-            World.world?.isPaused() == true) return;
-        ArmyMilitaryMovementPriorityIndex.BeginCycle();
-        int sliceCount = ArmyMilitaryMovementPriorityIndex.TakeNextSlice(
-            AWPerformanceSettings.SimulationBatchSize, militaryP0ActorIds);
-        for (int i = 0; i < sliceCount; i++)
+        if (activeBatches == null) return;
+        for (int batchIndex = 0;
+             batchIndex < activeBatches.Count;
+             batchIndex++)
         {
-            Actor actor = null;
-            long actorId = militaryP0ActorIds[i];
-            try { actor = World.world?.units?.get(actorId); }
-            catch { }
-            if (actor?.data == null || actor.isRekt() || !actor.isAlive() ||
-                !ArmyMilitaryMovementPriorityIndex.TryGetKind(actorId,
-                    out ArmyMilitaryMovementPriorityKind kind) ||
-                !HasLiveMilitaryP0Objective(actor, kind))
+            BatchActors batch = activeBatches[batchIndex];
+            List<Job<Actor>> jobs = batch?.jobs_post;
+            if (jobs == null) continue;
+            int enemySearchIndex = FindPostJobIndex(jobs, EnemySearchJobId);
+            if (enemySearchIndex < 0) continue;
+
+            ObjectContainer<Actor> container =
+                jobs[enemySearchIndex]?.container;
+            Actor[] actors = container?.getFastSimpleArray();
+            int count = Math.Min(container?.Count ?? 0, actors?.Length ?? 0);
+            for (int actorIndex = 0; actorIndex < count; actorIndex++)
             {
-                ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
-                continue;
+                RoyalGuardService.TryRefreshMilitaryPriority(actors[actorIndex]);
+                ArmyRtsControllerService.TryRefreshMilitaryPriority(actors[actorIndex]);
             }
+        }
+    }
+
+    private bool ShouldRunMilitaryP0Stage()
+    {
+        return militaryP0ActorIds.Count > 0 &&
+               AWPerformanceSettings.Mode == AWSimulationMode.Large &&
+               World.world?.isPaused() != true;
+    }
+
+    private void RunMilitaryP0Chunk(float cycleElapsed)
+    {
+        int remaining = militaryP0ActorIds.Count - militaryP0Cursor;
+        int chunkCount = ArmyMilitaryMovementPriorityRules.
+            ResolveP0ChunkCount(remaining,
+                AWPerformanceSettings.SimulationBatchSize);
+        int end = militaryP0Cursor + chunkCount;
+        if (chunkCount > 0)
+        {
+            Actor firstActor = null;
             try
             {
-                actor.updatePathMovement();
-                actor.updateMovement(cycleElapsed);
-                actor.skipBehaviour();
-                ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
+                firstActor = World.world?.units?.get(
+                    militaryP0ActorIds[militaryP0Cursor]);
             }
             catch { }
+            ArmyRtsMovementDiagnostic.Log("p0", "p0_chunk_begin",
+                firstActor, "cursor=" + militaryP0Cursor +
+                            " count=" + chunkCount +
+                            " total=" + militaryP0ActorIds.Count);
         }
+        for (; militaryP0Cursor < end; militaryP0Cursor++)
+        {
+            ProcessMilitaryP0Actor(militaryP0ActorIds[militaryP0Cursor],
+                cycleElapsed);
+        }
+    }
+
+    private void ProcessMilitaryP0Actor(long actorId, float cycleElapsed)
+    {
+        Actor actor = null;
+        try { actor = World.world?.units?.get(actorId); }
+        catch { }
+        if (actor?.data == null || actor.isRekt() || !actor.isAlive() ||
+            !ArmyMilitaryMovementPriorityIndex.TryGetKind(actorId,
+                out ArmyMilitaryMovementPriorityKind kind) ||
+            !HasLiveMilitaryP0Objective(actor, kind))
+        {
+            ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+            return;
+        }
+        try
+        {
+            ArmyRtsMovementDiagnostic.Log("p0", "p0_enter", actor,
+                "kind=" + kind);
+            ArmyRtsAbstractSupplyService.
+                TryConsumeHomeRationScheduled(actor);
+            if (ArmyRtsControllerService.HasImmediateCombatPriority(actor))
+            {
+                RunMilitaryP0Combat(actor, actorId, kind, cycleElapsed,
+                    "entry");
+                return;
+            }
+            if (kind == ArmyMilitaryMovementPriorityKind.RtsMember &&
+                !ArmyRtsControllerService.TryPrepareMilitaryP0Actor(actor))
+            {
+                ArmyRtsMovementDiagnostic.Log("p0", "prepare_failed", actor,
+                    "kind=" + kind);
+                ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+                return;
+            }
+            if (kind == ArmyMilitaryMovementPriorityKind.RoyalGuard &&
+                !RoyalGuardService.TryPrepareMilitaryP0Actor(actor))
+            {
+                ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+                return;
+            }
+            if (kind == ArmyMilitaryMovementPriorityKind.RoyalGuard)
+                ArmyRtsMovementDiagnostic.Log("guard", "native_pipeline",
+                    actor);
+            if (ArmyRtsControllerService.
+                    HasMilitaryTransportOwnership(actor))
+            {
+                ArmyRtsMovementDiagnostic.Log("p0", "transport_yield", actor,
+                    "boundary=prepare kind=" + kind);
+                ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+                return;
+            }
+
+            ArmyRtsMovementDiagnostic.Log("p0", "native_enemy_check", actor,
+                "kind=" + kind);
+            actor.b2_checkCurrentEnemyTarget(cycleElapsed);
+            if (YieldMilitaryP0Ownership(actor, actorId, kind,
+                    cycleElapsed, "current_enemy",
+                    refreshTransport: false)) return;
+
+            ArmyRtsMovementDiagnostic.Log("p0", "native_enemy_search", actor,
+                "kind=" + kind);
+            bool hadAttackTargetBeforeSearch = actor.has_attack_target;
+            actor.b3_findEnemyTarget(cycleElapsed);
+            if (YieldMilitaryP0Ownership(actor, actorId, kind,
+                    cycleElapsed, "enemy_search",
+                    refreshTransport: false,
+                    resumeNativeCombatAfterEnemyAcquisition:
+                        ArmyMilitaryMovementPriorityRules.
+                            ShouldResumeNativeCombatAfterEnemyAcquisition(
+                                hadAttackTargetBeforeSearch,
+                                actor.has_attack_target,
+                                actor._beh_skip))) return;
+
+            ArmyRtsMovementDiagnostic.Log("p0", "native_task_verifier", actor,
+                "kind=" + kind);
+            actor.b4_checkTaskVerifier(cycleElapsed);
+            if (YieldMilitaryP0Ownership(actor, actorId, kind,
+                    cycleElapsed, "task_verifier",
+                    refreshTransport: false)) return;
+
+            ArmyRtsMovementDiagnostic.Log("p0", "native_path", actor,
+                "kind=" + kind);
+            actor.b5_checkPathMovement(cycleElapsed);
+            if (YieldMilitaryP0Ownership(actor, actorId, kind,
+                    cycleElapsed, "path", refreshTransport: false)) return;
+
+            ArmyRtsMovementDiagnostic.Log("p0", "native_ai", actor,
+                "kind=" + kind);
+            actor.b6_updateAI(cycleElapsed);
+            if (kind == ArmyMilitaryMovementPriorityKind.RtsMember &&
+                actor.isTask("warrior_army_follow_leader"))
+            {
+                bool followerStalled = !actor.is_moving &&
+                    actor.beh_tile_target?.data == null &&
+                    actor.tile_target?.data == null;
+                ArmyRtsMovementDiagnostic.Log("p0", followerStalled
+                        ? "follower_stalled" : "follower_after_ai", actor,
+                    "kind=" + kind + " result=" + (!followerStalled));
+            }
+            if (YieldMilitaryP0Ownership(actor, actorId, kind,
+                    cycleElapsed, "ai", refreshTransport: true)) return;
+
+            ArmyRtsMovementDiagnostic.Log("p0", "native_smooth", actor,
+                "kind=" + kind);
+            actor.u10_checkSmoothMovement(cycleElapsed);
+            actor.skipBehaviour();
+            ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
+        }
+        catch (Exception error)
+        {
+            ArmyRtsMovementDiagnostic.Log("p0", "p0_exception", actor,
+                "error=" + error.GetType().Name + ":" + error.Message);
+            ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+        }
+    }
+
+    private static void RunMilitaryP0Combat(Actor actor, long actorId,
+        ArmyMilitaryMovementPriorityKind kind, float cycleElapsed,
+        string boundary, bool resumeNativeCombatAfterEnemyAcquisition = false)
+    {
+        if (resumeNativeCombatAfterEnemyAcquisition)
+            actor._beh_skip = false;
+        if (kind == ArmyMilitaryMovementPriorityKind.RtsMember)
+            ArmyRtsControllerService.TrySetMemberCombatTask(actor);
+        ArmyRtsMovementDiagnostic.Log("p0", "combat_p0", actor,
+            "boundary=" + boundary + " kind=" + kind);
+        actor.b2_checkCurrentEnemyTarget(cycleElapsed);
+        actor.b3_findEnemyTarget(cycleElapsed);
+        if (kind == ArmyMilitaryMovementPriorityKind.RtsMember)
+        {
+            ArmyRtsControllerService.TrySetCaptainTacticalTask(actor);
+            ArmyRtsControllerService.TrySetMemberCombatTask(actor);
+        }
+        actor.b4_checkTaskVerifier(cycleElapsed);
+        actor.b5_checkPathMovement(cycleElapsed);
+        int actionIndexBeforeAi = actor.ai?.action_index ?? -1;
+        bool fightingTask = actor.isTask("fighting");
+        bool memberCombatTask = actor.isTask(
+            ArmyRtsContent.MemberCombatTaskId) || actor.isTask(
+            ArmyRtsContent.SiegeCombatTaskId);
+        actor.b6_updateAI(cycleElapsed);
+        ArmyRtsMovementDiagnostic.Log("p0", "combat_after_ai", actor,
+            "boundary=" + boundary + " kind=" + kind);
+        int actionIndexAfterAi = actor.ai?.action_index ?? -1;
+        if (ArmyMilitaryMovementPriorityRules.
+                ShouldAdvanceNewFightTaskInSameP0(
+                    actor.has_attack_target, fightingTask,
+                    actionIndexBeforeAi, actionIndexAfterAi,
+                    actor._beh_skip, actor.is_moving) ||
+            ArmyMilitaryMovementPriorityRules.
+                ShouldAdvanceMemberCombatApproachInSameP0(
+                    actor.has_attack_target, memberCombatTask,
+                    actionIndexBeforeAi, actionIndexAfterAi,
+                    actor._beh_skip, actor.is_moving))
+        {
+            actor.b6_updateAI(cycleElapsed);
+            actor.b5_checkPathMovement(cycleElapsed);
+            ArmyRtsMovementDiagnostic.Log("p0",
+                "combat_after_move_command", actor,
+                "boundary=" + boundary + " kind=" + kind);
+        }
+        actor.u10_checkSmoothMovement(cycleElapsed);
+        actor.skipBehaviour();
+        ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
+    }
+
+    private static bool YieldMilitaryP0Ownership(Actor actor, long actorId,
+        ArmyMilitaryMovementPriorityKind kind, float cycleElapsed,
+        string boundary, bool refreshTransport,
+        bool resumeNativeCombatAfterEnemyAcquisition = false)
+    {
+        bool royalGuardThreat =
+            kind == ArmyMilitaryMovementPriorityKind.RoyalGuard &&
+            actor.beh_actor_target != null;
+        if (royalGuardThreat ||
+            ArmyRtsControllerService.HasImmediateCombatPriority(actor))
+        {
+            RunMilitaryP0Combat(actor, actorId, kind, cycleElapsed,
+                boundary, resumeNativeCombatAfterEnemyAcquisition);
+            return true;
+        }
+        bool transportOwned = refreshTransport
+            ? ArmyRtsControllerService.
+                RefreshMilitaryTransportOwnership(actor)
+            : ArmyRtsControllerService.
+                HasMilitaryTransportOwnership(actor);
+        if (!transportOwned)
+            return false;
+        ArmyRtsMovementDiagnostic.Log("p0", "transport_yield", actor,
+            "boundary=" + boundary + " kind=" + kind);
+        ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+        return true;
     }
 
     private static bool HasLiveMilitaryP0Objective(Actor actor,
         ArmyMilitaryMovementPriorityKind kind)
     {
+        bool immediateCombat =
+            ArmyRtsControllerService.HasImmediateCombatPriority(actor);
+        bool militaryOwnerActive = kind ==
+            ArmyMilitaryMovementPriorityKind.RtsMember
+                ? ArmyRtsControllerService.HasActiveMilitaryP0Owner(actor)
+                : RoyalGuardService.HasMilitaryP0Objective(actor);
+        if (ArmyMilitaryMovementPriorityRules.ShouldRetainCombatP0(
+                AWPerformanceSettings.Mode == AWSimulationMode.Large,
+                militaryOwnerActive, immediateCombat)) return true;
         return kind == ArmyMilitaryMovementPriorityKind.RtsMember
-            ? ArmyRtsControllerService.HasActiveCaptainObjective(actor) ||
-              ArmyRtsControllerService.HasActiveMemberObjective(actor)
-            : RoyalGuardService.HasLandFollowPriority(actor);
+            ? militaryOwnerActive
+            : RoyalGuardService.HasMilitaryP0Objective(actor);
     }
 
     public bool WaitingForBackgroundWork =>
@@ -442,6 +684,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     public string GetNextPhaseName(string phasePrefix)
     {
+        if (stage == PostStage.MilitaryP0)
+            return phasePrefix + ".post.military_p0.chunk";
+
         if (stage == PostStage.BeforeDeadCheck &&
             batchIndex >= batches.Count)
         {
@@ -645,6 +890,17 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             {
                 case PostStage.Idle:
                     return true;
+                case PostStage.MilitaryP0:
+                    RunMilitaryP0Chunk(elapsed);
+                    bool militaryP0Pending =
+                        militaryP0Cursor < militaryP0ActorIds.Count;
+                    if (!ArmyMilitaryMovementPriorityRules.
+                            CanAdmitOrdinaryActorWork(militaryP0Pending))
+                        return false;
+                    stage = batches.Count == 0
+                        ? PostStage.Finish
+                        : PostStage.BeforeDeadCheck;
+                    return false;
                 case PostStage.BeforeDeadCheck:
                     if (TryRunNextPostRange(
                             0,
@@ -2452,6 +2708,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     private void PrepareSmoothMovementWorkItems()
     {
+        ArmyMilitaryMovementPriorityIndex.RefreshVanillaTaxiSnapshot();
         int count = batches.Count;
         if (smoothMovementWorkItems.Length < count)
         {
@@ -3142,6 +3399,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         workCount = 0;
         workIndex = 0;
+        militaryP0ActorIds.Clear();
+        militaryP0Cursor = 0;
         tileActionCommitIndex = 0;
         pathCommitIndex = 0;
         smoothCommitIndex = 0;

@@ -9,6 +9,12 @@ internal static class ArmyRtsWarLifecycleRulesTests
             "an army above 20 percent must remain operational");
         Assert(ArmyRtsWarLifecycleRules.ShouldWithdraw(20, 100),
             "an army at 20 percent must withdraw");
+        Assert(ArmyRtsWarLifecycleRules.ShouldWithdraw(6, 20),
+            "a large army reduced to six soldiers must withdraw even above the percentage threshold");
+        Assert(!ArmyRtsWarLifecycleRules.ShouldWithdraw(7, 20),
+            "an army above the absolute remnant floor continues until its percentage threshold is reached");
+        Assert(!ArmyRtsWarLifecycleRules.ShouldWithdraw(6, 6),
+            "an army recruited with six soldiers is not immediately withdrawn by the remnant floor");
         Assert(ArmyRtsWarLifecycleRules.ShouldWithdraw(1, 5),
             "withdrawal uses integer comparison without rounding");
         Assert(!ArmyRtsWarLifecycleRules.ShouldWithdraw(0, 0),
@@ -37,6 +43,15 @@ internal static class ArmyRtsWarLifecycleRulesTests
         Assert(!ArmyRtsWarLifecycleRules.ShouldReleaseToVanilla(
                 insideTargetTerritory: true, hostileCombatUnitNearby: false),
             "arrival without defenders keeps strategic movement active");
+
+        Assert(ArmyRetreatRules.ShouldStandAndFightWhenNoSafeCity(
+                ArmyRtsRole.Assault, ArmyRtsPosture.Attack,
+                hasSafeRetreatCity: false, explicitPlayerRetreat: false),
+            "an automatic retreat with no legal city must stand and fight");
+        Assert(ArmyRetreatRules.ShouldStandAndFightWhenNoSafeCity(
+                ArmyRtsRole.Assault, ArmyRtsPosture.Retreat,
+                hasSafeRetreatCity: false, explicitPlayerRetreat: true),
+            "even an explicit retreat must stand and fight when no city exists");
 
         Assert(ArmyRtsWarLifecycleRules.CanGenerateReplacements(
             combatActive: false, transportActive: false,
@@ -83,6 +98,12 @@ internal static class ArmyRtsWarLifecycleRulesTests
         Assert(!ArmyRtsControllerRules.ShouldPrioritizeMission(
                 new ArmyRtsMission { WarId = -1L }),
             "non-war missions do not enter the wartime priority queue");
+        Assert(ArmyRtsControllerRules.ShouldUseMissionCityAsMovementTarget(
+                ArmyRtsState.March, hasRouteAnchor: false),
+            "a native March without a custom route anchor must keep the mission city as the captain target");
+        Assert(!ArmyRtsControllerRules.ShouldUseMissionCityAsMovementTarget(
+                ArmyRtsState.March, hasRouteAnchor: true),
+            "a custom route anchor remains the captain target while one exists");
 
         Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
             {
