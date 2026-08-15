@@ -205,7 +205,7 @@ namespace AncientWarfare3.core.lineage
             if (pRebel?.data == null || pOriginKingdom?.data == null ||
                 pFoundingCity?.data == null) return;
             TryPullAlignedCities(pRebel, pOriginKingdom, pFoundingCity);
-            StartRebelWar(pOriginKingdom, pRebel);
+            StartExistingRebelWar(pOriginKingdom, pRebel);
         }
 
         public static void MarkRebelKingdom(Kingdom pKingdom, Actor pLeader, Kingdom pOriginKingdom)
@@ -417,7 +417,8 @@ namespace AncientWarfare3.core.lineage
             return Randy.randomChance(0.18f);
         }
 
-        private static void StartRebelWar(Kingdom pOld, Kingdom pRebel)
+        internal static void StartExistingRebelWar(Kingdom pOld,
+            Kingdom pRebel)
         {
             if (pOld?.data == null || pRebel?.data == null || pOld == pRebel) return;
             WarTypeAsset asset = AssetManager.war_types_library.get(MandateService.WAR_TIANMING_REBEL)

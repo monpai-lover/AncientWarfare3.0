@@ -8,6 +8,15 @@ function Forbid([string]$Text, [string]$Needle, [string]$Message) {
     if ($Text.Contains($Needle)) { throw $Message }
 }
 
+function RequireOrder([string]$Text, [string]$Before, [string]$After,
+        [string]$Message) {
+    $beforeIndex = $Text.IndexOf($Before)
+    $afterIndex = $Text.IndexOf($After)
+    if ($beforeIndex -lt 0 -or $afterIndex -le $beforeIndex) {
+        throw $Message
+    }
+}
+
 $mandate = Get-Content -Raw 'Code/core/lineage/MandateRebelService.cs'
 $route = Get-Content -Raw 'Code/core/lineage/PeasantRebelRouteService.cs'
 $warDecision = Get-Content -Raw 'Code/core/lineage/WarDecisionService.cs'
@@ -35,7 +44,7 @@ Require $mandate 'EnterFoundingRoute(' `
     'The existing founding flow must have a dedicated adapter.'
 Require $mandate 'TryPullAlignedCities(pRebel, pOriginKingdom, pFoundingCity);' `
     'Aligned-city recruitment must remain behind EnterFoundingRoute.'
-Require $mandate 'StartRebelWar(pOriginKingdom, pRebel);' `
+Require $mandate 'StartExistingRebelWar(pOriginKingdom, pRebel);' `
     'The existing rebellion war must remain behind EnterFoundingRoute.'
 Require $route 'generateName(MetaType.Kingdom' `
     'Route initialization must use the original kingdom name generator.'
@@ -71,5 +80,16 @@ Forbid $wall 'AssetManager.top_tiles.add' `
     'Bandit walls must not register a custom wall asset.'
 Forbid $wall 'void setTopTileType' `
     'Bandit wall service must not copy the original tile implementation.'
+Require $route 'StartExistingRebelWar' `
+    'Bandit conversion must reuse the existing rebellion-war path.'
+Require $route 'PeasantRebelRouteIds.Founding' `
+    'Bandit conversion must persist the one-way founding route.'
+Forbid $route 'MANDATE_REBEL_BANDIT_WALLS, ""' `
+    'Conversion must preserve the fixed wooden wall coordinates.'
+Forbid $route 'new War(' `
+    'Route conversion must not implement a second war constructor.'
+RequireOrder $bandit 'CanEvaluateWeakOriginTransition' `
+    'Randy.randomInt(0, 100)' `
+    'Transition randomness must run only after eligibility checks.'
 
 Write-Host 'Peasant rebel route runtime source guard passed.'

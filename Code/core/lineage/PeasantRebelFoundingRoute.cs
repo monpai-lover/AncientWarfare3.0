@@ -46,5 +46,18 @@ namespace AncientWarfare3.core.lineage
         public void OnKingdomDestroying(Kingdom pKingdom)
         {
         }
+
+        internal static void RecordTransition(Kingdom pKingdom,
+            Kingdom pOrigin)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.MANDATE_REBELLION,
+                HistoryText.Kingdom(pKingdom) +
+                HistoryLocalizationRules.H("aw_hist_bandit_converted"),
+                HistoryTarget.Kingdom(pOrigin?.data != null
+                    ? pOrigin
+                    : pKingdom));
+        }
     }
 }

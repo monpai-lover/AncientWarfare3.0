@@ -43,8 +43,14 @@ internal static class PeasantRebelRouteRulesTests
                 3, true, true, 0, 0),
             "eligible three-year hideout can convert");
         False(PeasantRebelRouteRules.CanEvaluateWeakOriginTransition(
-                2, true, true, 0, 0),
+            2, true, true, 0, 0),
             "two-year hideout cannot convert");
+        False(PeasantRebelRouteRules.CanEvaluateWeakOriginTransition(
+            3, false, true, 15, 15),
+            "leader quality cannot replace origin weakness");
+        Equal(20, PeasantRebelRouteRules.TransitionChance(
+            false, 1, false, 0, 0),
+            "eligible transition begins at twenty percent");
         Equal(90, PeasantRebelRouteRules.TransitionChance(
                 true, 4, true, 15, 15),
             "transition chance clamps");

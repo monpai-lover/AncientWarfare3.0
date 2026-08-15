@@ -85,16 +85,8 @@ namespace AncientWarfare3.core.lineage
             pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_RULER_ID,
                 pOrigin.king?.getID() ?? -1L);
 
-            int leaderFactor = PeasantRebelRouteRules.LeaderFactor(
-                SafeStat(pFounder, "warfare"),
-                SafeStat(pFounder, "stewardship"),
-                SafeStat(pFounder, "diplomacy"),
-                SafeHasTrait(pFounder, "ambitious"),
-                SafeHasTrait(pFounder, "peaceful") ||
-                SafeHasTrait(pFounder, "pacifist"));
-            int cityFactor = PeasantRebelRouteRules.CityFactor(
-                SafePopulation(pFoundingCity),
-                MedianOriginCityPopulation(pOrigin));
+            int leaderFactor = ComputeLeaderFactor(pFounder);
+            int cityFactor = ComputeCityFactor(pFoundingCity, pOrigin);
             int originFactor = PeasantRebelRouteRules.OriginStrengthFactor(
                 RealmStrength(pOrigin), RealmStrength(pRebel));
             int turmoil = Math.Min(10,
@@ -175,15 +167,32 @@ namespace AncientWarfare3.core.lineage
         internal static bool ConvertBanditToFounding(Kingdom pKingdom,
             Kingdom pOrigin)
         {
-            if (!IsBandit(pKingdom)) return false;
+            if (!IsBandit(pKingdom) ||
+                AW3MultiplayerReplicaScope.IsReplicaSession ||
+                AW3MultiplayerReplicaScope.IsApplying) return false;
+            Behaviors[PeasantRebelRouteIds.Bandit].Exit(pKingdom);
             IPeasantRebelRouteBehavior route =
                 Behaviors[PeasantRebelRouteIds.Founding];
+            pKingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
+            RuntimeByKingdom[pKingdom.getID()] = route.Id;
+            RenameForRoute(pKingdom, route.Id);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
+            KingdomRenameProjectionService.Refresh(pKingdom);
+            PeasantRebelFoundingRoute.RecordTransition(pKingdom, pOrigin);
+            if (pOrigin?.data != null && !pOrigin.isRekt())
+                MandateRebelService.StartExistingRebelWar(pOrigin,
+                    pKingdom);
+            return true;
+        }
+
+        internal static void RenameForRoute(Kingdom pKingdom,
+            string pRoute)
+        {
+            if (pKingdom?.data == null) return;
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
                 out string root, pKingdom.name ?? "");
-            pKingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
-            TryApplyRouteName(pKingdom, route.ComposeStateName(root));
-            RuntimeByKingdom[pKingdom.getID()] = route.Id;
-            return true;
+            TryApplyRouteName(pKingdom,
+                PeasantRebelRouteRules.ComposeName(root, pRoute));
         }
 
         internal static bool CanAcquireCity(Kingdom pRecipient, City pCity)
@@ -234,6 +243,23 @@ namespace AncientWarfare3.core.lineage
             _enteringBanditKingdomId = null;
         }
 
+        internal static int ComputeLeaderFactor(Actor pActor)
+        {
+            return PeasantRebelRouteRules.LeaderFactor(
+                SafeStat(pActor, "warfare"),
+                SafeStat(pActor, "stewardship"),
+                SafeStat(pActor, "diplomacy"),
+                SafeHasTrait(pActor, "ambitious"),
+                SafeHasTrait(pActor, "peaceful") ||
+                SafeHasTrait(pActor, "pacifist"));
+        }
+
+        internal static int ComputeCityFactor(City pCity, Kingdom pOrigin)
+        {
+            return PeasantRebelRouteRules.CityFactor(SafePopulation(pCity),
+                MedianOriginCityPopulation(pOrigin));
+        }
+
         private static int SafeStat(Actor pActor, string pStat)
         {
             try { return (int)Math.Round(pActor?.stats[pStat] ?? 0f); }
@@ -272,7 +298,7 @@ namespace AncientWarfare3.core.lineage
                 : (populations[middle - 1] + populations[middle]) / 2;
         }
 
-        private static int RealmStrength(Kingdom pKingdom)
+        internal static int RealmStrength(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return 0;
             int population = 0;
@@ -299,7 +325,7 @@ namespace AncientWarfare3.core.lineage
             return population + warriors * 5 + cities * 50;
         }
 
-        private static int CountActiveWars(Kingdom pKingdom)
+        internal static int CountActiveWars(Kingdom pKingdom)
         {
             int count = 0;
             if (pKingdom?.data == null) return count;
@@ -312,7 +338,7 @@ namespace AncientWarfare3.core.lineage
             return count;
         }
 
-        private static int SafeCityCount(Kingdom pKingdom)
+        internal static int SafeCityCount(Kingdom pKingdom)
         {
             try { return pKingdom?.countCities() ?? 0; }
             catch { return 0; }
