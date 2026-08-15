@@ -15,6 +15,8 @@
     <Compile Include="..\..\Code\core\lineage\CultiwayStyleWallGeometryRules.cs" Link="Production\CultiwayStyleWallGeometryRules.cs" />
     <Compile Include="CultiwayStyleFrontierWallGeometryRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\CultiwayStyleFrontierWallGeometryRules.cs" Link="Production\CultiwayStyleFrontierWallGeometryRules.cs" />
+    <Compile Include="MandateBorderWallRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandateBorderWallRules.cs" Link="Production\MandateBorderWallRules.cs" />
     <Compile Include="PeasantRebelOutlawNameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelOutlawNameRules.cs" Link="Production\PeasantRebelOutlawNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />

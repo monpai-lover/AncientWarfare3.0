@@ -13,6 +13,7 @@ if (args.Length == 1 && args[0] == "--cultiway-wall")
 {
     CultiwayStyleWallGeometryRulesTests.Run();
     CultiwayStyleFrontierWallGeometryRulesTests.Run();
+    MandateBorderWallRulesTests.Run();
     Console.WriteLine("Cultiway wall geometry rules passed.");
     return;
 }
