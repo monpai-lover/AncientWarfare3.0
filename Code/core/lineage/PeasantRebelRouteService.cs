@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -11,7 +12,9 @@ namespace AncientWarfare3.core.lineage
             Behaviors = new Dictionary<string, IPeasantRebelRouteBehavior>
             {
                 { PeasantRebelRouteIds.Founding,
-                    new PeasantRebelFoundingRoute() }
+                    new PeasantRebelFoundingRoute() },
+                { PeasantRebelRouteIds.Bandit,
+                    new PeasantRebelBanditRoute() }
             };
 
         [ThreadStatic]
@@ -46,8 +49,8 @@ namespace AncientWarfare3.core.lineage
         internal static bool IsBanditOrEntering(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return false;
-            return IsBandit(pKingdom) ||
-                   _enteringBanditKingdomId == pKingdom.getID();
+            return _enteringBanditKingdomId == pKingdom.getID() ||
+                   IsBandit(pKingdom);
         }
 
         internal static bool InitializeAndEnter(Kingdom pRebel,
@@ -56,6 +59,8 @@ namespace AncientWarfare3.core.lineage
             if (pRebel?.data == null || pOrigin?.data == null ||
                 pFoundingCity?.data == null || pFounder?.data == null)
                 return false;
+            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
+                AW3MultiplayerReplicaScope.IsApplying) return true;
 
             int year = Date.getCurrentYear();
             long seed = pRebel.getID() ^ (pFounder.getID() << 1) ^
@@ -71,15 +76,92 @@ namespace AncientWarfare3.core.lineage
                 year);
             pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE_LAST_YEAR,
                 int.MinValue);
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_CITY_COUNT,
+                SafeCityCount(pOrigin));
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_STRENGTH,
+                RealmStrength(pOrigin));
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_CAPITAL_ID,
+                pOrigin.capital?.getID() ?? -1L);
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_RULER_ID,
+                pOrigin.king?.getID() ?? -1L);
 
+            int leaderFactor = PeasantRebelRouteRules.LeaderFactor(
+                SafeStat(pFounder, "warfare"),
+                SafeStat(pFounder, "stewardship"),
+                SafeStat(pFounder, "diplomacy"),
+                SafeHasTrait(pFounder, "ambitious"),
+                SafeHasTrait(pFounder, "peaceful") ||
+                SafeHasTrait(pFounder, "pacifist"));
+            int cityFactor = PeasantRebelRouteRules.CityFactor(
+                SafePopulation(pFoundingCity),
+                MedianOriginCityPopulation(pOrigin));
+            int originFactor = PeasantRebelRouteRules.OriginStrengthFactor(
+                RealmStrength(pOrigin), RealmStrength(pRebel));
+            int turmoil = Math.Min(10,
+                Math.Max(0, CountActiveWars(pOrigin) - 1) * 5 +
+                (pOrigin.capital?.data == null || !pOrigin.hasKing()
+                    ? 5 : 0));
+            int foundingChance = PeasantRebelRouteRules.FoundingChance(
+                leaderFactor, cityFactor, originFactor, turmoil);
+            string routeId = PeasantRebelRouteRules.SelectRoute(
+                Randy.randomInt(0, 100), foundingChance);
+            IPeasantRebelRouteBehavior route = Behaviors[routeId];
+
+            bool entered;
+            if (route.Id == PeasantRebelRouteIds.Bandit)
+            {
+                using (new BanditEntryScope(pRebel.getID()))
+                    entered = route.Enter(new PeasantRebelRouteEntryContext(
+                        pRebel, pOrigin, pFoundingCity, pFounder));
+            }
+            else
+            {
+                entered = TryApplyRouteName(pRebel,
+                              route.ComposeStateName(root)) &&
+                          route.Enter(new PeasantRebelRouteEntryContext(
+                              pRebel, pOrigin, pFoundingCity, pFounder));
+            }
+
+            if (!entered) return false;
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
+            RuntimeByKingdom[pRebel.getID()] = route.Id;
+            return true;
+        }
+
+        internal static void EnterFoundingFallback(Kingdom pRebel,
+            Kingdom pOrigin, City pFoundingCity)
+        {
+            if (pRebel?.data == null || pOrigin?.data == null ||
+                pFoundingCity?.data == null) return;
+            pRebel.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
+                out string root, pRebel.name ?? "");
             IPeasantRebelRouteBehavior route =
                 Behaviors[PeasantRebelRouteIds.Founding];
             pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
-            pRebel.setName(route.ComposeStateName(root), pTrack: false);
             RuntimeByKingdom[pRebel.getID()] = route.Id;
+            TryApplyRouteName(pRebel, route.ComposeStateName(root));
+            MandateRebelService.EnterFoundingRoute(pRebel, pOrigin,
+                pFoundingCity);
+        }
 
-            return route.Enter(new PeasantRebelRouteEntryContext(pRebel,
-                pOrigin, pFoundingCity, pFounder));
+        internal static bool TryApplyRouteName(Kingdom pKingdom,
+            string pName)
+        {
+            if (pKingdom?.data == null || string.IsNullOrWhiteSpace(pName))
+                return false;
+            try
+            {
+                pKingdom.setName(pName, pTrack: false);
+                KingdomRenameProjectionService.Refresh(pKingdom);
+                return string.Equals(pKingdom.name, pName,
+                    StringComparison.Ordinal);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Peasant rebel route rename failed: " +
+                                    e.Message);
+                return false;
+            }
         }
 
         internal static void OnKingdomYear(Kingdom pKingdom)
@@ -99,7 +181,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
                 out string root, pKingdom.name ?? "");
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
-            pKingdom.setName(route.ComposeStateName(root), pTrack: false);
+            TryApplyRouteName(pKingdom, route.ComposeStateName(root));
             RuntimeByKingdom[pKingdom.getID()] = route.Id;
             return true;
         }
@@ -141,6 +223,90 @@ namespace AncientWarfare3.core.lineage
         {
             RuntimeByKingdom.Clear();
             _enteringBanditKingdomId = null;
+        }
+
+        private static int SafeStat(Actor pActor, string pStat)
+        {
+            try { return (int)Math.Round(pActor?.stats[pStat] ?? 0f); }
+            catch { return 0; }
+        }
+
+        private static bool SafeHasTrait(Actor pActor, string pTrait)
+        {
+            try { return pActor?.hasTrait(pTrait) == true; }
+            catch { return false; }
+        }
+
+        private static int SafePopulation(City pCity)
+        {
+            try { return Math.Max(0, pCity?.getPopulationPeople() ?? 0); }
+            catch { return 0; }
+        }
+
+        private static int MedianOriginCityPopulation(Kingdom pOrigin)
+        {
+            var populations = new List<int>();
+            try
+            {
+                foreach (City city in pOrigin.getCities())
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    populations.Add(SafePopulation(city));
+                }
+            }
+            catch { }
+            if (populations.Count == 0) return 0;
+            populations.Sort();
+            int middle = populations.Count / 2;
+            return populations.Count % 2 == 1
+                ? populations[middle]
+                : (populations[middle - 1] + populations[middle]) / 2;
+        }
+
+        private static int RealmStrength(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0;
+            int population = 0;
+            int cities = 0;
+            try
+            {
+                foreach (City city in pKingdom.getCities())
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    cities++;
+                    population += SafePopulation(city);
+                }
+            }
+            catch { }
+
+            int warriors = 0;
+            try
+            {
+                foreach (Actor unit in pKingdom.getUnits())
+                    if (unit?.data != null && !unit.isRekt() &&
+                        unit.isWarrior()) warriors++;
+            }
+            catch { }
+            return population + warriors * 5 + cities * 50;
+        }
+
+        private static int CountActiveWars(Kingdom pKingdom)
+        {
+            int count = 0;
+            if (pKingdom?.data == null) return count;
+            try
+            {
+                foreach (War war in pKingdom.getWars())
+                    if (war?.data != null && !war.hasEnded()) count++;
+            }
+            catch { }
+            return count;
+        }
+
+        private static int SafeCityCount(Kingdom pKingdom)
+        {
+            try { return pKingdom?.countCities() ?? 0; }
+            catch { return 0; }
         }
 
         private sealed class BanditEntryScope : IDisposable

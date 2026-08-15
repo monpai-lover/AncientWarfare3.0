@@ -9,8 +9,9 @@ namespace AncientWarfare3.core.lineage
 
         public bool Enter(PeasantRebelRouteEntryContext pContext)
         {
-            return MandateRebelService.EnterFoundingRoute(pContext.Rebel,
+            MandateRebelService.EnterFoundingRoute(pContext.Rebel,
                 pContext.Origin, pContext.FoundingCity);
+            return true;
         }
 
         public void OnKingdomYear(Kingdom pKingdom)
