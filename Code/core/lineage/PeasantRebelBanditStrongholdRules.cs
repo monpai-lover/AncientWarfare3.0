@@ -5,17 +5,23 @@ namespace AncientWarfare3.core.lineage
 {
     public sealed class BanditZoneFact
     {
-        public BanditZoneFact(string key, bool insideWall,
+        public BanditZoneFact(string key, int enclosedTileCount,
+            int totalTileCount,
             IEnumerable<string> neighbourKeys)
         {
             Key = (key ?? "").Trim();
-            InsideWall = insideWall;
+            TotalTileCount = Math.Max(0, totalTileCount);
+            EnclosedTileCount = Math.Min(TotalTileCount,
+                Math.Max(0, enclosedTileCount));
             NeighbourKeys = new List<string>(
                 neighbourKeys ?? Array.Empty<string>());
         }
 
         public string Key { get; }
-        public bool InsideWall { get; }
+        public int EnclosedTileCount { get; }
+        public int TotalTileCount { get; }
+        public bool IsMajorityEnclosed => TotalTileCount > 0 &&
+            (long)EnclosedTileCount * 2L > TotalTileCount;
         public IReadOnlyList<string> NeighbourKeys { get; }
     }
 
@@ -37,7 +43,7 @@ namespace AncientWarfare3.core.lineage
                 byKey[zone.Key] = zone;
             }
             if (!byKey.TryGetValue(centerKey, out BanditZoneFact center) ||
-                !center.InsideWall) return selected;
+                !center.IsMajorityEnclosed) return selected;
 
             var pending = new Queue<string>();
             selected.Add(center.Key);
@@ -51,7 +57,7 @@ namespace AncientWarfare3.core.lineage
                     if (selected.Contains(neighbourKey) ||
                         !byKey.TryGetValue(neighbourKey,
                             out BanditZoneFact neighbour) ||
-                        !neighbour.InsideWall) continue;
+                        !neighbour.IsMajorityEnclosed) continue;
                     selected.Add(neighbourKey);
                     pending.Enqueue(neighbourKey);
                 }

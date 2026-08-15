@@ -168,6 +168,15 @@ namespace AncientWarfare3.core.lineage
                 .ThenBy(point => point.Y).ToArray();
         }
 
+        public static IReadOnlyList<CultiwayWallPoint> ComputeEnclosedLand(
+            CultiwayWallGeometryInput input)
+        {
+            if (input == null) throw new ArgumentNullException(nameof(input));
+            return IntersectBounds(GetCoreLand(input), input)
+                .OrderBy(point => point.X)
+                .ThenBy(point => point.Y).ToArray();
+        }
+
         private static HashSet<CultiwayWallPoint> GetCoreLand(
             CultiwayWallGeometryInput input)
         {

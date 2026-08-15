@@ -57,9 +57,11 @@ namespace AncientWarfare3.core.lineage
                 pFailureKey = "aw_bandit_stronghold_already_exists";
                 return false;
             }
-            if (!CultiwayStyleCityWallService.TryPlan(pMother, 1, true,
-                    out IReadOnlyList<CultiwayWallPoint> wallPoints) ||
-                wallPoints.Count == 0)
+            if (!CultiwayStyleCityWallService.TryPlanDetailed(
+                    pMother, 1, true,
+                    out CultiwayStyleCityWallPlan wallPlan) ||
+                wallPlan.WallPoints.Count == 0 ||
+                wallPlan.EnclosedLand.Count == 0)
             {
                 pFailureKey = "aw_bandit_stronghold_wall_failed";
                 return false;
@@ -73,32 +75,31 @@ namespace AncientWarfare3.core.lineage
                 pFailureKey = "aw_bandit_stronghold_split_failed";
                 return false;
             }
-            int minX = wallPoints.Min(point => point.X);
-            int maxX = wallPoints.Max(point => point.X);
-            int minY = wallPoints.Min(point => point.Y);
-            int maxY = wallPoints.Max(point => point.Y);
             var motherSet = new HashSet<TileZone>(motherZones);
+            var enclosedLand = new HashSet<CultiwayWallPoint>(
+                wallPlan.EnclosedLand);
             var facts = new List<BanditZoneFact>(motherZones.Count);
             foreach (TileZone zone in motherZones)
             {
-                WorldTile center = zone.centerTile;
-                bool inside = center != null && center.x > minX &&
-                    center.x < maxX && center.y > minY && center.y < maxY;
+                int totalTiles = zone.tiles?.Count(tile => tile != null) ?? 0;
+                int enclosedTiles = zone.tiles?.Count(tile =>
+                    tile != null && enclosedLand.Contains(
+                        new CultiwayWallPoint(tile.x, tile.y))) ?? 0;
                 IEnumerable<string> neighbours = (zone.neighbours_all ??
                         Array.Empty<TileZone>())
                     .Where(motherSet.Contains).Select(ZoneKey);
-                facts.Add(new BanditZoneFact(ZoneKey(zone), inside,
-                    neighbours));
+                facts.Add(new BanditZoneFact(ZoneKey(zone), enclosedTiles,
+                    totalTiles, neighbours));
             }
             WorldTile cityTile = pMother.getTile();
             TileZone centerZone = cityTile?.zone;
             if (centerZone == null || !motherSet.Contains(centerZone) ||
                 !facts.Any(fact => fact.Key == ZoneKey(centerZone) &&
-                                   fact.InsideWall))
+                                   fact.IsMajorityEnclosed))
             {
                 centerZone = motherZones.Where(zone =>
                         facts.Any(fact => fact.Key == ZoneKey(zone) &&
-                                          fact.InsideWall))
+                                          fact.IsMajorityEnclosed))
                     .OrderBy(zone => DistanceSquared(zone.centerTile,
                         cityTile)).FirstOrDefault();
             }
@@ -158,7 +159,7 @@ namespace AncientWarfare3.core.lineage
                 CenterZone = centerZone,
                 InteriorZones = interior,
                 ExteriorZones = exterior,
-                WallPoints = wallPoints.ToList(),
+                WallPoints = wallPlan.WallPoints.ToList(),
                 FixedZoneKeys = interior.Select(ZoneKey)
                     .OrderBy(key => key, StringComparer.Ordinal).ToList(),
                 ReserveMotherActor = reserve,

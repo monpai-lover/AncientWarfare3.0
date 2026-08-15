@@ -16,10 +16,12 @@ internal static class PeasantRebelBanditStrongholdRulesTests
     {
         var zones = new[]
         {
-            Zone("center", true, "east"),
-            Zone("east", true, "center"),
-            Zone("isolated", true),
-            Zone("outside", false, "east")
+            Zone("center", 7, 10, "east", "half", "minority", "empty"),
+            Zone("east", 6, 10, "center"),
+            Zone("isolated", 8, 10),
+            Zone("half", 5, 10, "center"),
+            Zone("minority", 4, 10, "center"),
+            Zone("empty", 0, 0, "center")
         };
 
         HashSet<string> selected =
@@ -27,7 +29,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
                 zones, "center");
 
         True(selected.SetEquals(new[] { "center", "east" }),
-            "only connected wall-interior zones transfer");
+            "only connected zones with strict majority wall overlap transfer");
     }
 
     private static void RequiresZonesOnBothSidesOfSplit()
@@ -74,10 +76,12 @@ internal static class PeasantRebelBanditStrongholdRulesTests
             "localized role text follows the canonical stronghold name");
     }
 
-    private static BanditZoneFact Zone(string key, bool inside,
+    private static BanditZoneFact Zone(string key, int enclosedTiles,
+        int totalTiles,
         params string[] neighbours)
     {
-        return new BanditZoneFact(key, inside, neighbours);
+        return new BanditZoneFact(key, enclosedTiles, totalTiles,
+            neighbours);
     }
 
     private static void True(bool value, string message)

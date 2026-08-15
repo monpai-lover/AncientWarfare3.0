@@ -17,6 +17,21 @@ namespace AncientWarfare3.core.lineage
         internal int Changed { get; }
     }
 
+    internal sealed class CultiwayStyleCityWallPlan
+    {
+        internal CultiwayStyleCityWallPlan(
+            IReadOnlyList<CultiwayWallPoint> pWallPoints,
+            IReadOnlyList<CultiwayWallPoint> pEnclosedLand)
+        {
+            WallPoints = pWallPoints ?? Array.Empty<CultiwayWallPoint>();
+            EnclosedLand = pEnclosedLand ??
+                Array.Empty<CultiwayWallPoint>();
+        }
+
+        internal IReadOnlyList<CultiwayWallPoint> WallPoints { get; }
+        internal IReadOnlyList<CultiwayWallPoint> EnclosedLand { get; }
+    }
+
     internal static class CultiwayStyleCityWallService
     {
         private const int RadiusMin = 3;
@@ -30,6 +45,17 @@ namespace AncientWarfare3.core.lineage
             out IReadOnlyList<CultiwayWallPoint> pPoints)
         {
             pPoints = Array.Empty<CultiwayWallPoint>();
+            if (!TryPlanDetailed(pCity, pWidth, pCarvePassages,
+                    out CultiwayStyleCityWallPlan plan)) return false;
+            pPoints = plan.WallPoints;
+            return true;
+        }
+
+        internal static bool TryPlanDetailed(City pCity, int pWidth,
+            bool pCarvePassages,
+            out CultiwayStyleCityWallPlan pPlan)
+        {
+            pPlan = null;
             if (pCity?.data == null || pCity.isRekt() || pWidth <= 0 ||
                 World.world == null || MapBox.width <= 0 ||
                 MapBox.height <= 0) return false;
@@ -60,19 +86,25 @@ namespace AncientWarfare3.core.lineage
                     pWidth, pCarvePassages);
                 IReadOnlyList<CultiwayWallPoint> computed =
                     CultiwayStyleWallGeometryRules.Compute(input);
-
-                pPoints = computed.Where(point =>
+                IReadOnlyList<CultiwayWallPoint> enclosedLand =
+                    CultiwayStyleWallGeometryRules.
+                        ComputeEnclosedLand(input);
+                CultiwayWallPoint[] wallPoints = computed.Where(point =>
                         CanPlaceAt(pCity,
                             World.world.GetTile(point.X, point.Y)))
                     .OrderBy(point => point.X)
                     .ThenBy(point => point.Y).ToArray();
-                return pPoints.Count > 0;
+                if (wallPoints.Length == 0 || enclosedLand.Count == 0)
+                    return false;
+                pPlan = new CultiwayStyleCityWallPlan(
+                    wallPoints, enclosedLand);
+                return true;
             }
             catch (Exception e)
             {
                 ModClass.LogWarning("Cultiway-style city wall plan failed: " +
                                     e.Message);
-                pPoints = Array.Empty<CultiwayWallPoint>();
+                pPlan = null;
                 return false;
             }
         }

@@ -13,6 +13,7 @@ internal static class CultiwayStyleWallGeometryRulesTests
         RoadGateWinsOverDirectionalFallback();
         DockWithinEightTilesCarvesThreeTilePassage();
         CoreReachabilityCarvesMinimumThreeTilePassage();
+        EnclosedLandUsesBoundedConnectedComponentBeforeGates();
     }
 
     private static void ClosedBoundaryExcludesDetachedLand()
@@ -119,6 +120,32 @@ internal static class CultiwayStyleWallGeometryRulesTests
             "minimum crossing opens the upper side of a three-tile passage");
         True(actual.Contains(Point(1, 2)) && actual.Contains(Point(1, 6)),
             "core reachability does not remove the rest of the wall");
+    }
+
+    private static void EnclosedLandUsesBoundedConnectedComponentBeforeGates()
+    {
+        HashSet<CultiwayWallPoint> cityLand = Rectangle(0, 0, 8, 8);
+        cityLand.Add(Point(10, 10));
+        HashSet<CultiwayWallPoint> passable = Rectangle(0, 0, 10, 10);
+        CultiwayWallGeometryInput gated = Input(12, 12,
+            Point(4, 4), Bounds(4, 4, 2, 2), cityLand, passable,
+            gates: true);
+        CultiwayWallGeometryInput sealedWall = Input(12, 12,
+            Point(4, 4), Bounds(4, 4, 2, 2), cityLand, passable,
+            gates: false);
+
+        HashSet<CultiwayWallPoint> expected = Rectangle(2, 2, 6, 6);
+        HashSet<CultiwayWallPoint> gatedLand =
+            CultiwayStyleWallGeometryRules.ComputeEnclosedLand(gated)
+                .ToHashSet();
+        HashSet<CultiwayWallPoint> sealedLand =
+            CultiwayStyleWallGeometryRules.ComputeEnclosedLand(sealedWall)
+                .ToHashSet();
+
+        SetEqual(expected, gatedLand,
+            "wall plan exposes its bounded connected interior land");
+        SetEqual(expected, sealedLand,
+            "gate carving does not change logical enclosed land");
     }
 
     private static CultiwayWallGeometryInput Input(int width, int height,
