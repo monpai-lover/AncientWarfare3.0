@@ -26,5 +26,13 @@ namespace AncientWarfare3.core.db
         public int active = 1;
         public int absorbed = 0;
         public string end_reason = "";
+        [TableItemDef(pDefaultValue: "-1")]
+        public int last_tribute_attempt_year = -1;
+        [TableItemDef(pDefaultValue: "-1")]
+        public int last_tribute_paid_year = -1;
+        [TableItemDef(pDefaultValue: "-1")]
+        public int next_tribute_due_year = -1;
+        [TableItemDef(pDefaultValue: "-1")]
+        public int last_tribute_factor_percent = -1;
     }
 }

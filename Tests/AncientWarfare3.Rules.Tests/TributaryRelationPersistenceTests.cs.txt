@@ -1,0 +1,122 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class TributaryRelationPersistenceTests
+{
+    public static void Run()
+    {
+        using SQLiteConnection db = OpenDatabase();
+
+        TributarySettlementPersistence.InitializeNewRelation(db, 10L, 140);
+        Equal(141, ScalarInt(db, "SELECT NEXT_TRIBUTE_DUE_YEAR FROM " +
+            "VassalRelation WHERE RELATION_ID=10"), "new due year");
+        Equal(-1, ScalarInt(db, "SELECT LAST_TRIBUTE_ATTEMPT_YEAR FROM " +
+            "VassalRelation WHERE RELATION_ID=10"),
+            "new relation has no attempt");
+        Equal(false,
+            TributarySettlementPersistence.TryBeginAttempt(db, 10L, 140),
+            "new relation is not due in its creation year");
+        Equal(true,
+            TributarySettlementPersistence.TryBeginAttempt(db, 10L, 141),
+            "first attempt");
+        Equal(false,
+            TributarySettlementPersistence.TryBeginAttempt(db, 10L, 141),
+            "same-year duplicate");
+
+        TributarySettlementPersistence.MarkPaid(db, 10L, 141, 75);
+        Equal(141, ScalarInt(db, "SELECT LAST_TRIBUTE_PAID_YEAR FROM " +
+            "VassalRelation WHERE RELATION_ID=10"), "paid year");
+        Equal(142, ScalarInt(db, "SELECT NEXT_TRIBUTE_DUE_YEAR FROM " +
+            "VassalRelation WHERE RELATION_ID=10"), "one-year renewal");
+        Equal(75, ScalarInt(db,
+            "SELECT LAST_TRIBUTE_FACTOR_PERCENT FROM VassalRelation " +
+            "WHERE RELATION_ID=10"), "factor");
+
+        Equal(true,
+            TributarySettlementPersistence.TryBeginAttempt(db, 11L, 141),
+            "legacy minus-one due now");
+        Equal(141, ScalarInt(db, "SELECT NEXT_TRIBUTE_DUE_YEAR FROM " +
+            "VassalRelation WHERE RELATION_ID=11"),
+            "legacy due year migrates to the attempt year");
+        Equal(142, ScalarInt(db, "SELECT NEXT_TRIBUTE_DUE_YEAR FROM " +
+            "VassalRelation WHERE RELATION_ID=10"),
+            "legacy attempt does not mutate another relation");
+        Equal(-1, ScalarInt(db, "SELECT LAST_TRIBUTE_PAID_YEAR FROM " +
+            "VassalRelation WHERE RELATION_ID=11"),
+            "another relation keeps its own paid state");
+
+        Equal(false,
+            TributarySettlementPersistence.TryBeginAttempt(db, 12L, 141),
+            "formal row excluded");
+        Equal(false,
+            TributarySettlementPersistence.TryBeginAttempt(db, 13L, 141),
+            "inactive row excluded");
+        Equal(false,
+            TributarySettlementPersistence.TryBeginAttempt(db, 14L, 141),
+            "ended row excluded");
+        ThrowsInvalidOperation(
+            () => TributarySettlementPersistence.MarkPaid(db, 11L, 142, 50),
+            "payment requires the current attempt year");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using (var schema = new SQLiteCommand(
+            "CREATE TABLE VassalRelation(" +
+            "RELATION_ID INTEGER PRIMARY KEY,CONTRACT_TIER INTEGER," +
+            "ACTIVE INTEGER,END_TIME REAL," +
+            "LAST_TRIBUTE_ATTEMPT_YEAR INTEGER DEFAULT -1," +
+            "LAST_TRIBUTE_PAID_YEAR INTEGER DEFAULT -1," +
+            "NEXT_TRIBUTE_DUE_YEAR INTEGER DEFAULT -1," +
+            "LAST_TRIBUTE_FACTOR_PERCENT INTEGER DEFAULT -1);", db))
+            schema.ExecuteNonQuery();
+        Seed(db, 10L, VassalContractTierRules.Tributary, 1, -1d);
+        Seed(db, 11L, VassalContractTierRules.Tributary, 1, -1d);
+        Seed(db, 12L, VassalContractTierRules.Outer, 1, -1d);
+        Seed(db, 13L, VassalContractTierRules.Tributary, 0, -1d);
+        Seed(db, 14L, VassalContractTierRules.Tributary, 1, 100d);
+        return db;
+    }
+
+    private static void Seed(SQLiteConnection db, long relationId,
+        int contractTier, int active, double endTime)
+    {
+        using var insert = new SQLiteCommand(
+            "INSERT INTO VassalRelation(RELATION_ID,CONTRACT_TIER," +
+            "ACTIVE,END_TIME) VALUES(@relation,@tier,@active,@end);", db);
+        insert.Parameters.AddWithValue("@relation", relationId);
+        insert.Parameters.AddWithValue("@tier", contractTier);
+        insert.Parameters.AddWithValue("@active", active);
+        insert.Parameters.AddWithValue("@end", endTime);
+        insert.ExecuteNonQuery();
+    }
+
+    private static int ScalarInt(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt32(command.ExecuteScalar());
+    }
+
+    private static void ThrowsInvalidOperation(Action action, string name)
+    {
+        try
+        {
+            action();
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
+        throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}
