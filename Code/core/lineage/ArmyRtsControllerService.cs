@@ -321,6 +321,18 @@ namespace AncientWarfare3.core.lineage
                        StringComparison.Ordinal) ||
                    string.Equals(stage, "self_landing_move_command",
                        StringComparison.Ordinal) ||
+                   string.Equals(stage, "return_prepare",
+                       StringComparison.Ordinal) ||
+                   string.Equals(stage, "return_native_pipeline",
+                       StringComparison.Ordinal) ||
+                   string.Equals(stage, "return_target_resolved",
+                       StringComparison.Ordinal) ||
+                   string.Equals(stage, "return_transport_yield",
+                       StringComparison.Ordinal) ||
+                   string.Equals(stage, "return_after_path",
+                       StringComparison.Ordinal) ||
+                   string.Equals(stage, "return_after_ai",
+                       StringComparison.Ordinal) ||
                    string.Equals(stage, "transport_yield",
                        StringComparison.Ordinal) ||
                    string.Equals(stage, "prepare_failed",
@@ -2253,6 +2265,12 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || RoyalGuardService.IsRoyalGuard(pActor))
                 return false;
+            if (WarArmyReturnService.IsActive(pActor.army))
+            {
+                ArmyMilitaryMovementPriorityIndex.Register(pActor.data.id,
+                    ArmyMilitaryMovementPriorityKind.RtsMember);
+                return true;
+            }
             if (HasActiveCaptainObjective(pActor) ||
                 HasActiveMemberObjective(pActor))
             {
@@ -2449,6 +2467,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return false;
             if (RoyalGuardService.IsRoyalGuard(pActor)) return true;
+            if (WarArmyReturnService.IsActive(pActor.army)) return true;
             Army army = pActor.army;
             if (army?.data == null ||
                 !Controllers.TryGet(army.id,

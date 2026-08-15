@@ -126,6 +126,8 @@ namespace AncientWarfare3.core.lineage
             if (!IsAlive(pActor) || army?.data == null ||
                 !IsActive(army)) return false;
             EnsureReturnActorJob(pActor, army, SafeCaptain(army));
+            ArmyRtsMovementDiagnostic.Log("return", "return_prepare",
+                pActor, "captain=" + (pActor == SafeCaptain(army)));
             return true;
         }
 
@@ -143,7 +145,13 @@ namespace AncientWarfare3.core.lineage
                 AWArmyService.GetIntendedKingdom(army) != kingdom ||
                 !IsFriendlySafeCity(city, kingdom)) return false;
             pTarget = SafeCityTile(city);
-            return pTarget?.data != null;
+            bool resolved = pTarget?.data != null;
+            if (resolved)
+                ArmyRtsMovementDiagnostic.Log("return",
+                    "return_target_resolved", pActor,
+                    "city=" + city.id +
+                    " target_tile=" + pTarget.data.tile_id);
+            return resolved;
         }
 
         internal static bool TryHandleTransport(Actor pActor,
@@ -410,11 +418,15 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || pActor.ai == null) return;
             ArmyMilitaryMovementPriorityIndex.Unregister(pActor.data.id);
             string jobId = pActor.ai.job?.id ?? "";
-            if (jobId != ArmyRtsContent.ReturnCaptainJobId &&
-                jobId != ArmyRtsContent.ReturnFollowerJobId) return;
-            pActor.cancelAllBeh();
-            try { pActor.ai.setJob(pActor.getNextJob()); }
-            catch { pActor.ai.clearJob(); }
+            bool returnOwnedJob =
+                jobId == ArmyRtsContent.ReturnCaptainJobId ||
+                jobId == ArmyRtsContent.ReturnFollowerJobId;
+            if (returnOwnedJob)
+            {
+                pActor.cancelAllBeh();
+                try { pActor.ai.setJob(pActor.getNextJob()); }
+                catch { pActor.ai.clearJob(); }
+            }
             StandingArmyPeacetimeService.RefreshJob(pActor);
         }
 

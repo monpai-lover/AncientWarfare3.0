@@ -36,6 +36,7 @@ internal static class RoyalGuardTaskRecoveryRulesTests
             "core", "performance", "ArmyMilitaryMovementPriorityIndex.cs"));
         string postRunner = File.ReadAllText(Path.Combine(root, "Code",
             "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        string normalizedPostRunner = postRunner.Replace("\r\n", "\n");
         string content = File.ReadAllText(Path.Combine(root, "Code",
             "content", "GuardContent.cs"));
         Assert(follow.Contains("return BehResult.RepeatStep;",
@@ -54,7 +55,7 @@ internal static class RoyalGuardTaskRecoveryRulesTests
             "unknown guard tasks are repaired directly to follow");
         Assert(priorityIndex.Contains("ResolveP0PriorityRank", StringComparison.Ordinal),
             "military P0 snapshot puts royal guards ahead of RTS followers");
-        Assert(postRunner.Contains(
+        Assert(normalizedPostRunner.Contains(
                 "RefreshRoyalGuardMilitaryPriorities(activeBatches);\n        ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);",
                 StringComparison.Ordinal),
             "every actor-post cycle refreshes guards before freezing the military P0 snapshot");

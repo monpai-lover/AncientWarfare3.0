@@ -47,8 +47,17 @@ internal static class SyntheticMobilizationRulesTests
                 loadReconciliationPending: true),
             "orphan synthetic cleanup waits for the bounded load scan");
         Equal(false, SyntheticMobilizationRules.ShouldDeferOrphanScan(
-                loadReconciliationPending: false),
+                 loadReconciliationPending: false),
             "orphan synthetic cleanup runs after the load scan");
+        Equal(true, SyntheticMobilizationRules.ShouldDeferDemobilization(
+                syntheticActor: true, armyReturnActive: true),
+            "synthetic army members survive until post-war return completes");
+        Equal(false, SyntheticMobilizationRules.ShouldDeferDemobilization(
+                syntheticActor: true, armyReturnActive: false),
+            "synthetic army members demobilize after return ownership clears");
+        Equal(false, SyntheticMobilizationRules.ShouldDeferDemobilization(
+                syntheticActor: false, armyReturnActive: true),
+            "permanent soldiers are never routed through synthetic cleanup");
         int remaining = 41;
         int[] expectedBatches = { 16, 16, 9 };
         for (int i = 0; i < expectedBatches.Length; i++)
@@ -91,6 +100,11 @@ internal static class SyntheticMobilizationRulesTests
         Contains(source,
             "SyntheticLevyService.RemoveWithoutPersonalHistory(",
             "demobilization destroys generated actors without biographies");
+        Contains(source,
+            "SyntheticMobilizationRules.ShouldDeferDemobilization(",
+            "demobilization yields while a synthetic actor's army is returning home");
+        Contains(source, "WarArmyReturnService.IsActive(actor.army)",
+            "the synthetic cleanup boundary reads active army return ownership");
         Contains(source, "OnSyntheticMaterialized(Actor pActor)",
             "materialization registers actor identity atomically");
     }

@@ -852,6 +852,10 @@ namespace AncientWarfare3.core.lineage
                     }
                     continue;
                 }
+                if (SyntheticMobilizationRules.ShouldDeferDemobilization(
+                        SyntheticLevyService.IsSynthetic(actor),
+                        WarArmyReturnService.IsActive(actor.army)))
+                    continue;
                 SyntheticLevyService.RemoveWithoutPersonalHistory(actor);
             }
             if (pRecord.ActorIds.Count > 0)

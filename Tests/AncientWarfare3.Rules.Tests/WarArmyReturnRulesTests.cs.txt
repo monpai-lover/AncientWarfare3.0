@@ -52,6 +52,20 @@ internal static class WarArmyReturnRulesTests
                 IsActiveReturnObjectiveOwner(
                     returnActive: true, actorBelongsToArmy: false),
             "an unrelated actor cannot inherit an army return objective");
+        string[] returnDiagnosticStages =
+        {
+            "return_prepare",
+            "return_native_pipeline",
+            "return_target_resolved",
+            "return_transport_yield",
+            "return_after_path",
+            "return_after_ai"
+        };
+        for (int i = 0; i < returnDiagnosticStages.Length; i++)
+            Equal(true, ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
+                    returnDiagnosticStages[i], anomaly: false),
+                "return diagnostic stage remains visible: " +
+                returnDiagnosticStages[i]);
 
         ScopedParticipantDepartureRules();
         InvalidMissionFallbackRules();
@@ -99,11 +113,16 @@ internal static class WarArmyReturnRulesTests
             "return registers a dedicated captain task and native follower job");
         string returnBehaviourPath = Path.Combine(root, "Code", "ai",
             "behaviours", "actor", "BehWarArmyReturnTarget.cs");
+        string returnBehaviour = File.Exists(returnBehaviourPath)
+            ? File.ReadAllText(returnBehaviourPath)
+            : string.Empty;
         True(File.Exists(returnBehaviourPath) &&
-             File.ReadAllText(returnBehaviourPath).Contains(
-                 "WarArmyReturnService.TryGetTarget(",
+             returnBehaviour.Contains("WarArmyReturnService.TryGetTarget(",
                  StringComparison.Ordinal),
             "the return task resolves its persisted safe-city target at execution time");
+        True(returnBehaviour.Contains("\"return_transport_yield\"",
+                StringComparison.Ordinal),
+            "the return task records transport ownership before yielding movement");
         string peacetime = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "StandingArmyPeacetimeService.cs"));
         True(peacetime.Contains("WarArmyReturnService.IsActive(army)",
@@ -112,11 +131,73 @@ internal static class WarArmyReturnRulesTests
         string postRunner = File.ReadAllText(Path.Combine(root, "Code",
             "core", "performance", "AWCooperativeActorPostRunner.cs"));
         True(postRunner.Contains("WarArmyReturnService.IsActive(actor?.army)",
-                StringComparison.Ordinal) &&
+                 StringComparison.Ordinal) &&
              postRunner.Contains(
-                 "WarArmyReturnService.TryPrepareMilitaryP0Actor(actor)",
-                 StringComparison.Ordinal),
+                  "WarArmyReturnService.TryPrepareMilitaryP0Actor(actor)",
+                  StringComparison.Ordinal),
             "large-step P0 retains and repairs actors owned by post-war return");
+        True(postRunner.Contains("\"return_native_pipeline\"",
+                 StringComparison.Ordinal) &&
+             postRunner.Contains("\"return_after_path\"",
+                 StringComparison.Ordinal) &&
+             postRunner.Contains("\"return_after_ai\"",
+                 StringComparison.Ordinal),
+            "the return P0 pipeline records selection, path, and AI movement boundaries");
+        string controllerSource = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        string priorityRefresh = Section(controllerSource,
+            "internal static bool TryRefreshMilitaryPriority(Actor pActor)",
+            "public static bool ShouldHoldDeploymentMove(Actor pActor)");
+        int returnOwnership = priorityRefresh.IndexOf(
+            "WarArmyReturnService.IsActive(pActor.army)",
+            StringComparison.Ordinal);
+        int returnRegistration = priorityRefresh.IndexOf(
+            "ArmyMilitaryMovementPriorityIndex.Register(",
+            Math.Max(0, returnOwnership), StringComparison.Ordinal);
+        int staleUnregister = priorityRefresh.IndexOf(
+            "ArmyMilitaryMovementPriorityIndex.Unregister(",
+            StringComparison.Ordinal);
+        True(returnOwnership >= 0 &&
+             returnRegistration > returnOwnership &&
+             staleUnregister > returnRegistration,
+            "ordinary RTS priority refresh preserves active return ownership before stale mission cleanup");
+        string nativePathGate = Section(controllerSource,
+            "internal static bool ShouldUseNativeMilitaryPath(Actor pActor)",
+            "internal static bool ShouldBlockLiquidMilitaryMovement(");
+        True(nativePathGate.Contains(
+                "WarArmyReturnService.IsActive(pActor.army)",
+                StringComparison.Ordinal),
+            "post-war return uses the native actor path pipeline without requiring a wartime mission");
+        string releaseActor = Section(service,
+            "private static void ReleaseReturnActor(Actor pActor)",
+            "private static void ClearAttackTarget(Actor pActor)");
+        True(releaseActor.Contains(
+                 "StandingArmyPeacetimeService.RefreshJob(pActor)",
+                 StringComparison.Ordinal),
+            "return completion hands permanent soldiers to peacetime ownership");
+        int releaseJobRead = releaseActor.IndexOf(
+            "string jobId = pActor.ai.job?.id ?? \"\";",
+            StringComparison.Ordinal);
+        int peacetimeHandoff = releaseActor.IndexOf(
+            "StandingArmyPeacetimeService.RefreshJob(pActor)",
+            StringComparison.Ordinal);
+        True(releaseJobRead >= 0 && peacetimeHandoff > releaseJobRead &&
+             !releaseActor.Substring(releaseJobRead,
+                     peacetimeHandoff - releaseJobRead)
+                 .Contains("return;", StringComparison.Ordinal),
+            "return completion cannot skip peacetime handoff when a scheduler cleared or replaced the return job");
+        string peacetimeRefresh = Section(peacetime,
+            "public static void RefreshJob(Actor pActor)",
+            "private static bool HandleActiveReproduction(");
+        True(peacetimeRefresh.Contains("!pActor.isTask(",
+                 StringComparison.Ordinal) &&
+             peacetimeRefresh.Contains(
+                 "StandingArmyPeacetimeContent.PatrolTaskId",
+                 StringComparison.Ordinal) &&
+             peacetimeRefresh.Contains(
+                 "pActor.ai.setTask(",
+                 StringComparison.Ordinal),
+            "return completion synchronously starts the first peacetime task instead of leaving an empty task");
         string enlistPatch = File.ReadAllText(Path.Combine(root, "Code",
             "patch", "AW_EnlistPatch.cs"));
         int returnJobLookup = enlistPatch.IndexOf(

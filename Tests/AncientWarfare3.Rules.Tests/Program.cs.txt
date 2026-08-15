@@ -129,6 +129,7 @@ if (args.Length == 1 && args[0] == "--rts-exclusive-retreat-return")
     ArmyRtsCombatHandoffRulesTests.Run();
     ArmyRtsRouteChoiceRulesTests.Run();
     WarArmyReturnRulesTests.Run();
+    SyntheticMobilizationRulesTests.Run();
     Console.WriteLine("RTS exclusive retreat and return rules passed.");
     return;
 }

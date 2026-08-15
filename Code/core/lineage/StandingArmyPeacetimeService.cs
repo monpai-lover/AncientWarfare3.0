@@ -159,10 +159,14 @@ namespace AncientWarfare3.core.lineage
             if (shouldUsePeacetimeJob)
             {
                 if (pActor.ai.job?.id !=
-                    StandingArmyPeacetimeContent.JobId)
+                        StandingArmyPeacetimeContent.JobId ||
+                    !pActor.isTask(
+                        StandingArmyPeacetimeContent.PatrolTaskId))
                 {
                     pActor.cancelAllBeh();
                     pActor.ai.setJob(StandingArmyPeacetimeContent.JobId);
+                    pActor.ai.setTask(
+                        StandingArmyPeacetimeContent.PatrolTaskId);
                 }
                 return;
             }

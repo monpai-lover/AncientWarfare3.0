@@ -55,5 +55,11 @@ namespace AncientWarfare3.core.lineage
         {
             return loadReconciliationPending;
         }
+
+        public static bool ShouldDeferDemobilization(bool syntheticActor,
+            bool armyReturnActive)
+        {
+            return syntheticActor && armyReturnActive;
+        }
     }
 }

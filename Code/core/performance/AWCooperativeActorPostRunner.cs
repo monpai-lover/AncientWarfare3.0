@@ -462,9 +462,17 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             if (kind == ArmyMilitaryMovementPriorityKind.RoyalGuard)
                 ArmyRtsMovementDiagnostic.Log("guard", "native_pipeline",
                     actor);
+            if (returnActive)
+                ArmyRtsMovementDiagnostic.Log("return",
+                    "return_native_pipeline", actor,
+                    "kind=" + kind);
             if (ArmyRtsControllerService.
                     HasMilitaryTransportOwnership(actor))
             {
+                if (returnActive)
+                    ArmyRtsMovementDiagnostic.Log("return",
+                        "return_transport_yield", actor,
+                        "boundary=prepare kind=" + kind);
                 ArmyRtsMovementDiagnostic.Log("p0", "transport_yield", actor,
                     "boundary=prepare kind=" + kind);
                 ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
@@ -505,6 +513,10 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             ArmyRtsMovementDiagnostic.Log("p0", "native_path", actor,
                 "kind=" + kind);
             actor.b5_checkPathMovement(cycleElapsed);
+            if (returnActive)
+                ArmyRtsMovementDiagnostic.Log("return",
+                    "return_after_path", actor,
+                    "kind=" + kind);
             if (YieldMilitaryP0Ownership(actor, actorId, kind,
                     cycleElapsed, "path", refreshTransport: false)) return;
 
@@ -539,6 +551,10 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                         ? "follower_stalled" : "follower_after_ai", actor,
                     "kind=" + kind + " result=" + (!followerStalled));
             }
+            if (returnActive)
+                ArmyRtsMovementDiagnostic.Log("return",
+                    "return_after_ai", actor,
+                    "kind=" + kind);
             if (YieldMilitaryP0Ownership(actor, actorId, kind,
                     cycleElapsed, "ai", refreshTransport: true)) return;
 
