@@ -6,30 +6,45 @@ internal static class PeasantRebelBanditStrongholdRulesTests
 {
     public static void Run()
     {
-        SelectsOnlyConnectedInteriorZones();
+        SelectsCenterAsMinimumNativeZone();
+        SelectsConnectedDesiredZonesWithoutMajorityThreshold();
         RequiresZonesOnBothSidesOfSplit();
         LocksBanditGrowthToPersistedZones();
         ComposesStrongholdNamesAndTitles();
     }
 
-    private static void SelectsOnlyConnectedInteriorZones()
+    private static void SelectsCenterAsMinimumNativeZone()
     {
         var zones = new[]
         {
-            Zone("center", 7, 10, "east", "half", "minority", "empty"),
-            Zone("east", 6, 10, "center"),
-            Zone("isolated", 8, 10),
-            Zone("half", 5, 10, "center"),
-            Zone("minority", 4, 10, "center"),
-            Zone("empty", 0, 0, "center")
+            Zone("center", 0, 64, "east"),
+            Zone("east", 0, 64, "center")
         };
 
         HashSet<string> selected =
-            PeasantRebelBanditStrongholdRules.SelectInteriorZoneKeys(
+            PeasantRebelBanditStrongholdRules.SelectZoneAlignedKeys(
+                zones, "center");
+
+        True(selected.SetEquals(new[] { "center" }),
+            "the civic-core zone is the one-zone minimum");
+    }
+
+    private static void SelectsConnectedDesiredZonesWithoutMajorityThreshold()
+    {
+        var zones = new[]
+        {
+            Zone("center", 64, 64, "east", "dry"),
+            Zone("east", 1, 64, "center"),
+            Zone("dry", 0, 64, "center"),
+            Zone("isolated", 64, 64)
+        };
+
+        HashSet<string> selected =
+            PeasantRebelBanditStrongholdRules.SelectZoneAlignedKeys(
                 zones, "center");
 
         True(selected.SetEquals(new[] { "center", "east" }),
-            "only connected zones with strict majority wall overlap transfer");
+            "all and only connected zones touched by the desired enclosure transfer");
     }
 
     private static void RequiresZonesOnBothSidesOfSplit()

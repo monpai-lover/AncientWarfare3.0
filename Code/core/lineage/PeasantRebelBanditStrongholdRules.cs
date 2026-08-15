@@ -20,14 +20,13 @@ namespace AncientWarfare3.core.lineage
         public string Key { get; }
         public int EnclosedTileCount { get; }
         public int TotalTileCount { get; }
-        public bool IsMajorityEnclosed => TotalTileCount > 0 &&
-            (long)EnclosedTileCount * 2L > TotalTileCount;
+        public bool HasDesiredLand => EnclosedTileCount > 0;
         public IReadOnlyList<string> NeighbourKeys { get; }
     }
 
     public static class PeasantRebelBanditStrongholdRules
     {
-        public static HashSet<string> SelectInteriorZoneKeys(
+        public static HashSet<string> SelectZoneAlignedKeys(
             IReadOnlyList<BanditZoneFact> zones, string centerKey)
         {
             var selected = new HashSet<string>(StringComparer.Ordinal);
@@ -42,8 +41,8 @@ namespace AncientWarfare3.core.lineage
                 if (zone == null || zone.Key.Length == 0) continue;
                 byKey[zone.Key] = zone;
             }
-            if (!byKey.TryGetValue(centerKey, out BanditZoneFact center) ||
-                !center.IsMajorityEnclosed) return selected;
+            if (!byKey.TryGetValue(centerKey, out BanditZoneFact center))
+                return selected;
 
             var pending = new Queue<string>();
             selected.Add(center.Key);
@@ -57,7 +56,7 @@ namespace AncientWarfare3.core.lineage
                     if (selected.Contains(neighbourKey) ||
                         !byKey.TryGetValue(neighbourKey,
                             out BanditZoneFact neighbour) ||
-                        !neighbour.IsMajorityEnclosed) continue;
+                        !neighbour.HasDesiredLand) continue;
                     selected.Add(neighbourKey);
                     pending.Enqueue(neighbourKey);
                 }
