@@ -45,9 +45,6 @@ namespace AncientWarfare3.patch
         private static bool ClaimZoneWithinTechCap_Prefix(Actor pActor,
             ref BehResult __result)
         {
-            bool actorIsKing = false;
-            try { actorIsKing = pActor?.isKing() == true; }
-            catch { }
             City city = pActor?.city;
             TileZone zone = pActor?.current_tile?.zone;
             WorldTile cityTile = city?.getTile();
@@ -56,14 +53,9 @@ namespace AncientWarfare3.patch
                 __result = BehResult.Stop;
                 return false;
             }
-            if (actorIsKing && cityTile != null &&
-                !IsKingAtClaimBorder(city, zone))
+            if (CivicLeaderLandClaimService.IsCivicLeader(pActor) &&
+                !CivicLeaderLandClaimService.IsValidArrival(pActor))
             {
-                if (TrySetKingClaimBorderTarget(pActor, city, cityTile))
-                {
-                    __result = BehResult.Continue;
-                    return false;
-                }
                 __result = BehResult.Stop;
                 return false;
             }
@@ -135,47 +127,6 @@ namespace AncientWarfare3.patch
             int allowance = CityTechService.GetCityZoneAllowance(pCity);
             return allowance == int.MaxValue ||
                    pCity.countZones() < allowance;
-        }
-
-        private static bool IsKingAtClaimBorder(City pCity,
-            TileZone pZone)
-        {
-            return pZone != null && pZone.city != pCity &&
-                   TouchesCityBoundary(pCity, pZone);
-        }
-
-        private static bool TrySetKingClaimBorderTarget(Actor pActor,
-            City pCity, WorldTile pCityTile)
-        {
-            if (pActor?.data == null || pCity?.data == null ||
-                pCity.border_zones == null) return false;
-            foreach (TileZone border in pCity.border_zones)
-            {
-                TileZone[] neighbours = border?.neighbours_all;
-                if (neighbours == null) continue;
-                foreach (TileZone candidate in neighbours)
-                {
-                    if (candidate == null || candidate.hasCity() ||
-                        candidate.centerTile == null ||
-                        !candidate.centerTile.isSameIsland(pCityTile) ||
-                        !pCity.isZoneToClaimStillGood(pActor, candidate,
-                            pCityTile)) continue;
-                    pActor.beh_tile_target = candidate.centerTile;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static bool TouchesCityBoundary(City pCity,
-            TileZone pZone)
-        {
-            if (pCity?.data == null || pZone == null) return false;
-            TileZone[] neighbours = pZone.neighbours_all;
-            if (neighbours == null) return false;
-            for (int i = 0; i < neighbours.Length; i++)
-                if (neighbours[i]?.city == pCity) return true;
-            return false;
         }
 
         private static bool IsVanillaNeighbourClaimable(City pCity,

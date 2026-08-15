@@ -174,15 +174,18 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
         Equal(true, expansionPatch.Contains(
                 "CivicLeaderLandClaimService.TrySetExternalTarget(pActor)"),
             "the selector delegates to the shared civic claim service");
-        Equal(true, expansionPatch.Contains(
+        Equal(false, expansionPatch.Contains(
                 "TrySetKingClaimBorderTarget"),
-            "kings receive an external border movement target before claiming");
+            "final claim execution never tries to restart completed movement");
+        Equal(true, expansionPatch.Contains(
+                "CivicLeaderLandClaimService.IsValidArrival(pActor)"),
+            "the final claim step rejects stale civic leader arrivals");
         Equal(true, expansionPatch.Contains(
                 "CityTechService.GetCityZoneAllowance(city)"),
             "the common claim executor receives the shared technology allowance");
         Equal(true, expansionPatch.Contains(
-                "!LineageService.IsXiaKingdom(city.kingdom)"),
-            "non-Xia cities retain vanilla claim execution after the shared gate");
+                "if (!LineageService.IsXiaKingdom(city.kingdom)) return true;"),
+            "valid non-Xia civic claims return to native claim execution");
         Equal(true, expansionPatch.Contains(
                 "pActor.hasCultureTrait(\"expansionists\")"),
             "the Xia executor preserves vanilla human batch expansion semantics");
