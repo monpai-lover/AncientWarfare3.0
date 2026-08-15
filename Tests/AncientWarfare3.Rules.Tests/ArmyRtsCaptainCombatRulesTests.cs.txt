@@ -76,6 +76,8 @@ internal static class ArmyRtsCaptainCombatRulesTests
             "content", "ArmyRtsContent.cs"));
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"));
+        string wartimeTaskPatch = File.ReadAllText(Path.Combine(root,
+            "Code", "patch", "AW_WartimeMilitaryTaskPatch.cs"));
         string behaviour = File.ReadAllText(Path.Combine(root, "Code",
             "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"))
             .Replace("\r\n", "\n");
@@ -109,6 +111,16 @@ internal static class ArmyRtsCaptainCombatRulesTests
                controller.Contains("ReassertCaptainMissionTask",
                    StringComparison.Ordinal),
             "a captain is reclaimed from vanilla fighting into bounded combat or its strategic mission");
+        Assert(controller.Contains(
+                   "internal static bool TryRedirectVanillaFight(",
+                   StringComparison.Ordinal),
+            "RTS ownership exposes an immediate vanilla-fight redirect");
+        int redirectBoundaries = wartimeTaskPatch.Split(new[]
+            {
+                "ArmyRtsControllerService.TryRedirectVanillaFight("
+            }, StringSplitOptions.None).Length - 1;
+        Assert(redirectBoundaries >= 2,
+            "both vanilla fighting assignment and active-task update redirect immediately into RTS combat");
         int memberMissionStart = controller.IndexOf(
             "private static void SetNativeMemberMissionTask(",
             StringComparison.Ordinal);
