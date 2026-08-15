@@ -95,7 +95,7 @@ namespace AncientWarfare3.core.lineage
 
         public static string ComposeName(string root, string route)
         {
-            return PeasantRebelOutlawNameRules.ComposeName(root, route);
+            return PeasantRebelOutlawNameRules.NormalizeRoot(root);
         }
 
         public static string ResolvePersistedRoute(string storedRoute,

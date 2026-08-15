@@ -264,12 +264,7 @@ namespace AncientWarfare3.core.lineage
         internal static void RenameForRoute(Kingdom pKingdom,
             string pRoute)
         {
-            if (pKingdom?.data == null) return;
-            pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
-                out string root, "");
-            string name = PeasantRebelRouteRules.ComposeName(root, pRoute);
-            if (string.IsNullOrWhiteSpace(name)) return;
-            TryApplyRouteName(pKingdom, name);
+            EnsureCanonicalName(pKingdom, pRoute);
         }
 
         internal static bool HasRouteName(Kingdom pKingdom, string pRoute)
@@ -280,6 +275,20 @@ namespace AncientWarfare3.core.lineage
             return string.Equals(pKingdom.name,
                 PeasantRebelRouteRules.ComposeName(root, pRoute),
                 StringComparison.Ordinal);
+        }
+
+        private static void EnsureCanonicalName(Kingdom pKingdom,
+            string pRoute)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
+                out string root, "");
+            string canonical = PeasantRebelRouteRules.ComposeName(
+                root, pRoute);
+            if (string.IsNullOrWhiteSpace(canonical) ||
+                string.Equals(pKingdom.name, canonical,
+                    StringComparison.Ordinal)) return;
+            TryApplyRouteName(pKingdom, canonical);
         }
 
         internal static void OnWarStarted(War pWar)
@@ -392,6 +401,8 @@ namespace AncientWarfare3.core.lineage
                         resolvedRoute);
                 if (resolvedRoute.Length == 0) continue;
                 RuntimeByKingdom[kingdom.getID()] = resolvedRoute;
+                if (authority)
+                    EnsureCanonicalName(kingdom, resolvedRoute);
                 RulerAppellationService.RefreshLivingProjection(kingdom);
             }
         }

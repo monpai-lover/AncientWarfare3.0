@@ -40,6 +40,8 @@ $rulerProjection = Get-Content -Raw `
     'Code/core/lineage/RulerAppellationService.cs'
 $heirProjection = Get-Content -Raw `
     'Code/core/lineage/HeirTitleRules.cs'
+$ceremonialProjection = Get-Content -Raw `
+    'Code/core/lineage/CeremonialTitleResolver.cs'
 $historyRules = Get-Content -Raw `
     'Code/core/lineage/HistoryLocalizationRules.cs'
 $othersLocale = Get-Content -Raw -Encoding UTF8 'locales/others.csv'
@@ -334,10 +336,20 @@ RequireOrder $bandit 'CanEvaluateWeakOriginTransition' `
     'Transition randomness must run only after eligibility checks.'
 Require $route 'RenameForRoute(' `
     'Route names must use the shared kingdom projection boundary.'
+Require $route 'EnsureCanonicalName(kingdom, resolvedRoute);' `
+    'Restore must migrate legacy suffixed kingdom names to the canonical root.'
+Require $rulerProjection 'PeasantRebelOutlawNameRules.ComposeName(' `
+    'Rebel nameplates must project the route suffix outside Kingdom.name.'
 Require $rulerProjection 'RouteRulerTitleKey(true)' `
     'The shared ruler read model must project the bandit title.'
+Require $kingdomUi 'PeasantRebelRouteService.IsBandit(kingdom)' `
+    'The kingdom ruler portrait must request the bandit living title.'
 Require $heirProjection 'RouteHeirTitleKey(true)' `
     'The shared heir read model must project the bandit title.'
+Require $ceremonialProjection 'PeasantRebelRouteService.IsBandit(pActor.kingdom)' `
+    'Bandit heirs must enter the route-specific ceremonial title path.'
+Require $ceremonialProjection 'HeirTitleRules.BuildSocialTitle("", pActor.kingdom)' `
+    'Bandit heir ceremonial titles must reuse the shared heir title rule.'
 Require $warPatch 'PeasantRebelRouteService.OnWarStarted(__result)' `
     'Native war lifecycle must record origin suppression starts.'
 foreach ($key in @(

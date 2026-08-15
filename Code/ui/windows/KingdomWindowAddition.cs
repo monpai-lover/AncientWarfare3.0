@@ -973,6 +973,7 @@ namespace AncientWarfare3.ui.windows
                         bool empireRank = KingdomTitleService.IsEmperor(kingdom);
                         bool militaryGovernorate = VassalService.GetSubjectKind(
                             kingdom) == VassalSubjectKind.MilitaryGovernorate;
+                        bool bandit = PeasantRebelRouteService.IsBandit(kingdom);
                         bool ceremonialEmperor = empireRank || mandate;
                         string key = GovernmentTitleRules.RulerKey(republic);
                         string monarchyLabel = AW_L10n.Text("aw_label_king", "King");
@@ -983,7 +984,8 @@ namespace AncientWarfare3.ui.windows
                         string militaryGovernorLabel = AW_L10n.Text(
                             "aw_military_governorate_ruler", "General");
                         string livingAppellation =
-                            (militaryGovernorate || ceremonialEmperor) && !republic
+                            (bandit || militaryGovernorate || ceremonialEmperor) &&
+                            !republic
                             ? RulerAppellationService.GetFullLivingAppellation(kingdom)
                             : "";
                         string label = RulerAppellationRules.ResolveWindowRulerLabel(
@@ -992,7 +994,8 @@ namespace AncientWarfare3.ui.windows
                             mandateFallback, militaryGovernorLabel);
                         LocalizedText localized = kingLabel.GetComponent<LocalizedText>();
                         Text text = kingLabel.GetComponent<Text>();
-                        if (militaryGovernorate || ceremonialEmperor && !republic)
+                        if ((bandit || militaryGovernorate || ceremonialEmperor) &&
+                            !republic)
                         {
                             if (localized != null) localized.enabled = false;
                             if (text != null) text.text = label;

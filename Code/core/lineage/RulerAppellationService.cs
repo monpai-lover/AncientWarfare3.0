@@ -255,24 +255,28 @@ namespace AncientWarfare3.core.lineage
                 pKingdom);
             bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
                                        VassalSubjectKind.MilitaryGovernorate;
+            bool rebel = MandateRebelService.IsRebelKingdom(pKingdom);
             bool originalXia = LineageService.IsXiaKingdom(pKingdom);
             bool displaySuffix = XiaizedKingdomNamingRules.
                 ShouldDisplayStateSuffix(originalXia,
                     XiaizationService.GetLevel(pKingdom),
                     XiaizationService.LevelXiaizedDynasty);
-            displaySuffix = militaryGovernorate || displaySuffix;
+            displaySuffix = rebel || militaryGovernorate || displaySuffix;
             if (!displaySuffix)
             {
                 CompactByKingdom.Remove(pKingdom.id);
                 return pEmptyWhenSuffixIsHidden ? "" : stateName;
             }
 
-            string suffix = KingdomTitleDisplayRules.GetNameplateTitleSuffix(
-                (int)KingdomTitleService.GetTitle(pKingdom),
-                MandateService.IsRuntimeMandateKingdom(pKingdom),
-                MandateRebelService.IsRebelKingdom(pKingdom),
-                RepublicGovernmentService.IsRepublic(pKingdom),
-                militaryGovernorate);
+            string suffix = rebel
+                ? PeasantRebelOutlawNameRules.ComposeName("",
+                    PeasantRebelRouteService.GetRouteId(pKingdom))
+                : KingdomTitleDisplayRules.GetNameplateTitleSuffix(
+                    (int)KingdomTitleService.GetTitle(pKingdom),
+                    MandateService.IsRuntimeMandateKingdom(pKingdom),
+                    pIsRebelKingdom: false,
+                    RepublicGovernmentService.IsRepublic(pKingdom),
+                    militaryGovernorate);
             if (CompactByKingdom.TryGetValue(pKingdom.id,
                     out LivingProjection cached) &&
                 string.Equals(cached.StateName, stateName,

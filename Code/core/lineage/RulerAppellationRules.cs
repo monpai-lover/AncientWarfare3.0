@@ -100,12 +100,11 @@ namespace AncientWarfare3.core.lineage
                     : LivingMilitaryGovernorate();
             }
             if (pIsRepublic) return Normalize(pRepublicLabel);
+            string appellation = Normalize(pLivingAppellation);
+            if (appellation.Length > 0) return appellation;
             if (!ShouldUseLivingEmperor(pIsEmpireRank, pIsMandate))
                 return Normalize(pMonarchyLabel);
-            string appellation = Normalize(pLivingAppellation);
-            return appellation.Length > 0
-                ? appellation
-                : Normalize(pEmperorFallbackLabel);
+            return Normalize(pEmperorFallbackLabel);
         }
 
         public static string ResolveWindowRulerLabel(bool pIsRepublic,
