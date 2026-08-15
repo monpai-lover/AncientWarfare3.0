@@ -319,16 +319,45 @@ namespace AncientWarfare3.core.lineage
             foreach (Kingdom kingdom in World.world.kingdoms)
             {
                 if (kingdom?.data == null || kingdom.isRekt()) continue;
-                string stored = ReadRouteRaw(kingdom);
-                string resolved =
-                    PeasantRebelRouteRules.ResolvePersistedRoute(stored,
-                        MandateRebelService.IsRebelKingdom(kingdom));
-                if (authority && stored.Length == 0 &&
-                    resolved == PeasantRebelRouteIds.Founding)
+                string storedRoute = ReadRouteRaw(kingdom);
+                kingdom.data.get(LineageKeys.POLICY_CLASS_STATE,
+                    out string storedClass, "");
+                storedClass = (storedClass ?? "").Trim();
+                bool banditCandidate =
+                    storedClass == KingdomPolicyDefs.ClassBandit ||
+                    storedRoute == PeasantRebelRouteIds.Bandit;
+                bool validBanditMetadata = false;
+                if (banditCandidate && ResolveOrigin(kingdom) != null)
+                {
+                    if (authority &&
+                        PeasantRebelBanditTerritoryService.
+                            IsWhitelistMissing(kingdom))
+                        PeasantRebelBanditTerritoryService.
+                            EnsureLegacyWhitelist(kingdom);
+                    validBanditMetadata =
+                        PeasantRebelBanditTerritoryService.
+                            HasValidWhitelist(kingdom);
+                }
+
+                string resolvedClass =
+                    PeasantRebelRouteRules.ResolveGovernmentClass(
+                        storedClass, storedRoute,
+                        MandateRebelService.IsRebelKingdom(kingdom),
+                        validBanditMetadata);
+                string resolvedRoute =
+                    resolvedClass == KingdomPolicyDefs.ClassBandit
+                        ? PeasantRebelRouteIds.Bandit
+                        : resolvedClass == KingdomPolicyDefs.ClassRebel
+                            ? PeasantRebelRouteIds.Founding
+                            : "";
+                if (authority && resolvedClass != storedClass)
+                    kingdom.data.set(LineageKeys.POLICY_CLASS_STATE,
+                        resolvedClass);
+                if (authority && resolvedRoute != storedRoute)
                     kingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE,
-                        resolved);
-                if (resolved.Length == 0) continue;
-                RuntimeByKingdom[kingdom.getID()] = resolved;
+                        resolvedRoute);
+                if (resolvedRoute.Length == 0) continue;
+                RuntimeByKingdom[kingdom.getID()] = resolvedRoute;
                 RulerAppellationService.RefreshLivingProjection(kingdom);
             }
         }

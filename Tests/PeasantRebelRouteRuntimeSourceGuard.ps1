@@ -26,7 +26,10 @@ function RequireCount([string]$Text, [string]$Needle, [int]$Count,
 }
 
 $mandate = Get-Content -Raw 'Code/core/lineage/MandateRebelService.cs'
+$rebelState = Get-Content -Raw `
+    'Code/core/lineage/MandateRebelStateRules.cs'
 $route = Get-Content -Raw 'Code/core/lineage/PeasantRebelRouteService.cs'
+$policy = Get-Content -Raw 'Code/core/policy/KingdomPolicyService.cs'
 $warDecision = Get-Content -Raw 'Code/core/lineage/WarDecisionService.cs'
 $warPatch = Get-Content -Raw 'Code/patch/AW_WarPatch.cs'
 $occupation = Get-Content -Raw `
@@ -122,6 +125,28 @@ Require $route 'PeasantRebelGovernmentTransitionService.TryEnterBandit(' `
     'AI and manual bandit entry must share the transition coordinator.'
 Forbid $bandit 'city.joinAnotherKingdom(' `
     'Formal bandit entry must retain every current city.'
+Require $rebelState 'KingdomPolicyDefs.ClassBandit' `
+    'Formal bandits must remain current rebel governments.'
+Require $route 'ResolveGovernmentClass(' `
+    'Restore must reconcile route and formal government state.'
+Require $route 'HasValidWhitelist(' `
+    'Restore must validate persisted entry territory.'
+Require $route 'resolvedRoute' `
+    'Runtime cache must follow the reconciled route.'
+Require $policy 'if (value == KingdomPolicyDefs.ClassBandit)' `
+    'Class reads must preserve the formal bandit state.'
+RequireOrder $policy 'if (!string.IsNullOrEmpty(value)) return value;' `
+    'MandateRebelService.IsRebelKingdom(pKingdom)' `
+    'Persisted policy class must outrank stale rebel flags.'
+Require $government 'SettleRebelGovernment(' `
+    'Rebel-to-ordinary transitions must use settlement cleanup.'
+Require $mandate 'public static bool SettleRebelGovernment(' `
+    'Settlement must report whether the requested class was applied.'
+RequireOrder $mandate 'CanMutateAuthority(' `
+    'pKingdom.data.set(LineageKeys.MANDATE_REBEL, false);' `
+    'Settlement authority must be checked before rebel state writes.'
+Require $route 'ApplyClassStateDirect(' `
+    'Bandit exit must persist peasant rebel government first.'
 Require $wall 'CaptureAndBuild(Kingdom pKingdom)' `
     'Wall capture must cover the complete kingdom border.'
 Require $wall 'foreach (City city in pKingdom.getCities())' `
@@ -205,6 +230,14 @@ $rebuildBody = $route.Substring($rebuildStart,
     $rebuildEnd - $rebuildStart)
 Forbid $rebuildBody 'InitializeAndEnter(' `
     'Restore must not replay route entry effects.'
+Forbid $rebuildBody 'EnterExistingBanditGovernment' `
+    'Restore must not replay formal government entry.'
+Forbid $rebuildBody 'endWar' `
+    'Restore must not mutate diplomacy.'
+Forbid $rebuildBody 'RenameForRoute' `
+    'Restore must not rename kingdoms.'
+Forbid $rebuildBody 'CaptureAndBuild' `
+    'Restore must not rebuild entry walls.'
 RequireCount $restorePipeline `
     'new AW3RestoreStage("peasant_rebel_routes",' 3 `
     'Both restore pipelines and cache reset must own a route stage.'

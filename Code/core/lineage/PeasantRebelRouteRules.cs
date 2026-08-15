@@ -112,6 +112,27 @@ namespace AncientWarfare3.core.lineage
                 : "";
         }
 
+        public static string ResolveGovernmentClass(string storedClass,
+            string route, bool currentRebel, bool validBanditMetadata)
+        {
+            string value = (storedClass ?? "").Trim();
+            string routeId = (route ?? "").Trim();
+            if (value.Length > 0 && value != "peasant_rebel" &&
+                value != "peasant_bandit") return value;
+            if (!currentRebel && value != "peasant_bandit") return value;
+            if (routeId == PeasantRebelRouteIds.Bandit)
+                return validBanditMetadata
+                    ? "peasant_bandit"
+                    : "peasant_rebel";
+            if (routeId == PeasantRebelRouteIds.Founding)
+                return "peasant_rebel";
+            if (value == "peasant_bandit")
+                return validBanditMetadata
+                    ? "peasant_bandit"
+                    : "peasant_rebel";
+            return value;
+        }
+
         public static bool CanMutateAuthority(bool replicaSession)
         {
             return !replicaSession;

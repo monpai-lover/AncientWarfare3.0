@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.content.schools;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 using UnityEngine;
@@ -286,21 +287,32 @@ namespace AncientWarfare3.core.lineage
             SettleRebelGovernment(defender, "rebellion_war_end");
         }
 
-        public static void SettleRebelGovernment(Kingdom pKingdom, string pReason)
+        public static bool SettleRebelGovernment(Kingdom pKingdom,
+            string pReason, string pTargetClass = null)
         {
-            if (pKingdom?.data == null || pKingdom.isRekt()) return;
-            if (PeasantRebelRouteService.IsBanditOrEntering(pKingdom)) return;
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying ||
+                pKingdom?.data == null || pKingdom.isRekt()) return false;
+            if (PeasantRebelRouteService.IsBanditOrEntering(pKingdom))
+                return false;
             pKingdom.data.get(LineageKeys.MANDATE_REBEL, out bool rebel, false);
             pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE, out string classState, "");
             pKingdom.data.get(LineageKeys.MANDATE_ORIGIN_TYPE, out string origin, "");
             pKingdom.data.get(LineageKeys.MANDATE_CLAIMANT_KIND, out string claimant, "");
-            if (!MandateRebelStateRules.IsCurrentRebelGovernment(rebel, classState, origin, claimant)) return;
+            if (!MandateRebelStateRules.IsCurrentRebelGovernment(
+                    rebel, classState, origin, claimant)) return false;
+            string target = string.IsNullOrEmpty(pTargetClass)
+                ? MandateRebelStateRules.SettledClassAfterRebellion(classState)
+                : pTargetClass;
+            if (target == KingdomPolicyDefs.ClassRebel ||
+                target == KingdomPolicyDefs.ClassBandit ||
+                Array.IndexOf(KingdomPolicyDefs.ClassStates, target) < 0)
+                return false;
 
             pKingdom.data.set(LineageKeys.MANDATE_REBEL, false);
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
                 -1L);
-            pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE,
-                MandateRebelStateRules.SettledClassAfterRebellion(classState));
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_BUFF_UNTIL, 0);
             pKingdom.data.get(LineageKeys.MANDATE_MAP_MARKER_KIND, out string marker, "");
             if (marker == "rebel_claimant") pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, "");
@@ -314,11 +326,22 @@ namespace AncientWarfare3.core.lineage
                 if (unit.hasTrait("rebel")) unit.removeTrait("rebel");
             }
 
+            pKingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE, "");
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
+                out string root, "");
+            if (!string.IsNullOrWhiteSpace(root) &&
+                !PeasantRebelRouteService.TryApplyRouteName(
+                    pKingdom, root.Trim())) return false;
+            if (!KingdomPolicyService.ApplyClassStateDirect(
+                    pKingdom, target)) return false;
+            PeasantRebelRouteService.RemoveRuntime(pKingdom);
+
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.MANDATE_REBELLION,
                 HistoryText.Kingdom(pKingdom) +
                 HistoryLocalizationRules.H("aw_hist_mandate_rebel_settled"),
                 HistoryTarget.Kingdom(pKingdom));
             RulerAppellationService.RefreshLivingProjection(pKingdom);
+            return true;
         }
 
         private static List<City> PickCollapseCities(Kingdom pMandateKingdom)

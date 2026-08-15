@@ -93,6 +93,30 @@ internal static class PeasantRebelRouteRulesTests
         True(PeasantRebelRouteRules.CanAcquireWhitelistedCity(
                 false, false, false),
             "non-bandits remain unrestricted");
+        Equal("peasant_bandit",
+            PeasantRebelRouteRules.ResolveGovernmentClass(
+                "peasant_rebel", "bandit", true, true),
+            "old bandit routes migrate to formal government");
+        Equal("peasant_rebel",
+            PeasantRebelRouteRules.ResolveGovernmentClass(
+                "peasant_bandit", "founding", true, true),
+            "founding route exits bandit government");
+        Equal("default",
+            PeasantRebelRouteRules.ResolveGovernmentClass(
+                "default", "founding", false, false),
+            "ordinary governments do not reactivate routes");
+        Equal("default",
+            PeasantRebelRouteRules.ResolveGovernmentClass(
+                "default", "founding", true, false),
+            "stale rebel flags do not reactivate ordinary governments");
+        Equal("peasant_rebel",
+            PeasantRebelRouteRules.ResolveGovernmentClass(
+                "peasant_bandit", "bandit", true, false),
+            "invalid bandit metadata fails closed to peasant rebel");
+        Equal("peasant_rebel",
+            PeasantRebelRouteRules.ResolveGovernmentClass(
+                "peasant_bandit", "", true, false),
+            "orphaned formal bandit state cannot remain active");
         Equal(-15, PeasantRebelRouteRules.LeaderFactor(
                 0, 0, 0, false, true),
             "weak peaceful leader");

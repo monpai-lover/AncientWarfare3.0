@@ -23,6 +23,10 @@ namespace AncientWarfare3.core.lineage
                 return PeasantRebelRouteService.ConvertBanditToFounding(
                     pKingdom,
                     PeasantRebelRouteService.ResolveOrigin(pKingdom));
+            if (current == KingdomPolicyDefs.ClassRebel &&
+                pTargetClass != KingdomPolicyDefs.ClassRebel)
+                return MandateRebelService.SettleRebelGovernment(
+                    pKingdom, "manual_government_change", pTargetClass);
             return KingdomPolicyService.ApplyClassStateDirect(
                 pKingdom, pTargetClass);
         }

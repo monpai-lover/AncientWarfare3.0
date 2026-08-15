@@ -744,9 +744,17 @@ namespace AncientWarfare3.core.policy
         public static string GetClassId(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return KingdomPolicyDefs.ClassDefault;
-            if (MandateRebelService.IsRebelKingdom(pKingdom)) return KingdomPolicyDefs.ClassRebel;
+            pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE,
+                out string value, "");
+            value = (value ?? "").Trim();
+            if (value == KingdomPolicyDefs.ClassBandit)
+                return KingdomPolicyDefs.ClassBandit;
+            if (!string.IsNullOrEmpty(value)) return value;
+            if (MandateRebelService.IsRebelKingdom(pKingdom))
+                return KingdomPolicyDefs.ClassRebel;
             EnsureInitialized(pKingdom);
-            pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE, out string value, KingdomPolicyDefs.ClassDefault);
+            pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE,
+                out value, KingdomPolicyDefs.ClassDefault);
             return string.IsNullOrEmpty(value) ? KingdomPolicyDefs.ClassDefault : value;
         }
 
