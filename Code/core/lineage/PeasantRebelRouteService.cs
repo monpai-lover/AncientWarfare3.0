@@ -188,10 +188,13 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool CanAcquireCity(Kingdom pRecipient, City pCity)
         {
-            string routeId = GetRouteId(pRecipient);
-            if (!Behaviors.TryGetValue(routeId,
-                    out IPeasantRebelRouteBehavior behavior)) return true;
-            return behavior.CanAcquireCity(pRecipient, pCity);
+            if (!IsBanditOrEntering(pRecipient)) return true;
+            bool alreadyOwned = pCity?.kingdom == pRecipient;
+            int count;
+            try { count = pRecipient?.countCities() ?? 0; }
+            catch { count = pRecipient?.hasCities() == true ? 1 : 0; }
+            return PeasantRebelRouteRules.CanAcquireCity(true, count,
+                alreadyOwned);
         }
 
         internal static bool CanStartWar(Kingdom pAttacker,
@@ -199,24 +202,30 @@ namespace AncientWarfare3.core.lineage
         {
             pBypassTruce = false;
             pReason = "";
-
-            string attackerRoute = GetRouteId(pAttacker);
-            if (Behaviors.TryGetValue(attackerRoute,
-                    out IPeasantRebelRouteBehavior attackerBehavior) &&
-                !attackerBehavior.CanDeclareWar(pAttacker))
+            bool attackerBandit = IsBanditOrEntering(pAttacker);
+            bool defenderBandit = IsBanditOrEntering(pDefender);
+            bool attackerIsOrigin = defenderBandit &&
+                ReadOriginKingdomId(pDefender) ==
+                (pAttacker?.id ?? -1L);
+            if (!PeasantRebelRouteRules.CanDeclareWar(attackerBandit,
+                    defenderBandit, attackerIsOrigin))
             {
-                pReason = "bandit_cannot_declare_war";
+                pReason = attackerBandit
+                    ? "bandit_cannot_declare_war"
+                    : "only_origin_can_suppress_bandit";
                 return false;
             }
+            pBypassTruce = PeasantRebelRouteRules.ShouldBypassTruce(
+                defenderBandit, attackerIsOrigin);
+            return true;
+        }
 
-            string defenderRoute = GetRouteId(pDefender);
-            if (!Behaviors.TryGetValue(defenderRoute,
-                    out IPeasantRebelRouteBehavior defenderBehavior) ||
-                defenderBehavior.CanReceiveDirectWar(pDefender, pAttacker))
-                return true;
-
-            pReason = "only_origin_can_suppress_bandit";
-            return false;
+        internal static bool IsOriginSuppressionPair(Kingdom pAttacker,
+            Kingdom pDefender)
+        {
+            return IsBanditOrEntering(pDefender) &&
+                   ReadOriginKingdomId(pDefender) ==
+                   (pAttacker?.id ?? -1L);
         }
 
         internal static void ClearRuntime()
@@ -307,6 +316,15 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pKingdom?.countCities() ?? 0; }
             catch { return 0; }
+        }
+
+        private static long ReadOriginKingdomId(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return -1L;
+            pKingdom.data.get(
+                LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
+                out long originId, -1L);
+            return originId;
         }
 
         private sealed class BanditEntryScope : IDisposable

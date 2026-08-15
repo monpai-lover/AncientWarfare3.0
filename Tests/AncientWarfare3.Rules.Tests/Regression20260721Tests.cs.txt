@@ -164,7 +164,9 @@ internal static class Regression20260721Tests
             "AW_CityOccupationAccelerationPatch.cs"));
         Equal(true, occupationPatch.Contains(
                 "nameof(City.joinAnotherKingdom)") &&
-                    occupationPatch.Contains("if (!pCaptured) return;"),
+                    occupationPatch.Contains("if (!pCaptured) return true;") &&
+                    occupationPatch.Contains(
+                        "PeasantRebelRouteService.CanAcquireCity("),
             "direct captured-city transfers also use the vassal recipient rule");
 
         Equal(true, SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(64f),

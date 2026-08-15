@@ -113,6 +113,12 @@ namespace AncientWarfare3.core.lineage
         internal static void RunBanditRouteYear(Kingdom pKingdom)
         {
             if (!IsRebelKingdom(pKingdom)) return;
+            if (SafeCountCities(pKingdom) > 1)
+            {
+                ModClass.LogWarning("Bandit realm " + pKingdom.id +
+                    " owns more than its founding city; acquisition remains locked.");
+                return;
+            }
             EnsureRebelGovernment(pKingdom);
             MobilizeRebelForces(pKingdom);
         }
