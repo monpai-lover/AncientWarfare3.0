@@ -81,7 +81,7 @@ namespace AncientWarfare3.core.lineage
                 if (result.towers < pTowerCap)
                     result.towers += BuildBorderTowers(city, pMandate, pTowerCap - result.towers);
                 if (pBuildWalls)
-                    result.walls += BuildBorderWalls(city);
+                    result.walls += BuildBorderWalls(city, pMandate);
                 if (result.main_city == null && (result.guards > 0 || result.walls > 0 || result.towers > 0))
                     result.main_city = city;
             }
@@ -239,8 +239,7 @@ namespace AncientWarfare3.core.lineage
                 foreach (City other in pCity.neighbours_cities)
                 {
                     Kingdom kingdom = other?.kingdom;
-                    if (kingdom?.data == null || kingdom.isNeutral()) continue;
-                    if (kingdom == pMandate || VassalService.GetRootSuzerain(kingdom) == pMandate) continue;
+                    if (!IsFortificationTarget(pMandate, kingdom)) continue;
                     return true;
                 }
             }
@@ -257,8 +256,7 @@ namespace AncientWarfare3.core.lineage
                 foreach (City other in pCity.neighbours_cities)
                 {
                     Kingdom kingdom = other?.kingdom;
-                    if (kingdom?.data == null) continue;
-                    if (kingdom == pMandate || VassalService.GetRootSuzerain(kingdom) == pMandate) continue;
+                    if (!IsFortificationTarget(pMandate, kingdom)) continue;
                     score += pMandate.isEnemy(kingdom) ? 20f : 8f;
                     if (!LineageService.IsXiaKingdom(kingdom)) score += 8f;
                 }
@@ -369,12 +367,15 @@ namespace AncientWarfare3.core.lineage
             return string.IsNullOrEmpty(cityName) ? name : cityName + " " + name;
         }
 
-        private static int BuildBorderWalls(City pCity)
+        private static int BuildBorderWalls(City pCity, Kingdom pMandate)
         {
             TopTileType wall = ResolveBorderWallType();
-            if (pCity?.data == null || wall == null) return 0;
-            return CultiwayStyleCityWallService.Build(
-                pCity, wall, 2, true).Changed;
+            if (pCity?.data == null || pMandate?.data == null ||
+                wall == null) return 0;
+            return CultiwayStyleCityWallService.BuildFrontier(
+                pCity, wall, 2,
+                kingdom => IsFortificationTarget(
+                    pMandate, kingdom)).Changed;
         }
 
         private static TopTileType ResolveBorderWallType()
@@ -469,27 +470,49 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
-                foreach (WorldTile n in pTile.neighboursAll)
+                foreach (WorldTile n in pTile.neighbours)
                 {
                     if (n == null || n.Type == null) continue;
                     City city = null;
                     try { city = n.zone_city; } catch { city = null; }
+                    if (city == null) city = n.zone?.city;
                     Kingdom kingdom = city?.kingdom;
-                    bool sameMandateSystem = kingdom != null &&
-                        (kingdom == pMandate || VassalService.GetRootSuzerain(kingdom) == pMandate);
+                    bool target = IsFortificationTarget(
+                        pMandate, kingdom);
                     if (MandateBorderWallRules.IsExternalLandBorderNeighbor(
-                            pNeighborHasCity: city?.data != null && kingdom?.data != null,
+                            pFortificationTarget: target,
+                            pNeighborHasCity: city?.data != null &&
+                                kingdom?.data != null,
                             pNeighborGround: n.Type.ground,
                             pNeighborLiquid: n.Type.liquid,
                             pNeighborLava: n.Type.lava,
-                            pNeighborBlock: n.Type.block,
-                            pNeighborNeutral: kingdom == null || kingdom.isNeutral(),
-                            pSameMandateSystem: sameMandateSystem))
+                            pNeighborBlock: n.Type.block))
                         return true;
                 }
             }
             catch { }
             return false;
+        }
+
+        internal static bool IsFortificationTarget(Kingdom pMandate,
+            Kingdom pNeighbour)
+        {
+            if (pMandate?.data == null || pNeighbour?.data == null)
+                return false;
+            try
+            {
+                bool sameSystem = pNeighbour == pMandate ||
+                    VassalService.GetRootSuzerain(pNeighbour) == pMandate;
+                bool sameAlliance = Alliance.isSame(
+                    pMandate.getAlliance(), pNeighbour.getAlliance());
+                bool mandateTributary =
+                    VassalService.GetTributarySuzerain(pNeighbour) ==
+                    pMandate;
+                return MandateBorderWallRules.ShouldFortifyKingdom(
+                    true, !pNeighbour.isRekt(), pNeighbour.isNeutral(),
+                    sameSystem, sameAlliance, mandateTributary);
+            }
+            catch { return false; }
         }
 
         private static WorldTile PickBorderTile(City pCity, Kingdom pMandate)

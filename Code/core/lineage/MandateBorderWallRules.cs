@@ -30,21 +30,5 @@ namespace AncientWarfare3.core.lineage
                 !pNeighborLava && !pNeighborBlock;
         }
 
-        public static bool IsExternalLandBorderNeighbor(
-            bool pNeighborHasCity,
-            bool pNeighborGround,
-            bool pNeighborLiquid,
-            bool pNeighborLava,
-            bool pNeighborBlock,
-            bool pNeighborNeutral,
-            bool pSameMandateSystem)
-        {
-            bool target = ShouldFortifyKingdom(
-                pNeighborHasCity, true, pNeighborNeutral,
-                pSameMandateSystem, false, false);
-            return IsExternalLandBorderNeighbor(target,
-                pNeighborHasCity, pNeighborGround, pNeighborLiquid,
-                pNeighborLava, pNeighborBlock);
-        }
     }
 }

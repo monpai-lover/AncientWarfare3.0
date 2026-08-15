@@ -115,6 +115,27 @@ if ($mandateBuildStart -lt 0 -or $mandateBuildEnd -le $mandateBuildStart) {
 }
 $mandateBuildWalls = $mandateBorder.Substring($mandateBuildStart,
     $mandateBuildEnd - $mandateBuildStart)
+$hasOutsideStart = $mandateBorder.IndexOf(
+    'private static bool HasOutsideNeighbour(')
+$hasOutsideEnd = $mandateBorder.IndexOf(
+    'private static float BorderScore(', $hasOutsideStart)
+$borderScoreEnd = $mandateBorder.IndexOf(
+    'private static int AppointBorderGuards(', $hasOutsideEnd)
+$touchesStart = $mandateBorder.IndexOf(
+    'private static bool TouchesExternalLandBorder(')
+$touchesEnd = $mandateBorder.IndexOf(
+    'private static WorldTile PickBorderTile(', $touchesStart)
+if ($hasOutsideStart -lt 0 -or $hasOutsideEnd -le $hasOutsideStart -or
+    $borderScoreEnd -le $hasOutsideEnd -or $touchesStart -lt 0 -or
+    $touchesEnd -le $touchesStart) {
+    throw 'Could not isolate Mandate border target consumers.'
+}
+$hasOutside = $mandateBorder.Substring($hasOutsideStart,
+    $hasOutsideEnd - $hasOutsideStart)
+$borderScore = $mandateBorder.Substring($hasOutsideEnd,
+    $borderScoreEnd - $hasOutsideEnd)
+$touchesBorder = $mandateBorder.Substring($touchesStart,
+    $touchesEnd - $touchesStart)
 
 Require $sharedWall 'CultiwayStyleWallGeometryRules.Compute(' `
     'The WorldBox wall adapter must use detached Cultiway geometry.'
@@ -138,10 +159,24 @@ Require $notice 'Cultiway-Reborn city-wall geometry' `
     'The adapted wall source needs an MIT notice.'
 Require $packagedNotice 'Copyright (c) 2025 Inmny' `
     'The packaged wall notice must retain the Cultiway copyright.'
-Require $mandateBorder 'CultiwayStyleCityWallService.Build(' `
-    'Mandate border cities must use the shared Cultiway wall tool.'
+Require $mandateBorder 'CultiwayStyleCityWallService.BuildFrontier(' `
+    'Mandate walls must follow real qualifying frontiers.'
+Require $mandateBorder 'IsFortificationTarget(' `
+    'Mandate border systems must share one diplomatic target predicate.'
+Require $mandateBorder 'Alliance.isSame(' `
+    'Allied borders must be excluded.'
+Require $mandateBorder 'VassalService.GetTributarySuzerain(' `
+    'Mandate tributary borders must be excluded.'
 Require $mandateBorder 'TopTileLibrary.wall_order' `
     'Mandate border cities must retain original order stone walls.'
+Forbid $mandateBuildWalls 'CultiwayStyleCityWallService.Build(' `
+    'Mandate walls must not build full city enclosures.'
+Require $hasOutside 'IsFortificationTarget(' `
+    'Border-city selection must use the shared target predicate.'
+Require $borderScore 'IsFortificationTarget(' `
+    'Border scoring must use the shared target predicate.'
+Require $touchesBorder 'IsFortificationTarget(' `
+    'Wall, tower, and patrol tiles must use the shared target predicate.'
 Forbid $mandateBuildWalls 'pCap' `
     'Mandate walls must not stop midway through a ring.'
 Forbid $mandateBuildWalls 'ShouldBuildWallAtOrderedIndex' `
