@@ -42,6 +42,10 @@ namespace AncientWarfare3.core.lineage
         public static string GetFullLivingAppellation(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return "";
+            if (PeasantRebelRouteService.IsBandit(pKingdom))
+                return AW_L10n.Text(
+                    RulerAppellationRules.RouteRulerTitleKey(true),
+                    "\u5927\u5f53\u5bb6");
             bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
                                        VassalSubjectKind.MilitaryGovernorate;
             if (militaryGovernorate)

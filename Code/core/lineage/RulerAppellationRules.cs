@@ -13,6 +13,11 @@ namespace AncientWarfare3.core.lineage
 
     public static class RulerAppellationRules
     {
+        public static string RouteRulerTitleKey(bool pBandit)
+        {
+            return pBandit ? "aw_bandit_ruler_title" : "";
+        }
+
         public static string LivingRanked(string pStateName, RulerRank pTitle)
         {
             string state = Normalize(pStateName);

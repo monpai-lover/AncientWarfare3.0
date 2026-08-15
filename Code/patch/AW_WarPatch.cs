@@ -106,6 +106,7 @@ namespace AncientWarfare3.patch
         public static void NewWar_Postfix(War __result)
         {
             if (__result?.data == null) return;
+            PeasantRebelRouteService.OnWarStarted(__result);
             if (ZhuluWarService.IsZhuluWar(__result,
                     requireActive: false))
             {

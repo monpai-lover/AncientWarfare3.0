@@ -25,6 +25,17 @@ $occupation = Get-Content -Raw `
     'Code/patch/AW_CityOccupationAccelerationPatch.cs'
 $settlement = Get-Content -Raw `
     'Code/core/lineage/WarPeaceSettlementRuntime.cs'
+$rulerProjection = Get-Content -Raw `
+    'Code/core/lineage/RulerAppellationService.cs'
+$heirProjection = Get-Content -Raw `
+    'Code/core/lineage/HeirTitleRules.cs'
+$historyRules = Get-Content -Raw `
+    'Code/core/lineage/HistoryLocalizationRules.cs'
+$othersLocale = Get-Content -Raw -Encoding UTF8 'locales/others.csv'
+$mandateLocale = Get-Content -Raw -Encoding UTF8 `
+    'locales/aw3_mandate_extra.csv'
+$uiSources = (Get-ChildItem 'Code/ui' -Recurse -File -Filter '*.cs' |
+    ForEach-Object { Get-Content -Raw $_.FullName }) -join "`n"
 $bandit = if (Test-Path 'Code/core/lineage/PeasantRebelBanditRoute.cs') {
     Get-Content -Raw 'Code/core/lineage/PeasantRebelBanditRoute.cs'
 } else {
@@ -91,5 +102,34 @@ Forbid $route 'new War(' `
 RequireOrder $bandit 'CanEvaluateWeakOriginTransition' `
     'Randy.randomInt(0, 100)' `
     'Transition randomness must run only after eligibility checks.'
+Require $route 'RenameForRoute(' `
+    'Route names must use the shared kingdom projection boundary.'
+Require $rulerProjection 'RouteRulerTitleKey(true)' `
+    'The shared ruler read model must project the bandit title.'
+Require $heirProjection 'RouteHeirTitleKey(true)' `
+    'The shared heir read model must project the bandit title.'
+Require $warPatch 'PeasantRebelRouteService.OnWarStarted(__result)' `
+    'Native war lifecycle must record origin suppression starts.'
+foreach ($key in @(
+        'aw_bandit_route_name', 'aw_founding_route_name',
+        'aw_bandit_ruler_title', 'aw_bandit_heir_title')) {
+    Require $othersLocale ($key + ',') `
+        ('Missing route locale key: ' + $key)
+}
+foreach ($key in @(
+        'aw_hist_rebel_route_founding', 'aw_hist_rebel_route_bandit',
+        'aw_hist_bandit_suppression_started',
+        'aw_hist_bandit_converted', 'aw_hist_bandit_destroyed')) {
+    Require $mandateLocale ($key + ',') `
+        ('Missing bandit history CSV key: ' + $key)
+    Require $historyRules ('new Entry("' + $key + '"') `
+        ('Missing bandit history registry key: ' + $key)
+}
+$hardCodedRuler = -join ([char]0x5927, [char]0x5F53, [char]0x5BB6)
+$hardCodedHeir = -join ([char]0x5C11, [char]0x5F53, [char]0x5BB6)
+Forbid $uiSources $hardCodedRuler `
+    'UI files must not hard-code the bandit ruler title.'
+Forbid $uiSources $hardCodedHeir `
+    'UI files must not hard-code the bandit heir title.'
 
 Write-Host 'Peasant rebel route runtime source guard passed.'

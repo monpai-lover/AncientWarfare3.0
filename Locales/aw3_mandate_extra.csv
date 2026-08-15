@@ -20,3 +20,8 @@ aw_mandate_occupation_none,无,None,無
 aw_mandate_marker_rebel,义军天命,Rebel Mandate,義軍天命
 aw_mandate_marker_pseudo,伪朝天命,Pseudo-dynastic Mandate,偽朝天命
 aw_mandate_marker_true,真天命,True Mandate,真天命
+aw_hist_rebel_route_founding,选择建国路线, chose the founding route,選擇建國路線
+aw_hist_rebel_route_bandit,落草为寇并筑寨, became bandits and fortified a hideout,落草為寇並築寨
+aw_hist_bandit_suppression_started,发兵剿匪, began a suppression campaign,發兵剿匪
+aw_hist_bandit_converted,改旗建号，转为建国义军, raised a state banner and became founding rebels,改旗建號，轉為建國義軍
+aw_hist_bandit_destroyed,山寨被攻破，贼国覆灭, lost its hideout and was destroyed,山寨被攻破，賊國覆滅

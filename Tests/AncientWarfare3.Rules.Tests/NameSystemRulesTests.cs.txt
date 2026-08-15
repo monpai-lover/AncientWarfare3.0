@@ -628,6 +628,14 @@ internal static class NameSystemRulesTests
             "a republic is excluded from imperial naming");
         Equal("宣祖", RulerAppellationRules.Retrospective("宣祖"),
             "retrospective ancestors do not gain fabricated suffixes");
+        Equal("aw_bandit_ruler_title",
+            RulerAppellationRules.RouteRulerTitleKey(true),
+            "bandit ruler uses the shared title key");
+        Equal("", RulerAppellationRules.RouteRulerTitleKey(false),
+            "ordinary rulers retain existing logic");
+        Equal("aw_bandit_heir_title",
+            HeirTitleSelectionRules.RouteHeirTitleKey(true),
+            "bandit heir uses the shared title key");
 
         Equal(HeirTitleSelectionRules.TaiziKey,
             HeirTitleSelectionRules.TitleKey(

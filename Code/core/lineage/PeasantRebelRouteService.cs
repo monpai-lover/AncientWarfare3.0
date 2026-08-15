@@ -25,6 +25,8 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pKingdom.isRekt()) return "";
 
             long kingdomId = pKingdom.getID();
+            if (_enteringBanditKingdomId == kingdomId)
+                return PeasantRebelRouteIds.Bandit;
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_ROUTE,
                 out string storedRoute, "");
             string route = PeasantRebelRouteRules.ResolvePersistedRoute(
@@ -108,10 +110,10 @@ namespace AncientWarfare3.core.lineage
             }
             else
             {
-                entered = TryApplyRouteName(pRebel,
-                              route.ComposeStateName(root)) &&
-                          route.Enter(new PeasantRebelRouteEntryContext(
-                              pRebel, pOrigin, pFoundingCity, pFounder));
+                RenameForRoute(pRebel, route.Id);
+                entered = HasRouteName(pRebel, route.Id) &&
+                    route.Enter(new PeasantRebelRouteEntryContext(pRebel,
+                        pOrigin, pFoundingCity, pFounder));
             }
 
             if (!entered) return false;
@@ -131,7 +133,7 @@ namespace AncientWarfare3.core.lineage
                 Behaviors[PeasantRebelRouteIds.Founding];
             pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
             RuntimeByKingdom[pRebel.getID()] = route.Id;
-            TryApplyRouteName(pRebel, route.ComposeStateName(root));
+            RenameForRoute(pRebel, route.Id);
             MandateRebelService.EnterFoundingRoute(pRebel, pOrigin,
                 pFoundingCity);
         }
@@ -190,9 +192,35 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
-                out string root, pKingdom.name ?? "");
-            TryApplyRouteName(pKingdom,
-                PeasantRebelRouteRules.ComposeName(root, pRoute));
+                out string root, "");
+            string name = PeasantRebelRouteRules.ComposeName(root, pRoute);
+            if (string.IsNullOrWhiteSpace(name)) return;
+            TryApplyRouteName(pKingdom, name);
+        }
+
+        internal static bool HasRouteName(Kingdom pKingdom, string pRoute)
+        {
+            if (pKingdom?.data == null) return false;
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
+                out string root, "");
+            return string.Equals(pKingdom.name,
+                PeasantRebelRouteRules.ComposeName(root, pRoute),
+                StringComparison.Ordinal);
+        }
+
+        internal static void OnWarStarted(War pWar)
+        {
+            if (pWar?.data == null) return;
+            Kingdom attacker = pWar.getMainAttacker();
+            Kingdom defender = pWar.getMainDefender();
+            if (!IsOriginSuppressionPair(attacker, defender)) return;
+            HistoryWriter.RecordKingdom(defender,
+                KingdomEvent.MANDATE_REBELLION,
+                HistoryText.Kingdom(attacker) +
+                HistoryLocalizationRules.H(
+                    "aw_hist_bandit_suppression_started") +
+                HistoryText.Kingdom(defender),
+                HistoryTarget.Kingdom(attacker));
         }
 
         internal static bool CanAcquireCity(Kingdom pRecipient, City pCity)

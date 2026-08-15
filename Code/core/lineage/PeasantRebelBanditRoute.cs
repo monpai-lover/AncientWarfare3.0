@@ -48,12 +48,17 @@ namespace AncientWarfare3.core.lineage
                 SafeCityCount(pContext.Rebel) != 1 ||
                 HasActiveWar(pContext.Rebel)) return false;
 
-            pContext.Rebel.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
-                out string root, pContext.Rebel.name ?? "");
-            if (!PeasantRebelRouteService.TryApplyRouteName(
-                    pContext.Rebel, ComposeStateName(root))) return false;
+            PeasantRebelRouteService.RenameForRoute(pContext.Rebel, Id);
+            if (!PeasantRebelRouteService.HasRouteName(
+                    pContext.Rebel, Id)) return false;
             PeasantRebelBanditWallService.CaptureAndBuild(pContext.Rebel,
                 pContext.FoundingCity);
+            HistoryWriter.RecordKingdom(pContext.Rebel,
+                KingdomEvent.MANDATE_REBELLION,
+                HistoryText.Kingdom(pContext.Rebel) +
+                HistoryLocalizationRules.H(
+                    "aw_hist_rebel_route_bandit"),
+                HistoryTarget.Kingdom(pContext.Origin));
             return true;
         }
 

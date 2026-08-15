@@ -11,6 +11,12 @@ namespace AncientWarfare3.core.lineage
         {
             MandateRebelService.EnterFoundingRoute(pContext.Rebel,
                 pContext.Origin, pContext.FoundingCity);
+            HistoryWriter.RecordKingdom(pContext.Rebel,
+                KingdomEvent.MANDATE_REBELLION,
+                HistoryText.Kingdom(pContext.Rebel) +
+                HistoryLocalizationRules.H(
+                    "aw_hist_rebel_route_founding"),
+                HistoryTarget.Kingdom(pContext.Origin));
             return true;
         }
 
