@@ -25,7 +25,8 @@ internal static class RoyalGuardTaskRecoveryRulesTests
 
         string root = Directory.GetCurrentDirectory();
         string follow = File.ReadAllText(Path.Combine(root, "Code",
-            "ai", "behaviours", "actor", "BehRoyalGuardFollowKing.cs"));
+            "ai", "behaviours", "actor", "BehRoyalGuardFollowKing.cs"))
+            .Replace("\r\n", "\n");
         string attack = File.ReadAllText(Path.Combine(root, "Code",
             "ai", "behaviours", "actor", "BehRoyalGuardAttackThreat.cs"));
         string service = File.ReadAllText(Path.Combine(root, "Code",
