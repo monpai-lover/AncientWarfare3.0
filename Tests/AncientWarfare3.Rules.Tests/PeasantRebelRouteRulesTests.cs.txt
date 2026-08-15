@@ -1,0 +1,72 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelRouteRulesTests
+{
+    public static void Run()
+    {
+        Equal(50, PeasantRebelRouteRules.FoundingChance(0, 0, 0, 0),
+            "neutral facts produce fifty percent");
+        Equal(10, PeasantRebelRouteRules.FoundingChance(-15, -15, -20, 0),
+            "chance has a ten percent floor");
+        Equal(90, PeasantRebelRouteRules.FoundingChance(15, 15, 20, 10),
+            "chance has a ninety percent ceiling");
+        Equal(PeasantRebelRouteIds.Founding,
+            PeasantRebelRouteRules.SelectRoute(49, 50),
+            "roll below chance chooses founding");
+        Equal(PeasantRebelRouteIds.Bandit,
+            PeasantRebelRouteRules.SelectRoute(50, 50),
+            "roll at chance chooses bandit");
+        False(PeasantRebelRouteRules.CanDeclareWar(true, false, false),
+            "bandit cannot declare");
+        False(PeasantRebelRouteRules.CanDeclareWar(false, true, false),
+            "non-origin cannot attack bandit");
+        True(PeasantRebelRouteRules.CanDeclareWar(false, true, true),
+            "origin can suppress bandit");
+        True(PeasantRebelRouteRules.ShouldBypassTruce(true, true),
+            "origin suppression bypasses entry truce");
+        False(PeasantRebelRouteRules.CanAcquireCity(true, 1, false),
+            "bandit cannot acquire second city");
+        True(PeasantRebelRouteRules.CanAcquireCity(false, 8, false),
+            "founding route remains unrestricted");
+        True(PeasantRebelRouteRules.ShouldRepairWalls(true, false),
+            "peace permits repair");
+        False(PeasantRebelRouteRules.ShouldRepairWalls(true, true),
+            "suppression pauses repair");
+        True(PeasantRebelRouteRules.CanEvaluateWeakOriginTransition(
+                3, true, true, 0, 0),
+            "eligible three-year hideout can convert");
+        False(PeasantRebelRouteRules.CanEvaluateWeakOriginTransition(
+                2, true, true, 0, 0),
+            "two-year hideout cannot convert");
+        Equal(90, PeasantRebelRouteRules.TransitionChance(
+                true, 4, true, 15, 15),
+            "transition chance clamps");
+        Equal("\u8d64\u7709\u8d3c", PeasantRebelRouteRules.ComposeName(
+                "\u8d64\u7709", PeasantRebelRouteIds.Bandit),
+            "bandit suffix is stable");
+        Equal("\u8d64\u7709\u4e49\u519b", PeasantRebelRouteRules.ComposeName(
+                "\u8d64\u7709", PeasantRebelRouteIds.Founding),
+            "conversion keeps root");
+        Equal(PeasantRebelRouteIds.Founding,
+            PeasantRebelRouteRules.ResolvePersistedRoute("", true),
+            "old rebel saves default to founding");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                message + $": expected {expected}, got {actual}");
+    }
+}

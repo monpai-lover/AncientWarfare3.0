@@ -9,6 +9,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="PeasantRebelRouteRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelRouteRules.cs" Link="Production\PeasantRebelRouteRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />
     <Compile Include="MilitaryGovernorateCourtRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\MilitaryGovernorateCourtRules.cs" Link="Production\MilitaryGovernorateCourtRules.cs" />
