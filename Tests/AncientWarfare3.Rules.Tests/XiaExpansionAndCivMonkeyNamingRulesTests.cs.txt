@@ -83,6 +83,79 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
                 upstreamWeight: 0f, isXia: true, belowZoneAllowance: true,
                 civicLeader: true),
             "an upstream land-claim veto remains authoritative");
+        Equal(true, XiaExpansionDecisionRules.IsCivicLeader(
+                actorIsKing: true, actorIsCityLeader: false),
+            "a king uses the external civic claim route");
+        Equal(true, XiaExpansionDecisionRules.IsCivicLeader(
+                actorIsKing: false, actorIsCityLeader: true),
+            "a city leader uses the external civic claim route");
+        Equal(false, XiaExpansionDecisionRules.IsCivicLeader(
+                actorIsKing: false, actorIsCityLeader: false),
+            "an ordinary resident keeps the native claim route");
+
+        Equal(true, XiaExpansionDecisionRules.IsExternalClaimZoneValid(
+                zoneExists: true, centerTileExists: true,
+                zoneHasCity: false, touchesOwnCity: true,
+                sameIsland: true, nativeClaimAllowed: true),
+            "an empty adjacent same-island zone accepted by vanilla is legal");
+        Equal(false, XiaExpansionDecisionRules.IsExternalClaimZoneValid(
+                zoneExists: true, centerTileExists: true,
+                zoneHasCity: true, touchesOwnCity: true,
+                sameIsland: true, nativeClaimAllowed: true),
+            "an occupied zone cannot be selected for a civic claim");
+        Equal(false, XiaExpansionDecisionRules.IsExternalClaimZoneValid(
+                zoneExists: true, centerTileExists: true,
+                zoneHasCity: false, touchesOwnCity: false,
+                sameIsland: true, nativeClaimAllowed: true),
+            "a detached empty zone cannot be selected");
+        Equal(false, XiaExpansionDecisionRules.IsExternalClaimZoneValid(
+                zoneExists: true, centerTileExists: true,
+                zoneHasCity: false, touchesOwnCity: true,
+                sameIsland: false, nativeClaimAllowed: true),
+            "an adjacent zone on another island cannot be selected");
+        Equal(false, XiaExpansionDecisionRules.IsExternalClaimZoneValid(
+                zoneExists: true, centerTileExists: true,
+                zoneHasCity: false, touchesOwnCity: true,
+                sameIsland: true, nativeClaimAllowed: false),
+            "the native claim veto remains authoritative");
+
+        Equal(true,
+            XiaExpansionDecisionRules.CanBeginExternalClaimAnimation(
+                currentZoneMatchesSelectedTarget: true,
+                externalZoneStillValid: true),
+            "arrival in the selected legal external zone permits animation");
+        Equal(false,
+            XiaExpansionDecisionRules.CanBeginExternalClaimAnimation(
+                currentZoneMatchesSelectedTarget: false,
+                externalZoneStillValid: true),
+            "standing in another zone cannot begin the claim animation");
+        Equal(false,
+            XiaExpansionDecisionRules.CanBeginExternalClaimAnimation(
+                currentZoneMatchesSelectedTarget: true,
+                externalZoneStillValid: false),
+            "a stale selected zone cannot begin the claim animation");
+
+        Equal(2, XiaExpansionDecisionRules.ClaimLandGuardInsertionIndex(
+                new[]
+                {
+                    "BehActorCheckZoneTarget",
+                    "BehGoToTileTarget",
+                    "BehActorReverseFlip"
+                }),
+            "the arrival guard is inserted immediately after native movement");
+        Equal(XiaExpansionDecisionRules.ClaimLandGuardAlreadyInstalled,
+            XiaExpansionDecisionRules.ClaimLandGuardInsertionIndex(
+                new[]
+                {
+                    "BehActorCheckZoneTarget",
+                    "BehGoToTileTarget",
+                    "BehCivicLeaderClaimArrival"
+                }),
+            "an existing guard suppresses duplicate installation");
+        Equal(XiaExpansionDecisionRules.ClaimLandTaskIncompatible,
+            XiaExpansionDecisionRules.ClaimLandGuardInsertionIndex(
+                new[] { "BehFindRandomTile", "BehGoToTileTarget" }),
+            "an unexpected native task shape is left unchanged");
         string expansionPatch = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "patch",
             "AW_XiaExpansionPatch.cs"));

@@ -1,7 +1,16 @@
+using System.Collections.Generic;
+
 namespace AncientWarfare3.core.policy
 {
     internal static class XiaExpansionDecisionRules
     {
+        internal const int ClaimLandTaskIncompatible = -1;
+        internal const int ClaimLandGuardAlreadyInstalled = -2;
+        private const string ClaimSelectorType =
+            "BehActorCheckZoneTarget";
+        private const string ClaimMovementType = "BehGoToTileTarget";
+        private const string ClaimArrivalGuardType =
+            "BehCivicLeaderClaimArrival";
         internal const int InitialZoneAllowance = 55;
         internal const int FirstTechZoneAllowance = 75;
         internal const int FourthTechZoneAllowance = 95;
@@ -40,6 +49,43 @@ namespace AncientWarfare3.core.policy
                 ? CivicLeaderClaimLandWeightMultiplier
                 : ClaimLandWeightMultiplier;
             return upstreamWeight * multiplier;
+        }
+
+        public static bool IsCivicLeader(bool actorIsKing,
+            bool actorIsCityLeader)
+        {
+            return actorIsKing || actorIsCityLeader;
+        }
+
+        public static bool IsExternalClaimZoneValid(bool zoneExists,
+            bool centerTileExists, bool zoneHasCity, bool touchesOwnCity,
+            bool sameIsland, bool nativeClaimAllowed)
+        {
+            return zoneExists && centerTileExists && !zoneHasCity &&
+                   touchesOwnCity && sameIsland && nativeClaimAllowed;
+        }
+
+        public static bool CanBeginExternalClaimAnimation(
+            bool currentZoneMatchesSelectedTarget,
+            bool externalZoneStillValid)
+        {
+            return currentZoneMatchesSelectedTarget &&
+                   externalZoneStillValid;
+        }
+
+        public static int ClaimLandGuardInsertionIndex(
+            IReadOnlyList<string> actionTypeNames)
+        {
+            if (actionTypeNames == null)
+                return ClaimLandTaskIncompatible;
+            for (int i = 0; i < actionTypeNames.Count; i++)
+                if (actionTypeNames[i] == ClaimArrivalGuardType)
+                    return ClaimLandGuardAlreadyInstalled;
+            if (actionTypeNames.Count < 2 ||
+                actionTypeNames[0] != ClaimSelectorType ||
+                actionTypeNames[1] != ClaimMovementType)
+                return ClaimLandTaskIncompatible;
+            return 2;
         }
 
         public static int ZoneAllowance(int pAdoptedTechCount)
