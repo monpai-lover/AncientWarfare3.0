@@ -7,6 +7,8 @@ $strongholdServicePath = Join-Path $root `
     'Code/core/lineage/PeasantRebelBanditStrongholdService.cs'
 $zoneWallServicePath = Join-Path $root `
     'Code/core/lineage/PeasantRebelBanditZoneWallService.cs'
+$strongholdRulesPath = Join-Path $root `
+    'Code/core/lineage/PeasantRebelBanditStrongholdRules.cs'
 
 if (-not (Test-Path -LiteralPath $wallServicePath)) {
     throw 'Missing CultiwayStyleCityWallService.cs'
@@ -17,11 +19,15 @@ if (-not (Test-Path -LiteralPath $strongholdServicePath)) {
 if (-not (Test-Path -LiteralPath $zoneWallServicePath)) {
     throw 'Missing PeasantRebelBanditZoneWallService.cs'
 }
+if (-not (Test-Path -LiteralPath $strongholdRulesPath)) {
+    throw 'Missing PeasantRebelBanditStrongholdRules.cs'
+}
 
 $wallService = Get-Content -Raw -Encoding UTF8 $wallServicePath
 $strongholdService = Get-Content -Raw -Encoding UTF8 `
     $strongholdServicePath
 $zoneWallService = Get-Content -Raw -Encoding UTF8 $zoneWallServicePath
+$strongholdRules = Get-Content -Raw -Encoding UTF8 $strongholdRulesPath
 
 foreach ($token in @('PeasantRebelBanditZoneWallRules.Build(',
         'ClosedWallPoints', 'WallPoints', 'zone.tiles',
@@ -40,16 +46,30 @@ foreach ($token in @('CultiwayStyleCityWallPlan', 'TryPlanDetailed(',
 
 foreach ($token in @('TryPlanDetailed(', '.EnclosedLand',
         'zone.tiles', 'enclosedTiles', 'totalTiles',
-        'new BanditZoneFact(ZoneKey(zone), enclosedTiles,')) {
+        'new BanditZoneFact(ZoneKey(zone), enclosedTiles,',
+        'SelectZoneAlignedKeys(',
+        'PeasantRebelBanditZoneWallService.TryPlan(',
+        'InteriorZones = interior',
+        'WallPoints = zoneWallPlan.WallPoints.ToList()',
+        'FixedZoneKeys = interior.Select(ZoneKey)')) {
     if (-not $strongholdService.Contains($token)) {
         throw "Stronghold wall-zone fit is missing $token"
     }
 }
 
+$selectionIndex = $strongholdService.IndexOf('SelectZoneAlignedKeys(')
+$wallIndex = $strongholdService.IndexOf(
+    'PeasantRebelBanditZoneWallService.TryPlan(')
+if ($selectionIndex -lt 0 -or $wallIndex -le $selectionIndex) {
+    throw 'Stronghold must select native zones before planning its wall'
+}
+
 foreach ($forbidden in @('wallPoints.Min(', 'wallPoints.Max(',
-        'center.x > minX', 'center.y > minY')) {
-    if ($strongholdService.Contains($forbidden)) {
-        throw "Stronghold still uses wall bounding rectangle: $forbidden"
+        'center.x > minX', 'center.y > minY',
+        'IsMajorityEnclosed', 'SelectInteriorZoneKeys(')) {
+    if ($strongholdService.Contains($forbidden) -or
+        $strongholdRules.Contains($forbidden)) {
+        throw "Rejected stronghold zone rule remains: $forbidden"
     }
 }
 
