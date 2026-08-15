@@ -71,6 +71,7 @@ internal static class WarArmyReturnRulesTests
         InvalidMissionFallbackRules();
 
         ReopenedOrderKeepsOneBoundedWorkItem();
+        RosterMutationInvalidatesArrivalConfirmation();
         DisposedOrdersArePhysicallyRemovedAtScale();
         StaleCleanupConsumesOneBoundedToken();
         StaleTokensDoNotConsumeActiveFrameBudget();
@@ -633,6 +634,7 @@ internal static class WarArmyReturnRulesTests
         cancelledOrder.ArrivalCursor = 11;
         cancelledOrder.ArrivalSweepClear = false;
         cancelledOrder.ArrivalExpectedMemberCount = 23;
+        cancelledOrder.ArrivalVerifiedActorIds.Add(99L);
         Equal(true, queue.Requeue(cancelledOrder.ArmyId),
             "the traversed return order requeues before cancellation");
         Equal(true, queue.Cancel(7L), "return can be cancelled");
@@ -652,6 +654,8 @@ internal static class WarArmyReturnRulesTests
             "a reopened order begins a clean bounded arrival sweep");
         Equal(-1, reopenedOrder.ArrivalExpectedMemberCount,
             "a reopened order has no stale roster size snapshot");
+        Equal(0, reopenedOrder.ArrivalVerifiedActorIds.Count,
+            "a reopened order cannot inherit actors frozen by an old return");
         Equal(true, queue.Requeue(reopenedOrder.ArmyId),
             "the cursor-reset order returns to bounded work");
 
@@ -680,6 +684,43 @@ internal static class WarArmyReturnRulesTests
         Equal(true, queue.Complete(order.ArmyId), "arrival completes order");
         Equal(0, queue.OrderCount, "completion clears active order");
         Equal(0, queue.WorkCount, "completion leaves no queued work");
+    }
+
+    private static void RosterMutationInvalidatesArrivalConfirmation()
+    {
+        var queue = new WarArmyReturnQueueCore();
+        Equal(true, queue.Begin(8L, 1L, 10L), "return begins");
+        Equal(true, queue.TryTake(out WarArmyReturnQueueOrder order),
+            "arrival scan owns the return order");
+        order.MemberCursor = 64;
+        order.ArrivalCursor = 128;
+        order.ArrivalSweepClear = false;
+        order.ArrivalExpectedMemberCount = 256;
+        order.ArrivalVerifiedActorIds.Add(100L);
+
+        Equal(true, queue.OnRosterChanged(8L),
+            "same-count roster replacement invalidates arrival progress");
+        Equal(0, order.MemberCursor,
+            "roster mutation restarts bounded return job repair");
+        Equal(0, order.ArrivalCursor,
+            "roster mutation restarts bounded arrival confirmation");
+        Equal(true, order.ArrivalSweepClear,
+            "roster mutation starts a clean confirmation sweep");
+        Equal(-1, order.ArrivalExpectedMemberCount,
+            "same-count replacement cannot reuse the old count snapshot");
+        Equal(0, order.ArrivalVerifiedActorIds.Count,
+            "removed or reordered actors cannot remain arrival-confirmed");
+        Equal(1, queue.WorkCount,
+            "an in-flight order is requeued immediately after mutation");
+        Equal(false, queue.IsArrivalVerified(8L, 100L),
+            "verified wait ownership ends when the roster changes");
+
+        Equal(true, queue.OnRosterChanged(8L),
+            "duplicate mutation notification remains idempotent");
+        Equal(1, queue.WorkCount,
+            "duplicate mutation notification cannot duplicate work tokens");
+        Equal(false, queue.OnRosterChanged(99L),
+            "an unrelated army cannot create a return order");
     }
 
     private static void DisposedOrdersArePhysicallyRemovedAtScale()
@@ -1142,8 +1183,35 @@ internal static class WarArmyReturnRulesTests
                  StringComparison.Ordinal) &&
              queueSource.Contains(
                  "public int ArrivalExpectedMemberCount { get; internal set; } = -1;",
+                 StringComparison.Ordinal) &&
+             queueSource.Contains(
+                 "ArrivalVerifiedActorIds", StringComparison.Ordinal) &&
+             queueSource.Contains(
+                 "public bool IsArrivalVerified(",
                  StringComparison.Ordinal),
             "each return order owns bounded full-roster arrival sweep state");
+        True(queueSource.Contains(
+                 "public bool OnRosterChanged(long pArmyId)",
+                 StringComparison.Ordinal) &&
+             queueSource.Contains(
+                 "order.ArrivalVerifiedActorIds.Clear()",
+                 StringComparison.Ordinal) &&
+             queueSource.Contains("EnqueueOnce(pArmyId)",
+                 StringComparison.Ordinal),
+            "roster mutation invalidates arrival proof and requeues bounded work");
+
+        string controllerSource = File.ReadAllText(Path.Combine(root,
+            "Code", "core", "lineage", "ArmyRtsControllerService.cs"));
+        string rosterChanged = Section(controllerSource,
+            "public static void OnArmyRosterChanged(Army pArmy)",
+            "public static void OnTransportCompleted(Army pArmy)");
+        int returnNotification = rosterChanged.IndexOf(
+            "WarArmyReturnService.OnArmyRosterChanged(pArmy)",
+            StringComparison.Ordinal);
+        int controllerGate = rosterChanged.IndexOf(
+            "Controllers.TryGet(pArmy.id", StringComparison.Ordinal);
+        True(returnNotification >= 0 && controllerGate > returnNotification,
+            "return arrival confirmation observes roster changes even after RTS controller teardown");
         True(service.Contains(
                 "private const int MaximumMemberJobChecksPerArmy = 128;",
                 StringComparison.Ordinal),
@@ -1225,6 +1293,14 @@ internal static class WarArmyReturnRulesTests
                  StringComparison.Ordinal) &&
              arrivalSweep.Contains("IsInsideFriendlySafeCity(actor",
                  StringComparison.Ordinal) &&
+             arrivalSweep.Contains(
+                 "pOrder.ArrivalVerifiedActorIds.Add(",
+                 StringComparison.Ordinal) &&
+             arrivalSweep.Contains(
+                 "pOrder.ArrivalVerifiedActorIds.Remove(",
+                 StringComparison.Ordinal) &&
+             arrivalSweep.Contains("EnsureReturnActorJob(actor",
+                 StringComparison.Ordinal) &&
              !arrivalSweep.Contains("for (int i = 0; i < count; i++)",
                  StringComparison.Ordinal),
             "arrival completion scans one bounded roster slice and requires every live member home");
@@ -1238,6 +1314,10 @@ internal static class WarArmyReturnRulesTests
         int diagnosticStage = actorRepair.IndexOf("\"task_repaired\"",
             Math.Max(0, diagnosticCall), StringComparison.Ordinal);
         True(diagnosticCall >= 0 && diagnosticStage > diagnosticCall &&
+             actorRepair.Contains("Queue.IsArrivalVerified(",
+                 StringComparison.Ordinal) &&
+             actorRepair.Contains("? \"wait\"",
+                 StringComparison.Ordinal) &&
              !actorRepair.Contains(
                  "ModClass.LogInfo(\"[AW3 RTS return] stage=task_repaired\"",
                  StringComparison.Ordinal),

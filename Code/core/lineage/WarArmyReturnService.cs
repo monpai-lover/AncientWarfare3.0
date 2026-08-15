@@ -62,7 +62,11 @@ namespace AncientWarfare3.core.lineage
                     kingdom);
                 bool armyArrived = !hasValidMission && captainInside &&
                     AdvanceArrivalSweep(army, kingdom, order);
-                if (!captainInside) ResetArrivalSweep(order);
+                if (!captainInside)
+                {
+                    ResetArrivalSweep(order);
+                    order.ArrivalVerifiedActorIds.Clear();
+                }
                 WarArmyReturnOrderDecision decision = WarArmyReturnRules.
                     ResolveOrder(armyAlive: true,
                         insideFriendlySafeCity: armyArrived,
@@ -108,6 +112,12 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.get(LineageKeys.AW_ARMY_RETURN_ACTIVE,
                 out bool active, false);
             return active;
+        }
+
+        public static void OnArmyRosterChanged(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            Queue.OnRosterChanged(pArmy.id);
         }
 
         public static string GetJob(Actor pActor)
@@ -401,7 +411,15 @@ namespace AncientWarfare3.core.lineage
                 if (!IsAlive(actor) || actor.army != pArmy) continue;
                 if (actor.kingdom != pKingdom ||
                     !IsInsideFriendlySafeCity(actor, pKingdom))
+                {
                     pOrder.ArrivalSweepClear = false;
+                    pOrder.ArrivalVerifiedActorIds.Remove(actor.data.id);
+                }
+                else
+                {
+                    pOrder.ArrivalVerifiedActorIds.Add(actor.data.id);
+                }
+                EnsureReturnActorJob(actor, pArmy, SafeCaptain(pArmy));
             }
             pOrder.ArrivalCursor = end >= count ? 0 : end;
             if (end < count) return false;
@@ -425,10 +443,14 @@ namespace AncientWarfare3.core.lineage
                 pActor.army != pArmy) return;
             SyntheticLevyService.ResetReturnArrival(pActor);
             bool captain = pActor == pCaptain;
+            bool arrivalVerified = Queue.IsArrivalVerified(pArmy.id,
+                pActor.data.id);
             string jobId = captain
                 ? ArmyRtsContent.ReturnCaptainJobId
                 : ArmyRtsContent.ReturnFollowerJobId;
-            string taskId = captain
+            string taskId = arrivalVerified
+                ? "wait"
+                : captain
                 ? ArmyRtsContent.ReturnTaskId
                 : "warrior_army_follow_leader";
             bool expectedJob = pActor.ai.job?.id == jobId;

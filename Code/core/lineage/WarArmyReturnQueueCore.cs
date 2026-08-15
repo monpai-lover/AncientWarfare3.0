@@ -12,6 +12,8 @@ namespace AncientWarfare3.core.lineage
         public int ArrivalCursor { get; internal set; }
         public bool ArrivalSweepClear { get; internal set; } = true;
         public int ArrivalExpectedMemberCount { get; internal set; } = -1;
+        public HashSet<long> ArrivalVerifiedActorIds { get; } =
+            new HashSet<long>();
     }
 
     public sealed class WarArmyReturnQueueCore
@@ -84,6 +86,26 @@ namespace AncientWarfare3.core.lineage
         public bool Requeue(long pArmyId)
         {
             return _orders.ContainsKey(pArmyId) && EnqueueOnce(pArmyId);
+        }
+
+        public bool IsArrivalVerified(long pArmyId, long pActorId)
+        {
+            return pActorId >= 0L && _orders.TryGetValue(pArmyId,
+                       out WarArmyReturnQueueOrder order) &&
+                   order.ArrivalVerifiedActorIds.Contains(pActorId);
+        }
+
+        public bool OnRosterChanged(long pArmyId)
+        {
+            if (pArmyId < 0L || !_orders.TryGetValue(pArmyId,
+                    out WarArmyReturnQueueOrder order)) return false;
+            order.MemberCursor = 0;
+            order.ArrivalCursor = 0;
+            order.ArrivalSweepClear = true;
+            order.ArrivalExpectedMemberCount = -1;
+            order.ArrivalVerifiedActorIds.Clear();
+            EnqueueOnce(pArmyId);
+            return true;
         }
 
         public bool Cancel(long pArmyId)

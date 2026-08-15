@@ -2724,8 +2724,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnArmyRosterChanged(Army pArmy)
         {
-            if (pArmy?.data == null ||
-                !Controllers.TryGet(pArmy.id, out _) ||
+            if (pArmy?.data == null) return;
+            WarArmyReturnService.OnArmyRosterChanged(pArmy);
+            if (!Controllers.TryGet(pArmy.id, out _) ||
                 !RuntimeByArmy.TryGetValue(pArmy.id,
                     out RuntimeState runtime)) return;
             runtime.RosterVersion++;
