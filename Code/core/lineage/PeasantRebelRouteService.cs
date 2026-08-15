@@ -242,13 +242,8 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool CanAcquireCity(Kingdom pRecipient, City pCity)
         {
-            if (!IsBanditOrEntering(pRecipient)) return true;
-            bool alreadyOwned = pCity?.kingdom == pRecipient;
-            int count;
-            try { count = pRecipient?.countCities() ?? 0; }
-            catch { count = pRecipient?.hasCities() == true ? 1 : 0; }
-            return PeasantRebelRouteRules.CanAcquireCity(true, count,
-                alreadyOwned);
+            return PeasantRebelBanditTerritoryService.CanAcquire(
+                pRecipient, pCity, IsBanditOrEntering(pRecipient));
         }
 
         internal static bool CanStartWar(Kingdom pAttacker,

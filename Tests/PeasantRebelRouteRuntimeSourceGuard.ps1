@@ -59,6 +59,13 @@ $wall = if (Test-Path `
 } else {
     ''
 }
+$territory = if (Test-Path `
+        'Code/core/lineage/PeasantRebelBanditTerritoryService.cs') {
+    Get-Content -Raw `
+        'Code/core/lineage/PeasantRebelBanditTerritoryService.cs'
+} else {
+    ''
+}
 
 Require $mandate 'PeasantRebelRouteService.InitializeAndEnter(' `
     'CreateRebelKingdom must dispatch through the route coordinator.'
@@ -84,6 +91,18 @@ Require $occupation 'City.joinAnotherKingdom' `
     'The authoritative original city transfer boundary must stay patched.'
 Require $settlement 'PeasantRebelRouteService.CanAcquireCity(' `
     'Peace cessions must enforce the one-city invariant before mutation.'
+Require $territory 'CaptureCurrentCities(' `
+    'Bandit entry must persist all current city IDs.'
+Require $territory 'MANDATE_REBEL_BANDIT_ENTRY_CITY_IDS' `
+    'Bandit territory must use its persisted whitelist.'
+Require $territory 'JsonConvert.SerializeObject' `
+    'Bandit territory persistence must be structured JSON.'
+Require $territory 'IsWhitelistMissing(' `
+    'Restore must distinguish missing legacy data from corruption.'
+Require $route 'PeasantRebelBanditTerritoryService.CanAcquire(' `
+    'Acquisition boundaries must query the whitelist service.'
+Forbid $route 'currentCityCount == 0' `
+    'The single-city invariant must be removed.'
 Require $wall 'pCity.recalculateNeighbourZones()' `
     'Bandit wall capture must use the original city boundary refresh.'
 Require $wall 'pCity.border_zones' `
