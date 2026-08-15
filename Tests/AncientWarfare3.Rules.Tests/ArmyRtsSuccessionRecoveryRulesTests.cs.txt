@@ -225,7 +225,8 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
                    StringComparison.Ordinal),
             "actor death hands the captured captain army to RTS recovery");
         string guardService = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "lineage", "RoyalGuardService.cs"));
+            "core", "lineage", "RoyalGuardService.cs"))
+            .Replace("\r\n", "\n");
         int guardCandidateStart = guardService.IndexOf(
             "private static bool IsGuardCandidate", StringComparison.Ordinal);
         int guardCandidateEnd = guardService.IndexOf(
