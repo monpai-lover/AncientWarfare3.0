@@ -50,13 +50,34 @@ internal static class SyntheticMobilizationRulesTests
                  loadReconciliationPending: false),
             "orphan synthetic cleanup runs after the load scan");
         Equal(true, SyntheticMobilizationRules.ShouldDeferDemobilization(
-                syntheticActor: true, armyReturnActive: true),
-            "synthetic army members survive until post-war return completes");
+                syntheticActor: true, returnArrivalConfirmed: false,
+                armyReturnActive: false, wartimeOwned: false,
+                insideFriendlySafeCity: true),
+            "synthetic army members survive cancel, discard, and active return until their own arrival is confirmed");
         Equal(false, SyntheticMobilizationRules.ShouldDeferDemobilization(
-                syntheticActor: true, armyReturnActive: false),
-            "synthetic army members demobilize after return ownership clears");
+                syntheticActor: true, returnArrivalConfirmed: true,
+                armyReturnActive: false, wartimeOwned: false,
+                insideFriendlySafeCity: true),
+            "synthetic army members demobilize only after confirmed arrival");
+        Equal(true, SyntheticMobilizationRules.ShouldDeferDemobilization(
+                syntheticActor: true, returnArrivalConfirmed: true,
+                armyReturnActive: true, wartimeOwned: false,
+                insideFriendlySafeCity: true),
+            "a stale prior arrival fact cannot remove a soldier during a new return");
+        Equal(true, SyntheticMobilizationRules.ShouldDeferDemobilization(
+                syntheticActor: true, returnArrivalConfirmed: true,
+                armyReturnActive: false, wartimeOwned: true,
+                insideFriendlySafeCity: true),
+            "a stale prior arrival fact cannot remove a soldier from a replacement mission");
+        Equal(true, SyntheticMobilizationRules.ShouldDeferDemobilization(
+                syntheticActor: true, returnArrivalConfirmed: true,
+                armyReturnActive: false, wartimeOwned: false,
+                insideFriendlySafeCity: false),
+            "a historical arrival fact cannot authorize removal while the actor is abroad");
         Equal(false, SyntheticMobilizationRules.ShouldDeferDemobilization(
-                syntheticActor: false, armyReturnActive: true),
+                syntheticActor: false, returnArrivalConfirmed: false,
+                armyReturnActive: true, wartimeOwned: true,
+                insideFriendlySafeCity: false),
             "permanent soldiers are never routed through synthetic cleanup");
         int remaining = 41;
         int[] expectedBatches = { 16, 16, 9 };
@@ -103,8 +124,29 @@ internal static class SyntheticMobilizationRulesTests
         Contains(source,
             "SyntheticMobilizationRules.ShouldDeferDemobilization(",
             "demobilization yields while a synthetic actor's army is returning home");
+        Contains(source,
+            "HasReturnArrivalConfirmed(",
+            "the synthetic cleanup boundary reads the per-actor arrival fact");
+        string levySource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SyntheticLevyService.cs"));
+        Contains(levySource, "ConfirmReturnArrival(Actor actor)",
+            "successful army return can persist each synthetic actor's arrival");
+        Contains(levySource, "ConfirmReturnArrivalIfSafe(Actor actor)",
+            "discard only releases synthetic actors already inside a safe city");
+        Contains(levySource, "ResetReturnArrival(Actor actor)",
+            "a new bounded return claim clears a stale prior arrival fact");
         Contains(source, "WarArmyReturnService.IsActive(actor.army)",
-            "the synthetic cleanup boundary reads active army return ownership");
+            "active return ownership blocks demobilization despite stale arrival state");
+        Contains(source,
+            "HasWartimeMilitaryLock(actor)",
+            "replacement wartime ownership blocks stale-arrival demobilization");
+        Contains(source,
+            "IsInsideFriendlySafeCity(actor)",
+            "bounded ledger work observes each actor's current safe-city arrival");
+        Contains(source,
+            "SyntheticLevyService.ConfirmReturnArrivalIfSafe(actor)",
+            "discarded actors become eligible when they later reach safety");
         Contains(source, "OnSyntheticMaterialized(Actor pActor)",
             "materialization registers actor identity atomically");
     }

@@ -20,16 +20,11 @@ namespace AncientWarfare3.core.lineage
         public static bool TryBegin(Army pArmy)
         {
             if (!IsLiveArmy(pArmy)) return false;
+            if (ArmyRtsControllerService.HasValidMission(pArmy)) return false;
             Kingdom kingdom = AWArmyService.GetIntendedKingdom(pArmy);
             if (!IsLiveKingdom(kingdom)) return false;
             Actor captain = SafeCaptain(pArmy);
             if (!IsAlive(captain) || captain.kingdom != kingdom) return false;
-            if (IsInsideFriendlySafeCity(captain, kingdom))
-            {
-                Finish(pArmy.id, pArmy);
-                return true;
-            }
-
             City target = ResolveTargetCity(pArmy, kingdom);
             if (!IsFriendlySafeCity(target, kingdom)) return false;
             if (!Queue.Begin(pArmy.id, kingdom.id, target.id)) return false;
@@ -58,23 +53,31 @@ namespace AncientWarfare3.core.lineage
                     !IsAlive(captain) || captain.kingdom != kingdom ||
                     AWArmyService.GetIntendedKingdom(army) != kingdom)
                 {
-                    Finish(armyId, army);
+                    Discard(armyId, army);
                     continue;
                 }
+                bool hasValidMission = ArmyRtsControllerService.
+                    HasValidMission(army);
+                bool captainInside = IsInsideFriendlySafeCity(captain,
+                    kingdom);
+                bool arrivalSweepAdvanced = !hasValidMission &&
+                    captainInside;
+                bool armyArrived = arrivalSweepAdvanced &&
+                    AdvanceArrivalSweep(army, kingdom, order);
+                if (!captainInside)
+                    ResetArrivalConfirmation(order);
                 WarArmyReturnOrderDecision decision = WarArmyReturnRules.
                     ResolveOrder(armyAlive: true,
-                        insideFriendlySafeCity: IsInsideFriendlySafeCity(
-                            captain, kingdom),
-                        hasValidMission: ArmyRtsControllerService.
-                            HasValidMission(army));
+                        insideFriendlySafeCity: armyArrived,
+                        hasValidMission: hasValidMission);
                 if (decision == WarArmyReturnOrderDecision.CancelForMission)
                 {
                     Cancel(armyId);
                     continue;
                 }
-                if (decision != WarArmyReturnOrderDecision.Continue)
+                if (decision == WarArmyReturnOrderDecision.Complete)
                 {
-                    Finish(armyId, army);
+                    CompleteArrival(armyId, army);
                     continue;
                 }
 
@@ -84,13 +87,14 @@ namespace AncientWarfare3.core.lineage
                     target = ResolveTargetCity(army, kingdom);
                     if (!IsFriendlySafeCity(target, kingdom))
                     {
-                        Finish(armyId, army);
+                        Discard(armyId, army);
                         continue;
                     }
                     Queue.UpdateTarget(armyId, target.id);
                     Persist(army, kingdom.id, target.id);
                 }
-                EnsureReturnJobs(army, order);
+                if (!arrivalSweepAdvanced)
+                    EnsureReturnJobs(army, order);
                 Queue.Requeue(armyId);
             }
         }
@@ -108,6 +112,12 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.get(LineageKeys.AW_ARMY_RETURN_ACTIVE,
                 out bool active, false);
             return active;
+        }
+
+        public static void OnArmyRosterChanged(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            Queue.OnRosterChanged(pArmy.id);
         }
 
         public static string GetJob(Actor pActor)
@@ -265,7 +275,7 @@ namespace AncientWarfare3.core.lineage
                         "[AW3 RTS return] stage=restore_discarded" +
                         " reason=restore_invalid_or_complete" +
                         " army=" + stored.ArmyId);
-                    Finish(stored.ArmyId, pArmy);
+                    Discard(stored.ArmyId, pArmy);
                 }
                 return;
             }
@@ -276,19 +286,30 @@ namespace AncientWarfare3.core.lineage
                     "[AW3 RTS return] stage=restore_discarded" +
                     " reason=restore_queue_rejected" +
                     " army=" + stored.ArmyId);
-                Finish(stored.ArmyId, pArmy);
+                Discard(stored.ArmyId, pArmy);
                 return;
             }
             Persist(pArmy, restored.KingdomId, restored.TargetCityId);
             EnsureReturnCaptainJob(pArmy);
         }
 
-        private static void Finish(long pArmyId, Army pArmy)
+        private static void CompleteArrival(long pArmyId, Army pArmy)
+        {
+            Queue.Complete(pArmyId);
+            ClearPersisted(pArmy);
+            ArmyRtsControllerService.ReleaseAfterReturn(pArmy);
+            ModClass.LogInfo("[AW3 RTS return] stage=completed" +
+                             " army=" + pArmyId +
+                             " rts_active=" +
+                             ArmyRtsControllerService.HasValidMission(pArmy));
+        }
+
+        private static void Discard(long pArmyId, Army pArmy)
         {
             Queue.Complete(pArmyId);
             ClearPersisted(pArmy);
             ReleaseReturnJobs(pArmy);
-            ModClass.LogInfo("[AW3 RTS return] stage=completed" +
+            ModClass.LogInfo("[AW3 RTS return] stage=discarded" +
                              " army=" + pArmyId);
         }
 
@@ -361,16 +382,128 @@ namespace AncientWarfare3.core.lineage
             pOrder.MemberCursor = end >= count ? 0 : end;
         }
 
+        private static bool AdvanceArrivalSweep(Army pArmy,
+            Kingdom pKingdom, WarArmyReturnQueueOrder pOrder)
+        {
+            if (pArmy?.data == null || pKingdom?.data == null ||
+                pOrder == null) return false;
+            int count;
+            try { count = pArmy.units?.Count ?? 0; }
+            catch { return false; }
+            if (pOrder.ArrivalExpectedMemberCount != count)
+            {
+                ResetArrivalConfirmation(pOrder);
+                pOrder.ArrivalExpectedMemberCount = count;
+            }
+            Actor captain = SafeCaptain(pArmy);
+            int start = Math.Min(count,
+                Math.Max(0, pOrder.ArrivalCursor));
+            int end = Math.Min(count,
+                start + MaximumMemberJobChecksPerArmy);
+            for (int i = start; i < end; i++)
+            {
+                Actor actor;
+                try { actor = pArmy.units[i]; }
+                catch
+                {
+                    pOrder.ArrivalSweepClear = false;
+                    continue;
+                }
+                if (!IsAlive(actor) || actor.army != pArmy)
+                {
+                    pOrder.ArrivalSweepClear = false;
+                    continue;
+                }
+                long actorId = actor.data.id;
+                if (!pOrder.ArrivalSweepActorIds.Add(actorId))
+                    pOrder.ArrivalSweepClear = false;
+                if (actor.kingdom != pKingdom ||
+                    !IsInsideFriendlySafeCity(actor, pKingdom))
+                {
+                    pOrder.ArrivalSweepClear = false;
+                    pOrder.ArrivalVerifiedActorIds.Remove(actorId);
+                }
+                else if (!pOrder.ArrivalConfirmationPass)
+                {
+                    pOrder.ArrivalVerifiedActorIds.Add(actorId);
+                }
+                else if (!pOrder.ArrivalVerifiedActorIds.Contains(actorId))
+                {
+                    pOrder.ArrivalSweepClear = false;
+                }
+                EnsureReturnActorJob(actor, pArmy, captain);
+            }
+            pOrder.ArrivalCursor = end >= count ? 0 : end;
+            if (end < count) return false;
+            bool completeRosterObserved =
+                pOrder.ArrivalSweepActorIds.Count == count;
+            if (!pOrder.ArrivalConfirmationPass)
+            {
+                bool freezeComplete = pOrder.ArrivalSweepClear &&
+                    completeRosterObserved &&
+                    pOrder.ArrivalVerifiedActorIds.Count == count;
+                if (!freezeComplete)
+                {
+                    ResetArrivalConfirmation(pOrder);
+                    return false;
+                }
+                pOrder.ArrivalConfirmationPass = true;
+                ResetArrivalSweep(pOrder);
+                return false;
+            }
+            bool arrived = pOrder.ArrivalSweepClear &&
+                completeRosterObserved &&
+                pOrder.ArrivalVerifiedActorIds.Count == count &&
+                pOrder.ArrivalVerifiedActorIds.SetEquals(
+                    pOrder.ArrivalSweepActorIds);
+            if (!arrived) ResetArrivalConfirmation(pOrder);
+            return arrived;
+        }
+
+        private static void ResetArrivalSweep(WarArmyReturnQueueOrder pOrder)
+        {
+            if (pOrder == null) return;
+            pOrder.ArrivalCursor = 0;
+            pOrder.ArrivalSweepClear = true;
+            pOrder.ArrivalSweepActorIds.Clear();
+        }
+
+        private static void ResetArrivalConfirmation(
+            WarArmyReturnQueueOrder pOrder)
+        {
+            if (pOrder == null) return;
+            ResetArrivalSweep(pOrder);
+            pOrder.ArrivalExpectedMemberCount = -1;
+            pOrder.ArrivalConfirmationPass = false;
+            pOrder.ArrivalVerifiedActorIds.Clear();
+        }
+
         private static void EnsureReturnActorJob(Actor pActor, Army pArmy,
             Actor pCaptain)
         {
             if (!IsAlive(pActor) || pActor.ai == null ||
                 pActor.army != pArmy) return;
+            SyntheticLevyService.ResetReturnArrival(pActor);
             bool captain = pActor == pCaptain;
+            bool arrivalVerified = Queue.IsArrivalVerified(pArmy.id,
+                pActor.data.id);
+            if (arrivalVerified)
+            {
+                WarArmyReturnStoredIntent stored = ReadPersisted(pArmy);
+                Kingdom returnKingdom = ResolveKingdom(
+                    stored?.KingdomId ?? -1L);
+                if (!IsInsideFriendlySafeCity(pActor, returnKingdom))
+                {
+                    Queue.OnRosterChanged(pArmy.id);
+                    arrivalVerified = false;
+                }
+            }
             string jobId = captain
                 ? ArmyRtsContent.ReturnCaptainJobId
                 : ArmyRtsContent.ReturnFollowerJobId;
-            string taskId = captain
+            string taskId = arrivalVerified
+                ? "wait"
+                : captain
                 ? ArmyRtsContent.ReturnTaskId
                 : "warrior_army_follow_leader";
             bool expectedJob = pActor.ai.job?.id == jobId;
@@ -416,6 +549,7 @@ namespace AncientWarfare3.core.lineage
         private static void ReleaseReturnActor(Actor pActor)
         {
             if (pActor?.data == null || pActor.ai == null) return;
+            SyntheticLevyService.ConfirmReturnArrivalIfSafe(pActor);
             ArmyMilitaryMovementPriorityIndex.Unregister(pActor.data.id);
             string jobId = pActor.ai.job?.id ?? "";
             bool returnOwnedJob =
@@ -427,7 +561,6 @@ namespace AncientWarfare3.core.lineage
                 try { pActor.ai.setJob(pActor.getNextJob()); }
                 catch { pActor.ai.clearJob(); }
             }
-            StandingArmyPeacetimeService.RefreshJob(pActor);
         }
 
         private static void ClearAttackTarget(Actor pActor)
@@ -461,6 +594,11 @@ namespace AncientWarfare3.core.lineage
             try { city = pActor?.current_tile?.zone?.city; }
             catch { city = null; }
             return IsFriendlySafeCity(city, pKingdom);
+        }
+
+        internal static bool IsInsideFriendlySafeCity(Actor pActor)
+        {
+            return IsInsideFriendlySafeCity(pActor, pActor?.kingdom);
         }
 
         private static bool IsFriendlySafeCity(City pCity,

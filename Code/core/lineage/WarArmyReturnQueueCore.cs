@@ -9,6 +9,14 @@ namespace AncientWarfare3.core.lineage
         public long KingdomId { get; internal set; }
         public long TargetCityId { get; internal set; }
         public int MemberCursor { get; internal set; }
+        public int ArrivalCursor { get; internal set; }
+        public bool ArrivalSweepClear { get; internal set; } = true;
+        public int ArrivalExpectedMemberCount { get; internal set; } = -1;
+        public bool ArrivalConfirmationPass { get; internal set; }
+        public HashSet<long> ArrivalSweepActorIds { get; } =
+            new HashSet<long>();
+        public HashSet<long> ArrivalVerifiedActorIds { get; } =
+            new HashSet<long>();
     }
 
     public sealed class WarArmyReturnQueueCore
@@ -81,6 +89,28 @@ namespace AncientWarfare3.core.lineage
         public bool Requeue(long pArmyId)
         {
             return _orders.ContainsKey(pArmyId) && EnqueueOnce(pArmyId);
+        }
+
+        public bool IsArrivalVerified(long pArmyId, long pActorId)
+        {
+            return pActorId >= 0L && _orders.TryGetValue(pArmyId,
+                       out WarArmyReturnQueueOrder order) &&
+                   order.ArrivalVerifiedActorIds.Contains(pActorId);
+        }
+
+        public bool OnRosterChanged(long pArmyId)
+        {
+            if (pArmyId < 0L || !_orders.TryGetValue(pArmyId,
+                    out WarArmyReturnQueueOrder order)) return false;
+            order.MemberCursor = 0;
+            order.ArrivalCursor = 0;
+            order.ArrivalSweepClear = true;
+            order.ArrivalExpectedMemberCount = -1;
+            order.ArrivalConfirmationPass = false;
+            order.ArrivalSweepActorIds.Clear();
+            order.ArrivalVerifiedActorIds.Clear();
+            EnqueueOnce(pArmyId);
+            return true;
         }
 
         public bool Cancel(long pArmyId)
@@ -185,7 +215,7 @@ namespace AncientWarfare3.core.lineage
             if (pStored == null || !pStored.Active || pFacts == null ||
                 pStored.ArmyId < 0L || pStored.KingdomId < 0L ||
                 !pFacts.ArmyAlive || !pFacts.ArmyKingdomMatches ||
-                pFacts.InsideFriendlySafeCity || pFacts.HasValidMission)
+                pFacts.HasValidMission)
                 return false;
             long targetCityId = pFacts.StoredTargetFriendlySafe
                 ? pStored.TargetCityId
