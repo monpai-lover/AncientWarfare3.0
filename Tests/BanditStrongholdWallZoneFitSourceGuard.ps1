@@ -5,6 +5,8 @@ $wallServicePath = Join-Path $root `
     'Code/core/lineage/CultiwayStyleCityWallService.cs'
 $strongholdServicePath = Join-Path $root `
     'Code/core/lineage/PeasantRebelBanditStrongholdService.cs'
+$zoneWallServicePath = Join-Path $root `
+    'Code/core/lineage/PeasantRebelBanditZoneWallService.cs'
 
 if (-not (Test-Path -LiteralPath $wallServicePath)) {
     throw 'Missing CultiwayStyleCityWallService.cs'
@@ -12,10 +14,22 @@ if (-not (Test-Path -LiteralPath $wallServicePath)) {
 if (-not (Test-Path -LiteralPath $strongholdServicePath)) {
     throw 'Missing PeasantRebelBanditStrongholdService.cs'
 }
+if (-not (Test-Path -LiteralPath $zoneWallServicePath)) {
+    throw 'Missing PeasantRebelBanditZoneWallService.cs'
+}
 
 $wallService = Get-Content -Raw -Encoding UTF8 $wallServicePath
 $strongholdService = Get-Content -Raw -Encoding UTF8 `
     $strongholdServicePath
+$zoneWallService = Get-Content -Raw -Encoding UTF8 $zoneWallServicePath
+
+foreach ($token in @('PeasantRebelBanditZoneWallRules.Build(',
+        'ClosedWallPoints', 'WallPoints', 'zone.tiles',
+        'TerrainCollectionPadding')) {
+    if (-not $zoneWallService.Contains($token)) {
+        throw "Zone-aligned wall runtime is missing $token"
+    }
+}
 
 foreach ($token in @('CultiwayStyleCityWallPlan', 'TryPlanDetailed(',
         'ComputeEnclosedLand(input)', 'WallPoints', 'EnclosedLand')) {
