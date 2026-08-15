@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
@@ -9,6 +10,8 @@ namespace AncientWarfare3.core.lineage
         internal City Mother;
         internal Actor Ruler;
         internal bool RemoveBanditOnFailure;
+        internal Func<City, bool> FinalizeGovernment;
+        internal Action RollbackGovernment;
     }
 
     internal sealed class PeasantRebelBanditStrongholdPlan

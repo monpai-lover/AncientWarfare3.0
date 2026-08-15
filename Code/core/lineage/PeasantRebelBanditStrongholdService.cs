@@ -32,6 +32,7 @@ namespace AncientWarfare3.core.lineage
             internal List<TileSnapshot> WallTiles = new List<TileSnapshot>();
             internal PeasantRebelBanditStrongholdState PreviousState;
             internal bool HadPreviousState;
+            internal bool GovernmentFinalized;
         }
 
         internal static bool TryPlan(City pMother, Kingdom pBandit,
@@ -178,6 +179,10 @@ namespace AncientWarfare3.core.lineage
                     out pFailureKey)) return false;
             plan.Context.RemoveBanditOnFailure =
                 pContext.RemoveBanditOnFailure;
+            plan.Context.FinalizeGovernment =
+                pContext.FinalizeGovernment;
+            plan.Context.RollbackGovernment =
+                pContext.RollbackGovernment;
             var transaction = new Transaction { Plan = plan };
             try
             {
@@ -201,7 +206,8 @@ namespace AncientWarfare3.core.lineage
                 stronghold.newCityEvent(plan.Context.Ruler);
                 stronghold.setName(
                     PeasantRebelBanditStrongholdRules.
-                        ComposeStrongholdName(plan.Context.Bandit.name));
+                        ComposeStrongholdName(ReadOutlawRoot(
+                            plan.Context.Bandit)));
                 for (int i = 0; i < plan.InteriorZones.Count; i++)
                     stronghold.addZone(plan.InteriorZones[i]);
 
@@ -212,6 +218,13 @@ namespace AncientWarfare3.core.lineage
                 stronghold.recalculateNeighbourZones();
                 plan.Context.Mother.recalculateNeighbourZones();
                 plan.Context.Bandit.setCityMetas(stronghold);
+                if (plan.Context.FinalizeGovernment != null)
+                {
+                    if (!plan.Context.FinalizeGovernment(stronghold))
+                        throw new InvalidOperationException(
+                            "bandit government finalization failed");
+                    transaction.GovernmentFinalized = true;
+                }
 
                 PeasantRebelBanditStrongholdState active = BuildState(plan,
                     BanditStrongholdPhase.Active, stronghold.getID());
@@ -229,6 +242,102 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("Bandit stronghold creation failed: " +
                                     e.Message);
                 Rollback(transaction);
+                pFailureKey = "aw_bandit_stronghold_transaction_failed";
+                return false;
+            }
+        }
+
+        internal static bool TryCreateDirect(City pMother,
+            out Kingdom pBandit, out City pStronghold,
+            out string pFailureKey)
+        {
+            pBandit = null;
+            pStronghold = null;
+            pFailureKey = "aw_bandit_stronghold_invalid_city";
+            if (!CanMutate() || pMother?.data == null ||
+                pMother.isRekt() || pMother.kingdom?.data == null ||
+                pMother.kingdom.isRekt() ||
+                !pMother.kingdom.isCiv() || pMother.kingdom.isNeutral() ||
+                MandateRebelService.IsRebelKingdom(pMother.kingdom) ||
+                IsStronghold(pMother) || HasChildStronghold(pMother))
+                return false;
+            Kingdom origin = pMother.kingdom;
+            Actor ruler = SelectDirectRuler(pMother);
+            if (ruler?.data == null)
+            {
+                pFailureKey = "aw_bandit_stronghold_population_failed";
+                return false;
+            }
+
+            try
+            {
+                Kingdom bandit = World.world.kingdoms.makeNewCivKingdom(
+                    ruler);
+                pBandit = bandit;
+                bandit.copyMetasFromOtherKingdom(origin);
+                MandateRebelService.MarkRebelKingdom(bandit, ruler,
+                    origin);
+                int year = Date.getCurrentYear();
+                if (!PeasantRebelOutlawNameService.EnsureRoot(bandit,
+                        ruler, year, out _))
+                    throw new InvalidOperationException(
+                        "cannot assign bandit name root");
+                bandit.data.set(
+                    LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
+                    pMother.getID());
+                bandit.data.set(
+                    LineageKeys.MANDATE_REBEL_ROUTE_CREATED_YEAR, year);
+                bandit.data.set(LineageKeys.MANDATE_REBEL_ROUTE_LAST_YEAR,
+                    int.MinValue);
+                bandit.data.set(
+                    LineageKeys.MANDATE_REBEL_ORIGIN_CITY_COUNT,
+                    PeasantRebelRouteService.SafeCityCount(origin));
+                bandit.data.set(
+                    LineageKeys.MANDATE_REBEL_ORIGIN_STRENGTH,
+                    PeasantRebelRouteService.RealmStrength(origin));
+                bandit.data.set(
+                    LineageKeys.MANDATE_REBEL_ORIGIN_CAPITAL_ID,
+                    origin.capital?.getID() ?? -1L);
+                bandit.data.set(
+                    LineageKeys.MANDATE_REBEL_ORIGIN_RULER_ID,
+                    origin.king?.getID() ?? -1L);
+
+                var context = new PeasantRebelBanditCreationContext
+                {
+                    Bandit = bandit,
+                    Origin = origin,
+                    Mother = pMother,
+                    Ruler = ruler,
+                    RemoveBanditOnFailure = true,
+                    FinalizeGovernment = stronghold =>
+                        PeasantRebelRouteService.
+                            FinalizeDirectBanditGovernment(
+                                bandit, stronghold),
+                    RollbackGovernment = () => { }
+                };
+                if (!TryCreate(context, out pStronghold,
+                        out pFailureKey))
+                {
+                    if (bandit?.data != null && !bandit.isRekt())
+                    {
+                        ruler.joinCity(pMother);
+                        World.world.kingdoms.removeObject(bandit);
+                    }
+                    pBandit = null;
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Direct bandit creation failed: " +
+                                    e.Message);
+                if (pBandit?.data != null && !pBandit.isRekt())
+                {
+                    ruler.joinCity(pMother);
+                    World.world.kingdoms.removeObject(pBandit);
+                }
+                pBandit = null;
                 pFailureKey = "aw_bandit_stronghold_transaction_failed";
                 return false;
             }
@@ -253,14 +362,31 @@ namespace AncientWarfare3.core.lineage
             bool pHeir)
         {
             if (pKingdom?.data == null) return "";
-            pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
-                out string root, pKingdom.name ?? "");
+            string root = ReadOutlawRoot(pKingdom);
             string role = AW_L10n.Text(
                 pHeir ? "aw_bandit_heir_title" :
                     "aw_bandit_ruler_title",
                 pHeir ? "\u5c11\u5f53\u5bb6" : "\u5927\u5f53\u5bb6");
             return PeasantRebelBanditStrongholdRules.
                 ComposeCeremonialTitle(root, role);
+        }
+
+        private static string ReadOutlawRoot(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return "";
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
+                out string root, pKingdom.name ?? "");
+            return PeasantRebelOutlawNameRules.NormalizeRoot(root);
+        }
+
+        private static Actor SelectDirectRuler(City pMother)
+        {
+            Actor leader = pMother?.leader;
+            if (leader?.data != null && !leader.isRekt() &&
+                !leader.isBaby()) return leader;
+            return pMother?.units?.Where(actor => actor?.data != null &&
+                    !actor.isRekt() && !actor.isBaby())
+                .OrderBy(actor => actor.getID()).FirstOrDefault();
         }
 
         internal static City ResolveStronghold(Kingdom pKingdom)
@@ -634,6 +760,8 @@ namespace AncientWarfare3.core.lineage
                         plan.Context.Bandit, pTransaction.PreviousState);
                 else PeasantRebelBanditStateStore.Clear(
                     plan.Context.Bandit);
+                if (pTransaction.GovernmentFinalized)
+                    plan.Context.RollbackGovernment?.Invoke();
                 if (plan.Context.RemoveBanditOnFailure &&
                     plan.Context.Bandit?.data != null &&
                     !plan.Context.Bandit.isRekt())

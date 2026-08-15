@@ -42,12 +42,16 @@ namespace AncientWarfare3.core.lineage
                 Bandit = pContext.Rebel,
                 Origin = pContext.Origin,
                 Mother = pContext.FoundingCity,
-                Ruler = pContext.Founder
+                Ruler = pContext.Founder,
+                FinalizeGovernment = stronghold =>
+                    KingdomPolicyService.ApplyClassStateDirect(
+                        pContext.Rebel, KingdomPolicyDefs.ClassBandit),
+                RollbackGovernment = () =>
+                    KingdomPolicyService.ApplyClassStateDirect(
+                        pContext.Rebel, KingdomPolicyDefs.ClassRebel)
             };
             if (!PeasantRebelBanditStrongholdService.TryCreate(creation,
-                    out City stronghold, out string failureKey) ||
-                !KingdomPolicyService.ApplyClassStateDirect(
-                    pContext.Rebel, KingdomPolicyDefs.ClassBandit))
+                    out City stronghold, out string failureKey))
                 return false;
 
             pContext.Rebel.data.set(

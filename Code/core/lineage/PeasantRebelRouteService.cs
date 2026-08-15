@@ -269,6 +269,28 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        internal static bool FinalizeDirectBanditGovernment(
+            Kingdom pBandit, City pStronghold)
+        {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying ||
+                pBandit?.data == null || pStronghold?.data == null ||
+                pStronghold.kingdom != pBandit) return false;
+            if (!KingdomPolicyService.ApplyClassStateDirect(pBandit,
+                    KingdomPolicyDefs.ClassBandit)) return false;
+            pBandit.data.set(LineageKeys.MANDATE_REBEL_ROUTE,
+                PeasantRebelRouteIds.Bandit);
+            pBandit.data.set(LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
+                pStronghold.getID());
+            RuntimeByKingdom[pBandit.getID()] =
+                PeasantRebelRouteIds.Bandit;
+            RenameForRoute(pBandit, PeasantRebelRouteIds.Bandit);
+            RulerAppellationService.RefreshLivingProjection(pBandit);
+            KingdomRenameProjectionService.Refresh(pBandit);
+            return HasRouteName(pBandit, PeasantRebelRouteIds.Bandit);
+        }
+
         internal static void RenameForRoute(Kingdom pKingdom,
             string pRoute)
         {
