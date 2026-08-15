@@ -180,6 +180,9 @@ namespace AncientWarfare3.patch
             Kingdom oldOwner = __instance?.kingdom;
             __state = new RebellionDirectCaptureState(oldOwner,
                 pNewKingdom, -1L, pDirect: false);
+            PeasantRebelBanditStrongholdService.TryHandleCapture(
+                __instance, pNewKingdom, out bool strongholdHandled);
+            if (strongholdHandled) return false;
             if (!PeasantRebelRouteService.CanAcquireCity(
                     pNewKingdom, __instance)) return false;
             if (ZhuluWarService.IsOpposingZhuluCapture(__instance,

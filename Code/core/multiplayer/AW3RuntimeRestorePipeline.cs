@@ -150,6 +150,8 @@ namespace AncientWarfare3.core.multiplayer
                     MandateService.RebuildRuntimeMarkerProjection),
                 new AW3RestoreStage("mandate_projection_resume", () =>
                     MandateService.ResumePendingProjections(2)),
+                new AW3RestoreStage("bandit_strongholds",
+                    PeasantRebelBanditStrongholdService.RestoreRuntime),
                 new AW3RestoreStage("peasant_rebel_routes",
                     PeasantRebelRouteService.RebuildRuntime),
                 new AW3RestoreStage("world_traits", () =>
@@ -289,6 +291,8 @@ namespace AncientWarfare3.core.multiplayer
                     MandateService.RebuildRuntimeMarkerProjection),
                 new AW3RestoreStage("mandate_projection_resume", () =>
                     MandateService.ResumePendingProjections(2)),
+                new AW3RestoreStage("bandit_strongholds",
+                    PeasantRebelBanditStrongholdService.RestoreRuntime),
                 new AW3RestoreStage("peasant_rebel_routes",
                     PeasantRebelRouteService.RebuildRuntime),
                 new AW3RestoreStage("war_plot_redirect",

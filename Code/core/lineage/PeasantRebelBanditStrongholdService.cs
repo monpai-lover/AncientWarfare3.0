@@ -300,6 +300,114 @@ namespace AncientWarfare3.core.lineage
                     StringComparer.Ordinal));
         }
 
+        internal static bool TryHandleCapture(City pCity,
+            Kingdom pOccupier, out bool pHandled)
+        {
+            pHandled = false;
+            if (pCity?.data == null || pCity.kingdom?.data == null)
+                return true;
+            Kingdom bandit = pCity.kingdom;
+            if (!PeasantRebelBanditStateStore.TryRead(bandit,
+                    out PeasantRebelBanditStrongholdState state) ||
+                state.StrongholdCityId != pCity.getID() ||
+                state.Phase != BanditStrongholdPhase.Active &&
+                state.Phase != BanditStrongholdPhase.Falling &&
+                state.Phase != BanditStrongholdPhase.Completed)
+                return true;
+            pHandled = true;
+            if (!CanMutate()) return false;
+            return CompleteFall(bandit, pCity, state);
+        }
+
+        internal static void RestoreRuntime()
+        {
+            if (!CanMutate() || World.world?.kingdoms == null ||
+                World.world.cities == null) return;
+            foreach (Kingdom kingdom in World.world.kingdoms.ToList())
+            {
+                if (kingdom?.data == null || kingdom.isRekt() ||
+                    !PeasantRebelBanditStateStore.TryRead(kingdom,
+                        out PeasantRebelBanditStrongholdState state))
+                    continue;
+                City stronghold = ResolveCity(state.StrongholdCityId);
+                City mother = ResolveCity(state.MotherCityId);
+                if (state.Phase == BanditStrongholdPhase.Active)
+                {
+                    if (stronghold?.data != null && mother?.data != null)
+                        continue;
+                    if (stronghold?.data == null)
+                    {
+                        state.Phase = BanditStrongholdPhase.Completed;
+                        state.Raid.Stage = BanditRaidStage.None;
+                        state.Raid.MemberActorIds.Clear();
+                        state.Raid.CarriedFood = 0;
+                        PeasantRebelBanditStateStore.Write(kingdom, state);
+                    }
+                    continue;
+                }
+                if ((state.Phase == BanditStrongholdPhase.Falling ||
+                     state.Phase == BanditStrongholdPhase.Completed) &&
+                    stronghold?.data != null)
+                    CompleteFall(kingdom, stronghold, state);
+            }
+        }
+
+        private static bool CompleteFall(Kingdom pBandit,
+            City pStronghold, PeasantRebelBanditStrongholdState pState)
+        {
+            City mother = ResolveCity(pState.MotherCityId);
+            if (pBandit?.data == null || pStronghold?.data == null ||
+                mother?.data == null || mother.isRekt()) return false;
+            try
+            {
+                if (pState.Phase == BanditStrongholdPhase.Active)
+                {
+                    pState.Phase = BanditStrongholdPhase.Falling;
+                    if (!PeasantRebelBanditStateStore.Write(pBandit,
+                            pState)) return false;
+                }
+
+                WorldTile motherTile = mother.getTile();
+                foreach (Actor actor in pStronghold.units.ToList())
+                {
+                    if (actor?.data == null || actor.isRekt()) continue;
+                    actor.joinCity(mother);
+                    if (motherTile != null) actor.spawnOn(motherTile);
+                }
+                foreach (TileZone zone in pStronghold.zones.ToList())
+                    mother.addZone(zone);
+                mother.recalculateNeighbourZones();
+                pStronghold.recalculateNeighbourZones();
+
+                pState.Phase = BanditStrongholdPhase.Completed;
+                pState.Raid.Stage = BanditRaidStage.None;
+                pState.Raid.MemberActorIds.Clear();
+                pState.Raid.CarriedFood = 0;
+                if (!PeasantRebelBanditStateStore.Write(pBandit, pState))
+                    return false;
+                if (!pStronghold.isRekt())
+                    World.world.cities.removeObject(pStronghold);
+                return true;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Bandit stronghold fall failed: " +
+                                    e.Message);
+                return false;
+            }
+        }
+
+        private static City ResolveCity(long pCityId)
+        {
+            if (pCityId <= 0 || World.world?.cities == null) return null;
+            try
+            {
+                City city = World.world.cities.get(pCityId);
+                return city?.data != null && !city.isRekt() ? city : null;
+            }
+            catch { return null; }
+        }
+
         internal static bool HasChildStronghold(City pMother)
         {
             if (pMother?.data == null || World.world?.kingdoms == null)
