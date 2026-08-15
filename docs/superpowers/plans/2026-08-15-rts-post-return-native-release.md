@@ -15,7 +15,9 @@
 - Modify `Tests/AncientWarfare3.Rules.Tests/WarArmyReturnRulesTests.cs.txt`: encode arrival/discard/cancellation ordering and native-handoff source guards.
 - Modify `Code/core/lineage/WarArmyReturnService.cs`: distinguish successful arrival from invalid cleanup and invoke post-return release only on arrival.
 - Modify `Code/core/lineage/ArmyRtsControllerService.cs`: add idempotent controller teardown plus permanent-actor native job handoff without peacetime mod job installation.
-- Verify `Code/core/lineage/SyntheticMobilizationLedgerService.cs`: retain its existing `WarArmyReturnService.IsActive` demobilization gate; no production edit is expected.
+- Modify `Code/core/lineage/SyntheticMobilizationLedgerService.cs`: require per-actor confirmed arrival, current safe-city presence, and absence of return/wartime ownership before bounded removal.
+- Modify `Code/core/lineage/SyntheticLevyService.cs`: persist and reset the per-actor return-arrival fact.
+- Modify `Code/core/lineage/WarArmyReturnQueueCore.cs`: retain bounded full-roster arrival sweep state per order.
 
 ### Task 1: Lock The Arrival Ownership Boundary With RED Tests
 
@@ -65,10 +67,15 @@ Also assert that only the safe-city branches call `CompleteArrival`, while inval
 Read `ArmyRtsControllerService.cs` and require a public API whose body uses `Invalidate(pArmy.id, pReleaseActorJobs: false)`, never calls `WarArmyReturnService.TryBegin`, never calls `RefreshReleasedArmyPeacetimeJobs`, unregisters military P0 ownership, clears return/RTS targets, skips native job assignment for `SyntheticLevyService.IsSynthetic(actor)`, and calls `actor.ai.setJob(actor.getNextJob())` for permanent survivors. Retain these existing ledger guards:
 
 ```csharp
-True(syntheticSource.Contains(
-        "WarArmyReturnService.IsActive(actor.army)",
+True(syntheticSource.Contains("HasReturnArrivalConfirmed(",
+        StringComparison.Ordinal) &&
+     syntheticSource.Contains("WarArmyReturnService.IsActive(actor.army)",
+        StringComparison.Ordinal) &&
+     syntheticSource.Contains("HasWartimeMilitaryLock(actor)",
+        StringComparison.Ordinal) &&
+     syntheticSource.Contains("IsInsideFriendlySafeCity(actor)",
         StringComparison.Ordinal),
-    "synthetic demobilization remains deferred until return ownership clears");
+    "synthetic demobilization requires current safe arrival without military ownership");
 True(nativeRelease > clearReturn,
     "synthetic actors become demobilization-eligible only at arrival handoff");
 ```
@@ -133,7 +140,7 @@ private static void ReleaseAfterReturnActor(Actor pActor)
         pActor.beh_tile_target = null;
         pActor.beh_actor_target = null;
         if (!SyntheticLevyService.IsSynthetic(pActor))
-            pActor.ai.setJob(pActor.getNextJob());
+            pActor.ai.setJob(Actor.nextJobActor(pActor));
         else
             pActor.ai.clearJob();
     }
@@ -193,7 +200,7 @@ The completion diagnostic must be emitted after release and show whether RTS own
 
 - [ ] **Step 2: Route only proven safe-city arrival to native release**
 
-Use `CompleteArrival` in `TryBegin` when `IsInsideFriendlySafeCity` is true and in `ProcessFrame` only when `decision == WarArmyReturnOrderDecision.Complete` for a live valid army. Keep `Cancel` for `CancelForMission`. Route invalid/disposed army, unavailable replacement target, restore-invalid, and queue-rejected paths to `Discard`.
+Make `TryBegin` reject an existing valid mission and always enqueue, including when the captain is already safe. In `ProcessFrame`, advance an order-owned arrival cursor by at most 128 members and call `CompleteArrival` only after one complete clean sweep confirms every live army member inside a friendly safe city. Keep `Cancel` for `CancelForMission`. Route invalid/disposed army, unavailable replacement target, restore-invalid, and queue-rejected paths to `Discard`.
 
 In `TryRestore`, distinguish a live safe-city completion from invalid facts before selecting `CompleteArrival`; never infer successful arrival merely from `HasArrived` returning true for a dead army.
 
@@ -235,7 +242,7 @@ dotnet run --project Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tes
 dotnet run --project Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tests.csproj --no-restore -- --army-mobilization-slice
 ```
 
-Expected: all four commands exit 0. The mobilization slice proves synthetic soldiers are protected while return is active and become removable after arrival clears it.
+Expected: all four commands exit 0. The mobilization slice proves synthetic soldiers remain protected during return and replacement wars, and become removable only with per-actor confirmed current safe-city arrival.
 
 - [ ] **Step 2: Run the full rules suite**
 

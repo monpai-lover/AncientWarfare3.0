@@ -29,8 +29,10 @@ Successful arrival has this ordered transition:
    movement priority for the army.
 4. Cancel RTS/return actor behaviours and assign each surviving permanent
    actor its native `getNextJob()` result.
-5. Publish return completion. Synthetic demobilization may then remove
-   synthetic soldiers because return ownership is no longer active.
+5. Persist a per-actor arrival confirmation for synthetic soldiers, then
+   publish return completion. The demobilization ledger may remove a soldier
+   only while that actor is currently inside a friendly safe city and has no
+   active return or wartime military owner.
 
 The release operation must be idempotent. Missing controllers, disposed
 actors, and already-cleared jobs are successful no-ops.
@@ -64,9 +66,14 @@ mean that a newly published RTS mission now owns the army.
 
 ### SyntheticMobilizationLedgerService
 
-No new removal policy is required. Its existing rule defers removal while
-`WarArmyReturnService.IsActive` is true. Clearing return ownership at `Finish`
-continues to make synthetic soldiers eligible only after arrival.
+Use a persisted per-actor return-arrival fact instead of treating a cleared
+army return flag as proof that every follower arrived. Bounded ledger work
+dynamically confirms actors that reach a friendly safe city after an invalid
+return was discarded. Removal still defers while return ownership or another
+wartime military owner is active, and it requires the actor to remain inside a
+friendly safe city at removal time. Return task admission resets stale arrival
+facts within the existing bounded member cursor so a later war cannot reuse an
+older completion fact.
 
 ## Failure Handling
 
@@ -88,5 +95,9 @@ Regression coverage must prove:
 - the completion path does not call `StandingArmyPeacetimeService.RefreshJob`;
 - cancellation for a valid replacement mission does not perform native
   release;
+- arrival completion uses a bounded full-roster sweep rather than captain
+  position alone;
+- stale arrival facts cannot remove synthetic soldiers during a later war or
+  while they are outside a friendly safe city;
 - return, wartime lifecycle, synthetic mobilization, and task-ownership slices
   remain green.
