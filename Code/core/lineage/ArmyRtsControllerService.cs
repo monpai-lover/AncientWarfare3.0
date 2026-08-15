@@ -2143,8 +2143,9 @@ namespace AncientWarfare3.core.lineage
             Army army = pActor?.army;
             if (ShouldSuppressCombatPreemption(pActor))
             {
-                ClearActorAttackTarget(pActor);
-                if (!IsCaptain(pActor, army))
+                if (IsCaptain(pActor, army))
+                    ClearActorAttackTarget(pActor);
+                else
                     SetRetreatFollowerJob(pActor);
                 return false;
             }
@@ -2433,11 +2434,13 @@ namespace AncientWarfare3.core.lineage
         internal static void SuppressCombatForTransit(Actor pActor)
         {
             if (!ShouldSuppressCombatPreemption(pActor)) return;
-            ClearActorAttackTarget(pActor);
             Army army = pActor.army;
             if (IsCaptain(pActor, army))
+            {
+                ClearActorAttackTarget(pActor);
                 SetJob(pActor, ArmyRtsContent.RetreatCaptainJobId,
                     ArmyRtsContent.RetreatTaskId);
+            }
             else
                 SetRetreatFollowerJob(pActor);
         }
@@ -5734,9 +5737,11 @@ namespace AncientWarfare3.core.lineage
         private static void SetRetreatFollowerJob(Actor pActor)
         {
             if (!IsLiveWarriorActor(pActor)) return;
-            ClearActorAttackTarget(pActor);
+            bool hadImmediateCombat = HasImmediateCombatPriority(pActor);
+            if (hadImmediateCombat) ClearActorAttackTarget(pActor);
             SetJob(pActor, ArmyRtsContent.RetreatFollowerJobId,
-                "warrior_army_follow_leader", pForceReassert: true);
+                "warrior_army_follow_leader",
+                pForceReassert: hadImmediateCombat);
         }
 
         private static void SetNativeMemberMissionTask(Actor pActor,

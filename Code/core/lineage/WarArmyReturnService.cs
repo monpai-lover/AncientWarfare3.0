@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content;
 using AncientWarfare3.core.performance;
+using life.taxi;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -9,6 +11,7 @@ namespace AncientWarfare3.core.lineage
     {
         private const int MaximumArmiesPerFrame = 4;
         private const int MaximumQueueScansPerFrame = 64;
+        private const int MaximumMemberJobChecksPerArmy = 128;
 
         private static readonly WarArmyReturnQueueCore Queue =
             new WarArmyReturnQueueCore();
@@ -31,7 +34,7 @@ namespace AncientWarfare3.core.lineage
             if (!IsFriendlySafeCity(target, kingdom)) return false;
             if (!Queue.Begin(pArmy.id, kingdom.id, target.id)) return false;
             Persist(pArmy, kingdom.id, target.id);
-            EnsureReturnJobs(pArmy);
+            EnsureReturnCaptainJob(pArmy);
             ModClass.LogInfo("[AW3 RTS return] stage=admitted" +
                              " army=" + pArmy.id +
                              " kingdom=" + kingdom.id +
@@ -87,7 +90,7 @@ namespace AncientWarfare3.core.lineage
                     Queue.UpdateTarget(armyId, target.id);
                     Persist(army, kingdom.id, target.id);
                 }
-                EnsureReturnJobs(army);
+                EnsureReturnJobs(army, order);
                 Queue.Requeue(armyId);
             }
         }
@@ -149,9 +152,24 @@ namespace AncientWarfare3.core.lineage
             if (!TryGetTarget(pActor, out WorldTile activeTarget) ||
                 activeTarget != pTarget ||
                 SameIsland(pActor.current_tile, pTarget)) return false;
-            ArmyRtsTransportService.TryHandleActor(pActor, pTarget,
-                pMayBegin: true);
+            if (HasExactTaxiRequest(pActor, pTarget)) return true;
+            if (ArmyRtsTransportService.TryHandleActor(pActor, pTarget,
+                    pMayBegin: true)) return true;
+            ArmyRtsTransportService.EnsureNativeTaxiRequest(pActor, pTarget);
             return true;
+        }
+
+        private static bool HasExactTaxiRequest(Actor pActor,
+            WorldTile pTarget)
+        {
+            if (pActor?.data == null || pTarget?.data == null) return false;
+            try
+            {
+                TaxiRequest request = TaxiManager.getRequestForActor(pActor);
+                return request?.getTileTarget()?.data?.tile_id ==
+                       pTarget.data.tile_id;
+            }
+            catch { return false; }
         }
 
         internal static bool ShouldSuppressCombatPreemption(Actor pActor)
@@ -254,7 +272,7 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             Persist(pArmy, restored.KingdomId, restored.TargetCityId);
-            EnsureReturnJobs(pArmy);
+            EnsureReturnCaptainJob(pArmy);
         }
 
         private static void Finish(long pArmyId, Army pArmy)
@@ -304,15 +322,27 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.removeLong(LineageKeys.AW_ARMY_RETURN_TARGET_CITY_ID);
         }
 
-        private static void EnsureReturnJobs(Army pArmy)
+        private static void EnsureReturnCaptainJob(Army pArmy)
         {
             if (pArmy?.data == null || !IsActive(pArmy)) return;
+            Actor captain = SafeCaptain(pArmy);
+            EnsureReturnActorJob(captain, pArmy, captain);
+        }
+
+        private static void EnsureReturnJobs(Army pArmy,
+            WarArmyReturnQueueOrder pOrder)
+        {
+            if (pArmy?.data == null || pOrder == null ||
+                !IsActive(pArmy)) return;
             Actor captain = SafeCaptain(pArmy);
             EnsureReturnActorJob(captain, pArmy, captain);
             int count;
             try { count = pArmy.units?.Count ?? 0; }
             catch { count = 0; }
-            for (int i = 0; i < count; i++)
+            int start = Math.Min(count, Math.Max(0, pOrder.MemberCursor));
+            int end = Math.Min(count,
+                start + MaximumMemberJobChecksPerArmy);
+            for (int i = start; i < end; i++)
             {
                 Actor actor;
                 try { actor = pArmy.units[i]; }
@@ -320,6 +350,7 @@ namespace AncientWarfare3.core.lineage
                 if (actor == captain) continue;
                 EnsureReturnActorJob(actor, pArmy, captain);
             }
+            pOrder.MemberCursor = end >= count ? 0 : end;
         }
 
         private static void EnsureReturnActorJob(Actor pActor, Army pArmy,
@@ -351,10 +382,8 @@ namespace AncientWarfare3.core.lineage
                 pActor.beh_tile_target = null;
                 pActor.ai.setJob(jobId);
                 pActor.ai.setTask(taskId);
-                ModClass.LogInfo("[AW3 RTS return] stage=task_repaired" +
-                                 " army=" + pArmy.id +
-                                 " actor=" + pActor.data.id +
-                                 " task=" + taskId);
+                ArmyRtsMovementDiagnostic.Log("return",
+                    "task_repaired", pActor, "task=" + taskId);
             }
             ArmyMilitaryMovementPriorityIndex.Register(pActor.data.id,
                 ArmyMilitaryMovementPriorityKind.RtsMember);

@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.lineage
         public long ArmyId { get; internal set; }
         public long KingdomId { get; internal set; }
         public long TargetCityId { get; internal set; }
+        public int MemberCursor { get; internal set; }
     }
 
     public sealed class WarArmyReturnQueueCore
