@@ -77,7 +77,8 @@ internal static class ArmyRtsCaptainCombatRulesTests
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"));
         string behaviour = File.ReadAllText(Path.Combine(root, "Code",
-            "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
+            "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"))
+            .Replace("\r\n", "\n");
         Assert(content.Contains("CaptainCombatTaskId", StringComparison.Ordinal) &&
                content.Contains("new BehArmyRtsCaptainCombat()",
                    StringComparison.Ordinal),
