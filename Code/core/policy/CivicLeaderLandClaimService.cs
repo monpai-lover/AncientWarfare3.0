@@ -29,8 +29,10 @@ namespace AncientWarfare3.core.policy
         internal static bool TrySetExternalTarget(Actor pActor)
         {
             City city = pActor?.city;
-            if (!IsCivicLeader(pActor) || city?.border_zones == null)
+            if (!IsCivicLeader(pActor) || city?.data == null)
                 return false;
+            if (TrySetCitySeedTarget(pActor, city)) return true;
+            if (city.border_zones == null) return false;
             foreach (TileZone border in city.border_zones)
             {
                 TileZone[] neighbours = border?.neighbours_all;
@@ -44,6 +46,19 @@ namespace AncientWarfare3.core.policy
                 }
             }
             return false;
+        }
+
+        private static bool TrySetCitySeedTarget(Actor pActor, City pCity)
+        {
+            bool hasNoZones;
+            try { hasNoZones = pCity.countZones() == 0; }
+            catch { return false; }
+            if (!hasNoZones) return false;
+
+            TileZone seedZone = pCity.getTile()?.zone;
+            if (!IsValidExternalZone(pActor, seedZone)) return false;
+            pActor.beh_tile_target = seedZone.centerTile;
+            return true;
         }
 
         internal static bool IsValidArrival(Actor pActor)
@@ -64,6 +79,13 @@ namespace AncientWarfare3.core.policy
             bool hasCenter = pZone?.centerTile != null;
             bool hasCity = exists && pZone.hasCity();
             bool touchesOwnCity = TouchesCityBoundary(city, pZone);
+            bool isCitySeedZone = false;
+            try
+            {
+                isCitySeedZone = city?.countZones() == 0 &&
+                    ReferenceEquals(pZone, cityTile?.zone);
+            }
+            catch { }
             bool sameIsland = hasCenter && cityTile != null &&
                               pZone.centerTile.isSameIsland(cityTile);
             bool nativeAllowed = exists && cityTile != null &&
@@ -71,7 +93,7 @@ namespace AncientWarfare3.core.policy
                                      pActor, pZone, cityTile);
             return XiaExpansionDecisionRules.IsExternalClaimZoneValid(
                 exists, hasCenter, hasCity, touchesOwnCity, sameIsland,
-                nativeAllowed);
+                nativeAllowed, isCitySeedZone);
         }
 
         private static bool TouchesCityBoundary(City pCity,
