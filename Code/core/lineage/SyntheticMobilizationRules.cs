@@ -57,9 +57,12 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool ShouldDeferDemobilization(bool syntheticActor,
-            bool returnArrivalConfirmed)
+            bool returnArrivalConfirmed, bool armyReturnActive,
+            bool wartimeOwned, bool insideFriendlySafeCity)
         {
-            return syntheticActor && !returnArrivalConfirmed;
+            return syntheticActor && (!returnArrivalConfirmed ||
+                   armyReturnActive || wartimeOwned ||
+                   !insideFriendlySafeCity);
         }
     }
 }

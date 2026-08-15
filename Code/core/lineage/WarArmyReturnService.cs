@@ -423,6 +423,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (!IsAlive(pActor) || pActor.ai == null ||
                 pActor.army != pArmy) return;
+            SyntheticLevyService.ResetReturnArrival(pActor);
             bool captain = pActor == pCaptain;
             string jobId = captain
                 ? ArmyRtsContent.ReturnCaptainJobId

@@ -42,6 +42,13 @@ namespace AncientWarfare3.core.lineage
                 ConfirmReturnArrival(actor);
         }
 
+        internal static void ResetReturnArrival(Actor actor)
+        {
+            if (!IsSynthetic(actor)) return;
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY_RETURN_ARRIVED,
+                false);
+        }
+
         private static bool TryReadFlags(Actor actor,
             out bool synthetic, out bool promoted)
         {
