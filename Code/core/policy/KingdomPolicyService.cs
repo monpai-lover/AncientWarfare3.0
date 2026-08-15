@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
@@ -706,8 +707,23 @@ namespace AncientWarfare3.core.policy
 
         public static bool ForceSetClassState(Kingdom pKingdom, string pClassId)
         {
-            if (pKingdom?.data == null || !KingdomPolicyDefs.ClassStates.Contains(pClassId)) return false;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
+            return PeasantRebelGovernmentTransitionService.TrySetClassState(
+                pKingdom, pClassId);
+        }
+
+        internal static bool ApplyClassStateDirect(Kingdom pKingdom,
+            string pClassId)
+        {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying ||
+                pKingdom?.data == null || pKingdom.isRekt() ||
+                !KingdomPolicyDefs.ClassStates.Contains(pClassId))
+                return false;
+            if (!KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                    KingdomPolicyProfileService.EnsureAssigned(pKingdom)))
+                return false;
             EnsureInitialized(pKingdom);
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, pClassId);
             ApplyClassStateEffects(pKingdom, pClassId);
@@ -1577,6 +1593,7 @@ namespace AncientWarfare3.core.policy
                     SlaveService.SetSlaveryEnabled(pKingdom, true);
                     break;
                 case KingdomPolicyDefs.ClassRebel:
+                case KingdomPolicyDefs.ClassBandit:
                     break;
                 case KingdomPolicyDefs.ClassDefault:
                 case KingdomPolicyDefs.ClassRepublic:

@@ -66,6 +66,13 @@ $territory = if (Test-Path `
 } else {
     ''
 }
+$government = if (Test-Path `
+        'Code/core/lineage/PeasantRebelGovernmentTransitionService.cs') {
+    Get-Content -Raw `
+        'Code/core/lineage/PeasantRebelGovernmentTransitionService.cs'
+} else {
+    ''
+}
 
 Require $mandate 'PeasantRebelRouteService.InitializeAndEnter(' `
     'CreateRebelKingdom must dispatch through the route coordinator.'
@@ -103,6 +110,18 @@ Require $route 'PeasantRebelBanditTerritoryService.CanAcquire(' `
     'Acquisition boundaries must query the whitelist service.'
 Forbid $route 'currentCityCount == 0' `
     'The single-city invariant must be removed.'
+Require $government 'TrySetClassState(' `
+    'Special government changes need one coordinator.'
+Require $government 'CanSwitchGovernment(' `
+    'Authority must share detached transition rules with UI.'
+Require $bandit 'CaptureCurrentCities(' `
+    'Bandit entry must capture retained territory.'
+RequireOrder $government 'CanMutateAuthority(' 'EnterBandit(' `
+    'Authority must be checked before full bandit entry.'
+Require $route 'PeasantRebelGovernmentTransitionService.TryEnterBandit(' `
+    'AI and manual bandit entry must share the transition coordinator.'
+Forbid $bandit 'city.joinAnotherKingdom(' `
+    'Formal bandit entry must retain every current city.'
 Require $wall 'CaptureAndBuild(Kingdom pKingdom)' `
     'Wall capture must cover the complete kingdom border.'
 Require $wall 'foreach (City city in pKingdom.getCities())' `
@@ -212,8 +231,6 @@ RequireOrder $mandateYearBody 'CanMutateAuthority(' `
     'Replica authority must be checked before the annual marker write.'
 RequireOrder $route 'CanMutateAuthority(' 'Randy.randomInt(0, 100)' `
     'Replica authority must be checked before route selection randomness.'
-RequireOrder $bandit 'CanMutateAuthority(' 'city.joinAnotherKingdom(' `
-    'Replica authority must be checked before bandit city transfer.'
 RequireOrder $bandit 'CanMutateAuthority(' `
     'World.world.wars.endWar(war, WarWinner.Peace)' `
     'Replica authority must be checked before bandit peace mutations.'
@@ -229,9 +246,10 @@ if ($banditYearStart -lt 0 -or $banditYearEnd -le $banditYearStart) {
 }
 $banditYearBody = $bandit.Substring($banditYearStart,
     $banditYearEnd - $banditYearStart)
-RequireOrder $banditYearBody 'TryResolveFoundingCity(' `
-    'SafeCityCount(pKingdom) > 1' `
-    'Founding-city validity must be checked before malformed city counts.'
+Require $banditYearBody 'ResolveTransitionCity(pKingdom)' `
+    'Annual bandit work must survive loss of the original founding city.'
+Forbid $banditYearBody 'SafeCityCount(pKingdom) > 1' `
+    'Multi-city formal bandits must continue annual route work.'
 
 $removeStart = $chroniclePatch.IndexOf(
     'internal static void RemoveKingdom_Prefix(')

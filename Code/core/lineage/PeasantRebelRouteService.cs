@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.content.policies;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -108,9 +110,8 @@ namespace AncientWarfare3.core.lineage
             bool entered;
             if (route.Id == PeasantRebelRouteIds.Bandit)
             {
-                using (new BanditEntryScope(pRebel.getID()))
-                    entered = route.Enter(new PeasantRebelRouteEntryContext(
-                        pRebel, pOrigin, pFoundingCity, pFounder));
+                entered = PeasantRebelGovernmentTransitionService.TryEnterBandit(
+                    pRebel, pOrigin, pFoundingCity, pFounder);
             }
             else
             {
@@ -189,6 +190,8 @@ namespace AncientWarfare3.core.lineage
             Behaviors[PeasantRebelRouteIds.Bandit].Exit(pKingdom);
             IPeasantRebelRouteBehavior route =
                 Behaviors[PeasantRebelRouteIds.Founding];
+            if (!KingdomPolicyService.ApplyClassStateDirect(
+                    pKingdom, KingdomPolicyDefs.ClassRebel)) return false;
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
             RuntimeByKingdom[pKingdom.getID()] = route.Id;
             RenameForRoute(pKingdom, route.Id);
@@ -198,6 +201,29 @@ namespace AncientWarfare3.core.lineage
             if (pOrigin?.data != null && !pOrigin.isRekt())
                 MandateRebelService.StartExistingRebelWar(pOrigin,
                     pKingdom);
+            return true;
+        }
+
+        internal static bool EnterExistingBanditGovernment(Kingdom pRebel,
+            Kingdom pOrigin, City pFoundingCity, Actor pFounder)
+        {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying ||
+                pRebel?.data == null || pOrigin?.data == null ||
+                pFoundingCity?.data == null || pFounder?.data == null)
+                return false;
+            IPeasantRebelRouteBehavior route =
+                Behaviors[PeasantRebelRouteIds.Bandit];
+            bool entered;
+            using (new BanditEntryScope(pRebel.getID()))
+                entered = route.Enter(new PeasantRebelRouteEntryContext(
+                    pRebel, pOrigin, pFoundingCity, pFounder));
+            if (!entered) return false;
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
+            RuntimeByKingdom[pRebel.getID()] = route.Id;
+            RulerAppellationService.RefreshLivingProjection(pRebel);
+            KingdomRenameProjectionService.Refresh(pRebel);
             return true;
         }
 
@@ -444,6 +470,38 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pKingdom?.countCities() ?? 0; }
             catch { return 0; }
+        }
+
+        internal static Kingdom ResolveOrigin(Kingdom pKingdom)
+        {
+            long originId = ReadOriginKingdomId(pKingdom);
+            if (originId < 0 || World.world?.kingdoms == null) return null;
+            try
+            {
+                Kingdom origin = World.world.kingdoms.get(originId);
+                return origin?.data != null && !origin.isRekt()
+                    ? origin
+                    : null;
+            }
+            catch { return null; }
+        }
+
+        internal static City ResolveFoundingCity(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || World.world?.cities == null)
+                return null;
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
+                out long cityId, -1L);
+            if (cityId < 0) return null;
+            try
+            {
+                City city = World.world.cities.get(cityId);
+                return city?.data != null && !city.isRekt() &&
+                       city.kingdom == pKingdom
+                    ? city
+                    : null;
+            }
+            catch { return null; }
         }
 
         private static long ReadOriginKingdomId(Kingdom pKingdom)

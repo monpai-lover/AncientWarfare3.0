@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.content.policies;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -20,22 +22,6 @@ namespace AncientWarfare3.core.lineage
                 pContext.Origin?.data == null ||
                 pContext.FoundingCity?.data == null) return false;
 
-            foreach (City city in new List<City>(
-                         pContext.Rebel.getCities()))
-            {
-                if (city == pContext.FoundingCity) continue;
-                try
-                {
-                    city.joinAnotherKingdom(pContext.Origin,
-                        pCaptured: false, pRebellion: true);
-                }
-                catch (Exception e)
-                {
-                    ModClass.LogWarning(
-                        "Bandit route city retention failed: " + e.Message);
-                }
-            }
-
             using (var wars = new ListPool<War>())
             {
                 foreach (War war in pContext.Rebel.getWars())
@@ -49,8 +35,13 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (pContext.FoundingCity.kingdom != pContext.Rebel ||
-                SafeCityCount(pContext.Rebel) != 1 ||
                 HasActiveWar(pContext.Rebel)) return false;
+
+            if (!PeasantRebelBanditTerritoryService.CaptureCurrentCities(
+                    pContext.Rebel) ||
+                !KingdomPolicyService.ApplyClassStateDirect(
+                    pContext.Rebel, KingdomPolicyDefs.ClassBandit))
+                return false;
 
             PeasantRebelRouteService.RenameForRoute(pContext.Rebel, Id);
             if (!PeasantRebelRouteService.HasRouteName(
@@ -70,20 +61,10 @@ namespace AncientWarfare3.core.lineage
             if (!PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return;
-            if (!TryResolveFoundingCity(pKingdom,
-                    out City foundingCity))
-            {
-                PeasantRebelRouteService.RemoveRuntime(pKingdom);
-                return;
-            }
-            if (SafeCityCount(pKingdom) > 1)
-            {
-                ModClass.LogWarning("Bandit realm " + pKingdom.id +
-                    " owns more than its founding city; acquisition remains locked.");
-                return;
-            }
+            City transitionCity = ResolveTransitionCity(pKingdom);
             MandateRebelService.RunBanditRouteYear(pKingdom);
-            if (TryConvertToFounding(pKingdom, foundingCity))
+            if (transitionCity?.data != null &&
+                TryConvertToFounding(pKingdom, transitionCity))
             {
                 MandateRebelService.RunFoundingRouteYear(pKingdom);
                 return;
@@ -274,6 +255,24 @@ namespace AncientWarfare3.core.lineage
             catch { }
             return pCity?.data != null && !pCity.isRekt() &&
                    pCity.kingdom == pKingdom;
+        }
+
+        private static City ResolveTransitionCity(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return null;
+            if (TryResolveFoundingCity(pKingdom, out City founding))
+                return founding;
+            City capital = pKingdom.capital;
+            if (capital?.data != null && !capital.isRekt() &&
+                capital.kingdom == pKingdom) return capital;
+            try
+            {
+                foreach (City city in pKingdom.getCities())
+                    if (city?.data != null && !city.isRekt() &&
+                        city.kingdom == pKingdom) return city;
+            }
+            catch { }
+            return null;
         }
     }
 }
