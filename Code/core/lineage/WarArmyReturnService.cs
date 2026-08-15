@@ -26,7 +26,7 @@ namespace AncientWarfare3.core.lineage
             if (!IsAlive(captain) || captain.kingdom != kingdom) return false;
             if (IsInsideFriendlySafeCity(captain, kingdom))
             {
-                Finish(pArmy.id, pArmy);
+                CompleteArrival(pArmy.id, pArmy);
                 return true;
             }
 
@@ -58,7 +58,7 @@ namespace AncientWarfare3.core.lineage
                     !IsAlive(captain) || captain.kingdom != kingdom ||
                     AWArmyService.GetIntendedKingdom(army) != kingdom)
                 {
-                    Finish(armyId, army);
+                    Discard(armyId, army);
                     continue;
                 }
                 WarArmyReturnOrderDecision decision = WarArmyReturnRules.
@@ -72,9 +72,9 @@ namespace AncientWarfare3.core.lineage
                     Cancel(armyId);
                     continue;
                 }
-                if (decision != WarArmyReturnOrderDecision.Continue)
+                if (decision == WarArmyReturnOrderDecision.Complete)
                 {
-                    Finish(armyId, army);
+                    CompleteArrival(armyId, army);
                     continue;
                 }
 
@@ -84,7 +84,7 @@ namespace AncientWarfare3.core.lineage
                     target = ResolveTargetCity(army, kingdom);
                     if (!IsFriendlySafeCity(target, kingdom))
                     {
-                        Finish(armyId, army);
+                        Discard(armyId, army);
                         continue;
                     }
                     Queue.UpdateTarget(armyId, target.id);
@@ -265,7 +265,11 @@ namespace AncientWarfare3.core.lineage
                         "[AW3 RTS return] stage=restore_discarded" +
                         " reason=restore_invalid_or_complete" +
                         " army=" + stored.ArmyId);
-                    Finish(stored.ArmyId, pArmy);
+                    if (facts.ArmyAlive && facts.ArmyKingdomMatches &&
+                        facts.InsideFriendlySafeCity)
+                        CompleteArrival(stored.ArmyId, pArmy);
+                    else
+                        Discard(stored.ArmyId, pArmy);
                 }
                 return;
             }
@@ -276,19 +280,30 @@ namespace AncientWarfare3.core.lineage
                     "[AW3 RTS return] stage=restore_discarded" +
                     " reason=restore_queue_rejected" +
                     " army=" + stored.ArmyId);
-                Finish(stored.ArmyId, pArmy);
+                Discard(stored.ArmyId, pArmy);
                 return;
             }
             Persist(pArmy, restored.KingdomId, restored.TargetCityId);
             EnsureReturnCaptainJob(pArmy);
         }
 
-        private static void Finish(long pArmyId, Army pArmy)
+        private static void CompleteArrival(long pArmyId, Army pArmy)
+        {
+            Queue.Complete(pArmyId);
+            ClearPersisted(pArmy);
+            ArmyRtsControllerService.ReleaseAfterReturn(pArmy);
+            ModClass.LogInfo("[AW3 RTS return] stage=completed" +
+                             " army=" + pArmyId +
+                             " rts_active=" +
+                             ArmyRtsControllerService.HasValidMission(pArmy));
+        }
+
+        private static void Discard(long pArmyId, Army pArmy)
         {
             Queue.Complete(pArmyId);
             ClearPersisted(pArmy);
             ReleaseReturnJobs(pArmy);
-            ModClass.LogInfo("[AW3 RTS return] stage=completed" +
+            ModClass.LogInfo("[AW3 RTS return] stage=discarded" +
                              " army=" + pArmyId);
         }
 
@@ -427,7 +442,6 @@ namespace AncientWarfare3.core.lineage
                 try { pActor.ai.setJob(pActor.getNextJob()); }
                 catch { pActor.ai.clearJob(); }
             }
-            StandingArmyPeacetimeService.RefreshJob(pActor);
         }
 
         private static void ClearAttackTarget(Actor pActor)
