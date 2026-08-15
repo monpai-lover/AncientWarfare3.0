@@ -1,4 +1,4 @@
-# RTS Soldier Combat Lifecycle Repair
+# Warrior Movement and RTS Soldier Combat Lifecycle Repair
 
 ## Problem
 
@@ -14,7 +14,31 @@ captain stays in its dedicated combat task, repeatedly validates or searches
 for a hostile target, and waits briefly before searching again when no target
 is available.
 
+Peaceful warriors have a separate ownership failure. The current standing-army
+job contains only `aw_standing_army_peacetime_patrol`. The v1.1.2 release also
+contained the native `make_decision` task and ended each patrol with a random
+wait. Removing those entries made the patrol job monopolize the actor: native
+hunger, eating, social, and other movement decisions cannot run. Wartime RTS
+movement masks this problem by replacing the job with an RTS-owned task.
+
 ## Design
+
+### Peaceful Warrior Decisions
+
+The standing-army peacetime job will restore the v1.1.2 task composition:
+
+1. Register native `make_decision` before the custom patrol task so hunger,
+   eating, social, and other native decisions retain an execution path.
+2. Keep the custom city-border patrol task, but allow normal social
+   cancellation as in v1.1.2.
+3. End a completed patrol with a bounded random wait before the next patrol
+   cycle. A missing or current-tile patrol target also stops the current cycle
+   after a short wait instead of repeating the same action indefinitely.
+4. Do not register all peaceful warriors for military P0 execution. Ordinary
+   large-step scheduling remains responsible for peaceful native behavior;
+   P0 remains reserved for active military movement ownership.
+
+### RTS Field Combat
 
 Ordinary soldiers will use the same combat lifecycle as the working captain
 combat behavior:
@@ -43,6 +67,11 @@ AI release after return, remain unchanged.
 ## State Flow
 
 ```text
+peaceful standing-army job
+    -> native make_decision (eat / social / other native work)
+    -> city-border patrol
+    -> bounded random wait
+
 strategic follow
     -> army enters field combat
 member combat
@@ -58,6 +87,10 @@ strategic follow / next RTS mission task
 
 Rules and source-guard tests will prove that:
 
+- the peacetime standing-army job retains native `make_decision` before
+  patrol;
+- patrol can yield to native social behavior and has a bounded wait;
+- a missing or current-tile patrol target does not repeat forever;
 - active field combat admits a non-captain without a personal target;
 - a transient target miss repeats the combat search instead of restoring
   follow;
