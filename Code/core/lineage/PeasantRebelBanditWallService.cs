@@ -15,37 +15,60 @@ namespace AncientWarfare3.core.lineage
             public int y;
         }
 
-        internal static void CaptureAndBuild(Kingdom pKingdom)
+        internal static bool CanCaptureAndBuild(Kingdom pKingdom)
         {
             if (!PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
-                AW3MultiplayerReplicaScope.IsApplying) return;
-            if (pKingdom?.data == null || pKingdom.isRekt() ||
-                TopTileLibrary.wall_wild == null) return;
+                AW3MultiplayerReplicaScope.IsApplying ||
+                pKingdom?.data == null || pKingdom.isRekt() ||
+                TopTileLibrary.wall_wild == null) return false;
 
-            var points = new List<WallPoint>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
+            bool foundCity = false;
             try
             {
                 foreach (City city in pKingdom.getCities())
                 {
                     if (city?.data == null || city.isRekt() ||
                         city.kingdom != pKingdom) continue;
-                    city.recalculateNeighbourZones();
-                    if (city.border_zones == null) continue;
-                    foreach (TileZone zone in city.border_zones)
+                    foundCity = true;
+                    if (!CultiwayStyleCityWallService.TryPlan(city, 1, true,
+                            out IReadOnlyList<CultiwayWallPoint> points) ||
+                        points.Count == 0) return false;
+                }
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Bandit wall preflight failed: " +
+                                    e.Message);
+                return false;
+            }
+            return foundCity;
+        }
+
+        internal static bool CaptureAndBuild(Kingdom pKingdom)
+        {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return false;
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                TopTileLibrary.wall_wild == null) return false;
+
+            var points = new Dictionary<string, WallPoint>(
+                StringComparer.Ordinal);
+            try
+            {
+                foreach (City city in pKingdom.getCities())
+                {
+                    if (city?.data == null || city.isRekt() ||
+                        city.kingdom != pKingdom) continue;
+                    CultiwayStyleCityWallResult result =
+                        CultiwayStyleCityWallService.Build(city,
+                            TopTileLibrary.wall_wild, 1, true);
+                    if (result.Points.Count == 0) return false;
+                    foreach (CultiwayWallPoint point in result.Points)
                     {
-                        if (zone?.tiles == null) continue;
-                        foreach (WorldTile tile in zone.tiles)
-                        {
-                            if (!IsInsideKingdom(tile, pKingdom) ||
-                                !TouchesOutsideKingdom(tile, pKingdom) ||
-                                !IsTerrainEligible(tile)) continue;
-                            string key = tile.x + ":" + tile.y;
-                            if (seen.Add(key))
-                                points.Add(new WallPoint
-                                    { x = tile.x, y = tile.y });
-                        }
+                        points[point.X + ":" + point.Y] = new WallPoint
+                            { x = point.X, y = point.Y };
                     }
                 }
             }
@@ -53,9 +76,12 @@ namespace AncientWarfare3.core.lineage
             {
                 ModClass.LogWarning("Bandit wall boundary capture failed: " +
                                     e.Message);
+                return false;
             }
 
-            PersistAndBuild(pKingdom, points);
+            if (points.Count == 0) return false;
+            PersistAndBuild(pKingdom, new List<WallPoint>(points.Values));
+            return true;
         }
 
         private static void PersistAndBuild(Kingdom pKingdom,
@@ -75,8 +101,7 @@ namespace AncientWarfare3.core.lineage
             {
                 WallPoint point = pPoints[i];
                 WorldTile tile = World.world?.GetTile(point.x, point.y);
-                if (!IsInsideKingdom(tile, pKingdom) ||
-                    !IsTerrainEligible(tile)) continue;
+                if (!CanRestoreAtRecordedPosition(tile)) continue;
                 try
                 {
                     tile.setTopTileType(TopTileLibrary.wall_wild);
@@ -131,46 +156,9 @@ namespace AncientWarfare3.core.lineage
 
         private static bool CanRestoreAtRecordedPosition(WorldTile pTile)
         {
-            return IsTerrainEligible(pTile);
-        }
-
-        private static bool IsTerrainEligible(WorldTile pTile)
-        {
-            if (pTile?.Type == null) return false;
-            return MandateBorderWallRules.IsWallBuildTileTerrainValid(
-                pInsideCity: true,
-                pGround: pTile.Type.ground,
-                pLiquid: pTile.Type.liquid,
-                pLava: pTile.Type.lava,
-                pBlock: pTile.Type.block,
-                pWall: pTile.Type.wall,
-                pRoad: pTile.Type.road,
-                pHasTopTile: pTile.top_type != null,
-                pHasBuilding: pTile.hasBuilding());
-        }
-
-        private static bool IsInsideKingdom(WorldTile pTile,
-            Kingdom pKingdom)
-        {
-            if (pTile == null || pKingdom?.data == null) return false;
-            try
-            {
-                City city = pTile.zone_city ?? pTile.zone?.city;
-                return city?.kingdom == pKingdom;
-            }
-            catch { return false; }
-        }
-
-        private static bool TouchesOutsideKingdom(WorldTile pTile,
-            Kingdom pKingdom)
-        {
-            try
-            {
-                foreach (WorldTile neighbour in pTile.neighboursAll)
-                    if (!IsInsideKingdom(neighbour, pKingdom)) return true;
-            }
-            catch { }
-            return false;
+            return pTile?.Type != null && !pTile.Type.liquid &&
+                !pTile.Type.ocean && !pTile.Type.mountains &&
+                !pTile.Type.summit;
         }
 
         private static string Serialize(IReadOnlyList<WallPoint> pPoints)

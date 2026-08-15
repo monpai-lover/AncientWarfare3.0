@@ -39,6 +39,8 @@ namespace AncientWarfare3.core.lineage
 
             if (!PeasantRebelBanditTerritoryService.CaptureCurrentCities(
                     pContext.Rebel) ||
+                !PeasantRebelBanditWallService.CaptureAndBuild(
+                    pContext.Rebel) ||
                 !KingdomPolicyService.ApplyClassStateDirect(
                     pContext.Rebel, KingdomPolicyDefs.ClassBandit))
                 return false;
@@ -46,7 +48,6 @@ namespace AncientWarfare3.core.lineage
             PeasantRebelRouteService.RenameForRoute(pContext.Rebel, Id);
             if (!PeasantRebelRouteService.HasRouteName(
                     pContext.Rebel, Id)) return false;
-            PeasantRebelBanditWallService.CaptureAndBuild(pContext.Rebel);
             HistoryWriter.RecordKingdom(pContext.Rebel,
                 KingdomEvent.MANDATE_REBELLION,
                 HistoryText.Kingdom(pContext.Rebel) +

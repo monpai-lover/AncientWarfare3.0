@@ -51,7 +51,9 @@ namespace AncientWarfare3.core.lineage
                 PeasantRebelRouteService.SafeCityCount(pRebel) <= 0 ||
                 World.world?.wars == null || World.world.cities == null ||
                 World.world.kingdoms == null ||
-                TopTileLibrary.wall_wild == null) return false;
+                TopTileLibrary.wall_wild == null ||
+                !PeasantRebelBanditWallService.CanCaptureAndBuild(pRebel))
+                return false;
 
             pRebel.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
                 out string root, "");

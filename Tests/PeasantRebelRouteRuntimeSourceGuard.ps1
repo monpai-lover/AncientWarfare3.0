@@ -209,22 +209,20 @@ Require $policyLocale 'aw_policy_class_peasant_bandit_desc,' `
     'Bandit class description must be localized.'
 Require $policyLocale 'aw_policy_class_transition_locked,' `
     'Invalid transition feedback must be localized.'
-Require $wall 'CaptureAndBuild(Kingdom pKingdom)' `
-    'Wall capture must cover the complete kingdom border.'
+Require $wall 'CultiwayStyleCityWallService.Build(' `
+    'Every bandit city must use the shared Cultiway wall tool.'
+Require $wall 'TopTileLibrary.wall_wild' `
+    'Bandits must retain original wooden walls.'
 Require $wall 'foreach (City city in pKingdom.getCities())' `
-    'National border capture must scan every retained city.'
-Require $wall 'city.recalculateNeighbourZones()' `
-    'Each city must use the original boundary refresh.'
-Require $wall 'city.border_zones' `
-    'Capture must start from original border zones.'
-Require $wall 'IsInsideKingdom(neighbour, pKingdom)' `
-    'Same-kingdom city borders must be excluded.'
+    'Every retained bandit city must receive its own wall.'
+Require $wall 'CultiwayStyleCityWallService.TryPlan(' `
+    'Bandit entry must preflight complete city wall geometry.'
+Forbid $wall 'city.border_zones' `
+    'Bandit walls must no longer scan incomplete border zones.'
+Forbid $wall 'TouchesOutsideKingdom' `
+    'Bandit wall geometry belongs to the shared city tool.'
 Forbid $wall 'CaptureAndBuild(Kingdom pKingdom, City pCity)' `
     'Walls must not remain tied to one city.'
-Require $wall 'neighboursAll' `
-    'Bandit wall capture must inspect original neighboring tiles.'
-Require $wall 'TopTileLibrary.wall_wild' `
-    'Bandit walls must reuse the original wooden wall asset.'
 Require $wall 'tile.setTopTileType(TopTileLibrary.wall_wild)' `
     'Bandit walls must use the original top-tile mutation API.'
 Require $wall 'World.world?.GetTile(point.x, point.y)' `
