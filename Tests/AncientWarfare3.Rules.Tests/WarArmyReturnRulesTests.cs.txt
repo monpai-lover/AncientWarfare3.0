@@ -129,6 +129,30 @@ internal static class WarArmyReturnRulesTests
         True(peacetime.Contains("WarArmyReturnService.IsActive(army)",
                 StringComparison.Ordinal),
             "standing-army peacetime jobs must yield to active return intent");
+        string peacetimeContent = File.ReadAllText(Path.Combine(root,
+            "Code", "content", "StandingArmyPeacetimeContent.cs"));
+        string peacetimeBehaviour = File.ReadAllText(Path.Combine(root,
+            "Code", "ai", "behaviours", "actor",
+            "BehStandingArmyPeacetimePatrol.cs"));
+        int nativeDecision = peacetimeContent.IndexOf(
+            "job.addTask(\"make_decision\")", StringComparison.Ordinal);
+        int patrolTask = peacetimeContent.IndexOf(
+            "job.addTask(PatrolTaskId)", StringComparison.Ordinal);
+        True(nativeDecision >= 0 && patrolTask > nativeDecision,
+            "post-return peaceful warriors retain native hunger and " +
+            "movement decisions before patrol");
+        True(peacetimeContent.Contains(
+                 "cancellable_by_socialize = true",
+                 StringComparison.Ordinal) &&
+             peacetimeContent.Contains("new BehRandomWait(2f, 5f)",
+                 StringComparison.Ordinal),
+            "peacetime patrol yields to native social work and pauses " +
+            "between patrols");
+        True(peacetimeBehaviour.Contains("return BehResult.Stop;",
+                 StringComparison.Ordinal) &&
+             !peacetimeBehaviour.Contains("return BehResult.RepeatStep;",
+                 StringComparison.Ordinal),
+            "an unavailable patrol target releases the current patrol cycle");
         string postRunner = File.ReadAllText(Path.Combine(root, "Code",
             "core", "performance", "AWCooperativeActorPostRunner.cs"));
         True(postRunner.Contains("WarArmyReturnService.IsActive(actor?.army)",
