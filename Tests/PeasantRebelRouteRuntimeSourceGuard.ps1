@@ -120,6 +120,17 @@ Require $government 'TrySetClassState(' `
     'Special government changes need one coordinator.'
 Require $government 'CanSwitchGovernment(' `
     'Authority must share detached transition rules with UI.'
+Require $government `
+    'if (pTargetClass == KingdomPolicyDefs.ClassRebel)' `
+    'Manual peasant-rebel selection needs dedicated initialization.'
+Require $government 'InitializeManualFoundingGovernment(' `
+    'Manual peasant rebels must receive complete route metadata.'
+Require $route 'internal static bool InitializeManualFoundingGovernment(' `
+    'The route service must own manual founding-state initialization.'
+RequireCount $route 'TryInitializeRouteMetadata(' 3 `
+    'Real and manual rebels must share one route metadata initializer.'
+Require $route 'MandateRebelService.MarkRebelKingdom(' `
+    'Manual peasant rebels must receive the normal rebel flags.'
 Require $bandit 'CaptureCurrentCities(' `
     'Bandit entry must capture retained territory.'
 RequireOrder $government 'CanMutateAuthority(' 'EnterBandit(' `

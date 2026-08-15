@@ -23,6 +23,8 @@ namespace AncientWarfare3.core.lineage
                 return PeasantRebelRouteService.ConvertBanditToFounding(
                     pKingdom,
                     PeasantRebelRouteService.ResolveOrigin(pKingdom));
+            if (pTargetClass == KingdomPolicyDefs.ClassRebel)
+                return EnterRebel(pKingdom);
             if (current == KingdomPolicyDefs.ClassRebel &&
                 pTargetClass != KingdomPolicyDefs.ClassRebel)
                 return MandateRebelService.SettleRebelGovernment(
@@ -67,6 +69,15 @@ namespace AncientWarfare3.core.lineage
                 ResolveCurrentCity(pKingdom);
             Actor founder = pKingdom?.king ?? founding?.leader;
             return TryEnterBandit(pKingdom, origin, founding, founder);
+        }
+
+        private static bool EnterRebel(Kingdom pKingdom)
+        {
+            City founding = ResolveCurrentCity(pKingdom);
+            Actor founder = pKingdom?.king ?? founding?.leader;
+            return PeasantRebelRouteService.
+                InitializeManualFoundingGovernment(pKingdom, pKingdom,
+                    founding, founder);
         }
 
         private static City ResolveCurrentCity(Kingdom pKingdom)

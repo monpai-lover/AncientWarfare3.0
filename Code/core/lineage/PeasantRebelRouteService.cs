@@ -63,35 +63,8 @@ namespace AncientWarfare3.core.lineage
         internal static bool InitializeAndEnter(Kingdom pRebel,
             Kingdom pOrigin, City pFoundingCity, Actor pFounder)
         {
-            if (pRebel?.data == null || pOrigin?.data == null ||
-                pFoundingCity?.data == null || pFounder?.data == null)
-                return false;
-            if (!PeasantRebelRouteRules.CanMutateAuthority(
-                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
-                AW3MultiplayerReplicaScope.IsApplying) return false;
-
-            int year = Date.getCurrentYear();
-            long seed = pRebel.getID() ^ (pFounder.getID() << 1) ^
-                        ((long)year << 32);
-            string root = pFounder.generateName(MetaType.Kingdom, seed);
-            if (string.IsNullOrWhiteSpace(root)) root = pRebel.name ?? "";
-            root = root.Trim();
-
-            pRebel.data.set(LineageKeys.MANDATE_REBEL_NAME_ROOT, root);
-            pRebel.data.set(LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
-                pFoundingCity.getID());
-            pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE_CREATED_YEAR,
-                year);
-            pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE_LAST_YEAR,
-                int.MinValue);
-            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_CITY_COUNT,
-                SafeCityCount(pOrigin));
-            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_STRENGTH,
-                RealmStrength(pOrigin));
-            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_CAPITAL_ID,
-                pOrigin.capital?.getID() ?? -1L);
-            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_RULER_ID,
-                pOrigin.king?.getID() ?? -1L);
+            if (!TryInitializeRouteMetadata(pRebel, pOrigin,
+                    pFoundingCity, pFounder)) return false;
 
             int leaderFactor = ComputeLeaderFactor(pFounder);
             int cityFactor = ComputeCityFactor(pFoundingCity, pOrigin);
@@ -124,6 +97,67 @@ namespace AncientWarfare3.core.lineage
             if (!entered) return false;
             pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
             RuntimeByKingdom[pRebel.getID()] = route.Id;
+            return true;
+        }
+
+        internal static bool InitializeManualFoundingGovernment(
+            Kingdom pRebel, Kingdom pOrigin, City pFoundingCity,
+            Actor pFounder)
+        {
+            if (!TryInitializeRouteMetadata(pRebel, pOrigin,
+                    pFoundingCity, pFounder)) return false;
+
+            MandateRebelService.MarkRebelKingdom(pRebel, pFounder,
+                pOrigin);
+            if (!KingdomPolicyService.ApplyClassStateDirect(
+                    pRebel, KingdomPolicyDefs.ClassRebel)) return false;
+
+            string routeId = PeasantRebelRouteIds.Founding;
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE, routeId);
+            RuntimeByKingdom[pRebel.getID()] = routeId;
+            RenameForRoute(pRebel, routeId);
+            if (!HasRouteName(pRebel, routeId)) return false;
+            RulerAppellationService.RefreshLivingProjection(pRebel);
+            KingdomRenameProjectionService.Refresh(pRebel);
+            return true;
+        }
+
+        private static bool TryInitializeRouteMetadata(Kingdom pRebel,
+            Kingdom pOrigin, City pFoundingCity, Actor pFounder)
+        {
+            if (pRebel?.data == null || pOrigin?.data == null ||
+                pFoundingCity?.data == null || pFounder?.data == null ||
+                pRebel.isRekt() || pOrigin.isRekt() ||
+                pFoundingCity.isRekt() || pFounder.isRekt() ||
+                pFoundingCity.kingdom != pRebel)
+                return false;
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return false;
+
+            int year = Date.getCurrentYear();
+            long seed = pRebel.getID() ^ (pFounder.getID() << 1) ^
+                        ((long)year << 32);
+            string root = pFounder.generateName(MetaType.Kingdom, seed);
+            if (string.IsNullOrWhiteSpace(root)) root = pRebel.name ?? "";
+            root = root.Trim();
+            if (root.Length == 0) return false;
+
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_NAME_ROOT, root);
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
+                pFoundingCity.getID());
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE_CREATED_YEAR,
+                year);
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE_LAST_YEAR,
+                int.MinValue);
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_CITY_COUNT,
+                SafeCityCount(pOrigin));
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_STRENGTH,
+                RealmStrength(pOrigin));
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_CAPITAL_ID,
+                pOrigin.capital?.getID() ?? -1L);
+            pRebel.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_RULER_ID,
+                pOrigin.king?.getID() ?? -1L);
             return true;
         }
 
