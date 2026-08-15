@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -246,6 +247,20 @@ namespace AncientWarfare3.core.lineage
         {
             return PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
                 out _);
+        }
+
+        internal static string ComposeCeremonialTitle(Kingdom pKingdom,
+            bool pHeir)
+        {
+            if (pKingdom?.data == null) return "";
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
+                out string root, pKingdom.name ?? "");
+            string role = AW_L10n.Text(
+                pHeir ? "aw_bandit_heir_title" :
+                    "aw_bandit_ruler_title",
+                pHeir ? "\u5c11\u5f53\u5bb6" : "\u5927\u5f53\u5bb6");
+            return PeasantRebelBanditStrongholdRules.
+                ComposeCeremonialTitle(root, role);
         }
 
         internal static City ResolveStronghold(Kingdom pKingdom)

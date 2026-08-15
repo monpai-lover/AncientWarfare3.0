@@ -81,8 +81,14 @@ namespace AncientWarfare3.core.lineage
 
         public static string ComposeCeremonialTitle(string root, bool heir)
         {
-            return ComposeStrongholdName(root) +
-                   (heir ? "\u5c11\u5f53\u5bb6" : "\u5927\u5f53\u5bb6");
+            return ComposeCeremonialTitle(root,
+                heir ? "\u5c11\u5f53\u5bb6" : "\u5927\u5f53\u5bb6");
+        }
+
+        public static string ComposeCeremonialTitle(string root,
+            string roleText)
+        {
+            return ComposeStrongholdName(root) + (roleText ?? "").Trim();
         }
     }
 }

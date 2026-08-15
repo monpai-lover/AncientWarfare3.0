@@ -87,9 +87,8 @@ namespace AncientWarfare3.core.lineage
             string pSuccessionMode)
         {
             if (PeasantRebelRouteService.IsBandit(pKingdom))
-                return AW_L10n.Text(
-                    HeirTitleSelectionRules.RouteHeirTitleKey(true),
-                    "\u5c11\u5f53\u5bb6");
+                return PeasantRebelBanditStrongholdService.
+                    ComposeCeremonialTitle(pKingdom, true);
             bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
                                        VassalSubjectKind.MilitaryGovernorate;
             return HeirTitleSelectionRules.DefaultTitleText(
@@ -100,9 +99,8 @@ namespace AncientWarfare3.core.lineage
         internal static string BuildSocialTitle(string pKingdomName, Kingdom pKingdom)
         {
             if (PeasantRebelRouteService.IsBandit(pKingdom))
-                return AW_L10n.Text(
-                    HeirTitleSelectionRules.RouteHeirTitleKey(true),
-                    "\u5c11\u5f53\u5bb6");
+                return PeasantRebelBanditStrongholdService.
+                    ComposeCeremonialTitle(pKingdom, true);
             bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
                                        VassalSubjectKind.MilitaryGovernorate;
             if (militaryGovernorate)

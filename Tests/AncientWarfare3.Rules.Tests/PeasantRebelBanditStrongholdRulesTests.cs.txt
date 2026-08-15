@@ -68,6 +68,10 @@ internal static class PeasantRebelBanditStrongholdRulesTests
             PeasantRebelBanditStrongholdRules.ComposeCeremonialTitle(
                 "\u864e\u8e1e\u4e49\u519b", true),
             "heir title includes stronghold name");
+        Equal("\u864e\u8e1e\u5be8Chief",
+            PeasantRebelBanditStrongholdRules.ComposeCeremonialTitle(
+                "\u864e\u8e1e", "Chief"),
+            "localized role text follows the canonical stronghold name");
     }
 
     private static BanditZoneFact Zone(string key, bool inside,
