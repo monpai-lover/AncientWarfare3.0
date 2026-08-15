@@ -79,6 +79,36 @@ $government = if (Test-Path `
 } else {
     ''
 }
+$sharedWall = if (Test-Path `
+        'Code/core/lineage/CultiwayStyleCityWallService.cs') {
+    Get-Content -Raw `
+        'Code/core/lineage/CultiwayStyleCityWallService.cs'
+} else {
+    ''
+}
+$notice = Get-Content -Raw -Encoding UTF8 'THIRD_PARTY_NOTICES.md'
+$packagedNotice = if (Test-Path `
+        'THIRD_PARTY_NOTICES/Cultiway-Wall-MIT.txt') {
+    Get-Content -Raw -Encoding UTF8 `
+        'THIRD_PARTY_NOTICES/Cultiway-Wall-MIT.txt'
+} else {
+    ''
+}
+
+Require $sharedWall 'CultiwayStyleWallGeometryRules.Compute(' `
+    'The WorldBox wall adapter must use detached Cultiway geometry.'
+Require $sharedWall 'tile.setTopTileType(pWallType)' `
+    'The shared tool must place the caller-selected original wall asset.'
+Require $sharedWall 'building.asset.type' `
+    'Remote utility filtering must follow Cultiway building bounds.'
+Require $sharedWall 'building.asset.docks' `
+    'Dock tiles must feed Cultiway passage carving.'
+Forbid $sharedWall 'MapAction.terraformTop' `
+    'The shared tool must not mutate terrain or destroy paths.'
+Require $notice 'Cultiway-Reborn city-wall geometry' `
+    'The adapted wall source needs an MIT notice.'
+Require $packagedNotice 'Copyright (c) 2025 Inmny' `
+    'The packaged wall notice must retain the Cultiway copyright.'
 
 Require $mandate 'PeasantRebelRouteService.InitializeAndEnter(' `
     'CreateRebelKingdom must dispatch through the route coordinator.'
