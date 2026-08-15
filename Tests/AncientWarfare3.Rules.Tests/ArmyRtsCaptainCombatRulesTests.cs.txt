@@ -136,6 +136,44 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    "HasValidMemberCombatTarget(pActor)",
                    StringComparison.Ordinal),
             "job repair cannot replace an individually engaged member combatant with follow before the army-wide threshold is reached");
+        Assert(memberMissionBody.Contains(
+                   "runtime.FieldCombatReleased ||",
+                   StringComparison.Ordinal),
+            "active field combat assigns targetless soldiers to member combat so the task can search for enemies");
+        int memberBehaviourStart = behaviour.IndexOf(
+            "public sealed class BehArmyRtsMemberCombat",
+            StringComparison.Ordinal);
+        string memberBehaviour = memberBehaviourStart >= 0
+            ? behaviour.Substring(memberBehaviourStart)
+            : string.Empty;
+        Assert(memberBehaviour.Contains("IsValidCaptainCombatTarget(",
+                   StringComparison.Ordinal) &&
+               memberBehaviour.Contains("FindCaptainCombatTarget(",
+                   StringComparison.Ordinal) &&
+               memberBehaviour.Contains("pActor.makeWait(0.15f);",
+                   StringComparison.Ordinal) &&
+               memberBehaviour.Contains("return BehResult.RepeatStep;",
+                   StringComparison.Ordinal) &&
+               !memberBehaviour.Contains("RestoreMemberFollowAfterCombatLull(",
+                   StringComparison.Ordinal),
+            "member combat mirrors captain target search and waits inside combat after a transient target miss");
+        int assignedTargetStart = controller.IndexOf(
+            "internal static bool IsValidAssignedCombatTarget(",
+            StringComparison.Ordinal);
+        int assignedTargetEnd = controller.IndexOf(
+            "internal static bool IsValidSiegeCombatTarget(",
+            Math.Max(0, assignedTargetStart), StringComparison.Ordinal);
+        string assignedTargetBody = assignedTargetStart >= 0 &&
+            assignedTargetEnd > assignedTargetStart
+            ? controller.Substring(assignedTargetStart,
+                assignedTargetEnd - assignedTargetStart)
+            : string.Empty;
+        Assert(!assignedTargetBody.Contains(
+                   "ArmyRtsContent.MemberCombatTaskId",
+                   StringComparison.Ordinal) &&
+               assignedTargetBody.Contains("IsValidCaptainCombatTarget(",
+                   StringComparison.Ordinal),
+            "the shared attack stage applies the working captain target contract to ordinary soldiers");
         int enterFieldStart = controller.IndexOf(
             "private static void EnterFieldCombat(",
             StringComparison.Ordinal);
