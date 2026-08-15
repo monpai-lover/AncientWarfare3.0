@@ -94,6 +94,20 @@ $packagedNotice = if (Test-Path `
 } else {
     ''
 }
+$mandateBorder = Get-Content -Raw `
+    'Code/core/lineage/MandateBorderDefenseService.cs'
+$mandateWallRules = Get-Content -Raw `
+    'Code/core/lineage/MandateBorderWallRules.cs'
+$mandateBuildStart = $mandateBorder.IndexOf(
+    'private static int BuildBorderWalls(')
+$mandateBuildEnd = $mandateBorder.IndexOf(
+    'private static TopTileType ResolveBorderWallType',
+    $mandateBuildStart)
+if ($mandateBuildStart -lt 0 -or $mandateBuildEnd -le $mandateBuildStart) {
+    throw 'Could not isolate Mandate BuildBorderWalls.'
+}
+$mandateBuildWalls = $mandateBorder.Substring($mandateBuildStart,
+    $mandateBuildEnd - $mandateBuildStart)
 
 Require $sharedWall 'CultiwayStyleWallGeometryRules.Compute(' `
     'The WorldBox wall adapter must use detached Cultiway geometry.'
@@ -109,6 +123,20 @@ Require $notice 'Cultiway-Reborn city-wall geometry' `
     'The adapted wall source needs an MIT notice.'
 Require $packagedNotice 'Copyright (c) 2025 Inmny' `
     'The packaged wall notice must retain the Cultiway copyright.'
+Require $mandateBorder 'CultiwayStyleCityWallService.Build(' `
+    'Mandate border cities must use the shared Cultiway wall tool.'
+Require $mandateBorder 'TopTileLibrary.wall_order' `
+    'Mandate border cities must retain original order stone walls.'
+Forbid $mandateBuildWalls 'pCap' `
+    'Mandate walls must not stop midway through a ring.'
+Forbid $mandateBuildWalls 'ShouldBuildWallAtOrderedIndex' `
+    'Mandate walls must not create every-ninth-tile gaps.'
+Forbid $mandateBuildWalls 'border_zones' `
+    'Mandate wall geometry belongs to the shared city tool.'
+Forbid $mandateWallRules 'GapInterval' `
+    'The obsolete sparse-wall interval must be removed.'
+Forbid $mandateWallRules 'IsWallBuildTileTerrainValid' `
+    'Shared wall placement must own terrain eligibility.'
 
 Require $mandate 'PeasantRebelRouteService.InitializeAndEnter(' `
     'CreateRebelKingdom must dispatch through the route coordinator.'
