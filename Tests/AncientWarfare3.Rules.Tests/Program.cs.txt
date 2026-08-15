@@ -16,6 +16,13 @@ if (args.Length == 1 && args[0] == "--cultiway-wall")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--bandit-outlaw-names")
+{
+    PeasantRebelOutlawNameRulesTests.Run();
+    Console.WriteLine("Bandit outlaw naming rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--peasant-rebel-routes")
 {
     PeasantRebelRouteRulesTests.Run();
