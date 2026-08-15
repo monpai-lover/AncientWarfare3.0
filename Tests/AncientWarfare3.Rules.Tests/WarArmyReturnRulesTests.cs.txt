@@ -634,6 +634,8 @@ internal static class WarArmyReturnRulesTests
         cancelledOrder.ArrivalCursor = 11;
         cancelledOrder.ArrivalSweepClear = false;
         cancelledOrder.ArrivalExpectedMemberCount = 23;
+        cancelledOrder.ArrivalConfirmationPass = true;
+        cancelledOrder.ArrivalSweepActorIds.Add(98L);
         cancelledOrder.ArrivalVerifiedActorIds.Add(99L);
         Equal(true, queue.Requeue(cancelledOrder.ArmyId),
             "the traversed return order requeues before cancellation");
@@ -654,6 +656,10 @@ internal static class WarArmyReturnRulesTests
             "a reopened order begins a clean bounded arrival sweep");
         Equal(-1, reopenedOrder.ArrivalExpectedMemberCount,
             "a reopened order has no stale roster size snapshot");
+        Equal(false, reopenedOrder.ArrivalConfirmationPass,
+            "a reopened order cannot inherit a confirmation pass");
+        Equal(0, reopenedOrder.ArrivalSweepActorIds.Count,
+            "a reopened order cannot inherit an observed roster snapshot");
         Equal(0, reopenedOrder.ArrivalVerifiedActorIds.Count,
             "a reopened order cannot inherit actors frozen by an old return");
         Equal(true, queue.Requeue(reopenedOrder.ArmyId),
@@ -696,6 +702,8 @@ internal static class WarArmyReturnRulesTests
         order.ArrivalCursor = 128;
         order.ArrivalSweepClear = false;
         order.ArrivalExpectedMemberCount = 256;
+        order.ArrivalConfirmationPass = true;
+        order.ArrivalSweepActorIds.Add(99L);
         order.ArrivalVerifiedActorIds.Add(100L);
 
         Equal(true, queue.OnRosterChanged(8L),
@@ -708,6 +716,10 @@ internal static class WarArmyReturnRulesTests
             "roster mutation starts a clean confirmation sweep");
         Equal(-1, order.ArrivalExpectedMemberCount,
             "same-count replacement cannot reuse the old count snapshot");
+        Equal(false, order.ArrivalConfirmationPass,
+            "roster mutation cancels the stable confirmation pass");
+        Equal(0, order.ArrivalSweepActorIds.Count,
+            "roster mutation discards identities observed in the old pass");
         Equal(0, order.ArrivalVerifiedActorIds.Count,
             "removed or reordered actors cannot remain arrival-confirmed");
         Equal(1, queue.WorkCount,
@@ -1185,6 +1197,11 @@ internal static class WarArmyReturnRulesTests
                  "public int ArrivalExpectedMemberCount { get; internal set; } = -1;",
                  StringComparison.Ordinal) &&
              queueSource.Contains(
+                 "public bool ArrivalConfirmationPass { get; internal set; }",
+                 StringComparison.Ordinal) &&
+             queueSource.Contains(
+                 "ArrivalSweepActorIds", StringComparison.Ordinal) &&
+             queueSource.Contains(
                  "ArrivalVerifiedActorIds", StringComparison.Ordinal) &&
              queueSource.Contains(
                  "public bool IsArrivalVerified(",
@@ -1233,6 +1250,17 @@ internal static class WarArmyReturnRulesTests
         True(processing.Contains("EnsureReturnJobs(army, order)",
                 StringComparison.Ordinal),
             "bounded frame processing advances the cursor stored on its queue order");
+        int arrivalAdvance = processing.IndexOf(
+            "bool arrivalSweepAdvanced", StringComparison.Ordinal);
+        int guardedRepair = processing.IndexOf(
+            "if (!arrivalSweepAdvanced)",
+            Math.Max(0, arrivalAdvance), StringComparison.Ordinal);
+        int guardedRepairCall = processing.IndexOf(
+            "EnsureReturnJobs(army, order)",
+            Math.Max(0, guardedRepair), StringComparison.Ordinal);
+        True(arrivalAdvance >= 0 && guardedRepair > arrivalAdvance &&
+             guardedRepairCall > guardedRepair,
+            "arrival confirmation and ordinary return repair share one 128-member frame budget");
 
         string restore = Section(service,
             "private static void TryRestore(Army pArmy)",
@@ -1299,6 +1327,12 @@ internal static class WarArmyReturnRulesTests
              arrivalSweep.Contains(
                  "pOrder.ArrivalVerifiedActorIds.Remove(",
                  StringComparison.Ordinal) &&
+             arrivalSweep.Contains("pOrder.ArrivalConfirmationPass",
+                 StringComparison.Ordinal) &&
+             arrivalSweep.Contains("pOrder.ArrivalSweepActorIds.Count == count",
+                 StringComparison.Ordinal) &&
+             arrivalSweep.Contains("SetEquals(",
+                 StringComparison.Ordinal) &&
              arrivalSweep.Contains("EnsureReturnActorJob(actor",
                  StringComparison.Ordinal) &&
              !arrivalSweep.Contains("for (int i = 0; i < count; i++)",
@@ -1315,6 +1349,11 @@ internal static class WarArmyReturnRulesTests
             Math.Max(0, diagnosticCall), StringComparison.Ordinal);
         True(diagnosticCall >= 0 && diagnosticStage > diagnosticCall &&
              actorRepair.Contains("Queue.IsArrivalVerified(",
+                 StringComparison.Ordinal) &&
+             actorRepair.Contains(
+                 "!IsInsideFriendlySafeCity(pActor, returnKingdom)",
+                 StringComparison.Ordinal) &&
+             actorRepair.Contains("Queue.OnRosterChanged(pArmy.id)",
                  StringComparison.Ordinal) &&
              actorRepair.Contains("? \"wait\"",
                  StringComparison.Ordinal) &&

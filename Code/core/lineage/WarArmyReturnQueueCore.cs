@@ -12,6 +12,9 @@ namespace AncientWarfare3.core.lineage
         public int ArrivalCursor { get; internal set; }
         public bool ArrivalSweepClear { get; internal set; } = true;
         public int ArrivalExpectedMemberCount { get; internal set; } = -1;
+        public bool ArrivalConfirmationPass { get; internal set; }
+        public HashSet<long> ArrivalSweepActorIds { get; } =
+            new HashSet<long>();
         public HashSet<long> ArrivalVerifiedActorIds { get; } =
             new HashSet<long>();
     }
@@ -103,6 +106,8 @@ namespace AncientWarfare3.core.lineage
             order.ArrivalCursor = 0;
             order.ArrivalSweepClear = true;
             order.ArrivalExpectedMemberCount = -1;
+            order.ArrivalConfirmationPass = false;
+            order.ArrivalSweepActorIds.Clear();
             order.ArrivalVerifiedActorIds.Clear();
             EnqueueOnce(pArmyId);
             return true;
