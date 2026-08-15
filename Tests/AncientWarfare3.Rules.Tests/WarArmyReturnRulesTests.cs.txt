@@ -350,10 +350,10 @@ internal static class WarArmyReturnRulesTests
                 missingControllerEnd - missingControllerStart)
             : string.Empty;
         int liveArmyLookup = missingControllerBranch.IndexOf(
-            "Army army = FindArmy(",
+            "Army liveArmy = FindArmy(",
             StringComparison.Ordinal);
         int missingControllerReturn = missingControllerBranch.IndexOf(
-            "InvalidateAndTryBeginReturn(armyId, army, IsLiveArmy(army))",
+            "InvalidateAndTryBeginReturn(armyId, liveArmy, IsLiveArmy(liveArmy))",
             StringComparison.Ordinal);
         True(missingControllerStart >= 0 && liveArmyLookup >= 0 &&
              missingControllerReturn > liveArmyLookup,
