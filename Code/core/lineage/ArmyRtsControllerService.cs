@@ -3767,6 +3767,68 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
+        public static void ReleaseAfterReturn(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            Invalidate(pArmy.id, pReleaseActorJobs: false);
+            ReleaseAfterReturnActors(pArmy);
+        }
+
+        private static void ReleaseAfterReturnActors(Army pArmy)
+        {
+            int count;
+            try { count = pArmy?.units?.Count ?? 0; }
+            catch { count = 0; }
+            for (int i = 0; i < count; i++)
+            {
+                Actor actor;
+                try { actor = pArmy.units[i]; }
+                catch { continue; }
+                ReleaseAfterReturnActor(actor);
+            }
+            Actor captain = SafeCaptain(pArmy);
+            if (captain?.data != null) ReleaseAfterReturnActor(captain);
+        }
+
+        private static void ReleaseAfterReturnActor(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.ai == null) return;
+            ArmyMilitaryMovementPriorityIndex.Unregister(pActor.data.id);
+            try
+            {
+                if (AWPathMovementBridge.HasOwnership(pActor))
+                    AWPathMovementBridge.Cancel(pActor,
+                        AWPathFailureReason.CancelledByNewRequest);
+            }
+            catch { }
+            try { pActor.cancelAllBeh(); }
+            catch { }
+            try { pActor.stopMovement(); }
+            catch { }
+            try { pActor.clearOldPath(); }
+            catch { }
+            try { pActor.clearTileTarget(); }
+            catch { }
+            try { pActor.clearAttackTarget(); }
+            catch { }
+            try { pActor.beh_tile_target = null; }
+            catch { }
+            try { pActor.beh_actor_target = null; }
+            catch { }
+            try
+            {
+                if (SyntheticLevyService.IsSynthetic(pActor))
+                    pActor.ai.clearJob();
+                else
+                    pActor.ai.setJob(pActor.getNextJob());
+            }
+            catch
+            {
+                try { pActor.ai.clearJob(); }
+                catch { }
+            }
+        }
+
         public static void Invalidate(long pArmyId)
         {
             Invalidate(pArmyId, pReleaseActorJobs: true);
