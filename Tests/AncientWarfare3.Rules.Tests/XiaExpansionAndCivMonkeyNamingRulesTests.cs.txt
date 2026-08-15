@@ -217,6 +217,23 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
         Equal(true, expansionDecisionContent.Contains(
                 "ApplyClaimLandWeight("),
             "the claim-land wrapper delegates to the bounded rules helper");
+        string arrivalBehaviorPath = Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ai", "behaviours",
+            "actor", "BehCivicLeaderClaimArrival.cs");
+        Equal(true, File.Exists(arrivalBehaviorPath),
+            "claim_land has a dedicated pre-animation arrival behavior");
+        string arrivalBehavior = File.Exists(arrivalBehaviorPath)
+            ? File.ReadAllText(arrivalBehaviorPath)
+            : string.Empty;
+        Equal(true, arrivalBehavior.Contains(
+                "CivicLeaderLandClaimService.IsValidArrival(pActor)"),
+            "the arrival behavior reuses the shared runtime validation");
+        Equal(true, expansionDecisionContent.Contains(
+                "ClaimLandGuardInsertionIndex("),
+            "claim_land installation validates the native task shape");
+        Equal(true, expansionDecisionContent.Contains(
+                "task.list.Insert(insertionIndex, guard)"),
+            "the arrival guard is inserted at the validated pre-animation index");
         Equal(false, KingdomPolicyTechOrderRules.CanConsider(
                 "aw_tech_three_departments", true, true, false),
             "AI cannot consider the three departments before nine-rank completion");

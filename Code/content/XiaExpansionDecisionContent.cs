@@ -1,5 +1,8 @@
+using System.Collections.Generic;
+using AncientWarfare3.ai.behaviours.actor;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using ai.behaviours;
 
 namespace AncientWarfare3.content
 {
@@ -17,6 +20,45 @@ namespace AncientWarfare3.content
         {
             ConfigureNewCityDecision();
             ConfigureClaimLandDecision();
+            ConfigureClaimLandTask();
+        }
+
+        private static void ConfigureClaimLandTask()
+        {
+            BehaviourTaskActor task = AssetManager.tasks_actor.get(
+                ClaimLandDecisionId);
+            if (task?.list == null)
+            {
+                ModClass.LogWarning(
+                    "[Xia expansion] Missing actor task: " +
+                    ClaimLandDecisionId);
+                return;
+            }
+
+            var actionTypeNames = new List<string>(task.list.Count);
+            for (int i = 0; i < task.list.Count; i++)
+                actionTypeNames.Add(task.list[i]?.GetType().Name ??
+                                    string.Empty);
+
+            int insertionIndex = XiaExpansionDecisionRules
+                .ClaimLandGuardInsertionIndex(actionTypeNames);
+            if (insertionIndex == XiaExpansionDecisionRules
+                    .ClaimLandGuardAlreadyInstalled)
+                return;
+            if (insertionIndex == XiaExpansionDecisionRules
+                    .ClaimLandTaskIncompatible)
+            {
+                ModClass.LogWarning(
+                    "[Xia expansion] Incompatible claim_land task shape; " +
+                    "arrival guard not installed.");
+                return;
+            }
+
+            var guard = new BehCivicLeaderClaimArrival();
+            guard.id = guard.GetType().ToString();
+            guard.id = guard.id.Replace("ai.behaviours.", string.Empty);
+            guard.create();
+            task.list.Insert(insertionIndex, guard);
         }
 
         private static void ConfigureNewCityDecision()
