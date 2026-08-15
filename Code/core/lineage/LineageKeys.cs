@@ -106,6 +106,8 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_rebel_bandit_wall_cursor";
         public const string MANDATE_REBEL_BANDIT_ENTRY_CITY_IDS =
             "aw_mandate_rebel_bandit_entry_city_ids";
+        public const string MANDATE_REBEL_BANDIT_STRONGHOLD_STATE =
+            "aw_mandate_rebel_bandit_stronghold_state";
         public const string MANDATE_DECLINE_REBEL =
             "aw_mandate_decline_rebel";
         public const string MANDATE_DECLINE_REBEL_ORIGIN_ID =
