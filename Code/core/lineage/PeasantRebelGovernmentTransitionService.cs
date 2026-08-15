@@ -52,7 +52,9 @@ namespace AncientWarfare3.core.lineage
                 World.world?.wars == null || World.world.cities == null ||
                 World.world.kingdoms == null ||
                 TopTileLibrary.wall_wild == null ||
-                !PeasantRebelBanditWallService.CanCaptureAndBuild(pRebel))
+                !PeasantRebelBanditStrongholdService.TryPlan(
+                    pFoundingCity, pRebel, pOrigin, pFounder,
+                    out _, out _))
                 return false;
 
             if (!PeasantRebelOutlawNameService.HasValidRoot(pRebel))

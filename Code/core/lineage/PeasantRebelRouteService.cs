@@ -216,7 +216,9 @@ namespace AncientWarfare3.core.lineage
                 !PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return false;
-            City founding = ResolveFoundingCity(pKingdom);
+            City founding =
+                PeasantRebelBanditStrongholdService.ResolveStronghold(
+                    pKingdom) ?? ResolveFoundingCity(pKingdom);
             Actor founder = pKingdom.king ?? founding?.leader;
             if (!PeasantRebelOutlawNameService.EnsureRoot(pKingdom,
                     founder, Date.getCurrentYear(), out string root))
@@ -226,6 +228,12 @@ namespace AncientWarfare3.core.lineage
                 Behaviors[PeasantRebelRouteIds.Founding];
             if (!KingdomPolicyService.ApplyClassStateDirect(
                     pKingdom, KingdomPolicyDefs.ClassRebel)) return false;
+            if (!PeasantRebelBanditStrongholdService.ReleaseToFounding(
+                    pKingdom)) return false;
+            if (founding?.data != null)
+                pKingdom.data.set(
+                    LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
+                    founding.getID());
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
             RuntimeByKingdom[pKingdom.getID()] = route.Id;
             RenameForRoute(pKingdom, route.Id);
@@ -311,6 +319,10 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool CanAcquireCity(Kingdom pRecipient, City pCity)
         {
+            if (PeasantRebelBanditStrongholdService.HasActiveStronghold(
+                    pRecipient))
+                return PeasantRebelBanditStrongholdService.
+                    CanAcquireCity(pRecipient, pCity);
             return PeasantRebelBanditTerritoryService.CanAcquire(
                 pRecipient, pCity, IsBanditOrEntering(pRecipient));
         }
@@ -372,12 +384,16 @@ namespace AncientWarfare3.core.lineage
                 bool validBanditMetadata = false;
                 if (banditCandidate && ResolveOrigin(kingdom) != null)
                 {
+                    validBanditMetadata =
+                        PeasantRebelBanditStrongholdService.
+                            HasActiveStronghold(kingdom);
                     if (authority &&
+                        !validBanditMetadata &&
                         PeasantRebelBanditTerritoryService.
                             IsWhitelistMissing(kingdom))
                         PeasantRebelBanditTerritoryService.
                             EnsureLegacyWhitelist(kingdom);
-                    validBanditMetadata =
+                    validBanditMetadata = validBanditMetadata ||
                         PeasantRebelBanditTerritoryService.
                             HasValidWhitelist(kingdom);
                 }

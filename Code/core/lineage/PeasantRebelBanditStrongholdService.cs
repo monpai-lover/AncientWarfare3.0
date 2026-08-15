@@ -242,6 +242,64 @@ namespace AncientWarfare3.core.lineage
                            state) && state.StrongholdCityId == pCity.getID();
         }
 
+        internal static bool HasActiveStronghold(Kingdom pKingdom)
+        {
+            return PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
+                out _);
+        }
+
+        internal static City ResolveStronghold(Kingdom pKingdom)
+        {
+            if (!PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
+                    out PeasantRebelBanditStrongholdState state) ||
+                World.world?.cities == null) return null;
+            try
+            {
+                City city = World.world.cities.get(state.StrongholdCityId);
+                return city?.data != null && !city.isRekt() &&
+                       city.kingdom == pKingdom
+                    ? city
+                    : null;
+            }
+            catch { return null; }
+        }
+
+        internal static bool ReleaseToFounding(Kingdom pKingdom)
+        {
+            if (!CanMutate() ||
+                !PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
+                    out PeasantRebelBanditStrongholdState state))
+                return false;
+            state.Phase = BanditStrongholdPhase.Released;
+            state.Raid.Stage = BanditRaidStage.None;
+            state.Raid.MemberActorIds.Clear();
+            state.Raid.CarriedFood = 0;
+            return PeasantRebelBanditStateStore.Write(pKingdom, state);
+        }
+
+        internal static bool CanAcquireCity(Kingdom pKingdom, City pCity)
+        {
+            if (!PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
+                    out PeasantRebelBanditStrongholdState state)) return true;
+            return pCity?.data != null &&
+                   pCity.getID() == state.StrongholdCityId &&
+                   pCity.kingdom == pKingdom;
+        }
+
+        internal static bool CanAcquireZone(City pCity, TileZone pZone)
+        {
+            if (pCity?.data == null || pZone == null ||
+                pCity.kingdom?.data == null) return true;
+            if (!PeasantRebelBanditStateStore.TryResolveActive(
+                    pCity.kingdom,
+                    out PeasantRebelBanditStrongholdState state) ||
+                state.StrongholdCityId != pCity.getID()) return true;
+            if (pZone.city == pCity) return true;
+            return PeasantRebelBanditStrongholdRules.CanAcquireZone(true,
+                ZoneKey(pZone), new HashSet<string>(state.FixedZoneKeys,
+                    StringComparer.Ordinal));
+        }
+
         internal static bool HasChildStronghold(City pMother)
         {
             if (pMother?.data == null || World.world?.kingdoms == null)

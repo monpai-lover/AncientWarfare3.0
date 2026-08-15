@@ -37,13 +37,22 @@ namespace AncientWarfare3.core.lineage
             if (pContext.FoundingCity.kingdom != pContext.Rebel ||
                 HasActiveWar(pContext.Rebel)) return false;
 
-            if (!PeasantRebelBanditTerritoryService.CaptureCurrentCities(
-                    pContext.Rebel) ||
-                !PeasantRebelBanditWallService.CaptureAndBuild(
-                    pContext.Rebel) ||
+            var creation = new PeasantRebelBanditCreationContext
+            {
+                Bandit = pContext.Rebel,
+                Origin = pContext.Origin,
+                Mother = pContext.FoundingCity,
+                Ruler = pContext.Founder
+            };
+            if (!PeasantRebelBanditStrongholdService.TryCreate(creation,
+                    out City stronghold, out string failureKey) ||
                 !KingdomPolicyService.ApplyClassStateDirect(
                     pContext.Rebel, KingdomPolicyDefs.ClassBandit))
                 return false;
+
+            pContext.Rebel.data.set(
+                LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
+                stronghold.getID());
 
             PeasantRebelRouteService.RenameForRoute(pContext.Rebel, Id);
             if (!PeasantRebelRouteService.HasRouteName(

@@ -128,6 +128,14 @@ namespace AncientWarfare3.core.lineage
             string json = ReadString(pKingdom,
                 LineageKeys.MANDATE_REBEL_BANDIT_WALLS);
             List<WallPoint> points = Deserialize(json);
+            if ((points == null || points.Count == 0) &&
+                PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
+                    out PeasantRebelBanditStrongholdState state))
+            {
+                points = new List<WallPoint>(state.WallPoints.Count);
+                foreach (BanditStrongholdPoint point in state.WallPoints)
+                    points.Add(new WallPoint { x = point.X, y = point.Y });
+            }
             if (points == null || points.Count == 0) return;
             int cursor = ReadInt(pKingdom,
                 LineageKeys.MANDATE_REBEL_BANDIT_WALL_CURSOR, 0);
