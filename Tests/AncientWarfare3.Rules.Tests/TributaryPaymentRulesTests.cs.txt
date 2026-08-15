@@ -1,0 +1,56 @@
+using AncientWarfare3.core.lineage;
+
+internal static class TributaryPaymentRulesTests
+{
+    public static void Run()
+    {
+        Equal(100, TributaryPaymentRules.FactorPercent(49.99f, 100f),
+            "49.99 percent");
+        Equal(75, TributaryPaymentRules.FactorPercent(50f, 100f),
+            "50 boundary");
+        Equal(50, TributaryPaymentRules.FactorPercent(75f, 100f),
+            "75 boundary");
+        Equal(25, TributaryPaymentRules.FactorPercent(100f, 100f),
+            "100 boundary");
+        Equal(25, TributaryPaymentRules.FactorPercent(124.99f, 100f),
+            "124.99 percent");
+        Equal(0, TributaryPaymentRules.FactorPercent(125f, 100f),
+            "125 refusal");
+        Equal(0, TributaryPaymentRules.FactorPercent(1f, 0f),
+            "power against zero refuses");
+        Equal(100, TributaryPaymentRules.FactorPercent(0f, 0f),
+            "two powerless realms");
+        Equal(1, TributaryPaymentRules.ScaleGold(1, 25, 1),
+            "minimum positive gold");
+        Equal(2, TributaryPaymentRules.ScaleGold(10, 25, 99),
+            "gold floor");
+        Near(3f, TributaryPaymentRules.ScalePolitical(12f, 25, 99f),
+            "political scaling");
+        Equal(true, TributaryPaymentRules.IsPaid(.01f, 0),
+            "political renews");
+        Equal(true, TributaryPaymentRules.IsPaid(0f, 1),
+            "gold renews");
+        Equal(false, TributaryPaymentRules.IsPaid(0f, 0),
+            "zero transfer fails");
+        Equal("tribute_refused_power",
+            TributaryPaymentRules.EndReason(0, 0f, 0),
+            "refusal reason");
+        Equal("tribute_unpaid",
+            TributaryPaymentRules.EndReason(25, 0f, 0),
+            "insolvency reason");
+    }
+
+    private static void Near(float expected, float actual, string name)
+    {
+        if (Math.Abs(expected - actual) > .0001f)
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

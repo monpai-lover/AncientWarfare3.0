@@ -9,6 +9,13 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--tributary-protection-only")
+{
+    TributaryPaymentRulesTests.Run();
+    Console.WriteLine("Tributary paid protection tests passed.");
+    return;
+}
+
 HistoricalWriteModeRulesTests.Run();
 AWThirdPartySchedulerFaultRulesTests.Run();
 ActorVisualRoleRulesTests.Run();

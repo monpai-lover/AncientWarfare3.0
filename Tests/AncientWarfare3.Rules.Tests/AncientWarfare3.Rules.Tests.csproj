@@ -401,6 +401,8 @@
     <Compile Include="..\..\Code\core\lineage\MandateDeclarationRules.cs" Link="Production\MandateDeclarationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateWarDefenseRules.cs" Link="Production\MandateWarDefenseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalFiscalRules.cs" Link="Production\VassalFiscalRules.cs" />
+    <Compile Include="TributaryPaymentRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\TributaryPaymentRules.cs" Link="Production\TributaryPaymentRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalContractTierRules.cs" Link="Production\VassalContractTierRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalRuntimeProjectionRules.cs" Link="Production\VassalRuntimeProjectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyProposalOpportunityRules.cs" Link="Production\DiplomacyProposalOpportunityRules.cs" />
