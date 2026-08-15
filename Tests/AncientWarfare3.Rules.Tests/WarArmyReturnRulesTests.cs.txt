@@ -341,18 +341,55 @@ internal static class WarArmyReturnRulesTests
 
         int missingControllerStart = invalidate.IndexOf(
             "if (!Controllers.TryGet(", StringComparison.Ordinal);
-        int liveArmyLookup = invalidate.IndexOf("Army army = FindArmy(",
-            missingControllerStart, StringComparison.Ordinal);
-        True(missingControllerStart >= 0 &&
-             liveArmyLookup > missingControllerStart,
-            "the missing-controller cleanup branch is identifiable");
-        string missingControllerBranch = invalidate.Substring(
-            missingControllerStart, liveArmyLookup - missingControllerStart);
-        True(missingControllerBranch.Contains("Invalidate(armyId)") &&
-             missingControllerBranch.Contains("invalidated++") &&
-             !missingControllerBranch.Contains(
-                 "WarArmyReturnService.TryBegin("),
-            "a stale mission index is cleaned without queueing return");
+        int missingControllerEnd = invalidate.IndexOf(
+            "long missionWarId", missingControllerStart,
+            StringComparison.Ordinal);
+        string missingControllerBranch = missingControllerStart >= 0 &&
+            missingControllerEnd > missingControllerStart
+            ? invalidate.Substring(missingControllerStart,
+                missingControllerEnd - missingControllerStart)
+            : string.Empty;
+        int liveArmyLookup = missingControllerBranch.IndexOf(
+            "Army army = FindArmy(",
+            StringComparison.Ordinal);
+        int missingControllerReturn = missingControllerBranch.IndexOf(
+            "InvalidateAndTryBeginReturn(armyId, army, IsLiveArmy(army))",
+            StringComparison.Ordinal);
+        True(missingControllerStart >= 0 && liveArmyLookup >= 0 &&
+             missingControllerReturn > liveArmyLookup,
+            "a stale controller cannot suppress return for a live ended-war army");
+
+        string lifecycle = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsWarLifecycleService.cs"));
+        string lifecycleWarEnd = Section(lifecycle,
+            "public static void OnWarEnded(War pWar)",
+            "private static void ClearWarCombatState(");
+        int lifecycleArmyLookup = lifecycleWarEnd.IndexOf(
+            "Army army = FindArmy(record.ArmyId)",
+            StringComparison.Ordinal);
+        int lifecycleReturn = lifecycleWarEnd.IndexOf(
+            "WarArmyReturnService.TryBegin(army)",
+            Math.Max(0, lifecycleArmyLookup), StringComparison.Ordinal);
+        int lifecycleCombatClear = lifecycleWarEnd.IndexOf(
+            "ClearWarCombatState(army)",
+            Math.Max(0, lifecycleArmyLookup), StringComparison.Ordinal);
+        int lifecycleStoreClear = lifecycleWarEnd.IndexOf(
+            "Store.ClearWar(warId)", StringComparison.Ordinal);
+        True(lifecycleArmyLookup >= 0 &&
+             lifecycleReturn > lifecycleArmyLookup &&
+             lifecycleCombatClear > lifecycleReturn &&
+             lifecycleStoreClear > lifecycleCombatClear,
+            "war lifecycle fallback starts return before combat and lifecycle cleanup");
+
+        int lifecycleEndCall = warPatch.IndexOf(
+            "ArmyRtsWarLifecycleService.OnWarEnded(pWar)",
+            StringComparison.Ordinal);
+        int syntheticEndCall = warPatch.IndexOf(
+            "SyntheticMobilizationLedgerService.OnWarEnded(pWar)",
+            StringComparison.Ordinal);
+        True(lifecycleEndCall >= 0 &&
+             syntheticEndCall > lifecycleEndCall,
+            "return fallback is published before synthetic demobilization begins");
 
         string assignment = Section(controller,
             "private static void AssignMission(Army pArmy,",

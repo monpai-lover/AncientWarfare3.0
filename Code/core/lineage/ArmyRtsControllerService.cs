@@ -3820,7 +3820,8 @@ namespace AncientWarfare3.core.lineage
                 if (!Controllers.TryGet(armyId,
                         out ArmyRtsControllerRecord record))
                 {
-                    Invalidate(armyId);
+                    Army army = FindArmy(armyId);
+                    InvalidateAndTryBeginReturn(armyId, army, IsLiveArmy(army));
                     invalidated++;
                     continue;
                 }
