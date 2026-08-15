@@ -7,6 +7,12 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class PeasantRebelBanditRaidService
     {
+        private static readonly ResType[] FoodResourceTypes =
+        {
+            ResType.Food,
+            ResType.Ingredient_Food
+        };
+
         private static int _authorityCursor;
 
         internal static void ResetRuntime()
@@ -21,6 +27,9 @@ namespace AncientWarfare3.core.lineage
                     out PeasantRebelBanditStrongholdState state)) return;
 
             int currentYear = Date.getCurrentYear();
+            if (PruneSuppressionRights(state, currentYear) &&
+                !PeasantRebelBanditStateStore.Write(pKingdom, state))
+                return;
             if (state.Raid.Stage == BanditRaidStage.Cooldown)
             {
                 if (!PeasantRebelBanditRaidRules.CooldownExpired(
@@ -63,6 +72,7 @@ namespace AncientWarfare3.core.lineage
             state.Raid.TargetX = destination.x;
             state.Raid.TargetY = destination.y;
             state.Raid.CarriedFood = 0;
+            state.Raid.CarriedFoodByResourceId.Clear();
             state.Raid.LastRouteDistance = selected.RouteDistance;
             if (!PeasantRebelBanditStateStore.Write(pKingdom, state))
                 return;
@@ -111,6 +121,8 @@ namespace AncientWarfare3.core.lineage
             List<Actor> survivors = ResolveSurvivors(pKingdom, pState.Raid);
             if (survivors.Count == 0)
             {
+                pState.Raid.CarriedFood = 0;
+                pState.Raid.CarriedFoodByResourceId.Clear();
                 BeginCooldown(pKingdom, pState, currentYear);
                 return;
             }
@@ -127,8 +139,9 @@ namespace AncientWarfare3.core.lineage
                     }
                     if (survivors.Any(actor => IsInside(actor, target)))
                     {
-                        pState.Raid.Stage = BanditRaidStage.Looted;
-                        PeasantRebelBanditStateStore.Write(pKingdom, pState);
+                        if (!TryLoot(pKingdom, pState, stronghold, target))
+                            BeginReturn(pKingdom, pState, stronghold,
+                                survivors);
                         return;
                     }
                     WorldTile targetTile = ResolveDestination(pState.Raid,
@@ -148,7 +161,8 @@ namespace AncientWarfare3.core.lineage
                     }
                     if (survivors.Any(actor => IsInside(actor, stronghold)))
                     {
-                        BeginCooldown(pKingdom, pState, currentYear);
+                        DeliverFoodAndBeginCooldown(pKingdom, pState,
+                            stronghold, currentYear);
                         return;
                     }
                     MoveParty(survivors, stronghold.getTile());
@@ -243,7 +257,151 @@ namespace AncientWarfare3.core.lineage
             pRaid.TargetX = 0;
             pRaid.TargetY = 0;
             pRaid.CarriedFood = 0;
+            pRaid.CarriedFoodByResourceId.Clear();
             pRaid.LastRouteDistance = 0;
+        }
+
+        private static bool TryLoot(Kingdom pBandit,
+            PeasantRebelBanditStrongholdState pState, City pStronghold,
+            City pTarget)
+        {
+            int requested = PeasantRebelBanditRaidRules.StealableFood(
+                SafeFood(pStronghold), SafePopulation(pStronghold),
+                SafeFood(pTarget), SafePopulation(pTarget));
+            if (requested <= 0) return false;
+
+            Dictionary<string, int> plan = BuildFoodCargo(pTarget,
+                requested);
+            if (plan.Count == 0) return false;
+            var observed = plan.Keys.ToDictionary(id => id,
+                id => SafeResourceAmount(pTarget, id));
+            var removed = new Dictionary<string, int>();
+            int totalRemoved = 0;
+            bool durable = false;
+            long victimId = pTarget.kingdom.getID();
+            bool hadExpiry = pState.SuppressionExpiryByKingdomId.
+                TryGetValue(victimId, out int previousExpiry);
+            try
+            {
+                foreach (KeyValuePair<string, int> item in plan)
+                {
+                    int before = SafeResourceAmount(pTarget, item.Key);
+                    pTarget.takeResource(item.Key, item.Value);
+                    int actual = Math.Max(0, before -
+                        SafeResourceAmount(pTarget, item.Key));
+                    if (actual <= 0) continue;
+                    removed[item.Key] = actual;
+                    totalRemoved += actual;
+                }
+                if (totalRemoved <= 0) return false;
+
+                pState.Raid.CarriedFoodByResourceId = removed;
+                pState.Raid.CarriedFood = totalRemoved;
+                int expiry = PeasantRebelBanditRaidRules.
+                    SuppressionExpiryYear(Date.getCurrentYear());
+                pState.SuppressionExpiryByKingdomId[victimId] =
+                    Math.Max(previousExpiry, expiry);
+                pState.Raid.Stage = BanditRaidStage.Looted;
+                durable = PeasantRebelBanditStateStore.Write(pBandit,
+                    pState);
+                if (durable) return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Bandit raid loot failed: " +
+                                    error.Message);
+            }
+
+            if (!durable) RestoreObservedInventory(pTarget, observed);
+            pState.Raid.Stage = BanditRaidStage.Outbound;
+            pState.Raid.CarriedFood = 0;
+            pState.Raid.CarriedFoodByResourceId.Clear();
+            if (hadExpiry)
+                pState.SuppressionExpiryByKingdomId[victimId] =
+                    previousExpiry;
+            else pState.SuppressionExpiryByKingdomId.Remove(victimId);
+            return false;
+        }
+
+        private static Dictionary<string, int> BuildFoodCargo(City pTarget,
+            int pRequested)
+        {
+            var cargo = new Dictionary<string, int>(
+                StringComparer.Ordinal);
+            int remaining = Math.Max(0, pRequested);
+            if (pTarget?.data == null || remaining == 0) return cargo;
+            using (ListPool<CityStorageSlot> slots =
+                   pTarget.getTotalResourceSlots(FoodResourceTypes))
+            {
+                foreach (CityStorageSlot slot in slots)
+                {
+                    ResourceAsset resource = slot?.asset;
+                    if (remaining <= 0) break;
+                    if (resource == null || !resource.food ||
+                        slot.amount <= 0) continue;
+                    int amount = Math.Min(remaining, slot.amount);
+                    cargo[resource.id] = amount;
+                    remaining -= amount;
+                }
+            }
+            return cargo;
+        }
+
+        private static void DeliverFoodAndBeginCooldown(Kingdom pBandit,
+            PeasantRebelBanditStrongholdState pState, City pStronghold,
+            int pCurrentYear)
+        {
+            var cargo = new Dictionary<string, int>(
+                pState.Raid.CarriedFoodByResourceId,
+                StringComparer.Ordinal);
+            ClearMission(pState.Raid, BanditRaidStage.Cooldown);
+            pState.Raid.CooldownUntilYear = pCurrentYear + 1;
+            if (!PeasantRebelBanditStateStore.Write(pBandit, pState))
+                return;
+
+            foreach (KeyValuePair<string, int> item in cargo)
+            {
+                int remaining = Math.Max(0, item.Value);
+                for (int attempt = 0; attempt < 8 && remaining > 0;
+                     attempt++)
+                {
+                    int accepted = pStronghold.
+                        addResourcesToRandomStockpile(item.Key, remaining);
+                    if (accepted <= 0) continue;
+                    remaining -= Math.Min(remaining, accepted);
+                }
+                if (remaining > 0)
+                    ModClass.LogWarning("Bandit raid delivery discarded " +
+                        remaining + " " + item.Key +
+                        " because the stronghold storage was full.");
+            }
+        }
+
+        private static void RestoreObservedInventory(City pCity,
+            Dictionary<string, int> pObserved)
+        {
+            if (pCity?.data == null || pObserved == null) return;
+            foreach (KeyValuePair<string, int> item in pObserved)
+            {
+                int current = SafeResourceAmount(pCity, item.Key);
+                if (current < item.Value)
+                    pCity.addResourcesToRandomStockpile(item.Key,
+                        item.Value - current);
+                else if (current > item.Value)
+                    pCity.takeResource(item.Key, current - item.Value);
+            }
+        }
+
+        private static bool PruneSuppressionRights(
+            PeasantRebelBanditStrongholdState pState, int pCurrentYear)
+        {
+            if (pState?.SuppressionExpiryByKingdomId == null) return false;
+            List<long> expired = pState.SuppressionExpiryByKingdomId.
+                Where(item => item.Value <= pCurrentYear).
+                Select(item => item.Key).ToList();
+            foreach (long kingdomId in expired)
+                pState.SuppressionExpiryByKingdomId.Remove(kingdomId);
+            return expired.Count > 0;
         }
 
         private static List<Actor> ResolveSurvivors(Kingdom pKingdom,
@@ -344,6 +502,19 @@ namespace AncientWarfare3.core.lineage
         private static int SafeFood(City pCity)
         {
             try { return Math.Max(0, pCity?.countFoodTotal() ?? 0); }
+            catch { return 0; }
+        }
+
+        private static int SafeResourceAmount(City pCity,
+            string pResourceId)
+        {
+            if (pCity?.data == null ||
+                string.IsNullOrWhiteSpace(pResourceId)) return 0;
+            try
+            {
+                return Math.Max(0,
+                    pCity.getResourcesAmount(pResourceId));
+            }
             catch { return 0; }
         }
 

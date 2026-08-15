@@ -90,6 +90,8 @@ namespace AncientWarfare3.core.lineage
             pState.Raid ??= new BanditRaidMissionState();
             pState.Raid.MemberActorIds ??=
                 new System.Collections.Generic.List<long>();
+            pState.Raid.CarriedFoodByResourceId ??=
+                new System.Collections.Generic.Dictionary<string, int>();
             pState.SuppressionExpiryByKingdomId ??=
                 new System.Collections.Generic.Dictionary<long, int>();
         }

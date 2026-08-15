@@ -38,13 +38,15 @@ namespace AncientWarfare3.core.lineage
         public int TargetX = 0;
         public int TargetY = 0;
         public int CarriedFood = 0;
+        public Dictionary<string, int> CarriedFoodByResourceId =
+            new Dictionary<string, int>();
         public int CooldownUntilYear = 0;
         public int LastRouteDistance = 0;
     }
 
     internal sealed class PeasantRebelBanditStrongholdState
     {
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion = 2;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public BanditStrongholdPhase Phase = BanditStrongholdPhase.None;

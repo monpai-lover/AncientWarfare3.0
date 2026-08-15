@@ -415,6 +415,7 @@ namespace AncientWarfare3.core.lineage
             state.Raid.Stage = BanditRaidStage.None;
             state.Raid.MemberActorIds.Clear();
             state.Raid.CarriedFood = 0;
+            state.Raid.CarriedFoodByResourceId.Clear();
             return PeasantRebelBanditStateStore.Write(pKingdom, state);
         }
 
@@ -482,6 +483,7 @@ namespace AncientWarfare3.core.lineage
                         state.Raid.Stage = BanditRaidStage.None;
                         state.Raid.MemberActorIds.Clear();
                         state.Raid.CarriedFood = 0;
+                        state.Raid.CarriedFoodByResourceId.Clear();
                         PeasantRebelBanditStateStore.Write(kingdom, state);
                     }
                     continue;
@@ -524,6 +526,7 @@ namespace AncientWarfare3.core.lineage
                 pState.Raid.Stage = BanditRaidStage.None;
                 pState.Raid.MemberActorIds.Clear();
                 pState.Raid.CarriedFood = 0;
+                pState.Raid.CarriedFoodByResourceId.Clear();
                 if (!PeasantRebelBanditStateStore.Write(pBandit, pState))
                     return false;
                 if (!pStronghold.isRekt())

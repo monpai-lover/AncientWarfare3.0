@@ -97,10 +97,15 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pAttacker?.data == null)
                 return false;
-            pKingdom.data.get(
-                LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
-                out long originId, -1L);
-            return pAttacker.getID() == originId;
+            if (!PeasantRebelBanditStateStore.TryRead(pKingdom,
+                    out PeasantRebelBanditStrongholdState state))
+                return false;
+            long attackerId = pAttacker.getID();
+            if (attackerId == state.OriginKingdomId) return true;
+            int currentYear = Date.getCurrentYear();
+            return state.SuppressionExpiryByKingdomId.TryGetValue(
+                       attackerId, out int expiryYear) &&
+                   currentYear < expiryYear;
         }
 
         public bool CanAcquireCity(Kingdom pKingdom, City pCity)

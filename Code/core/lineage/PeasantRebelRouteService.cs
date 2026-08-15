@@ -359,8 +359,11 @@ namespace AncientWarfare3.core.lineage
             bool attackerIsOrigin = defenderBandit &&
                 ReadOriginKingdomId(pDefender) ==
                 (pAttacker?.id ?? -1L);
+            bool attackerHasSuppressionRight = defenderBandit &&
+                Behaviors[PeasantRebelRouteIds.Bandit].
+                    CanReceiveDirectWar(pDefender, pAttacker);
             if (!PeasantRebelRouteRules.CanDeclareWar(attackerBandit,
-                    defenderBandit, attackerIsOrigin))
+                    defenderBandit, attackerHasSuppressionRight))
             {
                 pReason = attackerBandit
                     ? "bandit_cannot_declare_war"
