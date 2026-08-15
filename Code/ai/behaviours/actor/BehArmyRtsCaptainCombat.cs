@@ -44,7 +44,7 @@ namespace AncientWarfare3.ai.behaviours.actor
             {
                 if (pActor != null) pActor.beh_actor_target = null;
                 pActor?.makeWait(0.15f);
-                return BehResult.RepeatStep;
+                return BehResult.Continue;
             }
             try
             {

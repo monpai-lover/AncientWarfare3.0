@@ -413,6 +413,8 @@ namespace AncientWarfare3.patch
 
         private static void OnKingdomLeftWar(War pWar, Kingdom pKingdom)
         {
+            ArmyRtsControllerService.InvalidateWarParticipant(
+                pWar?.data?.id ?? -1L, pKingdom?.data?.id ?? -1L);
             ArmyRtsWarLifecycleService.OnWarParticipantChanged(pWar,
                 pKingdom);
             WarParticipantEntrySourceService.Instance.TryEndAllActiveSources(

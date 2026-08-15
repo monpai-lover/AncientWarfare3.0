@@ -49,22 +49,38 @@ internal static class ArmyRtsFieldCombatRulesTests
 
         // 野战交接必须保有将领可实际攻击的目标。成员的陈旧交战状态
         // 不能让整军在两军相距很远时无限停留在 captain_combat。
-        Assert(!ArmyRtsFieldCombatRules.ShouldKeepFieldCombat(
+        Assert(ArmyRtsFieldCombatRules.ShouldKeepFieldCombat(
                 pAlreadyReleased: true, pCaptainHasCombatTarget: false,
                 pEngagedCombatants: 1, pLiveCombatants: 10,
                 pCaptainEngaged: false),
-            "a released army without a captain target resumes strategic control");
-        Assert(ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
-                pFieldCombatReleased: true,
-                pCaptainHasCombatTarget: false),
-            "large-step P0 immediately restores a cleared field battle");
+            "an engaged soldier keeps the released army in field combat when the captain transiently loses its target");
         Assert(!ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
                 pFieldCombatReleased: true,
-                pCaptainHasCombatTarget: true),
+                pCaptainHasCombatTarget: false,
+                pAnyMemberEngaged: true),
+            "large-step P0 cannot collapse an active battle while a soldier remains engaged");
+        Assert(ArmyRtsFieldCombatRules.IsMemberEngaged(
+                pImmediateAttackTarget: false,
+                pValidBehaviourTarget: true),
+            "a dedicated member-combat behaviour target counts as live contact while attack_target is between actions");
+        Assert(!ArmyRtsFieldCombatRules.IsMemberEngaged(
+                pImmediateAttackTarget: false,
+                pValidBehaviourTarget: false),
+            "a soldier without either target does not keep a cleared battle locked");
+        Assert(ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
+                pFieldCombatReleased: true,
+                pCaptainHasCombatTarget: false,
+                pAnyMemberEngaged: false),
+            "large-step P0 restores strategic control only after the whole army loses contact");
+        Assert(!ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
+                pFieldCombatReleased: true,
+                pCaptainHasCombatTarget: true,
+                pAnyMemberEngaged: false),
             "large-step P0 preserves a field battle with a captain target");
         Assert(!ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
                 pFieldCombatReleased: false,
-                pCaptainHasCombatTarget: false),
+                pCaptainHasCombatTarget: false,
+                pAnyMemberEngaged: false),
             "P0 does not alter normal strategic movement");
         Assert(ArmyRtsFieldCombatRules.ShouldKeepFieldCombat(
                 pAlreadyReleased: true, pCaptainHasCombatTarget: true,

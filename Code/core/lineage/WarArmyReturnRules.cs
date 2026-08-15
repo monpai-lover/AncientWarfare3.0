@@ -16,6 +16,23 @@ namespace AncientWarfare3.core.lineage
                    currentMissionWarId == endedWarId;
         }
 
+        public static bool MatchesDepartedParticipant(long missionWarId,
+            long missionKingdomId, long departedWarId,
+            long departedKingdomId)
+        {
+            return departedWarId >= 0L && departedKingdomId >= 0L &&
+                   missionWarId == departedWarId &&
+                   missionKingdomId == departedKingdomId;
+        }
+
+        public static bool ShouldReturnInvalidMission(bool armyAlive,
+            bool missionExists, bool missionWarActive,
+            bool missionKingdomParticipating)
+        {
+            return armyAlive && missionExists &&
+                   (!missionWarActive || !missionKingdomParticipating);
+        }
+
         public static bool HasArrived(bool armyAlive,
             bool insideFriendlySafeCity)
         {

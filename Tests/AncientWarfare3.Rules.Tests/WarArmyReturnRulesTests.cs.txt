@@ -23,6 +23,9 @@ internal static class WarArmyReturnRulesTests
                 armyAlive: true, insideFriendlySafeCity: false),
             "an army abroad retains return intent");
 
+        ScopedParticipantDepartureRules();
+        InvalidMissionFallbackRules();
+
         ReopenedOrderKeepsOneBoundedWorkItem();
         DisposedOrdersArePhysicallyRemovedAtScale();
         StaleCleanupConsumesOneBoundedToken();
@@ -147,6 +150,39 @@ internal static class WarArmyReturnRulesTests
              queue > invalidation,
             "matching ended-war missions invalidate before live armies enter return handling");
 
+        string participantInvalidate = Section(controller,
+            "public static int InvalidateWarParticipant(",
+            "public static int InvalidateWar(");
+        int participantSnapshot = participantInvalidate.IndexOf(
+            "MissionIndex.SnapshotWar(", StringComparison.Ordinal);
+        int participantMatch = participantInvalidate.IndexOf(
+            "MatchesDepartedParticipant(", StringComparison.Ordinal);
+        int participantInvalidation = participantInvalidate.IndexOf(
+            "Invalidate(armyId)", participantMatch,
+            StringComparison.Ordinal);
+        int participantReturn = participantInvalidate.IndexOf(
+            "WarArmyReturnService.TryBegin(", participantInvalidation,
+            StringComparison.Ordinal);
+        True(participantSnapshot >= 0 &&
+             participantMatch > participantSnapshot &&
+             participantInvalidation > participantMatch &&
+             participantReturn > participantInvalidation,
+            "participant departure scopes by war and kingdom, then invalidates before return");
+
+        string warPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_WarPatch.cs"));
+        string participantDeparture = Section(warPatch,
+            "private static void OnKingdomLeftWar(",
+            "private static bool CanJoin(");
+        int immediateReturn = participantDeparture.IndexOf(
+            "ArmyRtsControllerService.InvalidateWarParticipant(",
+            StringComparison.Ordinal);
+        int directorReschedule = participantDeparture.IndexOf(
+            "KingdomWarDirectorService.OnWarParticipantChanged(",
+            StringComparison.Ordinal);
+        True(immediateReturn >= 0 && directorReschedule > immediateReturn,
+            "participant departure queues return before war director rescheduling");
+
         int missingControllerStart = invalidate.IndexOf(
             "if (!Controllers.TryGet(", StringComparison.Ordinal);
         int liveArmyLookup = invalidate.IndexOf("Army army = FindArmy(",
@@ -169,6 +205,36 @@ internal static class WarArmyReturnRulesTests
              assignment.Contains("MissionIndex.Matches(pMission)") &&
              assignment.Contains("ShouldCancelForPublishedMission("),
             "return cancellation follows validated controller and index publication");
+
+        string processOne = Section(controller,
+            "private static void ProcessOne(",
+            "private static void ObserveFormation(");
+        int invalidMissionBranch = processOne.IndexOf(
+            "if (!liveArmy || !IsMissionValid(",
+            StringComparison.Ordinal);
+        int fallbackDecision = processOne.IndexOf(
+            "ShouldReturnInvalidMission(", invalidMissionBranch,
+            StringComparison.Ordinal);
+        int fallbackInvalidation = processOne.IndexOf(
+            "Invalidate(pArmyId)", Math.Max(0, fallbackDecision),
+            StringComparison.Ordinal);
+        int fallbackReturn = processOne.IndexOf(
+            "WarArmyReturnService.TryBegin(",
+            Math.Max(0, fallbackInvalidation),
+            StringComparison.Ordinal);
+        True(invalidMissionBranch >= 0 &&
+             fallbackDecision > invalidMissionBranch &&
+             fallbackInvalidation > fallbackDecision &&
+             fallbackReturn > fallbackInvalidation,
+            "invalid mission fallback decides before invalidation and returns afterward");
+        string fallbackPrefix = invalidMissionBranch >= 0 &&
+                                fallbackDecision > invalidMissionBranch
+            ? processOne.Substring(invalidMissionBranch,
+                fallbackDecision - invalidMissionBranch)
+            : "";
+        True(fallbackPrefix.Contains("IsWarActive(") &&
+             fallbackPrefix.Contains("IsKingdomInWar("),
+            "fallback distinguishes an ended war or departed participant from target churn");
 
         int missionDefense = queueProcessing.IndexOf("ResolveOrder(",
             StringComparison.Ordinal);
@@ -195,6 +261,46 @@ internal static class WarArmyReturnRulesTests
              temporaryReturn.Contains(
                  "TemporaryMilitaryDemobilizationService."),
             "temporary levies retain arrival-only demobilization");
+    }
+
+    private static void ScopedParticipantDepartureRules()
+    {
+        Equal(true, WarArmyReturnRules.MatchesDepartedParticipant(
+                missionWarId: 17L, missionKingdomId: 3L,
+                departedWarId: 17L, departedKingdomId: 3L),
+            "separate peace selects the departing kingdom mission");
+        Equal(false, WarArmyReturnRules.MatchesDepartedParticipant(
+                missionWarId: 17L, missionKingdomId: 4L,
+                departedWarId: 17L, departedKingdomId: 3L),
+            "separate peace preserves allied missions in the same war");
+        Equal(false, WarArmyReturnRules.MatchesDepartedParticipant(
+                missionWarId: 18L, missionKingdomId: 3L,
+                departedWarId: 17L, departedKingdomId: 3L),
+            "separate peace preserves the kingdom's other war missions");
+    }
+
+    private static void InvalidMissionFallbackRules()
+    {
+        Equal(true, WarArmyReturnRules.ShouldReturnInvalidMission(
+                armyAlive: true, missionExists: true,
+                missionWarActive: true,
+                missionKingdomParticipating: false),
+            "a departed participant returns when validation catches up");
+        Equal(true, WarArmyReturnRules.ShouldReturnInvalidMission(
+                armyAlive: true, missionExists: true,
+                missionWarActive: false,
+                missionKingdomParticipating: false),
+            "an ended war returns when its callback was missed");
+        Equal(false, WarArmyReturnRules.ShouldReturnInvalidMission(
+                armyAlive: true, missionExists: true,
+                missionWarActive: true,
+                missionKingdomParticipating: true),
+            "an invalid target in an active war replans instead of returning");
+        Equal(false, WarArmyReturnRules.ShouldReturnInvalidMission(
+                armyAlive: false, missionExists: true,
+                missionWarActive: false,
+                missionKingdomParticipating: false),
+            "a dead army cannot enter fallback return");
     }
 
     private static void ReopenedOrderKeepsOneBoundedWorkItem()

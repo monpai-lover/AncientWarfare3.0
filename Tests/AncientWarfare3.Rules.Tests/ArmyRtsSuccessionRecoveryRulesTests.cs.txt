@@ -178,6 +178,23 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
         Assert(service.Contains("RehydrateAfterAuthorityChange",
                 StringComparison.Ordinal),
             "succession recovery rebuilds one controller without loading");
+        string controller = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "ArmyRtsControllerService.cs"));
+        int rehydrateStart = controller.IndexOf(
+            "public static bool RehydrateAfterAuthorityChange(",
+            StringComparison.Ordinal);
+        int rehydrateEnd = controller.IndexOf(
+            "public static void ClearRuntime()", rehydrateStart,
+            StringComparison.Ordinal);
+        string rehydrateBody = rehydrateStart >= 0 &&
+            rehydrateEnd > rehydrateStart
+            ? controller.Substring(rehydrateStart,
+                rehydrateEnd - rehydrateStart)
+            : string.Empty;
+        Assert(rehydrateBody.Contains(
+                   "ReassertCaptainMissionTask(SafeCaptain(pArmy))",
+                   StringComparison.Ordinal),
+            "authority rehydration immediately replaces a promoted captain's follower task");
         Assert(service.Contains("HasOperationalCaptain(army, kingdom)",
                 StringComparison.Ordinal),
             "an alive but ineligible captain is recovered as commandless");

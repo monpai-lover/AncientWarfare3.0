@@ -35,16 +35,25 @@ namespace AncientWarfare3.core.lineage
             bool pCaptainHasCombatTarget, int pEngagedCombatants,
             int pLiveCombatants, bool pCaptainEngaged)
         {
+            if (pAlreadyReleased)
+                return pCaptainHasCombatTarget || pEngagedCombatants > 0;
             if (!pCaptainHasCombatTarget) return false;
-            if (pAlreadyReleased) return true;
             return ShouldReleaseToFieldCombat(false, pEngagedCombatants,
                 pLiveCombatants, pCaptainEngaged);
         }
 
         public static bool ShouldAbortFieldCombatFromP0(
-            bool pFieldCombatReleased, bool pCaptainHasCombatTarget)
+            bool pFieldCombatReleased, bool pCaptainHasCombatTarget,
+            bool pAnyMemberEngaged)
         {
-            return pFieldCombatReleased && !pCaptainHasCombatTarget;
+            return pFieldCombatReleased && !pCaptainHasCombatTarget &&
+                   !pAnyMemberEngaged;
+        }
+
+        public static bool IsMemberEngaged(bool pImmediateAttackTarget,
+            bool pValidBehaviourTarget)
+        {
+            return pImmediateAttackTarget || pValidBehaviourTarget;
         }
     }
 }

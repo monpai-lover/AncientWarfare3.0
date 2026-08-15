@@ -416,6 +416,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 "kind=" + kind);
             ArmyRtsAbstractSupplyService.
                 TryConsumeHomeRationScheduled(actor);
+            if (TryRunSelfLandingP0(actor, actorId, kind, cycleElapsed))
+                return;
             if (ArmyRtsControllerService.HasImmediateCombatPriority(actor))
             {
                 RunMilitaryP0Combat(actor, actorId, kind, cycleElapsed,
@@ -484,9 +486,27 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
             ArmyRtsMovementDiagnostic.Log("p0", "native_ai", actor,
                 "kind=" + kind);
+            int actionIndexBeforeAi = actor.ai?.action_index ?? -1;
+            bool followerTask = kind ==
+                                    ArmyMilitaryMovementPriorityKind.RtsMember &&
+                                actor.isTask(
+                                    "warrior_army_follow_leader");
             actor.b6_updateAI(cycleElapsed);
-            if (kind == ArmyMilitaryMovementPriorityKind.RtsMember &&
-                actor.isTask("warrior_army_follow_leader"))
+            int actionIndexAfterAi = actor.ai?.action_index ?? -1;
+            if (ArmyMilitaryMovementPriorityRules.
+                    ShouldAdvanceFollowerMoveInSameP0(
+                        followerTask, actionIndexBeforeAi,
+                        actionIndexAfterAi,
+                        actor.beh_tile_target?.data != null,
+                        actor._beh_skip, actor.is_moving))
+            {
+                actor.b6_updateAI(cycleElapsed);
+                actor.b5_checkPathMovement(cycleElapsed);
+                ArmyRtsMovementDiagnostic.Log("p0",
+                    "follower_after_move_command", actor,
+                    "kind=" + kind);
+            }
+            if (followerTask)
             {
                 bool followerStalled = !actor.is_moving &&
                     actor.beh_tile_target?.data == null &&
@@ -510,6 +530,71 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 "error=" + error.GetType().Name + ":" + error.Message);
             ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
         }
+    }
+
+    private static bool TryRunSelfLandingP0(Actor actor, long actorId,
+        ArmyMilitaryMovementPriorityKind kind, float cycleElapsed)
+    {
+        bool inLiquid = false;
+        bool waterCreature = false;
+        bool actorTransportOwned = false;
+        try
+        {
+            inLiquid = actor?.current_tile?.Type?.liquid == true;
+            waterCreature = actor?.isWaterCreature() == true;
+            actorTransportOwned = kind ==
+                                      ArmyMilitaryMovementPriorityKind.RtsMember &&
+                                  ArmyRtsTransportService.OwnsActorTask(
+                                      actor);
+        }
+        catch { }
+        bool transportOwned = actorTransportOwned ||
+                              ArmyRtsControllerService.
+                                  HasMilitaryTransportOwnership(actor);
+        if (!ArmyMilitaryMovementPriorityRules.ShouldRunSelfLanding(
+                inLiquid, actor?.is_inside_boat == true, waterCreature,
+                transportOwned)) return false;
+
+        const string selfLandingTask =
+            ArmyRtsTaskOwnershipRules.SelfLandingTaskId;
+        try
+        {
+            if (!actor.isTask(selfLandingTask))
+                actor.setTask(selfLandingTask, pClean: true,
+                    pCleanJob: false, pForceAction: false);
+            ArmyRtsMovementDiagnostic.Log("p0", "self_landing_enter",
+                actor, "kind=" + kind);
+            actor.b4_checkTaskVerifier(cycleElapsed);
+            actor.b5_checkPathMovement(cycleElapsed);
+            int actionIndexBeforeAi = actor.ai?.action_index ?? -1;
+            actor.b6_updateAI(cycleElapsed);
+            int actionIndexAfterAi = actor.ai?.action_index ?? -1;
+            if (ArmyMilitaryMovementPriorityRules.
+                    ShouldAdvanceSelfLandingInSameP0(
+                        actor.isTask(selfLandingTask),
+                        actionIndexBeforeAi, actionIndexAfterAi,
+                        actor.beh_tile_target?.data != null,
+                        actor._beh_skip, actor.is_moving))
+            {
+                actor.b6_updateAI(cycleElapsed);
+                actor.b5_checkPathMovement(cycleElapsed);
+                ArmyRtsMovementDiagnostic.Log("p0",
+                    "self_landing_move_command", actor,
+                    "kind=" + kind);
+            }
+            actor.u10_checkSmoothMovement(cycleElapsed);
+            actor.skipBehaviour();
+            ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
+        }
+        catch (Exception error)
+        {
+            ArmyRtsMovementDiagnostic.Log("p0",
+                "self_landing_exception", actor,
+                "kind=" + kind + " error=" +
+                error.GetType().Name + ":" + error.Message);
+            ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+        }
+        return true;
     }
 
     private static void RunMilitaryP0Combat(Actor actor, long actorId,

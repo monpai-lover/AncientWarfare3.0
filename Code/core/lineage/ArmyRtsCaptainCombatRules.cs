@@ -20,16 +20,16 @@ namespace AncientWarfare3.core.lineage
             bool actorIsCaptain, bool fieldCombatReleased,
             bool hasValidCombatTarget)
         {
-            return missionActive && !actorIsCaptain && fieldCombatReleased &&
-                   hasValidCombatTarget;
+            return missionActive && !actorIsCaptain &&
+                   (fieldCombatReleased || hasValidCombatTarget);
         }
 
         public static bool ShouldSuppressVanillaMemberFight(
             bool missionActive, bool actorIsCaptain,
             bool fieldCombatReleased, bool hasValidCombatTarget)
         {
-            return missionActive && !actorIsCaptain && fieldCombatReleased &&
-                   !hasValidCombatTarget;
+            return missionActive && !actorIsCaptain &&
+                   !fieldCombatReleased && !hasValidCombatTarget;
         }
 
         public static bool ShouldRestoreVanillaMemberFollow(

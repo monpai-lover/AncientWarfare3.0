@@ -3,6 +3,7 @@ namespace AncientWarfare3.core.lineage
     public static class ArmyRtsTaskOwnershipRules
     {
         public const double ImmediateCombatPriorityDistanceTiles = 16d;
+        public const string SelfLandingTaskId = "swim_to_island";
 
         public static string ResolveWatchdogTaskId(
             ArmyWatchdogPositionSource pPositionSource,
@@ -63,6 +64,12 @@ namespace AncientWarfare3.core.lineage
                 pRequiredBoatWork)
                 return false;
             return !pExpectedJobActive || !pExpectedTaskActive;
+        }
+
+        public static bool ShouldPreserveSelfLandingTask(bool inLiquid,
+            bool isSelfLandingTask, bool requiredBoatWork)
+        {
+            return inLiquid && isSelfLandingTask && !requiredBoatWork;
         }
 
         public static bool ShouldRecoverMissingCaptainTarget(

@@ -210,8 +210,7 @@ namespace AncientWarfare3.core.lineage
             bool needsReplenishment, bool wartimeRecovery,
             bool alreadyReplenishing)
         {
-            return needsReplenishment &&
-                   (wartimeRecovery || alreadyReplenishing);
+            return needsReplenishment;
         }
 
         public static int ResolveCityArmyTarget(int cityCapacity,
@@ -515,7 +514,8 @@ namespace AncientWarfare3.core.lineage
                    pState == ArmyRtsState.Deploy ||
                    pState == ArmyRtsState.Assault ||
                    pState == ArmyRtsState.Hold ||
-                   pState == ArmyRtsState.Pursue;
+                   pState == ArmyRtsState.Pursue ||
+                   pState == ArmyRtsState.Retreat;
         }
 
         public static bool OwnsReplenishmentRequest(ArmyRtsState pState)
@@ -586,10 +586,19 @@ namespace AncientWarfare3.core.lineage
             if (pFacts == null || !pFacts.HasMission)
                 return ArmyRtsState.Idle;
 
+            bool enterReplenishment = ShouldEnterReplenishment(
+                pFacts.NeedsReplenishment, pFacts.WartimeRecovery,
+                pFacts.CurrentState == ArmyRtsState.Replenish);
+
             if (pFacts.CurrentState == ArmyRtsState.Retreat)
+            {
+                if (enterReplenishment && !pFacts.TargetComplete &&
+                    pFacts.Posture != ArmyRtsPosture.Retreat)
+                    return ArmyRtsState.Replenish;
                 return pFacts.RetreatArrived
                     ? ArmyRtsState.Regroup
                     : ArmyRtsState.Retreat;
+            }
 
             if (pFacts.CurrentState == ArmyRtsState.Regroup &&
                 pFacts.TargetComplete &&
@@ -642,17 +651,16 @@ namespace AncientWarfare3.core.lineage
                 if (pFacts.PursuitAllowed) return ArmyRtsState.Pursue;
                 return ArmyRtsState.Idle;
             }
+            if (pFacts.EnemyContact)
+                return ArmyRtsState.Assault;
+            if (enterReplenishment)
+                return ArmyRtsState.Replenish;
             bool operationCommitted = IsOperationCommitted(
                 pFacts.CurrentState);
             if (operationCommitted && !pFacts.MinimumForceReady &&
                 !skipInitialRally &&
                 !pFacts.SurvivalException)
                 return ArmyRtsState.Retreat;
-            bool enterReplenishment = ShouldEnterReplenishment(
-                pFacts.NeedsReplenishment, pFacts.WartimeRecovery,
-                pFacts.CurrentState == ArmyRtsState.Replenish);
-            if (enterReplenishment)
-                return ArmyRtsState.Replenish;
             if (pFacts.CurrentState == ArmyRtsState.March &&
                 !pFacts.RouteArrived)
                 return ArmyRtsState.March;
@@ -662,8 +670,7 @@ namespace AncientWarfare3.core.lineage
             if (!pFacts.RouteArrived) return ArmyRtsState.March;
             if (!pFacts.DeploymentReady) return ArmyRtsState.Deploy;
 
-            if (pFacts.EnemyContact ||
-                pFacts.Posture == ArmyRtsPosture.Attack ||
+            if (pFacts.Posture == ArmyRtsPosture.Attack ||
                 pFacts.Role == ArmyRtsRole.Assault)
                 return ArmyRtsState.Assault;
             return ArmyRtsState.Hold;

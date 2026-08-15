@@ -59,6 +59,33 @@ internal static class ArmyRtsCombatHandoffRulesTests
                     behaviourSkipped: false, alreadyMoving: false),
             "the custom soldier combat task reaches its original approach action without waiting for another large step");
         Assert(ArmyMilitaryMovementPriorityRules.
+                ShouldAdvanceFollowerMoveInSameP0(
+                    isFollowerTask: true, actionIndexBeforeAi: 0,
+                    actionIndexAfterAi: 1, hasBehaviourTileTarget: true,
+                    behaviourSkipped: false, alreadyMoving: false),
+            "native follow executes its move action in the same large-step P0 slice that selected a captain-relative tile");
+        Assert(!ArmyMilitaryMovementPriorityRules.
+                ShouldAdvanceFollowerMoveInSameP0(
+                    isFollowerTask: true, actionIndexBeforeAi: 1,
+                    actionIndexAfterAi: 2, hasBehaviourTileTarget: true,
+                    behaviourSkipped: false, alreadyMoving: false),
+            "an already advanced follower is not executed twice");
+        Assert(ArmyMilitaryMovementPriorityRules.ShouldRunSelfLanding(
+                inLiquid: true, insideBoat: false,
+                waterCreature: false, intentionalTransportOwned: false),
+            "an ordinary military actor stranded in liquid must swim to land under its own movement");
+        Assert(!ArmyMilitaryMovementPriorityRules.ShouldRunSelfLanding(
+                inLiquid: true, insideBoat: false,
+                waterCreature: false, intentionalTransportOwned: true),
+            "an intentional sea voyage retains transport ownership");
+        Assert(ArmyMilitaryMovementPriorityRules.
+                ShouldAdvanceSelfLandingInSameP0(
+                    isSelfLandingTask: true, actionIndexBeforeAi: 0,
+                    actionIndexAfterAi: 1,
+                    hasBehaviourTileTarget: true,
+                    behaviourSkipped: false, alreadyMoving: false),
+            "the original swim-to-island task selects land and starts swimming in one P0 slice");
+        Assert(ArmyMilitaryMovementPriorityRules.
                 ShouldResumeNativeCombatAfterEnemyAcquisition(
                     hadAttackTargetBeforeSearch: false,
                     hasAttackTargetAfterSearch: true,
@@ -79,6 +106,14 @@ internal static class ArmyRtsCombatHandoffRulesTests
         Assert(ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
                 "follower_after_ai", anomaly: false),
             "native follower target publication remains visible during large-step diagnosis");
+        Assert(ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
+                "follower_after_move_command", anomaly: false),
+            "same-P0 follower movement commands remain visible during diagnosis");
+        Assert(ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
+                    "self_landing_enter", anomaly: false) &&
+               ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
+                    "self_landing_move_command", anomaly: false),
+            "self-swim recovery exposes both task acquisition and movement command stages");
         Assert(!ArmyRtsP0Rules.ShouldWriteDiagnosticStage(
                 "native_enemy_check", anomaly: false),
             "normal per-stage actor diagnostics are suppressed");
@@ -120,6 +155,60 @@ internal static class ArmyRtsCombatHandoffRulesTests
         Assert(!ArmyRtsControllerRules.ShouldUseVanillaFollowerMovement(
                 ArmyRtsProposalKind.FrontHold, targetIsEnemy: false),
             "a front-hold task remains stationary rather than following a leader");
+        Assert(ArmyRtsControllerRules.ShouldApplyTargetChangeCooldown(
+                ArmyRtsProposalKind.Attack,
+                ArmyRtsProposalKind.Attack),
+            "ordinary attack target reversals retain the anti-oscillation cooldown");
+        Assert(!ArmyRtsControllerRules.ShouldApplyTargetChangeCooldown(
+                ArmyRtsProposalKind.Attack,
+                ArmyRtsProposalKind.Defend) &&
+               !ArmyRtsControllerRules.ShouldApplyTargetChangeCooldown(
+                ArmyRtsProposalKind.Attack,
+                ArmyRtsProposalKind.Retreat),
+            "defense and retreat orders immediately preempt an old attack target");
+        Assert(ArmyRtsControllerRules.ShouldEnterTargetCityCombat(
+                ArmyRtsProposalKind.Defend, objectiveOpen: true,
+                captainInsideTargetCombatZone: true,
+                hostileMilitaryInsideTarget: true),
+            "a relieving army fights hostile occupiers in its friendly mission city");
+        Assert(ArmyRtsControllerRules.ShouldEnterTargetCityCombat(
+                ArmyRtsProposalKind.Attack, objectiveOpen: true,
+                captainInsideTargetCombatZone: true,
+                hostileMilitaryInsideTarget: true),
+            "an attacker uses the same city-scoped combat entry");
+        Assert(!ArmyRtsControllerRules.ShouldEnterTargetCityCombat(
+                ArmyRtsProposalKind.Retreat, objectiveOpen: true,
+                captainInsideTargetCombatZone: true,
+                hostileMilitaryInsideTarget: true),
+            "retreat movement is never converted into a city assault");
+        Assert(!ArmyRtsControllerRules.ShouldInspectTargetCityCombat(
+                   captainInsideTargetCombatZone: false,
+                   siegeCombatActive: false) &&
+               ArmyRtsControllerRules.ShouldInspectTargetCityCombat(
+                   captainInsideTargetCombatZone: true,
+                   siegeCombatActive: false) &&
+               ArmyRtsControllerRules.ShouldInspectTargetCityCombat(
+                   captainInsideTargetCombatZone: false,
+                   siegeCombatActive: true),
+            "target-city hostile scans run only on arrival or while maintaining an active siege");
+        Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+            {
+                CurrentState = ArmyRtsState.Rally,
+                Role = ArmyRtsRole.Defense,
+                Posture = ArmyRtsPosture.Automatic,
+                HasMission = true,
+                TargetValid = true,
+                TargetComplete = false,
+                EnemyContact = true,
+                ForceReady = false,
+                RallyReady = false,
+                RouteArrived = true,
+                DeploymentReady = false,
+                MinimumForceReady = true,
+                Supply = 100,
+                Organization = 100
+            }) == ArmyRtsState.Assault,
+            "real enemy contact preempts rally and deployment readiness gates");
         Assert(ArmyRtsControllerRules.ShouldUseNativeMissionExecution(
                 ArmyRtsProposalKind.Attack, ArmyRtsState.March,
                 targetIsEnemy: true),
@@ -235,6 +324,18 @@ internal static class ArmyRtsCombatHandoffRulesTests
                 pImmediateCombat: false, pRequiredBoatWork: false,
                 pForceRecovery: true),
             "watchdog recovery must repair a task after ownership was lost");
+        Assert(ArmyRtsTaskOwnershipRules.ShouldPreserveSelfLandingTask(
+                inLiquid: true, isSelfLandingTask: true,
+                requiredBoatWork: false),
+            "RTS task repair must preserve the original self-landing task while the actor is still in liquid");
+        Assert(!ArmyRtsTaskOwnershipRules.ShouldPreserveSelfLandingTask(
+                inLiquid: false, isSelfLandingTask: true,
+                requiredBoatWork: false),
+            "RTS task repair resumes immediately after the actor reaches land");
+        Assert(!ArmyRtsTaskOwnershipRules.ShouldPreserveSelfLandingTask(
+                inLiquid: true, isSelfLandingTask: true,
+                requiredBoatWork: true),
+            "intentional transport ownership supersedes stale self-landing work");
         Assert(ArmyRtsWarLifecycleRules.OwnsTacticalActors(
                 ArmyRtsWarPhase.Withdrawal),
             "RTS actor patches resume ownership for withdrawal");
@@ -284,6 +385,63 @@ internal static class ArmyRtsCombatHandoffRulesTests
 
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"));
+        int missionRouteClearStart = controller.IndexOf(
+            "if (clearSharedRoute)", StringComparison.Ordinal);
+        int missionRouteClearEnd = controller.IndexOf(
+            "if (changed && resetOperationalProgress)",
+            missionRouteClearStart, StringComparison.Ordinal);
+        string missionRouteClearBody = missionRouteClearStart >= 0 &&
+            missionRouteClearEnd > missionRouteClearStart
+            ? controller.Substring(missionRouteClearStart,
+                missionRouteClearEnd - missionRouteClearStart)
+            : string.Empty;
+        int siegeTargetStart = controller.IndexOf(
+            "private static bool IsViableSiegeCombatTarget(",
+            StringComparison.Ordinal);
+        int siegeTargetEnd = controller.IndexOf(
+            "internal static Actor FindCaptainCombatTarget(",
+            siegeTargetStart, StringComparison.Ordinal);
+        string siegeTargetBody = siegeTargetStart >= 0 &&
+            siegeTargetEnd > siegeTargetStart
+            ? controller.Substring(siegeTargetStart,
+                siegeTargetEnd - siegeTargetStart)
+            : string.Empty;
+        Assert(siegeTargetBody.Contains(
+                   "pTarget.is_profession_warrior",
+                   StringComparison.Ordinal),
+            "city combat retains hostile military targets only and exits after the garrison is gone");
+        Assert(missionRouteClearBody.Contains(
+                   "ClearArmyAttackTargets(pArmy)",
+                   StringComparison.Ordinal),
+            "an accepted emergency mission clears every stale attack target with the old route");
+        int combatOwnershipStart = controller.IndexOf(
+            "private static bool TryHandleWarCombatOwnership(",
+            StringComparison.Ordinal);
+        int fieldCombatStart = controller.IndexOf(
+            "private static bool TryHandleFieldCombat(",
+            combatOwnershipStart, StringComparison.Ordinal);
+        string combatOwnershipBody = combatOwnershipStart >= 0 &&
+            fieldCombatStart > combatOwnershipStart
+            ? controller.Substring(combatOwnershipStart,
+                fieldCombatStart - combatOwnershipStart)
+            : string.Empty;
+        Assert(combatOwnershipBody.Contains(
+                   "ShouldEnterTargetCityCombat(", StringComparison.Ordinal) &&
+               combatOwnershipBody.Contains(
+                   "EnterTargetCitySiegeCombat(pArmy, pRecord,",
+                   StringComparison.Ordinal),
+            "friendly defense and enemy attack share the target-city combat preemption path");
+        int setJobStart = controller.IndexOf(
+            "private static void SetJob(", StringComparison.Ordinal);
+        int setJobEnd = controller.IndexOf(
+            "private static void SetNativeMemberMissionTask(",
+            setJobStart, StringComparison.Ordinal);
+        string setJobBody = setJobStart >= 0 && setJobEnd > setJobStart
+            ? controller.Substring(setJobStart, setJobEnd - setJobStart)
+            : string.Empty;
+        Assert(setJobBody.Contains("ShouldPreserveSelfLandingTask(",
+                   StringComparison.Ordinal),
+            "RTS job repair must not replace a live original self-landing task");
         string behaviours = File.ReadAllText(Path.Combine(root, "Code",
             "ai", "behaviours", "actor", "BehArmyRtsMission.cs"));
         int missionStart = behaviours.IndexOf(
@@ -350,11 +508,15 @@ internal static class ArmyRtsCombatHandoffRulesTests
         Assert(!vanillaJobBody.Contains("ArmyRtsContent.FollowerJobId",
                 StringComparison.Ordinal),
             "normal RTS missions must not install the custom follower job");
-        Assert(ensureJobsBody.Contains("ArmyRtsContent.VanillaFollowerJobId",
-                StringComparison.Ordinal) &&
-            ensureJobsBody.Contains("\"warrior_army_follow_leader\"",
-                StringComparison.Ordinal),
-            "native RTS marches install the original follower task for every soldier");
+        Assert(ensureJobsBody.Contains("SetNativeMemberMissionTask(actor, pArmy)",
+                   StringComparison.Ordinal) &&
+               controller.Contains(
+                   "string jobId = ArmyRtsContent.VanillaFollowerJobId",
+                   StringComparison.Ordinal) &&
+               controller.Contains(
+                   "taskId = ArmyRtsContent.MemberCombatTaskId",
+                   StringComparison.Ordinal),
+            "native RTS marches use original follow while active field battles retain dedicated member combat");
         int nativeMarchStart = ensureJobsBody.IndexOf(
             "private static void EnsureVanillaMarchJobs(",
             StringComparison.Ordinal);
@@ -564,6 +726,24 @@ internal static class ArmyRtsCombatHandoffRulesTests
         Assert(postRunner.Contains("TryPrepareMilitaryP0Actor(actor)",
                 StringComparison.Ordinal),
             "military P0 prepares strategic state before running native actor stages");
+        int selfLandingStart = postRunner.IndexOf(
+            "private static bool TryRunSelfLandingP0(",
+            StringComparison.Ordinal);
+        int selfLandingEnd = postRunner.IndexOf(
+            "private static void RunMilitaryP0Combat(", selfLandingStart,
+            StringComparison.Ordinal);
+        string selfLandingBody = selfLandingStart >= 0 &&
+            selfLandingEnd > selfLandingStart
+            ? postRunner.Substring(selfLandingStart,
+                selfLandingEnd - selfLandingStart)
+            : string.Empty;
+        Assert(selfLandingBody.Contains(
+                   "ArmyRtsTransportService.OwnsActorTask(",
+                   StringComparison.Ordinal) &&
+               !selfLandingBody.Contains(
+                   "ArmyRtsTransportService.HasActiveVoyage(",
+                   StringComparison.Ordinal),
+            "self-landing yields only when that actor belongs to transport, not merely when its army has another active voyage");
         int p0Start = postRunner.IndexOf(
             "private void ProcessMilitaryP0Actor(",
             StringComparison.Ordinal);

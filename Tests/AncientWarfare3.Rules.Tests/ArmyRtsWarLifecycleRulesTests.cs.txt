@@ -76,10 +76,10 @@ internal static class ArmyRtsWarLifecycleRulesTests
         Assert(!ArmyRtsRules.ShouldSkipInitialRally(
                 warStarted: true, wartimeRecovery: true),
             "a casualty recovery operation may still use replenishment");
-        Assert(!ArmyRtsRules.ShouldEnterReplenishment(
+        Assert(ArmyRtsRules.ShouldEnterReplenishment(
                 needsReplenishment: true, wartimeRecovery: false,
                 alreadyReplenishing: false),
-            "initial wartime shortage must not create a blocking replenishment state");
+            "any active wartime shortage opens in-place replenishment instead of stranding the army");
         Assert(ArmyRtsRules.ShouldEnterReplenishment(
                 needsReplenishment: true, wartimeRecovery: true,
                 alreadyReplenishing: false),
@@ -104,6 +104,35 @@ internal static class ArmyRtsWarLifecycleRulesTests
         Assert(!ArmyRtsControllerRules.ShouldUseMissionCityAsMovementTarget(
                 ArmyRtsState.March, hasRouteAnchor: true),
             "a custom route anchor remains the captain target while one exists");
+
+        Assert(ArmyRtsRules.SupportsReplenishment(ArmyRtsState.Retreat),
+            "a casualty retreat remains eligible for in-place wartime replenishment");
+        Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+            {
+                CurrentState = ArmyRtsState.March,
+                HasMission = true,
+                WarStarted = true,
+                TargetValid = true,
+                TargetComplete = false,
+                MinimumForceReady = false,
+                NeedsReplenishment = true,
+                Supply = 100,
+                Organization = 100
+            }) == ArmyRtsState.Replenish,
+            "a depleted marching army replenishes in place before casualty retreat");
+        Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+            {
+                CurrentState = ArmyRtsState.Retreat,
+                HasMission = true,
+                WarStarted = true,
+                TargetValid = true,
+                TargetComplete = false,
+                MinimumForceReady = true,
+                NeedsReplenishment = true,
+                Supply = 100,
+                Organization = 100
+            }) == ArmyRtsState.Replenish,
+            "an already retreating depleted army is recovered into in-place replenishment");
 
         Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
             {

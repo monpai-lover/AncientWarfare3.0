@@ -173,6 +173,10 @@ namespace AncientWarfare3.core.lineage
             float positionY = float.NaN;
             float nextX = float.NaN;
             float nextY = float.NaN;
+            bool inLiquid = false;
+            bool tileGround = false;
+            bool tileLiquid = false;
+            bool tileOcean = false;
             try
             {
                 currentX = pActor?.current_tile?.x ?? int.MinValue;
@@ -187,6 +191,10 @@ namespace AncientWarfare3.core.lineage
                 positionY = pActor.current_position.y;
                 nextX = pActor.next_step_position.x;
                 nextY = pActor.next_step_position.y;
+                inLiquid = pActor.isInLiquid();
+                tileGround = pActor.current_tile?.Type?.ground == true;
+                tileLiquid = pActor.current_tile?.Type?.liquid == true;
+                tileOcean = pActor.current_tile?.Type?.ocean == true;
             }
             catch { }
             int firstPathTile = PathTileId(pActor, 0);
@@ -225,6 +233,10 @@ namespace AncientWarfare3.core.lineage
                    " moving=" + moving +
                    " inside_boat=" +
                    (pActor?.is_inside_boat == true) +
+                   " in_liquid=" + inLiquid +
+                   " tile_ground=" + tileGround +
+                   " tile_liquid=" + tileLiquid +
+                   " tile_ocean=" + tileOcean +
                    " current_xy=" + currentX + "," + currentY +
                    " beh_xy=" + behaviourX + "," + behaviourY +
                    " native_xy=" + nativeX + "," + nativeY +

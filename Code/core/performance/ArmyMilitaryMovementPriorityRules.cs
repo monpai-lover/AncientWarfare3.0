@@ -75,5 +75,33 @@ namespace AncientWarfare3.core.performance
                    actionIndexBeforeAi == 0 && actionIndexAfterAi == 1 &&
                    !behaviourSkipped && !alreadyMoving;
         }
+
+        internal static bool ShouldAdvanceFollowerMoveInSameP0(
+            bool isFollowerTask, int actionIndexBeforeAi,
+            int actionIndexAfterAi, bool hasBehaviourTileTarget,
+            bool behaviourSkipped, bool alreadyMoving)
+        {
+            return isFollowerTask && actionIndexBeforeAi == 0 &&
+                   actionIndexAfterAi == 1 && hasBehaviourTileTarget &&
+                   !behaviourSkipped && !alreadyMoving;
+        }
+
+        internal static bool ShouldRunSelfLanding(bool inLiquid,
+            bool insideBoat, bool waterCreature,
+            bool intentionalTransportOwned)
+        {
+            return inLiquid && !insideBoat && !waterCreature &&
+                   !intentionalTransportOwned;
+        }
+
+        internal static bool ShouldAdvanceSelfLandingInSameP0(
+            bool isSelfLandingTask, int actionIndexBeforeAi,
+            int actionIndexAfterAi, bool hasBehaviourTileTarget,
+            bool behaviourSkipped, bool alreadyMoving)
+        {
+            return isSelfLandingTask && actionIndexBeforeAi == 0 &&
+                   actionIndexAfterAi == 1 && hasBehaviourTileTarget &&
+                   !behaviourSkipped && !alreadyMoving;
+        }
     }
 }

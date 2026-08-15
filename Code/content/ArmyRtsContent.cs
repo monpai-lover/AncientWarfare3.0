@@ -272,6 +272,7 @@ namespace AncientWarfare3.content
                 GoToActorTargetType.RaycastWithAttackRange,
                 false, true, true));
             task.addBeh(new BehArmyRtsCaptainAttack());
+            task.addBeh(new BehRestartTask());
         }
 
         private static void RegisterMemberCombatTask()
@@ -292,6 +293,7 @@ namespace AncientWarfare3.content
                 GoToActorTargetType.RaycastWithAttackRange,
                 false, true, true));
             task.addBeh(new BehArmyRtsCaptainAttack());
+            task.addBeh(new BehRestartTask());
         }
 
         private static void RegisterSiegeCombatTask()
@@ -312,6 +314,7 @@ namespace AncientWarfare3.content
                 GoToActorTargetType.RaycastWithAttackRange,
                 false, true, true));
             task.addBeh(new BehArmyRtsCaptainAttack());
+            task.addBeh(new BehRestartTask());
         }
 
         private static void RegisterCaptainSiegeAdvanceTask()

@@ -63,6 +63,31 @@ namespace AncientWarfare3.core.lineage
                    pFirst.PlayerOrder == pSecond.PlayerOrder;
         }
 
+        public static bool ShouldApplyTargetChangeCooldown(
+            ArmyRtsProposalKind pPreviousKind,
+            ArmyRtsProposalKind pNextKind)
+        {
+            return pPreviousKind == ArmyRtsProposalKind.Attack &&
+                   pNextKind == ArmyRtsProposalKind.Attack;
+        }
+
+        public static bool ShouldEnterTargetCityCombat(
+            ArmyRtsProposalKind pProposalKind, bool objectiveOpen,
+            bool captainInsideTargetCombatZone,
+            bool hostileMilitaryInsideTarget)
+        {
+            if (!objectiveOpen || !captainInsideTargetCombatZone ||
+                !hostileMilitaryInsideTarget) return false;
+            return pProposalKind == ArmyRtsProposalKind.Attack ||
+                   pProposalKind == ArmyRtsProposalKind.Defend;
+        }
+
+        public static bool ShouldInspectTargetCityCombat(
+            bool captainInsideTargetCombatZone, bool siegeCombatActive)
+        {
+            return captainInsideTargetCombatZone || siegeCombatActive;
+        }
+
         public static bool SameTransportObjective(ArmyRtsMission pFirst,
             ArmyRtsMission pSecond)
         {
@@ -289,6 +314,12 @@ namespace AncientWarfare3.core.lineage
                    string.Equals(stage, "combat_after_move_command",
                        StringComparison.Ordinal) ||
                    string.Equals(stage, "follower_after_ai",
+                       StringComparison.Ordinal) ||
+                   string.Equals(stage, "follower_after_move_command",
+                       StringComparison.Ordinal) ||
+                   string.Equals(stage, "self_landing_enter",
+                       StringComparison.Ordinal) ||
+                   string.Equals(stage, "self_landing_move_command",
                        StringComparison.Ordinal) ||
                    string.Equals(stage, "transport_yield",
                        StringComparison.Ordinal) ||
@@ -1132,6 +1163,9 @@ namespace AncientWarfare3.core.lineage
             bool targetCityChanged = previousMission != null &&
                 previousMission.TargetCityId != pMission.TargetCityId;
             if (targetCityChanged &&
+                ArmyRtsControllerRules.ShouldApplyTargetChangeCooldown(
+                    previousMission.ProposalKind,
+                    pMission.ProposalKind) &&
                 RuntimeByArmy.TryGetValue(pArmy.id, out RuntimeState cooldownCheck))
             {
                 double now = CurrentWorldTime();
@@ -1180,6 +1214,7 @@ namespace AncientWarfare3.core.lineage
             {
                 AWArmyMarchService.ClearArmy(pArmy);
                 ClearIndependentMemberPaths(pArmy, previousRuntime);
+                ClearArmyAttackTargets(pArmy);
                 if (ArmyRtsControllerRules.ShouldResetNativeMovement(
                         previousMission != null,
                         resetOperationalProgress))
@@ -1810,6 +1845,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || pTarget?.data == null ||
                 pActor.isRekt() || pTarget.isRekt() ||
                 !pActor.isAlive() || !pTarget.isAlive() ||
+                !pTarget.is_profession_warrior ||
                 pActor.current_tile?.data == null ||
                 pTarget.current_tile?.data == null ||
                 pActor.current_tile.isSameIsland(pTarget.current_tile) != true)
@@ -1904,6 +1940,13 @@ namespace AncientWarfare3.core.lineage
                 return zone?.city == pTargetCity ||
                        pTargetCity.border_zones?.Contains(zone) == true;
             }
+            catch { return false; }
+        }
+
+        private static bool IsWarActive(War pWar)
+        {
+            if (pWar?.data == null) return false;
+            try { return !pWar.hasEnded(); }
             catch { return false; }
         }
 
@@ -2019,10 +2062,33 @@ namespace AncientWarfare3.core.lineage
             Army army = pCaptain?.army;
             if (!HasCaptainMission(pCaptain) || army?.data == null ||
                 !RuntimeByArmy.TryGetValue(army.id,
-                    out RuntimeState runtime) || (!runtime.FieldCombatReleased &&
-                    !runtime.SiegeCombatActive))
+                    out RuntimeState runtime))
                 return;
+            if (!runtime.FieldCombatReleased && !runtime.SiegeCombatActive)
+            {
+                RepairCaptainVanillaFight(pCaptain);
+                return;
+            }
             SetCaptainTacticalTask(pCaptain);
+        }
+
+        private static void RepairCaptainVanillaFight(Actor pCaptain)
+        {
+            if (pCaptain?.data == null || !pCaptain.isTask("fighting"))
+                return;
+            Actor target = pCaptain.attack_target?.a;
+            if (!IsValidCaptainCombatTarget(pCaptain, target))
+                target = pCaptain.beh_actor_target?.a;
+            if (!IsValidCaptainCombatTarget(pCaptain, target))
+                target = FindCaptainCombatTarget(pCaptain);
+            if (IsValidCaptainCombatTarget(pCaptain, target))
+            {
+                pCaptain.beh_actor_target = target;
+                SetCaptainCombatTask(pCaptain);
+                return;
+            }
+            ClearActorAttackTarget(pCaptain);
+            ReassertCaptainMissionTask(pCaptain);
         }
 
         private static void SetCaptainTacticalTask(Actor pCaptain)
@@ -2417,9 +2483,11 @@ namespace AncientWarfare3.core.lineage
                 Actor combatTarget = pActor.beh_actor_target?.a;
                 if (!IsValidCaptainCombatTarget(pActor, combatTarget))
                     combatTarget = FindCaptainCombatTarget(pActor);
+                CountFieldCombatEngagement(army, out int engaged,
+                    out _, out _);
                 if (ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
                         fieldCombatRuntime.FieldCombatReleased,
-                        combatTarget != null))
+                        combatTarget != null, engaged > 0))
                 {
                     ExitFieldCombat(army, fieldCombatRuntime);
                     if (Controllers.TryGet(army.id,
@@ -3377,9 +3445,7 @@ namespace AncientWarfare3.core.lineage
                     ReassertCaptainCommand(pArmyId);
                 else
                 {
-                    SetJob(attackActor,
-                        ArmyRtsContent.VanillaFollowerJobId,
-                        "warrior_army_follow_leader",
+                    SetNativeMemberMissionTask(attackActor, army,
                         pForceReassert: true);
                     if (IsLiveWarriorActor(attackActor) &&
                         !HasImmediateCombatPriority(attackActor))
@@ -3416,9 +3482,7 @@ namespace AncientWarfare3.core.lineage
                 if (IsCaptain(vanillaFollower, army))
                     ReassertCaptainCommand(pArmyId);
                 else
-                    SetJob(vanillaFollower,
-                        ArmyRtsContent.VanillaFollowerJobId,
-                        "warrior_army_follow_leader",
+                    SetNativeMemberMissionTask(vanillaFollower, army,
                         pForceReassert: true);
                 if (vanillaFollower?.data != null &&
                     !HasImmediateCombatPriority(vanillaFollower))
@@ -3485,8 +3549,8 @@ namespace AncientWarfare3.core.lineage
                 return;
             if (UsesVanillaFollowerMovement(actor))
             {
-                SetJob(actor, ArmyRtsContent.VanillaFollowerJobId,
-                    "warrior_army_follow_leader", pForceReassert: true);
+                SetNativeMemberMissionTask(actor, army,
+                    pForceReassert: true);
                 return;
             }
             if (!RuntimeByArmy.TryGetValue(pArmyId, out RuntimeState runtime))
@@ -3632,6 +3696,36 @@ namespace AncientWarfare3.core.lineage
             RemovePendingReplenishmentArrivals(pArmyId);
         }
 
+        public static int InvalidateWarParticipant(long pWarId,
+            long pKingdomId)
+        {
+            if (pWarId < 0L || pKingdomId < 0L) return 0;
+            IReadOnlyList<long> armyIds = MissionIndex.SnapshotWar(pWarId);
+            int invalidated = 0;
+            for (int i = 0; i < armyIds.Count; i++)
+            {
+                long armyId = armyIds[i];
+                if (!Controllers.TryGet(armyId,
+                        out ArmyRtsControllerRecord record) ||
+                    record?.Mission == null ||
+                    !WarArmyReturnRules.MatchesDepartedParticipant(
+                        record.Mission.WarId, record.Mission.KingdomId,
+                        pWarId, pKingdomId)) continue;
+                Army army = FindArmy(armyId);
+                bool shouldBeginReturn = IsLiveArmy(army);
+                Invalidate(armyId);
+                bool returnQueued = shouldBeginReturn &&
+                    WarArmyReturnService.TryBegin(army);
+                ModClass.LogInfo("[AW3 RTS return] trigger=participant_left" +
+                                 " war=" + pWarId +
+                                 " kingdom=" + pKingdomId +
+                                 " army=" + armyId +
+                                 " queued=" + returnQueued);
+                invalidated++;
+            }
+            return invalidated;
+        }
+
         public static int InvalidateWar(long pWarId)
         {
             if (pWarId < 0L) return 0;
@@ -3712,6 +3806,7 @@ namespace AncientWarfare3.core.lineage
                 pConnectedSupply: corridor, pInCorridor: corridor);
             ArmyStallWatchdogService.OnMissionAssigned(pArmy,
                 pResetState: true);
+            ReassertCaptainMissionTask(SafeCaptain(pArmy));
             Controllers.Requeue(pArmy.id);
             return true;
         }
@@ -3757,10 +3852,41 @@ namespace AncientWarfare3.core.lineage
             bool liveArmy = IsLiveArmy(army);
             if (!liveArmy || !IsMissionValid(army, record.Mission))
             {
+                ArmyRtsMission invalidMission = record?.Mission;
+                War missionWar = FindWar(invalidMission?.WarId ?? -1L);
+                Kingdom missionKingdom = FindKingdom(
+                    invalidMission?.KingdomId ?? -1L);
+                Kingdom armyKingdom = liveArmy ? SafeKingdom(army) : null;
+                bool missionWarActive = IsWarActive(missionWar);
+                bool missionKingdomParticipating = IsKingdomInWar(
+                    missionWar, missionKingdom);
+                bool shouldBeginReturn = WarArmyReturnRules.
+                    ShouldReturnInvalidMission(
+                        armyAlive: liveArmy &&
+                            armyKingdom?.data != null &&
+                            armyKingdom.id == invalidMission?.KingdomId,
+                        missionExists: invalidMission != null,
+                        missionWarActive: missionWarActive,
+                        missionKingdomParticipating:
+                            missionKingdomParticipating);
                 Kingdom kingdom = liveArmy ? SafeKingdom(army) : null;
                 if (liveArmy)
                     GarrisonSortieService.OnMissionCompleted(army);
                 Invalidate(pArmyId);
+                if (shouldBeginReturn)
+                {
+                    bool returnQueued = WarArmyReturnService.TryBegin(army);
+                    ModClass.LogInfo(
+                        "[AW3 RTS return] trigger=invalid_mission" +
+                        " war=" + (invalidMission?.WarId ?? -1L) +
+                        " kingdom=" +
+                        (invalidMission?.KingdomId ?? -1L) +
+                        " army=" + pArmyId +
+                        " war_active=" + missionWarActive +
+                        " participant=" +
+                        missionKingdomParticipating +
+                        " queued=" + returnQueued);
+                }
                 if (liveArmy)
                     KingdomWarDirectorService.OnArmyChanged(kingdom);
                 return;
@@ -4036,21 +4162,28 @@ namespace AncientWarfare3.core.lineage
             if (lifecycle == null) return false;
             City target = FindCity(pRecord.Mission.TargetCityId);
             Actor captain = SafeCaptain(pArmy);
-            City currentCity = null;
-            try { currentCity = captain?.current_tile?.zone?.city; }
-            catch { }
             bool insideTarget = IsInsideTargetTerritory(captain, target);
             Kingdom kingdom = SafeKingdom(pArmy);
             War war = FindWar(pRecord.Mission.WarId);
-            bool hostileInside = insideTarget &&
-                (currentCity == target ||
-                 CityAttackZoneService.HasHostileMilitaryInside(war,
-                    target, kingdom));
-            bool hostileInCurrentCity = currentCity?.data != null &&
-                CityAttackZoneService.HasHostileMilitaryInside(war,
-                    currentCity, kingdom);
             bool objectiveOpen = target?.data != null &&
                 !TargetComplete(pArmy, pRecord.Mission, target, kingdom);
+            bool inspectTargetCityCombat = ArmyRtsControllerRules.
+                ShouldInspectTargetCityCombat(insideTarget,
+                    pRuntime.SiegeCombatActive);
+            bool hostileInTargetCity = inspectTargetCityCombat &&
+                target?.data != null &&
+                CityAttackZoneService.HasHostileMilitaryInside(war,
+                    target, kingdom);
+            bool enterMissionCityCombat = ArmyRtsControllerRules.
+                ShouldEnterTargetCityCombat(
+                    pRecord.Mission.ProposalKind, objectiveOpen,
+                    insideTarget, hostileInTargetCity);
+            if (enterMissionCityCombat || pRuntime.SiegeCombatActive)
+            {
+                bool cityCombatActive = EnterTargetCitySiegeCombat(
+                    pArmy, pRecord, pRuntime, target);
+                if (cityCombatActive) return true;
+            }
             bool targetIsEnemy = IsEnemyWarTarget(war, target, kingdom);
             bool withdrawalRequired = ArmyRtsWarLifecycleRules.
                 ShouldWithdraw(SafeUnitCount(pArmy),
@@ -4214,7 +4347,11 @@ namespace AncientWarfare3.core.lineage
                 if (actor == captain) continue;
                 if (!IsLiveCombatantActor(actor)) continue;
                 pLiveCombatants++;
-                if (HasImmediateCombatPriority(actor)) pEngaged++;
+                bool immediateAttack = HasImmediateCombatPriority(actor);
+                bool behaviourTarget = IsValidCaptainCombatTarget(actor,
+                    actor.beh_actor_target?.a);
+                if (ArmyRtsFieldCombatRules.IsMemberEngaged(
+                        immediateAttack, behaviourTarget)) pEngaged++;
             }
         }
 
@@ -4230,8 +4367,8 @@ namespace AncientWarfare3.core.lineage
             AWArmyMarchService.ClearArmy(pArmy.id);
             ResetStrategicMovementRuntime(pRuntime);
             SetCaptainTacticalTask(SafeCaptain(pArmy));
-            RegisterFieldCombatMembers(pArmy);
             pRuntime.FieldCombatReleased = true;
+            RegisterFieldCombatMembers(pArmy);
         }
 
         private static bool EnterTargetCitySiegeCombat(Army pArmy,
@@ -4323,8 +4460,8 @@ namespace AncientWarfare3.core.lineage
                 catch { continue; }
                 if (actor == captain || !IsLiveWarriorActor(actor))
                     continue;
-                SetJob(actor, ArmyRtsContent.VanillaFollowerJobId,
-                    "warrior_army_follow_leader", pForceReassert: true);
+                SetNativeMemberMissionTask(actor, pArmy,
+                    pForceReassert: true);
                 ArmyMilitaryMovementPriorityIndex.Register(actor.data.id,
                     ArmyMilitaryMovementPriorityKind.RtsMember);
             }
@@ -5152,8 +5289,7 @@ namespace AncientWarfare3.core.lineage
             {
                 Actor actor = pArmy.units[i];
                 if (actor == captain) continue;
-                SetJob(actor, ArmyRtsContent.VanillaFollowerJobId,
-                    "warrior_army_follow_leader");
+                SetNativeMemberMissionTask(actor, pArmy);
                 if (pState != ArmyRtsState.Rally &&
                     IsLiveWarriorActor(actor) &&
                     !HasImmediateCombatPriority(actor))
@@ -5514,6 +5650,12 @@ namespace AncientWarfare3.core.lineage
                                        HasImmediateCombatPriority(pActor);
                 bool requiredBoatWork =
                     HasMilitaryTransportOwnership(pActor);
+                bool inLiquid = pActor.current_tile?.Type?.liquid == true;
+                bool selfLandingTask = pActor.isTask(
+                    ArmyRtsTaskOwnershipRules.SelfLandingTaskId);
+                if (ArmyRtsTaskOwnershipRules.
+                        ShouldPreserveSelfLandingTask(inLiquid,
+                            selfLandingTask, requiredBoatWork)) return;
                 if (!ArmyRtsTaskOwnershipRules.ShouldReassertMissionTask(
                             ArmyRtsRuntimeMode.Current, ownsActor,
                             pActor.isAlive(), expectedJob,
@@ -5529,6 +5671,33 @@ namespace AncientWarfare3.core.lineage
                 pActor.ai.setTask(taskId);
             }
             catch { }
+        }
+
+        private static void SetNativeMemberMissionTask(Actor pActor,
+            Army pArmy, bool pForceReassert = false)
+        {
+            if (pActor?.data == null || pArmy?.data == null ||
+                IsCaptain(pActor, pArmy)) return;
+            string jobId = ArmyRtsContent.VanillaFollowerJobId;
+            string taskId = "warrior_army_follow_leader";
+            if (RuntimeByArmy.TryGetValue(pArmy.id,
+                    out RuntimeState runtime))
+            {
+                if (runtime.SiegeCombatActive)
+                {
+                    jobId = ArmyRtsContent.MemberCombatJobId;
+                    taskId = ArmyRtsContent.SiegeCombatTaskId;
+                }
+                else if (runtime.FieldCombatReleased ||
+                         HasValidMemberCombatTarget(pActor))
+                {
+                    jobId = ArmyRtsContent.MemberCombatJobId;
+                    taskId = ArmyRtsContent.MemberCombatTaskId;
+                }
+            }
+            bool taskMissing = !pActor.isTask(taskId);
+            SetJob(pActor, jobId, taskId,
+                pForceReassert || taskMissing);
         }
 
         internal static bool HasImmediateCombatPriority(Actor pActor)

@@ -34,10 +34,10 @@ internal static class ArmyRtsCaptainCombatRulesTests
                 alreadyInCombat: false, engagedCombatants: 2,
                 liveCombatants: 10, captainEngaged: false),
             "sub-threshold contact does not interrupt strategic movement");
-        Assert(!ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
+        Assert(ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: false, hasValidCombatTarget: true),
-            "a marching soldier keeps native follow even when it has an enemy target");
+            "a marching soldier with a valid close enemy immediately enters dedicated combat");
         Assert(ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: true, hasValidCombatTarget: true),
@@ -46,14 +46,14 @@ internal static class ArmyRtsCaptainCombatRulesTests
                 missionActive: true, actorIsCaptain: true,
                 fieldCombatReleased: true, hasValidCombatTarget: true),
             "the captain keeps the captain-specific combat task");
-        Assert(!ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
+        Assert(ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: true, hasValidCombatTarget: false),
-            "a follower without a live combat target stays on follow duty");
-        Assert(ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
+            "an active field battle keeps every soldier on dedicated combat even during a transient personal target miss");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: true, hasValidCombatTarget: false),
-            "a field soldier without a close target remains on follow duty instead of entering vanilla fighting");
+            "an active field battle routes a targetless soldier into dedicated member combat instead of follow");
         Assert(!ArmyRtsCaptainCombatRules.ShouldRestoreVanillaMemberFollow(
                 suppressVanillaFight: true,
                 isDedicatedMemberCombatTask: true),
@@ -66,10 +66,10 @@ internal static class ArmyRtsCaptainCombatRulesTests
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: true, hasValidCombatTarget: true),
             "a field soldier with a close target receives member combat rather than suppressing combat");
-        Assert(!ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
+        Assert(ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: false, hasValidCombatTarget: false),
-            "strategic marching does not suppress the original follow pipeline");
+            "an RTS soldier without a valid close enemy cannot remain in vanilla fighting during a march");
 
         string root = Directory.GetCurrentDirectory();
         string content = File.ReadAllText(Path.Combine(root, "Code",
@@ -86,6 +86,11 @@ internal static class ArmyRtsCaptainCombatRulesTests
                content.Contains("new BehArmyRtsMemberCombat()",
                    StringComparison.Ordinal),
             "field soldiers receive a dedicated RTS combat task rather than the unstable vanilla fighting task");
+        Assert(content.Split(new[]
+                   {
+                       "task.addBeh(new BehRestartTask());"
+                   }, StringSplitOptions.None).Length - 1 >= 4,
+            "captain, member and siege combat all restart target acquisition after each attack pass");
         string warLocale = File.ReadAllText(Path.Combine(root, "Locales",
             "war.csv"));
         Assert(warLocale.Contains("task_unit_aw_army_rts_captain_combat",
@@ -98,10 +103,51 @@ internal static class ArmyRtsCaptainCombatRulesTests
                !controller.Contains("ReleaseArmyActors(pArmy);\n            pRuntime.FieldCombatReleased",
                    StringComparison.Ordinal),
             "field contact does not release the army into an unowned vanilla gap");
+        Assert(controller.Contains("RepairCaptainVanillaFight",
+                   StringComparison.Ordinal) &&
+               controller.Contains("ReassertCaptainMissionTask",
+                   StringComparison.Ordinal),
+            "a captain is reclaimed from vanilla fighting into bounded combat or its strategic mission");
+        int memberMissionStart = controller.IndexOf(
+            "private static void SetNativeMemberMissionTask(",
+            StringComparison.Ordinal);
+        int memberMissionEnd = controller.IndexOf(
+            "internal static bool HasImmediateCombatPriority(",
+            memberMissionStart, StringComparison.Ordinal);
+        string memberMissionBody = memberMissionStart >= 0 &&
+            memberMissionEnd > memberMissionStart
+            ? controller.Substring(memberMissionStart,
+                memberMissionEnd - memberMissionStart)
+            : string.Empty;
+        Assert(memberMissionBody.Contains(
+                   "HasValidMemberCombatTarget(pActor)",
+                   StringComparison.Ordinal),
+            "job repair cannot replace an individually engaged member combatant with follow before the army-wide threshold is reached");
+        int enterFieldStart = controller.IndexOf(
+            "private static void EnterFieldCombat(",
+            StringComparison.Ordinal);
+        int enterFieldEnd = controller.IndexOf(
+            "private static bool EnterTargetCitySiegeCombat(",
+            enterFieldStart, StringComparison.Ordinal);
+        string enterFieldBody = enterFieldStart >= 0 &&
+            enterFieldEnd > enterFieldStart
+            ? controller.Substring(enterFieldStart,
+                enterFieldEnd - enterFieldStart)
+            : string.Empty;
+        int publishFieldCombat = enterFieldBody.IndexOf(
+            "pRuntime.FieldCombatReleased = true",
+            StringComparison.Ordinal);
+        int assignFieldMembers = enterFieldBody.IndexOf(
+            "RegisterFieldCombatMembers(pArmy)",
+            StringComparison.Ordinal);
+        Assert(publishFieldCombat >= 0 &&
+               assignFieldMembers > publishFieldCombat,
+            "field combat ownership must be published before member tasks are assigned");
         Assert(behaviour.Contains("beh_actor_target", StringComparison.Ordinal) &&
                behaviour.Contains("tryToAttack", StringComparison.Ordinal) &&
-               behaviour.Contains("RepeatStep", StringComparison.Ordinal),
-            "captain combat retains a bounded target and never terminates on a transient miss");
+               behaviour.Contains("pActor?.makeWait(0.15f);\n                return BehResult.Continue;",
+                   StringComparison.Ordinal),
+            "an attack-stage target miss advances into task restart instead of repeating forever on an empty target");
     }
 
     private static void Assert(bool condition, string message)
