@@ -761,6 +761,7 @@ namespace AncientWarfare3.core.policy
         public static string GetClassFallbackName(string pClassId)
         {
             if (pClassId == KingdomPolicyDefs.ClassRebel) return "\u519C\u6C11\u4E49\u519B";
+            if (pClassId == KingdomPolicyDefs.ClassBandit) return "\u571F\u532A";
             if (pClassId == KingdomPolicyDefs.ClassRepublic) return "\u5171\u548C\u653F\u4F53";
             return pClassId switch
             {
@@ -775,6 +776,24 @@ namespace AncientWarfare3.core.policy
         public static string GetClassLocaleKey(string pClassId)
         {
             return "aw_policy_class_" + (string.IsNullOrEmpty(pClassId) ? KingdomPolicyDefs.ClassDefault : pClassId);
+        }
+
+        internal static string GetClassIconPath(string pClassId)
+        {
+            if (pClassId == KingdomPolicyDefs.ClassSlaveOwner)
+                return "ui/policy/start_slaves";
+            if (pClassId == KingdomPolicyDefs.ClassHalfAristocrat)
+                return "ui/policy/start_halfaristocrat";
+            if (pClassId == KingdomPolicyDefs.ClassAristocrat)
+                return "ui/policy/base_enfeoffment";
+            if (pClassId == KingdomPolicyDefs.ClassReform)
+                return "ui/icons/iconPeace";
+            if (pClassId == KingdomPolicyDefs.ClassRepublic)
+                return "ui/icons/iconDiplomacy";
+            if (pClassId == KingdomPolicyDefs.ClassRebel ||
+                pClassId == KingdomPolicyDefs.ClassBandit)
+                return "ui/Icons/traits/iconrebel";
+            return "ui/icons/iconDiplomacy";
         }
 
         public static string GetArmyState(Kingdom pKingdom)

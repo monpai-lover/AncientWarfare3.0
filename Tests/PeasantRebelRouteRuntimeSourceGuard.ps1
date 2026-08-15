@@ -50,6 +50,9 @@ $restorePipeline = Get-Content -Raw `
 $chroniclePatch = Get-Content -Raw 'Code/patch/AW_ChroniclePatch.cs'
 $uiSources = (Get-ChildItem 'Code/ui' -Recurse -File -Filter '*.cs' |
     ForEach-Object { Get-Content -Raw $_.FullName }) -join "`n"
+$policyUi = Get-Content -Raw 'Code/ui/windows/KingdomPolicyWindow.cs'
+$kingdomUi = Get-Content -Raw 'Code/ui/windows/KingdomWindowAddition.cs'
+$policyLocale = Get-Content -Raw -Encoding UTF8 'Locales/aw3_policy_ui.csv'
 $bandit = if (Test-Path 'Code/core/lineage/PeasantRebelBanditRoute.cs') {
     Get-Content -Raw 'Code/core/lineage/PeasantRebelBanditRoute.cs'
 } else {
@@ -147,6 +150,24 @@ RequireOrder $mandate 'CanMutateAuthority(' `
     'Settlement authority must be checked before rebel state writes.'
 Require $route 'ApplyClassStateDirect(' `
     'Bandit exit must persist peasant rebel government first.'
+Require $policyUi 'CanSwitchGovernment(current, classId)' `
+    'UI must share transition availability with authority.'
+Require $policyUi 'button.interactable = !active && canSwitch;' `
+    'Invalid transitions must be disabled.'
+Require $policyUi 'AW3CommandRequest.SetPolicyClass(' `
+    'Policy UI must keep using the authoritative multiplayer command.'
+Require $policyUi 'KingdomPolicyDefs.ClassBandit' `
+    'The formal bandit class must render.'
+Require $policyUi 'AddClassStateIcon(box.transform, classId)' `
+    'Every government choice must render its mapped icon.'
+Require $kingdomUi 'GetClassIconPath(classId)' `
+    'The kingdom summary must share the formal class icon mapping.'
+Require $policyLocale 'aw_policy_class_peasant_bandit,' `
+    'Bandit class name must be localized.'
+Require $policyLocale 'aw_policy_class_peasant_bandit_desc,' `
+    'Bandit class description must be localized.'
+Require $policyLocale 'aw_policy_class_transition_locked,' `
+    'Invalid transition feedback must be localized.'
 Require $wall 'CaptureAndBuild(Kingdom pKingdom)' `
     'Wall capture must cover the complete kingdom border.'
 Require $wall 'foreach (City city in pKingdom.getCities())' `

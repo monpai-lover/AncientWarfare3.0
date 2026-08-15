@@ -859,15 +859,9 @@ namespace AncientWarfare3.ui.windows
             return "ui/icons/iconPlotsList";
         }
 
-        private static string ClassIconPath(string pClassId)
+        private static string ClassIconPath(string classId)
         {
-            if (pClassId == KingdomPolicyDefs.ClassSlaveOwner) return "ui/policy/start_slaves";
-            if (pClassId == KingdomPolicyDefs.ClassHalfAristocrat) return "ui/policy/start_halfaristocrat";
-            if (pClassId == KingdomPolicyDefs.ClassAristocrat) return "ui/policy/base_enfeoffment";
-            if (pClassId == KingdomPolicyDefs.ClassReform) return "ui/icons/iconPeace";
-            if (pClassId == KingdomPolicyDefs.ClassRepublic) return "ui/icons/iconDiplomacy";
-            if (pClassId == KingdomPolicyDefs.ClassRebel) return "ui/Icons/traits/iconrebel";
-            return "ui/icons/iconDiplomacy";
+            return KingdomPolicyService.GetClassIconPath(classId);
         }
 
         private static void SetPolicyIcon(Image pIcon, string pIconPath)
@@ -890,6 +884,7 @@ namespace AncientWarfare3.ui.windows
             if (pClassId == KingdomPolicyDefs.ClassReform) return "\u6539\u9769\u5236";
             if (pClassId == KingdomPolicyDefs.ClassRepublic) return "\u5171\u548C\u653F\u4F53";
             if (pClassId == KingdomPolicyDefs.ClassRebel) return "\u519C\u6C11\u4E49\u519B";
+            if (pClassId == KingdomPolicyDefs.ClassBandit) return "\u571F\u532A";
             return "\u90E8\u843D\u5236";
         }
 
