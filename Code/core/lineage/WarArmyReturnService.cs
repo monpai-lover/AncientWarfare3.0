@@ -20,16 +20,11 @@ namespace AncientWarfare3.core.lineage
         public static bool TryBegin(Army pArmy)
         {
             if (!IsLiveArmy(pArmy)) return false;
+            if (ArmyRtsControllerService.HasValidMission(pArmy)) return false;
             Kingdom kingdom = AWArmyService.GetIntendedKingdom(pArmy);
             if (!IsLiveKingdom(kingdom)) return false;
             Actor captain = SafeCaptain(pArmy);
             if (!IsAlive(captain) || captain.kingdom != kingdom) return false;
-            if (IsInsideFriendlySafeCity(captain, kingdom))
-            {
-                CompleteArrival(pArmy.id, pArmy);
-                return true;
-            }
-
             City target = ResolveTargetCity(pArmy, kingdom);
             if (!IsFriendlySafeCity(target, kingdom)) return false;
             if (!Queue.Begin(pArmy.id, kingdom.id, target.id)) return false;
@@ -61,12 +56,17 @@ namespace AncientWarfare3.core.lineage
                     Discard(armyId, army);
                     continue;
                 }
+                bool hasValidMission = ArmyRtsControllerService.
+                    HasValidMission(army);
+                bool captainInside = IsInsideFriendlySafeCity(captain,
+                    kingdom);
+                bool armyArrived = !hasValidMission && captainInside &&
+                    AdvanceArrivalSweep(army, kingdom, order);
+                if (!captainInside) ResetArrivalSweep(order);
                 WarArmyReturnOrderDecision decision = WarArmyReturnRules.
                     ResolveOrder(armyAlive: true,
-                        insideFriendlySafeCity: IsInsideFriendlySafeCity(
-                            captain, kingdom),
-                        hasValidMission: ArmyRtsControllerService.
-                            HasValidMission(army));
+                        insideFriendlySafeCity: armyArrived,
+                        hasValidMission: hasValidMission);
                 if (decision == WarArmyReturnOrderDecision.CancelForMission)
                 {
                     Cancel(armyId);
@@ -265,11 +265,7 @@ namespace AncientWarfare3.core.lineage
                         "[AW3 RTS return] stage=restore_discarded" +
                         " reason=restore_invalid_or_complete" +
                         " army=" + stored.ArmyId);
-                    if (facts.ArmyAlive && facts.ArmyKingdomMatches &&
-                        facts.InsideFriendlySafeCity)
-                        CompleteArrival(stored.ArmyId, pArmy);
-                    else
-                        Discard(stored.ArmyId, pArmy);
+                    Discard(stored.ArmyId, pArmy);
                 }
                 return;
             }
@@ -376,6 +372,52 @@ namespace AncientWarfare3.core.lineage
             pOrder.MemberCursor = end >= count ? 0 : end;
         }
 
+        private static bool AdvanceArrivalSweep(Army pArmy,
+            Kingdom pKingdom, WarArmyReturnQueueOrder pOrder)
+        {
+            if (pArmy?.data == null || pKingdom?.data == null ||
+                pOrder == null) return false;
+            int count;
+            try { count = pArmy.units?.Count ?? 0; }
+            catch { return false; }
+            if (pOrder.ArrivalExpectedMemberCount != count)
+            {
+                ResetArrivalSweep(pOrder);
+                pOrder.ArrivalExpectedMemberCount = count;
+            }
+            int start = Math.Min(count,
+                Math.Max(0, pOrder.ArrivalCursor));
+            int end = Math.Min(count,
+                start + MaximumMemberJobChecksPerArmy);
+            for (int i = start; i < end; i++)
+            {
+                Actor actor;
+                try { actor = pArmy.units[i]; }
+                catch
+                {
+                    pOrder.ArrivalSweepClear = false;
+                    continue;
+                }
+                if (!IsAlive(actor) || actor.army != pArmy) continue;
+                if (actor.kingdom != pKingdom ||
+                    !IsInsideFriendlySafeCity(actor, pKingdom))
+                    pOrder.ArrivalSweepClear = false;
+            }
+            pOrder.ArrivalCursor = end >= count ? 0 : end;
+            if (end < count) return false;
+            bool arrived = pOrder.ArrivalSweepClear;
+            ResetArrivalSweep(pOrder);
+            return arrived;
+        }
+
+        private static void ResetArrivalSweep(WarArmyReturnQueueOrder pOrder)
+        {
+            if (pOrder == null) return;
+            pOrder.ArrivalCursor = 0;
+            pOrder.ArrivalSweepClear = true;
+            pOrder.ArrivalExpectedMemberCount = -1;
+        }
+
         private static void EnsureReturnActorJob(Actor pActor, Army pArmy,
             Actor pCaptain)
         {
@@ -431,6 +473,7 @@ namespace AncientWarfare3.core.lineage
         private static void ReleaseReturnActor(Actor pActor)
         {
             if (pActor?.data == null || pActor.ai == null) return;
+            SyntheticLevyService.ConfirmReturnArrivalIfSafe(pActor);
             ArmyMilitaryMovementPriorityIndex.Unregister(pActor.data.id);
             string jobId = pActor.ai.job?.id ?? "";
             bool returnOwnedJob =
@@ -475,6 +518,11 @@ namespace AncientWarfare3.core.lineage
             try { city = pActor?.current_tile?.zone?.city; }
             catch { city = null; }
             return IsFriendlySafeCity(city, pKingdom);
+        }
+
+        internal static bool IsInsideFriendlySafeCity(Actor pActor)
+        {
+            return IsInsideFriendlySafeCity(pActor, pActor?.kingdom);
         }
 
         private static bool IsFriendlySafeCity(City pCity,

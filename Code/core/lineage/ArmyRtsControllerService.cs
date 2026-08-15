@@ -3818,7 +3818,10 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 if (SyntheticLevyService.IsSynthetic(pActor))
+                {
+                    SyntheticLevyService.ConfirmReturnArrival(pActor);
                     pActor.ai.clearJob();
+                }
                 else
                     pActor.ai.setJob(Actor.nextJobActor(pActor));
             }

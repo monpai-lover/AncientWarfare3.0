@@ -9,6 +9,9 @@ namespace AncientWarfare3.core.lineage
         public long KingdomId { get; internal set; }
         public long TargetCityId { get; internal set; }
         public int MemberCursor { get; internal set; }
+        public int ArrivalCursor { get; internal set; }
+        public bool ArrivalSweepClear { get; internal set; } = true;
+        public int ArrivalExpectedMemberCount { get; internal set; } = -1;
     }
 
     public sealed class WarArmyReturnQueueCore
@@ -185,7 +188,7 @@ namespace AncientWarfare3.core.lineage
             if (pStored == null || !pStored.Active || pFacts == null ||
                 pStored.ArmyId < 0L || pStored.KingdomId < 0L ||
                 !pFacts.ArmyAlive || !pFacts.ArmyKingdomMatches ||
-                pFacts.InsideFriendlySafeCity || pFacts.HasValidMission)
+                pFacts.HasValidMission)
                 return false;
             long targetCityId = pFacts.StoredTargetFriendlySafe
                 ? pStored.TargetCityId

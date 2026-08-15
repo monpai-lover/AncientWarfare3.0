@@ -335,10 +335,13 @@ namespace AncientWarfare3.core.lineage
                     ClearPersisted(army);
                     bool returnActive =
                         WarArmyReturnService.IsActive(army);
-                    if (!returnActive)
+                    bool hasValidMission =
+                        ArmyRtsControllerService.HasValidMission(army);
+                    if (!returnActive && !hasValidMission)
                         WarArmyReturnService.TryBegin(army);
                     returnActive = WarArmyReturnService.IsActive(army);
-                    ClearWarCombatState(army);
+                    if (!hasValidMission)
+                        ClearWarCombatState(army);
                     ModClass.LogInfo(
                         "[AW3 RTS return] trigger=lifecycle_war_ended" +
                         " war=" + warId +

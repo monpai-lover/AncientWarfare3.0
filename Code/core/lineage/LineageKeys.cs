@@ -320,6 +320,8 @@ namespace AncientWarfare3.core.lineage
             "aw_synthetic_levy_emergency_id";
         public const string SYNTHETIC_LEVY_LEDGER_RELEASED =
             "aw_synthetic_levy_ledger_released";
+        public const string SYNTHETIC_LEVY_RETURN_ARRIVED =
+            "aw_synthetic_levy_return_arrived";
         public const string AW_RTS_ABSTRACT_BATTLE_OPERATION =
             "aw_rts_abstract_battle_operation";
         public const string AW_RTS_ABSTRACT_BATTLE_PHASE =

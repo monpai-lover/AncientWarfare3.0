@@ -50,13 +50,13 @@ internal static class SyntheticMobilizationRulesTests
                  loadReconciliationPending: false),
             "orphan synthetic cleanup runs after the load scan");
         Equal(true, SyntheticMobilizationRules.ShouldDeferDemobilization(
-                syntheticActor: true, armyReturnActive: true),
-            "synthetic army members survive until post-war return completes");
+                syntheticActor: true, returnArrivalConfirmed: false),
+            "synthetic army members survive cancel, discard, and active return until their own arrival is confirmed");
         Equal(false, SyntheticMobilizationRules.ShouldDeferDemobilization(
-                syntheticActor: true, armyReturnActive: false),
-            "synthetic army members demobilize after return ownership clears");
+                syntheticActor: true, returnArrivalConfirmed: true),
+            "synthetic army members demobilize only after confirmed arrival");
         Equal(false, SyntheticMobilizationRules.ShouldDeferDemobilization(
-                syntheticActor: false, armyReturnActive: true),
+                syntheticActor: false, returnArrivalConfirmed: false),
             "permanent soldiers are never routed through synthetic cleanup");
         int remaining = 41;
         int[] expectedBatches = { 16, 16, 9 };
@@ -103,8 +103,16 @@ internal static class SyntheticMobilizationRulesTests
         Contains(source,
             "SyntheticMobilizationRules.ShouldDeferDemobilization(",
             "demobilization yields while a synthetic actor's army is returning home");
-        Contains(source, "WarArmyReturnService.IsActive(actor.army)",
-            "the synthetic cleanup boundary reads active army return ownership");
+        Contains(source,
+            "HasReturnArrivalConfirmed(",
+            "the synthetic cleanup boundary reads the per-actor arrival fact");
+        string levySource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SyntheticLevyService.cs"));
+        Contains(levySource, "ConfirmReturnArrival(Actor actor)",
+            "successful army return can persist each synthetic actor's arrival");
+        Contains(levySource, "ConfirmReturnArrivalIfSafe(Actor actor)",
+            "discard only releases synthetic actors already inside a safe city");
         Contains(source, "OnSyntheticMaterialized(Actor pActor)",
             "materialization registers actor identity atomically");
     }

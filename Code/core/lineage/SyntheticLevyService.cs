@@ -20,6 +20,28 @@ namespace AncientWarfare3.core.lineage
                 synthetic, promoted);
         }
 
+        internal static bool HasReturnArrivalConfirmed(Actor actor)
+        {
+            if (actor?.data == null) return false;
+            actor.data.get(LineageKeys.SYNTHETIC_LEVY_RETURN_ARRIVED,
+                out bool arrived, false);
+            return arrived;
+        }
+
+        internal static void ConfirmReturnArrival(Actor actor)
+        {
+            if (!IsSynthetic(actor)) return;
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY_RETURN_ARRIVED,
+                true);
+        }
+
+        internal static void ConfirmReturnArrivalIfSafe(Actor actor)
+        {
+            if (IsSynthetic(actor) &&
+                WarArmyReturnService.IsInsideFriendlySafeCity(actor))
+                ConfirmReturnArrival(actor);
+        }
+
         private static bool TryReadFlags(Actor actor,
             out bool synthetic, out bool promoted)
         {
@@ -186,6 +208,8 @@ namespace AncientWarfare3.core.lineage
             actor.data.set(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID, -1L);
             actor.data.set(LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED,
                 false);
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY_RETURN_ARRIVED,
+                false);
         }
 
         internal static void RemoveWithoutPersonalHistory(Actor actor)
@@ -230,6 +254,8 @@ namespace AncientWarfare3.core.lineage
             actor.data.set(LineageKeys.SYNTHETIC_LEVY_EMERGENCY_ID,
                 emergencyId);
             actor.data.set(LineageKeys.SYNTHETIC_LEVY_LEDGER_RELEASED,
+                false);
+            actor.data.set(LineageKeys.SYNTHETIC_LEVY_RETURN_ARRIVED,
                 false);
         }
 

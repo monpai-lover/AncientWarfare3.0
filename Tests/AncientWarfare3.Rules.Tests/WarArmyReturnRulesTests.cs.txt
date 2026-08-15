@@ -230,6 +230,16 @@ internal static class WarArmyReturnRulesTests
         string queueAdmission = Section(service,
             "public static bool TryBegin(",
             "public static void ProcessFrame(");
+        int admissionMissionGuard = queueAdmission.IndexOf(
+            "ArmyRtsControllerService.HasValidMission(pArmy)",
+            StringComparison.Ordinal);
+        int admissionQueue = queueAdmission.IndexOf("Queue.Begin(",
+            StringComparison.Ordinal);
+        True(admissionMissionGuard >= 0 &&
+             admissionQueue > admissionMissionGuard &&
+             !queueAdmission.Contains("CompleteArrival(",
+                 StringComparison.Ordinal),
+            "return admission preserves a replacement mission and defers safe-city completion to the bounded queue");
         False(queueAdmission.Contains("IssueMovement("),
             "queue admission does not bypass the per-frame movement bound");
         string queueProcessing = Section(service,
@@ -238,7 +248,9 @@ internal static class WarArmyReturnRulesTests
         True(queueProcessing.Contains(
                  "MaximumQueueScansPerFrame") &&
              queueProcessing.Contains("Queue.TakeFrame(") &&
-             queueProcessing.Contains("MaximumQueueScansPerFrame)"),
+             queueProcessing.Contains("MaximumQueueScansPerFrame)") &&
+             queueProcessing.Contains(
+                 "AdvanceArrivalSweep(army, kingdom, order)"),
             "service uses a fixed defensive queue scan ceiling");
         False(queueProcessing.Contains(
                 "Queue.WorkCount"),
@@ -385,16 +397,24 @@ internal static class WarArmyReturnRulesTests
         int lifecycleReturn = lifecycleWarEnd.IndexOf(
             "WarArmyReturnService.TryBegin(army)",
             Math.Max(0, lifecycleArmyLookup), StringComparison.Ordinal);
+        int lifecycleMissionGuard = lifecycleWarEnd.IndexOf(
+            "ArmyRtsControllerService.HasValidMission(army)",
+            Math.Max(0, lifecycleArmyLookup), StringComparison.Ordinal);
         int lifecycleCombatClear = lifecycleWarEnd.IndexOf(
             "ClearWarCombatState(army)",
             Math.Max(0, lifecycleArmyLookup), StringComparison.Ordinal);
         int lifecycleStoreClear = lifecycleWarEnd.IndexOf(
             "Store.ClearWar(warId)", StringComparison.Ordinal);
         True(lifecycleArmyLookup >= 0 &&
-             lifecycleReturn > lifecycleArmyLookup &&
+             lifecycleMissionGuard > lifecycleArmyLookup &&
+             lifecycleReturn > lifecycleMissionGuard &&
              lifecycleCombatClear > lifecycleReturn &&
-             lifecycleStoreClear > lifecycleCombatClear,
-            "war lifecycle fallback starts return before combat and lifecycle cleanup");
+             lifecycleStoreClear > lifecycleCombatClear &&
+             lifecycleWarEnd.Substring(lifecycleMissionGuard,
+                     lifecycleCombatClear - lifecycleMissionGuard)
+                 .Contains("if (!hasValidMission)",
+                     StringComparison.Ordinal),
+            "war lifecycle preserves replacement missions while fallback return owns ended-war cleanup");
 
         int lifecycleEndCall = warPatch.IndexOf(
             "ArmyRtsWarLifecycleService.OnWarEnded(pWar)",
@@ -536,20 +556,20 @@ internal static class WarArmyReturnRulesTests
                  StringComparison.Ordinal),
             "return invalidation clears mission ownership, begins return, and only releases actor jobs on failure");
 
-        int missionDefense = queueProcessing.IndexOf("ResolveOrder(",
-            StringComparison.Ordinal);
         int activeMissionCheck = queueProcessing.IndexOf(
-            "HasValidMission(army)", missionDefense,
+            "HasValidMission(army)",
             StringComparison.Ordinal);
+        int missionDefense = queueProcessing.IndexOf("ResolveOrder(",
+            Math.Max(0, activeMissionCheck), StringComparison.Ordinal);
         int movement = queueProcessing.IndexOf(
             "EnsureReturnJobs(army, order)", StringComparison.Ordinal);
         int requeue = queueProcessing.IndexOf("Queue.Requeue(armyId)",
             movement, StringComparison.Ordinal);
-        True(missionDefense >= 0 && activeMissionCheck > missionDefense &&
-             movement > activeMissionCheck &&
+        True(activeMissionCheck >= 0 && missionDefense > activeMissionCheck &&
+             movement > missionDefense &&
               requeue > movement &&
-              queueProcessing.Substring(missionDefense,
-                  movement - missionDefense).Contains(
+              queueProcessing.Substring(activeMissionCheck,
+                  movement - activeMissionCheck).Contains(
                   "Cancel(armyId)"),
             "consumer drops a return order before movement and requeue when a mission is active");
 
@@ -610,6 +630,9 @@ internal static class WarArmyReturnRulesTests
         Equal(true, queue.TryTake(out WarArmyReturnQueueOrder cancelledOrder),
             "the first return order can begin traversal");
         cancelledOrder.MemberCursor = 17;
+        cancelledOrder.ArrivalCursor = 11;
+        cancelledOrder.ArrivalSweepClear = false;
+        cancelledOrder.ArrivalExpectedMemberCount = 23;
         Equal(true, queue.Requeue(cancelledOrder.ArmyId),
             "the traversed return order requeues before cancellation");
         Equal(true, queue.Cancel(7L), "return can be cancelled");
@@ -623,6 +646,12 @@ internal static class WarArmyReturnRulesTests
             "the reopened return resolves a new order instance");
         Equal(0, reopenedOrder.MemberCursor,
             "cancelling an order clears its member cursor lifecycle");
+        Equal(0, reopenedOrder.ArrivalCursor,
+            "cancelling an order clears its arrival cursor lifecycle");
+        Equal(true, reopenedOrder.ArrivalSweepClear,
+            "a reopened order begins a clean bounded arrival sweep");
+        Equal(-1, reopenedOrder.ArrivalExpectedMemberCount,
+            "a reopened order has no stale roster size snapshot");
         Equal(true, queue.Requeue(reopenedOrder.ArmyId),
             "the cursor-reset order returns to bounded work");
 
@@ -774,12 +803,14 @@ internal static class WarArmyReturnRulesTests
         foreach (WarArmyReturnRestoreFacts facts in new[]
                  {
                      RestoreFacts(armyAlive: false),
-                     RestoreFacts(insideFriendlySafeCity: true),
                      RestoreFacts(hasValidMission: true)
                  })
             Equal(false, WarArmyReturnPersistenceRules.TryRestore(stored,
                     facts, out _),
-                "death, arrival, or a valid mission clears persisted return");
+                "death or a valid mission clears persisted return");
+        Equal(true, WarArmyReturnPersistenceRules.TryRestore(stored,
+                RestoreFacts(insideFriendlySafeCity: true), out _),
+            "captain arrival restores the order until a bounded full-roster sweep completes");
     }
 
     private static void DisposedArmyClearsRuntimeAndCannotRestore()
@@ -1020,11 +1051,11 @@ internal static class WarArmyReturnRulesTests
         int restoreCompletionReason = restoreRuleFailure.IndexOf(
             "reason=restore_invalid_or_complete",
             Math.Max(0, restoreCompletionElse), StringComparison.Ordinal);
-        int restoreArrival = restoreRuleFailure.IndexOf(
-            "CompleteArrival(stored.ArmyId, pArmy)",
+        int restoreDiscard = restoreRuleFailure.IndexOf(
+            "Discard(stored.ArmyId, pArmy)",
             Math.Max(0, restoreCompletionReason), StringComparison.Ordinal);
         int restoreFailureReturn = restoreRuleFailure.IndexOf("return;",
-            Math.Max(0, restoreArrival), StringComparison.Ordinal);
+            Math.Max(0, restoreDiscard), StringComparison.Ordinal);
         string restoreMissionBranch = restoreMissionDecision >= 0 &&
                                       restoreCompletionElse >
                                       restoreMissionDecision
@@ -1038,13 +1069,13 @@ internal static class WarArmyReturnRulesTests
             restoreMissionReason > restoreMissionCancel &&
             restoreCompletionElse > restoreMissionReason &&
             restoreCompletionReason > restoreCompletionElse &&
-            restoreArrival > restoreCompletionReason &&
-            restoreFailureReturn > restoreArrival &&
+            restoreDiscard > restoreCompletionReason &&
+            restoreFailureReturn > restoreDiscard &&
             !restoreMissionBranch.Contains("CompleteArrival(",
                 StringComparison.Ordinal) &&
             !restoreMissionBranch.Contains("ReleaseReturnJobs(",
                 StringComparison.Ordinal),
-            "restore cancels valid-mission intent without releasing jobs while invalid completion finishes destructively");
+            "restore cancels valid-mission intent without releasing jobs while invalid state is discarded");
         int restoreQueueRejected = restore.IndexOf(
             "reason=restore_queue_rejected",
             Math.Max(0, restoredQueue), StringComparison.Ordinal);
@@ -1085,9 +1116,9 @@ internal static class WarArmyReturnRulesTests
             "core", "lineage", "SyntheticMobilizationLedgerService.cs"));
         Collect(failures,
             syntheticSource.Contains(
-                "WarArmyReturnService.IsActive(actor.army)",
+                "HasReturnArrivalConfirmed(",
                 StringComparison.Ordinal) && nativeRelease > clearReturn,
-            "synthetic demobilization remains deferred until arrival clears return ownership");
+            "synthetic demobilization requires a per-actor successful return fact");
 
         if (failures.Count > 0)
             throw new InvalidOperationException(string.Join(
@@ -1103,6 +1134,16 @@ internal static class WarArmyReturnRulesTests
                 "public int MemberCursor { get; internal set; }",
                 StringComparison.Ordinal),
             "each return order owns its member cursor so queue removal clears traversal state");
+        True(queueSource.Contains(
+                 "public int ArrivalCursor { get; internal set; }",
+                 StringComparison.Ordinal) &&
+             queueSource.Contains(
+                 "public bool ArrivalSweepClear { get; internal set; } = true;",
+                 StringComparison.Ordinal) &&
+             queueSource.Contains(
+                 "public int ArrivalExpectedMemberCount { get; internal set; } = -1;",
+                 StringComparison.Ordinal),
+            "each return order owns bounded full-roster arrival sweep state");
         True(service.Contains(
                 "private const int MaximumMemberJobChecksPerArmy = 128;",
                 StringComparison.Ordinal),
@@ -1168,6 +1209,25 @@ internal static class WarArmyReturnRulesTests
              !jobRepair.Contains("for (int i = 0; i < count; i++)",
                  StringComparison.Ordinal),
             "return frame work checks one cursor-bounded member slice and wraps for later repair");
+
+        string arrivalSweep = Section(service,
+            "private static bool AdvanceArrivalSweep(",
+            "private static void ResetArrivalSweep(");
+        True(arrivalSweep.Contains("WarArmyReturnQueueOrder pOrder",
+                 StringComparison.Ordinal) &&
+             arrivalSweep.Contains("MaximumMemberJobChecksPerArmy",
+                 StringComparison.Ordinal) &&
+             arrivalSweep.Contains("pOrder.ArrivalCursor",
+                 StringComparison.Ordinal) &&
+             arrivalSweep.Contains("pOrder.ArrivalSweepClear",
+                 StringComparison.Ordinal) &&
+             arrivalSweep.Contains("pOrder.ArrivalExpectedMemberCount",
+                 StringComparison.Ordinal) &&
+             arrivalSweep.Contains("IsInsideFriendlySafeCity(actor",
+                 StringComparison.Ordinal) &&
+             !arrivalSweep.Contains("for (int i = 0; i < count; i++)",
+                 StringComparison.Ordinal),
+            "arrival completion scans one bounded roster slice and requires every live member home");
 
         string actorRepair = Section(service,
             "private static void EnsureReturnActorJob(",
