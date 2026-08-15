@@ -650,6 +650,12 @@ namespace AncientWarfare3.core.lineage
                 " members=" + pState.Members.Count);
         }
 
+        internal static void EnsureNativeTaxiRequest(Actor pActor,
+            WorldTile pTarget)
+        {
+            EnsureRequest(pActor, pTarget);
+        }
+
         private static void EnsureRequest(Actor pActor,
             WorldTile pTarget)
         {

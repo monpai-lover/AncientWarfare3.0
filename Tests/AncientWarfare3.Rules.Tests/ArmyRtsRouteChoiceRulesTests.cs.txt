@@ -149,6 +149,27 @@ internal static class ArmyRtsRouteChoiceRulesTests
                 ArmyRtsTransportPhase.None) ==
                "aw_army_rts_formation",
             "a sampled formation member must be checked against the formation task");
+        Assert(ArmyStallWatchdogRules.HasPhysicalMovementProgress(
+                movementTiles: 0.1d, fixedRetreatTransit: true),
+            "slow but real retreat motion must reset the stall watchdog");
+        Assert(!ArmyStallWatchdogRules.HasPhysicalMovementProgress(
+                movementTiles: 0.1d, fixedRetreatTransit: false),
+            "ordinary strategic movement retains the existing progress threshold");
+        Assert(ArmyStallWatchdogRules.NormalizeRecoveryForFixedRetreat(
+                fixedRetreatTransit: true,
+                ArmyStallRecoveryAction.AlternateEndpoint) ==
+               ArmyStallRecoveryAction.ReassertCommand,
+            "retreat recovery must keep its selected safe city instead of choosing another endpoint");
+        Assert(ArmyStallWatchdogRules.NormalizeRecoveryForFixedRetreat(
+                fixedRetreatTransit: true,
+                ArmyStallRecoveryAction.RebuildRoute) ==
+               ArmyStallRecoveryAction.ReassertCommand,
+            "retreat route recovery reasserts the same fixed-city command");
+        Assert(ArmyStallWatchdogRules.NormalizeRecoveryForFixedRetreat(
+                fixedRetreatTransit: true,
+                ArmyStallRecoveryAction.EnterTransport) ==
+               ArmyStallRecoveryAction.EnterTransport,
+            "a cross-island retreat may still hand movement to transport");
     }
 
     private static void TransportRecoveryUsesLockedStrategicEndpoint()

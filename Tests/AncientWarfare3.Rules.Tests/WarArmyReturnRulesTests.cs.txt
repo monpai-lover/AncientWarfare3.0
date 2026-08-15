@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 
 internal static class WarArmyReturnRulesTests
 {
@@ -22,6 +23,35 @@ internal static class WarArmyReturnRulesTests
         Equal(false, WarArmyReturnRules.HasArrived(
                 armyAlive: true, insideFriendlySafeCity: false),
             "an army abroad retains return intent");
+        Equal(false, WarArmyReturnRules.ShouldAllowPeacetimeJob(
+                returnActive: true),
+            "active return intent blocks patrol and social ownership");
+        Equal(true, WarArmyReturnRules.ShouldAllowPeacetimeJob(
+                returnActive: false),
+            "peacetime ownership resumes after return completes");
+        Equal(true, WarArmyReturnRules.ShouldRepairReturnTask(
+                returnActive: true, actorAlive: true,
+                expectedJobActive: false, expectedTaskActive: false,
+                actorMoving: true, transportOwned: false),
+            "a moving social task cannot block return task repair");
+        Equal(false, WarArmyReturnRules.ShouldRepairReturnTask(
+                returnActive: true, actorAlive: true,
+                expectedJobActive: true, expectedTaskActive: true,
+                actorMoving: true, transportOwned: false),
+            "a healthy moving return path is not restarted every frame");
+        Equal(false, WarArmyReturnRules.ShouldRepairReturnTask(
+                returnActive: true, actorAlive: true,
+                expectedJobActive: false, expectedTaskActive: false,
+                actorMoving: false, transportOwned: true),
+            "transport retains movement ownership during cross-island return");
+        Equal(true, ArmyMilitaryMovementPriorityRules.
+                IsActiveReturnObjectiveOwner(
+                    returnActive: true, actorBelongsToArmy: true),
+            "return remains a P0 military objective after the RTS mission is invalidated");
+        Equal(false, ArmyMilitaryMovementPriorityRules.
+                IsActiveReturnObjectiveOwner(
+                    returnActive: true, actorBelongsToArmy: false),
+            "an unrelated actor cannot inherit an army return objective");
 
         ScopedParticipantDepartureRules();
         InvalidMissionFallbackRules();
@@ -43,6 +73,8 @@ internal static class WarArmyReturnRulesTests
         True(File.Exists(servicePath),
             "the ended-war army return queue exists");
         string service = File.ReadAllText(servicePath);
+        ReturnServiceEdgeSourceGuards(root, service);
+        BoundedReturnJobSourceGuards(root, service);
         True(service.Contains("MaximumArmiesPerFrame") &&
              service.Contains(
                  "private const int MaximumQueueScansPerFrame = 64;") &&
@@ -51,6 +83,54 @@ internal static class WarArmyReturnRulesTests
         False(service.Contains("RestoreCivilian(") ||
               service.Contains("removeFromArmy("),
             "army return intent never demobilizes standing or special armies");
+        False(service.Contains("if (pCaptain.is_moving) return;"),
+            "a social movement flag must not suppress the return command");
+        True(service.Contains("EnsureReturnJobs(") &&
+             service.Contains("TryPrepareMilitaryP0Actor(") &&
+             service.Contains("TryGetTarget("),
+            "return owns task repair, P0 preparation, and target publication");
+        string content = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "ArmyRtsContent.cs"));
+        True(content.Contains("ReturnCaptainJobId") &&
+             content.Contains("ReturnFollowerJobId") &&
+             content.Contains("ReturnTaskId") &&
+             content.Contains("new BehWarArmyReturnTarget()") &&
+             content.Contains("warrior_army_follow_leader"),
+            "return registers a dedicated captain task and native follower job");
+        string returnBehaviourPath = Path.Combine(root, "Code", "ai",
+            "behaviours", "actor", "BehWarArmyReturnTarget.cs");
+        True(File.Exists(returnBehaviourPath) &&
+             File.ReadAllText(returnBehaviourPath).Contains(
+                 "WarArmyReturnService.TryGetTarget(",
+                 StringComparison.Ordinal),
+            "the return task resolves its persisted safe-city target at execution time");
+        string peacetime = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "StandingArmyPeacetimeService.cs"));
+        True(peacetime.Contains("WarArmyReturnService.IsActive(army)",
+                StringComparison.Ordinal),
+            "standing-army peacetime jobs must yield to active return intent");
+        string postRunner = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        True(postRunner.Contains("WarArmyReturnService.IsActive(actor?.army)",
+                StringComparison.Ordinal) &&
+             postRunner.Contains(
+                 "WarArmyReturnService.TryPrepareMilitaryP0Actor(actor)",
+                 StringComparison.Ordinal),
+            "large-step P0 retains and repairs actors owned by post-war return");
+        string enlistPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_EnlistPatch.cs"));
+        int returnJobLookup = enlistPatch.IndexOf(
+            "WarArmyReturnService.GetJob(__instance)",
+            StringComparison.Ordinal);
+        int peacetimeJobLookup = enlistPatch.IndexOf(
+            "StandingArmyPeacetimeService.GetJob(__instance)",
+            StringComparison.Ordinal);
+        True(returnJobLookup >= 0 && peacetimeJobLookup > returnJobLookup,
+            "Actor.getNextJob must preserve return ownership before consulting peacetime patrol");
+        True(enlistPatch.Contains(
+                "WarArmyReturnService.IsActive(__instance.army)",
+                StringComparison.Ordinal),
+            "a returning standing soldier cannot retire before reaching home");
         string queueAdmission = Section(service,
             "public static bool TryBegin(",
             "public static void ProcessFrame(");
@@ -71,7 +151,7 @@ internal static class WarArmyReturnRulesTests
             "if (!IsFriendlySafeCity(target, kingdom))",
             StringComparison.Ordinal);
         int recoveredMovement = queueProcessing.IndexOf(
-            "IssueMovement(captain, target)", targetRecovery,
+            "EnsureReturnJobs(army, order)", targetRecovery,
             StringComparison.Ordinal);
         True(targetRecovery >= 0 && recoveredMovement > targetRecovery &&
              queueProcessing.Substring(targetRecovery,
@@ -141,14 +221,12 @@ internal static class WarArmyReturnRulesTests
             StringComparison.Ordinal);
         int missionMatch = invalidate.IndexOf(
             "ShouldBeginReturn(", StringComparison.Ordinal);
-        int invalidation = invalidate.IndexOf("Invalidate(armyId)",
+        int invalidation = invalidate.IndexOf(
+            "InvalidateAndTryBeginReturn(armyId, army,",
             missionMatch, StringComparison.Ordinal);
-        int queue = invalidate.IndexOf("WarArmyReturnService.TryBegin(",
-            invalidation, StringComparison.Ordinal);
         True(exactMissionMatch >= 0 && missionMatch > exactMissionMatch &&
-             invalidation > missionMatch &&
-             queue > invalidation,
-            "matching ended-war missions invalidate before live armies enter return handling");
+             invalidation > missionMatch,
+            "matching ended-war missions use phased invalidation before return handling");
 
         string participantInvalidate = Section(controller,
             "public static int InvalidateWarParticipant(",
@@ -158,16 +236,13 @@ internal static class WarArmyReturnRulesTests
         int participantMatch = participantInvalidate.IndexOf(
             "MatchesDepartedParticipant(", StringComparison.Ordinal);
         int participantInvalidation = participantInvalidate.IndexOf(
-            "Invalidate(armyId)", participantMatch,
-            StringComparison.Ordinal);
-        int participantReturn = participantInvalidate.IndexOf(
-            "WarArmyReturnService.TryBegin(", participantInvalidation,
+            "InvalidateAndTryBeginReturn(armyId, army,",
+            participantMatch,
             StringComparison.Ordinal);
         True(participantSnapshot >= 0 &&
              participantMatch > participantSnapshot &&
-             participantInvalidation > participantMatch &&
-             participantReturn > participantInvalidation,
-            "participant departure scopes by war and kingdom, then invalidates before return");
+             participantInvalidation > participantMatch,
+            "participant departure scopes by war and kingdom before phased return invalidation");
 
         string warPatch = File.ReadAllText(Path.Combine(root, "Code",
             "patch", "AW_WarPatch.cs"));
@@ -216,17 +291,13 @@ internal static class WarArmyReturnRulesTests
             "ShouldReturnInvalidMission(", invalidMissionBranch,
             StringComparison.Ordinal);
         int fallbackInvalidation = processOne.IndexOf(
-            "Invalidate(pArmyId)", Math.Max(0, fallbackDecision),
-            StringComparison.Ordinal);
-        int fallbackReturn = processOne.IndexOf(
-            "WarArmyReturnService.TryBegin(",
-            Math.Max(0, fallbackInvalidation),
+            "InvalidateAndTryBeginReturn(pArmyId, army,",
+            Math.Max(0, fallbackDecision),
             StringComparison.Ordinal);
         True(invalidMissionBranch >= 0 &&
              fallbackDecision > invalidMissionBranch &&
-             fallbackInvalidation > fallbackDecision &&
-             fallbackReturn > fallbackInvalidation,
-            "invalid mission fallback decides before invalidation and returns afterward");
+             fallbackInvalidation > fallbackDecision,
+            "invalid mission fallback decides before phased return invalidation");
         string fallbackPrefix = invalidMissionBranch >= 0 &&
                                 fallbackDecision > invalidMissionBranch
             ? processOne.Substring(invalidMissionBranch,
@@ -236,13 +307,109 @@ internal static class WarArmyReturnRulesTests
              fallbackPrefix.Contains("IsKingdomInWar("),
             "fallback distinguishes an ended war or departed participant from target churn");
 
+        string standardInvalidation = Section(controller,
+            "public static void Invalidate(long pArmyId)",
+            "private static bool InvalidateAndTryBeginReturn(");
+        const string releaseGuardText = "if (pReleaseActorJobs)";
+        const string releaseCallText = "ReleaseArmyActors(army)";
+        const string refreshCallText =
+            "RefreshReleasedArmyPeacetimeJobs(army)";
+        int standardReleaseGuard = standardInvalidation.IndexOf(
+            releaseGuardText, StringComparison.Ordinal);
+        int firstStandardRelease = standardInvalidation.IndexOf(
+            releaseCallText, StringComparison.Ordinal);
+        int standardRelease = standardInvalidation.IndexOf(releaseCallText,
+            Math.Max(0, standardReleaseGuard), StringComparison.Ordinal);
+        string beforeStandardRelease = standardReleaseGuard >= 0 &&
+                                       standardRelease > standardReleaseGuard
+            ? standardInvalidation.Substring(
+                standardReleaseGuard + releaseGuardText.Length,
+                standardRelease - standardReleaseGuard -
+                releaseGuardText.Length)
+            : "not-guarded";
+        int duplicateStandardRelease = standardInvalidation.IndexOf(
+            releaseCallText,
+            Math.Max(0, standardRelease + releaseCallText.Length),
+            StringComparison.Ordinal);
+        int standardRefreshGuard = standardInvalidation.IndexOf(
+            releaseGuardText,
+            Math.Max(0, standardRelease + releaseCallText.Length),
+            StringComparison.Ordinal);
+        int firstStandardRefresh = standardInvalidation.IndexOf(
+            refreshCallText, StringComparison.Ordinal);
+        int standardRefresh = standardInvalidation.IndexOf(refreshCallText,
+            Math.Max(0, standardRefreshGuard), StringComparison.Ordinal);
+        string beforeStandardRefresh = standardRefreshGuard >= 0 &&
+                                       standardRefresh > standardRefreshGuard
+            ? standardInvalidation.Substring(
+                standardRefreshGuard + releaseGuardText.Length,
+                standardRefresh - standardRefreshGuard -
+                releaseGuardText.Length)
+            : "not-guarded";
+        int duplicateStandardRefresh = standardInvalidation.IndexOf(
+            refreshCallText,
+            Math.Max(0, standardRefresh + refreshCallText.Length),
+            StringComparison.Ordinal);
+        True(standardInvalidation.Contains(
+                 "Invalidate(pArmyId, pReleaseActorJobs: true)",
+                 StringComparison.Ordinal) &&
+             standardReleaseGuard >= 0 &&
+             standardRelease > standardReleaseGuard &&
+             firstStandardRelease == standardRelease &&
+             string.IsNullOrWhiteSpace(beforeStandardRelease) &&
+             duplicateStandardRelease < 0 &&
+             standardRefreshGuard > standardRelease &&
+             standardRefresh > standardRefreshGuard &&
+             firstStandardRefresh == standardRefresh &&
+             string.IsNullOrWhiteSpace(beforeStandardRefresh) &&
+             duplicateStandardRefresh < 0,
+            "ordinary invalidation preserves immediate actor release and peacetime refresh");
+        string returnInvalidation = Section(controller,
+            "private static bool InvalidateAndTryBeginReturn(",
+            "public static int InvalidateWarParticipant(");
+        int ownershipInvalidated = returnInvalidation.IndexOf(
+            "Invalidate(pArmyId, pReleaseActorJobs: false)",
+            StringComparison.Ordinal);
+        int returnBegin = returnInvalidation.IndexOf(
+            "WarArmyReturnService.TryBegin(pArmy)",
+            Math.Max(0, ownershipInvalidated), StringComparison.Ordinal);
+        int returnActive = returnInvalidation.IndexOf(
+            "WarArmyReturnService.IsActive(pArmy)",
+            Math.Max(0, returnBegin), StringComparison.Ordinal);
+        int returnFailed = returnInvalidation.IndexOf(
+            "if (!returnQueued)", Math.Max(0, returnActive),
+            StringComparison.Ordinal);
+        int fallbackRelease = returnInvalidation.IndexOf(
+            "ReleaseArmyActors(pArmy)", Math.Max(0, returnFailed),
+            StringComparison.Ordinal);
+        int fallbackRefresh = returnInvalidation.IndexOf(
+            "RefreshReleasedArmyPeacetimeJobs(pArmy)",
+            Math.Max(0, fallbackRelease), StringComparison.Ordinal);
+        string beforeReturnBegin = ownershipInvalidated >= 0 &&
+                                   returnBegin > ownershipInvalidated
+            ? returnInvalidation.Substring(ownershipInvalidated,
+                returnBegin - ownershipInvalidated)
+            : "invalid";
+        True(ownershipInvalidated >= 0 &&
+             returnBegin > ownershipInvalidated &&
+             returnActive > returnBegin &&
+             returnFailed > returnActive &&
+             fallbackRelease > returnFailed &&
+             fallbackRefresh > fallbackRelease &&
+             !beforeReturnBegin.Contains("ReleaseArmyActors(",
+                 StringComparison.Ordinal) &&
+             !beforeReturnBegin.Contains(
+                 "RefreshReleasedArmyPeacetimeJobs(",
+                 StringComparison.Ordinal),
+            "return invalidation clears mission ownership, begins return, and only releases actor jobs on failure");
+
         int missionDefense = queueProcessing.IndexOf("ResolveOrder(",
             StringComparison.Ordinal);
         int activeMissionCheck = queueProcessing.IndexOf(
             "HasValidMission(army)", missionDefense,
             StringComparison.Ordinal);
         int movement = queueProcessing.IndexOf(
-            "IssueMovement(captain, target)", StringComparison.Ordinal);
+            "EnsureReturnJobs(army, order)", StringComparison.Ordinal);
         int requeue = queueProcessing.IndexOf("Queue.Requeue(armyId)",
             movement, StringComparison.Ordinal);
         True(missionDefense >= 0 && activeMissionCheck > missionDefense &&
@@ -307,6 +474,11 @@ internal static class WarArmyReturnRulesTests
     {
         var queue = new WarArmyReturnQueueCore();
         Equal(true, queue.Begin(7L, 1L, 10L), "first return begins");
+        Equal(true, queue.TryTake(out WarArmyReturnQueueOrder cancelledOrder),
+            "the first return order can begin traversal");
+        cancelledOrder.MemberCursor = 17;
+        Equal(true, queue.Requeue(cancelledOrder.ArmyId),
+            "the traversed return order requeues before cancellation");
         Equal(true, queue.Cancel(7L), "return can be cancelled");
         Equal(0, queue.WorkCount,
             "cancel physically removes its queued node");
@@ -314,6 +486,12 @@ internal static class WarArmyReturnRulesTests
             "cancel clears its node index entry");
         Equal(true, queue.Begin(7L, 1L, 11L),
             "same army can reopen before its old token drains");
+        Equal(true, queue.TryTake(out WarArmyReturnQueueOrder reopenedOrder),
+            "the reopened return resolves a new order instance");
+        Equal(0, reopenedOrder.MemberCursor,
+            "cancelling an order clears its member cursor lifecycle");
+        Equal(true, queue.Requeue(reopenedOrder.ArmyId),
+            "the cursor-reset order returns to bounded work");
 
         for (int i = 0; i < 32; i++)
         {
@@ -571,6 +749,285 @@ internal static class WarArmyReturnRulesTests
 
         Equal(WarArmyReturnOrderDecision.CancelForMission, decision,
             "consumer defense cancels return when active assignment appears");
+    }
+
+    private static void ReturnServiceEdgeSourceGuards(string root,
+        string service)
+    {
+        var failures = new List<string>();
+        string transportService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsTransportService.cs"));
+        string nativeRequestRepair = Section(transportService,
+            "private static void EnsureRequest(",
+            "private static void ReleaseRequest(");
+
+        string transport = Section(service,
+            "internal static bool TryHandleTransport(",
+            "internal static bool ShouldSuppressCombatPreemption(");
+        const string sameIslandFalse =
+            "SameIsland(pActor.current_tile, pTarget)) return false;";
+        int sameIsland = transport.IndexOf(sameIslandFalse,
+            StringComparison.Ordinal);
+        int existingTaxiRequest = transport.IndexOf(
+            "HasExactTaxiRequest(pActor, pTarget)",
+            Math.Max(0, sameIsland), StringComparison.Ordinal);
+        int transportCall = transport.IndexOf(
+            "ArmyRtsTransportService.TryHandleActor(pActor, pTarget,",
+            Math.Max(0, existingTaxiRequest), StringComparison.Ordinal);
+        int nativeTaxiFallback = transport.IndexOf(
+            "ArmyRtsTransportService.EnsureNativeTaxiRequest(" +
+            "pActor, pTarget)",
+            Math.Max(0, transportCall), StringComparison.Ordinal);
+        int transportOwned = transport.IndexOf("return true;",
+            Math.Max(0, nativeTaxiFallback), StringComparison.Ordinal);
+        Collect(failures,
+            sameIsland >= 0 && existingTaxiRequest > sameIsland &&
+            transportCall > existingTaxiRequest &&
+            nativeTaxiFallback > transportCall &&
+            transportOwned > nativeTaxiFallback &&
+            service.Contains("using life.taxi;",
+                StringComparison.Ordinal) &&
+            transport.Contains("TaxiManager.getRequestForActor(pActor)",
+                StringComparison.Ordinal) &&
+            transport.Contains(
+                "request?.getTileTarget()?.data?.tile_id ==",
+                StringComparison.Ordinal) &&
+            transportService.Contains(
+                "internal static void EnsureNativeTaxiRequest(",
+                StringComparison.Ordinal) &&
+            transportService.Contains("EnsureRequest(pActor, pTarget);",
+                StringComparison.Ordinal) &&
+            nativeRequestRepair.Contains(
+                "RemoveActorFromRequest(request, pActor);",
+                StringComparison.Ordinal) &&
+            nativeRequestRepair.Contains("FindExactReusableRequest(",
+                StringComparison.Ordinal) &&
+            nativeRequestRepair.Contains("TaxiManager.list.Add(" +
+                "new TaxiRequest(pActor,",
+                StringComparison.Ordinal) &&
+            !transport.Contains(
+                "!SameIsland(pActor.current_tile, pTarget)",
+                StringComparison.Ordinal) &&
+            !transport.Contains(
+                "return ArmyRtsTransportService.TryHandleActor",
+                StringComparison.Ordinal),
+            "cross-island return reuses an exact taxi request, falls back to native taxi when managed transport rejects, and retains movement ownership");
+
+        string processing = Section(service,
+            "public static void ProcessFrame()",
+            "public static void Cancel(long pArmyId)");
+        int missionDecision = processing.IndexOf(
+            "decision == WarArmyReturnOrderDecision.CancelForMission",
+            StringComparison.Ordinal);
+        int missionCancel = processing.IndexOf("Cancel(armyId)",
+            Math.Max(0, missionDecision), StringComparison.Ordinal);
+        int completionBranch = processing.IndexOf(
+            "decision != WarArmyReturnOrderDecision.Continue",
+            Math.Max(0, missionCancel), StringComparison.Ordinal);
+        string missionCancellationBranch = missionDecision >= 0 &&
+                                           completionBranch > missionDecision
+            ? processing.Substring(missionDecision,
+                completionBranch - missionDecision)
+            : "";
+        int missionContinue = missionCancellationBranch.IndexOf(
+            "continue;", Math.Max(0, missionCancel - missionDecision),
+            StringComparison.Ordinal);
+        int completionFinish = processing.IndexOf("Finish(armyId, army)",
+            Math.Max(0, completionBranch), StringComparison.Ordinal);
+        Collect(failures,
+            missionDecision >= 0 && missionCancel > missionDecision &&
+            missionContinue > missionCancel - missionDecision &&
+            !missionCancellationBranch.Contains("Finish(",
+                StringComparison.Ordinal) &&
+            completionBranch > missionCancel &&
+            completionFinish > completionBranch,
+            "mission cancellation clears return intent before the destructive completion branch");
+
+        string cancellation = Section(service,
+            "public static void Cancel(long pArmyId)",
+            "public static bool IsActive(Army pArmy)");
+        Collect(failures,
+            cancellation.Contains("Queue.Cancel(pArmyId)",
+                StringComparison.Ordinal) &&
+            cancellation.Contains("ClearPersisted(",
+                StringComparison.Ordinal) &&
+            !cancellation.Contains("ReleaseReturnJobs(",
+                StringComparison.Ordinal) &&
+            !cancellation.Contains("Unregister(",
+                StringComparison.Ordinal) &&
+            !cancellation.Contains("RefreshJob(",
+                StringComparison.Ordinal),
+            "published missions cancel persisted return intent without releasing their newly-owned P0 jobs");
+
+        string restore = Section(service,
+            "private static void TryRestore(Army pArmy)",
+            "private static void Finish(long pArmyId, Army pArmy)");
+        int restoreRules = restore.IndexOf(
+            "if (!WarArmyReturnPersistenceRules.TryRestore(stored, facts,",
+            StringComparison.Ordinal);
+        int restoredQueue = restore.IndexOf("Queue.Begin(",
+            StringComparison.Ordinal);
+        string restoreRuleFailure = restoreRules >= 0 &&
+                                    restoredQueue > restoreRules
+            ? restore.Substring(restoreRules,
+                restoredQueue - restoreRules)
+            : "";
+        int restoreMissionDecision = restoreRuleFailure.IndexOf(
+            "if (facts.HasValidMission)", StringComparison.Ordinal);
+        int restoreMissionCancel = restoreRuleFailure.IndexOf(
+            "Cancel(stored.ArmyId)",
+            Math.Max(0, restoreMissionDecision), StringComparison.Ordinal);
+        int restoreMissionReason = restoreRuleFailure.IndexOf(
+            "reason=restore_valid_mission",
+            Math.Max(0, restoreMissionCancel), StringComparison.Ordinal);
+        int restoreCompletionElse = restoreRuleFailure.IndexOf("else",
+            Math.Max(0, restoreMissionReason), StringComparison.Ordinal);
+        int restoreCompletionReason = restoreRuleFailure.IndexOf(
+            "reason=restore_invalid_or_complete",
+            Math.Max(0, restoreCompletionElse), StringComparison.Ordinal);
+        int restoreCompletionFinish = restoreRuleFailure.IndexOf(
+            "Finish(stored.ArmyId, pArmy)",
+            Math.Max(0, restoreCompletionReason), StringComparison.Ordinal);
+        int restoreFailureReturn = restoreRuleFailure.IndexOf("return;",
+            Math.Max(0, restoreCompletionFinish), StringComparison.Ordinal);
+        string restoreMissionBranch = restoreMissionDecision >= 0 &&
+                                      restoreCompletionElse >
+                                      restoreMissionDecision
+            ? restoreRuleFailure.Substring(restoreMissionDecision,
+                restoreCompletionElse - restoreMissionDecision)
+            : "";
+        Collect(failures,
+            restoreRules >= 0 &&
+            restoreMissionDecision >= 0 &&
+            restoreMissionCancel > restoreMissionDecision &&
+            restoreMissionReason > restoreMissionCancel &&
+            restoreCompletionElse > restoreMissionReason &&
+            restoreCompletionReason > restoreCompletionElse &&
+            restoreCompletionFinish > restoreCompletionReason &&
+            restoreFailureReturn > restoreCompletionFinish &&
+            !restoreMissionBranch.Contains("Finish(",
+                StringComparison.Ordinal) &&
+            !restoreMissionBranch.Contains("ReleaseReturnJobs(",
+                StringComparison.Ordinal),
+            "restore cancels valid-mission intent without releasing jobs while invalid completion finishes destructively");
+        int restoreQueueRejected = restore.IndexOf(
+            "reason=restore_queue_rejected",
+            Math.Max(0, restoredQueue), StringComparison.Ordinal);
+        int restoreQueueFinish = restore.IndexOf(
+            "Finish(stored.ArmyId, pArmy)",
+            Math.Max(0, restoreQueueRejected), StringComparison.Ordinal);
+        int restoredPersist = restore.IndexOf("Persist(pArmy,",
+            Math.Max(0, restoredQueue), StringComparison.Ordinal);
+        int restoredCaptainJob = restore.IndexOf(
+            "EnsureReturnCaptainJob(pArmy)",
+            Math.Max(0, restoredPersist), StringComparison.Ordinal);
+        Collect(failures,
+            restoredQueue >= 0 && restoredPersist > restoredQueue &&
+            restoreQueueRejected > restoredQueue &&
+            restoreQueueFinish > restoreQueueRejected &&
+            restoredPersist > restoreQueueFinish &&
+            restoredCaptainJob > restoredPersist,
+            "restore queue rejection finishes before successful persistence immediately installs the captain return job");
+
+        if (failures.Count > 0)
+            throw new InvalidOperationException(string.Join(
+                Environment.NewLine, failures));
+    }
+
+    private static void BoundedReturnJobSourceGuards(string root,
+        string service)
+    {
+        string queueSource = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "WarArmyReturnQueueCore.cs"));
+        True(queueSource.Contains(
+                "public int MemberCursor { get; internal set; }",
+                StringComparison.Ordinal),
+            "each return order owns its member cursor so queue removal clears traversal state");
+        True(service.Contains(
+                "private const int MaximumMemberJobChecksPerArmy = 128;",
+                StringComparison.Ordinal),
+            "return member job repair has a fixed per-army actor check budget");
+
+        string admission = Section(service,
+            "public static bool TryBegin(Army pArmy)",
+            "public static void ProcessFrame()");
+        True(admission.Contains("EnsureReturnCaptainJob(pArmy)",
+                 StringComparison.Ordinal) &&
+             !admission.Contains("EnsureReturnJobs(",
+                 StringComparison.Ordinal) &&
+             !admission.Contains("pArmy.units", StringComparison.Ordinal),
+            "return admission synchronously owns only the captain and never scans the roster");
+
+        string processing = Section(service,
+            "public static void ProcessFrame()",
+            "public static void Cancel(long pArmyId)");
+        True(processing.Contains("EnsureReturnJobs(army, order)",
+                StringComparison.Ordinal),
+            "bounded frame processing advances the cursor stored on its queue order");
+
+        string restore = Section(service,
+            "private static void TryRestore(Army pArmy)",
+            "private static void Finish(long pArmyId, Army pArmy)");
+        True(restore.Contains("EnsureReturnCaptainJob(pArmy)",
+                 StringComparison.Ordinal) &&
+             !restore.Contains("EnsureReturnJobs(",
+                 StringComparison.Ordinal) &&
+             !restore.Contains("pArmy.units", StringComparison.Ordinal),
+            "restore synchronously reclaims only the captain before bounded frame work resumes");
+
+        string captainRepair = Section(service,
+            "private static void EnsureReturnCaptainJob(",
+            "private static void EnsureReturnJobs(");
+        True(captainRepair.Contains("SafeCaptain(pArmy)",
+                 StringComparison.Ordinal) &&
+             captainRepair.Contains("EnsureReturnActorJob(captain",
+                 StringComparison.Ordinal) &&
+             !captainRepair.Contains("pArmy.units",
+                 StringComparison.Ordinal) &&
+             !captainRepair.Contains("for (", StringComparison.Ordinal),
+            "the captain-only helper cannot hide a roster scan from admission and restore guards");
+
+        string jobRepair = Section(service,
+            "private static void EnsureReturnJobs(",
+            "private static void ReleaseReturnJobs(");
+        int cursorStart = jobRepair.IndexOf(
+            "pOrder.MemberCursor", StringComparison.Ordinal);
+        int boundedEnd = jobRepair.IndexOf(
+            "MaximumMemberJobChecksPerArmy", Math.Max(0, cursorStart),
+            StringComparison.Ordinal);
+        int boundedLoop = jobRepair.IndexOf(
+            "for (int i = start; i < end; i++)",
+            Math.Max(0, boundedEnd), StringComparison.Ordinal);
+        int cursorWrap = jobRepair.IndexOf(
+            "pOrder.MemberCursor = end >= count ? 0 : end;",
+            Math.Max(0, boundedLoop), StringComparison.Ordinal);
+        True(jobRepair.Contains("WarArmyReturnQueueOrder pOrder",
+                 StringComparison.Ordinal) &&
+             cursorStart >= 0 && boundedEnd > cursorStart &&
+             boundedLoop > boundedEnd && cursorWrap > boundedLoop &&
+             !jobRepair.Contains("for (int i = 0; i < count; i++)",
+                 StringComparison.Ordinal),
+            "return frame work checks one cursor-bounded member slice and wraps for later repair");
+
+        string actorRepair = Section(service,
+            "private static void EnsureReturnActorJob(",
+            "private static void ReleaseReturnJobs(");
+        int diagnosticCall = actorRepair.IndexOf(
+            "ArmyRtsMovementDiagnostic.Log(\"return\",",
+            StringComparison.Ordinal);
+        int diagnosticStage = actorRepair.IndexOf("\"task_repaired\"",
+            Math.Max(0, diagnosticCall), StringComparison.Ordinal);
+        True(diagnosticCall >= 0 && diagnosticStage > diagnosticCall &&
+             !actorRepair.Contains(
+                 "ModClass.LogInfo(\"[AW3 RTS return] stage=task_repaired\"",
+                 StringComparison.Ordinal),
+            "per-actor repair diagnostics use the gated sampled movement diagnostic");
+    }
+
+    private static void Collect(List<string> failures, bool condition,
+        string message)
+    {
+        if (!condition) failures.Add(message);
     }
 
     private static string Section(string source, string start, string end)
