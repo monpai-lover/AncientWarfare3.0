@@ -584,6 +584,85 @@ internal static class ArmyRtsCombatHandoffRulesTests
                 "ArmyRtsTransportService.ReleaseArmy",
                 StringComparison.Ordinal),
             "retreat job repair must not cancel live vanilla taxi requests");
+        int retreatFollowerHelperStart = controller.IndexOf(
+            "private static void SetRetreatFollowerJob(",
+            StringComparison.Ordinal);
+        int retreatFollowerHelperEnd = controller.IndexOf(
+            "private static void SetNativeMemberMissionTask(",
+            Math.Max(0, retreatFollowerHelperStart),
+            StringComparison.Ordinal);
+        string retreatFollowerHelper = retreatFollowerHelperStart >= 0 &&
+            retreatFollowerHelperEnd > retreatFollowerHelperStart
+            ? controller.Substring(retreatFollowerHelperStart,
+                retreatFollowerHelperEnd - retreatFollowerHelperStart)
+            : string.Empty;
+        int clearRetreatAttack = retreatFollowerHelper.IndexOf(
+            "ClearActorAttackTarget(pActor)", StringComparison.Ordinal);
+        int forceRetreatFollower = retreatFollowerHelper.IndexOf(
+            "ArmyRtsContent.RetreatFollowerJobId",
+            Math.Max(0, clearRetreatAttack),
+            StringComparison.Ordinal);
+        int forceRetreatTask = retreatFollowerHelper.IndexOf(
+            "\"warrior_army_follow_leader\"",
+            Math.Max(0, forceRetreatFollower),
+            StringComparison.Ordinal);
+        int forceRetreatOwnership = retreatFollowerHelper.IndexOf(
+            "pForceReassert: true", Math.Max(0, forceRetreatTask),
+            StringComparison.Ordinal);
+        Assert(clearRetreatAttack >= 0 &&
+               forceRetreatFollower > clearRetreatAttack &&
+               forceRetreatTask > forceRetreatFollower &&
+               forceRetreatOwnership > forceRetreatTask,
+            "valid retreat ownership clears combat before force-installing the follower job and task");
+        Assert(retreatJobsBody.Contains(
+                   "SetRetreatFollowerJob(actor)",
+                   StringComparison.Ordinal) &&
+               retreatJobsBody.Contains(
+                   "if (IsLiveWarriorActor(actor))",
+                   StringComparison.Ordinal) &&
+               !retreatJobsBody.Contains(
+                   "!HasImmediateCombatPriority(actor)",
+                   StringComparison.Ordinal),
+            "every live retreat follower receives military P0 even when combat was previously active");
+        int retreatReassertStart = controller.IndexOf(
+            "if (record != null && UsesVanillaRetreatMovement(",
+            StringComparison.Ordinal);
+        int retreatReassertEnd = controller.IndexOf(
+            "if (record != null && UsesVanillaFollowerMovement(",
+            Math.Max(0, retreatReassertStart), StringComparison.Ordinal);
+        string retreatReassert = retreatReassertStart >= 0 &&
+            retreatReassertEnd > retreatReassertStart
+            ? controller.Substring(retreatReassertStart,
+                retreatReassertEnd - retreatReassertStart)
+            : string.Empty;
+        Assert(retreatReassert.Contains(
+                   "SetRetreatFollowerJob(retreatActor)",
+                   StringComparison.Ordinal) &&
+               retreatReassert.Contains(
+                   "if (IsLiveWarriorActor(retreatActor))",
+                   StringComparison.Ordinal) &&
+               retreatReassert.Contains(
+                   "ArmyMilitaryMovementPriorityIndex.Register(",
+                   StringComparison.Ordinal) &&
+               !retreatReassert.Contains(
+                   "!HasImmediateCombatPriority(retreatActor)",
+                   StringComparison.Ordinal),
+            "retreat command repair force-restores every live follower to military P0");
+        int suppressTransitStart = controller.IndexOf(
+            "internal static void SuppressCombatForTransit(",
+            StringComparison.Ordinal);
+        int suppressTransitEnd = controller.IndexOf(
+            "internal static bool ShouldUseNativeMilitaryPath(",
+            Math.Max(0, suppressTransitStart), StringComparison.Ordinal);
+        string suppressTransit = suppressTransitStart >= 0 &&
+            suppressTransitEnd > suppressTransitStart
+            ? controller.Substring(suppressTransitStart,
+                suppressTransitEnd - suppressTransitStart)
+            : string.Empty;
+        Assert(suppressTransit.Contains(
+                "SetRetreatFollowerJob(pActor)",
+                StringComparison.Ordinal),
+            "combat suppression uses the forced retreat follower transition only after validating retreat ownership");
         Assert(!watchdog.Contains("SampleFollowerRecovery(pArmyId",
                 StringComparison.Ordinal),
             "the watchdog must not recover soldiers owned by vanilla follow-leader AI");

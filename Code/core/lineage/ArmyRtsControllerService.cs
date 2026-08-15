@@ -2145,8 +2145,7 @@ namespace AncientWarfare3.core.lineage
             {
                 ClearActorAttackTarget(pActor);
                 if (!IsCaptain(pActor, army))
-                    SetJob(pActor, ArmyRtsContent.RetreatFollowerJobId,
-                        "warrior_army_follow_leader");
+                    SetRetreatFollowerJob(pActor);
                 return false;
             }
             bool missionActive = army?.data != null &&
@@ -2440,8 +2439,7 @@ namespace AncientWarfare3.core.lineage
                 SetJob(pActor, ArmyRtsContent.RetreatCaptainJobId,
                     ArmyRtsContent.RetreatTaskId);
             else
-                SetJob(pActor, ArmyRtsContent.RetreatFollowerJobId,
-                    "warrior_army_follow_leader");
+                SetRetreatFollowerJob(pActor);
         }
 
         internal static bool ShouldUseNativeMilitaryPath(Actor pActor)
@@ -3505,12 +3503,8 @@ namespace AncientWarfare3.core.lineage
                 if (IsCaptain(retreatActor, army))
                     ReassertCaptainCommand(pArmyId);
                 else
-                    SetJob(retreatActor,
-                        ArmyRtsContent.RetreatFollowerJobId,
-                        "warrior_army_follow_leader",
-                        pForceReassert: true);
-                if (retreatActor?.data != null &&
-                    !HasImmediateCombatPriority(retreatActor))
+                    SetRetreatFollowerJob(retreatActor);
+                if (IsLiveWarriorActor(retreatActor))
                     ArmyMilitaryMovementPriorityIndex.Register(
                         retreatActor.data.id,
                         ArmyMilitaryMovementPriorityKind.RtsMember);
@@ -3720,22 +3714,48 @@ namespace AncientWarfare3.core.lineage
 
         public static void Invalidate(long pArmyId)
         {
+            Invalidate(pArmyId, pReleaseActorJobs: true);
+        }
+
+        private static void Invalidate(long pArmyId,
+            bool pReleaseActorJobs)
+        {
             CoalitionWarTaskService.OnArmyInvalidated(pArmyId);
             Army army = FindArmy(pArmyId);
             ArmyRtsTransportService.ReleaseArmy(army);
             ArmyRtsMobilizationStatusService.Clear(army);
-            ReleaseArmyActors(army);
+            if (pReleaseActorJobs) ReleaseArmyActors(army);
             GarrisonSortieService.OnMissionCompleted(army);
             ArmyMissionPersistence.Invalidate(army);
             Controllers.Invalidate(pArmyId);
             MissionIndex.Remove(pArmyId);
             RuntimeByArmy.Remove(pArmyId);
-            RefreshReleasedArmyPeacetimeJobs(army);
+            if (pReleaseActorJobs)
+                RefreshReleasedArmyPeacetimeJobs(army);
             ArmyLogisticsService.OnMissionInvalidated(pArmyId);
             ArmyStallWatchdogService.OnArmyInvalidated(pArmyId);
             ArmyFormationService.RemoveArmy(pArmyId);
             AWArmyMarchService.ClearArmy(pArmyId);
             RemovePendingReplenishmentArrivals(pArmyId);
+        }
+
+        private static bool InvalidateAndTryBeginReturn(long pArmyId,
+            Army pArmy, bool pShouldBeginReturn)
+        {
+            if (!pShouldBeginReturn)
+            {
+                Invalidate(pArmyId);
+                return false;
+            }
+            Invalidate(pArmyId, pReleaseActorJobs: false);
+            bool returnQueued = WarArmyReturnService.TryBegin(pArmy) &&
+                                WarArmyReturnService.IsActive(pArmy);
+            if (!returnQueued)
+            {
+                ReleaseArmyActors(pArmy);
+                RefreshReleasedArmyPeacetimeJobs(pArmy);
+            }
+            return returnQueued;
         }
 
         public static int InvalidateWarParticipant(long pWarId,
@@ -3755,9 +3775,8 @@ namespace AncientWarfare3.core.lineage
                         pWarId, pKingdomId)) continue;
                 Army army = FindArmy(armyId);
                 bool shouldBeginReturn = IsLiveArmy(army);
-                Invalidate(armyId);
-                bool returnQueued = shouldBeginReturn &&
-                    WarArmyReturnService.TryBegin(army);
+                bool returnQueued = InvalidateAndTryBeginReturn(armyId, army,
+                    shouldBeginReturn);
                 ModClass.LogInfo("[AW3 RTS return] trigger=participant_left" +
                                  " war=" + pWarId +
                                  " kingdom=" + pKingdomId +
@@ -3791,9 +3810,8 @@ namespace AncientWarfare3.core.lineage
                 bool shouldBeginReturn = WarArmyReturnRules.
                     ShouldBeginReturn(IsLiveArmy(army), missionWarId,
                         pWarId);
-                Invalidate(armyId);
-                if (shouldBeginReturn)
-                    WarArmyReturnService.TryBegin(army);
+                InvalidateAndTryBeginReturn(armyId, army,
+                    shouldBeginReturn);
                 invalidated++;
             }
             return invalidated;
@@ -3914,10 +3932,10 @@ namespace AncientWarfare3.core.lineage
                 Kingdom kingdom = liveArmy ? SafeKingdom(army) : null;
                 if (liveArmy)
                     GarrisonSortieService.OnMissionCompleted(army);
-                Invalidate(pArmyId);
+                bool returnQueued = InvalidateAndTryBeginReturn(pArmyId, army,
+                    shouldBeginReturn);
                 if (shouldBeginReturn)
                 {
-                    bool returnQueued = WarArmyReturnService.TryBegin(army);
                     ModClass.LogInfo(
                         "[AW3 RTS return] trigger=invalid_mission" +
                         " war=" + (invalidMission?.WarId ?? -1L) +
@@ -5369,10 +5387,8 @@ namespace AncientWarfare3.core.lineage
             {
                 Actor actor = pArmy.units[i];
                 if (actor == captain) continue;
-                SetJob(actor, ArmyRtsContent.RetreatFollowerJobId,
-                    "warrior_army_follow_leader");
-                if (IsLiveWarriorActor(actor) &&
-                    !HasImmediateCombatPriority(actor))
+                SetRetreatFollowerJob(actor);
+                if (IsLiveWarriorActor(actor))
                     ArmyMilitaryMovementPriorityIndex.Register(
                         actor.data.id,
                         ArmyMilitaryMovementPriorityKind.RtsMember);
@@ -5713,6 +5729,14 @@ namespace AncientWarfare3.core.lineage
                 pActor.ai.setTask(taskId);
             }
             catch { }
+        }
+
+        private static void SetRetreatFollowerJob(Actor pActor)
+        {
+            if (!IsLiveWarriorActor(pActor)) return;
+            ClearActorAttackTarget(pActor);
+            SetJob(pActor, ArmyRtsContent.RetreatFollowerJobId,
+                "warrior_army_follow_leader", pForceReassert: true);
         }
 
         private static void SetNativeMemberMissionTask(Actor pActor,

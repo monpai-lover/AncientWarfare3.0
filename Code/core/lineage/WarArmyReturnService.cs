@@ -223,11 +223,34 @@ namespace AncientWarfare3.core.lineage
                 ReplacementTargetCityId = replacement?.id ?? -1L
             };
             if (!WarArmyReturnPersistenceRules.TryRestore(stored, facts,
-                    out WarArmyReturnStoredIntent restored) ||
-                !Queue.Begin(restored.ArmyId, restored.KingdomId,
+                    out WarArmyReturnStoredIntent restored))
+            {
+                if (facts.HasValidMission)
+                {
+                    Cancel(stored.ArmyId);
+                    ModClass.LogInfo(
+                        "[AW3 RTS return] stage=cancelled" +
+                        " reason=restore_valid_mission" +
+                        " army=" + stored.ArmyId);
+                }
+                else
+                {
+                    ModClass.LogInfo(
+                        "[AW3 RTS return] stage=restore_discarded" +
+                        " reason=restore_invalid_or_complete" +
+                        " army=" + stored.ArmyId);
+                    Finish(stored.ArmyId, pArmy);
+                }
+                return;
+            }
+            if (!Queue.Begin(restored.ArmyId, restored.KingdomId,
                     restored.TargetCityId))
             {
-                ClearPersisted(pArmy);
+                ModClass.LogInfo(
+                    "[AW3 RTS return] stage=restore_discarded" +
+                    " reason=restore_queue_rejected" +
+                    " army=" + stored.ArmyId);
+                Finish(stored.ArmyId, pArmy);
                 return;
             }
             Persist(pArmy, restored.KingdomId, restored.TargetCityId);
