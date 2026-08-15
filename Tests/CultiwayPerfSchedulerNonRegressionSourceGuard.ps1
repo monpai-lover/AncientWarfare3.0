@@ -24,7 +24,7 @@ $expected = @{
     'Code/core/performance/AWCooperativeSimulationRunner.cs' =
         '12DC261FF37E1BB5CDD34D4AD1466725CA88248332D9C21E01C121DF68925EB1'
     'Code/core/performance/AWCooperativeBatchRunner.cs' =
-        'D86AE5C98B043F3B95DEA3EE62E36787D94DA4AD9898A28D62ADC5F81A9A767C'
+        '4FB1808412CB30043976F73895F3D839834FEA314FEA526AC3BD81006C2894C8'
     'Code/core/performance/AWCooperativeActorParallelJobRunner.cs' =
         '71C6AF13988F69825D18E111440A4EE6CEB9AA540AA89C62031328767B7075F4'
     'Code/core/performance/AWFrameSchedulerRules.cs' =

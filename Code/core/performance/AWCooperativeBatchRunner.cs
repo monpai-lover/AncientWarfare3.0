@@ -40,6 +40,7 @@ namespace AncientWarfare3.core.performance
         private ParallelOptions _parallelOptions;
         private bool _collectJobBenchmarks;
         private bool _useCustomPostRunner;
+        private bool _deferParallelToPresentationForCycle;
         private bool _parallelStageFinishedInBackground;
         private AWSimulationCoordinatorThread.WorkTicket
             _parallelStageTicket;
@@ -65,7 +66,7 @@ namespace AncientWarfare3.core.performance
 
         public bool Active => _stage != RunnerStage.Idle;
         public bool WaitingForPresentationDispatch =>
-            _deferParallelToPresentation &&
+            _deferParallelToPresentationForCycle &&
             _parallelEnabled &&
             _stage == RunnerStage.Parallel &&
             !_parallelStageTicket.IsValid &&
@@ -108,6 +109,9 @@ namespace AncientWarfare3.core.performance
             _batches.Clear();
             _batches.AddRange(pActiveBatches);
             if (pComparison != null) _batches.Sort(pComparison);
+            _deferParallelToPresentationForCycle =
+                _deferParallelToPresentation &&
+                CanDeferActorParallelStageToPresentation();
 
             _collectJobBenchmarks = AWSimulationTickBenchmark.IsCapturing;
             if (_collectJobBenchmarks) _manager.clearJobBenchmarks();
@@ -185,7 +189,7 @@ namespace AncientWarfare3.core.performance
                             continue;
                         }
 
-                        if (_deferParallelToPresentation &&
+                        if (_deferParallelToPresentationForCycle &&
                             _parallelEnabled)
                             return false;
 
@@ -312,6 +316,7 @@ namespace AncientWarfare3.core.performance
             _activeParallelBatchCount = 0;
             _collectJobBenchmarks = false;
             _useCustomPostRunner = false;
+            _deferParallelToPresentationForCycle = false;
             _parallelStageFinishedInBackground = false;
             _parallelStageTicket = default;
             _stage = RunnerStage.Idle;
@@ -427,6 +432,22 @@ namespace AncientWarfare3.core.performance
 
         private const string PrepareJobId = "prepare";
         private const string UpdateVisibilityJobId = "update_visibility";
+        private const string UpdateStatsJobId = "update_stats";
+
+        private bool CanDeferActorParallelStageToPresentation()
+        {
+            if (typeof(TBatch) != typeof(BatchActors)) return true;
+            for (int batchIndex = 0; batchIndex < _batches.Count;
+                 batchIndex++)
+            {
+                List<Job<TObject>> jobs = _batches[batchIndex].jobs_parallel;
+                for (int jobIndex = 0; jobIndex < jobs.Count; jobIndex++)
+                    if (string.Equals(jobs[jobIndex].id, UpdateStatsJobId,
+                            StringComparison.Ordinal))
+                        return false;
+            }
+            return true;
+        }
 
         private bool ShouldSkipParallelJob(Job<TObject> pJob)
         {

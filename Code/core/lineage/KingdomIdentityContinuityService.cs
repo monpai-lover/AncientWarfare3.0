@@ -481,8 +481,18 @@ namespace AncientWarfare3.core.lineage
         private static void RestoreDetachedStatsRow(KingdomData pSnapshot)
         {
             if (pSnapshot == null || Config.disable_db) return;
-            try { DBInserter.insertData(pSnapshot, "kingdom"); }
-            catch (Exception e) { ModClass.LogWarning("Dead KingdomData rollback failed: " + e.Message); }
+            try
+            {
+                VanillaSQLiteConnectionWithLock connection =
+                    DBManager.getSyncConnection();
+                using (connection.Lock())
+                    connection.InsertOrReplace(pSnapshot);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Dead KingdomData rollback failed: " +
+                                    e.Message);
+            }
         }
 
         private static void ClearDeadKingdomCache(long pKingdomId)

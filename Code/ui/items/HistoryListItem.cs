@@ -218,8 +218,7 @@ namespace AncientWarfare3.ui.items
             if (_targetId < 0 || string.IsNullOrEmpty(_targetType)) return;
             if (_targetType == "actor")
             {
-                Actor actor = World.world?.units?.get(_targetId);
-                if (actor != null && !actor.isRekt()) ActionLibrary.openUnitWindow(actor);
+                TryOpenLiveActor(_targetId);
                 return;
             }
             if (_targetType == "kingdom")
@@ -233,6 +232,20 @@ namespace AncientWarfare3.ui.items
                 City city = World.world?.cities?.get(_targetId);
                 if (city != null && !city.isRekt()) MetaType.City.getAsset().selectAndInspect(city);
             }
+        }
+
+        private static void TryOpenLiveActor(long pActorId)
+        {
+            if (pActorId < 0L) return;
+
+            Actor actor = null;
+            try { actor = World.world?.units?.get(pActorId); }
+            catch { return; }
+
+            if (actor?.data == null || !actor.isAlive() || actor.isRekt())
+                return;
+
+            ActionLibrary.openUnitWindow(actor);
         }
 
         private void SetTip(string pTitle, string pDesc)

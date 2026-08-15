@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.schools
@@ -88,6 +89,17 @@ namespace AncientWarfare3.core.schools
 
         public static bool FlushForSave()
         {
+            if (HistoricalWriteModeRules.ShouldRequireWorkerForFlush(
+                    AWAsyncRuntime.DatabaseEnabled,
+                    HistoricalWriteService.Ready) &&
+                !HistoricalWriteService.EnsureRequiredWorker(
+                    out string writerError))
+            {
+                ModClass.LogWarning(
+                    "Historical school save writer recovery failed: " +
+                    writerError);
+                return false;
+            }
             bool buffered = true;
             if (Buffer.Count > 0)
             {

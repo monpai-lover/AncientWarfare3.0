@@ -1,3 +1,4 @@
+using System.IO;
 using AncientWarfare3.core.policy;
 
 internal static class ActorBatchPerformanceRulesTests
@@ -29,5 +30,13 @@ internal static class ActorBatchPerformanceRulesTests
         Equal("unknown",
             ActorBatchPerformanceRules.Id(ActorBatchPerformanceStage.Unknown),
             "the unknown stage has a safe diagnostic id");
+
+        string root = Directory.GetCurrentDirectory();
+        string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeBatchRunner.cs"));
+        if (!runner.Contains("CanDeferActorParallelStageToPresentation") ||
+            !runner.Contains("update_stats"))
+            throw new InvalidOperationException(
+                "actor update_stats must keep ObjectContainer commits out of presentation background work");
     }
 }
