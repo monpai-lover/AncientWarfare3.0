@@ -33,6 +33,12 @@ internal static class PeasantRebelRouteRulesTests
             "peace permits repair");
         False(PeasantRebelRouteRules.ShouldRepairWalls(true, true),
             "suppression pauses repair");
+        False(PeasantRebelRouteRules.ShouldRepairWalls(false, false),
+            "converted rebels never repair old walls");
+        Equal(3, PeasantRebelRouteRules.RepairCount(9, 3),
+            "repair work is bounded");
+        Equal(0, PeasantRebelRouteRules.RepairCount(0, 3),
+            "complete rings require no writes");
         True(PeasantRebelRouteRules.CanEvaluateWeakOriginTransition(
                 3, true, true, 0, 0),
             "eligible three-year hideout can convert");

@@ -50,13 +50,24 @@ namespace AncientWarfare3.core.lineage
 
             pContext.Rebel.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
                 out string root, pContext.Rebel.name ?? "");
-            return PeasantRebelRouteService.TryApplyRouteName(
-                pContext.Rebel, ComposeStateName(root));
+            if (!PeasantRebelRouteService.TryApplyRouteName(
+                    pContext.Rebel, ComposeStateName(root))) return false;
+            PeasantRebelBanditWallService.CaptureAndBuild(pContext.Rebel,
+                pContext.FoundingCity);
+            return true;
         }
 
         public void OnKingdomYear(Kingdom pKingdom)
         {
+            if (SafeCityCount(pKingdom) > 1)
+            {
+                ModClass.LogWarning("Bandit realm " + pKingdom.id +
+                    " owns more than its founding city; acquisition remains locked.");
+                return;
+            }
             MandateRebelService.RunBanditRouteYear(pKingdom);
+            PeasantRebelBanditWallService.RepairYear(pKingdom,
+                IsOriginSuppressionActive(pKingdom));
         }
 
         public bool CanDeclareWar(Kingdom pKingdom)
@@ -108,6 +119,29 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pKingdom?.countCities() ?? 0; }
             catch { return 0; }
+        }
+
+        private static bool IsOriginSuppressionActive(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            pKingdom.data.get(
+                LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
+                out long originId, -1L);
+            if (originId < 0) return false;
+            try
+            {
+                foreach (War war in pKingdom.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    Kingdom attacker = war.getMainAttacker();
+                    Kingdom defender = war.getMainDefender();
+                    if (attacker == pKingdom && defender?.id == originId ||
+                        defender == pKingdom && attacker?.id == originId)
+                        return true;
+                }
+            }
+            catch { }
+            return false;
         }
     }
 }

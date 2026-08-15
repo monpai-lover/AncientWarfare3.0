@@ -50,6 +50,12 @@ namespace AncientWarfare3.core.lineage
             return bandit && !suppressionActive;
         }
 
+        public static int RepairCount(int missing, int yearlyBudget)
+        {
+            return Math.Min(Math.Max(0, missing),
+                Math.Max(0, yearlyBudget));
+        }
+
         public static bool CanEvaluateWeakOriginTransition(
             int banditAgeYears, bool originWeak, bool turmoil,
             int cityFactor, int leaderFactor)

@@ -4,6 +4,10 @@ function Require([string]$Text, [string]$Needle, [string]$Message) {
     if (-not $Text.Contains($Needle)) { throw $Message }
 }
 
+function Forbid([string]$Text, [string]$Needle, [string]$Message) {
+    if ($Text.Contains($Needle)) { throw $Message }
+}
+
 $mandate = Get-Content -Raw 'Code/core/lineage/MandateRebelService.cs'
 $route = Get-Content -Raw 'Code/core/lineage/PeasantRebelRouteService.cs'
 $warDecision = Get-Content -Raw 'Code/core/lineage/WarDecisionService.cs'
@@ -14,6 +18,13 @@ $settlement = Get-Content -Raw `
     'Code/core/lineage/WarPeaceSettlementRuntime.cs'
 $bandit = if (Test-Path 'Code/core/lineage/PeasantRebelBanditRoute.cs') {
     Get-Content -Raw 'Code/core/lineage/PeasantRebelBanditRoute.cs'
+} else {
+    ''
+}
+$wall = if (Test-Path `
+        'Code/core/lineage/PeasantRebelBanditWallService.cs') {
+    Get-Content -Raw `
+        'Code/core/lineage/PeasantRebelBanditWallService.cs'
 } else {
     ''
 }
@@ -42,5 +53,23 @@ Require $occupation 'City.joinAnotherKingdom' `
     'The authoritative original city transfer boundary must stay patched.'
 Require $settlement 'PeasantRebelRouteService.CanAcquireCity(' `
     'Peace cessions must enforce the one-city invariant before mutation.'
+Require $wall 'pCity.recalculateNeighbourZones()' `
+    'Bandit wall capture must use the original city boundary refresh.'
+Require $wall 'pCity.border_zones' `
+    'Bandit walls must start from the entry-time city border zones.'
+Require $wall 'neighboursAll' `
+    'Bandit wall capture must inspect original neighboring tiles.'
+Require $wall 'TopTileLibrary.wall_wild' `
+    'Bandit walls must reuse the original wooden wall asset.'
+Require $wall 'tile.setTopTileType(TopTileLibrary.wall_wild)' `
+    'Bandit walls must use the original top-tile mutation API.'
+Require $wall 'World.world?.GetTile(point.x, point.y)' `
+    'Bandit wall repair must resolve only persisted coordinates.'
+Forbid $wall 'new TopTileType' `
+    'Bandit walls must not instantiate a custom wall type.'
+Forbid $wall 'AssetManager.top_tiles.add' `
+    'Bandit walls must not register a custom wall asset.'
+Forbid $wall 'void setTopTileType' `
+    'Bandit wall service must not copy the original tile implementation.'
 
 Write-Host 'Peasant rebel route runtime source guard passed.'
