@@ -22,7 +22,7 @@ namespace AncientWarfare3.core.lineage
         private const int RadiusMin = 3;
         private const int RadiusMax = 60;
         private const int RemoteUtilityDistance = 16;
-        private const int WallMargin = 3;
+        private const int WallMargin = 6;
         private const int TerrainCollectionPadding = 1;
 
         internal static bool TryPlan(City pCity, int pWidth,
@@ -86,9 +86,83 @@ namespace AncientWarfare3.core.lineage
                 return new CultiwayStyleCityWallResult(
                     new List<CultiwayWallPoint>(), 0);
 
-            var placed = new List<CultiwayWallPoint>(planned.Count);
+            return Place(pCity, pWallType, planned);
+        }
+
+        internal static bool TryPlanFrontier(City pCity, int pWidth,
+            Func<Kingdom, bool> pIsFortificationTarget,
+            out IReadOnlyList<CultiwayWallPoint> pPoints)
+        {
+            pPoints = Array.Empty<CultiwayWallPoint>();
+            if (pCity?.data == null || pCity.isRekt() || pWidth <= 0 ||
+                pIsFortificationTarget == null || World.world == null)
+                return false;
+
+            try
+            {
+                var cityLand = new HashSet<CultiwayWallPoint>();
+                var roads = new HashSet<CultiwayWallPoint>();
+                CollectCityLandAndRoads(pCity, cityLand, roads);
+                if (cityLand.Count == 0) return false;
+
+                var passable = new HashSet<CultiwayWallPoint>();
+                var frontier = new HashSet<CultiwayWallPoint>();
+                foreach (CultiwayWallPoint point in cityLand)
+                {
+                    WorldTile tile = World.world.GetTile(point.X, point.Y);
+                    if (!CanPlaceAt(pCity, tile)) continue;
+                    passable.Add(point);
+                    if (TouchesFortificationTarget(tile,
+                            pIsFortificationTarget))
+                        frontier.Add(point);
+                }
+                if (frontier.Count == 0) return false;
+
+                var input = new CultiwayFrontierWallGeometryInput(
+                    cityLand, passable, frontier, roads, pWidth);
+                IReadOnlyList<CultiwayWallPoint> computed =
+                    CultiwayStyleFrontierWallGeometryRules.Compute(input);
+                pPoints = computed.Where(point => CanPlaceAt(pCity,
+                        World.world.GetTile(point.X, point.Y)))
+                    .OrderBy(point => point.X)
+                    .ThenBy(point => point.Y).ToArray();
+                return pPoints.Count > 0;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Cultiway-style frontier wall plan failed: " +
+                    e.Message);
+                pPoints = Array.Empty<CultiwayWallPoint>();
+                return false;
+            }
+        }
+
+        internal static CultiwayStyleCityWallResult BuildFrontier(
+            City pCity, TopTileType pWallType, int pWidth,
+            Func<Kingdom, bool> pIsFortificationTarget)
+        {
+            if (pWallType == null || !TryPlanFrontier(pCity, pWidth,
+                    pIsFortificationTarget,
+                    out IReadOnlyList<CultiwayWallPoint> planned))
+                return new CultiwayStyleCityWallResult(
+                    new List<CultiwayWallPoint>(), 0);
+
+            return Place(pCity, pWallType, planned);
+        }
+
+        private static CultiwayStyleCityWallResult Place(City pCity,
+            TopTileType pWallType,
+            IReadOnlyList<CultiwayWallPoint> pPlanned)
+        {
+            if (pCity?.data == null || pWallType == null ||
+                pPlanned == null)
+                return new CultiwayStyleCityWallResult(
+                    new List<CultiwayWallPoint>(), 0);
+
+            var placed = new List<CultiwayWallPoint>(pPlanned.Count);
             int changed = 0;
-            foreach (CultiwayWallPoint point in planned)
+            foreach (CultiwayWallPoint point in pPlanned)
             {
                 WorldTile tile = World.world?.GetTile(point.X, point.Y);
                 if (!CanPlaceAt(pCity, tile)) continue;
@@ -107,6 +181,38 @@ namespace AncientWarfare3.core.lineage
                 }
             }
             return new CultiwayStyleCityWallResult(placed, changed);
+        }
+
+        private static bool TouchesFortificationTarget(WorldTile pTile,
+            Func<Kingdom, bool> pIsFortificationTarget)
+        {
+            if (pTile?.neighbours == null) return false;
+            foreach (WorldTile neighbour in pTile.neighbours)
+            {
+                City city = NeighbourCity(neighbour);
+                Kingdom kingdom = city?.kingdom;
+                bool target = kingdom?.data != null &&
+                    pIsFortificationTarget(kingdom);
+                if (MandateBorderWallRules.IsExternalLandBorderNeighbor(
+                        target, city?.data != null,
+                        neighbour?.Type?.ground == true,
+                        neighbour?.Type?.liquid == true,
+                        neighbour?.Type?.lava == true,
+                        neighbour?.Type?.block == true))
+                    return true;
+            }
+            return false;
+        }
+
+        private static City NeighbourCity(WorldTile pTile)
+        {
+            if (pTile == null) return null;
+            try
+            {
+                if (pTile.zone_city != null) return pTile.zone_city;
+            }
+            catch { }
+            return pTile.zone?.city;
         }
 
         private static bool TryGetBuildingBounds(City pCity,

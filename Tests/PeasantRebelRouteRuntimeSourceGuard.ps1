@@ -118,6 +118,14 @@ $mandateBuildWalls = $mandateBorder.Substring($mandateBuildStart,
 
 Require $sharedWall 'CultiwayStyleWallGeometryRules.Compute(' `
     'The WorldBox wall adapter must use detached Cultiway geometry.'
+Require $sharedWall 'private const int WallMargin = 6;' `
+    'Bandit city walls must use the approved six-tile margin.'
+Require $sharedWall 'CultiwayStyleFrontierWallGeometryRules.Compute(' `
+    'The runtime adapter must use detached frontier geometry.'
+Require $sharedWall 'TryPlanFrontier(' `
+    'The shared wall tool must expose frontier preflight.'
+Require $sharedWall 'BuildFrontier(' `
+    'The shared wall tool must expose frontier placement.'
 Require $sharedWall 'tile.setTopTileType(pWallType)' `
     'The shared tool must place the caller-selected original wall asset.'
 Require $sharedWall 'building.asset.type' `
