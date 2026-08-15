@@ -40,6 +40,13 @@ if (args.Length == 1 && args[0] == "--bandit-stronghold")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--actor-kingdom-safety")
+{
+    ActorKingdomSafetyRulesTests.Run();
+    Console.WriteLine("Actor kingdom safety rules passed.");
+    return;
+}
+
 HistoricalWriteModeRulesTests.Run();
 AWThirdPartySchedulerFaultRulesTests.Run();
 ActorVisualRoleRulesTests.Run();

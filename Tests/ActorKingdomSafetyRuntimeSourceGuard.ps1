@@ -353,13 +353,32 @@ Require-OnlyQueuedActor 'actor load queues only the Actor returned by vanilla' `
 $enemyBlock = Get-HarmonyMethodBlock $patchSource 'ActorEnemyCheck_Prefix'
 Require-Present 'enemy checks validate the supplied Actor' `
     $enemyBlock '__instance?.kingdom?.asset != null'
+Require-Present 'enemy checks reject disposed kingdom data' `
+    $enemyBlock '__instance?.kingdom?.data != null'
 Require-OnlyQueuedActor 'enemy checks queue only the supplied Actor' `
     $enemyBlock '__instance'
+
+$chunkBlock = Get-HarmonyMethodBlock $patchSource `
+    'ChunkObjectContainerAddActor_Prefix'
+if (-not (Test-HarmonyPatchTarget `
+        (@(Get-HarmonyMethodBlocks $patchSource) | Where-Object {
+            $_.Name -eq 'ChunkObjectContainerAddActor_Prefix'
+        }).Attributes 'ChunkObjectContainer' 'addActor')) {
+    throw 'chunk insertion guard does not target ChunkObjectContainer.addActor'
+}
+Require-Present 'chunk insertion validates kingdom data' `
+    $chunkBlock 'pActor?.kingdom?.data != null'
+Require-Present 'chunk insertion validates kingdom asset' `
+    $chunkBlock 'pActor?.kingdom?.asset != null'
+Require-OnlyQueuedActor 'chunk insertion queues only the supplied Actor' `
+    $chunkBlock 'pActor'
 
 $addUnitBlock = Get-HarmonyMethodBlock $patchSource `
     'SimObjectsZonesAddUnit_Prefix'
 Require-Present 'zone insertion validates the supplied Actor' `
     $addUnitBlock 'CanEnterVanillaZoneProcessing('
+Require-Present 'zone insertion rejects disposed kingdom data' `
+    $addUnitBlock 'pActor?.kingdom?.data != null'
 Require-OnlyQueuedActor 'zone insertion queues only the supplied Actor' `
     $addUnitBlock 'pActor'
 
@@ -367,6 +386,8 @@ $conquestBlock = Get-HarmonyMethodBlock $patchSource `
     'CityUpdateConquest_Prefix'
 Require-Present 'conquest validates the supplied Actor' `
     $conquestBlock 'CanEnterVanillaZoneProcessing('
+Require-Present 'conquest rejects disposed kingdom data' `
+    $conquestBlock 'pActor?.kingdom?.data != null'
 Require-OnlyQueuedActor 'conquest queues only the supplied Actor' `
     $conquestBlock 'pActor'
 
@@ -387,6 +408,14 @@ Require-Present 'repair diagnostics cannot dereference invalid actors' `
     $serviceSource 'DescribeActor(actor)'
 Require-Present 'stale kingdom references are detached before vanilla repair' `
     $serviceSource 'pActor.kingdom = null;'
+Require-Present 'repair selection rejects disposed current kingdom data' `
+    $serviceSource 'kingdomDataExists: pActor?.kingdom?.data != null'
+Require-Present 'repair selection does not inspect disposed city kingdom state' `
+    $serviceSource 'cityKingdom?.data == null'
+Require-Present 'repair attachment rejects disposed target kingdom data' `
+    $serviceSource 'pTarget?.data == null'
+Require-Present 'repair success requires live kingdom data' `
+    $serviceSource 'pActor?.kingdom?.data != null'
 Require-Present 'validated kingdom repair bypasses school travel affiliation gates' `
     $serviceSource 'FormalAffiliationTransferScope.Open('
 Require-Present 'repair failures retain their concrete runtime cause' `

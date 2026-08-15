@@ -6,7 +6,7 @@
 
 **Architecture:** Extend the pure actor-Kingdom validity rules to require both runtime data and an asset, use those rules at every existing safety boundary, and add the missing boundary directly around vanilla `ChunkObjectContainer.addActor`. Before deleting a failed temporary bandit Kingdom, restore or detach every known actor that still references it.
 
-**Tech Stack:** C# 10, .NET Framework 4.8.1, Harmony, PowerShell source guards, custom console rules tests.
+**Tech Stack:** C# 10, .NET Framework 4.8, Harmony, PowerShell source guards, custom console rules tests.
 
 ---
 
@@ -181,7 +181,7 @@ Expected: all exit 0.
 
 ```powershell
 dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj -c Release
-dotnet build AncientWarfare3.csproj -c Release -f net481
+dotnet build AncientWarfare3.csproj -c Release -f net48
 ```
 
 Expected: rules runner exits 0 and production build reports zero errors.

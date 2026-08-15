@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
@@ -321,6 +322,8 @@ namespace AncientWarfare3.core.lineage
                     if (bandit?.data != null && !bandit.isRekt())
                     {
                         ruler.joinCity(pMother);
+                        PrepareBanditKingdomRemoval(
+                            bandit, origin, pMother, null);
                         World.world.kingdoms.removeObject(bandit);
                     }
                     pBandit = null;
@@ -335,6 +338,8 @@ namespace AncientWarfare3.core.lineage
                 if (pBandit?.data != null && !pBandit.isRekt())
                 {
                     ruler.joinCity(pMother);
+                    PrepareBanditKingdomRemoval(
+                        pBandit, origin, pMother, null);
                     World.world.kingdoms.removeObject(pBandit);
                 }
                 pBandit = null;
@@ -768,12 +773,108 @@ namespace AncientWarfare3.core.lineage
                 if (plan.Context.RemoveBanditOnFailure &&
                     plan.Context.Bandit?.data != null &&
                     !plan.Context.Bandit.isRekt())
+                {
+                    PrepareBanditKingdomRemoval(plan.Context.Bandit,
+                        plan.Context.Origin, plan.Context.Mother,
+                        pTransaction.Actors);
                     World.world.kingdoms.removeObject(plan.Context.Bandit);
+                }
             }
             catch (Exception e)
             {
                 ModClass.LogWarning("Bandit stronghold rollback failed: " +
                                     e.Message);
+            }
+        }
+
+        private static void PrepareBanditKingdomRemoval(Kingdom pBandit,
+            Kingdom pOrigin, City pFallbackCity,
+            IReadOnlyCollection<ActorSnapshot> pSnapshots)
+        {
+            if (pBandit == null) return;
+            var candidates = new HashSet<Actor>();
+            var snapshotCities = new Dictionary<Actor, City>();
+            if (pSnapshots != null)
+            {
+                foreach (ActorSnapshot snapshot in pSnapshots)
+                {
+                    if (snapshot?.Actor == null) continue;
+                    candidates.Add(snapshot.Actor);
+                    snapshotCities[snapshot.Actor] = snapshot.City;
+                }
+            }
+            if (pBandit.units != null)
+                foreach (Actor actor in pBandit.units.ToList())
+                    if (actor != null) candidates.Add(actor);
+
+            foreach (Actor actor in candidates)
+            {
+                if (actor?.data == null || actor.kingdom != pBandit)
+                    continue;
+                if (actor.asset != null)
+                {
+                    snapshotCities.TryGetValue(actor, out City snapshotCity);
+                    City targetCity = IsValidRemovalCity(
+                        snapshotCity, pBandit)
+                        ? snapshotCity
+                        : IsValidRemovalCity(pFallbackCity, pBandit)
+                            ? pFallbackCity
+                            : null;
+                    TryRestoreRemovalActor(actor, pBandit, targetCity,
+                        pOrigin);
+                }
+                if (actor.kingdom != pBandit) continue;
+                actor.kingdom = null;
+                ActorKingdomSafetyService.QueueRepair(actor);
+            }
+        }
+
+        private static bool IsValidRemovalCity(City pCity,
+            Kingdom pBandit)
+        {
+            return pCity?.data != null && !pCity.isRekt() &&
+                   pCity.kingdom != pBandit &&
+                   pCity.kingdom?.data != null &&
+                   pCity.kingdom.asset != null &&
+                   !pCity.kingdom.isRekt();
+        }
+
+        private static void TryRestoreRemovalActor(Actor pActor,
+            Kingdom pBandit, City pTargetCity, Kingdom pOrigin)
+        {
+            try
+            {
+                if (pTargetCity != null)
+                    pActor.joinCity(pTargetCity);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Bandit actor city rollback failed: " + e.Message);
+            }
+            if (pActor.kingdom != pBandit) return;
+
+            Kingdom target = pTargetCity?.kingdom;
+            if (target?.data == null || target.asset == null ||
+                target.isRekt())
+                target = pOrigin?.data != null &&
+                         pOrigin.asset != null && !pOrigin.isRekt()
+                    ? pOrigin
+                    : null;
+            if (target == null || target == pBandit) return;
+            try
+            {
+                using (FormalAffiliationTransferScope.Open(
+                           pActor.data.id, target.id,
+                           pTargetCity?.data?.id ?? -1L))
+                {
+                    pActor.joinKingdom(target);
+                }
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Bandit actor kingdom rollback failed: " + e.Message);
             }
         }
     }
