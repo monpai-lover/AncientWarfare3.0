@@ -1,0 +1,95 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditStrongholdRulesTests
+{
+    public static void Run()
+    {
+        SelectsOnlyConnectedInteriorZones();
+        RequiresZonesOnBothSidesOfSplit();
+        LocksBanditGrowthToPersistedZones();
+        ComposesStrongholdNamesAndTitles();
+    }
+
+    private static void SelectsOnlyConnectedInteriorZones()
+    {
+        var zones = new[]
+        {
+            Zone("center", true, "east"),
+            Zone("east", true, "center"),
+            Zone("isolated", true),
+            Zone("outside", false, "east")
+        };
+
+        HashSet<string> selected =
+            PeasantRebelBanditStrongholdRules.SelectInteriorZoneKeys(
+                zones, "center");
+
+        True(selected.SetEquals(new[] { "center", "east" }),
+            "only connected wall-interior zones transfer");
+    }
+
+    private static void RequiresZonesOnBothSidesOfSplit()
+    {
+        True(PeasantRebelBanditStrongholdRules.IsViableSplit(1, 1),
+            "one zone on each side is viable");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(0, 3),
+            "stronghold needs an interior zone");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(3, 0),
+            "mother city needs an exterior zone");
+    }
+
+    private static void LocksBanditGrowthToPersistedZones()
+    {
+        var fixedZones = new HashSet<string> { "center", "east" };
+        True(PeasantRebelBanditStrongholdRules.CanAcquireZone(
+                true, "east", fixedZones),
+            "bandit stronghold may restore a fixed zone");
+        False(PeasantRebelBanditStrongholdRules.CanAcquireZone(
+                true, "outside", fixedZones),
+            "bandit stronghold cannot grow beyond its walls");
+        True(PeasantRebelBanditStrongholdRules.CanAcquireZone(
+                false, "outside", fixedZones),
+            "non-bandit city growth remains unrestricted");
+    }
+
+    private static void ComposesStrongholdNamesAndTitles()
+    {
+        Equal("\u864e\u8e1e\u5be8",
+            PeasantRebelBanditStrongholdRules.ComposeStrongholdName(
+                "\u864e\u8e1e\u8d3c\u4e49\u519b"),
+            "stronghold city uses canonical root plus stronghold suffix");
+        Equal("\u864e\u8e1e\u5be8\u5927\u5f53\u5bb6",
+            PeasantRebelBanditStrongholdRules.ComposeCeremonialTitle(
+                "\u864e\u8e1e\u8d3c", false),
+            "ruler title includes stronghold name");
+        Equal("\u864e\u8e1e\u5be8\u5c11\u5f53\u5bb6",
+            PeasantRebelBanditStrongholdRules.ComposeCeremonialTitle(
+                "\u864e\u8e1e\u4e49\u519b", true),
+            "heir title includes stronghold name");
+    }
+
+    private static BanditZoneFact Zone(string key, bool inside,
+        params string[] neighbours)
+    {
+        return new BanditZoneFact(key, inside, neighbours);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                message + $": expected {expected}, got {actual}");
+    }
+}
