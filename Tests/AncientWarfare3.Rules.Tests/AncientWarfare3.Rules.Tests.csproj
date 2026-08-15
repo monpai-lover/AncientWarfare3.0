@@ -12,8 +12,10 @@
     <Compile Include="PeasantRebelRouteRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelRouteRules.cs" Link="Production\PeasantRebelRouteRules.cs" />
     <Compile Include="PeasantRebelBanditStrongholdRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditZoneWallRules.cs" Link="Production\PeasantRebelBanditZoneWallRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditRaidRules.cs" Link="Production\PeasantRebelBanditRaidRules.cs" />
     <Compile Include="CultiwayStyleWallGeometryRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\CultiwayStyleWallGeometryRules.cs" Link="Production\CultiwayStyleWallGeometryRules.cs" />

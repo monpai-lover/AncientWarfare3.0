@@ -35,6 +35,7 @@ if (args.Length == 1 && args[0] == "--peasant-rebel-routes")
 if (args.Length == 1 && args[0] == "--bandit-stronghold")
 {
     PeasantRebelBanditStrongholdRulesTests.Run();
+    PeasantRebelBanditZoneWallRulesTests.Run();
     PeasantRebelBanditRaidRulesTests.Run();
     Console.WriteLine("Bandit stronghold and raid rules passed.");
     return;
