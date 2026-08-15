@@ -140,6 +140,18 @@ internal static class ArmyRtsCombatHandoffRulesTests
         Assert(ArmyRtsControllerRules.ShouldUseVanillaRetreatMovement(
                 ArmyRtsProposalKind.Retreat, targetIsEnemy: false),
             "a friendly retreat uses the vanilla-style return-city task");
+        Assert(ArmyRtsTaskOwnershipRules.ShouldSuppressCombatPreemption(
+                ArmyRtsState.Retreat, ArmyRtsProposalKind.Retreat,
+                retreatTargetAvailable: true),
+            "a valid retreat owns movement even while enemies are nearby");
+        Assert(!ArmyRtsTaskOwnershipRules.ShouldSuppressCombatPreemption(
+                ArmyRtsState.March, ArmyRtsProposalKind.Attack,
+                retreatTargetAvailable: true),
+            "ordinary offensive movement still yields to nearby combat");
+        Assert(!ArmyRtsTaskOwnershipRules.ShouldSuppressCombatPreemption(
+                ArmyRtsState.Retreat, ArmyRtsProposalKind.Retreat,
+                retreatTargetAvailable: false),
+            "a retreat without a valid safe endpoint cannot suppress emergency combat forever");
         Assert(ArmyRtsControllerRules.ShouldUseVanillaFollowerMovement(
                 ArmyRtsProposalKind.Retreat, targetIsEnemy: false),
             "retreat soldiers use vanilla follow-leader movement");
@@ -191,6 +203,24 @@ internal static class ArmyRtsCombatHandoffRulesTests
                    captainInsideTargetCombatZone: false,
                    siegeCombatActive: true),
             "target-city hostile scans run only on arrival or while maintaining an active siege");
+        string retreatRoot = Directory.GetCurrentDirectory();
+        while (!File.Exists(Path.Combine(retreatRoot, "AncientWarfare3.csproj")))
+        {
+            DirectoryInfo parent = Directory.GetParent(retreatRoot);
+            if (parent == null)
+                throw new InvalidOperationException("project root unavailable");
+            retreatRoot = parent.FullName;
+        }
+        string armyRtsContent = File.ReadAllText(Path.Combine(retreatRoot, "Code",
+            "content", "ArmyRtsContent.cs"));
+        Assert(armyRtsContent.Contains("speed_multiplier = 1.15f",
+                StringComparison.Ordinal),
+            "the retreat task must be fast enough to create separation from ordinary pursuers");
+        string militaryPostRunner = File.ReadAllText(Path.Combine(retreatRoot, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        Assert(militaryPostRunner.Contains("ShouldSuppressCombatPreemption(actor)",
+                StringComparison.Ordinal),
+            "the P0 enemy boundary must consult retreat ownership before entering combat");
         Assert(ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
             {
                 CurrentState = ArmyRtsState.Rally,

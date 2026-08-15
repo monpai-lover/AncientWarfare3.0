@@ -368,7 +368,7 @@ namespace AncientWarfare3.content
                 id = RetreatTaskId,
                 cancellable_by_reproduction = false,
                 cancellable_by_socialize = false,
-                speed_multiplier = 0.8f,
+                speed_multiplier = 1.15f,
                 locale_key = "task_unit_aw_army_rts_retreat"
             });
             task.setIcon("ui/Icons/iconLoyalty");

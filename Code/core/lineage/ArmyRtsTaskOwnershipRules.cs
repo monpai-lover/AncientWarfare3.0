@@ -52,6 +52,15 @@ namespace AncientWarfare3.core.lineage
             return distanceSquared <= maximum * maximum;
         }
 
+        public static bool ShouldSuppressCombatPreemption(
+            ArmyRtsState pState, ArmyRtsProposalKind pProposalKind,
+            bool retreatTargetAvailable)
+        {
+            return retreatTargetAvailable &&
+                   pState == ArmyRtsState.Retreat &&
+                   pProposalKind == ArmyRtsProposalKind.Retreat;
+        }
+
         public static bool ShouldReassertMissionTask(
             ArmyRtsMode pMode, bool pOwnsActor, bool pActorAlive,
             bool pExpectedJobActive, bool pExpectedTaskActive,

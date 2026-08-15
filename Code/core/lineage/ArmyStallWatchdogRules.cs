@@ -458,7 +458,8 @@ namespace AncientWarfare3.core.lineage
             bool localPathFollowing = false,
             bool localPathMoving = false,
             int localPathIndex = 0,
-            int localTargetTileId = -1)
+            int localTargetTileId = -1,
+            bool fixedRetreatTransit = false)
         {
             ArmyWatchdogPositionSource source = _lifecycle.ResolveSample(
                 missionValid,
@@ -472,8 +473,8 @@ namespace AncientWarfare3.core.lineage
                 return ArmyStallRecoveryAction.None;
             if (combatActive)
             {
-                if (movementTiles >=
-                    ArmyStallWatchdogRules.MinimumProgressTiles)
+                if (ArmyStallWatchdogRules.HasPhysicalMovementProgress(
+                        movementTiles, fixedRetreatTransit))
                 {
                     ArmyStallWatchdogRules.ResetForCombat(_stall);
                     return ArmyStallRecoveryAction.None;
@@ -496,7 +497,8 @@ namespace AncientWarfare3.core.lineage
                 commandOwned, objectiveOpen, requiresTransport,
                 objectiveProgressExpected, objectiveProgress,
                 localPathOwnerId, localPathFollowing, localPathMoving,
-                localPathIndex, localTargetTileId);
+                localPathIndex, localTargetTileId,
+                fixedRetreatTransit);
         }
 
         public ArmyStallRecoveryAction RecordRouteFailure()
@@ -581,6 +583,7 @@ namespace AncientWarfare3.core.lineage
     {
         public const double SampleIntervalSeconds = 1d;
         public const double MinimumProgressTiles = 0.25d;
+        public const double MinimumRetreatProgressTiles = 0.05d;
         public const int SlowSamplesBeforeRecovery = 3;
         public const int RoutePlanningSamplesBeforeRecovery = 6;
         public const int FailedRecoveryAttemptsBeforeHandoff = 3;
@@ -641,6 +644,27 @@ namespace AncientWarfare3.core.lineage
                    pAction == ArmyStallRecoveryAction.EnterTransport;
         }
 
+        public static bool HasPhysicalMovementProgress(double movementTiles,
+            bool fixedRetreatTransit)
+        {
+            double minimum = fixedRetreatTransit
+                ? MinimumRetreatProgressTiles
+                : MinimumProgressTiles;
+            return !double.IsNaN(movementTiles) && movementTiles >= minimum;
+        }
+
+        public static ArmyStallRecoveryAction NormalizeRecoveryForFixedRetreat(
+            bool fixedRetreatTransit, ArmyStallRecoveryAction pAction)
+        {
+            if (!fixedRetreatTransit ||
+                pAction == ArmyStallRecoveryAction.EnterTransport)
+                return pAction;
+            return pAction == ArmyStallRecoveryAction.RebuildRoute ||
+                   pAction == ArmyStallRecoveryAction.AlternateEndpoint
+                ? ArmyStallRecoveryAction.ReassertCommand
+                : pAction;
+        }
+
         public static bool ShouldExpectFormationProgress(
             ArmyRtsState pState, bool targetComplete)
         {
@@ -673,7 +697,8 @@ namespace AncientWarfare3.core.lineage
             bool localPathFollowing = false,
             bool localPathMoving = false,
             int localPathIndex = 0,
-            int localTargetTileId = -1)
+            int localTargetTileId = -1,
+            bool fixedRetreatTransit = false)
         {
             if (pState == null) return ArmyStallRecoveryAction.None;
             pState.HasRoutePhase = true;
@@ -700,7 +725,8 @@ namespace AncientWarfare3.core.lineage
                 pState.LastRecoveryStage = 0;
                 return ArmyStallRecoveryAction.None;
             }
-            if (movementTiles >= MinimumProgressTiles ||
+            if (HasPhysicalMovementProgress(movementTiles,
+                    fixedRetreatTransit) ||
                 localPathAdvanced)
             {
                 ResetAfterMovement(pState);

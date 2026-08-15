@@ -418,7 +418,18 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 TryConsumeHomeRationScheduled(actor);
             if (TryRunSelfLandingP0(actor, actorId, kind, cycleElapsed))
                 return;
-            if (ArmyRtsControllerService.HasImmediateCombatPriority(actor))
+            bool suppressCombatPreemption =
+                ArmyRtsControllerService.
+                    ShouldSuppressCombatPreemption(actor);
+            if (suppressCombatPreemption)
+            {
+                ArmyRtsControllerService.SuppressCombatForTransit(actor);
+                ArmyRtsMovementDiagnostic.Log("p0",
+                    "retreat_combat_suppressed", actor,
+                    "kind=" + kind);
+            }
+            else if (ArmyRtsControllerService.
+                         HasImmediateCombatPriority(actor))
             {
                 RunMilitaryP0Combat(actor, actorId, kind, cycleElapsed,
                     "entry");
@@ -450,26 +461,29 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 return;
             }
 
-            ArmyRtsMovementDiagnostic.Log("p0", "native_enemy_check", actor,
-                "kind=" + kind);
-            actor.b2_checkCurrentEnemyTarget(cycleElapsed);
-            if (YieldMilitaryP0Ownership(actor, actorId, kind,
-                    cycleElapsed, "current_enemy",
-                    refreshTransport: false)) return;
+            if (!suppressCombatPreemption)
+            {
+                ArmyRtsMovementDiagnostic.Log("p0", "native_enemy_check",
+                    actor, "kind=" + kind);
+                actor.b2_checkCurrentEnemyTarget(cycleElapsed);
+                if (YieldMilitaryP0Ownership(actor, actorId, kind,
+                        cycleElapsed, "current_enemy",
+                        refreshTransport: false)) return;
 
-            ArmyRtsMovementDiagnostic.Log("p0", "native_enemy_search", actor,
-                "kind=" + kind);
-            bool hadAttackTargetBeforeSearch = actor.has_attack_target;
-            actor.b3_findEnemyTarget(cycleElapsed);
-            if (YieldMilitaryP0Ownership(actor, actorId, kind,
-                    cycleElapsed, "enemy_search",
-                    refreshTransport: false,
-                    resumeNativeCombatAfterEnemyAcquisition:
-                        ArmyMilitaryMovementPriorityRules.
-                            ShouldResumeNativeCombatAfterEnemyAcquisition(
-                                hadAttackTargetBeforeSearch,
-                                actor.has_attack_target,
-                                actor._beh_skip))) return;
+                ArmyRtsMovementDiagnostic.Log("p0", "native_enemy_search",
+                    actor, "kind=" + kind);
+                bool hadAttackTargetBeforeSearch = actor.has_attack_target;
+                actor.b3_findEnemyTarget(cycleElapsed);
+                if (YieldMilitaryP0Ownership(actor, actorId, kind,
+                        cycleElapsed, "enemy_search",
+                        refreshTransport: false,
+                        resumeNativeCombatAfterEnemyAcquisition:
+                            ArmyMilitaryMovementPriorityRules.
+                                ShouldResumeNativeCombatAfterEnemyAcquisition(
+                                    hadAttackTargetBeforeSearch,
+                                    actor.has_attack_target,
+                                    actor._beh_skip))) return;
+            }
 
             ArmyRtsMovementDiagnostic.Log("p0", "native_task_verifier", actor,
                 "kind=" + kind);
@@ -652,6 +666,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         string boundary, bool refreshTransport,
         bool resumeNativeCombatAfterEnemyAcquisition = false)
     {
+        if (kind == ArmyMilitaryMovementPriorityKind.RtsMember &&
+            ArmyRtsControllerService.ShouldSuppressCombatPreemption(actor))
+        {
+            ArmyRtsControllerService.SuppressCombatForTransit(actor);
+            return false;
+        }
         bool royalGuardThreat =
             kind == ArmyMilitaryMovementPriorityKind.RoyalGuard &&
             actor.beh_actor_target != null;

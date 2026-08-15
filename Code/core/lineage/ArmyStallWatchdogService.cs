@@ -244,7 +244,12 @@ namespace AncientWarfare3.core.lineage
                 localPathFollowing: sample.LocalPathFollowing,
                 localPathMoving: sample.LocalPathMoving,
                 localPathIndex: sample.LocalPathIndex,
-                localTargetTileId: sample.LocalTargetTileId);
+                localTargetTileId: sample.LocalTargetTileId,
+                fixedRetreatTransit:
+                    sample.State == ArmyRtsState.Retreat);
+            action = ArmyStallWatchdogRules.
+                NormalizeRecoveryForFixedRetreat(
+                    sample.State == ArmyRtsState.Retreat, action);
             HandleRecoveryAction(pArmyId, state, action, sample);
         }
 

@@ -2141,6 +2141,14 @@ namespace AncientWarfare3.core.lineage
         internal static bool TrySetMemberCombatTask(Actor pActor)
         {
             Army army = pActor?.army;
+            if (ShouldSuppressCombatPreemption(pActor))
+            {
+                ClearActorAttackTarget(pActor);
+                if (!IsCaptain(pActor, army))
+                    SetJob(pActor, ArmyRtsContent.RetreatFollowerJobId,
+                        "warrior_army_follow_leader");
+                return false;
+            }
             bool missionActive = army?.data != null &&
                                  HasActiveMission(army.id);
             bool actorIsCaptain = IsCaptain(pActor, army);
@@ -2401,6 +2409,39 @@ namespace AncientWarfare3.core.lineage
             Army army = pActor?.army;
             return pActor?.data != null && army?.data != null &&
                    HasActiveMission(army.id);
+        }
+
+        internal static bool ShouldSuppressCombatPreemption(Actor pActor)
+        {
+            Army army = pActor?.army;
+            if (pActor?.data == null || army?.data == null ||
+                !Controllers.TryGet(army.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null ||
+                !RuntimeByArmy.TryGetValue(army.id,
+                    out RuntimeState runtime) ||
+                runtime.RetreatSelectionPending || runtime.NoSafeRetreat)
+                return false;
+            City target = FindCity(record.Mission.TargetCityId);
+            Kingdom kingdom = SafeKingdom(army);
+            bool targetAvailable = target?.data != null &&
+                                   kingdom?.data != null &&
+                                   target.kingdom == kingdom;
+            return ArmyRtsTaskOwnershipRules.ShouldSuppressCombatPreemption(
+                record.State, record.Mission.ProposalKind, targetAvailable);
+        }
+
+        internal static void SuppressCombatForTransit(Actor pActor)
+        {
+            if (!ShouldSuppressCombatPreemption(pActor)) return;
+            ClearActorAttackTarget(pActor);
+            Army army = pActor.army;
+            if (IsCaptain(pActor, army))
+                SetJob(pActor, ArmyRtsContent.RetreatCaptainJobId,
+                    ArmyRtsContent.RetreatTaskId);
+            else
+                SetJob(pActor, ArmyRtsContent.RetreatFollowerJobId,
+                    "warrior_army_follow_leader");
         }
 
         internal static bool ShouldUseNativeMilitaryPath(Actor pActor)
@@ -2886,8 +2927,9 @@ namespace AncientWarfare3.core.lineage
             bool atStrategicEndpoint =
                 runtime.LastStrategicEndpointTileId >= 0 &&
                 sampledTileId == runtime.LastStrategicEndpointTileId;
-            bool sampledCombatActive = HasImmediateCombatPriority(
-                sampledActor);
+            bool sampledCombatActive =
+                !ShouldSuppressCombatPreemption(sampledActor) &&
+                HasImmediateCombatPriority(sampledActor);
             bool transportCommandExpected = ArmyRtsControllerRules.
                 ShouldExpectTransportCommand(
                     runtime.TransportRouteConfirmed, transportOwned);
