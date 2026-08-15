@@ -231,6 +231,9 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
         Equal(true, arrivalBehavior.Contains(
                 "CivicLeaderLandClaimService.IsValidArrival(pActor)"),
             "the arrival behavior reuses the shared runtime validation");
+        Equal(true, arrivalBehavior.Contains(
+                "pActor?.city?.data == null"),
+            "a destroyed or detached city stops the task before animation");
         Equal(true, expansionDecisionContent.Contains(
                 "ClaimLandGuardInsertionIndex("),
             "claim_land installation validates the native task shape");
