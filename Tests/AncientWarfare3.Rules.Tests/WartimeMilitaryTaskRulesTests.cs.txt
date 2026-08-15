@@ -16,6 +16,9 @@ internal static class WartimeMilitaryTaskRulesTests
         Equal(true, WartimeMilitaryTaskRules.
                 ShouldEvaluateMilitaryState("sleep_inside"),
             "listed civilian tasks evaluate military state");
+        Equal(true, WartimeMilitaryTaskRules.
+                ShouldEvaluateMilitaryState("fighting"),
+            "vanilla fighting evaluates RTS task ownership");
 
         Equal(true, WartimeMilitaryTaskRules.AllowsTask(
                 pWartimeMilitary: true, pTaskId: "idle"),

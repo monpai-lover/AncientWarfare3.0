@@ -2084,6 +2084,39 @@ namespace AncientWarfare3.core.lineage
             SetCaptainTacticalTask(pCaptain);
         }
 
+        internal static bool TryRedirectVanillaFight(Actor pActor,
+            string pTaskId)
+        {
+            if (!string.Equals(pTaskId, "fighting",
+                    StringComparison.Ordinal)) return false;
+            Army army = pActor?.army;
+            if (pActor?.data == null || army?.data == null ||
+                !HasActiveMission(army.id) ||
+                RoyalGuardService.IsRoyalGuard(pActor)) return false;
+            if (IsCaptain(pActor, army))
+            {
+                Actor target = pActor.attack_target?.a;
+                if (!IsValidCaptainCombatTarget(pActor, target))
+                    target = pActor.beh_actor_target?.a;
+                if (!IsValidCaptainCombatTarget(pActor, target))
+                    target = FindCaptainCombatTarget(pActor);
+                if (IsValidCaptainCombatTarget(pActor, target))
+                {
+                    pActor.beh_actor_target = target;
+                    SetCaptainTacticalTask(pActor);
+                }
+                else
+                {
+                    ClearActorAttackTarget(pActor);
+                    ReassertCaptainMissionTask(pActor);
+                }
+                return true;
+            }
+            if (!HasMemberCombatMission(pActor)) return false;
+            TrySetMemberCombatTask(pActor);
+            return true;
+        }
+
         private static void RepairCaptainVanillaFight(Actor pCaptain)
         {
             if (pCaptain?.data == null || !pCaptain.isTask("fighting"))
