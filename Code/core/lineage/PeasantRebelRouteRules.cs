@@ -95,10 +95,7 @@ namespace AncientWarfare3.core.lineage
 
         public static string ComposeName(string root, string route)
         {
-            return (root ?? "").Trim() +
-                   (route == PeasantRebelRouteIds.Bandit
-                       ? "\u8d3c"
-                       : "\u4e49\u519b");
+            return PeasantRebelOutlawNameRules.ComposeName(root, route);
         }
 
         public static string ResolvePersistedRoute(string storedRoute,

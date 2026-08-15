@@ -55,9 +55,8 @@ namespace AncientWarfare3.core.lineage
                 !PeasantRebelBanditWallService.CanCaptureAndBuild(pRebel))
                 return false;
 
-            pRebel.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
-                out string root, "");
-            if (string.IsNullOrWhiteSpace(root)) return false;
+            if (!PeasantRebelOutlawNameService.HasValidRoot(pRebel))
+                return false;
             return PeasantRebelRouteService.EnterExistingBanditGovernment(
                 pRebel, pOrigin, pFoundingCity, pFounder);
         }
@@ -70,6 +69,9 @@ namespace AncientWarfare3.core.lineage
                 PeasantRebelRouteService.ResolveFoundingCity(pKingdom) ??
                 ResolveCurrentCity(pKingdom);
             Actor founder = pKingdom?.king ?? founding?.leader;
+            if (!PeasantRebelOutlawNameService.EnsureRoot(pKingdom,
+                    founder, Date.getCurrentYear(), out string root))
+                return false;
             return TryEnterBandit(pKingdom, origin, founding, founder);
         }
 

@@ -98,6 +98,13 @@ $mandateBorder = Get-Content -Raw `
     'Code/core/lineage/MandateBorderDefenseService.cs'
 $mandateWallRules = Get-Content -Raw `
     'Code/core/lineage/MandateBorderWallRules.cs'
+$outlawName = if (Test-Path `
+        'Code/core/lineage/PeasantRebelOutlawNameService.cs') {
+    Get-Content -Raw `
+        'Code/core/lineage/PeasantRebelOutlawNameService.cs'
+} else {
+    ''
+}
 $mandateBuildStart = $mandateBorder.IndexOf(
     'private static int BuildBorderWalls(')
 $mandateBuildEnd = $mandateBorder.IndexOf(
@@ -137,6 +144,18 @@ Forbid $mandateWallRules 'GapInterval' `
     'The obsolete sparse-wall interval must be removed.'
 Forbid $mandateWallRules 'IsWallBuildTileTerrainValid' `
     'Shared wall placement must own terrain eligibility.'
+Require $outlawName 'AWWordLibraryManager.Instance.GetWords(' `
+    'Outlaw roots must come from the integrated UTF-8 word library.'
+Require $outlawName 'PeasantRebelOutlawNameRules.ResolveRoot(' `
+    'Persisted roots must be validated and migrated centrally.'
+Require $route 'PeasantRebelOutlawNameService.EnsureRoot(' `
+    'Manual and generated rebels must initialize an outlaw root.'
+Require $government 'PeasantRebelOutlawNameService.EnsureRoot(' `
+    'Bandit preflight must repair legacy roots before entry mutations.'
+Require $government 'PeasantRebelOutlawNameService.HasValidRoot(' `
+    'Shared bandit entry must reject invalid legacy roots.'
+Forbid $route 'pFounder.generateName(MetaType.Kingdom' `
+    'Rebel roots must not use the founder culture kingdom generator.'
 
 Require $mandate 'PeasantRebelRouteService.InitializeAndEnter(' `
     'CreateRebelKingdom must dispatch through the route coordinator.'
@@ -146,8 +165,6 @@ Require $mandate 'TryPullAlignedCities(pRebel, pOriginKingdom, pFoundingCity);' 
     'Aligned-city recruitment must remain behind EnterFoundingRoute.'
 Require $mandate 'StartExistingRebelWar(pOriginKingdom, pRebel);' `
     'The existing rebellion war must remain behind EnterFoundingRoute.'
-Require $route 'generateName(MetaType.Kingdom' `
-    'Route initialization must use the original kingdom name generator.'
 Require $bandit 'World.world.wars.endWar(war, WarWinner.Peace)' `
     'Bandit entry must end active wars through the original war manager.'
 Require $warDecision 'PeasantRebelRouteService.CanStartWar' `
@@ -326,6 +343,8 @@ Forbid $rebuildBody 'RenameForRoute' `
     'Restore must not rename kingdoms.'
 Forbid $rebuildBody 'CaptureAndBuild' `
     'Restore must not rebuild entry walls.'
+Forbid $rebuildBody 'EnsureRoot' `
+    'Restore must not reroll or migrate outlaw roots.'
 RequireCount $restorePipeline `
     'new AW3RestoreStage("peasant_rebel_routes",' 3 `
     'Both restore pipelines and cache reset must own a route stage.'

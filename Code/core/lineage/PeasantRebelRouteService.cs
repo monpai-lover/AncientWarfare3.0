@@ -136,14 +136,9 @@ namespace AncientWarfare3.core.lineage
                 AW3MultiplayerReplicaScope.IsApplying) return false;
 
             int year = Date.getCurrentYear();
-            long seed = pRebel.getID() ^ (pFounder.getID() << 1) ^
-                        ((long)year << 32);
-            string root = pFounder.generateName(MetaType.Kingdom, seed);
-            if (string.IsNullOrWhiteSpace(root)) root = pRebel.name ?? "";
-            root = root.Trim();
-            if (root.Length == 0) return false;
+            if (!PeasantRebelOutlawNameService.EnsureRoot(
+                    pRebel, pFounder, year, out string root)) return false;
 
-            pRebel.data.set(LineageKeys.MANDATE_REBEL_NAME_ROOT, root);
             pRebel.data.set(LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
                 pFoundingCity.getID());
             pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE_CREATED_YEAR,
@@ -221,6 +216,11 @@ namespace AncientWarfare3.core.lineage
                 !PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return false;
+            City founding = ResolveFoundingCity(pKingdom);
+            Actor founder = pKingdom.king ?? founding?.leader;
+            if (!PeasantRebelOutlawNameService.EnsureRoot(pKingdom,
+                    founder, Date.getCurrentYear(), out string root))
+                return false;
             Behaviors[PeasantRebelRouteIds.Bandit].Exit(pKingdom);
             IPeasantRebelRouteBehavior route =
                 Behaviors[PeasantRebelRouteIds.Founding];
