@@ -49,9 +49,13 @@ without crossing the perimeter belongs to a selected stronghold zone, and
 every tile immediately beyond the perimeter belongs to an unselected zone.
 
 Diagonal gaps are sealed using the existing Cultiway-style geometry rules.
-The existing three-tile land gates are carved after the closed logical
-perimeter is recorded, so a gate does not change territory membership.
-Coastal and blocked tiles use the existing original-terrain placement checks.
+The wall keeps the existing four-direction gate rule: one three-tile opening
+is carved on each of the north, south, east, and west sides. Each opening is
+chosen from the corresponding side near its midpoint using the existing
+passable-land and road preference. Gates are carved only after the closed
+logical perimeter is recorded, so an opening does not change territory
+membership or let the logical enclosure leak into the mother city. Coastal
+and blocked tiles use the existing original-terrain placement checks.
 
 This planner is used only for bandit stronghold creation. The shared
 `CultiwayStyleCityWallService`, ordinary city walls, and mandate frontier
@@ -88,7 +92,8 @@ Pure geometry tests cover:
 - expansion to multiple zones when the desired core crosses a zone edge;
 - removal of unnecessary edge zones;
 - cardinal connectivity and diagonal-gap sealing;
-- gate carving without changing the closed logical enclosure;
+- four three-tile cardinal gates without changing the closed logical
+  enclosure;
 - rejection when the mother city would retain no zone.
 
 Source/runtime guards reject the old 50-percent coverage rule and require the
