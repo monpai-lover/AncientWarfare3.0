@@ -156,6 +156,38 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
             XiaExpansionDecisionRules.ClaimLandGuardInsertionIndex(
                 new[] { "BehFindRandomTile", "BehGoToTileTarget" }),
             "an unexpected native task shape is left unchanged");
+        Equal(XiaExpansionDecisionRules.ClaimLandTaskIncompatible,
+            XiaExpansionDecisionRules.ClaimLandGuardInsertionIndex(
+                new[]
+                {
+                    "BehActorCheckZoneTarget",
+                    "BehGoToTileTarget",
+                    "BehActorReverseFlip",
+                    "BehCivicLeaderClaimArrival"
+                }),
+            "a guard after animation is not accepted as installed");
+        Equal(XiaExpansionDecisionRules.ClaimLandTaskIncompatible,
+            XiaExpansionDecisionRules.ClaimLandGuardInsertionIndex(
+                new[]
+                {
+                    "BehActorCheckZoneTarget",
+                    "BehGoToTileTarget",
+                    "BehCivicLeaderClaimArrival",
+                    "BehCivicLeaderClaimArrival"
+                }),
+            "duplicate arrival guards make the task incompatible");
+        Equal(true,
+            XiaExpansionDecisionRules.ShouldUseExternalClaimSelector(
+                pipelineReady: true, civicLeader: true),
+            "a ready pipeline intercepts civic leader target selection");
+        Equal(false,
+            XiaExpansionDecisionRules.ShouldUseExternalClaimSelector(
+                pipelineReady: false, civicLeader: true),
+            "an incomplete pipeline falls back to the native selector");
+        Equal(false,
+            XiaExpansionDecisionRules.ShouldUseExternalClaimSelector(
+                pipelineReady: true, civicLeader: false),
+            "ordinary residents always retain the native selector");
         string expansionPatch = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "patch",
             "AW_XiaExpansionPatch.cs"));
@@ -171,6 +203,9 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
         Equal(true, expansionPatch.Contains(
                 "nameof(BehActorCheckZoneTarget.execute)"),
             "claim target selection is intercepted before native movement");
+        Equal(true, expansionPatch.Contains(
+                "CivicLeaderLandClaimService.CanUseExternalSelector(pActor)"),
+            "the Harmony selector requires a fully installed claim pipeline");
         Equal(true, expansionPatch.Contains(
                 "CivicLeaderLandClaimService.TrySetExternalTarget(pActor)"),
             "the selector delegates to the shared civic claim service");
@@ -240,6 +275,9 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
         Equal(true, expansionDecisionContent.Contains(
                 "task.list.Insert(insertionIndex, guard)"),
             "the arrival guard is inserted at the validated pre-animation index");
+        Equal(true, expansionDecisionContent.Contains(
+                "SetClaimLandPipelineReady(true)"),
+            "successful or existing guard installation enables the selector");
         Equal(false, KingdomPolicyTechOrderRules.CanConsider(
                 "aw_tech_three_departments", true, true, false),
             "AI cannot consider the three departments before nine-rank completion");

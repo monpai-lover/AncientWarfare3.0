@@ -14,7 +14,7 @@ namespace AncientWarfare3.patch
         private static bool CivicLeaderClaimTarget_Prefix(Actor pActor,
             ref BehResult __result)
         {
-            if (!CivicLeaderLandClaimService.IsCivicLeader(pActor))
+            if (!CivicLeaderLandClaimService.CanUseExternalSelector(pActor))
                 return true;
             __result = CivicLeaderLandClaimService.TrySetExternalTarget(pActor)
                     ? BehResult.Continue

@@ -25,6 +25,7 @@ namespace AncientWarfare3.content
 
         private static void ConfigureClaimLandTask()
         {
+            CivicLeaderLandClaimService.SetClaimLandPipelineReady(false);
             BehaviourTaskActor task = AssetManager.tasks_actor.get(
                 ClaimLandDecisionId);
             if (task?.list == null)
@@ -44,7 +45,10 @@ namespace AncientWarfare3.content
                 .ClaimLandGuardInsertionIndex(actionTypeNames);
             if (insertionIndex == XiaExpansionDecisionRules
                     .ClaimLandGuardAlreadyInstalled)
+            {
+                CivicLeaderLandClaimService.SetClaimLandPipelineReady(true);
                 return;
+            }
             if (insertionIndex == XiaExpansionDecisionRules
                     .ClaimLandTaskIncompatible)
             {
@@ -59,6 +63,7 @@ namespace AncientWarfare3.content
             guard.id = guard.id.Replace("ai.behaviours.", string.Empty);
             guard.create();
             task.list.Insert(insertionIndex, guard);
+            CivicLeaderLandClaimService.SetClaimLandPipelineReady(true);
         }
 
         private static void ConfigureNewCityDecision()

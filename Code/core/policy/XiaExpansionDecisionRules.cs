@@ -73,17 +73,32 @@ namespace AncientWarfare3.core.policy
                    externalZoneStillValid;
         }
 
+        public static bool ShouldUseExternalClaimSelector(
+            bool pipelineReady, bool civicLeader)
+        {
+            return pipelineReady && civicLeader;
+        }
+
         public static int ClaimLandGuardInsertionIndex(
             IReadOnlyList<string> actionTypeNames)
         {
             if (actionTypeNames == null)
                 return ClaimLandTaskIncompatible;
-            for (int i = 0; i < actionTypeNames.Count; i++)
-                if (actionTypeNames[i] == ClaimArrivalGuardType)
-                    return ClaimLandGuardAlreadyInstalled;
             if (actionTypeNames.Count < 2 ||
                 actionTypeNames[0] != ClaimSelectorType ||
                 actionTypeNames[1] != ClaimMovementType)
+                return ClaimLandTaskIncompatible;
+            int guardCount = 0;
+            int guardIndex = -1;
+            for (int i = 0; i < actionTypeNames.Count; i++)
+                if (actionTypeNames[i] == ClaimArrivalGuardType)
+                {
+                    guardCount++;
+                    guardIndex = i;
+                }
+            if (guardCount == 1 && guardIndex == 2)
+                return ClaimLandGuardAlreadyInstalled;
+            if (guardCount != 0)
                 return ClaimLandTaskIncompatible;
             return 2;
         }

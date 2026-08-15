@@ -2,6 +2,19 @@ namespace AncientWarfare3.core.policy
 {
     internal static class CivicLeaderLandClaimService
     {
+        private static bool _claimLandPipelineReady;
+
+        internal static void SetClaimLandPipelineReady(bool pReady)
+        {
+            _claimLandPipelineReady = pReady;
+        }
+
+        internal static bool CanUseExternalSelector(Actor pActor)
+        {
+            return XiaExpansionDecisionRules.ShouldUseExternalClaimSelector(
+                _claimLandPipelineReady, IsCivicLeader(pActor));
+        }
+
         internal static bool IsCivicLeader(Actor pActor)
         {
             City city = pActor?.city;
