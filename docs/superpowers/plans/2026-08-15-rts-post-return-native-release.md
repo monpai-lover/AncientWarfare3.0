@@ -262,4 +262,3 @@ git log --oneline master..HEAD
 ```
 
 Expected: no whitespace errors; only the design, plan, focused tests, and two RTS service files differ from `master`.
-
