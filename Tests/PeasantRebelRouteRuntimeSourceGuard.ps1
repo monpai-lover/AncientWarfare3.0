@@ -103,10 +103,18 @@ Require $route 'PeasantRebelBanditTerritoryService.CanAcquire(' `
     'Acquisition boundaries must query the whitelist service.'
 Forbid $route 'currentCityCount == 0' `
     'The single-city invariant must be removed.'
-Require $wall 'pCity.recalculateNeighbourZones()' `
-    'Bandit wall capture must use the original city boundary refresh.'
-Require $wall 'pCity.border_zones' `
-    'Bandit walls must start from the entry-time city border zones.'
+Require $wall 'CaptureAndBuild(Kingdom pKingdom)' `
+    'Wall capture must cover the complete kingdom border.'
+Require $wall 'foreach (City city in pKingdom.getCities())' `
+    'National border capture must scan every retained city.'
+Require $wall 'city.recalculateNeighbourZones()' `
+    'Each city must use the original boundary refresh.'
+Require $wall 'city.border_zones' `
+    'Capture must start from original border zones.'
+Require $wall 'IsInsideKingdom(neighbour, pKingdom)' `
+    'Same-kingdom city borders must be excluded.'
+Forbid $wall 'CaptureAndBuild(Kingdom pKingdom, City pCity)' `
+    'Walls must not remain tied to one city.'
 Require $wall 'neighboursAll' `
     'Bandit wall capture must inspect original neighboring tiles.'
 Require $wall 'TopTileLibrary.wall_wild' `

@@ -15,30 +15,37 @@ namespace AncientWarfare3.core.lineage
             public int y;
         }
 
-        internal static void CaptureAndBuild(Kingdom pKingdom, City pCity)
+        internal static void CaptureAndBuild(Kingdom pKingdom)
         {
             if (!PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return;
-            if (pKingdom?.data == null || pCity?.data == null ||
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
                 TopTileLibrary.wall_wild == null) return;
 
             var points = new List<WallPoint>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
             try
             {
-                pCity.recalculateNeighbourZones();
-                foreach (TileZone zone in pCity.border_zones)
+                foreach (City city in pKingdom.getCities())
                 {
-                    if (zone?.tiles == null) continue;
-                    foreach (WorldTile tile in zone.tiles)
+                    if (city?.data == null || city.isRekt() ||
+                        city.kingdom != pKingdom) continue;
+                    city.recalculateNeighbourZones();
+                    if (city.border_zones == null) continue;
+                    foreach (TileZone zone in city.border_zones)
                     {
-                        if (!IsInsideCity(tile, pCity) ||
-                            !TouchesOutsideCity(tile, pCity) ||
-                            !CanBuildAtEntry(tile, pCity)) continue;
-                        string key = tile.x + ":" + tile.y;
-                        if (!seen.Add(key)) continue;
-                        points.Add(new WallPoint { x = tile.x, y = tile.y });
+                        if (zone?.tiles == null) continue;
+                        foreach (WorldTile tile in zone.tiles)
+                        {
+                            if (!IsInsideKingdom(tile, pKingdom) ||
+                                !TouchesOutsideKingdom(tile, pKingdom) ||
+                                !IsTerrainEligible(tile)) continue;
+                            string key = tile.x + ":" + tile.y;
+                            if (seen.Add(key))
+                                points.Add(new WallPoint
+                                    { x = tile.x, y = tile.y });
+                        }
                     }
                 }
             }
@@ -48,21 +55,28 @@ namespace AncientWarfare3.core.lineage
                                     e.Message);
             }
 
-            points.Sort((left, right) =>
+            PersistAndBuild(pKingdom, points);
+        }
+
+        private static void PersistAndBuild(Kingdom pKingdom,
+            List<WallPoint> pPoints)
+        {
+            pPoints.Sort((left, right) =>
             {
                 int x = left.x.CompareTo(right.x);
                 return x != 0 ? x : left.y.CompareTo(right.y);
             });
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_BANDIT_WALLS,
-                Serialize(points));
+                Serialize(pPoints));
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_BANDIT_WALL_CURSOR,
                 0);
 
-            for (int i = 0; i < points.Count; i++)
+            for (int i = 0; i < pPoints.Count; i++)
             {
-                WallPoint point = points[i];
+                WallPoint point = pPoints[i];
                 WorldTile tile = World.world?.GetTile(point.x, point.y);
-                if (!CanBuildAtEntry(tile, pCity)) continue;
+                if (!IsInsideKingdom(tile, pKingdom) ||
+                    !IsTerrainEligible(tile)) continue;
                 try
                 {
                     tile.setTopTileType(TopTileLibrary.wall_wild);
@@ -115,11 +129,6 @@ namespace AncientWarfare3.core.lineage
                 (cursor + inspected) % points.Count);
         }
 
-        private static bool CanBuildAtEntry(WorldTile pTile, City pCity)
-        {
-            return IsInsideCity(pTile, pCity) && IsTerrainEligible(pTile);
-        }
-
         private static bool CanRestoreAtRecordedPosition(WorldTile pTile)
         {
             return IsTerrainEligible(pTile);
@@ -140,22 +149,25 @@ namespace AncientWarfare3.core.lineage
                 pHasBuilding: pTile.hasBuilding());
         }
 
-        private static bool IsInsideCity(WorldTile pTile, City pCity)
+        private static bool IsInsideKingdom(WorldTile pTile,
+            Kingdom pKingdom)
         {
-            if (pTile == null || pCity?.data == null) return false;
+            if (pTile == null || pKingdom?.data == null) return false;
             try
             {
-                return pTile.zone_city == pCity || pTile.zone?.city == pCity;
+                City city = pTile.zone_city ?? pTile.zone?.city;
+                return city?.kingdom == pKingdom;
             }
             catch { return false; }
         }
 
-        private static bool TouchesOutsideCity(WorldTile pTile, City pCity)
+        private static bool TouchesOutsideKingdom(WorldTile pTile,
+            Kingdom pKingdom)
         {
             try
             {
                 foreach (WorldTile neighbour in pTile.neighboursAll)
-                    if (!IsInsideCity(neighbour, pCity)) return true;
+                    if (!IsInsideKingdom(neighbour, pKingdom)) return true;
             }
             catch { }
             return false;

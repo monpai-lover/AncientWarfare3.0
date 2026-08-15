@@ -55,8 +55,7 @@ namespace AncientWarfare3.core.lineage
             PeasantRebelRouteService.RenameForRoute(pContext.Rebel, Id);
             if (!PeasantRebelRouteService.HasRouteName(
                     pContext.Rebel, Id)) return false;
-            PeasantRebelBanditWallService.CaptureAndBuild(pContext.Rebel,
-                pContext.FoundingCity);
+            PeasantRebelBanditWallService.CaptureAndBuild(pContext.Rebel);
             HistoryWriter.RecordKingdom(pContext.Rebel,
                 KingdomEvent.MANDATE_REBELLION,
                 HistoryText.Kingdom(pContext.Rebel) +
