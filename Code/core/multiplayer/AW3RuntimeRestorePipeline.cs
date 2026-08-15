@@ -150,6 +150,8 @@ namespace AncientWarfare3.core.multiplayer
                     MandateService.RebuildRuntimeMarkerProjection),
                 new AW3RestoreStage("mandate_projection_resume", () =>
                     MandateService.ResumePendingProjections(2)),
+                new AW3RestoreStage("peasant_rebel_routes",
+                    PeasantRebelRouteService.RebuildRuntime),
                 new AW3RestoreStage("world_traits", () =>
                     XiaSubspeciesRepair.EnsureWorldTraits()),
                 new AW3RestoreStage("figure_state", FigureStateStore.Load),
@@ -287,6 +289,8 @@ namespace AncientWarfare3.core.multiplayer
                     MandateService.RebuildRuntimeMarkerProjection),
                 new AW3RestoreStage("mandate_projection_resume", () =>
                     MandateService.ResumePendingProjections(2)),
+                new AW3RestoreStage("peasant_rebel_routes",
+                    PeasantRebelRouteService.RebuildRuntime),
                 new AW3RestoreStage("war_plot_redirect",
                     WarPlotRedirectService.SweepExistingPlots),
                 new AW3RestoreStage("world_traits", () =>
@@ -419,6 +423,8 @@ namespace AncientWarfare3.core.multiplayer
                     CityOccupationAccelerationService.ClearRuntime),
                 new AW3RestoreStage("mandate_phase",
                     MandatePhaseService.ClearRuntime),
+                new AW3RestoreStage("peasant_rebel_routes",
+                    PeasantRebelRouteService.ClearRuntime),
                 new AW3RestoreStage("army_retreat",
                     ArmyRetreatService.ClearRuntime),
                 new AW3RestoreStage("army_strategic_index",

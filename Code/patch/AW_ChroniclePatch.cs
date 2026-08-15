@@ -54,6 +54,12 @@ namespace AncientWarfare3.patch
             // UI and map-mode references are local state and must be cleared
             // even when the destruction is being applied on a replica.
             KingdomSelectionLifecycleService.OnKingdomDestroying(pKingdom);
+            bool routeAuthority =
+                PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) &&
+                !AW3MultiplayerReplicaScope.IsApplying;
+            PeasantRebelRouteService.OnKingdomDestroying(pKingdom,
+                pAuthoritative: routeAuthority);
             if (AW3MultiplayerReplicaScope.IsApplying)
             {
                 __state = default;

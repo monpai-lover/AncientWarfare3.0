@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 using Newtonsoft.Json;
 
 namespace AncientWarfare3.core.lineage
@@ -16,6 +17,9 @@ namespace AncientWarfare3.core.lineage
 
         internal static void CaptureAndBuild(Kingdom pKingdom, City pCity)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return;
             if (pKingdom?.data == null || pCity?.data == null ||
                 TopTileLibrary.wall_wild == null) return;
 
@@ -74,6 +78,9 @@ namespace AncientWarfare3.core.lineage
         internal static void RepairYear(Kingdom pKingdom,
             bool pSuppressionActive)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return;
             if (!PeasantRebelRouteRules.ShouldRepairWalls(
                     PeasantRebelRouteService.IsBandit(pKingdom),
                     pSuppressionActive) || TopTileLibrary.wall_wild == null)

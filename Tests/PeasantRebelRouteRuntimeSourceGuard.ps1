@@ -17,6 +17,14 @@ function RequireOrder([string]$Text, [string]$Before, [string]$After,
     }
 }
 
+function RequireCount([string]$Text, [string]$Needle, [int]$Count,
+        [string]$Message) {
+    $actual = ([regex]::Matches($Text, [regex]::Escape($Needle))).Count
+    if ($actual -ne $Count) {
+        throw ($Message + " Expected $Count, found $actual.")
+    }
+}
+
 $mandate = Get-Content -Raw 'Code/core/lineage/MandateRebelService.cs'
 $route = Get-Content -Raw 'Code/core/lineage/PeasantRebelRouteService.cs'
 $warDecision = Get-Content -Raw 'Code/core/lineage/WarDecisionService.cs'
@@ -34,6 +42,9 @@ $historyRules = Get-Content -Raw `
 $othersLocale = Get-Content -Raw -Encoding UTF8 'locales/others.csv'
 $mandateLocale = Get-Content -Raw -Encoding UTF8 `
     'locales/aw3_mandate_extra.csv'
+$restorePipeline = Get-Content -Raw `
+    'Code/core/multiplayer/AW3RuntimeRestorePipeline.cs'
+$chroniclePatch = Get-Content -Raw 'Code/patch/AW_ChroniclePatch.cs'
 $uiSources = (Get-ChildItem 'Code/ui' -Recurse -File -Filter '*.cs' |
     ForEach-Object { Get-Content -Raw $_.FullName }) -join "`n"
 $bandit = if (Test-Path 'Code/core/lineage/PeasantRebelBanditRoute.cs') {
@@ -131,5 +142,97 @@ Forbid $uiSources $hardCodedRuler `
     'UI files must not hard-code the bandit ruler title.'
 Forbid $uiSources $hardCodedHeir `
     'UI files must not hard-code the bandit heir title.'
+
+Require $route 'internal static void RebuildRuntime()' `
+    'Route runtime must rebuild from persisted kingdom data.'
+Require $route 'ClearRuntime();' `
+    'Route runtime rebuild must start from a clean cache.'
+Require $route 'RulerAppellationService.RefreshLivingProjection(kingdom);' `
+    'Restored routes must refresh the shared ruler projection.'
+$rebuildStart = $route.IndexOf('internal static void RebuildRuntime()')
+$rebuildEnd = $route.IndexOf('internal static void RemoveRuntime(',
+    $rebuildStart)
+if ($rebuildStart -lt 0 -or $rebuildEnd -le $rebuildStart) {
+    throw 'Could not isolate the route runtime rebuild method.'
+}
+$rebuildBody = $route.Substring($rebuildStart,
+    $rebuildEnd - $rebuildStart)
+Forbid $rebuildBody 'InitializeAndEnter(' `
+    'Restore must not replay route entry effects.'
+RequireCount $restorePipeline `
+    'new AW3RestoreStage("peasant_rebel_routes",' 3 `
+    'Both restore pipelines and cache reset must own a route stage.'
+RequireCount $restorePipeline `
+    'PeasantRebelRouteService.RebuildRuntime),' 2 `
+    'Both restore pipelines must rebuild peasant rebel routes.'
+RequireCount $restorePipeline `
+    'PeasantRebelRouteService.ClearRuntime),' 1 `
+    'Runtime cache reset must clear peasant rebel routes.'
+
+RequireOrder $mandate 'CanMutateAuthority(' 'pCity.makeOwnKingdom(' `
+    'Replica authority must be checked before creating a rebel kingdom.'
+$mandateYearStart = $mandate.IndexOf(
+    'public static void OnKingdomYear(Kingdom pKingdom)')
+$mandateYearEnd = $mandate.IndexOf(
+    'internal static void RunFoundingRouteYear(', $mandateYearStart)
+if ($mandateYearStart -lt 0 -or $mandateYearEnd -le $mandateYearStart) {
+    throw 'Could not isolate the Mandate rebel annual dispatcher.'
+}
+$mandateYearBody = $mandate.Substring($mandateYearStart,
+    $mandateYearEnd - $mandateYearStart)
+RequireOrder $mandateYearBody 'CanMutateAuthority(' `
+    'pKingdom.data.set(LineageKeys.MANDATE_REBEL_LAST_YEAR, year);' `
+    'Replica authority must be checked before the annual marker write.'
+RequireOrder $route 'CanMutateAuthority(' 'Randy.randomInt(0, 100)' `
+    'Replica authority must be checked before route selection randomness.'
+RequireOrder $bandit 'CanMutateAuthority(' 'city.joinAnotherKingdom(' `
+    'Replica authority must be checked before bandit city transfer.'
+RequireOrder $bandit 'CanMutateAuthority(' `
+    'World.world.wars.endWar(war, WarWinner.Peace)' `
+    'Replica authority must be checked before bandit peace mutations.'
+RequireOrder $wall 'CanMutateAuthority(' `
+    'tile.setTopTileType(TopTileLibrary.wall_wild)' `
+    'Replica authority must be checked before wall placement or repair.'
+$banditYearStart = $bandit.IndexOf(
+    'public void OnKingdomYear(Kingdom pKingdom)')
+$banditYearEnd = $bandit.IndexOf(
+    'public bool CanDeclareWar(', $banditYearStart)
+if ($banditYearStart -lt 0 -or $banditYearEnd -le $banditYearStart) {
+    throw 'Could not isolate the bandit annual dispatcher.'
+}
+$banditYearBody = $bandit.Substring($banditYearStart,
+    $banditYearEnd - $banditYearStart)
+RequireOrder $banditYearBody 'TryResolveFoundingCity(' `
+    'SafeCityCount(pKingdom) > 1' `
+    'Founding-city validity must be checked before malformed city counts.'
+
+$removeStart = $chroniclePatch.IndexOf(
+    'internal static void RemoveKingdom_Prefix(')
+$removeEnd = $chroniclePatch.IndexOf(
+    'internal static void RemoveKingdom_Postfix(', $removeStart)
+if ($removeStart -lt 0 -or $removeEnd -le $removeStart) {
+    throw 'Could not isolate the kingdom removal prefix.'
+}
+$removeBody = $chroniclePatch.Substring($removeStart,
+    $removeEnd - $removeStart)
+RequireOrder $removeBody `
+    'KingdomSelectionLifecycleService.OnKingdomDestroying(pKingdom);' `
+    'PeasantRebelRouteService.OnKingdomDestroying(pKingdom,' `
+    'Route cleanup must follow local kingdom selection cleanup.'
+RequireOrder $removeBody `
+    'PeasantRebelRouteService.OnKingdomDestroying(pKingdom,' `
+    'if (AW3MultiplayerReplicaScope.IsApplying)' `
+    'Route cleanup must run before the replica destruction early return.'
+RequireOrder $removeBody 'CanMutateAuthority(' `
+    'PeasantRebelRouteService.OnKingdomDestroying(pKingdom,' `
+    'Extinction authority must reject replica sessions, not only apply scope.'
+Require $route 'internal static void OnKingdomDestroying(' `
+    'Route runtime must clean up when the original kingdom path destroys it.'
+Require $bandit 'internal static void RecordDestruction(' `
+    'Bandit destruction history must validate active origin suppression.'
+Forbid ($route + $bandit + $wall) 'KingdomManager.removeObject' `
+    'Route-owned code must reuse normal kingdom extinction.'
+Forbid ($route + $bandit + $wall) 'setTopTileType(null)' `
+    'Route extinction and conversion must not remove fixed wall tiles.'
 
 Write-Host 'Peasant rebel route runtime source guard passed.'

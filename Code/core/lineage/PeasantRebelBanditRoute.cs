@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -12,6 +13,9 @@ namespace AncientWarfare3.core.lineage
 
         public bool Enter(PeasantRebelRouteEntryContext pContext)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return false;
             if (pContext.Rebel?.data == null ||
                 pContext.Origin?.data == null ||
                 pContext.FoundingCity?.data == null) return false;
@@ -64,6 +68,15 @@ namespace AncientWarfare3.core.lineage
 
         public void OnKingdomYear(Kingdom pKingdom)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return;
+            if (!TryResolveFoundingCity(pKingdom,
+                    out City foundingCity))
+            {
+                PeasantRebelRouteService.RemoveRuntime(pKingdom);
+                return;
+            }
             if (SafeCityCount(pKingdom) > 1)
             {
                 ModClass.LogWarning("Bandit realm " + pKingdom.id +
@@ -71,7 +84,7 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             MandateRebelService.RunBanditRouteYear(pKingdom);
-            if (TryConvertToFounding(pKingdom))
+            if (TryConvertToFounding(pKingdom, foundingCity))
             {
                 MandateRebelService.RunFoundingRouteYear(pKingdom);
                 return;
@@ -154,9 +167,32 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
-        private static bool TryConvertToFounding(Kingdom pKingdom)
+        internal static void RecordDestruction(Kingdom pKingdom)
         {
             if (pKingdom?.data == null ||
+                !IsOriginSuppressionActive(pKingdom)) return;
+            pKingdom.data.get(
+                LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
+                out long originId, -1L);
+            Kingdom origin = null;
+            try { origin = World.world?.kingdoms?.get(originId); }
+            catch { }
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.MANDATE_REBELLION,
+                HistoryText.Kingdom(pKingdom) +
+                HistoryLocalizationRules.H("aw_hist_bandit_destroyed"),
+                HistoryTarget.Kingdom(origin?.data != null
+                    ? origin
+                    : pKingdom));
+        }
+
+        private static bool TryConvertToFounding(Kingdom pKingdom,
+            City pFoundingCity)
+        {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying ||
+                pKingdom?.data == null ||
                 !PeasantRebelRouteService.IsBandit(pKingdom)) return false;
             int currentYear = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_ROUTE_LAST_YEAR,
@@ -212,16 +248,8 @@ namespace AncientWarfare3.core.lineage
 
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_ROUTE_CREATED_YEAR,
                 out int createdYear, currentYear);
-            pKingdom.data.get(LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
-                out long foundingCityId, -1L);
-            City foundingCity = null;
-            try
-            {
-                foundingCity = World.world?.cities?.get(foundingCityId);
-            }
-            catch { }
             int cityFactor = PeasantRebelRouteService.ComputeCityFactor(
-                foundingCity, origin);
+                pFoundingCity, origin);
             int leaderFactor =
                 PeasantRebelRouteService.ComputeLeaderFactor(pKingdom.king);
             int age = currentYear - createdYear;
@@ -234,6 +262,19 @@ namespace AncientWarfare3.core.lineage
             if (Randy.randomInt(0, 100) >= chance) return false;
             return PeasantRebelRouteService.ConvertBanditToFounding(
                 pKingdom, origin);
+        }
+
+        private static bool TryResolveFoundingCity(Kingdom pKingdom,
+            out City pCity)
+        {
+            pCity = null;
+            if (pKingdom?.data == null) return false;
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
+                out long cityId, -1L);
+            try { pCity = World.world?.cities?.get(cityId); }
+            catch { }
+            return pCity?.data != null && !pCity.isRekt() &&
+                   pCity.kingdom == pKingdom;
         }
     }
 }

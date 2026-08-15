@@ -94,6 +94,11 @@ namespace AncientWarfare3.core.lineage
                 : "";
         }
 
+        public static bool CanMutateAuthority(bool replicaSession)
+        {
+            return !replicaSession;
+        }
+
         public static int LeaderFactor(int warfare, int stewardship,
             int diplomacy, bool ambitious, bool peaceful)
         {

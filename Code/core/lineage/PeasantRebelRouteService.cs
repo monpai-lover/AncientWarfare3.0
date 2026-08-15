@@ -37,7 +37,10 @@ namespace AncientWarfare3.core.lineage
                 return "";
             }
 
-            if (route != storedRoute)
+            bool authority = PeasantRebelRouteRules.CanMutateAuthority(
+                AW3MultiplayerReplicaScope.IsReplicaSession) &&
+                !AW3MultiplayerReplicaScope.IsApplying;
+            if (authority && route != storedRoute)
                 pKingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route);
             RuntimeByKingdom[kingdomId] = route;
             return route;
@@ -61,8 +64,9 @@ namespace AncientWarfare3.core.lineage
             if (pRebel?.data == null || pOrigin?.data == null ||
                 pFoundingCity?.data == null || pFounder?.data == null)
                 return false;
-            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
-                AW3MultiplayerReplicaScope.IsApplying) return true;
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return false;
 
             int year = Date.getCurrentYear();
             long seed = pRebel.getID() ^ (pFounder.getID() << 1) ^
@@ -125,6 +129,9 @@ namespace AncientWarfare3.core.lineage
         internal static void EnterFoundingFallback(Kingdom pRebel,
             Kingdom pOrigin, City pFoundingCity)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return;
             if (pRebel?.data == null || pOrigin?.data == null ||
                 pFoundingCity?.data == null) return;
             pRebel.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
@@ -141,6 +148,9 @@ namespace AncientWarfare3.core.lineage
         internal static bool TryApplyRouteName(Kingdom pKingdom,
             string pName)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return false;
             if (pKingdom?.data == null || string.IsNullOrWhiteSpace(pName))
                 return false;
             try
@@ -160,6 +170,9 @@ namespace AncientWarfare3.core.lineage
 
         internal static void OnKingdomYear(Kingdom pKingdom)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return;
             string routeId = GetRouteId(pKingdom);
             if (!Behaviors.TryGetValue(routeId,
                     out IPeasantRebelRouteBehavior behavior)) return;
@@ -170,7 +183,8 @@ namespace AncientWarfare3.core.lineage
             Kingdom pOrigin)
         {
             if (!IsBandit(pKingdom) ||
-                AW3MultiplayerReplicaScope.IsReplicaSession ||
+                !PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return false;
             Behaviors[PeasantRebelRouteIds.Bandit].Exit(pKingdom);
             IPeasantRebelRouteBehavior route =
@@ -210,6 +224,9 @@ namespace AncientWarfare3.core.lineage
 
         internal static void OnWarStarted(War pWar)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return;
             if (pWar?.data == null) return;
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
@@ -269,6 +286,68 @@ namespace AncientWarfare3.core.lineage
         {
             RuntimeByKingdom.Clear();
             _enteringBanditKingdomId = null;
+        }
+
+        internal static void RebuildRuntime()
+        {
+            ClearRuntime();
+            if (World.world?.kingdoms == null) return;
+            bool authority = PeasantRebelRouteRules.CanMutateAuthority(
+                AW3MultiplayerReplicaScope.IsReplicaSession) &&
+                !AW3MultiplayerReplicaScope.IsApplying;
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null || kingdom.isRekt()) continue;
+                string stored = ReadRouteRaw(kingdom);
+                string resolved =
+                    PeasantRebelRouteRules.ResolvePersistedRoute(stored,
+                        MandateRebelService.IsRebelKingdom(kingdom));
+                if (authority && stored.Length == 0 &&
+                    resolved == PeasantRebelRouteIds.Founding)
+                    kingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE,
+                        resolved);
+                if (resolved.Length == 0) continue;
+                RuntimeByKingdom[kingdom.getID()] = resolved;
+                RulerAppellationService.RefreshLivingProjection(kingdom);
+            }
+        }
+
+        internal static void RemoveRuntime(Kingdom pKingdom)
+        {
+            if (pKingdom == null) return;
+            RuntimeByKingdom.Remove(pKingdom.getID());
+            RulerAppellationService.RemoveKingdom(pKingdom.getID());
+        }
+
+        internal static void OnKingdomDestroying(Kingdom pKingdom,
+            bool pAuthoritative)
+        {
+            if (pKingdom?.data == null) return;
+            bool bandit = string.Equals(ReadRouteRaw(pKingdom),
+                PeasantRebelRouteIds.Bandit, StringComparison.Ordinal);
+            if (pAuthoritative && bandit)
+                PeasantRebelBanditRoute.RecordDestruction(pKingdom);
+            if (pAuthoritative)
+            {
+                try
+                {
+                    foreach (Actor unit in pKingdom.getUnits())
+                    {
+                        if (unit?.data == null) continue;
+                        unit.data.set(LineageKeys.MANDATE_REBEL_LEADER,
+                            false);
+                        if (unit.hasTrait("rebel"))
+                            unit.removeTrait("rebel");
+                    }
+                }
+                catch (Exception e)
+                {
+                    ModClass.LogWarning(
+                        "Peasant rebel extinction cleanup failed: " +
+                        e.Message);
+                }
+            }
+            RemoveRuntime(pKingdom);
         }
 
         internal static int ComputeLeaderFactor(Actor pActor)
@@ -379,6 +458,14 @@ namespace AncientWarfare3.core.lineage
                 LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
                 out long originId, -1L);
             return originId;
+        }
+
+        private static string ReadRouteRaw(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return "";
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL_ROUTE,
+                out string route, "");
+            return (route ?? "").Trim();
         }
 
         private sealed class BanditEntryScope : IDisposable

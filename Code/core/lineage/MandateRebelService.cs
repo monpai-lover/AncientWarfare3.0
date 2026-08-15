@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.schools;
@@ -93,6 +94,9 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return;
             if (!IsRebelKingdom(pKingdom)) return;
 
             int year = Date.getCurrentYear();
@@ -149,6 +153,9 @@ namespace AncientWarfare3.core.lineage
 
         public static Kingdom CreateRebelKingdom(City pCity, Actor pFounder, Kingdom pOriginKingdom, string pReason)
         {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying) return null;
             if (pCity?.data == null || pFounder?.data == null || pOriginKingdom?.data == null) return null;
 
             Kingdom rebel = null;
