@@ -38,6 +38,24 @@ namespace AncientWarfare3.core.lineage
             return !bandit || alreadyOwned || currentCityCount == 0;
         }
 
+        public static bool CanSwitchGovernment(string currentClass,
+            string targetClass)
+        {
+            string current = (currentClass ?? "").Trim();
+            string target = (targetClass ?? "").Trim();
+            if (target == "peasant_bandit")
+                return current == "peasant_rebel";
+            if (current == "peasant_bandit")
+                return target == "peasant_rebel";
+            return current != target;
+        }
+
+        public static bool CanAcquireWhitelistedCity(bool bandit,
+            bool alreadyOwned, bool whitelisted)
+        {
+            return !bandit || alreadyOwned || whitelisted;
+        }
+
         public static bool ShouldBypassTruce(bool defenderBandit,
             bool attackerIsOrigin)
         {

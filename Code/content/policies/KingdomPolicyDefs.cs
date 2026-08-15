@@ -51,6 +51,7 @@ namespace AncientWarfare3.content.policies
         public const string ClassReform = "reform";
         public const string ClassRepublic = "republic";
         public const string ClassRebel = "peasant_rebel";
+        public const string ClassBandit = "peasant_bandit";
         public const string ArmyDefault = "default";
         public const string ArmySlaveSoldier = "slave_soldier";
         public const string NameDefault = "default";
@@ -68,7 +69,8 @@ namespace AncientWarfare3.content.policies
             ClassAristocrat,
             ClassReform,
             ClassRepublic,
-            ClassRebel
+            ClassRebel,
+            ClassBandit
         };
 
         private static readonly KingdomPolicyDef[] _all =

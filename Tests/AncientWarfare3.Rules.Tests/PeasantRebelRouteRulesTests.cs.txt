@@ -72,6 +72,27 @@ internal static class PeasantRebelRouteRulesTests
             "replicas cannot mutate route state");
         True(PeasantRebelRouteRules.CanMutateAuthority(false),
             "simulation authority may mutate route state");
+        True(PeasantRebelRouteRules.CanSwitchGovernment(
+                "peasant_rebel", "peasant_bandit"),
+            "peasant rebels may become bandits");
+        True(PeasantRebelRouteRules.CanSwitchGovernment(
+                "peasant_bandit", "peasant_rebel"),
+            "bandits may return to peasant rebels");
+        False(PeasantRebelRouteRules.CanSwitchGovernment(
+                "default", "peasant_bandit"),
+            "ordinary governments cannot become bandits directly");
+        False(PeasantRebelRouteRules.CanSwitchGovernment(
+                "peasant_bandit", "default"),
+            "bandits cannot skip the peasant rebel exit");
+        True(PeasantRebelRouteRules.CanAcquireWhitelistedCity(
+                true, false, true),
+            "entry territory may be recovered");
+        False(PeasantRebelRouteRules.CanAcquireWhitelistedCity(
+                true, false, false),
+            "new territory is forbidden");
+        True(PeasantRebelRouteRules.CanAcquireWhitelistedCity(
+                false, false, false),
+            "non-bandits remain unrestricted");
         Equal(-15, PeasantRebelRouteRules.LeaderFactor(
                 0, 0, 0, false, true),
             "weak peaceful leader");
