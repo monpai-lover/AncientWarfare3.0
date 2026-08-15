@@ -105,6 +105,14 @@ namespace AncientWarfare3.core.lineage
             TryClaimMandate(pKingdom);
         }
 
+        internal static void RunFoundingRouteYear(Kingdom pKingdom)
+        {
+            if (!IsRebelKingdom(pKingdom)) return;
+            EnsureRebelGovernment(pKingdom);
+            MobilizeRebelForces(pKingdom);
+            TryClaimMandate(pKingdom);
+        }
+
         public static void OnMandateCollapse(Kingdom pMandateKingdom, string pReason)
         {
             if (pMandateKingdom?.data == null || pMandateKingdom.isRekt()) return;
@@ -183,6 +191,16 @@ namespace AncientWarfare3.core.lineage
                 (pCity.data.name ?? "") +
                 HistoryLocalizationRules.Text("aw_hist_mandate_rebel_rose_suffix"));
             return rebel;
+        }
+
+        internal static bool EnterFoundingRoute(Kingdom pRebel,
+            Kingdom pOriginKingdom, City pFoundingCity)
+        {
+            if (pRebel?.data == null || pOriginKingdom?.data == null ||
+                pFoundingCity?.data == null) return false;
+            TryPullAlignedCities(pRebel, pOriginKingdom, pFoundingCity);
+            StartRebelWar(pOriginKingdom, pRebel);
+            return true;
         }
 
         public static void MarkRebelKingdom(Kingdom pKingdom, Actor pLeader, Kingdom pOriginKingdom)

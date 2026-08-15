@@ -51,6 +51,22 @@ internal static class PeasantRebelRouteRulesTests
         Equal(PeasantRebelRouteIds.Founding,
             PeasantRebelRouteRules.ResolvePersistedRoute("", true),
             "old rebel saves default to founding");
+        Equal(-15, PeasantRebelRouteRules.LeaderFactor(
+                0, 0, 0, false, true),
+            "weak peaceful leader");
+        Equal(15, PeasantRebelRouteRules.LeaderFactor(
+                20, 20, 20, true, false),
+            "strong ambitious leader");
+        Equal(0, PeasantRebelRouteRules.CityFactor(100, 100),
+            "median city is neutral");
+        Equal(-15, PeasantRebelRouteRules.CityFactor(50, 100),
+            "half median city");
+        Equal(15, PeasantRebelRouteRules.CityFactor(150, 100),
+            "one-and-a-half median city");
+        Equal(-20, PeasantRebelRouteRules.OriginStrengthFactor(400, 100),
+            "overwhelming origin discourages founding");
+        Equal(20, PeasantRebelRouteRules.OriginStrengthFactor(100, 100),
+            "strength parity favors founding");
     }
 
     private static void True(bool value, string message)

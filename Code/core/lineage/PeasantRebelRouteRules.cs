@@ -88,6 +88,37 @@ namespace AncientWarfare3.core.lineage
                 : "";
         }
 
+        public static int LeaderFactor(int warfare, int stewardship,
+            int diplomacy, bool ambitious, bool peaceful)
+        {
+            int average = Clamp(
+                (Math.Max(0, warfare) + Math.Max(0, stewardship) +
+                 Math.Max(0, diplomacy)) / 3, 0, 20);
+            int personality = (ambitious ? 5 : 0) -
+                              (peaceful ? 5 : 0);
+            return Clamp(average - 10 + personality, -15, 15);
+        }
+
+        public static int CityFactor(int population, int originMedian)
+        {
+            if (originMedian <= 0) return 0;
+            double ratio = Math.Max(0, population) /
+                           (double)originMedian;
+            return Clamp((int)Math.Round((ratio - 1d) * 30d), -15, 15);
+        }
+
+        public static int OriginStrengthFactor(int originStrength,
+            int rebelStrength)
+        {
+            if (originStrength <= 0) return 20;
+            double ratio = Math.Max(0, rebelStrength) /
+                           (double)originStrength;
+            if (ratio <= 0.25d) return -20;
+            if (ratio >= 1d) return 20;
+            return Clamp((int)Math.Round(
+                -20d + (ratio - 0.25d) / 0.75d * 40d), -20, 20);
+        }
+
         private static int Clamp(int value, int min, int max)
         {
             if (value < min) return min;

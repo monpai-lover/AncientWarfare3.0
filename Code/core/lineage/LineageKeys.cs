@@ -82,6 +82,28 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_REBEL_LAST_YEAR = "aw_mandate_rebel_last_year";
         public const string MANDATE_REBEL_ORIGIN_KINGDOM_ID =
             "aw_mandate_rebel_origin_kingdom_id";
+        public const string MANDATE_REBEL_ROUTE =
+            "aw_mandate_rebel_route";
+        public const string MANDATE_REBEL_NAME_ROOT =
+            "aw_mandate_rebel_name_root";
+        public const string MANDATE_REBEL_FOUNDING_CITY_ID =
+            "aw_mandate_rebel_founding_city_id";
+        public const string MANDATE_REBEL_ROUTE_CREATED_YEAR =
+            "aw_mandate_rebel_route_created_year";
+        public const string MANDATE_REBEL_ROUTE_LAST_YEAR =
+            "aw_mandate_rebel_route_last_year";
+        public const string MANDATE_REBEL_ORIGIN_CITY_COUNT =
+            "aw_mandate_rebel_origin_city_count";
+        public const string MANDATE_REBEL_ORIGIN_STRENGTH =
+            "aw_mandate_rebel_origin_strength";
+        public const string MANDATE_REBEL_ORIGIN_CAPITAL_ID =
+            "aw_mandate_rebel_origin_capital_id";
+        public const string MANDATE_REBEL_ORIGIN_RULER_ID =
+            "aw_mandate_rebel_origin_ruler_id";
+        public const string MANDATE_REBEL_BANDIT_WALLS =
+            "aw_mandate_rebel_bandit_walls";
+        public const string MANDATE_REBEL_BANDIT_WALL_CURSOR =
+            "aw_mandate_rebel_bandit_wall_cursor";
         public const string MANDATE_DECLINE_REBEL =
             "aw_mandate_decline_rebel";
         public const string MANDATE_DECLINE_REBEL_ORIGIN_ID =
