@@ -14,11 +14,14 @@
 
 **Files:**
 - Modify: `Tests/AncientWarfare3.Rules.Tests/ActorKingdomSafetyRulesTests.cs.txt`
+- Modify: `Tests/AncientWarfare3.Rules.Tests/Program.cs.txt`
 - Modify: `Code/core/lineage/ActorKingdomSafetyRules.cs`
 
 - [ ] **Step 1: Write failing rule tests**
 
 Add `kingdomDataExists` arguments to enemy, zone, detach, and repair-source tests. Include cases where `kingdomDataExists: false` and `kingdomAssetExists: true`; assert that vanilla processing is rejected, detachment is requested, and the city is selected as the repair source.
+
+Add a `--actor-kingdom-safety` runner branch that invokes only `ActorKingdomSafetyRulesTests.Run()` so unrelated baseline failures do not hide this regression.
 
 ```csharp
 Equal(false, ActorKingdomSafetyRules.CanRunEnemyCheck(
