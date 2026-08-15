@@ -169,6 +169,12 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
                 "nameof(BehClaimZoneForCityActorBorder.tryClaimZone)"),
             "Xia claims intercept the vanilla multi-zone execution point");
         Equal(true, expansionPatch.Contains(
+                "nameof(BehActorCheckZoneTarget.execute)"),
+            "claim target selection is intercepted before native movement");
+        Equal(true, expansionPatch.Contains(
+                "CivicLeaderLandClaimService.TrySetExternalTarget(pActor)"),
+            "the selector delegates to the shared civic claim service");
+        Equal(true, expansionPatch.Contains(
                 "TrySetKingClaimBorderTarget"),
             "kings receive an external border movement target before claiming");
         Equal(true, expansionPatch.Contains(
@@ -188,6 +194,20 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
         Equal(false, expansionPatch.Contains(
                 "ShouldLimitClaimToSingleZone"),
             "the Xia executor is not forced to a single-zone claim");
+
+        string civicClaimServicePath = Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "CivicLeaderLandClaimService.cs");
+        Equal(true, File.Exists(civicClaimServicePath),
+            "civic claim selection and validation share one runtime service");
+        string civicClaimService = File.Exists(civicClaimServicePath)
+            ? File.ReadAllText(civicClaimServicePath)
+            : string.Empty;
+        Equal(true, civicClaimService.Contains("city.border_zones"),
+            "civic claim targets originate from the current city border");
+        Equal(true, civicClaimService.Contains(
+                "XiaExpansionDecisionRules.IsExternalClaimZoneValid("),
+            "runtime zone checks delegate to the pure external-zone invariant");
 
         string expansionDecisionContent = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "content",

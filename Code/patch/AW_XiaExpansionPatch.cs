@@ -8,6 +8,20 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_XiaExpansionPatch
     {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BehActorCheckZoneTarget),
+            nameof(BehActorCheckZoneTarget.execute))]
+        private static bool CivicLeaderClaimTarget_Prefix(Actor pActor,
+            ref BehResult __result)
+        {
+            if (!CivicLeaderLandClaimService.IsCivicLeader(pActor))
+                return true;
+            __result = CivicLeaderLandClaimService.TrySetExternalTarget(pActor)
+                    ? BehResult.Continue
+                    : BehResult.Stop;
+            return false;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(City), nameof(City.canGrowZones))]
         private static void CanGrowZones_Postfix(City __instance,
