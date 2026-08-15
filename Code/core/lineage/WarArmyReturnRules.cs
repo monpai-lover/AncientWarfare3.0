@@ -39,6 +39,21 @@ namespace AncientWarfare3.core.lineage
             return !armyAlive || insideFriendlySafeCity;
         }
 
+        public static bool ShouldAllowPeacetimeJob(bool returnActive)
+        {
+            return !returnActive;
+        }
+
+        public static bool ShouldRepairReturnTask(bool returnActive,
+            bool actorAlive, bool expectedJobActive,
+            bool expectedTaskActive, bool actorMoving,
+            bool transportOwned)
+        {
+            _ = actorMoving;
+            return returnActive && actorAlive && !transportOwned &&
+                   (!expectedJobActive || !expectedTaskActive);
+        }
+
         public static bool ShouldCancelForMission(bool hasValidMission)
         {
             return hasValidMission;

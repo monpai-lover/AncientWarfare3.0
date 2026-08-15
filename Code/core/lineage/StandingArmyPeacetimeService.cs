@@ -65,7 +65,9 @@ namespace AncientWarfare3.core.lineage
                 !pActor.isAlive() || !pActor.isWarrior()) return false;
             Army army = pActor.army;
             if (army?.data == null || AWArmyService.IsSpecialArmy(army) ||
-                ArmyRtsControllerService.HasActiveMission(army.id))
+                ArmyRtsControllerService.HasActiveMission(army.id) ||
+                !WarArmyReturnRules.ShouldAllowPeacetimeJob(
+                    WarArmyReturnService.IsActive(army)))
                 return false;
             City anchorCity = AWArmyService.FindAnchorCity(army);
             if (anchorCity?.data == null || pActor.kingdom != anchorCity.kingdom)
@@ -130,6 +132,11 @@ namespace AncientWarfare3.core.lineage
         public static void RefreshJob(Actor pActor)
         {
             if (pActor?.data == null || pActor.ai == null) return;
+            if (WarArmyReturnService.IsActive(pActor.army))
+            {
+                WarArmyReturnService.TryPrepareMilitaryP0Actor(pActor);
+                return;
+            }
             bool shouldUsePeacetimeJob = ShouldUsePeacetimeJob(pActor);
             string taskId = pActor.ai.task?.id ?? "";
             if (DynasticReproductionRules.IsSexualReproductionTask(taskId))

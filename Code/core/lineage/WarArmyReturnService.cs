@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.content;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -29,6 +31,11 @@ namespace AncientWarfare3.core.lineage
             if (!IsFriendlySafeCity(target, kingdom)) return false;
             if (!Queue.Begin(pArmy.id, kingdom.id, target.id)) return false;
             Persist(pArmy, kingdom.id, target.id);
+            EnsureReturnJobs(pArmy);
+            ModClass.LogInfo("[AW3 RTS return] stage=admitted" +
+                             " army=" + pArmy.id +
+                             " kingdom=" + kingdom.id +
+                             " target_city=" + target.id);
             return true;
         }
 
@@ -57,6 +64,11 @@ namespace AncientWarfare3.core.lineage
                             captain, kingdom),
                         hasValidMission: ArmyRtsControllerService.
                             HasValidMission(army));
+                if (decision == WarArmyReturnOrderDecision.CancelForMission)
+                {
+                    Cancel(armyId);
+                    continue;
+                }
                 if (decision != WarArmyReturnOrderDecision.Continue)
                 {
                     Finish(armyId, army);
@@ -75,7 +87,7 @@ namespace AncientWarfare3.core.lineage
                     Queue.UpdateTarget(armyId, target.id);
                     Persist(army, kingdom.id, target.id);
                 }
-                IssueMovement(captain, target);
+                EnsureReturnJobs(army);
                 Queue.Requeue(armyId);
             }
         }
@@ -93,6 +105,66 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.get(LineageKeys.AW_ARMY_RETURN_ACTIVE,
                 out bool active, false);
             return active;
+        }
+
+        public static string GetJob(Actor pActor)
+        {
+            Army army = pActor?.army;
+            if (!IsAlive(pActor) || army?.data == null ||
+                !IsActive(army)) return "";
+            return pActor == SafeCaptain(army)
+                ? ArmyRtsContent.ReturnCaptainJobId
+                : ArmyRtsContent.ReturnFollowerJobId;
+        }
+
+        internal static bool TryPrepareMilitaryP0Actor(Actor pActor)
+        {
+            Army army = pActor?.army;
+            if (!IsAlive(pActor) || army?.data == null ||
+                !IsActive(army)) return false;
+            EnsureReturnActorJob(pActor, army, SafeCaptain(army));
+            return true;
+        }
+
+        internal static bool TryGetTarget(Actor pActor,
+            out WorldTile pTarget)
+        {
+            pTarget = null;
+            Army army = pActor?.army;
+            if (!IsAlive(pActor) || army?.data == null ||
+                !IsActive(army)) return false;
+            WarArmyReturnStoredIntent stored = ReadPersisted(army);
+            Kingdom kingdom = ResolveKingdom(stored?.KingdomId ?? -1L);
+            City city = ResolveCity(stored?.TargetCityId ?? -1L);
+            if (pActor.kingdom != kingdom ||
+                AWArmyService.GetIntendedKingdom(army) != kingdom ||
+                !IsFriendlySafeCity(city, kingdom)) return false;
+            pTarget = SafeCityTile(city);
+            return pTarget?.data != null;
+        }
+
+        internal static bool TryHandleTransport(Actor pActor,
+            WorldTile pTarget)
+        {
+            if (!TryGetTarget(pActor, out WorldTile activeTarget) ||
+                activeTarget != pTarget ||
+                SameIsland(pActor.current_tile, pTarget)) return false;
+            ArmyRtsTransportService.TryHandleActor(pActor, pTarget,
+                pMayBegin: true);
+            return true;
+        }
+
+        internal static bool ShouldSuppressCombatPreemption(Actor pActor)
+        {
+            return TryGetTarget(pActor, out _);
+        }
+
+        internal static void SuppressCombatForReturn(Actor pActor)
+        {
+            if (!ShouldSuppressCombatPreemption(pActor)) return;
+            ClearAttackTarget(pActor);
+            EnsureReturnActorJob(pActor, pActor.army,
+                SafeCaptain(pActor.army));
         }
 
         public static void OnArmyDisposed(Army pArmy)
@@ -159,12 +231,16 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             Persist(pArmy, restored.KingdomId, restored.TargetCityId);
+            EnsureReturnJobs(pArmy);
         }
 
         private static void Finish(long pArmyId, Army pArmy)
         {
             Queue.Complete(pArmyId);
             ClearPersisted(pArmy);
+            ReleaseReturnJobs(pArmy);
+            ModClass.LogInfo("[AW3 RTS return] stage=completed" +
+                             " army=" + pArmyId);
         }
 
         private static void Persist(Army pArmy, long pKingdomId,
@@ -205,19 +281,97 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.removeLong(LineageKeys.AW_ARMY_RETURN_TARGET_CITY_ID);
         }
 
-        private static void IssueMovement(Actor pCaptain, City pTargetCity)
+        private static void EnsureReturnJobs(Army pArmy)
         {
-            WorldTile target = SafeCityTile(pTargetCity);
-            if (!IsAlive(pCaptain) || pCaptain.current_tile?.data == null ||
-                target?.data == null) return;
-            if (!SameIsland(pCaptain.current_tile, target))
+            if (pArmy?.data == null || !IsActive(pArmy)) return;
+            Actor captain = SafeCaptain(pArmy);
+            EnsureReturnActorJob(captain, pArmy, captain);
+            int count;
+            try { count = pArmy.units?.Count ?? 0; }
+            catch { count = 0; }
+            for (int i = 0; i < count; i++)
             {
-                ArmyRtsTransportService.TryHandleActor(pCaptain, target,
-                    pMayBegin: true);
-                return;
+                Actor actor;
+                try { actor = pArmy.units[i]; }
+                catch { continue; }
+                if (actor == captain) continue;
+                EnsureReturnActorJob(actor, pArmy, captain);
             }
-            if (pCaptain.is_moving) return;
-            try { pCaptain.goTo(target, pLimitPathfindingRegions: 6); }
+        }
+
+        private static void EnsureReturnActorJob(Actor pActor, Army pArmy,
+            Actor pCaptain)
+        {
+            if (!IsAlive(pActor) || pActor.ai == null ||
+                pActor.army != pArmy) return;
+            bool captain = pActor == pCaptain;
+            string jobId = captain
+                ? ArmyRtsContent.ReturnCaptainJobId
+                : ArmyRtsContent.ReturnFollowerJobId;
+            string taskId = captain
+                ? ArmyRtsContent.ReturnTaskId
+                : "warrior_army_follow_leader";
+            bool expectedJob = pActor.ai.job?.id == jobId;
+            bool expectedTask = pActor.isTask(taskId);
+            bool transportOwned = pActor.is_inside_boat ||
+                ArmyRtsTransportService.OwnsActorTask(pActor);
+            bool repair = WarArmyReturnRules.ShouldRepairReturnTask(
+                IsActive(pArmy), actorAlive: true, expectedJob,
+                expectedTask, pActor.is_moving, transportOwned);
+            if (repair)
+            {
+                ClearAttackTarget(pActor);
+                pActor.cancelAllBeh();
+                pActor.stopMovement();
+                pActor.clearOldPath();
+                pActor.clearTileTarget();
+                pActor.beh_tile_target = null;
+                pActor.ai.setJob(jobId);
+                pActor.ai.setTask(taskId);
+                ModClass.LogInfo("[AW3 RTS return] stage=task_repaired" +
+                                 " army=" + pArmy.id +
+                                 " actor=" + pActor.data.id +
+                                 " task=" + taskId);
+            }
+            ArmyMilitaryMovementPriorityIndex.Register(pActor.data.id,
+                ArmyMilitaryMovementPriorityKind.RtsMember);
+        }
+
+        private static void ReleaseReturnJobs(Army pArmy)
+        {
+            Actor captain = SafeCaptain(pArmy);
+            int count;
+            try { count = pArmy?.units?.Count ?? 0; }
+            catch { count = 0; }
+            for (int i = 0; i < count; i++)
+            {
+                Actor actor;
+                try { actor = pArmy.units[i]; }
+                catch { continue; }
+                ReleaseReturnActor(actor);
+            }
+            if (captain?.data != null) ReleaseReturnActor(captain);
+        }
+
+        private static void ReleaseReturnActor(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.ai == null) return;
+            ArmyMilitaryMovementPriorityIndex.Unregister(pActor.data.id);
+            string jobId = pActor.ai.job?.id ?? "";
+            if (jobId != ArmyRtsContent.ReturnCaptainJobId &&
+                jobId != ArmyRtsContent.ReturnFollowerJobId) return;
+            pActor.cancelAllBeh();
+            try { pActor.ai.setJob(pActor.getNextJob()); }
+            catch { pActor.ai.clearJob(); }
+            StandingArmyPeacetimeService.RefreshJob(pActor);
+        }
+
+        private static void ClearAttackTarget(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            try { pActor.clearAttackTarget(); }
+            catch { }
+            try { pActor.beh_actor_target = null; }
             catch { }
         }
 

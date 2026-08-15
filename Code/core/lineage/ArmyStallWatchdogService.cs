@@ -219,7 +219,8 @@ namespace AncientWarfare3.core.lineage
                  sample.CommandExpected) &&
                 previousRouteCursor != int.MinValue &&
                 previousRouteCursor == sample.RouteCursor &&
-                movement < ArmyStallWatchdogRules.MinimumProgressTiles &&
+                !ArmyStallWatchdogRules.HasPhysicalMovementProgress(
+                    movement, sample.State == ArmyRtsState.Retreat) &&
                 !ArmyStallWatchdogRules.IsLocalPathCursorProgress(
                     state.Flow.StallState.HasLocalPathSample,
                     state.Flow.StallState.LastLocalPathOwnerId,
@@ -328,6 +329,9 @@ namespace AncientWarfare3.core.lineage
             if (pSample == null)
                 ArmyRtsControllerService.TryGetWatchdogSample(pArmyId,
                     out pSample);
+            pAction = ArmyStallWatchdogRules.
+                NormalizeRecoveryForFixedRetreat(
+                    pSample?.State == ArmyRtsState.Retreat, pAction);
             LogRecoveryAction(pArmyId, pState, pAction, pSample);
             if (pSample != null && ArmyStallWatchdogRules.
                     ShouldUseMemberRecovery(pSample.PositionSource,

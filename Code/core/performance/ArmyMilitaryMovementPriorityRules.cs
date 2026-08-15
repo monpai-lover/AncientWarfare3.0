@@ -32,6 +32,12 @@ namespace AncientWarfare3.core.performance
             return controllerActive && ownsObjective;
         }
 
+        internal static bool IsActiveReturnObjectiveOwner(bool returnActive,
+            bool actorBelongsToArmy)
+        {
+            return returnActive && actorBelongsToArmy;
+        }
+
         internal static bool ShouldRunP0(bool largeSchedulerActive,
             bool ownsRtsObjective, bool isLandGuardFollow)
         {

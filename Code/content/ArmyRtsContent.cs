@@ -17,6 +17,10 @@ namespace AncientWarfare3.content
             "aw_army_rts_retreat_captain";
         public const string RetreatFollowerJobId =
             "aw_army_rts_retreat_follower";
+        public const string ReturnCaptainJobId =
+            "aw_army_return_home_captain";
+        public const string ReturnFollowerJobId =
+            "aw_army_return_home_follower";
         public const string MissionTaskId = "aw_army_rts_mission";
         public const string RallyTaskId = "aw_army_rts_rally";
         public const string ReplenishTaskId = "aw_army_rts_replenish";
@@ -25,6 +29,7 @@ namespace AncientWarfare3.content
         public const string AssaultTaskId = "aw_army_rts_assault";
         public const string PursueTaskId = "aw_army_rts_pursue";
         public const string RetreatTaskId = "aw_army_rts_retreat";
+        public const string ReturnTaskId = "aw_army_return_home";
         public const string RegroupTaskId = "aw_army_rts_regroup";
         public const string AwaitingPickupTaskId =
             "aw_army_rts_transport_awaiting_pickup";
@@ -127,6 +132,22 @@ namespace AncientWarfare3.content
                 });
                 job.addTask("warrior_army_follow_leader");
             }
+            if (!AssetManager.job_actor.has(ReturnCaptainJobId))
+            {
+                ActorJob job = AssetManager.job_actor.add(new ActorJob
+                {
+                    id = ReturnCaptainJobId
+                });
+                job.addTask(ReturnTaskId);
+            }
+            if (!AssetManager.job_actor.has(ReturnFollowerJobId))
+            {
+                ActorJob job = AssetManager.job_actor.add(new ActorJob
+                {
+                    id = ReturnFollowerJobId
+                });
+                job.addTask("warrior_army_follow_leader");
+            }
 
             RegisterCaptainTask(MissionTaskId,
                 "task_unit_aw_army_rts_mission", "ui/Icons/iconWar");
@@ -146,6 +167,7 @@ namespace AncientWarfare3.content
                 "task_unit_aw_army_rts_pursue",
                 "ui/Icons/iconArrowAttackTarget");
             RegisterRetreatTask();
+            RegisterReturnTask();
             RegisterCaptainTask(RegroupTaskId,
                 "task_unit_aw_army_rts_regroup", "ui/Icons/iconLoyalty");
             RegisterCaptainTask(AwaitingPickupTaskId,
@@ -373,6 +395,27 @@ namespace AncientWarfare3.content
             });
             task.setIcon("ui/Icons/iconLoyalty");
             task.addBeh(new BehArmyRtsRetreatTarget());
+            task.addBeh(new BehGoToTileTarget
+            {
+                limit_pathfinding_regions = 6
+            });
+            task.addBeh(new BehWarriorCaptainWait());
+            task.addBeh(new BehRestartTask());
+        }
+
+        private static void RegisterReturnTask()
+        {
+            if (AssetManager.tasks_actor.has(ReturnTaskId)) return;
+            var task = AssetManager.tasks_actor.add(new BehaviourTaskActor
+            {
+                id = ReturnTaskId,
+                cancellable_by_reproduction = false,
+                cancellable_by_socialize = false,
+                speed_multiplier = 1f,
+                locale_key = "task_unit_aw_army_return_home"
+            });
+            task.setIcon("ui/Icons/iconCity");
+            task.addBeh(new BehWarArmyReturnTarget());
             task.addBeh(new BehGoToTileTarget
             {
                 limit_pathfinding_regions = 6

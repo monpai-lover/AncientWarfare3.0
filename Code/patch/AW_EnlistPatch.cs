@@ -191,6 +191,7 @@ namespace AncientWarfare3.patch
                     __instance.isRekt() || !__instance.isAlive())) return false;
             if (ActiveMilitaryLifecycleService.
                     HasWartimeMilitaryLock(__instance)) return false;
+            if (WarArmyReturnService.IsActive(__instance.army)) return false;
             if (__instance.army?.data == null) return true;
             if (ArmyCaptainContinuityRules.
                     ShouldRejectCaptainRetirement(
@@ -246,6 +247,12 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.getNextJob))]
         public static bool GetNextJob_Asylum_Prefix(Actor __instance, ref string __result)
         {
+            string returnJob = WarArmyReturnService.GetJob(__instance);
+            if (!string.IsNullOrEmpty(returnJob))
+            {
+                __result = returnJob;
+                return false;
+            }
             string garrisonJob = WartimeGarrisonService.GetJob(__instance);
             if (!string.IsNullOrEmpty(garrisonJob))
             {

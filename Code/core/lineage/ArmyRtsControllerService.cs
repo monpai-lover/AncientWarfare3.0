@@ -5859,6 +5859,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void RefreshReleasedArmyPeacetimeJobs(Army pArmy)
         {
+            if (WarArmyReturnService.IsActive(pArmy)) return;
             int count;
             try { count = pArmy?.units?.Count ?? 0; }
             catch { count = 0; }
