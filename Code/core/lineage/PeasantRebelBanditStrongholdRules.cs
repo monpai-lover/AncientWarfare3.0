@@ -136,6 +136,12 @@ namespace AncientWarfare3.core.lineage
                 : -1L;
         }
 
+        public static bool CanAttributeHostileKiller(
+            bool hostileAttacker, bool deathClearsAttacker)
+        {
+            return hostileAttacker && !deathClearsAttacker;
+        }
+
         public static bool CanAcquireZone(bool bandit, string zoneKey,
             ISet<string> fixedZoneKeys)
         {

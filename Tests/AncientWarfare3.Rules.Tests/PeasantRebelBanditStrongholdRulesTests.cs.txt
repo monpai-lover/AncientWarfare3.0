@@ -14,6 +14,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         LocksBanditGrowthToPersistedZones();
         RestoresOnlyUnchangedStrongholdWalls();
         ResolvesSuppressionVictorByConfirmedPrecedence();
+        AttributesOnlyLiveCombatAttackers();
         ComposesStrongholdNamesAndTitles();
     }
 
@@ -117,6 +118,19 @@ internal static class PeasantRebelBanditStrongholdRulesTests
             PeasantRebelBanditStrongholdRules.ResolveSuppressorKingdomId(
                 -1L, 20L, false),
             "starvation without a war has no suppressing kingdom");
+    }
+
+    private static void AttributesOnlyLiveCombatAttackers()
+    {
+        True(PeasantRebelBanditStrongholdRules.CanAttributeHostileKiller(
+                hostileAttacker: true, deathClearsAttacker: false),
+            "a combat death may retain its hostile killer");
+        False(PeasantRebelBanditStrongholdRules.CanAttributeHostileKiller(
+                hostileAttacker: true, deathClearsAttacker: true),
+            "starvation and other native clear-attacker deaths have no killer");
+        False(PeasantRebelBanditStrongholdRules.CanAttributeHostileKiller(
+                hostileAttacker: false, deathClearsAttacker: false),
+            "a non-hostile attacker is never credited");
     }
 
     private static void ComposesStrongholdNamesAndTitles()

@@ -68,5 +68,11 @@ foreach ($token in @('TryRecordCity(', 'bandit-stronghold-established:',
         throw "Stronghold chronicle lifecycle is missing $token"
     }
 }
+foreach ($token in @('CanAttributeHostileKiller(',
+        'DeathClearsAttacker(', 'AttackType.Starvation')) {
+    if (-not ($service + $death).Contains($token)) {
+        throw "Bandit death attribution is missing $token"
+    }
+}
 
 Write-Output 'Bandit stronghold history and tower source guard passed.'

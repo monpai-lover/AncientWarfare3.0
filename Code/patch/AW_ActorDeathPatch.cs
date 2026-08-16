@@ -48,8 +48,11 @@ namespace AncientWarfare3.patch
             {
                 __state.BanditStrongholdCityId = dyingCity.getID();
                 Kingdom attacker = __instance.attackedBy?.kingdom;
-                if (PeasantRebelBanditStrongholdService.IsHostileKingdom(
-                        dyingCity.kingdom, attacker))
+                bool hostile = PeasantRebelBanditStrongholdService.
+                    IsHostileKingdom(dyingCity.kingdom, attacker);
+                if (PeasantRebelBanditStrongholdRules.
+                    CanAttributeHostileKiller(hostile,
+                        DeathClearsAttacker(pType)))
                     __state.HostileKillerKingdomId = attacker.getID();
             }
             Army dyingArmy = __instance.army;
@@ -351,6 +354,28 @@ namespace AncientWarfare3.patch
             pActor.data.get(LineageKeys.DEATH_CAUSE, out string existing, "");
             if (!string.IsNullOrEmpty(existing)) return;
             pActor.data.set(LineageKeys.DEATH_CAUSE, DescribeDeathType(pType));
+        }
+
+        private static bool DeathClearsAttacker(AttackType pType)
+        {
+            switch (pType)
+            {
+                case AttackType.Plague:
+                case AttackType.Infection:
+                case AttackType.Tumor:
+                case AttackType.Divine:
+                case AttackType.AshFever:
+                case AttackType.Metamorphosis:
+                case AttackType.Starvation:
+                case AttackType.Age:
+                case AttackType.None:
+                case AttackType.Poison:
+                case AttackType.Gravity:
+                case AttackType.Drowning:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private static string DescribeDeathType(AttackType pType)
