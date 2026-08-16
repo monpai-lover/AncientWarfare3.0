@@ -201,7 +201,7 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 CaptureSnapshots(transaction);
-                var creating = BuildState(plan,
+                var creating = BuildState(transaction,
                     BanditStrongholdPhase.Creating, -1L);
                 if (!PeasantRebelBanditStateStore.Write(
                         plan.Context.Bandit, creating))
@@ -240,7 +240,8 @@ namespace AncientWarfare3.core.lineage
                     transaction.GovernmentFinalized = true;
                 }
 
-                PeasantRebelBanditStrongholdState active = BuildState(plan,
+                PeasantRebelBanditStrongholdState active = BuildState(
+                    transaction,
                     BanditStrongholdPhase.Active, stronghold.getID());
                 if (!PeasantRebelBanditStateStore.Write(
                         plan.Context.Bandit, active))
@@ -539,6 +540,7 @@ namespace AncientWarfare3.core.lineage
                     mother.addZone(zone);
                 mother.recalculateNeighbourZones();
                 pStronghold.recalculateNeighbourZones();
+                if (!RestoreWalls(pState)) return false;
 
                 pState.Phase = BanditStrongholdPhase.Completed;
                 pState.Raid.Stage = BanditRaidStage.None;
@@ -734,20 +736,57 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static PeasantRebelBanditStrongholdState BuildState(
-            PeasantRebelBanditStrongholdPlan pPlan,
+            Transaction pTransaction,
             BanditStrongholdPhase pPhase, long pStrongholdCityId)
         {
+            PeasantRebelBanditStrongholdPlan plan = pTransaction.Plan;
             return new PeasantRebelBanditStrongholdState
             {
                 Phase = pPhase,
                 StrongholdCityId = pStrongholdCityId,
-                MotherCityId = pPlan.Context.Mother.getID(),
-                OriginKingdomId = pPlan.Context.Origin.getID(),
-                FixedZoneKeys = new List<string>(pPlan.FixedZoneKeys),
-                WallPoints = pPlan.WallPoints.Select(point =>
+                MotherCityId = plan.Context.Mother.getID(),
+                OriginKingdomId = plan.Context.Origin.getID(),
+                FixedZoneKeys = new List<string>(plan.FixedZoneKeys),
+                WallPoints = pTransaction.WallTiles.Select(snapshot =>
                     new BanditStrongholdPoint
-                        { X = point.X, Y = point.Y }).ToList()
+                    {
+                        X = snapshot.Tile.x,
+                        Y = snapshot.Tile.y,
+                        OriginalTopTypeId = snapshot.TopType?.id ?? ""
+                    }).ToList()
             };
+        }
+
+        private static bool RestoreWalls(
+            PeasantRebelBanditStrongholdState pState)
+        {
+            if (pState?.WallPoints == null) return true;
+            int failed = 0;
+            foreach (BanditStrongholdPoint point in pState.WallPoints)
+            {
+                if (point == null) continue;
+                WorldTile tile = World.world?.GetTile(point.X, point.Y);
+                if (tile == null ||
+                    !PeasantRebelBanditStrongholdRules.ShouldRestoreWall(
+                        tile.top_type?.id)) continue;
+                try
+                {
+                    TopTileType originalTopType =
+                        string.IsNullOrWhiteSpace(point.OriginalTopTypeId)
+                            ? null
+                            : AssetManager.top_tiles.get(
+                                point.OriginalTopTypeId);
+                    tile.setTopTileType(originalTopType);
+                }
+                catch
+                {
+                    failed++;
+                }
+            }
+            if (failed <= 0) return true;
+            ModClass.LogWarning("Bandit stronghold wall restore failed: " +
+                                failed + " tile(s) remain pending.");
+            return false;
         }
 
         private static void Rollback(Transaction pTransaction)

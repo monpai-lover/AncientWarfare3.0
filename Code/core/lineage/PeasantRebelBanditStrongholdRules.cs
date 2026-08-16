@@ -145,6 +145,12 @@ namespace AncientWarfare3.core.lineage
                    exteriorCount > 0;
         }
 
+        public static bool ShouldRestoreWall(string currentTopTypeId)
+        {
+            return string.Equals(currentTopTypeId, "wall_wild",
+                StringComparison.Ordinal);
+        }
+
         public static bool CanAcquireZone(bool bandit, string zoneKey,
             ISet<string> fixedZoneKeys)
         {

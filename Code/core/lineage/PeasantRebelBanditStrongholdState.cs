@@ -25,6 +25,7 @@ namespace AncientWarfare3.core.lineage
     {
         public int X = 0;
         public int Y = 0;
+        public string OriginalTopTypeId = "";
 
         public string Key => X + ":" + Y;
     }
@@ -46,7 +47,7 @@ namespace AncientWarfare3.core.lineage
 
     internal sealed class PeasantRebelBanditStrongholdState
     {
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 3;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public BanditStrongholdPhase Phase = BanditStrongholdPhase.None;

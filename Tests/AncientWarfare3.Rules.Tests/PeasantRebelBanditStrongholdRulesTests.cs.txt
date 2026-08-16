@@ -12,6 +12,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         RejectsWhenFourConnectedZonesAreUnavailable();
         RequiresZonesOnBothSidesOfSplit();
         LocksBanditGrowthToPersistedZones();
+        RestoresOnlyUnchangedStrongholdWalls();
         ComposesStrongholdNamesAndTitles();
     }
 
@@ -106,6 +107,17 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         True(PeasantRebelBanditStrongholdRules.CanAcquireZone(
                 false, "outside", fixedZones),
             "non-bandit city growth remains unrestricted");
+    }
+
+    private static void RestoresOnlyUnchangedStrongholdWalls()
+    {
+        True(PeasantRebelBanditStrongholdRules.ShouldRestoreWall(
+                "wall_wild"),
+            "an unchanged stronghold wall is restored during suppression");
+        False(PeasantRebelBanditStrongholdRules.ShouldRestoreWall("road"),
+            "later terrain changes are preserved");
+        False(PeasantRebelBanditStrongholdRules.ShouldRestoreWall(null),
+            "an already removed wall is ignored");
     }
 
     private static void ComposesStrongholdNamesAndTitles()
