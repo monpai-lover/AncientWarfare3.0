@@ -120,6 +120,16 @@ namespace AncientWarfare3.ui
                 ?? SpriteTextureLoader.getSprite("ui/Icons/iconKings"));
             Register(groups, AWLineageTabLayoutRules.Mandate, grantMandateButton);
 
+            PowerButton spawnBanditButton =
+                PowerButtonCreator.CreateGodPowerButton(
+                    content.GodPowerLibrary.SPAWN_BANDIT_STRONGHOLD,
+                    SpriteTextureLoader.getSprite(
+                        "ui/wars/war_rebellion") ??
+                    SpriteTextureLoader.getSprite(
+                        "ui/Icons/traits/iconrebel"));
+            Register(groups, AWLineageTabLayoutRules.Mandate,
+                spawnBanditButton);
+
             PowerButton mandateCoreMapButton = CreateMapModeToggleButton(
                 MandateCoreMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/icons/iconMap")

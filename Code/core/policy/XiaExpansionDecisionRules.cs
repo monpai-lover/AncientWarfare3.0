@@ -59,10 +59,12 @@ namespace AncientWarfare3.core.policy
 
         public static bool IsExternalClaimZoneValid(bool zoneExists,
             bool centerTileExists, bool zoneHasCity, bool touchesOwnCity,
-            bool sameIsland, bool nativeClaimAllowed)
+            bool sameIsland, bool nativeClaimAllowed,
+            bool isCitySeedZone = false)
         {
             return zoneExists && centerTileExists && !zoneHasCity &&
-                   touchesOwnCity && sameIsland && nativeClaimAllowed;
+                   (touchesOwnCity || isCitySeedZone) && sameIsland &&
+                   nativeClaimAllowed;
         }
 
         public static bool CanBeginExternalClaimAnimation(

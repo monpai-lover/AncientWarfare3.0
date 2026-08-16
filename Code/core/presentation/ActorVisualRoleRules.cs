@@ -45,5 +45,18 @@ namespace AncientWarfare3.core.presentation
                 ? ActorVisualRole.Warrior
                 : ActorVisualRole.Default;
         }
+
+        public static ActorVisualRole ResolvePeasantRebelRole(
+            bool pRebelActive, bool pActorAlive,
+            bool pActorKingdomMatches, long pActorId,
+            long pKingActorId, long pHeirActorId)
+        {
+            if (!pRebelActive || !pActorAlive ||
+                !pActorKingdomMatches || pActorId < 0)
+                return ActorVisualRole.Default;
+            return pActorId == pKingActorId || pActorId == pHeirActorId
+                ? ActorVisualRole.Warrior
+                : ActorVisualRole.Default;
+        }
     }
 }

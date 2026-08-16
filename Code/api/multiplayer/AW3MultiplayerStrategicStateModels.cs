@@ -236,13 +236,30 @@ namespace AncientWarfare3.api.multiplayer
         public bool Active { get; }
     }
 
+    public sealed class AW3MultiplayerBanditStrongholdProjection
+    {
+        public AW3MultiplayerBanditStrongholdProjection(long kingdomId,
+            string stateJson)
+        {
+            AW3MultiplayerStrategicValidation.RequiredId(kingdomId,
+                nameof(kingdomId));
+            KingdomId = kingdomId;
+            StateJson = AW3MultiplayerStrategicValidation.Payload(
+                stateJson, nameof(stateJson));
+        }
+
+        public long KingdomId { get; }
+        public string StateJson { get; }
+    }
+
     public sealed class AW3MultiplayerStrategicSnapshot
     {
         public AW3MultiplayerStrategicSnapshot(long authoritativeTick,
             IReadOnlyList<AW3MultiplayerArmyProjection> armies,
             IReadOnlyList<AW3MultiplayerActorProjection> actors)
             : this(authoritativeTick, armies, actors,
-                Array.Empty<AW3MultiplayerMilitaryGovernorateProjection>())
+                Array.Empty<AW3MultiplayerMilitaryGovernorateProjection>(),
+                Array.Empty<AW3MultiplayerBanditStrongholdProjection>())
         {
         }
 
@@ -251,6 +268,19 @@ namespace AncientWarfare3.api.multiplayer
             IReadOnlyList<AW3MultiplayerActorProjection> actors,
             IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
                 militaryGovernorates)
+            : this(authoritativeTick, armies, actors,
+                militaryGovernorates,
+                Array.Empty<AW3MultiplayerBanditStrongholdProjection>())
+        {
+        }
+
+        public AW3MultiplayerStrategicSnapshot(long authoritativeTick,
+            IReadOnlyList<AW3MultiplayerArmyProjection> armies,
+            IReadOnlyList<AW3MultiplayerActorProjection> actors,
+            IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
+                militaryGovernorates,
+            IReadOnlyList<AW3MultiplayerBanditStrongholdProjection>
+                banditStrongholds)
         {
             if (authoritativeTick < 0)
                 throw new ArgumentOutOfRangeException(
@@ -263,12 +293,16 @@ namespace AncientWarfare3.api.multiplayer
             MilitaryGovernorates = AW3MultiplayerStrategicValidation.
                 SortUnique(militaryGovernorates, value => value.StateId,
                     nameof(militaryGovernorates));
+            BanditStrongholds = AW3MultiplayerStrategicValidation.
+                SortUnique(banditStrongholds, value => value.KingdomId,
+                    nameof(banditStrongholds));
         }
 
         public long AuthoritativeTick { get; }
         public IReadOnlyList<AW3MultiplayerArmyProjection> Armies { get; }
         public IReadOnlyList<AW3MultiplayerActorProjection> Actors { get; }
         public IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection> MilitaryGovernorates { get; }
+        public IReadOnlyList<AW3MultiplayerBanditStrongholdProjection> BanditStrongholds { get; }
     }
 
     public sealed class AW3MultiplayerStrategicApplyResult
@@ -365,6 +399,26 @@ namespace AncientWarfare3.api.multiplayer
             if (bytes > MaxTextBytes)
                 throw new ArgumentException(
                     "Strategic projection text is too long.", pParameter);
+            return pValue;
+        }
+
+        internal static string Payload(string pValue, string pParameter)
+        {
+            if (pValue == null) throw new ArgumentNullException(pParameter);
+            int bytes;
+            try
+            {
+                bytes = Utf8.GetByteCount(pValue);
+            }
+            catch (EncoderFallbackException error)
+            {
+                throw new ArgumentException("Payload is not valid UTF-8.",
+                    pParameter, error);
+            }
+            if (bytes > 262144)
+                throw new ArgumentException(
+                    "Strategic projection payload is too long.",
+                    pParameter);
             return pValue;
         }
 

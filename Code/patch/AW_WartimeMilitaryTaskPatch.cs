@@ -19,6 +19,8 @@ namespace AncientWarfare3.patch
         {
             if (!WartimeMilitaryTaskRules.
                     ShouldEvaluateMilitaryState(__0)) return true;
+            if (ArmyRtsControllerService.TryRedirectVanillaFight(
+                    __instance.ai_object, __0)) return false;
             return WartimeMilitaryTaskGate.Allows(
                 __instance.ai_object, __0);
         }
@@ -38,6 +40,8 @@ namespace AncientWarfare3.patch
             string taskId = __instance.task?.id;
             if (!WartimeMilitaryTaskRules.
                     ShouldEvaluateMilitaryState(taskId)) return true;
+            if (ArmyRtsControllerService.TryRedirectVanillaFight(
+                    __instance.ai_object, taskId)) return false;
             if (WartimeMilitaryTaskGate.Allows(
                     __instance.ai_object, taskId)) return true;
             try { __instance.setTaskBehFinished(); }

@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.performance
             ArmyMembershipReconciliation,
             EnclosedUnownedZoneRepair,
             EmptyCityResettlement,
+            BanditRaids,
             TemporaryMilitaryReturn,
             WarArmyReturn,
             ArmyRtsWarLifecycle,
@@ -71,6 +72,7 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.army_membership_reconciliation",
             "aw3.authority.enclosed_unowned_zone_repair",
             "aw3.authority.empty_city_resettlement",
+            "aw3.authority.bandit_raids",
             "aw3.authority.temporary_military_return",
             "aw3.authority.war_army_return",
             "aw3.authority.army_rts_war_lifecycle",
@@ -214,6 +216,7 @@ namespace AncientWarfare3.core.performance
             ReigningRoyalLineageIndex.Reset();
             AuthoritativeSuccessionService.Reset();
             SuccessionDisputePersistenceService.Reset();
+            PeasantRebelBanditRaidService.ResetRuntime();
         }
 
         private static void ProcessCycle(AWAuthorityCycleGate pGate,
@@ -317,6 +320,9 @@ namespace AncientWarfare3.core.performance
                     break;
                 case CooperativeAuthorityStage.EmptyCityResettlement:
                     EmptyCityResettlementService.ProcessAuthorityCycle();
+                    break;
+                case CooperativeAuthorityStage.BanditRaids:
+                    PeasantRebelBanditRaidService.ProcessAuthorityCycle();
                     break;
                 case CooperativeAuthorityStage.TemporaryMilitaryReturn:
                     TemporaryMilitaryReturnService.ProcessFrame();

@@ -13,6 +13,10 @@ $requirements = [ordered]@{
         'aw_royal_enfeoffment Description'
         'aw_royal_enfeoffment_description'
     )
+    'Locales/aw3_military_governorate.csv' = @(
+        'aw_military_governorate Description'
+        'aw_military_governorate_description'
+    )
     'Locales/aw3_army_rts.csv' = @(
         'aw_army_rts_transport_awaiting_pickup'
         'aw_army_rts_transport_embarking'

@@ -8,6 +8,13 @@ namespace AncientWarfare3.core.lineage
             return targetAlive && targetHostile && withinEnvelope;
         }
 
+        public static bool ShouldRetainMemberTarget(bool targetAlive,
+            bool targetHostile, bool sameIsland, bool combatOwned)
+        {
+            return targetAlive && targetHostile && sameIsland &&
+                   combatOwned;
+        }
+
         public static bool ShouldEnterCombat(bool alreadyInCombat,
             int engagedCombatants, int liveCombatants, bool captainEngaged)
         {
@@ -36,6 +43,12 @@ namespace AncientWarfare3.core.lineage
             bool suppressVanillaFight, bool isDedicatedMemberCombatTask)
         {
             return suppressVanillaFight && !isDedicatedMemberCombatTask;
+        }
+
+        public static bool ShouldUseSiegeCombatTask(
+            bool siegeCombatActive, bool actorInsideTargetCityCombatZone)
+        {
+            return siegeCombatActive && actorInsideTargetCityCombatZone;
         }
     }
 }

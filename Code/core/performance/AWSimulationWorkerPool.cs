@@ -14,6 +14,7 @@ namespace AncientWarfare3.core.performance
         private readonly ManualResetEventSlim _operationCompleted =
             new ManualResetEventSlim(true);
         private readonly object _operationLock = new object();
+        private readonly AWSimulationWorkerDispatchGate _dispatchGate;
         private readonly Thread[] _workers;
         private readonly AutoResetEvent[] _workerSignals;
 
@@ -53,6 +54,7 @@ namespace AncientWarfare3.core.performance
                 AWPerformanceSettings.ForegroundParallelism - 1);
             _workers = new Thread[workerCount];
             _workerSignals = new AutoResetEvent[workerCount];
+            _dispatchGate = new AWSimulationWorkerDispatchGate(workerCount);
             for (int i = 0; i < workerCount; i++)
             {
                 _workerSignals[i] = new AutoResetEvent(false);
@@ -221,6 +223,11 @@ namespace AncientWarfare3.core.performance
                     int stoppedAtIndex = Volatile.Read(ref _nextIndex);
                     int endIndex = Volatile.Read(ref _endIndex);
                     int stopRequested = Volatile.Read(ref _stopRequested);
+                    int generation = Volatile.Read(ref _activeGeneration);
+                    int remainingParticipants =
+                        Volatile.Read(ref _remainingParticipants);
+                    int completionMarked =
+                        Volatile.Read(ref _completionMarked);
                     exception = ExceptionDispatchInfo.Capture(
                         new InvalidOperationException(
                             "Simulation worker did not execute all scheduled work: " +
@@ -229,6 +236,10 @@ namespace AncientWarfare3.core.performance
                             " (nextIndex=" + stoppedAtIndex +
                             ", endIndex=" + endIndex +
                             ", stopRequested=" + stopRequested +
+                            ", generation=" + generation +
+                            ", remainingParticipants=" +
+                            remainingParticipants +
+                            ", completionMarked=" + completionMarked +
                             ", workers=" + result.WorkerSlots + ")"));
                 }
                 _operationAction = null;
@@ -388,7 +399,10 @@ namespace AncientWarfare3.core.performance
             }
 
             for (int i = 0; i < pBackgroundWorkers; i++)
+            {
+                _dispatchGate.Assign(i, ticket.Generation);
                 _workerSignals[i].Set();
+            }
             return ticket;
         }
 
@@ -399,8 +413,10 @@ namespace AncientWarfare3.core.performance
             while (true)
             {
                 signal.WaitOne();
-                int generation = Volatile.Read(ref _activeGeneration);
-                if (generation == 0) continue;
+                int generation = _dispatchGate.Consume(workerIndex);
+                if (generation == 0 ||
+                    generation != Volatile.Read(ref _activeGeneration))
+                    continue;
                 ExecuteItems(generation);
                 SignalParticipantCompleted(generation);
             }

@@ -35,6 +35,7 @@ namespace AncientWarfare3
         protected override void OnModLoad()
         {
             MilitaryGovernorateAppearanceService.Initialize();
+            PeasantRebelAppearanceService.Initialize();
             HierarchicalVassalMapFontSettings.InitializeConfig();
             AWFramePriorityGovernor.Initialize();
             AWSimulationTickBenchmark.Initialize();

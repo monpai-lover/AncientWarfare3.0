@@ -53,6 +53,13 @@ namespace AncientWarfare3.core.performance
                    immediateCombat;
         }
 
+        internal static bool ShouldEnterCombatP0(
+            bool hasImmediateAttackTarget,
+            bool hasValidBehaviourTarget)
+        {
+            return hasImmediateAttackTarget || hasValidBehaviourTarget;
+        }
+
         internal static bool ShouldResumeNativeCombatAfterEnemyAcquisition(
             bool hadAttackTargetBeforeSearch,
             bool hasAttackTargetAfterSearch,

@@ -13,6 +13,11 @@ namespace AncientWarfare3.core.lineage
 
     public static class RulerAppellationRules
     {
+        public static string RouteRulerTitleKey(bool pBandit)
+        {
+            return pBandit ? "aw_bandit_ruler_title" : "";
+        }
+
         public static string LivingRanked(string pStateName, RulerRank pTitle)
         {
             string state = Normalize(pStateName);
@@ -95,12 +100,11 @@ namespace AncientWarfare3.core.lineage
                     : LivingMilitaryGovernorate();
             }
             if (pIsRepublic) return Normalize(pRepublicLabel);
+            string appellation = Normalize(pLivingAppellation);
+            if (appellation.Length > 0) return appellation;
             if (!ShouldUseLivingEmperor(pIsEmpireRank, pIsMandate))
                 return Normalize(pMonarchyLabel);
-            string appellation = Normalize(pLivingAppellation);
-            return appellation.Length > 0
-                ? appellation
-                : Normalize(pEmperorFallbackLabel);
+            return Normalize(pEmperorFallbackLabel);
         }
 
         public static string ResolveWindowRulerLabel(bool pIsRepublic,

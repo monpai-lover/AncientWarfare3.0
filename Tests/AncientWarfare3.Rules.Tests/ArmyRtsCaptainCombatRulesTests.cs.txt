@@ -22,14 +22,34 @@ internal static class ArmyRtsCaptainCombatRulesTests
                 targetAlive: true, targetHostile: true,
                 withinEnvelope: false),
             "a target outside the bounded encounter envelope is cleared");
+        Assert(ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: true, targetHostile: true,
+                sameIsland: true, combatOwned: true),
+            "an RTS member retains a hostile target outside the captain envelope");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: false, targetHostile: true,
+                sameIsland: true, combatOwned: true),
+            "a dead member target is rejected");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: true, targetHostile: false,
+                sameIsland: true, combatOwned: true),
+            "a friendly member target is rejected");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: true, targetHostile: true,
+                sameIsland: false, combatOwned: true),
+            "a cross-island member target is rejected");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: true, targetHostile: true,
+                sameIsland: true, combatOwned: false),
+            "a target is released after RTS combat ownership ends");
         Assert(ArmyRtsCaptainCombatRules.ShouldEnterCombat(
                 alreadyInCombat: false, engagedCombatants: 3,
                 liveCombatants: 10, captainEngaged: false),
             "a 25 percent field contact enters captain combat");
-        Assert(!ArmyRtsCaptainCombatRules.ShouldEnterCombat(
+        Assert(ArmyRtsCaptainCombatRules.ShouldEnterCombat(
                 alreadyInCombat: false, engagedCombatants: 0,
                 liveCombatants: 10, captainEngaged: true),
-            "a lone captain contact does not stop strategic movement");
+            "captain contact releases followers into the field battle");
         Assert(!ArmyRtsCaptainCombatRules.ShouldEnterCombat(
                 alreadyInCombat: false, engagedCombatants: 2,
                 liveCombatants: 10, captainEngaged: false),
@@ -70,12 +90,26 @@ internal static class ArmyRtsCaptainCombatRulesTests
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: false, hasValidCombatTarget: false),
             "an RTS soldier without a valid close enemy cannot remain in vanilla fighting during a march");
+        Assert(ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(
+                siegeCombatActive: true,
+                actorInsideTargetCityCombatZone: true),
+            "a soldier inside the active target-city combat zone joins siege combat");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(
+                siegeCombatActive: true,
+                actorInsideTargetCityCombatZone: false),
+            "an outlying soldier keeps following the captain instead of attacking a distant city target");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(
+                siegeCombatActive: false,
+                actorInsideTargetCityCombatZone: true),
+            "standing inside a city cannot create siege combat without an active army siege");
 
         string root = Directory.GetCurrentDirectory();
         string content = File.ReadAllText(Path.Combine(root, "Code",
             "content", "ArmyRtsContent.cs"));
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"));
+        string wartimeTaskPatch = File.ReadAllText(Path.Combine(root,
+            "Code", "patch", "AW_WartimeMilitaryTaskPatch.cs"));
         string behaviour = File.ReadAllText(Path.Combine(root, "Code",
             "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"))
             .Replace("\r\n", "\n");
@@ -109,6 +143,16 @@ internal static class ArmyRtsCaptainCombatRulesTests
                controller.Contains("ReassertCaptainMissionTask",
                    StringComparison.Ordinal),
             "a captain is reclaimed from vanilla fighting into bounded combat or its strategic mission");
+        Assert(controller.Contains(
+                   "internal static bool TryRedirectVanillaFight(",
+                   StringComparison.Ordinal),
+            "RTS ownership exposes an immediate vanilla-fight redirect");
+        int redirectBoundaries = wartimeTaskPatch.Split(new[]
+            {
+                "ArmyRtsControllerService.TryRedirectVanillaFight("
+            }, StringSplitOptions.None).Length - 1;
+        Assert(redirectBoundaries >= 2,
+            "both vanilla fighting assignment and active-task update redirect immediately into RTS combat");
         int memberMissionStart = controller.IndexOf(
             "private static void SetNativeMemberMissionTask(",
             StringComparison.Ordinal);
@@ -124,6 +168,75 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    "HasValidMemberCombatTarget(pActor)",
                    StringComparison.Ordinal),
             "job repair cannot replace an individually engaged member combatant with follow before the army-wide threshold is reached");
+        Assert(memberMissionBody.Contains(
+                   "runtime.FieldCombatReleased ||",
+                   StringComparison.Ordinal),
+            "active field combat assigns targetless soldiers to member combat so the task can search for enemies");
+        Assert(memberMissionBody.Contains(
+                   "ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(",
+                   StringComparison.Ordinal) &&
+               memberMissionBody.Contains(
+                   "IsInsideCityCombatZone(pActor, activeSiegeCity)",
+                   StringComparison.Ordinal),
+            "routine member job repair gates siege combat by the individual soldier's target-city position");
+        int siegeRegisterStart = controller.IndexOf(
+            "private static void RegisterTargetCitySiegeMembers(",
+            StringComparison.Ordinal);
+        int siegeRegisterEnd = controller.IndexOf(
+            "private static void ExitTargetCitySiegeCombat(",
+            Math.Max(0, siegeRegisterStart), StringComparison.Ordinal);
+        string siegeRegisterBody = siegeRegisterStart >= 0 &&
+            siegeRegisterEnd > siegeRegisterStart
+            ? controller.Substring(siegeRegisterStart,
+                siegeRegisterEnd - siegeRegisterStart)
+            : string.Empty;
+        Assert(siegeRegisterBody.Contains(
+                   "SetNativeMemberMissionTask(actor, pArmy",
+                   StringComparison.Ordinal) &&
+               !siegeRegisterBody.Contains(
+                   "ArmyRtsContent.SiegeCombatTaskId",
+                   StringComparison.Ordinal),
+            "siege entry evaluates each member's city position instead of assigning the siege task army-wide");
+        int memberBehaviourStart = behaviour.IndexOf(
+            "public sealed class BehArmyRtsMemberCombat",
+            StringComparison.Ordinal);
+        string memberBehaviour = memberBehaviourStart >= 0
+            ? behaviour.Substring(memberBehaviourStart)
+            : string.Empty;
+        Assert(memberBehaviour.Contains("IsValidMemberCombatTarget(",
+                   StringComparison.Ordinal) &&
+               memberBehaviour.Contains("FindMemberCombatTarget(",
+                   StringComparison.Ordinal) &&
+               memberBehaviour.Contains("pActor.makeWait(0.15f);",
+                   StringComparison.Ordinal) &&
+               memberBehaviour.Contains("return BehResult.RepeatStep;",
+                   StringComparison.Ordinal) &&
+               !memberBehaviour.Contains("RestoreMemberFollowAfterCombatLull(",
+                   StringComparison.Ordinal),
+            "member combat keeps its own chase target and waits inside combat after a transient target miss");
+        int assignedTargetStart = controller.IndexOf(
+            "internal static bool IsValidAssignedCombatTarget(",
+            StringComparison.Ordinal);
+        int assignedTargetEnd = controller.IndexOf(
+            "internal static bool IsValidSiegeCombatTarget(",
+            Math.Max(0, assignedTargetStart), StringComparison.Ordinal);
+        string assignedTargetBody = assignedTargetStart >= 0 &&
+            assignedTargetEnd > assignedTargetStart
+            ? controller.Substring(assignedTargetStart,
+                assignedTargetEnd - assignedTargetStart)
+            : string.Empty;
+        Assert(assignedTargetBody.Contains(
+                   "ArmyRtsContent.MemberCombatTaskId",
+                   StringComparison.Ordinal) &&
+               assignedTargetBody.Contains("IsValidMemberCombatTarget(",
+                   StringComparison.Ordinal) &&
+               assignedTargetBody.Contains("IsValidCaptainCombatTarget(",
+                   StringComparison.Ordinal),
+            "the shared attack stage keeps separate captain and member target contracts");
+        Assert(controller.Contains(
+                   "bool behaviourTarget = IsValidMemberCombatTarget(actor,",
+                   StringComparison.Ordinal),
+            "field engagement counts a member target outside the captain envelope");
         int enterFieldStart = controller.IndexOf(
             "private static void EnterFieldCombat(",
             StringComparison.Ordinal);
@@ -144,10 +257,11 @@ internal static class ArmyRtsCaptainCombatRulesTests
         Assert(publishFieldCombat >= 0 &&
                assignFieldMembers > publishFieldCombat,
             "field combat ownership must be published before member tasks are assigned");
-        Assert(behaviour.Contains("beh_actor_target", StringComparison.Ordinal) &&
-               behaviour.Contains("tryToAttack", StringComparison.Ordinal) &&
-               behaviour.Contains("pActor?.makeWait(0.15f);\n                return BehResult.Continue;",
-                   StringComparison.Ordinal),
+        string normalizedBehaviour = behaviour.Replace("\r\n", "\n");
+        Assert(normalizedBehaviour.Contains("beh_actor_target", StringComparison.Ordinal) &&
+               normalizedBehaviour.Contains("tryToAttack", StringComparison.Ordinal) &&
+               normalizedBehaviour.Contains("pActor?.makeWait(0.15f);\n                return BehResult.Continue;",
+                    StringComparison.Ordinal),
             "an attack-stage target miss advances into task restart instead of repeating forever on an empty target");
     }
 

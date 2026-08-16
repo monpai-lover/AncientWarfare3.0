@@ -19,6 +19,8 @@ namespace AncientWarfare3.content
         public const string MILITARY_GOVERNORATE =
             "aw_military_governorate";
         public const string GRANT_MANDATE = "aw_grant_mandate";
+        public const string SPAWN_BANDIT_STRONGHOLD =
+            "aw_spawn_bandit_stronghold";
 
         private static Kingdom _pendingVassal;
         private static readonly List<City> SchoolNameplateCandidates = new List<City>();
@@ -57,6 +59,7 @@ namespace AncientWarfare3.content
             RegisterRoyalEnfeoffmentPower();
             RegisterMilitaryGovernoratePower();
             RegisterMandateGrantPower();
+            RegisterBanditStrongholdPower();
         }
 
         public static void ClearRuntime()
@@ -915,6 +918,46 @@ namespace AncientWarfare3.content
                 allow_unit_selection = false,
                 click_special_action = new PowerActionWithID(GrantMandateClick)
             });
+        }
+
+        private static void RegisterBanditStrongholdPower()
+        {
+            if (AssetManager.powers.get(SPAWN_BANDIT_STRONGHOLD) != null)
+                return;
+            AssetManager.powers.add(new GodPower
+            {
+                id = SPAWN_BANDIT_STRONGHOLD,
+                name = SPAWN_BANDIT_STRONGHOLD,
+                path_icon = "ui/wars/war_rebellion",
+                force_map_mode = MetaType.City,
+                unselect_when_window = true,
+                allow_unit_selection = false,
+                click_special_action = new PowerActionWithID(
+                    BanditStrongholdClick)
+            });
+        }
+
+        private static bool BanditStrongholdClick(WorldTile pTile,
+            string pPowerId)
+        {
+            City city = pTile?.zone?.city;
+            if (city?.data == null)
+            {
+                Tip(AW_L10n.Text("aw_bandit_stronghold_invalid_city",
+                    "Select an occupied city zone"));
+                return false;
+            }
+            if (!PeasantRebelBanditStrongholdService.TryCreateDirect(city,
+                    out Kingdom bandit, out City stronghold,
+                    out string failureKey))
+            {
+                Tip(AW_L10n.Text(failureKey,
+                    "Bandit stronghold creation failed"));
+                return false;
+            }
+            Tip(AW_L10n.Text("aw_bandit_stronghold_success",
+                "Bandit stronghold created") + ": " + stronghold.name);
+            return true;
         }
 
         private static bool GrantMandateClick(WorldTile pTile, string pPowerID)

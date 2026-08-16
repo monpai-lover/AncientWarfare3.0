@@ -9,6 +9,27 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="PeasantRebelRouteRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelRouteRules.cs" Link="Production\PeasantRebelRouteRules.cs" />
+    <Compile Include="PeasantRebelBanditStrongholdRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditPressureRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditPressureRules.cs" Link="Production\PeasantRebelBanditPressureRules.cs" />
+    <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditZoneWallRules.cs" Link="Production\PeasantRebelBanditZoneWallRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditRaidRules.cs" Link="Production\PeasantRebelBanditRaidRules.cs" />
+    <Compile Include="CultiwayStyleWallGeometryRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\CultiwayStyleWallGeometryRules.cs" Link="Production\CultiwayStyleWallGeometryRules.cs" />
+    <Compile Include="CultiwayStyleFrontierWallGeometryRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\CultiwayStyleFrontierWallGeometryRules.cs" Link="Production\CultiwayStyleFrontierWallGeometryRules.cs" />
+    <Compile Include="MandateBorderWallRulesTests.cs.txt" />
+    <Compile Include="MandateBorderWallRefreshRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandateBorderWallState.cs" Link="Production\MandateBorderWallState.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateBorderWallRefreshRules.cs" Link="Production\MandateBorderWallRefreshRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateBorderWallRules.cs" Link="Production\MandateBorderWallRules.cs" />
+    <Compile Include="PeasantRebelOutlawNameRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelOutlawNameRules.cs" Link="Production\PeasantRebelOutlawNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />
     <Compile Include="MilitaryGovernorateCourtRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\MilitaryGovernorateCourtRules.cs" Link="Production\MilitaryGovernorateCourtRules.cs" />
@@ -60,11 +81,15 @@
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
     <Compile Include="SimulationWorkerPoolTests.cs.txt" />
+    <Compile Include="..\..\Code\core\performance\AWSimulationWorkerDispatchGate.cs" Link="Production\AWSimulationWorkerDispatchGate.cs" />
     <Compile Include="..\..\Code\core\performance\AWSimulationWorkerPool.cs" Link="Production\AWSimulationWorkerPool.cs" />
     <Compile Include="ActorScalePerformanceRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\ActorScalePerformanceRules.cs" Link="Production\ActorScalePerformanceRules.cs" />
     <Compile Include="PathMovementExecutorRulesTests.cs.txt" />
     <Compile Include="PathMovementSafetyRulesTests.cs.txt" />
+    <Compile Include="PreparedNativePathCommitRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\pathfinding\PreparedNativePathCommitRules.cs" Link="Production\PreparedNativePathCommitRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PathfindingSafetyRules.cs" Link="Production\PathfindingSafetyRules.cs" />
     <Compile Include="RuntimePerformanceBudgetRulesTests.cs.txt" />
     <Compile Include="MonthlyAuthorityWorkQueueTests.cs.txt" />
     <Compile Include="CourtReplacementSqlTests.cs.txt" />
@@ -449,6 +474,8 @@
     <Compile Include="..\..\Code\core\db\SuccessionDisputeIndexRules.cs" Link="Production\SuccessionDisputeIndexRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirMinimapScaleRules.cs" Link="Production\HeirMinimapScaleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirMinimapVisualRules.cs" Link="Production\HeirMinimapVisualRules.cs" />
+    <Compile Include="XiaMinimapVisualRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\XiaMinimapVisualRules.cs" Link="Production\XiaMinimapVisualRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirRegistrationRules.cs" Link="Production\HeirRegistrationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MinimapActorMarkerRules.cs" Link="Production\MinimapActorMarkerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyMapInformationRules.cs" Link="Production\ArmyMapInformationRules.cs" />

@@ -30,8 +30,14 @@ namespace AncientWarfare3.core.lineage
             bool inCombat,
             bool cityAttackOrder)
         {
-            return isCareerStandingSoldier &&
-                   !militaryEmergency && !inCombat && !cityAttackOrder;
+            return false;
+        }
+
+        public static bool ShouldReleaseLegacyPeacetimePatrol(
+            string pJobId, string pTaskId)
+        {
+            return pJobId == "aw_standing_army_peacetime_job" ||
+                   pTaskId == "aw_standing_army_peacetime_patrol";
         }
 
         public static bool ShouldRetryPeacetimePatrol(

@@ -1,0 +1,199 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class CultiwayStyleFrontierWallGeometryRulesTests
+{
+    public static void Run()
+    {
+        VerticalContactBuildsTwoOwnSideLayers();
+        IndependentSegmentsDoNotBecomeAClosedCityRing();
+        DiagonalSegmentsReceiveAnOrthogonalBridge();
+        RoadCrossingCarvesAThreeTilePassage();
+        WatchTowerFootprintIsTheOnlyMandatePassage();
+        InvalidAndForeignTilesAreClipped();
+        EmptyFrontierProducesNoWalls();
+    }
+
+    private static void VerticalContactBuildsTwoOwnSideLayers()
+    {
+        HashSet<CultiwayWallPoint> land = Rectangle(1, 1, 5, 5);
+        HashSet<CultiwayWallPoint> seeds = Vertical(5, 1, 5);
+        HashSet<CultiwayWallPoint> actual = Compute(Input(
+            land, land, seeds, width: 2));
+        var expected = new HashSet<CultiwayWallPoint>();
+        expected.UnionWith(Vertical(4, 1, 5));
+        expected.UnionWith(Vertical(5, 1, 5));
+
+        SetEqual(expected, actual,
+            "a frontier grows exactly one layer into owned land");
+    }
+
+    private static void IndependentSegmentsDoNotBecomeAClosedCityRing()
+    {
+        HashSet<CultiwayWallPoint> land = Rectangle(1, 1, 5, 5);
+        var seeds = new HashSet<CultiwayWallPoint>
+        {
+            Point(5, 1), Point(5, 2), Point(5, 4), Point(5, 5)
+        };
+
+        HashSet<CultiwayWallPoint> actual = Compute(Input(
+            land, land, seeds));
+
+        SetEqual(seeds, actual,
+            "frontier planning preserves open independent segments");
+        False(actual.Contains(Point(1, 1)),
+            "frontier planning does not create a city enclosure");
+    }
+
+    private static void DiagonalSegmentsReceiveAnOrthogonalBridge()
+    {
+        HashSet<CultiwayWallPoint> land = Rectangle(1, 1, 5, 5);
+        var seeds = new HashSet<CultiwayWallPoint>
+        {
+            Point(4, 2), Point(3, 3)
+        };
+
+        HashSet<CultiwayWallPoint> actual = Compute(Input(
+            land, land, seeds));
+
+        True(actual.Count == 3,
+            "one orthogonal bridge seals a diagonal frontier gap");
+        True(actual.Contains(Point(3, 2)) ||
+             actual.Contains(Point(4, 3)),
+            "the bridge stays on owned passable land");
+    }
+
+    private static void RoadCrossingCarvesAThreeTilePassage()
+    {
+        HashSet<CultiwayWallPoint> land = Rectangle(1, 1, 5, 7);
+        HashSet<CultiwayWallPoint> actual = Compute(Input(
+            land, land, Vertical(5, 1, 7),
+            roads: new[] { Point(5, 4) }, width: 2));
+
+        for (int x = 4; x <= 5; x++)
+        for (int y = 3; y <= 5; y++)
+            False(actual.Contains(Point(x, y)),
+                "the road passage removes three wall tiles across each layer");
+        True(actual.Contains(Point(4, 2)) &&
+             actual.Contains(Point(5, 6)),
+            "the road passage does not remove the remaining frontier");
+    }
+
+    private static void WatchTowerFootprintIsTheOnlyMandatePassage()
+    {
+        HashSet<CultiwayWallPoint> land = Rectangle(1, 1, 5, 7);
+        HashSet<CultiwayWallPoint> actual = Compute(Input(
+            land, land, Vertical(5, 1, 7),
+            roads: new[] { Point(5, 4) }, width: 2,
+            reservedPassages: new[] { Point(5, 4), Point(4, 4) },
+            carveRoadPassages: false));
+
+        False(actual.Contains(Point(5, 4)),
+            "the tower anchor receives no wall");
+        False(actual.Contains(Point(4, 4)),
+            "the complete tower footprint receives no wall");
+        True(actual.Contains(Point(5, 3)),
+            "the tile before the tower remains walled");
+        True(actual.Contains(Point(5, 5)),
+            "the tile after the tower remains walled");
+        True(actual.Contains(Point(4, 3)) &&
+             actual.Contains(Point(4, 5)),
+            "the tower does not carve a surrounding artificial gap");
+    }
+
+    private static void InvalidAndForeignTilesAreClipped()
+    {
+        HashSet<CultiwayWallPoint> land = Rectangle(1, 1, 5, 5);
+        HashSet<CultiwayWallPoint> passable = new(land);
+        passable.Remove(Point(5, 3));
+        var seeds = new HashSet<CultiwayWallPoint>
+        {
+            Point(5, 2), Point(5, 3), Point(6, 2)
+        };
+
+        HashSet<CultiwayWallPoint> actual = Compute(Input(
+            land, passable, seeds));
+
+        SetEqual(new HashSet<CultiwayWallPoint> { Point(5, 2) }, actual,
+            "frontier walls are clipped to owned passable land");
+    }
+
+    private static void EmptyFrontierProducesNoWalls()
+    {
+        HashSet<CultiwayWallPoint> land = Rectangle(1, 1, 5, 5);
+        HashSet<CultiwayWallPoint> actual = Compute(Input(
+            land, land, Array.Empty<CultiwayWallPoint>(), width: 2));
+
+        True(actual.Count == 0,
+            "corner-only or non-qualifying contact produces no wall");
+    }
+
+    private static CultiwayFrontierWallGeometryInput Input(
+        IEnumerable<CultiwayWallPoint> land,
+        IEnumerable<CultiwayWallPoint> passable,
+        IEnumerable<CultiwayWallPoint> seeds,
+        IEnumerable<CultiwayWallPoint> roads = null,
+        int width = 1,
+        IEnumerable<CultiwayWallPoint> reservedPassages = null,
+        bool carveRoadPassages = true)
+    {
+        return new CultiwayFrontierWallGeometryInput(
+            land, passable, seeds,
+            roads ?? Array.Empty<CultiwayWallPoint>(),
+            reservedPassages ?? Array.Empty<CultiwayWallPoint>(),
+            width, carveRoadPassages);
+    }
+
+    private static HashSet<CultiwayWallPoint> Compute(
+        CultiwayFrontierWallGeometryInput input)
+    {
+        return CultiwayStyleFrontierWallGeometryRules.Compute(input)
+            .ToHashSet();
+    }
+
+    private static CultiwayWallPoint Point(int x, int y)
+    {
+        return new CultiwayWallPoint(x, y);
+    }
+
+    private static HashSet<CultiwayWallPoint> Rectangle(
+        int minX, int minY, int maxX, int maxY)
+    {
+        var result = new HashSet<CultiwayWallPoint>();
+        for (int y = minY; y <= maxY; y++)
+        for (int x = minX; x <= maxX; x++)
+            result.Add(Point(x, y));
+        return result;
+    }
+
+    private static HashSet<CultiwayWallPoint> Vertical(
+        int x, int minY, int maxY)
+    {
+        var result = new HashSet<CultiwayWallPoint>();
+        for (int y = minY; y <= maxY; y++)
+            result.Add(Point(x, y));
+        return result;
+    }
+
+    private static void SetEqual(HashSet<CultiwayWallPoint> expected,
+        HashSet<CultiwayWallPoint> actual, string message)
+    {
+        if (expected.SetEquals(actual)) return;
+        throw new InvalidOperationException(message +
+            ": missing [" + string.Join(", ", expected.Except(actual)) +
+            "], extra [" + string.Join(", ", actual.Except(expected)) +
+            "]");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}

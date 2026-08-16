@@ -108,6 +108,18 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
                 zoneHasCity: false, touchesOwnCity: false,
                 sameIsland: true, nativeClaimAllowed: true),
             "a detached empty zone cannot be selected");
+        Equal(true, XiaExpansionDecisionRules.IsExternalClaimZoneValid(
+                zoneExists: true, centerTileExists: true,
+                zoneHasCity: false, touchesOwnCity: false,
+                sameIsland: true, nativeClaimAllowed: true,
+                isCitySeedZone: true),
+            "a zero-zone city can seed its first claim from the city tile zone");
+        Equal(false, XiaExpansionDecisionRules.IsExternalClaimZoneValid(
+                zoneExists: true, centerTileExists: true,
+                zoneHasCity: true, touchesOwnCity: false,
+                sameIsland: true, nativeClaimAllowed: true,
+                isCitySeedZone: true),
+            "an occupied city seed zone remains invalid");
         Equal(false, XiaExpansionDecisionRules.IsExternalClaimZoneValid(
                 zoneExists: true, centerTileExists: true,
                 zoneHasCity: false, touchesOwnCity: true,
@@ -243,6 +255,8 @@ internal static class XiaExpansionAndCivMonkeyNamingRulesTests
             : string.Empty;
         Equal(true, civicClaimService.Contains("city.border_zones"),
             "civic claim targets originate from the current city border");
+        Equal(true, civicClaimService.Contains("TrySetCitySeedTarget"),
+            "a zero-zone city selects its city tile zone before scanning an empty border set");
         Equal(true, civicClaimService.Contains(
                 "XiaExpansionDecisionRules.IsExternalClaimZoneValid("),
             "runtime zone checks delegate to the pure external-zone invariant");

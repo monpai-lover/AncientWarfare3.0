@@ -17,6 +17,76 @@ if (args.Length == 1 && args[0] == "--tributary-protection-only")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--runtime-stability")
+{
+    SimulationWorkerPoolTests.Run();
+    PreparedNativePathCommitRulesTests.Run();
+    PathMovementSafetyRulesTests.Run();
+    Console.WriteLine("PASS: runtime stability slice");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--simulation-worker")
+{
+    SimulationWorkerPoolTests.Run();
+    Console.WriteLine("PASS: simulation worker slice");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--cultiway-wall")
+{
+    CultiwayStyleWallGeometryRulesTests.Run();
+    CultiwayStyleFrontierWallGeometryRulesTests.Run();
+    MandateBorderWallRulesTests.Run();
+    MandateBorderWallRefreshRulesTests.Run();
+    Console.WriteLine("Cultiway wall geometry rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-outlaw-names")
+{
+    PeasantRebelOutlawNameRulesTests.Run();
+    Console.WriteLine("Bandit outlaw naming rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--peasant-rebel-routes")
+{
+    PeasantRebelRouteRulesTests.Run();
+    Console.WriteLine("Peasant rebel route rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-stronghold")
+{
+    PeasantRebelBanditStrongholdRulesTests.Run();
+    PeasantRebelBanditZoneWallRulesTests.Run();
+    PeasantRebelBanditRaidRulesTests.Run();
+    Console.WriteLine("Bandit stronghold and raid rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-pressure")
+{
+    PeasantRebelBanditPressureRulesTests.Run();
+    Console.WriteLine("Bandit pressure rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-history-localization")
+{
+    HistoryLocalizationRulesTests.Run();
+    Console.WriteLine("Bandit history localization rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--actor-kingdom-safety")
+{
+    ActorKingdomSafetyRulesTests.Run();
+    Console.WriteLine("Actor kingdom safety rules passed.");
+    return;
+}
+
 HistoricalWriteModeRulesTests.Run();
 AWThirdPartySchedulerFaultRulesTests.Run();
 ActorVisualRoleRulesTests.Run();
@@ -508,6 +578,7 @@ if (args.Length == 1 && args[0] == "--zhulu-war-slice")
 if (args.Length == 1 && args[0] == "--xiaization-ui-slice")
 {
     XiaizationStatusDisplayRulesTests.Run();
+    XiaMinimapVisualRulesTests.Run();
     Console.WriteLine("Xiaization UI rules passed.");
     return;
 }
@@ -4430,6 +4501,38 @@ True(StandingArmyRules.ShouldAllowGuardRecruitment(
         standingCoreReady: true,
         militaryEmergency: true),
     "mobilization still permits replacement royal guards");
+Equal(false, StandingArmyRules.ShouldUsePeacetimePatrol(
+        isCareerStandingSoldier: true,
+        militaryEmergency: false,
+        inCombat: false,
+        cityAttackOrder: false),
+    "complete peace leaves career soldiers under vanilla AI");
+Equal(true, StandingArmyRules.ShouldReleaseLegacyPeacetimePatrol(
+        "aw_standing_army_peacetime_job", ""),
+    "a legacy patrol job is released");
+Equal(true, StandingArmyRules.ShouldReleaseLegacyPeacetimePatrol(
+        "", "aw_standing_army_peacetime_patrol"),
+    "a legacy patrol task is released");
+Equal(false, StandingArmyRules.ShouldReleaseLegacyPeacetimePatrol(
+        "unit", "sexual_reproduction_civ_go"),
+    "unrelated vanilla work is not cleared");
+string peacetimeEnlistPatchSource = File.ReadAllText(Path.Combine(
+    Directory.GetCurrentDirectory(), "Code", "patch", "AW_EnlistPatch.cs"));
+True(peacetimeEnlistPatchSource.Contains(
+        "ReleaseLegacyPatrolForJobSelection(__instance)"),
+    "job selection clears legacy patrol state before vanilla decides work");
+Equal(false, peacetimeEnlistPatchSource.Contains(
+        "StandingArmyPeacetimeService.GetJob(__instance)"),
+    "job selection never returns the legacy peacetime patrol job");
+string peacetimeServiceSource = File.ReadAllText(Path.Combine(
+    Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+    "StandingArmyPeacetimeService.cs"));
+Equal(false, peacetimeServiceSource.Contains(
+        "pActor.ai.setJob(StandingArmyPeacetimeContent.JobId)"),
+    "runtime refresh never assigns the legacy patrol job");
+Equal(false, peacetimeServiceSource.Contains(
+        "pActor.ai.setTask(\n                        StandingArmyPeacetimeContent.PatrolTaskId)"),
+    "runtime refresh never assigns the legacy patrol task");
 True(StandingArmyRules.ShouldRetryPeacetimePatrol(
         pHasPatrolTarget: false,
         pTargetIsCurrentTile: false),
@@ -8423,5 +8526,6 @@ MilitaryGovernorateRulesTests.Run();
 MilitaryGovernorateWarRulesTests.Run();
 MilitaryGovernorateSuccessionRulesTests.Run();
 ReflectionDelegateFactoryTests.Run();
+PeasantRebelRouteRulesTests.Run();
 
 Console.WriteLine("Rule tests passed.");

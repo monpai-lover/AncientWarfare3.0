@@ -34,6 +34,24 @@ internal static class ArmyRtsCombatHandoffRulesTests
                 largeSchedulerActive: false, militaryOwnerActive: true,
                 immediateCombat: true),
             "native scheduling does not need the large-step combat lane");
+        Assert(ArmyMilitaryMovementPriorityRules.ShouldEnterCombatP0(
+                hasImmediateAttackTarget: false,
+                hasValidBehaviourTarget: true),
+            "an RTS soldier with a valid behaviour target enters combat before vanilla publishes attack_target");
+        Assert(!ArmyMilitaryMovementPriorityRules.ShouldEnterCombatP0(
+                hasImmediateAttackTarget: false,
+                hasValidBehaviourTarget: false),
+            "an RTS soldier without either combat target remains on its movement task");
+        Assert(ArmyRtsFieldCombatRules.ShouldRequestFieldCombatFromP0(
+                missionActive: true, alreadyReleased: false,
+                contactActorIsCaptain: true,
+                captainHasValidCombatTarget: true),
+            "captain contact requests field-combat ownership immediately instead of waiting for a controller tick");
+        Assert(!ArmyRtsFieldCombatRules.ShouldRequestFieldCombatFromP0(
+                missionActive: true, alreadyReleased: false,
+                contactActorIsCaptain: false,
+                captainHasValidCombatTarget: true),
+            "ordinary member contacts do not repeatedly scan the whole army");
         Assert(ArmyMilitaryMovementPriorityRules.
                 ShouldAdvanceNewFightTaskInSameP0(
                     hasAttackTarget: true, isFightingTask: true,
@@ -414,7 +432,90 @@ internal static class ArmyRtsCombatHandoffRulesTests
         RuntimeModeFollowsTheLiveConfiguration(root);
 
         string controller = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "lineage", "ArmyRtsControllerService.cs"));
+            "core", "lineage", "ArmyRtsControllerService.cs"))
+            .Replace("\r\n", "\n");
+        string combatBehaviours = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
+        int memberCombatStart = combatBehaviours.IndexOf(
+            "public sealed class BehArmyRtsMemberCombat",
+            StringComparison.Ordinal);
+        string memberCombatBody = memberCombatStart >= 0
+            ? combatBehaviours.Substring(memberCombatStart)
+            : string.Empty;
+        Assert(CountOccurrences(memberCombatBody,
+                   "IsValidMemberCombatTarget(") == 1 &&
+               memberCombatBody.Contains("FindMemberCombatTarget(",
+                   StringComparison.Ordinal) &&
+               !memberCombatBody.Contains("attack_target",
+                   StringComparison.Ordinal),
+            "member combat validates each selected target once without changing target sources");
+
+        int memberSearchStart = controller.IndexOf(
+            "internal static Actor FindMemberCombatTarget(",
+            StringComparison.Ordinal);
+        int memberSearchEnd = controller.IndexOf(
+            "internal static bool HasActiveTargetCitySiege(",
+            memberSearchStart, StringComparison.Ordinal);
+        string memberSearchBody = memberSearchStart >= 0 &&
+            memberSearchEnd > memberSearchStart
+                ? controller.Substring(memberSearchStart,
+                    memberSearchEnd - memberSearchStart)
+                : string.Empty;
+        Assert(memberSearchBody.Contains(
+                   "IsValidOwnedMemberCombatTarget(",
+                   StringComparison.Ordinal) &&
+               !memberSearchBody.Contains(
+                   "IsValidMemberCombatTarget(pActor, candidate)",
+                   StringComparison.Ordinal),
+            "member target search hoists actor ownership outside candidate validation");
+
+        int setMemberCombatStart = controller.IndexOf(
+            "internal static bool TrySetMemberCombatTask(",
+            StringComparison.Ordinal);
+        int setMemberCombatEnd = controller.IndexOf(
+            "private static bool SetMemberSiegeCombatTask(",
+            setMemberCombatStart, StringComparison.Ordinal);
+        string setMemberCombatBody = setMemberCombatStart >= 0 &&
+            setMemberCombatEnd > setMemberCombatStart
+                ? controller.Substring(setMemberCombatStart,
+                    setMemberCombatEnd - setMemberCombatStart)
+                : string.Empty;
+        int fixedAdmissionGate = setMemberCombatBody.IndexOf(
+            "if (!missionActive || actorIsCaptain) return false;",
+            StringComparison.Ordinal);
+        int siegeAdmission = setMemberCombatBody.IndexOf(
+            "if (useSiegeCombatTask)", StringComparison.Ordinal);
+        int personalTargetValidation = setMemberCombatBody.IndexOf(
+            "bool hasValidCombatTarget", StringComparison.Ordinal);
+        Assert(fixedAdmissionGate >= 0 && siegeAdmission >
+                   fixedAdmissionGate && personalTargetValidation >
+                   siegeAdmission && setMemberCombatBody.Contains(
+                       "fieldCombatReleased\n                ? false\n                : HasValidMemberCombatTarget(pActor)",
+                       StringComparison.Ordinal),
+            "member task admission skips personal target work when mission, captain, siege, or released-field state fixes the result");
+
+        int prepareP0Start = controller.IndexOf(
+            "internal static bool TryPrepareMilitaryP0Actor(",
+            StringComparison.Ordinal);
+        int prepareP0End = controller.IndexOf(
+            "private static bool IsMissionTargetEnemy(", prepareP0Start,
+            StringComparison.Ordinal);
+        string prepareP0Body = prepareP0Start >= 0 &&
+            prepareP0End > prepareP0Start
+                ? controller.Substring(prepareP0Start,
+                    prepareP0End - prepareP0Start)
+                : string.Empty;
+        int noCaptainTargetGuard = prepareP0Body.IndexOf(
+            "if (combatTarget == null)", StringComparison.Ordinal);
+        int engagementScan = prepareP0Body.IndexOf(
+            "CountFieldCombatEngagement(army", StringComparison.Ordinal);
+        Assert(noCaptainTargetGuard >= 0 && engagementScan >
+                   noCaptainTargetGuard,
+            "captain P0 scans the roster only when a missing captain target can permit combat exit");
+        Assert(controller.Contains(
+                   "ArmyRtsFieldCombatRules.IsMemberEngaged(\n                    HasImmediateCombatPriority(captain)",
+                   StringComparison.Ordinal),
+            "captain behaviour targets must count as real contact when field combat is released");
         int missionRouteClearStart = controller.IndexOf(
             "if (clearSharedRoute)", StringComparison.Ordinal);
         int missionRouteClearEnd = controller.IndexOf(
@@ -887,7 +988,8 @@ internal static class ArmyRtsCombatHandoffRulesTests
             "the vanilla retreat selector must not reuse a stale city while retreat selection is pending or unavailable");
 
         string postRunner = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+            "core", "performance", "AWCooperativeActorPostRunner.cs"))
+            .Replace("\r\n", "\n");
         string movementDiagnostic = File.ReadAllText(Path.Combine(root,
             "Code", "core", "lineage", "ArmyRtsMovementDiagnostic.cs"));
         Assert(postRunner.Contains("TryPrepareMilitaryP0Actor(actor)",
@@ -953,10 +1055,23 @@ internal static class ArmyRtsCombatHandoffRulesTests
                    "ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId)",
                    StringComparison.Ordinal),
             "native P0 actors are skipped by later path and smooth stages");
+        int nativeAiCall = p0Body.IndexOf(
+            "actor.b6_updateAI(cycleElapsed);",
+            StringComparison.Ordinal);
+        int followerTaskRefresh = p0Body.IndexOf(
+            "bool followerTaskAfterAi =",
+            Math.Max(0, nativeAiCall), StringComparison.Ordinal);
+        Assert(nativeAiCall >= 0 && followerTaskRefresh > nativeAiCall &&
+               p0Body.Split(new[] { "followerTaskAfterAi" },
+                   StringSplitOptions.None).Length - 1 >= 3,
+            "a member that restores follow inside AI keeps the same-P0 follower movement fast path");
         Assert(p0Body.Contains("RunMilitaryP0Combat(",
                    StringComparison.Ordinal) &&
                p0Body.Contains("\"combat_p0\"", StringComparison.Ordinal),
             "native enemy acquisition keeps actors in the military P0 combat lane");
+        Assert(p0Body.Contains("HasMilitaryCombatPriority(actor)",
+                   StringComparison.Ordinal),
+            "the P0 boundaries admit valid behaviour targets instead of waiting for attack_target");
         int combatMethodStart = postRunner.IndexOf(
             "private static void RunMilitaryP0Combat(",
             StringComparison.Ordinal);
@@ -972,12 +1087,19 @@ internal static class ArmyRtsCombatHandoffRulesTests
                    "actor.b2_checkCurrentEnemyTarget(cycleElapsed)",
                    StringComparison.Ordinal) &&
                combatMethodBody.Contains(
+                   "TryEnterFieldCombatFromP0(actor)",
+                   StringComparison.Ordinal) &&
+               combatMethodBody.Contains(
                    "ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId)",
                    StringComparison.Ordinal) &&
                !combatMethodBody.Contains(
                    "ArmyMilitaryMovementPriorityIndex.Unregister(actorId)",
                    StringComparison.Ordinal),
             "combat P0 runs vanilla attacks without dropping military priority");
+        Assert(combatMethodBody.Contains(
+                   "ShouldAdvanceMemberCombatApproachInSameP0(\n                    HasMilitaryCombatPriority(actor)",
+                   StringComparison.Ordinal),
+            "a behaviour-target contact advances the custom soldier approach in the same P0 slice");
         int liveObjectiveStart = postRunner.IndexOf(
             "private static bool HasLiveMilitaryP0Objective(",
             StringComparison.Ordinal);
@@ -1148,5 +1270,18 @@ internal static class ArmyRtsCombatHandoffRulesTests
     private static void Assert(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(value, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 }

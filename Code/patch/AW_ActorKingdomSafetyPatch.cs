@@ -78,10 +78,28 @@ namespace AncientWarfare3.patch
             if (ActorKingdomSafetyRules.CanRunEnemyCheck(
                     actorExists: __instance?.data != null,
                     actorAssetExists: __instance?.asset != null,
+                    kingdomDataExists:
+                        __instance?.kingdom?.data != null,
                     kingdomAssetExists:
                         __instance?.kingdom?.asset != null)) return true;
             __result = false;
             ActorKingdomSafetyService.QueueRepair(__instance);
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(ChunkObjectContainer),
+            nameof(ChunkObjectContainer.addActor))]
+        private static bool ChunkObjectContainerAddActor_Prefix(
+            Actor pActor)
+        {
+            bool valid = pActor?.data != null &&
+                         pActor?.asset != null &&
+                         pActor?.kingdom?.data != null &&
+                         pActor?.kingdom?.asset != null;
+            if (valid) return true;
+            ActorKingdomSafetyService.QueueRepair(pActor);
             return false;
         }
 
@@ -124,6 +142,7 @@ namespace AncientWarfare3.patch
                     pTile?.data != null &&
                         pActor?.current_tile?.data != null,
                     pActor?.profession_asset != null,
+                    pActor?.kingdom?.data != null,
                     pActor?.kingdom?.asset != null);
             if (valid) return true;
             ActorKingdomSafetyService.QueueRepair(pActor);
@@ -140,6 +159,7 @@ namespace AncientWarfare3.patch
                     pActor?.data != null, pActor?.asset != null,
                     pActor?.current_tile?.data != null,
                     pActor?.profession_asset != null,
+                    pActor?.kingdom?.data != null,
                     pActor?.kingdom?.asset != null);
             if (valid) return true;
             ActorKingdomSafetyService.QueueRepair(pActor);

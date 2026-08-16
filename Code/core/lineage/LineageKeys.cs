@@ -82,6 +82,32 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_REBEL_LAST_YEAR = "aw_mandate_rebel_last_year";
         public const string MANDATE_REBEL_ORIGIN_KINGDOM_ID =
             "aw_mandate_rebel_origin_kingdom_id";
+        public const string MANDATE_REBEL_ROUTE =
+            "aw_mandate_rebel_route";
+        public const string MANDATE_REBEL_NAME_ROOT =
+            "aw_mandate_rebel_name_root";
+        public const string MANDATE_REBEL_FOUNDING_CITY_ID =
+            "aw_mandate_rebel_founding_city_id";
+        public const string MANDATE_REBEL_ROUTE_CREATED_YEAR =
+            "aw_mandate_rebel_route_created_year";
+        public const string MANDATE_REBEL_ROUTE_LAST_YEAR =
+            "aw_mandate_rebel_route_last_year";
+        public const string MANDATE_REBEL_ORIGIN_CITY_COUNT =
+            "aw_mandate_rebel_origin_city_count";
+        public const string MANDATE_REBEL_ORIGIN_STRENGTH =
+            "aw_mandate_rebel_origin_strength";
+        public const string MANDATE_REBEL_ORIGIN_CAPITAL_ID =
+            "aw_mandate_rebel_origin_capital_id";
+        public const string MANDATE_REBEL_ORIGIN_RULER_ID =
+            "aw_mandate_rebel_origin_ruler_id";
+        public const string MANDATE_REBEL_BANDIT_WALLS =
+            "aw_mandate_rebel_bandit_walls";
+        public const string MANDATE_REBEL_BANDIT_WALL_CURSOR =
+            "aw_mandate_rebel_bandit_wall_cursor";
+        public const string MANDATE_REBEL_BANDIT_ENTRY_CITY_IDS =
+            "aw_mandate_rebel_bandit_entry_city_ids";
+        public const string MANDATE_REBEL_BANDIT_STRONGHOLD_STATE =
+            "aw_mandate_rebel_bandit_stronghold_state";
         public const string MANDATE_DECLINE_REBEL =
             "aw_mandate_decline_rebel";
         public const string MANDATE_DECLINE_REBEL_ORIGIN_ID =
@@ -95,6 +121,8 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_BORDER_LAST_YEAR = "aw_mandate_border_last_year";
         public const string MANDATE_BORDER_GUARD = "aw_mandate_border_guard";
         public const string MANDATE_BORDER_WALL_LAST_YEAR = "aw_mandate_border_wall_last_year";
+        public const string MANDATE_BORDER_WALL_STATE =
+            "aw_mandate_border_wall_state";
         public const string MANDATE_SACRIFICE_LAST_YEAR = "aw_mandate_sacrifice_last_year";
         public const string MANDATE_SACRIFICE_BUFF_UNTIL = "aw_mandate_sacrifice_buff_until";
         public const string MANDATE_SACRIFICE_BUFF_DELTA = "aw_mandate_sacrifice_buff_delta";
@@ -320,6 +348,8 @@ namespace AncientWarfare3.core.lineage
             "aw_synthetic_levy_emergency_id";
         public const string SYNTHETIC_LEVY_LEDGER_RELEASED =
             "aw_synthetic_levy_ledger_released";
+        public const string SYNTHETIC_LEVY_RETURN_ARRIVED =
+            "aw_synthetic_levy_return_arrived";
         public const string AW_RTS_ABSTRACT_BATTLE_OPERATION =
             "aw_rts_abstract_battle_operation";
         public const string AW_RTS_ABSTRACT_BATTLE_PHASE =

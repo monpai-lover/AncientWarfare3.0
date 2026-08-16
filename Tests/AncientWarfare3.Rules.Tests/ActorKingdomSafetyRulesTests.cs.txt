@@ -29,27 +29,44 @@ internal static class ActorKingdomSafetyRulesTests
         Equal(false, ActorKingdomSafetyRules.CanRunEnemyCheck(
                 actorExists: true,
                 actorAssetExists: true,
+                kingdomDataExists: false,
                 kingdomAssetExists: false),
             "an actor with a null kingdom cannot enter vanilla enemy checks");
+        Equal(false, ActorKingdomSafetyRules.CanRunEnemyCheck(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomDataExists: false,
+                kingdomAssetExists: true),
+            "an actor with disposed kingdom data cannot enter vanilla enemy checks");
         Equal(true, ActorKingdomSafetyRules.CanRunEnemyCheck(
                 actorExists: true,
                 actorAssetExists: true,
+                kingdomDataExists: true,
                 kingdomAssetExists: true),
             "a fully restored actor keeps vanilla enemy checks");
 
         Equal(true,
             ActorKingdomSafetyRules.ShouldDetachInvalidKingdomBeforeRepair(
                 kingdomObjectExists: true,
+                kingdomDataExists: false,
                 kingdomAssetExists: false),
             "a stale destroyed kingdom must be detached before vanilla joinKingdom");
+        Equal(true,
+            ActorKingdomSafetyRules.ShouldDetachInvalidKingdomBeforeRepair(
+                kingdomObjectExists: true,
+                kingdomDataExists: false,
+                kingdomAssetExists: true),
+            "a kingdom with disposed data must be detached before repair");
         Equal(false,
             ActorKingdomSafetyRules.ShouldDetachInvalidKingdomBeforeRepair(
                 kingdomObjectExists: false,
+                kingdomDataExists: false,
                 kingdomAssetExists: false),
             "a genuinely kingdomless actor needs no stale-reference detach");
         Equal(false,
             ActorKingdomSafetyRules.ShouldDetachInvalidKingdomBeforeRepair(
                 kingdomObjectExists: true,
+                kingdomDataExists: true,
                 kingdomAssetExists: true),
             "a valid kingdom reference must never be detached by repair");
 
@@ -57,6 +74,7 @@ internal static class ActorKingdomSafetyRulesTests
             ActorKingdomSafetyRules.SelectRepairSource(
                 actorExists: true,
                 actorAssetExists: true,
+                kingdomDataExists: false,
                 kingdomAssetExists: false,
                 cityKingdomAssetExists: true,
                 cityKingdomIsRekt: false,
@@ -66,6 +84,7 @@ internal static class ActorKingdomSafetyRulesTests
             ActorKingdomSafetyRules.SelectRepairSource(
                 actorExists: true,
                 actorAssetExists: true,
+                kingdomDataExists: false,
                 kingdomAssetExists: false,
                 cityKingdomAssetExists: false,
                 cityKingdomIsRekt: false,
@@ -75,6 +94,7 @@ internal static class ActorKingdomSafetyRulesTests
             ActorKingdomSafetyRules.SelectRepairSource(
                 actorExists: true,
                 actorAssetExists: true,
+                kingdomDataExists: true,
                 kingdomAssetExists: true,
                 cityKingdomAssetExists: true,
                 cityKingdomIsRekt: false,
@@ -84,17 +104,29 @@ internal static class ActorKingdomSafetyRulesTests
             ActorKingdomSafetyRules.SelectRepairSource(
                 actorExists: true,
                 actorAssetExists: true,
+                kingdomDataExists: false,
                 kingdomAssetExists: false,
                 cityKingdomAssetExists: false,
                 cityKingdomIsRekt: false,
                 wildKingdomIdExists: false),
             "actors without a valid repair source remain quarantined");
+        Equal(ActorKingdomRepairSource.City,
+            ActorKingdomSafetyRules.SelectRepairSource(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomDataExists: false,
+                kingdomAssetExists: true,
+                cityKingdomAssetExists: true,
+                cityKingdomIsRekt: false,
+                wildKingdomIdExists: true),
+            "disposed kingdom data is repaired from the actor city");
 
         Equal(true, ActorKingdomSafetyRules.CanEnterVanillaZoneProcessing(
                 actorExists: true,
                 actorAssetExists: true,
                 tileExists: true,
                 professionAssetExists: true,
+                kingdomDataExists: true,
                 kingdomAssetExists: true),
             "only fully initialized actors may enter vanilla zone processing");
         Equal(false, ActorKingdomSafetyRules.CanEnterVanillaZoneProcessing(
@@ -102,8 +134,17 @@ internal static class ActorKingdomSafetyRulesTests
                 actorAssetExists: true,
                 tileExists: true,
                 professionAssetExists: true,
+                kingdomDataExists: false,
                 kingdomAssetExists: false),
             "a kingdomless actor must be quarantined before conquest scanning");
+        Equal(false, ActorKingdomSafetyRules.CanEnterVanillaZoneProcessing(
+                actorExists: true,
+                actorAssetExists: true,
+                tileExists: true,
+                professionAssetExists: true,
+                kingdomDataExists: false,
+                kingdomAssetExists: true),
+            "disposed kingdom data must be quarantined before zone insertion");
         Equal(false, ActorKingdomSafetyRules.CanRenderUnit(
                 actorExists: true,
                 actorAssetExists: true,

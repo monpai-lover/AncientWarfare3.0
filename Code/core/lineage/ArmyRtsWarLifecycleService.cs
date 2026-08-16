@@ -333,7 +333,20 @@ namespace AncientWarfare3.core.lineage
                 {
                     Army army = FindArmy(record.ArmyId);
                     ClearPersisted(army);
-                    ClearWarCombatState(army);
+                    bool returnActive =
+                        WarArmyReturnService.IsActive(army);
+                    bool hasValidMission =
+                        ArmyRtsControllerService.HasValidMission(army);
+                    if (!returnActive && !hasValidMission)
+                        WarArmyReturnService.TryBegin(army);
+                    returnActive = WarArmyReturnService.IsActive(army);
+                    if (!hasValidMission)
+                        ClearWarCombatState(army);
+                    ModClass.LogInfo(
+                        "[AW3 RTS return] trigger=lifecycle_war_ended" +
+                        " war=" + warId +
+                        " army=" + record.ArmyId +
+                        " active=" + returnActive);
                 }
             }
             Store.ClearWar(warId);

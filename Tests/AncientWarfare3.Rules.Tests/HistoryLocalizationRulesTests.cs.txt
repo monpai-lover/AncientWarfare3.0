@@ -38,6 +38,46 @@ internal static class HistoryLocalizationRulesTests
             HistoryLocalizationRules.Text("aw_hist_official_rank_grant_suffix", "en"),
             "first official rank grant history resolves its suffix");
 
+        foreach ((string key, string cz, string en, string ch) in new[]
+                 {
+                     ("aw_hist_rebel_route_founding",
+                         "\u9009\u62e9\u5efa\u56fd\u8def\u7ebf",
+                         " chose the founding route",
+                         "\u9078\u64c7\u5efa\u570b\u8def\u7dda"),
+                     ("aw_hist_rebel_route_bandit",
+                         "\u843d\u8349\u4e3a\u5bc7\u5e76\u7b51\u5be8",
+                         " became bandits and fortified a hideout",
+                         "\u843d\u8349\u70ba\u5bc7\u4e26\u7bc9\u5be8"),
+                     ("aw_hist_bandit_suppression_started",
+                         "\u53d1\u5175\u527f\u532a",
+                         " began a suppression campaign",
+                         "\u767c\u5175\u527f\u532a"),
+                     ("aw_hist_bandit_converted",
+                         "\u6539\u65d7\u5efa\u53f7\uff0c\u8f6c\u4e3a\u5efa\u56fd\u4e49\u519b",
+                         " raised a state banner and became founding rebels",
+                         "\u6539\u65d7\u5efa\u865f\uff0c\u8f49\u70ba\u5efa\u570b\u7fa9\u8ecd"),
+                     ("aw_hist_bandit_destroyed",
+                         "\u5c71\u5be8\u88ab\u653b\u7834\uff0c\u8d3c\u56fd\u8986\u706d",
+                         " lost its hideout and was destroyed",
+                         "\u5c71\u5be8\u88ab\u653b\u7834\uff0c\u8cca\u570b\u8986\u6ec5"),
+                     ("aw_hist_bandit_pressure_annexed",
+                         "\u56e0\u532a\u60a3\u6df1\u91cd\u5f52\u9644\u5c71\u5be8",
+                         " joined the bandit stronghold after prolonged unrest",
+                         "\u56e0\u532a\u60a3\u6df1\u91cd\u6b78\u9644\u5c71\u5be8"),
+                     ("aw_hist_bandit_revolution_started",
+                         "\u7fbd\u7ffc\u5df2\u4e30\uff0c\u6539\u65d7\u8d77\u4e49",
+                         " grew strong enough to raise the rebel banner",
+                         "\u7fbd\u7ffc\u5df2\u8c50\uff0c\u6539\u65d7\u8d77\u7fa9")
+                 })
+        {
+            Equal(cz, HistoryLocalizationRules.Text(key, "cz"),
+                "bandit lifecycle history localizes simplified " + key);
+            Equal(en, HistoryLocalizationRules.Text(key, "en"),
+                "bandit lifecycle history localizes English " + key);
+            Equal(ch, HistoryLocalizationRules.Text(key, "ch"),
+                "bandit lifecycle history localizes traditional " + key);
+        }
+
         foreach ((string key, string expected) in new[]
                  {
                      ("aw_hist_school_authored", "著成"),

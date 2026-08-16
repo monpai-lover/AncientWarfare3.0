@@ -17,12 +17,10 @@ namespace AncientWarfare3.ai.behaviours.actor
 
             WorldTile tile = StandingArmyPeacetimeService.GetPatrolTile(
                 pActor);
-            if (StandingArmyRules.ShouldRetryPeacetimePatrol(
-                    pHasPatrolTarget: tile != null,
-                    pTargetIsCurrentTile: tile == pActor?.current_tile))
+            if (tile == null || tile == pActor?.current_tile)
             {
-                pActor?.makeWait(StandingArmyRules.PeacetimePatrolRetrySeconds);
-                return BehResult.RepeatStep;
+                pActor?.makeWait(Randy.randomFloat(2f, 5f));
+                return BehResult.Stop;
             }
 
             pActor.beh_tile_target = tile;

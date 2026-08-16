@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
@@ -706,8 +707,23 @@ namespace AncientWarfare3.core.policy
 
         public static bool ForceSetClassState(Kingdom pKingdom, string pClassId)
         {
-            if (pKingdom?.data == null || !KingdomPolicyDefs.ClassStates.Contains(pClassId)) return false;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
+            return PeasantRebelGovernmentTransitionService.TrySetClassState(
+                pKingdom, pClassId);
+        }
+
+        internal static bool ApplyClassStateDirect(Kingdom pKingdom,
+            string pClassId)
+        {
+            if (!PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying ||
+                pKingdom?.data == null || pKingdom.isRekt() ||
+                !KingdomPolicyDefs.ClassStates.Contains(pClassId))
+                return false;
+            if (!KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                    KingdomPolicyProfileService.EnsureAssigned(pKingdom)))
+                return false;
             EnsureInitialized(pKingdom);
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, pClassId);
             ApplyClassStateEffects(pKingdom, pClassId);
@@ -728,15 +744,24 @@ namespace AncientWarfare3.core.policy
         public static string GetClassId(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return KingdomPolicyDefs.ClassDefault;
-            if (MandateRebelService.IsRebelKingdom(pKingdom)) return KingdomPolicyDefs.ClassRebel;
+            pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE,
+                out string value, "");
+            value = (value ?? "").Trim();
+            if (value == KingdomPolicyDefs.ClassBandit)
+                return KingdomPolicyDefs.ClassBandit;
+            if (!string.IsNullOrEmpty(value)) return value;
+            if (MandateRebelService.IsRebelKingdom(pKingdom))
+                return KingdomPolicyDefs.ClassRebel;
             EnsureInitialized(pKingdom);
-            pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE, out string value, KingdomPolicyDefs.ClassDefault);
+            pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE,
+                out value, KingdomPolicyDefs.ClassDefault);
             return string.IsNullOrEmpty(value) ? KingdomPolicyDefs.ClassDefault : value;
         }
 
         public static string GetClassFallbackName(string pClassId)
         {
             if (pClassId == KingdomPolicyDefs.ClassRebel) return "\u519C\u6C11\u4E49\u519B";
+            if (pClassId == KingdomPolicyDefs.ClassBandit) return "\u571F\u532A";
             if (pClassId == KingdomPolicyDefs.ClassRepublic) return "\u5171\u548C\u653F\u4F53";
             return pClassId switch
             {
@@ -751,6 +776,24 @@ namespace AncientWarfare3.core.policy
         public static string GetClassLocaleKey(string pClassId)
         {
             return "aw_policy_class_" + (string.IsNullOrEmpty(pClassId) ? KingdomPolicyDefs.ClassDefault : pClassId);
+        }
+
+        internal static string GetClassIconPath(string pClassId)
+        {
+            if (pClassId == KingdomPolicyDefs.ClassSlaveOwner)
+                return "ui/policy/start_slaves";
+            if (pClassId == KingdomPolicyDefs.ClassHalfAristocrat)
+                return "ui/policy/start_halfaristocrat";
+            if (pClassId == KingdomPolicyDefs.ClassAristocrat)
+                return "ui/policy/base_enfeoffment";
+            if (pClassId == KingdomPolicyDefs.ClassReform)
+                return "ui/icons/iconPeace";
+            if (pClassId == KingdomPolicyDefs.ClassRepublic)
+                return "ui/icons/iconDiplomacy";
+            if (pClassId == KingdomPolicyDefs.ClassRebel ||
+                pClassId == KingdomPolicyDefs.ClassBandit)
+                return "ui/Icons/traits/iconrebel";
+            return "ui/icons/iconDiplomacy";
         }
 
         public static string GetArmyState(Kingdom pKingdom)
@@ -1577,6 +1620,7 @@ namespace AncientWarfare3.core.policy
                     SlaveService.SetSlaveryEnabled(pKingdom, true);
                     break;
                 case KingdomPolicyDefs.ClassRebel:
+                case KingdomPolicyDefs.ClassBandit:
                     break;
                 case KingdomPolicyDefs.ClassDefault:
                 case KingdomPolicyDefs.ClassRepublic:

@@ -118,6 +118,9 @@ namespace AncientWarfare3.core.lineage
         public const string CAPITAL_MOVED = "capital_moved";
         public const string TECH_COMPLETED = "tech_completed";
         public const string MANDATE_REBELLION = "mandate_rebellion";
+        public const string BANDIT_SUPPRESSION_VICTORY =
+            "bandit_suppression_victory";
+        public const string BANDIT_SUPPRESSED = "bandit_suppressed";
         public const string MANDATE_CLAIMED = "mandate_claimed";
         public const string MANDATE_BORDER_DEFENSE = "mandate_border_defense";
         public const string FOREIGN_OCCUPATION = "foreign_occupation";
@@ -169,6 +172,10 @@ namespace AncientWarfare3.core.lineage
     {
         public const string CITY_FOUND = "city_found";
         public const string CITY_TRANSFER = "city_transfer";
+        public const string BANDIT_STRONGHOLD_ESTABLISHED =
+            "bandit_stronghold_established";
+        public const string BANDIT_STRONGHOLD_SUPPRESSED =
+            "bandit_stronghold_suppressed";
         public const string ENSLAVED = "enslaved";
         public const string FREED_SLAVE = "freed_slave";
         public const string RETIRED_SOLDIER = "retired_soldier";

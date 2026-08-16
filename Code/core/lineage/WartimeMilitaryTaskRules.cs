@@ -12,7 +12,8 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldEvaluateMilitaryState(string pTaskId)
         {
-            return IsCivilianTask(pTaskId);
+            return IsCivilianTask(pTaskId) || string.Equals(pTaskId,
+                "fighting", StringComparison.Ordinal);
         }
 
         public static bool ShouldContinueUpdateAfterRejectingActiveTask(

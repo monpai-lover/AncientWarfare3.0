@@ -38,6 +38,25 @@ namespace AncientWarfare3.patch
             if (ArmyRtsControllerService.
                     ShouldUseNativeMilitaryPath(__instance))
             {
+                bool validNativeEndpoints = false;
+                try
+                {
+                    validNativeEndpoints = __instance?.data != null &&
+                        !__instance.isRekt() &&
+                        __instance.current_tile?.data != null &&
+                        pTile?.data != null &&
+                        __instance.current_tile.Type != null &&
+                        pTile.Type != null &&
+                        __instance.current_tile.region != null &&
+                        pTile.region != null;
+                }
+                catch { }
+                if (!validNativeEndpoints)
+                {
+                    RejectNativeMilitaryMovement(__instance);
+                    __result = ExecuteEvent.False;
+                    return false;
+                }
                 if (ArmyRtsControllerService.
                         ShouldBlockLiquidMilitaryMovement(__instance,
                             pTile))
@@ -75,6 +94,27 @@ namespace AncientWarfare3.patch
                     ActorRacePerformanceMetric.PathSubmit, raceToken);
             }
             return false;
+        }
+
+        private static void RejectNativeMilitaryMovement(Actor pActor)
+        {
+            if (pActor == null) return;
+            try
+            {
+                pActor.stopMovement();
+                pActor.clearOldPath();
+                pActor.clearTileTarget();
+                pActor.beh_tile_target = null;
+            }
+            catch
+            {
+                try { pActor.clearOldPath(); }
+                catch { }
+                try { pActor.clearTileTarget(); }
+                catch { }
+                try { pActor.beh_tile_target = null; }
+                catch { }
+            }
         }
 
         [HarmonyPrefix]

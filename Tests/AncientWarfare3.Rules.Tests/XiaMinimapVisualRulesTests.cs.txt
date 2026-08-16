@@ -1,0 +1,96 @@
+using System.Security.Cryptography;
+using AncientWarfare3.core.lineage;
+
+internal static class XiaMinimapVisualRulesTests
+{
+    public static void Run()
+    {
+        Equal("civ/icons/minimap_heir",
+            XiaMinimapVisualRules.ResolveHeirIconPath(
+                cultureIntegrated: false),
+            "ordinary heirs retain the existing minimap icon");
+        Equal("civ/icons/minimap_heir_xia",
+            XiaMinimapVisualRules.ResolveHeirIconPath(
+                cultureIntegrated: true),
+            "integrated Xia cultures use the Xia heir icon");
+
+        Equal("civ/icons/minimap_king_xia",
+            XiaMinimapVisualRules.ResolveKingIconPath(
+                cultureIntegrated: true, hasAttackTarget: true,
+                hasPlot: false, kingdomHasEnemies: true),
+            "Xia kings retain their cultural icon while fighting");
+        Equal("civ/icons/minimap_king_angry",
+            XiaMinimapVisualRules.ResolveKingIconPath(
+                cultureIntegrated: false, hasAttackTarget: true,
+                hasPlot: false, kingdomHasEnemies: true),
+            "ordinary attacking kings retain the vanilla angry icon");
+        Equal("civ/icons/minimap_king_surprised",
+            XiaMinimapVisualRules.ResolveKingIconPath(
+                cultureIntegrated: false, hasAttackTarget: false,
+                hasPlot: true, kingdomHasEnemies: false),
+            "ordinary plotting kings retain the vanilla surprised icon");
+        Equal("civ/icons/minimap_king_normal",
+            XiaMinimapVisualRules.ResolveKingIconPath(
+                cultureIntegrated: false, hasAttackTarget: false,
+                hasPlot: false, kingdomHasEnemies: true),
+            "ordinary wartime kings retain the vanilla normal icon");
+        Equal("civ/icons/minimap_king_happy",
+            XiaMinimapVisualRules.ResolveKingIconPath(
+                cultureIntegrated: false, hasAttackTarget: false,
+                hasPlot: false, kingdomHasEnemies: false),
+            "ordinary peacetime kings retain the vanilla happy icon");
+
+        string root = FindRepoRoot();
+        Equal("A71832335AA8AC35646E19119941C54281FDAB030B79B55C61585AC3A6B7CD4F",
+            Hash(Path.Combine(root, "GameResources", "civ", "icons",
+                "minimap_heir_xia.png")),
+            "the Xia heir resource matches the supplied artwork");
+        Equal("5D0E779A1D7E6777EC42D6B38DEF380425FB5F934FCAE54D066113623C5895BC",
+            Hash(Path.Combine(root, "GameResources", "civ", "icons",
+                "minimap_king_xia.png")),
+            "the Xia king resource matches the supplied artwork");
+
+        string kingPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_XiaMinimapKingPatch.cs"));
+        Contains(kingPatch, "XiaCultureIntegrationService.IsIntegrated(",
+            "king icon selection reads the kingdom culture's integrated marker");
+        string heirPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_HeirMinimapPatch.cs"));
+        Contains(heirPatch, "XiaCultureIntegrationService.IsIntegrated(",
+            "heir icon selection reads the visual kingdom culture's integrated marker");
+    }
+
+    private static string Hash(string path)
+    {
+        if (!File.Exists(path)) return "missing";
+        using SHA256 sha = SHA256.Create();
+        return Convert.ToHexString(sha.ComputeHash(File.ReadAllBytes(path)));
+    }
+
+    private static string FindRepoRoot()
+    {
+        DirectoryInfo current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            if (Directory.Exists(Path.Combine(current.FullName, "Code")) &&
+                Directory.Exists(Path.Combine(current.FullName, "GameResources")))
+                return current.FullName;
+            current = current.Parent;
+        }
+        throw new InvalidOperationException("repository root not found");
+    }
+
+    private static void Contains(string value, string expected,
+        string message)
+    {
+        if (value?.Contains(expected, StringComparison.Ordinal) != true)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Equal(string expected, string actual, string message)
+    {
+        if (!string.Equals(expected, actual, StringComparison.Ordinal))
+            throw new InvalidOperationException(message +
+                $" (expected={expected}, actual={actual})");
+    }
+}

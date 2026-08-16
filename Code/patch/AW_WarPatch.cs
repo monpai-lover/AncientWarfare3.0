@@ -67,6 +67,12 @@ namespace AncientWarfare3.patch
         public static bool DiplomacyStartWar_Prefix(Kingdom pAttacker, Kingdom pDefender, WarTypeAsset pAsset,
             ref War __result)
         {
+            if (!PeasantRebelRouteService.CanStartWar(pAttacker,
+                    pDefender, out _, out _))
+            {
+                __result = null;
+                return false;
+            }
             if (!WarDecisionService.ShouldBlockWarStart(pAttacker, pDefender, pAsset)) return true;
             __result = null;
             return false;
@@ -76,6 +82,12 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(WarManager), nameof(WarManager.newWar))]
         public static bool NewWar_Prefix(Kingdom pAttacker, Kingdom pDefender, WarTypeAsset pType, ref War __result)
         {
+            if (!PeasantRebelRouteService.CanStartWar(pAttacker,
+                    pDefender, out _, out _))
+            {
+                __result = null;
+                return false;
+            }
             if (WarDecisionService.ShouldBlockWarStart(pAttacker, pDefender,
                     pType))
             {
@@ -94,6 +106,7 @@ namespace AncientWarfare3.patch
         public static void NewWar_Postfix(War __result)
         {
             if (__result?.data == null) return;
+            PeasantRebelRouteService.OnWarStarted(__result);
             if (ZhuluWarService.IsZhuluWar(__result,
                     requireActive: false))
             {

@@ -9,6 +9,8 @@ namespace AncientWarfare3.core.lineage
 
     public static class WarArmyReturnRules
     {
+        public const int ArrivalCenterRadius = 16;
+
         public static bool ShouldBeginReturn(bool armyAlive,
             long currentMissionWarId, long endedWarId)
         {
@@ -39,9 +41,26 @@ namespace AncientWarfare3.core.lineage
             return !armyAlive || insideFriendlySafeCity;
         }
 
+        public static bool IsInsideReturnArrivalRadius(
+            bool insideFriendlySafeCity, long deltaX, long deltaY)
+        {
+            if (!insideFriendlySafeCity) return false;
+            long radius = ArrivalCenterRadius;
+            if (deltaX < -radius || deltaX > radius ||
+                deltaY < -radius || deltaY > radius) return false;
+            return deltaX * deltaX + deltaY * deltaY <= radius * radius;
+        }
+
         public static bool ShouldAllowPeacetimeJob(bool returnActive)
         {
             return !returnActive;
+        }
+
+        public static bool ShouldWaitAtReturnArrival(bool arrivalVerified,
+            bool actorIsCaptain, bool captainAtTargetCenter)
+        {
+            return arrivalVerified &&
+                   (!actorIsCaptain || captainAtTargetCenter);
         }
 
         public static bool ShouldRepairReturnTask(bool returnActive,

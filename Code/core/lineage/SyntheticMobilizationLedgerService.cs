@@ -852,9 +852,18 @@ namespace AncientWarfare3.core.lineage
                     }
                     continue;
                 }
+                bool insideFriendlySafeCity = WarArmyReturnService.
+                    IsInsideFriendlySafeCity(actor);
+                if (insideFriendlySafeCity)
+                    SyntheticLevyService.ConfirmReturnArrivalIfSafe(actor);
                 if (SyntheticMobilizationRules.ShouldDeferDemobilization(
                         SyntheticLevyService.IsSynthetic(actor),
-                        WarArmyReturnService.IsActive(actor.army)))
+                        SyntheticLevyService.HasReturnArrivalConfirmed(
+                            actor),
+                        WarArmyReturnService.IsActive(actor.army),
+                        ActiveMilitaryLifecycleService
+                            .HasWartimeMilitaryLock(actor),
+                        insideFriendlySafeCity))
                     continue;
                 SyntheticLevyService.RemoveWithoutPersonalHistory(actor);
             }

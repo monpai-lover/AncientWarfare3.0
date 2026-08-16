@@ -15,7 +15,35 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         ApplyUsesStableFailuresAndRebuildsAfterWrites();
         ApplyPreservesExplicitRtsRoleWithAutomaticPosture();
         ApplyReplacesTheReplicaArmyProjectionSet();
+        SnapshotCarriesBanditStateWithoutAuthorityReplay();
         FacadeIsTypedAndContainsNoReflectionOrDatabaseAccess();
+    }
+
+    private static void SnapshotCarriesBanditStateWithoutAuthorityReplay()
+    {
+        var store = new FakeStore();
+        store.ExistingKingdoms.Add(42);
+        store.CapturedStrongholds.Add(
+            new AW3MultiplayerBanditStrongholdProjection(42,
+                "{\"SchemaVersion\":1,\"Phase\":2}"));
+
+        AW3MultiplayerStrategicSnapshot snapshot =
+            AW3MultiplayerStrategicStateCoordinator.Capture(90, store);
+
+        Equal(1, snapshot.BanditStrongholds.Count,
+            "stronghold projection captured");
+        Equal(42L, snapshot.BanditStrongholds[0].KingdomId,
+            "stronghold projection retains kingdom identity");
+
+        AW3MultiplayerStrategicApplyResult result =
+            AW3MultiplayerStrategicStateCoordinator.Apply(snapshot, store);
+
+        Equal(true, result.IsSuccess, "stronghold projection applies");
+        Equal(true, store.Calls.Contains("stronghold:42"),
+            "replica store receives durable stronghold JSON");
+        Equal(false, store.Calls.Any(call =>
+                call.Contains("create", StringComparison.Ordinal)),
+            "replica apply does not invoke authoritative creation");
     }
 
     private static void SnapshotSortsAndCopiesRecords()
@@ -229,7 +257,8 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         SequenceEqual(new[]
             {
                 "army:4", "actor:11", "governorate:5",
-                "complete-armies:4", "complete-governorates:5", "rebuild"
+                "complete-armies:4", "complete-governorates:5",
+                "complete-strongholds:", "rebuild"
             },
             store.Calls, "cache rebuild occurs after typed writes");
 
@@ -258,7 +287,8 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         Equal(true, result.IsSuccess,
             "empty authoritative Army set applies");
         SequenceEqual(new[]
-            { "complete-armies:", "complete-governorates:", "rebuild" },
+            { "complete-armies:", "complete-governorates:",
+                "complete-strongholds:", "rebuild" },
             store.Calls,
             "snapshot completion clears omitted replica projections");
     }
@@ -498,8 +528,12 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         public List<AW3MultiplayerMilitaryGovernorateProjection>
             CapturedGovernorates { get; } =
                 new List<AW3MultiplayerMilitaryGovernorateProjection>();
+        public List<AW3MultiplayerBanditStrongholdProjection>
+            CapturedStrongholds { get; } =
+                new List<AW3MultiplayerBanditStrongholdProjection>();
         public HashSet<long> ExistingArmies { get; } = new HashSet<long>();
         public HashSet<long> ExistingActors { get; } = new HashSet<long>();
+        public HashSet<long> ExistingKingdoms { get; } = new HashSet<long>();
         public HashSet<long> RejectedGovernorateStateIds { get; } =
             new HashSet<long>();
         public List<string> Calls { get; } = new List<string>();
@@ -522,6 +556,12 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             return CapturedGovernorates;
         }
 
+        public IReadOnlyList<AW3MultiplayerBanditStrongholdProjection>
+            CaptureBanditStrongholds()
+        {
+            return CapturedStrongholds;
+        }
+
         public bool HasArmy(long armyId)
         {
             return ExistingArmies.Contains(armyId);
@@ -538,6 +578,13 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             return governorate != null &&
                    !RejectedGovernorateStateIds.Contains(
                        governorate.StateId);
+        }
+
+        public bool CanApplyBanditStronghold(
+            AW3MultiplayerBanditStrongholdProjection stronghold)
+        {
+            return stronghold != null &&
+                   ExistingKingdoms.Contains(stronghold.KingdomId);
         }
 
         public void ApplyArmy(AW3MultiplayerArmyProjection army)
@@ -560,6 +607,12 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             Calls.Add("governorate:" + governorate.StateId);
         }
 
+        public void ApplyBanditStronghold(
+            AW3MultiplayerBanditStrongholdProjection stronghold)
+        {
+            Calls.Add("stronghold:" + stronghold.KingdomId);
+        }
+
         public void CompleteArmySnapshot(
             IReadOnlyList<AW3MultiplayerArmyProjection> armies)
         {
@@ -573,6 +626,14 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         {
             Calls.Add("complete-governorates:" + string.Join(",",
                 governorates.Select(value => value.StateId)));
+        }
+
+        public void CompleteBanditStrongholdSnapshot(
+            IReadOnlyList<AW3MultiplayerBanditStrongholdProjection>
+                strongholds)
+        {
+            Calls.Add("complete-strongholds:" + string.Join(",",
+                strongholds.Select(value => value.KingdomId)));
         }
 
         public void RebuildMilitaryReadModels()

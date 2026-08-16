@@ -2089,6 +2089,11 @@ namespace AncientWarfare3.core.lineage
                 reason = "city_owner_changed_during_recovery";
                 return false;
             }
+            if (!PeasantRebelRouteService.CanAcquireCity(recipient, city))
+            {
+                reason = "bandit_single_city";
+                return false;
+            }
             RoyalClaimService.TreatyAnnexationMarker annexation = default;
             if (original?.data != null && original != recipient)
             {

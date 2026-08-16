@@ -9,6 +9,11 @@ namespace AncientWarfare3.core.lineage
         public const string MilitaryAcclaimMode = "military_acclaim";
         public const string CivilAcclaimMode = "civil_acclaim";
 
+        public static string RouteHeirTitleKey(bool pBandit)
+        {
+            return pBandit ? "aw_bandit_heir_title" : "";
+        }
+
         public static string TitleKey(bool isEmpireOrMandate,
             string successionMode)
         {
