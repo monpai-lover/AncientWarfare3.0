@@ -4686,16 +4686,19 @@ namespace AncientWarfare3.core.lineage
                 ExitFieldCombat(pArmy, pRuntime);
             bool enteringSiege = !pRuntime.SiegeCombatActive;
             pRuntime.SiegeTargetActorId = target.data.id;
+            if (enteringSiege)
+            {
+                pRuntime.NativeRoute.MarkMovementInterrupted();
+                ArmyRouteProviderService.Cancel(pArmy.id,
+                    ArmyRouteCancelReason.TargetReplaced);
+                AWArmyMarchService.ClearArmy(pArmy.id);
+                ClearArmyAttackTargets(pArmy);
+                ResetStrategicMovementRuntime(pRuntime);
+                pRuntime.SiegeCombatActive = true;
+                pRuntime.JobCursor.Reopen();
+            }
+            EnsureTargetCitySiegeTasks(pArmy, pRuntime);
             if (!enteringSiege) return true;
-            pRuntime.NativeRoute.MarkMovementInterrupted();
-            ArmyRouteProviderService.Cancel(pArmy.id,
-                ArmyRouteCancelReason.TargetReplaced);
-            AWArmyMarchService.ClearArmy(pArmy.id);
-            ClearArmyAttackTargets(pArmy);
-            ResetStrategicMovementRuntime(pRuntime);
-            pRuntime.SiegeCombatActive = true;
-            SetCaptainTacticalTask(captain);
-            RegisterTargetCitySiegeMembers(pArmy);
             if (AWPerformanceSettings.ArmyRtsDiagnosticsEnabled)
                 ModClass.LogInfo("[AW3 RTS siege] enter army=" + pArmy.id +
                                  " city=" + pTarget.id + " target=" +
@@ -4703,23 +4706,35 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        private static void RegisterTargetCitySiegeMembers(Army pArmy)
+        private static void EnsureTargetCitySiegeTasks(Army pArmy,
+            RuntimeState pRuntime)
         {
+            if (pArmy?.data == null || pRuntime == null ||
+                !pRuntime.SiegeCombatActive) return;
             Actor captain = SafeCaptain(pArmy);
+            SetCaptainTacticalTask(captain);
+            TryReopenJobOwnershipRepair(pRuntime);
             int count;
-            try { count = pArmy?.units?.Count ?? 0; }
+            try { count = pArmy.units.Count; }
             catch { count = 0; }
-            for (int i = 0; i < count; i++)
+            bool jobsWereInitialized = pRuntime.JobCursor.JobsInitialized;
+            int end = Math.Min(count, pRuntime.JobCursor.MemberCursor +
+                                      MaximumJobMutationsPerController);
+            for (int i = pRuntime.JobCursor.MemberCursor; i < end; i++)
             {
                 Actor actor;
                 try { actor = pArmy.units[i]; }
                 catch { continue; }
                 if (actor == captain || !IsLiveWarriorActor(actor)) continue;
-                SetNativeMemberMissionTask(actor, pArmy,
-                    pForceReassert: true);
+                SetNativeMemberMissionTask(actor, pArmy);
                 ArmyMilitaryMovementPriorityIndex.Register(actor.data.id,
                     ArmyMilitaryMovementPriorityKind.RtsMember);
             }
+            pRuntime.JobCursor.Advance(end, count);
+            if (!jobsWereInitialized && pRuntime.JobCursor.JobsInitialized)
+                pRuntime.NextJobOwnershipRepairWorldTime =
+                    CurrentWorldTime() +
+                    ArmyRtsRules.JobOwnershipRepairIntervalSeconds;
         }
 
         private static void ExitTargetCitySiegeCombat(Army pArmy,
