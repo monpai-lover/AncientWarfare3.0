@@ -432,7 +432,8 @@ internal static class ArmyRtsCombatHandoffRulesTests
         RuntimeModeFollowsTheLiveConfiguration(root);
 
         string controller = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "lineage", "ArmyRtsControllerService.cs"));
+            "core", "lineage", "ArmyRtsControllerService.cs"))
+            .Replace("\r\n", "\n");
         string combatBehaviours = File.ReadAllText(Path.Combine(root, "Code",
             "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
         int memberCombatStart = combatBehaviours.IndexOf(
@@ -987,7 +988,8 @@ internal static class ArmyRtsCombatHandoffRulesTests
             "the vanilla retreat selector must not reuse a stale city while retreat selection is pending or unavailable");
 
         string postRunner = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+            "core", "performance", "AWCooperativeActorPostRunner.cs"))
+            .Replace("\r\n", "\n");
         string movementDiagnostic = File.ReadAllText(Path.Combine(root,
             "Code", "core", "lineage", "ArmyRtsMovementDiagnostic.cs"));
         Assert(postRunner.Contains("TryPrepareMilitaryP0Actor(actor)",
