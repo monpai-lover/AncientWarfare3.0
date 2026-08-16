@@ -1854,21 +1854,32 @@ namespace AncientWarfare3.core.lineage
         internal static bool IsValidMemberCombatTarget(Actor pActor,
             Actor pTarget)
         {
-            bool actorsAlive = pActor?.data != null &&
-                               pTarget?.data != null &&
-                               !pActor.isRekt() && !pTarget.isRekt() &&
-                               pActor.isAlive() && pTarget.isAlive();
-            bool sameIsland = actorsAlive &&
-                              pActor.current_tile?.data != null &&
+            if (!HasValidMemberCombatActorContext(pActor)) return false;
+            return IsValidOwnedMemberCombatTarget(pActor, pTarget);
+        }
+
+        private static bool HasValidMemberCombatActorContext(Actor pActor)
+        {
+            return pActor?.data != null && !pActor.isRekt() &&
+                   pActor.isAlive() && pActor.current_tile?.data != null &&
+                   HasMemberCombatMission(pActor);
+        }
+
+        private static bool IsValidOwnedMemberCombatTarget(Actor pActor,
+            Actor pTarget)
+        {
+            bool targetAlive = pTarget?.data != null &&
+                               !pTarget.isRekt() && pTarget.isAlive();
+            bool sameIsland = targetAlive &&
                               pTarget.current_tile?.data != null &&
                               pActor.current_tile.isSameIsland(
                                   pTarget.current_tile) == true;
             return ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
-                targetAlive: actorsAlive,
-                targetHostile: actorsAlive &&
-                               IsHostileCaptainTarget(pActor, pTarget),
+                targetAlive,
+                targetHostile: targetAlive &&
+                                IsHostileCaptainTarget(pActor, pTarget),
                 sameIsland,
-                combatOwned: HasMemberCombatMission(pActor));
+                combatOwned: true);
         }
 
         private static bool IsViableSiegeCombatTarget(Actor pActor,
@@ -1911,8 +1922,7 @@ namespace AncientWarfare3.core.lineage
 
         internal static Actor FindMemberCombatTarget(Actor pActor)
         {
-            if (pActor?.data == null || pActor.current_tile?.data == null ||
-                !HasMemberCombatMission(pActor)) return null;
+            if (!HasValidMemberCombatActorContext(pActor)) return null;
             Actor best = null;
             int bestDistance = int.MaxValue;
             try
@@ -1920,7 +1930,7 @@ namespace AncientWarfare3.core.lineage
                 foreach (Actor candidate in Finder.getUnitsFromChunk(
                              pActor.current_tile, 2, 10))
                 {
-                    if (!IsValidMemberCombatTarget(pActor, candidate))
+                    if (!IsValidOwnedMemberCombatTarget(pActor, candidate))
                         continue;
                     int distance = Toolbox.SquaredDistTile(
                         pActor.current_tile, candidate.current_tile);

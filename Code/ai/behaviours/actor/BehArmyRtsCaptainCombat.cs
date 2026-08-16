@@ -117,15 +117,15 @@ namespace AncientWarfare3.ai.behaviours.actor
             Actor target = pActor.beh_actor_target?.a;
             if (!ArmyRtsControllerService.IsValidMemberCombatTarget(
                     pActor, target))
+            {
                 target = ArmyRtsControllerService.FindMemberCombatTarget(
                     pActor);
-
-            if (!ArmyRtsControllerService.IsValidMemberCombatTarget(
-                    pActor, target))
-            {
-                pActor.beh_actor_target = null;
-                pActor.makeWait(0.15f);
-                return BehResult.RepeatStep;
+                if (target == null)
+                {
+                    pActor.beh_actor_target = null;
+                    pActor.makeWait(0.15f);
+                    return BehResult.RepeatStep;
+                }
             }
 
             pActor.beh_actor_target = target;
