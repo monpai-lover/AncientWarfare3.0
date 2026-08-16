@@ -1,0 +1,25 @@
+using System;
+using System.IO;
+
+internal static class XiaBanditHeadRulesTests
+{
+    internal static void Run()
+    {
+        string root = Environment.CurrentDirectory;
+        string source = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "presentation", "XiaBanditHeadRules.cs"));
+        True(source.Contains("HeadDirectory = \"heads_bandit\"",
+                StringComparison.Ordinal),
+            "Xia bandit actors use the dedicated head directory");
+        True(source.Contains("HeadCount = 5", StringComparison.Ordinal),
+            "the dedicated bandit head set has five variants");
+        True(source.Contains("pBandit || pSynthetic",
+                StringComparison.Ordinal),
+            "bandit and synthetic levy actors share the dedicated heads");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+}

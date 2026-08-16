@@ -242,6 +242,10 @@ namespace AncientWarfare3.core.schools
                     "Historical school async cleanup failed: key=" +
                     pOperationKey + " error=" + error.Message);
             }
+            if (pEntry?.Operation is
+                    IHistoricalSchoolRetainedCleanFailure retained &&
+                retained.RetainsPendingAfterCleanFailure)
+                return;
             ModClass.LogWarning("Historical school async operation retired: key=" +
                                 pOperationKey + " reason=" + (pReason ?? ""));
         }

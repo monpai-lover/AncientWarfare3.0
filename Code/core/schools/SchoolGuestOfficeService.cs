@@ -505,6 +505,7 @@ namespace AncientWarfare3.core.schools
         {
             if (pPending == null) return true;
             if (pPending.PersistenceCleanFailure) return true;
+            if (pPending.EndSuperseded) return true;
             if (pPending.EndExpectedAffiliation != null)
                 return TryProcessPendingEnd(pPending);
             Actor actor = FindActor(pPending.ActorId);
@@ -773,6 +774,18 @@ namespace AncientWarfare3.core.schools
                 : HistoricalSchoolTeachingPersistenceOutcome.Unknown;
         }
 
+        private static HistoricalSchoolTeachingPersistenceOutcome
+            GuestEndPreparationOutcome(
+                GuestOfficeEndPreparationResult pPreparation)
+        {
+            if (pPreparation?.Decision ==
+                    GuestOfficeEndPreparationDecision.AlreadyEnded ||
+                pPreparation?.Decision ==
+                    GuestOfficeEndPreparationDecision.Superseded)
+                return HistoricalSchoolTeachingPersistenceOutcome.Replayed;
+            return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+        }
+
         private static HistoricalSchoolAffiliationSnapshot CopyAffiliation(
             HistoricalSchoolAffiliationSnapshot pAffiliation)
         {
@@ -849,7 +862,8 @@ namespace AncientWarfare3.core.schools
         }
 
         private sealed class GuestEndWriteOperation : IHistoricalSchoolWriteOperation,
-            IHistoricalSchoolAsyncWriteOperation
+            IHistoricalSchoolAsyncWriteOperation,
+            IHistoricalSchoolRetainedCleanFailure
         {
             private readonly PendingGuestOffice _pending;
             private readonly HistoricalSchoolAffiliationSnapshot
@@ -861,8 +875,10 @@ namespace AncientWarfare3.core.schools
             private readonly string _schoolId;
             private readonly GuestEndWriteResult _backgroundResult =
                 new GuestEndWriteResult();
+            private GuestOfficeEndPreparationResult _preparation;
             private GuestOfficeEndRequest _request;
             private GuestOfficeEndResult _result;
+            private bool _retainedAfterCleanFailure;
 
             public GuestEndWriteOperation(PendingGuestOffice pPending)
             {
@@ -881,16 +897,24 @@ namespace AncientWarfare3.core.schools
                 (_expectedAffiliation?.ServiceKingdomId ?? -1L) + "|office=" +
                 _officeId + "|year=" + _endedYear + "|reason=" + _endReason;
 
+            public bool RetainsPendingAfterCleanFailure =>
+                _retainedAfterCleanFailure;
+
             public HistoricalSchoolTeachingPersistenceOutcome Execute(
                 System.Data.SQLite.SQLiteConnection pDb,
                 System.Data.SQLite.SQLiteTransaction pTransaction)
             {
-                _request = _pending.EndRequest ??
-                    GuestOfficeEndPersistence.PrepareEndInTransaction(pDb,
+                _request = _pending.EndRequest;
+                if (_request == null)
+                {
+                    _preparation = GuestOfficeEndPersistence.
+                        PrepareEndAttemptInTransaction(pDb,
                         pTransaction, _expectedAffiliation, _endReason,
                         _endedYear, _endedTime, _officeId, _schoolId);
+                    _request = _preparation.Request;
+                }
                 if (_request == null)
-                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+                    return GuestEndPreparationOutcome(_preparation);
                 _result = GuestOfficeEndPersistence.EndInTransaction(pDb,
                     pTransaction, _request);
                 return WriteOutcome(_result?.Persistence.Outcome ??
@@ -907,6 +931,29 @@ namespace AncientWarfare3.core.schools
 
             public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
             {
+                _preparation = _backgroundResult.Preparation ?? _preparation;
+                if (_preparation?.Decision ==
+                    GuestOfficeEndPreparationDecision.Superseded)
+                {
+                    _pending.MarkEndSuperseded();
+                    ReleasePendingWrite(_pending);
+                    return;
+                }
+                if (_preparation?.Decision ==
+                    GuestOfficeEndPreparationDecision.AlreadyEnded)
+                {
+                    if (_preparation.CurrentAffiliation == null)
+                        _pending.PersistenceCleanFailure = true;
+                    else
+                        _pending.CommittedEndResult = new GuestOfficeEndResult(
+                            GuestOfficePersistenceOutcome.Committed,
+                            _preparation.CurrentAffiliation,
+                            OfficialCareerPersistence.ResultForClose(null,
+                                OfficialCareerPersistenceOutcome.Committed),
+                            pRecoveredExisting: true);
+                    ReleasePendingWrite(_pending);
+                    return;
+                }
                 _request = _backgroundResult.Request ?? _request;
                 _result = _backgroundResult.Result ?? _result;
                 _pending.EndRequest = _request;
@@ -921,6 +968,17 @@ namespace AncientWarfare3.core.schools
 
             public void OnCleanFailure()
             {
+                _preparation = _backgroundResult.Preparation ?? _preparation;
+                if (_preparation == null ||
+                    GuestOfficeEndRetryRules.RetainPending(
+                        _preparation.Decision))
+                {
+                    _pending.RefreshEndExpectation(
+                        _preparation?.CurrentAffiliation);
+                    DeferPendingEndWrite(_pending, _preparation);
+                    _retainedAfterCleanFailure = true;
+                    return;
+                }
                 _pending.PersistenceCleanFailure = true;
                 ReleasePendingWrite(_pending);
             }
@@ -928,6 +986,7 @@ namespace AncientWarfare3.core.schools
 
         private sealed class GuestEndWriteResult
         {
+            public GuestOfficeEndPreparationResult Preparation;
             public GuestOfficeEndRequest Request;
             public GuestOfficeEndResult Result;
         }
@@ -963,12 +1022,14 @@ namespace AncientWarfare3.core.schools
                 System.Data.SQLite.SQLiteConnection pDb,
                 System.Data.SQLite.SQLiteTransaction pTransaction)
             {
-                GuestOfficeEndRequest request =
-                    GuestOfficeEndPersistence.PrepareEndInTransaction(pDb,
+                GuestOfficeEndPreparationResult preparation =
+                    GuestOfficeEndPersistence.PrepareEndAttemptInTransaction(pDb,
                         pTransaction, _expectedAffiliation, _endReason,
                         _endedYear, _endedTime, _officeId, _schoolId);
+                _result.Preparation = preparation;
+                GuestOfficeEndRequest request = preparation.Request;
                 if (request == null)
-                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+                    return GuestEndPreparationOutcome(preparation);
                 GuestOfficeEndResult result =
                     GuestOfficeEndPersistence.EndInTransaction(pDb, pTransaction,
                         request);
@@ -986,6 +1047,27 @@ namespace AncientWarfare3.core.schools
             pPending.PersistenceQueued = false;
             pPending.Attempts = 0;
             pPending.ReadyFrame = 0;
+        }
+
+        private static void DeferPendingEndWrite(PendingGuestOffice pPending,
+            GuestOfficeEndPreparationResult pPreparation)
+        {
+            if (pPending == null) return;
+            pPending.PersistenceQueued = false;
+            pPending.Attempts = Math.Min(30, pPending.Attempts + 1);
+            pPending.ReadyFrame = _pendingFrame +
+                GuestOfficePendingRules.RetryDelayFrames(pPending.Attempts,
+                    MaxPendingGuestRetryBackoffFrames);
+            if (!GuestOfficeEndRetryRules.ShouldLogAttempt(pPending.Attempts))
+                return;
+            ModClass.LogWarning("Guest office end deferred: actor=" +
+                                pPending.ActorId + " host=" +
+                                pPending.HostKingdomId + " office=" +
+                                pPending.OfficeId + " active_careers=" +
+                                (pPreparation?.ActiveCentralCareerCount ?? -1) +
+                                " reason=" +
+                                (pPreparation?.ConflictReason ??
+                                 "write_clean_failure"));
         }
 
         private static void RecordSupplementalGuestHistory(Actor pActor, Kingdom pHost,
@@ -1387,6 +1469,7 @@ namespace AncientWarfare3.core.schools
             public bool StatusApplied { get; set; }
             public bool PersistenceQueued { get; set; }
             public bool PersistenceCleanFailure { get; set; }
+            public bool EndSuperseded { get; private set; }
             public int Attempts { get; set; }
             public int ReadyFrame { get; set; }
 
@@ -1416,6 +1499,25 @@ namespace AncientWarfare3.core.schools
                 Attempts = 0;
                 ReadyFrame = 0;
                 return true;
+            }
+
+            public void RefreshEndExpectation(
+                HistoricalSchoolAffiliationSnapshot pCurrent)
+            {
+                if (pCurrent == null || pCurrent.ActorId != ActorId ||
+                    pCurrent.LifecycleState !=
+                    HistoricalSchoolLifecycleState.Serving)
+                    return;
+                EndExpectedAffiliation = pCurrent;
+                HostKingdomId = pCurrent.ServiceKingdomId;
+                CityId = pCurrent.ResidenceCityId;
+                EndRequest = null;
+                CommittedEndResult = null;
+            }
+
+            public void MarkEndSuperseded()
+            {
+                EndSuperseded = true;
             }
 
             public static PendingGuestOffice ForStart(GuestOfficeStartRequest pRequest,

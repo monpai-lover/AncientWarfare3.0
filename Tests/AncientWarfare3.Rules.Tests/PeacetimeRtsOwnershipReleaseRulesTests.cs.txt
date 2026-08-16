@@ -1,0 +1,64 @@
+using System;
+using System.IO;
+
+internal static class PeacetimeRtsOwnershipReleaseRulesTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string bridge = Read(root, "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs");
+        string march = Read(root, "Code", "core", "lineage",
+            "AWArmyMarchService.cs");
+        string priority = Read(root, "Code", "core", "performance",
+            "ArmyMilitaryMovementPriorityIndex.cs");
+
+        string unregister = Slice(priority,
+            "internal static void Unregister(long actorId)",
+            "internal static void CopySnapshot(");
+        Assert(unregister.Contains("ProcessedThisCycle.Remove(actorId)",
+                   StringComparison.Ordinal) &&
+               unregister.Contains("VanillaTaxiActors.Remove(actorId)",
+                   StringComparison.Ordinal) &&
+               !unregister.Contains("if (!Entries.Remove(actorId)) return",
+                   StringComparison.Ordinal),
+            "RTS unregister must release every actor-level P0 movement mark");
+
+        string armyMarchGate = Slice(bridge,
+            "private static bool HasArmyMarchState(Actor pActor)",
+            "public static bool ShouldUseCustomSmoothMovement(");
+        Assert(armyMarchGate.Contains(
+                   "AWArmyMarchService.HasSerialMarchState(pActor)",
+                   StringComparison.Ordinal) &&
+               !armyMarchGate.Contains("pActor?.army?.data != null",
+                   StringComparison.Ordinal),
+            "Army membership alone must not divert peaceful custom paths into the serial RTS path");
+        Assert(march.Contains(
+                "public static bool HasSerialMarchState(Actor pActor)",
+                StringComparison.Ordinal),
+            "the shared march service must expose real serial ownership");
+    }
+
+    private static string Read(string root, params string[] parts)
+    {
+        string path = root;
+        for (int i = 0; i < parts.Length; i++)
+            path = Path.Combine(path, parts[i]);
+        return File.ReadAllText(path);
+    }
+
+    private static string Slice(string source, string start, string end)
+    {
+        int startIndex = source.IndexOf(start, StringComparison.Ordinal);
+        int endIndex = source.IndexOf(end, startIndex >= 0 ? startIndex : 0,
+            StringComparison.Ordinal);
+        return startIndex >= 0 && endIndex > startIndex
+            ? source.Substring(startIndex, endIndex - startIndex)
+            : string.Empty;
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

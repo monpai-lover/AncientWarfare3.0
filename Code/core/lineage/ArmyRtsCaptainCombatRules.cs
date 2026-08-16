@@ -28,7 +28,7 @@ namespace AncientWarfare3.core.lineage
             bool hasValidCombatTarget)
         {
             return missionActive && !actorIsCaptain &&
-                   (fieldCombatReleased || hasValidCombatTarget);
+                   hasValidCombatTarget;
         }
 
         public static bool ShouldSuppressVanillaMemberFight(
@@ -36,13 +36,13 @@ namespace AncientWarfare3.core.lineage
             bool fieldCombatReleased, bool hasValidCombatTarget)
         {
             return missionActive && !actorIsCaptain &&
-                   !fieldCombatReleased && !hasValidCombatTarget;
+                   !hasValidCombatTarget;
         }
 
         public static bool ShouldRestoreVanillaMemberFollow(
             bool suppressVanillaFight, bool isDedicatedMemberCombatTask)
         {
-            return suppressVanillaFight && !isDedicatedMemberCombatTask;
+            return suppressVanillaFight && isDedicatedMemberCombatTask;
         }
 
         public static bool ShouldUseSiegeCombatTask(

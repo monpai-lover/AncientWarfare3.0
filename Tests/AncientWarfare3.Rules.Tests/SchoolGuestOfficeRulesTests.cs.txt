@@ -11,6 +11,8 @@ internal static class SchoolGuestOfficeRulesTests
         ActingFallbackWinsWhenNoFormalCandidateExists();
         QueuedAppointmentsReserveTheirOfficeImmediately();
         MissingCareerRecoveryOnlyClosesZeroActiveRows();
+        GuestEndPreparationClassifiesDurableState();
+        GuestEndRetryDiagnosticsAreBounded();
     }
 
     private static void EducatedResidentCanEnterGuestServiceRegardlessOfHomeRealm()
@@ -100,6 +102,48 @@ internal static class SchoolGuestOfficeRulesTests
             "one active central career must use the ordinary atomic guest close");
         False(GuestOfficeEndRecoveryRules.CanCloseMissingCareer(2),
             "multiple active central careers are a conflict, not a recoverable orphan");
+    }
+
+    private static void GuestEndPreparationClassifiesDurableState()
+    {
+        Equal(GuestOfficeEndPreparationDecision.CloseCareerAndAffiliation,
+            GuestOfficeEndPreparationRules.Resolve(true, true, false,
+                true, 1, true),
+            "one matching career closes atomically");
+        Equal(GuestOfficeEndPreparationDecision.CloseOrphanAffiliation,
+            GuestOfficeEndPreparationRules.Resolve(true, true, false,
+                true, 0, false),
+            "zero careers closes the orphan affiliation");
+        Equal(GuestOfficeEndPreparationDecision.AlreadyEnded,
+            GuestOfficeEndPreparationRules.Resolve(true, false, true,
+                true, 0, false),
+            "a closed affiliation resolves idempotently");
+        Equal(GuestOfficeEndPreparationDecision.Superseded,
+            GuestOfficeEndPreparationRules.Resolve(true, true, false,
+                false, 1, true),
+            "a newer service identity is preserved");
+        Equal(GuestOfficeEndPreparationDecision.RetryConflict,
+            GuestOfficeEndPreparationRules.Resolve(true, true, false,
+                true, 2, false),
+            "multiple active careers remain pending");
+        Equal(GuestOfficeEndPreparationDecision.RetryConflict,
+            GuestOfficeEndPreparationRules.Resolve(true, true, false,
+                true, 1, false),
+            "a mismatching career remains pending");
+    }
+
+    private static void GuestEndRetryDiagnosticsAreBounded()
+    {
+        True(GuestOfficeEndRetryRules.RetainPending(
+                GuestOfficeEndPreparationDecision.RetryConflict),
+            "retry conflicts retain pending state");
+        True(GuestOfficeEndRetryRules.RetainPending(
+                GuestOfficeEndPreparationDecision.CloseCareerAndAffiliation),
+            "a rejected classified close retains pending state");
+        False(GuestOfficeEndRetryRules.ShouldLogAttempt(3),
+            "ordinary retries do not spam diagnostics");
+        True(GuestOfficeEndRetryRules.ShouldLogAttempt(4),
+            "power-of-two retries expose persistent conflicts");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

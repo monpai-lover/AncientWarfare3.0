@@ -1,0 +1,210 @@
+using System;
+using System.IO;
+using System.Reflection;
+using AncientWarfare3.core.lineage;
+
+internal static class PeacetimeCitizenJobRulesTests
+{
+    internal static void Run()
+    {
+        MethodInfo rule = typeof(StandingArmyRules).GetMethod(
+            "ShouldAssignCitizenJob",
+            BindingFlags.Public | BindingFlags.NonPublic |
+            BindingFlags.Static);
+        Assert(rule != null,
+            "standing-army rules must expose peaceful citizen-job eligibility");
+
+        Assert(Evaluate(rule, true, true, true, false, false, false,
+                false, false, false),
+            "a peaceful ordinary warrior with a city must use citizen");
+        Assert(!Evaluate(rule, true, true, true, true, false, false,
+                false, false, false),
+            "an active RTS mission must keep military job ownership");
+        Assert(!Evaluate(rule, true, true, true, false, true, false,
+                false, false, false),
+            "an active return must keep military job ownership");
+        Assert(!Evaluate(rule, true, true, true, false, false, true,
+                false, false, false),
+            "a military emergency must reject citizen");
+        Assert(!Evaluate(rule, true, true, true, false, false, false,
+                true, false, false),
+            "combat must reject citizen");
+        Assert(!Evaluate(rule, true, true, true, false, false, false,
+                false, true, false),
+            "a city attack order must reject citizen");
+        Assert(!Evaluate(rule, true, true, true, false, false, false,
+                false, false, true),
+            "special military ownership must reject citizen");
+        Assert(!Evaluate(rule, true, false, true, false, false, false,
+                false, false, false),
+            "a warrior without a valid city must reject citizen");
+        Assert(!Evaluate(rule, true, true, false, false, false, false,
+                false, false, false),
+            "a warrior without an ordinary army must reject citizen");
+
+        MethodInfo staleAttackOrderRule = typeof(StandingArmyRules).GetMethod(
+            "ShouldClearPostReturnAttackOrder",
+            BindingFlags.Public | BindingFlags.NonPublic |
+            BindingFlags.Static);
+        Assert(staleAttackOrderRule != null,
+            "standing-army rules must expose stale attack-order cleanup");
+        Assert((bool)staleAttackOrderRule.Invoke(null, new object[]
+            { false, false, true, false, false }),
+            "a missing target city must clear the post-return attack order");
+        Assert((bool)staleAttackOrderRule.Invoke(null, new object[]
+            { true, true, true, false, true }),
+            "a former enemy must clear the post-return attack order");
+        Assert(!(bool)staleAttackOrderRule.Invoke(null, new object[]
+            { true, true, true, true, true }),
+            "a live reachable enemy target must retain its attack order");
+
+        MethodInfo releaseActorRule = typeof(StandingArmyRules).GetMethod(
+            "ShouldReleasePostReturnActor",
+            BindingFlags.Public | BindingFlags.NonPublic |
+            BindingFlags.Static);
+        Assert(releaseActorRule != null,
+            "standing-army rules must expose post-return actor deduplication");
+        Assert((bool)releaseActorRule.Invoke(null, new object[]
+            { true, false }),
+            "a valid unseen actor must be released after return");
+        Assert(!(bool)releaseActorRule.Invoke(null, new object[]
+            { true, true }),
+            "an already released actor must not be released twice");
+        Assert(!(bool)releaseActorRule.Invoke(null, new object[]
+            { false, false }),
+            "an invalid actor must not enter post-return release");
+
+        string root = Directory.GetCurrentDirectory();
+        string content = Read(root, "Code", "content", "ArmyRtsContent.cs");
+        string service = Read(root, "Code", "core", "lineage",
+            "StandingArmyPeacetimeService.cs");
+        string controller = Read(root, "Code", "core", "lineage",
+            "ArmyRtsControllerService.cs");
+        string returnService = Read(root, "Code", "core", "lineage",
+            "WarArmyReturnService.cs");
+        string enlistPatch = Read(root, "Code", "patch",
+            "AW_EnlistPatch.cs");
+
+        Assert(content.Contains("CitizenJobId = \"citizen\"",
+                   StringComparison.Ordinal) &&
+               content.Contains("id = CitizenJobId",
+                   StringComparison.Ordinal) &&
+               content.Contains("job.addTask(\"make_decision\")",
+                   StringComparison.Ordinal),
+            "ArmyRtsContent must register literal citizen with make_decision");
+        Assert(service.Contains(
+                   "StandingArmyRules.ShouldAssignCitizenJob(",
+                   StringComparison.Ordinal) &&
+               service.Contains(
+                   "pActor.ai.setJob(ArmyRtsContent.CitizenJobId)",
+                   StringComparison.Ordinal) &&
+               service.Contains("pActor._beh_skip = false",
+                   StringComparison.Ordinal) &&
+               service.Contains("pActor._update_done = false",
+                   StringComparison.Ordinal) &&
+               service.Contains("pActor.b6_0_updateDecision(0f)",
+                   StringComparison.Ordinal) &&
+               service.Contains("if (pActor.ai.job == null)",
+                   StringComparison.Ordinal),
+            "peaceful refresh must assign citizen and immediately resume decisions");
+        Assert(service.Contains(
+                   "return ArmyRtsContent.CitizenJobId",
+                   StringComparison.Ordinal) &&
+               enlistPatch.Contains(
+                   "StandingArmyPeacetimeService.GetJob(__instance)",
+                   StringComparison.Ordinal),
+            "Actor.getNextJob must preserve citizen ownership in peace");
+        string refreshAfterReturnBody = Slice(service,
+            "public static void RefreshAfterReturn(Actor pActor)",
+            "private static bool ShouldAssignCitizenJob(Actor pActor)");
+        int cleanupIndex = refreshAfterReturnBody.IndexOf(
+            "ReleasePostReturnMovementOwnership(pActor)",
+            StringComparison.Ordinal);
+        int refreshIndex = refreshAfterReturnBody.IndexOf(
+            "RefreshJob(pActor)", StringComparison.Ordinal);
+        Assert(cleanupIndex >= 0 && refreshIndex > cleanupIndex,
+            "confirmed return must release stale movement ownership before strict peaceful refresh");
+        Assert(service.Contains(
+                   "StandingArmyRules.ShouldClearPostReturnAttackOrder(",
+                   StringComparison.Ordinal) &&
+               service.Contains("city.target_attack_city = null",
+                   StringComparison.Ordinal) &&
+               service.Contains("city.target_attack_zone = null",
+                   StringComparison.Ordinal),
+            "post-return cleanup must clear only invalid original city attack orders");
+        Assert(service.Contains("request.embarkToBoat(pActor)",
+                   StringComparison.Ordinal) &&
+               service.Contains("request.countActors() == 0",
+                   StringComparison.Ordinal) &&
+               service.Contains("TaxiManager.cancelRequest(request)",
+                   StringComparison.Ordinal),
+            "post-return cleanup must remove only the returned actor from shared taxi ownership");
+
+        string releaseActorsBody = Slice(controller,
+            "private static void ReleaseAfterReturnActors(Army pArmy)",
+            "private static void ReleaseAfterReturnActor(Actor pActor)");
+        Assert(releaseActorsBody.Contains(
+                   "HashSet<long> releasedActorIds",
+                   StringComparison.Ordinal) &&
+               releaseActorsBody.Contains(
+                   "StandingArmyRules.ShouldReleasePostReturnActor(",
+                   StringComparison.Ordinal) &&
+               releaseActorsBody.Contains("releasedActorIds.Add(",
+                   StringComparison.Ordinal),
+            "RTS return completion must release each actor ID only once");
+
+        string postReturnBody = Slice(controller,
+            "private static void ReleaseAfterReturnActor(Actor pActor)",
+            "public static void Invalidate(long pArmyId)");
+        Assert(postReturnBody.Contains(
+                "StandingArmyPeacetimeService.RefreshAfterReturn(pActor)",
+                StringComparison.Ordinal),
+            "RTS return completion must use centralized peaceful refresh");
+
+        string returnReleaseBody = Slice(returnService,
+            "private static void ReleaseReturnActor(Actor pActor)",
+            "private static void ClearAttackTarget(Actor pActor)");
+        Assert(returnReleaseBody.Contains(
+                   "pActor.ai.clearJob()", StringComparison.Ordinal) &&
+               returnReleaseBody.Contains(
+                   "StandingArmyPeacetimeService.RefreshJob(pActor)",
+                   StringComparison.Ordinal),
+            "return-job release must use centralized peaceful refresh");
+    }
+
+    private static bool Evaluate(MethodInfo pRule,
+        bool actorValid, bool hasValidCity, bool ordinaryArmy,
+        bool activeRtsMission, bool activeReturn, bool militaryEmergency,
+        bool inCombat, bool cityAttackOrder, bool specialMilitaryState)
+    {
+        return (bool)pRule.Invoke(null, new object[]
+        {
+            actorValid, hasValidCity, ordinaryArmy, activeRtsMission,
+            activeReturn, militaryEmergency, inCombat, cityAttackOrder,
+            specialMilitaryState
+        });
+    }
+
+    private static string Read(string root, params string[] parts)
+    {
+        string path = root;
+        for (int i = 0; i < parts.Length; i++)
+            path = Path.Combine(path, parts[i]);
+        return File.ReadAllText(path);
+    }
+
+    private static string Slice(string source, string start, string end)
+    {
+        int startIndex = source.IndexOf(start, StringComparison.Ordinal);
+        int endIndex = source.IndexOf(end, startIndex >= 0 ? startIndex : 0,
+            StringComparison.Ordinal);
+        return startIndex >= 0 && endIndex > startIndex
+            ? source.Substring(startIndex, endIndex - startIndex)
+            : string.Empty;
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

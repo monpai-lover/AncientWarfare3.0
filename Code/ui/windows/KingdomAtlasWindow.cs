@@ -60,6 +60,7 @@ namespace AncientWarfare3.ui.windows
         {
             internal string Text = "";
             internal Color Color = Color.white;
+            internal float Width = 17f;
         }
 
         internal static void Open(long pKingdomId)
@@ -755,25 +756,34 @@ namespace AncientWarfare3.ui.windows
             ClearChronicleColumns();
             if (_chronicleViewport == null || _chronicleContent == null ||
                 pNode?.Event == null) return;
-            const float columnWidth = 17f;
+            // Chinese keeps the traditional vertical atlas layout. Latin
+            // text uses wider horizontal columns so fallback English stays
+            // readable instead of becoming one character per line.
             const float columnPadding = 6f;
+            const int charactersPerLine = 16;
             int maximumRows = Mathf.Max(1, Mathf.FloorToInt(
                 Mathf.Max(12f, _chronicleViewport.rect.height - 12f) / 12f));
             var columns = new List<ChronicleDisplayColumn>();
             List<string> entityNames = BuildChronicleEntityNames(pNode);
             AppendChronicleColumns(columns, pNode.Event.OldKingdomName,
-                pNode.OldChronicle, maximumRows, ResolveChronicleColor(pNode,
+                pNode.OldChronicle, maximumRows, charactersPerLine,
+                ResolveChronicleColor(pNode,
                     pNode.Event.OldKingdomId,
                     pNode.Event.OldKingdomColor), entityNames);
             AppendChronicleColumns(columns, pNode.Event.NewKingdomName,
-                pNode.NewChronicle, maximumRows, ResolveChronicleColor(pNode,
+                pNode.NewChronicle, maximumRows, charactersPerLine,
+                ResolveChronicleColor(pNode,
                     pNode.Event.NewKingdomId,
                     pNode.Event.NewKingdomColor), entityNames);
 
+            float columnsWidth = 0f;
+            for (int index = 0; index < columns.Count; index++)
+                columnsWidth += Mathf.Max(17f, columns[index].Width);
             float contentWidth = Mathf.Max(_chronicleViewport.rect.width,
-                columnPadding * 2f + columns.Count * columnWidth);
+                columnPadding * 2f + columnsWidth);
             _chronicleContent.sizeDelta = new Vector2(contentWidth,
                 Mathf.Max(1f, _chronicleViewport.rect.height));
+            float right = contentWidth - columnPadding;
             for (int index = 0; index < columns.Count; index++)
             {
                 var columnObject = new GameObject("ChronicleColumn",
@@ -789,11 +799,12 @@ namespace AncientWarfare3.ui.windows
                 column.verticalOverflow = VerticalWrapMode.Overflow;
                 column.raycastTarget = false;
                 column.text = columns[index].Text;
-                float x = contentWidth - columnPadding -
-                    (index + 1) * columnWidth;
-                SetRect(column.rectTransform, x, columnPadding,
+                float columnWidth = Mathf.Max(17f, columns[index].Width);
+                right -= columnWidth;
+                SetRect(column.rectTransform, right, columnPadding,
                     columnWidth, Mathf.Max(1f,
                         _chronicleViewport.rect.height - 12f));
+                right -= 2f;
                 _chronicleColumns.Add(columnObject);
             }
             Canvas.ForceUpdateCanvases();
@@ -804,25 +815,53 @@ namespace AncientWarfare3.ui.windows
         private static void AppendChronicleColumns(
             List<ChronicleDisplayColumn> pColumns,
             string pName, IReadOnlyList<KingdomAtlasChronicleRow> pRows,
-            int pMaximumRows, Color pColor, IReadOnlyList<string> pEntityNames)
+            int pMaximumRows, int pCharactersPerLine, Color pColor,
+            IReadOnlyList<string> pEntityNames)
         {
-            AppendVerticalColumns(pColumns, pName, pMaximumRows, pColor,
-                pEntityNames);
+            AppendChronicleText(pColumns, pName, pMaximumRows,
+                pCharactersPerLine, pColor, pEntityNames);
             if (pRows != null)
                 for (int index = Math.Max(0, pRows.Count - 12);
                      index < pRows.Count; index++)
                 {
                     KingdomAtlasChronicleRow row = pRows[index];
-                    AppendVerticalColumns(pColumns,
+                    AppendChronicleText(pColumns,
                         (row.YearText ?? "") + " " +
-                        (row.Content ?? ""), pMaximumRows, pColor,
-                        pEntityNames);
+                        (row.Content ?? ""), pMaximumRows,
+                        pCharactersPerLine, pColor, pEntityNames);
                 }
             pColumns.Add(new ChronicleDisplayColumn
             {
                 Text = " ",
-                Color = pColor
+                Color = pColor,
+                Width = 17f
             });
+        }
+
+        private static void AppendChronicleText(
+            List<ChronicleDisplayColumn> pColumns,
+            string pText, int pMaximumRows, int pCharactersPerLine,
+            Color pColor, IReadOnlyList<string> pEntityNames)
+        {
+            if (ContainsNonChineseText(pText))
+                AppendHorizontalColumns(pColumns, pText, pMaximumRows,
+                    pCharactersPerLine, pColor, pEntityNames);
+            else
+                AppendVerticalColumns(pColumns, pText, pMaximumRows, pColor,
+                    pEntityNames);
+        }
+
+        private static bool ContainsNonChineseText(string pText)
+        {
+            if (string.IsNullOrEmpty(pText)) return false;
+            for (int index = 0; index < pText.Length; index++)
+            {
+                char character = pText[index];
+                if (character >= '\u4e00' && character <= '\u9fff') continue;
+                if (character >= 'a' && character <= 'z' ||
+                    character >= 'A' && character <= 'Z') return true;
+            }
+            return false;
         }
 
         private static void AppendVerticalColumns(
@@ -843,16 +882,16 @@ namespace AncientWarfare3.ui.windows
                     if (rows > 0)
                     {
                         AddChronicleColumn(pColumns, column, pColor,
-                            pEntityNames);
+                            pEntityNames, 17f);
                         column.Length = 0;
                         rows = 0;
                     }
                     continue;
                 }
-                if (rows >= pMaximumRows)
+                if (rows >= Math.Max(1, pMaximumRows))
                 {
                     AddChronicleColumn(pColumns, column, pColor,
-                        pEntityNames);
+                        pEntityNames, 17f);
                     column.Length = 0;
                     rows = 0;
                 }
@@ -861,19 +900,72 @@ namespace AncientWarfare3.ui.windows
                 rows++;
             }
             if (rows > 0) AddChronicleColumn(pColumns, column, pColor,
-                pEntityNames);
+                pEntityNames, 17f);
+        }
+
+        private static void AppendHorizontalColumns(
+            List<ChronicleDisplayColumn> pColumns,
+            string pText, int pMaximumRows, int pCharactersPerLine,
+            Color pColor,
+            IReadOnlyList<string> pEntityNames)
+        {
+            if (pColumns == null || string.IsNullOrWhiteSpace(pText)) return;
+            pText = KingdomAtlasRules.SanitizeChronicleDisplayText(pText);
+            var column = new StringBuilder();
+            var line = new StringBuilder();
+            int rows = 0;
+
+            Action flushLine = () =>
+            {
+                if (line.Length == 0) return;
+                if (rows > 0) column.Append('\n');
+                column.Append(line);
+                line.Length = 0;
+                rows++;
+            };
+
+            Action flushColumn = () =>
+            {
+                flushLine();
+                if (column.Length == 0) return;
+                AddChronicleColumn(pColumns, column, pColor, pEntityNames,
+                    150f);
+                column.Length = 0;
+                rows = 0;
+            };
+
+            for (int index = 0; index < pText.Length; index++)
+            {
+                char character = pText[index];
+                if (character == '\r') continue;
+                if (character == '\n')
+                {
+                    flushLine();
+                    continue;
+                }
+                if (line.Length >= Math.Max(1, pCharactersPerLine))
+                    flushLine();
+                if (rows >= Math.Max(1, pMaximumRows))
+                {
+                    flushColumn();
+                }
+                line.Append(character);
+            }
+            flushColumn();
         }
 
         private static void AddChronicleColumn(
             List<ChronicleDisplayColumn> pColumns, StringBuilder pText,
-            Color pColor, IReadOnlyList<string> pEntityNames)
+            Color pColor, IReadOnlyList<string> pEntityNames,
+            float pWidth)
         {
             pColumns.Add(new ChronicleDisplayColumn
             {
                 Text = KingdomAtlasRules.ColorizeChronicleEntities(
                     pText.ToString(), pEntityNames,
                     ColorUtility.ToHtmlStringRGB(pColor)),
-                Color = pColor
+                Color = pColor,
+                Width = pWidth
             });
         }
 

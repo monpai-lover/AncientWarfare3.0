@@ -1953,6 +1953,9 @@ namespace AncientWarfare3.core.court
                 Actor actor = World.world?.units?.get(row.actor_id);
                 if (IsValidActiveOfficeActor(actor, pKingdom, row.layer,
                         row.office_id)) continue;
+                if (TryRestoreActiveOfficerProjection(actor) &&
+                    IsValidActiveOfficeActor(actor, pKingdom, row.layer,
+                        row.office_id)) continue;
                 CloseDurableOfficerRow(pKingdom, row, actor);
             }
         }
@@ -1964,6 +1967,9 @@ namespace AncientWarfare3.core.court
             if (row == null) return;
             Actor actor = World.world?.units?.get(row.actor_id);
             if (IsValidActiveOfficeActor(actor, pKingdom, row.layer,
+                    row.office_id)) return;
+            if (TryRestoreActiveOfficerProjection(actor) &&
+                IsValidActiveOfficeActor(actor, pKingdom, row.layer,
                     row.office_id)) return;
             CloseDurableOfficerRow(pKingdom, row, actor);
         }

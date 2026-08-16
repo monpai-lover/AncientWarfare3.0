@@ -33,6 +33,41 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
+        public static bool ShouldAssignCitizenJob(
+            bool actorValid,
+            bool hasValidCity,
+            bool ordinaryArmy,
+            bool activeRtsMission,
+            bool activeReturn,
+            bool militaryEmergency,
+            bool inCombat,
+            bool cityAttackOrder,
+            bool specialMilitaryState)
+        {
+            return actorValid && hasValidCity && ordinaryArmy &&
+                   !activeRtsMission && !activeReturn &&
+                   !militaryEmergency && !inCombat && !cityAttackOrder &&
+                   !specialMilitaryState;
+        }
+
+        public static bool ShouldClearPostReturnAttackOrder(
+            bool hasTargetCity,
+            bool targetAlive,
+            bool sourceHasWarriors,
+            bool targetStillEnemy,
+            bool targetReachable)
+        {
+            return !hasTargetCity || !targetAlive || !sourceHasWarriors ||
+                   !targetStillEnemy || !targetReachable;
+        }
+
+        public static bool ShouldReleasePostReturnActor(
+            bool actorValid,
+            bool alreadyReleased)
+        {
+            return actorValid && !alreadyReleased;
+        }
+
         public static bool ShouldReleaseLegacyPeacetimePatrol(
             string pJobId, string pTaskId)
         {

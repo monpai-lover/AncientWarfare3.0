@@ -9,6 +9,13 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="ArmyConquestReserveRulesTests.cs.txt" />
+    <Compile Include="PeacetimeCitizenJobRulesTests.cs.txt" />
+    <Compile Include="RtsMemberGeneralCombatRegressionTests.cs.txt" />
+    <Compile Include="ArmyRtsTransportP0RulesTests.cs.txt" />
+    <Compile Include="PeacetimeWarriorMovementRulesTests.cs.txt" />
+    <Compile Include="PeacetimeRtsOwnershipReleaseRulesTests.cs.txt" />
+    <Compile Include="WarriorDecisionAndCombatRegressionTests.cs.txt" />
     <Compile Include="PeasantRebelRouteRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelRouteRules.cs" Link="Production\PeasantRebelRouteRules.cs" />
     <Compile Include="PeasantRebelBanditStrongholdRulesTests.cs.txt" />
@@ -37,6 +44,7 @@
     <Compile Include="PeasantRebelOutlawNameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelOutlawNameRules.cs" Link="Production\PeasantRebelOutlawNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />
+    <Compile Include="XiaBanditHeadRulesTests.cs.txt" />
     <Compile Include="MilitaryGovernorateCourtRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\MilitaryGovernorateCourtRules.cs" Link="Production\MilitaryGovernorateCourtRules.cs" />
     <Compile Include="TestActorVisualRoleStubs.cs.txt" />
@@ -246,10 +254,13 @@
     <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />
     <Compile Include="ArmyRtsAsyncPlanningRulesTests.cs.txt" />
     <Compile Include="ActorKingdomSafetyRulesTests.cs.txt" />
+    <Compile Include="KingdomFounderSpeciesSafetyRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\KingdomFounderSpeciesSafetyRules.cs" Link="Production\KingdomFounderSpeciesSafetyRules.cs" />
     <Compile Include="ActorBirthAffiliationRulesTests.cs.txt" />
     <Compile Include="SchedulerLoadSafetyRulesTests.cs.txt" />
     <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
     <Compile Include="ArmyRtsSchedulingRulesTests.cs.txt" />
+    <Compile Include="OperationalPathCadenceRulesTests.cs.txt" />
     <Compile Include="ArmyRtsExecutionBudgetRulesTests.cs.txt" />
     <Compile Include="ArmyRtsFullRosterCursorRulesTests.cs.txt" />
     <Compile Include="ArmyRtsFirstOrderRecoveryRulesTests.cs.txt" />
@@ -521,6 +532,7 @@
     <Compile Include="..\..\Code\core\lineage\GarrisonSortieRules.cs" Link="Production\GarrisonSortieRules.cs" />
     <Compile Include="..\..\Code\core\lineage\GarrisonSortieService.cs" Link="Production\GarrisonSortieService.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRules.cs" Link="Production\ArmyRtsRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyConquestReserveRules.cs" Link="Production\ArmyConquestReserveRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsWarLifecycleRules.cs" Link="Production\ArmyRtsWarLifecycleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsWarDoctrineRules.cs" Link="Production\ArmyRtsWarDoctrineRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyAbstractBattleModels.cs" Link="Production\ArmyAbstractBattleModels.cs" />
@@ -591,6 +603,7 @@
     <Compile Include="..\..\Code\core\lineage\RoyalGuardMaintenanceRules.cs" Link="Production\RoyalGuardMaintenanceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalGuardActionRules.cs" Link="Production\RoyalGuardActionRules.cs" />
     <Compile Include="..\..\Code\core\performance\ArmyMilitaryMovementPriorityRules.cs" Link="Production\ArmyMilitaryMovementPriorityRules.cs" />
+    <Compile Include="..\..\Code\core\performance\ArmyRtsMovementCadenceRules.cs" Link="Production\ArmyRtsMovementCadenceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\StandingArmyRules.cs" Link="Production\StandingArmyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SoldierRetirementRules.cs" Link="Production\SoldierRetirementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ActiveMilitaryLifecycleRules.cs" Link="Production\ActiveMilitaryLifecycleRules.cs" />

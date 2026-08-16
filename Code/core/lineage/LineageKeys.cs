@@ -288,6 +288,12 @@ namespace AncientWarfare3.core.lineage
             "aw_army_replenishment_operation_start_time";
         public const string ARMY_REPLENISHMENT_OPERATION_DEADLINE_TIME =
             "aw_army_replenishment_operation_deadline_time";
+        public const string AW_ARMY_CONQUEST_RESERVE =
+            "aw_army_conquest_reserve";
+        public const string AW_ARMY_CONQUEST_RESERVE_CITY_IDS =
+            "aw_army_conquest_reserve_city_ids";
+        public const string AW_CITY_CONQUEST_RESERVE_LAST_WAR_ID =
+            "aw_city_conquest_reserve_last_war_id";
         public const string MANDATE_DECISION_CURRENT = "aw_mandate_decision_current";
         public const string MANDATE_DECISION_PROGRESS = "aw_mandate_decision_progress";
         public const string MANDATE_DECISION_LAST_YEAR = "aw_mandate_decision_last_year";

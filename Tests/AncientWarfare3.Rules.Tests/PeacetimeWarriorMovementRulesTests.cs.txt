@@ -1,0 +1,61 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class PeacetimeWarriorMovementRulesTests
+{
+    internal static void Run()
+    {
+        Assert(!ArmyRtsRules.ShouldOwnMilitaryActor(
+                authoritative: true,
+                actorValid: true,
+                currentProfessionIsWarrior: true,
+                hasArmyIndex: true,
+                armyMissionActive: false,
+                isCivilAuthority: false,
+                isCurrentCaptain: false),
+            "a peaceful warrior without an active RTS mission must not be RTS-owned");
+        Assert(ArmyRtsRuntimeModeRules.ShouldAllowVanillaDecisionEvaluation(
+                ArmyRtsMode.On, rtsOwnsActor: false),
+            "a peaceful warrior outside RTS ownership must retain vanilla decisions");
+
+        string root = Directory.GetCurrentDirectory();
+        string enlist = Read(root, "Code", "patch", "AW_EnlistPatch.cs");
+        string safety = Read(root, "Code", "patch", "AW_ArmySafetyPatch.cs");
+        string path = Read(root, "Code", "patch", "AW_GlobalPathfindingPatch.cs");
+        string bridge = Read(root, "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs");
+        string diagnostic = Read(root, "Code", "core", "lineage",
+            "PeacetimeWarriorMovementDiagnostic.cs");
+
+        Assert(enlist.Contains("PeacetimeWarriorMovementDiagnostic.Trace",
+                StringComparison.Ordinal),
+            "job selection must trace a stuck peaceful warrior");
+        Assert(safety.Contains("PeacetimeWarriorMovementDiagnostic.Trace",
+                StringComparison.Ordinal),
+            "decision evaluation must trace a stuck peaceful warrior");
+        Assert(path.Contains("PeacetimeWarriorMovementDiagnostic.Trace",
+                StringComparison.Ordinal),
+            "goTo and path consumption must trace a stuck peaceful warrior");
+        Assert(bridge.Contains("PeacetimeWarriorMovementDiagnostic.Trace",
+                StringComparison.Ordinal),
+            "custom path polling must trace a stuck peaceful warrior");
+        Assert(!diagnostic.Contains("cancelAllBeh(", StringComparison.Ordinal) &&
+               !diagnostic.Contains("stopMovement(", StringComparison.Ordinal) &&
+               !diagnostic.Contains(".setTask(", StringComparison.Ordinal) &&
+               !diagnostic.Contains(".goTo(", StringComparison.Ordinal),
+            "the peacetime diagnostic must be read-only");
+    }
+
+    private static string Read(string root, params string[] parts)
+    {
+        string path = root;
+        for (int i = 0; i < parts.Length; i++) path = Path.Combine(path, parts[i]);
+        return File.ReadAllText(path);
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

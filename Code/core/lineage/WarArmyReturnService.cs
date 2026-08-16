@@ -575,8 +575,8 @@ namespace AncientWarfare3.core.lineage
             if (returnOwnedJob)
             {
                 pActor.cancelAllBeh();
-                try { pActor.ai.setJob(pActor.getNextJob()); }
-                catch { pActor.ai.clearJob(); }
+                pActor.ai.clearJob();
+                StandingArmyPeacetimeService.RefreshJob(pActor);
             }
         }
 

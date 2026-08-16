@@ -103,33 +103,4 @@ namespace AncientWarfare3.ai.behaviours.actor
             return BehResult.Continue;
         }
     }
-
-    public sealed class BehArmyRtsMemberCombat : BehaviourActionActor
-    {
-        public override BehResult execute(Actor pActor)
-        {
-            if (!ArmyRtsControllerService.HasMemberCombatMission(pActor))
-            {
-                ArmyRtsControllerService.ReleaseActor(pActor);
-                return BehResult.Stop;
-            }
-
-            Actor target = pActor.beh_actor_target?.a;
-            if (!ArmyRtsControllerService.IsValidMemberCombatTarget(
-                    pActor, target))
-            {
-                target = ArmyRtsControllerService.FindMemberCombatTarget(
-                    pActor);
-                if (target == null)
-                {
-                    pActor.beh_actor_target = null;
-                    pActor.makeWait(0.15f);
-                    return BehResult.RepeatStep;
-                }
-            }
-
-            pActor.beh_actor_target = target;
-            return BehResult.Continue;
-        }
-    }
 }

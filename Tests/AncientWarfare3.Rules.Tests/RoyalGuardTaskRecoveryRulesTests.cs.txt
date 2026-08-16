@@ -57,9 +57,9 @@ internal static class RoyalGuardTaskRecoveryRulesTests
         Assert(priorityIndex.Contains("ResolveP0PriorityRank", StringComparison.Ordinal),
             "military P0 snapshot puts royal guards ahead of RTS followers");
         Assert(postRunner.Contains(
-                "RefreshRoyalGuardMilitaryPriorities(activeBatches);\n        ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);",
+                "RefreshRoyalGuardMilitaryPriorities(activeBatches);\n        ArmyRtsTransportService.RefreshMilitaryP0Priority();\n        ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);",
                 StringComparison.Ordinal),
-            "every actor-post cycle refreshes guards before freezing the military P0 snapshot");
+            "every actor-post cycle refreshes guards and transport members before freezing the military P0 snapshot");
         Assert(postRunner.Contains(
                 "RoyalGuardService.TryRefreshMilitaryPriority(actors[",
                 StringComparison.Ordinal),

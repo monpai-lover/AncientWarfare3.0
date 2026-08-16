@@ -498,40 +498,26 @@ internal static class ArmyRtsCombatHandoffRulesTests
                    StringComparison.Ordinal),
             "temporary RTS boats must use the original dock spawn path while bypassing permanent-fleet resource and capacity gates");
 
-        string combatBehaviours = File.ReadAllText(Path.Combine(root, "Code",
-            "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
-        int memberCombatStart = combatBehaviours.IndexOf(
-            "public sealed class BehArmyRtsMemberCombat",
+        string memberTaskContent = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "ArmyRtsContent.cs"));
+        int memberCombatStart = memberTaskContent.IndexOf(
+            "private static void RegisterMemberCombatTask",
             StringComparison.Ordinal);
-        string memberCombatBody = memberCombatStart >= 0
-            ? combatBehaviours.Substring(memberCombatStart)
+        int memberCombatEnd = memberTaskContent.IndexOf(
+            "private static void RegisterSiegeCombatTask", memberCombatStart,
+            StringComparison.Ordinal);
+        string memberCombatBody = memberCombatStart >= 0 &&
+            memberCombatEnd > memberCombatStart
+            ? memberTaskContent.Substring(memberCombatStart,
+                memberCombatEnd - memberCombatStart)
             : string.Empty;
-        Assert(CountOccurrences(memberCombatBody,
-                   "IsValidMemberCombatTarget(") == 1 &&
-               memberCombatBody.Contains("FindMemberCombatTarget(",
+        Assert(memberCombatBody.Contains("new BehFightCheckEnemyIsOk()",
                    StringComparison.Ordinal) &&
-               !memberCombatBody.Contains("attack_target",
-                   StringComparison.Ordinal),
-            "member combat validates each selected target once without changing target sources");
-
-        int memberSearchStart = controller.IndexOf(
-            "internal static Actor FindMemberCombatTarget(",
-            StringComparison.Ordinal);
-        int memberSearchEnd = controller.IndexOf(
-            "internal static bool HasActiveTargetCitySiege(",
-            memberSearchStart, StringComparison.Ordinal);
-        string memberSearchBody = memberSearchStart >= 0 &&
-            memberSearchEnd > memberSearchStart
-                ? controller.Substring(memberSearchStart,
-                    memberSearchEnd - memberSearchStart)
-                : string.Empty;
-        Assert(memberSearchBody.Contains(
-                   "IsValidOwnedMemberCombatTarget(",
+               memberCombatBody.Contains("GoToActorTargetType.SameTile",
                    StringComparison.Ordinal) &&
-               !memberSearchBody.Contains(
-                   "IsValidMemberCombatTarget(pActor, candidate)",
+               !controller.Contains("FindMemberCombatTarget(",
                    StringComparison.Ordinal),
-            "member target search hoists actor ownership outside candidate validation");
+            "member combat uses native fighting after native target acquisition");
 
         int setMemberCombatStart = controller.IndexOf(
             "internal static bool TrySetMemberCombatTask(",
@@ -549,14 +535,14 @@ internal static class ArmyRtsCombatHandoffRulesTests
             StringComparison.Ordinal);
         int siegeAdmission = setMemberCombatBody.IndexOf(
             "if (useSiegeCombatTask)", StringComparison.Ordinal);
-        int personalTargetValidation = setMemberCombatBody.IndexOf(
-            "bool hasValidCombatTarget", StringComparison.Ordinal);
+        int nativeFightPreservation = setMemberCombatBody.IndexOf(
+            "if (pActor.isTask(\"fighting\"))", StringComparison.Ordinal);
         Assert(fixedAdmissionGate >= 0 && siegeAdmission >
-                   fixedAdmissionGate && personalTargetValidation >
+                   fixedAdmissionGate && nativeFightPreservation >
                    siegeAdmission && setMemberCombatBody.Contains(
-                       "fieldCombatReleased\n                ? false\n                : HasValidMemberCombatTarget(pActor)",
+                       "return HasValidMemberCombatTarget(pActor);",
                        StringComparison.Ordinal),
-            "member task admission skips personal target work when mission, captain, siege, or released-field state fixes the result");
+            "member task admission preserves native fighting after mission and siege gates");
 
         int prepareP0Start = controller.IndexOf(
             "internal static bool TryPrepareMilitaryP0Actor(",
@@ -709,9 +695,9 @@ internal static class ArmyRtsCombatHandoffRulesTests
                    "string jobId = ArmyRtsContent.VanillaFollowerJobId",
                    StringComparison.Ordinal) &&
                controller.Contains(
-                   "taskId = ArmyRtsContent.MemberCombatTaskId",
+                   "pActor.isTask(\"fighting\")) return",
                    StringComparison.Ordinal),
-            "native RTS marches use original follow while active field battles retain dedicated member combat");
+            "native RTS marches use original follow and preserve original fighting during contact");
         int nativeMarchStart = ensureJobsBody.IndexOf(
             "private static void EnsureVanillaMarchJobs(",
             StringComparison.Ordinal);

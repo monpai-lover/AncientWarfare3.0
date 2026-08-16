@@ -101,6 +101,52 @@ namespace AncientWarfare3.core.schools
         }
     }
 
+    public enum GuestOfficeEndPreparationDecision
+    {
+        CloseCareerAndAffiliation,
+        CloseOrphanAffiliation,
+        AlreadyEnded,
+        Superseded,
+        RetryConflict
+    }
+
+    public static class GuestOfficeEndPreparationRules
+    {
+        public static GuestOfficeEndPreparationDecision Resolve(
+            bool pSingleAffiliation, bool pCurrentServing,
+            bool pCurrentClosed, bool pSameServiceIdentity,
+            int pActiveCentralCareers, bool pCareerMatches)
+        {
+            if (!pSingleAffiliation)
+                return GuestOfficeEndPreparationDecision.RetryConflict;
+            if (pCurrentClosed)
+                return GuestOfficeEndPreparationDecision.AlreadyEnded;
+            if (!pCurrentServing || !pSameServiceIdentity)
+                return GuestOfficeEndPreparationDecision.Superseded;
+            if (pActiveCentralCareers == 0)
+                return GuestOfficeEndPreparationDecision.CloseOrphanAffiliation;
+            if (pActiveCentralCareers == 1 && pCareerMatches)
+                return GuestOfficeEndPreparationDecision.
+                    CloseCareerAndAffiliation;
+            return GuestOfficeEndPreparationDecision.RetryConflict;
+        }
+    }
+
+    public static class GuestOfficeEndRetryRules
+    {
+        public static bool RetainPending(
+            GuestOfficeEndPreparationDecision pDecision)
+        {
+            return pDecision != GuestOfficeEndPreparationDecision.AlreadyEnded &&
+                   pDecision != GuestOfficeEndPreparationDecision.Superseded;
+        }
+
+        public static bool ShouldLogAttempt(int pAttempt)
+        {
+            return pAttempt > 0 && (pAttempt & (pAttempt - 1)) == 0;
+        }
+    }
+
     public static class GuestOfficeAdoptionRules
     {
         public static bool ShouldAdopt(GuestOfficePersistenceOutcome pOutcome)

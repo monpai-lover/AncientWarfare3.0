@@ -1,0 +1,43 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyConquestReserveRulesTests
+{
+    internal static void Run()
+    {
+        Assert(ArmyConquestReserveRules.GrantForPopulation(100) == 20,
+            "conquered population grants twenty percent reserve");
+        Assert(ArmyConquestReserveRules.GrantForPopulation(-1) == 0,
+            "negative population grants no reserve");
+        Assert(ArmyConquestReserveRules.Add(10, 20) == 30,
+            "reserve grants accumulate");
+        Assert(ArmyConquestReserveRules.Add(int.MaxValue, 20) == int.MaxValue,
+            "reserve accumulation saturates");
+        int consumed;
+        Assert(ArmyConquestReserveRules.Consume(9, 4, out consumed) == 5 &&
+               consumed == 4, "reserve consumption is bounded");
+        Assert(ArmyRtsRules.ShouldContinueSameArmyAfterCapture(
+                shouldCommit: true, attackMission: true, assaultRole: true,
+                playerOrder: false, warActive: true,
+                nextTargetAvailable: true, living: 20,
+                minimumOperationalForce: 5),
+            "automatic assault army continues to the next target");
+        Assert(!ArmyRtsRules.ShouldContinueSameArmyAfterCapture(
+                shouldCommit: true, attackMission: true, assaultRole: true,
+                playerOrder: true, warActive: true,
+                nextTargetAvailable: true, living: 20,
+                minimumOperationalForce: 5),
+            "player ordered army is not overwritten");
+        Assert(!ArmyRtsRules.ShouldContinueSameArmyAfterCapture(
+                shouldCommit: true, attackMission: true, assaultRole: true,
+                playerOrder: false, warActive: true,
+                nextTargetAvailable: false, living: 20,
+                minimumOperationalForce: 5),
+            "completed war has no synthetic next mission");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

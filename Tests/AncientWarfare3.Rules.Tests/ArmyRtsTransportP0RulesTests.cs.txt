@@ -1,0 +1,71 @@
+using System;
+using System.IO;
+
+internal static class ArmyRtsTransportP0RulesTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string transport = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsTransportService.cs"));
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeActorPostRunner.cs"));
+
+        Assert(transport.Contains("ProcessMilitaryP0(",
+                StringComparison.Ordinal),
+            "active RTS voyages expose a dedicated military P0 driver");
+        Assert(transport.Contains("RefreshMilitaryP0Priority(",
+                StringComparison.Ordinal),
+            "every active voyage re-admits every expected passenger to P0");
+        Assert(!controller.Contains(
+                "ArmyRtsTransportService.ProcessFrame();",
+                StringComparison.Ordinal),
+            "the ordinary RTS controller cannot advance a voyage in large-step mode");
+
+        int p0Stage = runner.IndexOf("case PostStage.MilitaryP0:",
+            StringComparison.Ordinal);
+        int p0Chunk = runner.IndexOf("RunMilitaryP0Chunk(elapsed);",
+            p0Stage, StringComparison.Ordinal);
+        int transportP0 = runner.IndexOf(
+            "ArmyRtsTransportService.ProcessMilitaryP0(elapsed);", p0Stage,
+            StringComparison.Ordinal);
+        Assert(p0Stage >= 0 && transportP0 > p0Stage &&
+               transportP0 < p0Chunk,
+            "transport state and boat movement run before passenger P0 work");
+
+        Assert(transport.Contains("DriveBoundBoatP0(",
+                StringComparison.Ordinal),
+            "the transport-owned boat is driven in the same P0 transaction");
+        Assert(transport.Contains("SuppressCombatForVoyage(",
+                StringComparison.Ordinal),
+            "transport ownership suppresses combat until the whole roster lands");
+        Assert(transport.Contains("landedExpectedMembers >= validExpectedMembers",
+                StringComparison.Ordinal),
+            "voyage completion waits for every valid expected member to land");
+
+        int transportP0Start = transport.IndexOf(
+            "internal static void ProcessMilitaryP0(float pCycleElapsed)",
+            StringComparison.Ordinal);
+        int transportP0End = transport.IndexOf(
+            "internal static bool SuppressCombatForVoyage", transportP0Start,
+            StringComparison.Ordinal);
+        string transportP0Body = transportP0Start >= 0 &&
+            transportP0End > transportP0Start
+            ? transport.Substring(transportP0Start,
+                transportP0End - transportP0Start)
+            : string.Empty;
+        int disposal = transportP0Body.IndexOf(
+            "ProcessTemporaryBoatDisposals();", StringComparison.Ordinal);
+        int voyageGate = transportP0Body.IndexOf(
+            "ShouldProcessInMilitaryP0(", StringComparison.Ordinal);
+        Assert(disposal >= 0 && voyageGate > disposal,
+            "P0 drains temporary-boat disposals even after the final voyage completed");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

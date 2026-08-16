@@ -1,0 +1,34 @@
+using System;
+using System.Reflection;
+using AncientWarfare3.core.performance;
+
+internal static class OperationalPathCadenceRulesTests
+{
+    internal static void Run()
+    {
+        MethodInfo path = Find("ShouldRunDuringSkippedPathBatch");
+        MethodInfo movement = Find("ShouldRunDuringSkippedMovementBatch");
+        Assert(path != null && movement != null,
+            "cadence rules expose the owned operational-path input");
+        Assert((bool)path.Invoke(null, new object[] { true, false, true }),
+            "an owned operational path must progress during a large-step skip");
+        Assert((bool)movement.Invoke(null, new object[] { true, false, true }),
+            "an owned operational path must smooth-move during a large-step skip");
+        Assert(!(bool)path.Invoke(null, new object[] { true, false, false }),
+            "an ordinary actor without an operational path remains skipped");
+    }
+
+    private static MethodInfo Find(string name)
+    {
+        return typeof(ArmyRtsMovementCadenceRules).GetMethod(name,
+            BindingFlags.Static | BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { typeof(bool), typeof(bool), typeof(bool) },
+            modifiers: null);
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

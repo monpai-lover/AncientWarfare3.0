@@ -50,8 +50,111 @@ public static class CivilServiceExamRulesTests
         GovernorRotationIsAllOrNothing();
         GovernorRotationRuntimeScopeIsNestedAndExceptionSafe();
         CrossLayerPromotionReleasesThePriorCityLeader();
+        DurableOfficerRowsRecoverRuntimeProjectionBeforeDismissal();
+        GuestOfficeEndReadsAuthoritativeStateBeforeRetirement();
+        GuestOfficeEndConflictRetainsOnePendingOperation();
         RuntimeSchedulingAvoidsIdleDatabasePollAndWorldRescan();
         CivilServiceForeignResidentSqlTests.Run();
+    }
+
+    private static void DurableOfficerRowsRecoverRuntimeProjectionBeforeDismissal()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string courtService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "court", "CourtService.cs"));
+        int staleRows = courtService.IndexOf(
+            "private static void CloseStaleOfficerRows", StringComparison.Ordinal);
+        int nextMethod = courtService.IndexOf(
+            "private static void CloseStaleCentralOfficeRow", staleRows,
+            StringComparison.Ordinal);
+        True(staleRows >= 0 && nextMethod > staleRows,
+            "court stale-row cleanup remains discoverable");
+        string body = courtService.Substring(staleRows,
+            nextMethod - staleRows);
+        int recovery = body.IndexOf("TryRestoreActiveOfficerProjection(actor)",
+            StringComparison.Ordinal);
+        int close = body.IndexOf("CloseDurableOfficerRow", StringComparison.Ordinal);
+        True(recovery >= 0 && close > recovery,
+            "a durable office restores a missing runtime projection before dismissal");
+    }
+
+    private static void GuestOfficeEndReadsAuthoritativeStateBeforeRetirement()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string persistence = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "schools", "GuestOfficeEndPersistence.cs"));
+        string guestService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "schools", "SchoolGuestOfficeService.cs"));
+
+        True(persistence.Contains(
+                "GuestOfficeEndPreparationResult PrepareEndAttemptInTransaction(",
+                StringComparison.Ordinal),
+            "guest end exposes a structured authoritative preparation result");
+        True(persistence.Contains("GuestOfficeEndPreparationRules.Resolve(",
+                StringComparison.Ordinal) &&
+             persistence.Contains(
+                "GuestOfficeEndPreparationDecision.AlreadyEnded",
+                StringComparison.Ordinal) &&
+             persistence.Contains(
+                "GuestOfficeEndPreparationDecision.Superseded",
+                StringComparison.Ordinal),
+            "guest end classifies closed and superseded durable state");
+        True(persistence.Contains("active.Count, careerMatches",
+                StringComparison.Ordinal),
+            "guest end classifies the authoritative active-career tuple");
+        True(!persistence.Contains(
+                "pCareer.AppointedTime.Equals(pAffiliation.UpdatedTime)",
+                StringComparison.Ordinal),
+            "affiliation maintenance time is not part of guest career identity");
+        True(!guestService.Contains(
+                "if (_request == null)\r\n" +
+                "                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;",
+                StringComparison.Ordinal) &&
+             !guestService.Contains(
+                "if (_request == null)\n" +
+                "                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;",
+                StringComparison.Ordinal),
+            "an unclassified missing request cannot be retired as clean failure");
+    }
+
+    private static void GuestOfficeEndConflictRetainsOnePendingOperation()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string writeBuffer = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "schools", "HistoricalSchoolWriteBuffer.cs"));
+        string writeService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "schools", "HistoricalSchoolWriteBufferService.cs"));
+        string guestService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "schools", "SchoolGuestOfficeService.cs"));
+
+        True(writeBuffer.Contains("IHistoricalSchoolRetainedCleanFailure",
+                StringComparison.Ordinal) &&
+             writeBuffer.Contains("RetainsPendingAfterCleanFailure",
+                StringComparison.Ordinal),
+            "the write layer can identify a retained domain failure");
+        True(writeService.Contains(
+                "retained.RetainsPendingAfterCleanFailure",
+                StringComparison.Ordinal),
+            "async cleanup does not report retained guest work as retired");
+        True(guestService.Contains("DeferPendingEndWrite(_pending",
+                StringComparison.Ordinal) &&
+             guestService.Contains("_preparation == null ||",
+                StringComparison.Ordinal) &&
+             guestService.Contains("RefreshEndExpectation(",
+                StringComparison.Ordinal) &&
+             guestService.Contains(
+                "GuestOfficeEndRetryRules.ShouldLogAttempt(",
+                StringComparison.Ordinal),
+            "guest-end conflicts refresh and defer one pending operation");
+        True(guestService.Contains(
+                "GuestOfficeEndPreparationDecision.Superseded",
+                StringComparison.Ordinal) &&
+             guestService.Contains(
+                "_pending.CommittedEndResult = new GuestOfficeEndResult(",
+                StringComparison.Ordinal) &&
+             guestService.Contains("_preparation.CurrentAffiliation",
+                StringComparison.Ordinal),
+            "closed affiliations complete idempotently while obsolete requests preserve newer terms");
     }
 
     private static void RuntimeSchedulingAvoidsIdleDatabasePollAndWorldRescan()

@@ -1,0 +1,35 @@
+using AncientWarfare3.core.lineage;
+
+internal static class KingdomFounderSpeciesSafetyRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(true, KingdomFounderSpeciesSafetyRules.IsUsableAssetId("human"),
+            "a normal actor asset id is usable");
+        Equal(false, KingdomFounderSpeciesSafetyRules.IsUsableAssetId(null),
+            "a null actor asset id is not usable");
+        Equal(false, KingdomFounderSpeciesSafetyRules.IsUsableAssetId("  "),
+            "whitespace actor asset ids are not usable");
+
+        Equal("king", KingdomFounderSpeciesSafetyRules.SelectFirstUsableAssetId(
+                null, "  ", "king", "leader"),
+            "the first usable candidate wins");
+        Equal(null, KingdomFounderSpeciesSafetyRules.SelectFirstUsableAssetId(
+                null, " "),
+            "missing candidates produce no lookup key");
+
+        Equal(true, KingdomFounderSpeciesSafetyRules.ShouldBypassVanillaLookup(
+                null),
+            "null ids must bypass vanilla AssetLibrary.get");
+        Equal(false, KingdomFounderSpeciesSafetyRules.ShouldBypassVanillaLookup(
+                "human"),
+            "valid ids may enter vanilla lookup");
+    }
+}

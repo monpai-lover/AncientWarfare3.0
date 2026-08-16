@@ -1,5 +1,7 @@
 # Warrior Movement and RTS Member Combat Implementation Plan
 
+> **Superseded on 2026-08-16:** Do not execute the peacetime patrol restoration in this document. The current root-cause plan is `docs/superpowers/plans/2026-08-16-peacetime-warrior-movement-root-cause.md`; peaceful warriors must return to vanilla AI without reintroducing an AncientWarfare3 patrol job.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Restore peaceful warriors' native decision and movement lifecycle, and restore RTS ordinary soldiers to the working captain-combat lifecycle.

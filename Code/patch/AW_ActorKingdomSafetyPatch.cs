@@ -8,6 +8,25 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_ActorKingdomSafetyPatch
     {
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.getFounderSpecies))]
+        private static bool KingdomGetFounderSpecies_Prefix(Kingdom __instance,
+            ref ActorAsset __result)
+        {
+            if (KingdomFounderSpeciesSafetyService.TryResolve(__instance,
+                    out ActorAsset founder))
+            {
+                __result = founder;
+                return false;
+            }
+
+            // Never fall through to vanilla: it calls AssetLibrary.get with
+            // data.original_actor_asset and throws for a null key.
+            __result = null;
+            return false;
+        }
+
         [HarmonyPostfix]
         [HarmonyPriority(Priority.Last)]
         [HarmonyPatch(typeof(ActorManager), nameof(ActorManager.loadObject))]
@@ -108,6 +127,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
         private static void DrainActorKingdomRepairs_Prefix()
         {
+            KingdomFounderSpeciesSafetyService.RepairLoadedKingdoms();
             long benchmark = RecentFeatureBenchmark.BeginOutsideFrameStage();
             try
             {
@@ -128,6 +148,7 @@ namespace AncientWarfare3.patch
         private static void ClearActorKingdomRepairs_Prefix()
         {
             ActorKingdomSafetyService.ClearRuntime();
+            KingdomFounderSpeciesSafetyService.ClearRuntime();
         }
 
         [HarmonyPrefix]

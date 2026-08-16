@@ -1441,7 +1441,7 @@ namespace AncientWarfare3.core.lineage
             if (mode == ArmyRtsMode.Off) return;
             if (ArmyRtsWarDoctrine.IsAbstractDecisive) return;
             ProcessPendingReplenishmentArrivals(pReplenishmentBudget);
-            ArmyRtsTransportService.ProcessFrame();
+            ArmyRtsTransportService.ProcessOrdinaryFrame();
             IReadOnlyList<long> batch = Controllers.Take(Math.Min(
                 Math.Max(0, pControllerBudget), Controllers.PendingCount));
             for (int i = 0; i < batch.Count; i++)
@@ -2928,11 +2928,16 @@ namespace AncientWarfare3.core.lineage
                 runtime.TargetCompletionLatched = true;
                 LogMissionChanged(army, record.Mission, null,
                     "target_control_event");
+                ArmyConquestReserveService.GrantForConqueredCity(army,
+                    pTargetCity, record.Mission.WarId);
                 CoalitionWarTaskService.ReleaseObjectiveClaim(
                     record.Mission.WarId, armyId,
                     record.Mission.TargetCityId);
                 Invalidate(armyId);
-                KingdomWarDirectorService.OnArmyChanged(kingdom);
+                if (!KingdomWarDirectorService.
+                        TryContinueSameArmyAfterCapture(army,
+                            record.Mission, pTargetCity))
+                    KingdomWarDirectorService.OnArmyChanged(kingdom);
             }
         }
 
@@ -3794,6 +3799,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void ReleaseAfterReturnActors(Army pArmy)
         {
+            HashSet<long> releasedActorIds = new HashSet<long>();
             int count;
             try { count = pArmy?.units?.Count ?? 0; }
             catch { count = 0; }
@@ -3802,10 +3808,23 @@ namespace AncientWarfare3.core.lineage
                 Actor actor;
                 try { actor = pArmy.units[i]; }
                 catch { continue; }
-                ReleaseAfterReturnActor(actor);
+                ReleaseAfterReturnActorOnce(actor, releasedActorIds);
             }
             Actor captain = SafeCaptain(pArmy);
-            if (captain?.data != null) ReleaseAfterReturnActor(captain);
+            ReleaseAfterReturnActorOnce(captain, releasedActorIds);
+        }
+
+        private static void ReleaseAfterReturnActorOnce(Actor pActor,
+            HashSet<long> releasedActorIds)
+        {
+            bool actorValid = pActor?.data != null;
+            long actorId = actorValid ? pActor.data.id : -1L;
+            bool alreadyReleased = actorValid &&
+                                   releasedActorIds.Contains(actorId);
+            if (!StandingArmyRules.ShouldReleasePostReturnActor(
+                    actorValid, alreadyReleased)) return;
+            releasedActorIds.Add(actorId);
+            ReleaseAfterReturnActor(pActor);
         }
 
         private static void ReleaseAfterReturnActor(Actor pActor)

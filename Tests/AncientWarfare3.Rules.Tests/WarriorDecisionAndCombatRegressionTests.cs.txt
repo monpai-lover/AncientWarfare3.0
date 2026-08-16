@@ -1,0 +1,85 @@
+using System;
+using System.IO;
+
+internal static class WarriorDecisionAndCombatRegressionTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string runner = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        string content = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "ArmyRtsContent.cs"));
+        string behaviour = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
+
+        Assert(!runner.Contains("RunDecisionJob", StringComparison.Ordinal) &&
+               !runner.Contains("actor.b6_0_updateDecision(batch._elapsed)",
+                   StringComparison.Ordinal),
+            "the cooperative post runner must leave the vanilla decision queue lifecycle to its original job updater");
+        Assert(content.Contains("new BehFightCheckEnemyIsOk()",
+                   StringComparison.Ordinal) &&
+               content.Contains(
+                   "GoToActorTargetType.SameTile",
+                   StringComparison.Ordinal) &&
+               content.Contains("new BehRestartTask()",
+                   StringComparison.Ordinal),
+            "member combat must use the vanilla fighting task chain");
+
+        string safety = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ArmySafetyPatch.cs"));
+        string bridge = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "pathfinding", "AWPathMovementBridge.cs"));
+        int ownershipStart = bridge.IndexOf(
+            "internal static bool HasOwnership(Actor pActor)",
+            StringComparison.Ordinal);
+        int ownershipEnd = bridge.IndexOf(
+            "internal static string DescribeDiagnosticState",
+            ownershipStart, StringComparison.Ordinal);
+        string ownershipBody = ownershipStart >= 0 &&
+            ownershipEnd > ownershipStart
+            ? bridge.Substring(ownershipStart, ownershipEnd - ownershipStart)
+            : string.Empty;
+        Assert(ownershipBody.Contains("HasOwnedPathState(pActor.data.id)",
+                   StringComparison.Ordinal) &&
+               !ownershipBody.Contains("Finder.Poll(",
+                   StringComparison.Ordinal) &&
+               !ownershipBody.Contains("ReleaseStaleOwnership(",
+                   StringComparison.Ordinal),
+            "path ownership queries must be side-effect free and leave finder result consumption to IsUsing/Update");
+        int diagnosticStart = bridge.IndexOf(
+            "internal static string DescribeDiagnosticState(Actor pActor)",
+            StringComparison.Ordinal);
+        int diagnosticEnd = bridge.IndexOf(
+            "internal static bool HasOperationalOwnership(Actor pActor)",
+            diagnosticStart, StringComparison.Ordinal);
+        string diagnosticBody = diagnosticStart >= 0 &&
+            diagnosticEnd > diagnosticStart
+            ? bridge.Substring(diagnosticStart,
+                diagnosticEnd - diagnosticStart)
+            : string.Empty;
+        Assert(!diagnosticBody.Contains("Finder.Poll(",
+                   StringComparison.Ordinal) &&
+               diagnosticBody.Contains("TerminalPolls.TryGetValue(",
+                   StringComparison.Ordinal),
+            "path diagnostics must inspect cached ownership state without consuming finder results");
+        Assert(safety.Contains("AWPathMovementBridge.Cancel(pActor,",
+                   StringComparison.Ordinal) &&
+               safety.Contains("!rtsOwnsActor", StringComparison.Ordinal) &&
+               safety.Contains("!nativeMilitaryMovement",
+                   StringComparison.Ordinal),
+            "vanilla peaceful decision entry must release stale RTS path ownership");
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        Assert(controller.Contains("pActor.setTask(\"fighting\"",
+                   StringComparison.Ordinal) &&
+               controller.Contains("pActor.beh_actor_target =",
+                   StringComparison.Ordinal),
+            "RTS member handoff must enter the vanilla fighting task and preserve its actor target");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

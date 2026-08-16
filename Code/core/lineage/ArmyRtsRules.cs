@@ -382,6 +382,17 @@ namespace AncientWarfare3.core.lineage
             return shouldCommit && !hasViableAttack && !hasActiveMission;
         }
 
+        public static bool ShouldContinueSameArmyAfterCapture(
+            bool shouldCommit, bool attackMission, bool assaultRole,
+            bool playerOrder, bool warActive, bool nextTargetAvailable,
+            int living, int minimumOperationalForce)
+        {
+            return shouldCommit && attackMission && assaultRole &&
+                   !playerOrder && warActive && nextTargetAvailable &&
+                   Math.Max(0, living) >=
+                       Math.Max(1, minimumOperationalForce);
+        }
+
         public static bool HasRallyReadiness(bool departureStrengthReady)
         {
             return departureStrengthReady;

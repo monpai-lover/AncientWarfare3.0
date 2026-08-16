@@ -562,6 +562,60 @@ namespace AncientWarfare3.core.lineage
             QueueArmyChanged(pKingdom);
         }
 
+        internal static bool TryContinueSameArmyAfterCapture(Army pArmy,
+            ArmyRtsMission pCompletedMission, City pCompletedCity)
+        {
+            Kingdom armyKingdom = SafeArmyKingdom(pArmy);
+            if (!IsLiveKingdom(armyKingdom) || pArmy?.data == null ||
+                pCompletedMission == null || pCompletedCity?.data == null ||
+                pCompletedMission.ProposalKind != ArmyRtsProposalKind.Attack ||
+                pCompletedMission.Role != ArmyRtsRole.Assault ||
+                pCompletedMission.PlayerOrder)
+                return false;
+            Kingdom kingdom = armyKingdom;
+            War war = FindWar(pCompletedMission.WarId);
+            bool warActive;
+            try { warActive = IsActiveWar(war) && war.hasKingdom(kingdom); }
+            catch { warActive = false; }
+            if (!warActive) return false;
+            bool nextTargetAvailable = TryFindOffensiveContinuityTargetForWar(
+                war, kingdom, pArmy, out City target, out long frontId);
+            int living;
+            try { living = Math.Max(0, pArmy.countUnits()); }
+            catch { return false; }
+            if (!ArmyRtsRules.ShouldContinueSameArmyAfterCapture(
+                    shouldCommit: ArmyRtsRuntimeModeRules.ShouldCommit(
+                        ArmyRtsRuntimeMode.Current),
+                    attackMission: pCompletedMission.ProposalKind ==
+                        ArmyRtsProposalKind.Attack,
+                    assaultRole: pCompletedMission.Role == ArmyRtsRole.Assault,
+                    playerOrder: pCompletedMission.PlayerOrder,
+                    warActive: warActive,
+                    nextTargetAvailable: nextTargetAvailable,
+                    living: living,
+                    minimumOperationalForce:
+                        ArmyLogisticsRules.MinimumOperationalForce))
+                return false;
+            ArmyRtsControllerService.AssignMission(pArmy,
+                new ArmyRtsMission
+                {
+                    ArmyId = pArmy.id,
+                    KingdomId = kingdom.id,
+                    WarId = war.data.id,
+                    FrontId = frontId,
+                    TargetCityId = target.id,
+                    TargetStrength = StandingArmyService.TargetStrength(
+                        pArmy, kingdom),
+                    ProposalKind = ArmyRtsProposalKind.Attack,
+                    Role = ArmyRtsRole.Assault,
+                    Posture = ArmyRtsPosture.Attack,
+                    PlayerOrder = false,
+                    IssuedTime = CurrentWorldTime()
+                });
+            QueueArmyChanged(kingdom);
+            return true;
+        }
+
         public static void ProcessFrame()
         {
             ProcessFrame(1);
@@ -969,6 +1023,33 @@ namespace AncientWarfare3.core.lineage
                 return true;
             }
             return false;
+        }
+
+        private static bool TryFindOffensiveContinuityTargetForWar(War pWar,
+            Kingdom pKingdom, Army pArmy, out City pTarget,
+            out long pFrontId)
+        {
+            pTarget = null;
+            pFrontId = -1L;
+            if (!IsActiveWar(pWar) || pKingdom?.data == null ||
+                pArmy?.data == null) return false;
+            if (CoalitionWarTaskService.TryResolveTarget(pWar, pKingdom,
+                    pArmy, pCommit: true, out City coalitionTarget,
+                    out long coalitionTaskId) &&
+                ArmyRtsObjectiveService.Classify(pWar, pKingdom,
+                    coalitionTarget) == ArmyRtsObjectiveState.OpenAttack)
+            {
+                pTarget = coalitionTarget;
+                pFrontId = coalitionTaskId >= 0L
+                    ? coalitionTaskId
+                    : coalitionTarget.id;
+                return true;
+            }
+            City nearest = FindNearestOpenEnemyCity(pWar, pKingdom, pArmy);
+            if (nearest?.data == null) return false;
+            pTarget = nearest;
+            pFrontId = nearest.id;
+            return true;
         }
 
         private static City FindNearestOpenEnemyCity(War pWar,
@@ -1978,6 +2059,12 @@ namespace AncientWarfare3.core.lineage
         private static Kingdom FindKingdom(long pKingdomId)
         {
             try { return World.world?.kingdoms?.get(pKingdomId); }
+            catch { return null; }
+        }
+
+        private static Kingdom SafeArmyKingdom(Army pArmy)
+        {
+            try { return pArmy?.getKingdom(); }
             catch { return null; }
         }
 

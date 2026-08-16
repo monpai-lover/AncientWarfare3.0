@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.content;
+using life.taxi;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -36,7 +37,10 @@ namespace AncientWarfare3.core.lineage
         public static string GetJob(Actor pActor)
         {
             ReleaseLegacyPatrolForJobSelection(pActor);
-            return "";
+            if (!ShouldAssignCitizenJob(pActor) ||
+                !AssetManager.job_actor.has(ArmyRtsContent.CitizenJobId))
+                return "";
+            return ArmyRtsContent.CitizenJobId;
         }
 
         public static bool ShouldUsePeacetimeJob(Actor pActor)
@@ -135,6 +139,171 @@ namespace AncientWarfare3.core.lineage
             }
             ReleaseLegacyPeacetimePatrol(pActor,
                 pRestoreImmediately: true);
+            if (ShouldAssignCitizenJob(pActor))
+            {
+                AssignCitizenJob(pActor);
+                return;
+            }
+            ReleaseCitizenJob(pActor);
+            if (pActor.ai.job == null) RestoreOriginalJob(pActor);
+        }
+
+        public static void RefreshAfterReturn(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.ai == null) return;
+            ReleasePostReturnMovementOwnership(pActor);
+            RefreshJob(pActor);
+            Army army = pActor.army;
+            AncientWarfare3.ModClass.LogInfo(
+                "[AW3 peacetime] stage=" +
+                (pActor.ai.job?.id == ArmyRtsContent.CitizenJobId
+                    ? "post_return_citizen"
+                    : "post_return_military") +
+                " actor=" + pActor.data.id +
+                " army=" + (army?.data?.id ?? -1L) +
+                " job=" + (pActor.ai.job?.id ?? "none") +
+                " task=" + (pActor.ai.task?.id ?? "none"));
+        }
+
+        private static void ReleasePostReturnMovementOwnership(Actor pActor)
+        {
+            City city = pActor?.city;
+            if (city?.data != null)
+            {
+                City target = null;
+                bool hasTargetCity = false;
+                bool targetAlive = false;
+                bool sourceHasWarriors = false;
+                bool targetStillEnemy = false;
+                bool targetReachable = false;
+                try
+                {
+                    target = city.target_attack_city;
+                    hasTargetCity = target?.data != null;
+                    targetAlive = hasTargetCity && target.isAlive();
+                    sourceHasWarriors = city.hasAnyWarriors();
+                    targetStillEnemy = hasTargetCity &&
+                                       target.kingdom?.data != null &&
+                                       target.kingdom.isEnemy(city.kingdom);
+                    targetReachable = hasTargetCity &&
+                                      target.reachableFrom(city);
+                }
+                catch { }
+                if (StandingArmyRules.ShouldClearPostReturnAttackOrder(
+                        hasTargetCity, targetAlive, sourceHasWarriors,
+                        targetStillEnemy, targetReachable))
+                {
+                    city.target_attack_city = null;
+                    city.target_attack_zone = null;
+                }
+            }
+
+            try
+            {
+                TaxiRequest request = TaxiManager.getRequestForActor(pActor);
+                if (request == null) return;
+                request.embarkToBoat(pActor);
+                if (request.countActors() == 0)
+                    TaxiManager.cancelRequest(request);
+            }
+            catch { }
+        }
+
+        private static bool ShouldAssignCitizenJob(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            Army army = pActor.army;
+            City city = pActor.city;
+            bool actorValid;
+            bool hasValidCity;
+            bool ordinaryArmy;
+            try
+            {
+                actorValid = !pActor.isRekt() && pActor.isAlive() &&
+                             pActor.isWarrior();
+                hasValidCity = city?.data != null && !city.isRekt() &&
+                               city.kingdom == pActor.kingdom;
+                ordinaryArmy = army?.data != null &&
+                               !AWArmyService.IsSpecialArmy(army);
+            }
+            catch
+            {
+                return false;
+            }
+            bool activeMission = ordinaryArmy &&
+                                 ArmyRtsControllerService.HasActiveMission(
+                                     army.id);
+            bool activeReturn = ordinaryArmy &&
+                                WarArmyReturnService.IsActive(army);
+            return StandingArmyRules.ShouldAssignCitizenJob(
+                actorValid, hasValidCity, ordinaryArmy,
+                activeMission, activeReturn, HasMilitaryEmergency(pActor),
+                IsInCombat(pActor), HasCityAttackOrder(pActor),
+                HasSpecialMilitaryState(pActor, army));
+        }
+
+        private static bool HasSpecialMilitaryState(Actor pActor, Army pArmy)
+        {
+            if (pActor?.data == null) return true;
+            pActor.data.get(LineageKeys.TEMPORARY_LEVY,
+                out bool temporaryLevy, false);
+            pActor.data.get(LineageKeys.WARTIME_GARRISON,
+                out bool wartimeGarrison, false);
+            pActor.data.get(LineageKeys.TEMPORARY_SLAVE_VANGUARD_MEMBER,
+                out bool slaveVanguard, false);
+            try
+            {
+                return temporaryLevy || wartimeGarrison || slaveVanguard ||
+                       AWArmyService.IsSpecialArmy(pArmy) ||
+                       SyntheticLevyService.IsSynthetic(pActor) ||
+                       RoyalGuardService.IsRoyalGuard(pActor) ||
+                       SlaveService.IsSlave(pActor);
+            }
+            catch { return true; }
+        }
+
+        private static void AssignCitizenJob(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.ai == null) return;
+            if (!AssetManager.job_actor.has(ArmyRtsContent.CitizenJobId))
+            {
+                RestoreOriginalJob(pActor);
+                return;
+            }
+            if (pActor.ai.job?.id == ArmyRtsContent.CitizenJobId &&
+                pActor.ai.task != null) return;
+            try
+            {
+                pActor.cancelAllBeh();
+                pActor.ai.setJob(ArmyRtsContent.CitizenJobId);
+                pActor.timer_action = 0f;
+                pActor._beh_skip = false;
+                pActor._update_done = false;
+                pActor.b6_0_updateDecision(0f);
+            }
+            catch { RestoreOriginalJob(pActor); }
+        }
+
+        private static void ReleaseCitizenJob(Actor pActor)
+        {
+            if (pActor?.ai?.job?.id != ArmyRtsContent.CitizenJobId) return;
+            try { pActor.cancelAllBeh(); }
+            catch { }
+            RestoreOriginalJob(pActor);
+        }
+
+        private static void RestoreOriginalJob(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.ai == null) return;
+            string jobId = "";
+            try { jobId = pActor.getNextJob(); }
+            catch { }
+            if (string.IsNullOrEmpty(jobId) ||
+                !AssetManager.job_actor.has(jobId))
+                jobId = pActor.isWarrior() ? "attacker" : "unit_citizen";
+            if (!AssetManager.job_actor.has(jobId)) return;
+            try { pActor.ai.setJob(jobId); }
+            catch { }
         }
 
         private static bool HandleActiveReproduction(Actor pActor,
@@ -196,8 +365,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void RestoreMilitaryJob(Actor pActor)
         {
-            ReleaseLegacyPeacetimePatrol(pActor,
-                pRestoreImmediately: true);
+            RefreshJob(pActor);
         }
 
         public static void ReleaseLegacyPatrolForJobSelection(Actor pActor)

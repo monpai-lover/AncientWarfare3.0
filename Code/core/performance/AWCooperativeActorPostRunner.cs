@@ -215,6 +215,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         ArmyMilitaryMovementPriorityIndex.BeginCycle();
         ArmyMilitaryMovementPriorityIndex.RefreshVanillaTaxiSnapshot();
         RefreshRoyalGuardMilitaryPriorities(activeBatches);
+        ArmyRtsTransportService.RefreshMilitaryP0Priority();
         ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);
         militaryP0Cursor = 0;
         AWDeferredPathRequestBatch.StartCycle();
@@ -331,9 +332,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 "Actor post jobs 中 u10_checkSmoothMovement 顺序无效");
         }
 
-        stage = ShouldRunMilitaryP0Stage()
-            ? PostStage.MilitaryP0
-            : PostStage.BeforeDeadCheck;
+        // P0 owns the military actor lifecycle only after native timer and
+        // current-target checks have established this cycle's search state.
+        stage = PostStage.BeforeDeadCheck;
     }
 
     private static void RefreshRoyalGuardMilitaryPriorities(
@@ -416,6 +417,14 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 "kind=" + kind);
             ArmyRtsAbstractSupplyService.
                 TryConsumeHomeRationScheduled(actor);
+            if (ArmyRtsTransportService.SuppressCombatForVoyage(actor))
+            {
+                if (TryRunVanillaPassengerTransportP0(actor, actorId, kind,
+                        cycleElapsed)) return;
+                actor.skipBehaviour();
+                ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
+                return;
+            }
             if (TryRunSelfLandingP0(actor, actorId, kind, cycleElapsed))
                 return;
             if (TryRunVanillaPassengerTransportP0(actor, actorId, kind,
@@ -1105,15 +1114,20 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 case PostStage.Idle:
                     return true;
                 case PostStage.MilitaryP0:
+                    ArmyRtsTransportService.ProcessMilitaryP0(elapsed);
                     RunMilitaryP0Chunk(elapsed);
                     bool militaryP0Pending =
                         militaryP0Cursor < militaryP0ActorIds.Count;
                     if (!ArmyMilitaryMovementPriorityRules.
                             CanAdmitOrdinaryActorWork(militaryP0Pending))
                         return false;
-                    stage = batches.Count == 0
-                        ? PostStage.Finish
-                        : PostStage.BeforeDeadCheck;
+                    if (batches.Count == 0)
+                    {
+                        stage = PostStage.Finish;
+                        return false;
+                    }
+
+                    BeginEnemySearchPreparation();
                     return false;
                 case PostStage.BeforeDeadCheck:
                     if (TryRunNextPostRange(
@@ -1261,12 +1275,13 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                         return false;
                     }
 
-                    batchIndex = 0;
-                    postJobIndex =
-                        currentEnemyTargetJobIndex;
-                    PrepareEnemySearchClassifications();
-                    AWEnemyPresenceCache.BeginPreparation();
-                    stage = PostStage.PrepareEnemySearch;
+                    if (ShouldRunMilitaryP0Stage())
+                    {
+                        stage = PostStage.MilitaryP0;
+                        continue;
+                    }
+
+                    BeginEnemySearchPreparation();
                     continue;
                 case PostStage.PrepareEnemySearch:
                     int prepareEnd = splitPostJobs
@@ -3211,6 +3226,15 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             "b3_findEnemyTarget.classify_parallel",
             startedAt,
             actorsClassified);
+    }
+
+    private void BeginEnemySearchPreparation()
+    {
+        batchIndex = 0;
+        postJobIndex = currentEnemyTargetJobIndex;
+        PrepareEnemySearchClassifications();
+        AWEnemyPresenceCache.BeginPreparation();
+        stage = PostStage.PrepareEnemySearch;
     }
 
     private void RunEnemyPrepareWorkItemAt(int index)

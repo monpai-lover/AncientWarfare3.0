@@ -266,13 +266,67 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        public static void ProcessFrame()
+        public static void ProcessOrdinaryFrame()
         {
             if (!ArmyRtsRuntimeMode.ShouldCommit ||
                 AW3MultiplayerReplicaScope.IsReplicaSession ||
                 World.world == null || World.world.isPaused()) return;
+            if (AWPerformanceSettings.Mode == AWSimulationMode.Large) return;
             ArmyRtsTransportProductionService.
                 ProcessTemporaryBoatDisposals();
+            ProcessVoyageFrame(0f, pDriveBoundBoats: false);
+        }
+
+        internal static void RefreshMilitaryP0Priority()
+        {
+            if (AWPerformanceSettings.Mode != AWSimulationMode.Large) return;
+            foreach (TransportState state in States.Values)
+            {
+                if (state?.Army?.data == null) continue;
+                foreach (Actor member in state.Members.Values)
+                {
+                    if (!IsValidMember(member, state.Army)) continue;
+                    ArmyMilitaryMovementPriorityIndex.Register(member.data.id,
+                        ArmyMilitaryMovementPriorityKind.RtsMember);
+                }
+            }
+        }
+
+        internal static void ProcessMilitaryP0(float pCycleElapsed)
+        {
+            if (!ArmyRtsRuntimeMode.ShouldCommit ||
+                AW3MultiplayerReplicaScope.IsReplicaSession ||
+                World.world == null || World.world.isPaused() ||
+                AWPerformanceSettings.Mode != AWSimulationMode.Large)
+                return;
+            ArmyRtsTransportProductionService.
+                ProcessTemporaryBoatDisposals();
+            if (!ArmyRtsTransportRules.ShouldProcessInMilitaryP0(
+                    largeStepMode: true,
+                    activeVoyageCount: States.Count)) return;
+            ProcessVoyageFrame(pCycleElapsed, pDriveBoundBoats: true);
+        }
+
+        internal static bool SuppressCombatForVoyage(Actor pActor)
+        {
+            Army army = pActor?.army;
+            bool expectedPassenger = pActor?.data != null &&
+                army?.data != null && States.TryGetValue(army.id,
+                    out TransportState state) &&
+                state.Members.ContainsKey(pActor.data.id);
+            bool suppress = ArmyRtsTransportRules.ShouldSuppressCombatForVoyage(
+                expectedPassenger, voyageComplete: false);
+            if (!suppress) return false;
+            try { pActor.clearAttackTarget(); }
+            catch { }
+            try { pActor.beh_actor_target = null; }
+            catch { }
+            return true;
+        }
+
+        private static void ProcessVoyageFrame(float pCycleElapsed,
+            bool pDriveBoundBoats)
+        {
             if (!ArmyRtsTransportRules.ShouldProcessFrame(States.Count))
                 return;
             double now = CurrentRealtime();
@@ -300,6 +354,7 @@ namespace AncientWarfare3.core.lineage
                 bool hasAssignedBoat = false;
                 bool hasEmbarkedMember = false;
                 long assignedBoatId = -1L;
+                Actor assignedBoat = null;
                 List<long> invalidMemberIds = state.InvalidMemberIds;
                 invalidMemberIds.Clear();
                 int validExpectedMembers = 0;
@@ -369,6 +424,8 @@ namespace AncientWarfare3.core.lineage
                         hasAssignedBoat = true;
                         hasEmbarkedMember = true;
                         assignedBoatId = SafeInsideBoatId(member);
+                        if (assignedBoat == null)
+                            assignedBoat = SafeInsideBoatActor(member);
                         CaptureMovementMarker(member,
                             SafeInsideBoatTileId(member),
                             ref markerActorId, ref movementTileId);
@@ -381,6 +438,8 @@ namespace AncientWarfare3.core.lineage
                             hasAssignedBoat = true;
                             if (assignedBoatId < 0)
                                 assignedBoatId = SafeAssignedBoatId(request);
+                            if (assignedBoat == null)
+                                assignedBoat = SafeAssignedBoatActor(request);
                             CaptureMovementMarker(member,
                                 SafeAssignedBoatTileId(request),
                                 ref markerActorId, ref movementTileId);
@@ -392,10 +451,16 @@ namespace AncientWarfare3.core.lineage
                      memberIndex < invalidMemberIds.Count; memberIndex++)
                     state.Members.Remove(
                         invalidMemberIds[memberIndex]);
+                if (pDriveBoundBoats)
+                    DriveBoundBoatP0(assignedBoat, pCycleElapsed);
+                bool allExpectedMembersLanded =
+                    landedExpectedMembers >= validExpectedMembers;
                 ArmyRtsTransportVoyageAction voyageAction =
-                    ArmyRtsTransportRules.ResolveVoyageAction(
-                        validExpectedMembers, landedExpectedMembers,
-                        timedOut: false);
+                    allExpectedMembersLanded
+                        ? ArmyRtsTransportVoyageAction.Complete
+                        : ArmyRtsTransportRules.ResolveVoyageAction(
+                            validExpectedMembers, landedExpectedMembers,
+                            timedOut: false);
                 if (voyageAction ==
                     ArmyRtsTransportVoyageAction.Complete)
                 {
@@ -431,8 +496,11 @@ namespace AncientWarfare3.core.lineage
                 bool timedOut = ArmyRtsTransportRules.
                     TransportWaitTimedOut(state.LastProgressRealtime, now,
                         hasAssignedBoat);
-                voyageAction = ArmyRtsTransportRules.ResolveVoyageAction(
-                    validExpectedMembers, landedExpectedMembers, timedOut);
+                voyageAction = allExpectedMembersLanded
+                    ? ArmyRtsTransportVoyageAction.Complete
+                    : ArmyRtsTransportRules.ResolveVoyageAction(
+                        validExpectedMembers, landedExpectedMembers,
+                        timedOut);
                 if (voyageAction == ArmyRtsTransportVoyageAction.Retry)
                 {
                     LogPhase(state, "timeout",
@@ -812,6 +880,12 @@ namespace AncientWarfare3.core.lineage
             catch { return -1L; }
         }
 
+        private static Actor SafeAssignedBoatActor(TaxiRequest pRequest)
+        {
+            try { return pRequest?.getBoat()?.actor; }
+            catch { return null; }
+        }
+
         private static int SafeInsideBoatTileId(Actor pActor)
         {
             try
@@ -826,6 +900,34 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pActor?.inside_boat?.actor?.data?.id ?? -1L; }
             catch { return -1L; }
+        }
+
+        private static Actor SafeInsideBoatActor(Actor pActor)
+        {
+            try { return pActor?.inside_boat?.actor; }
+            catch { return null; }
+        }
+
+        private static void DriveBoundBoatP0(Actor pBoat,
+            float pCycleElapsed)
+        {
+            if (pBoat?.data == null || pBoat.isRekt() || !pBoat.isAlive())
+                return;
+            try
+            {
+                pBoat.b4_checkTaskVerifier(pCycleElapsed);
+                pBoat.b5_checkPathMovement(pCycleElapsed);
+                pBoat.b6_updateAI(pCycleElapsed);
+                pBoat.u10_checkSmoothMovement(pCycleElapsed);
+                pBoat.skipBehaviour();
+                ArmyMilitaryMovementPriorityIndex.MarkProcessed(pBoat.data.id);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("[AW3 RTS transport] phase=p0_boat_error" +
+                    " boat=" + pBoat.data.id + " error=" +
+                    error.GetType().Name);
+            }
         }
 
         private static void DestroyTemporaryTransportBoats(

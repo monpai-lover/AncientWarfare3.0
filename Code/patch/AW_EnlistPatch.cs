@@ -259,8 +259,13 @@ namespace AncientWarfare3.patch
                 __result = garrisonJob;
                 return false;
             }
-            StandingArmyPeacetimeService
-                .ReleaseLegacyPatrolForJobSelection(__instance);
+            string peacetimeJob =
+                StandingArmyPeacetimeService.GetJob(__instance);
+            if (!string.IsNullOrEmpty(peacetimeJob))
+            {
+                __result = peacetimeJob;
+                return false;
+            }
             if (RoyalAsylumService.IsActive(__instance))
             {
                 __result = RoyalAsylumContent.ActorJobId;

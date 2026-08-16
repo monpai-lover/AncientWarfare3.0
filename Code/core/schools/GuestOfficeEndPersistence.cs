@@ -79,6 +79,28 @@ namespace AncientWarfare3.core.schools
         public bool RecoveredExisting { get; }
     }
 
+    internal sealed class GuestOfficeEndPreparationResult
+    {
+        public GuestOfficeEndPreparationResult(
+            GuestOfficeEndPreparationDecision pDecision,
+            GuestOfficeEndRequest pRequest,
+            HistoricalSchoolAffiliationSnapshot pCurrentAffiliation,
+            int pActiveCentralCareerCount, string pConflictReason)
+        {
+            Decision = pDecision;
+            Request = pRequest;
+            CurrentAffiliation = pCurrentAffiliation;
+            ActiveCentralCareerCount = pActiveCentralCareerCount;
+            ConflictReason = pConflictReason ?? "";
+        }
+
+        public GuestOfficeEndPreparationDecision Decision { get; }
+        public GuestOfficeEndRequest Request { get; }
+        public HistoricalSchoolAffiliationSnapshot CurrentAffiliation { get; }
+        public int ActiveCentralCareerCount { get; }
+        public string ConflictReason { get; }
+    }
+
     internal sealed class GuestOfficeEndRecoveryResult
     {
         public GuestOfficeEndRecoveryResult(GuestOfficePersistenceOutcome pOutcome,
@@ -153,36 +175,70 @@ namespace AncientWarfare3.core.schools
             string pEndReason, int pEndedYear, double pEndedTime,
             string pOfficeId = null, string pSchoolId = null)
         {
+            return PrepareEndAttemptInTransaction(pDb, pTransaction,
+                pExpectedAffiliation, pEndReason, pEndedYear, pEndedTime,
+                pOfficeId, pSchoolId).Request;
+        }
+
+        internal static GuestOfficeEndPreparationResult PrepareEndAttemptInTransaction(
+                SQLiteConnection pDb, SQLiteTransaction pTransaction,
+                HistoricalSchoolAffiliationSnapshot pExpectedAffiliation,
+                string pEndReason, int pEndedYear, double pEndedTime,
+                string pOfficeId = null, string pSchoolId = null)
+        {
             if (pDb == null || pTransaction == null ||
                 !ValidExpected(pExpectedAffiliation, pEndedYear, pEndedTime))
-                return null;
+                return Preparation(GuestOfficeEndPreparationDecision.RetryConflict,
+                    null, null, -1, "invalid_end_request");
             List<GuestOfficeAffiliationRow> rows = ReadAffiliations(pDb,
                 pTransaction, pExpectedAffiliation.ActorId);
-            GuestOfficeAffiliationRow expected =
-                AffiliationRow(pExpectedAffiliation);
-            if (rows.Count != 1 || !rows[0].ExactExceptUpdatedTime(expected))
-                return null;
+            if (rows.Count != 1)
+                return Preparation(GuestOfficeEndPreparationDecision.RetryConflict,
+                    null, null, -1, "affiliation_row_count");
 
             GuestOfficeAffiliationRow original = rows[0];
-            if (original.LifecycleState != "Serving" ||
-                original.ServiceKingdomId < 0 || original.ServiceStartYear < 0)
-                return null;
-            GuestOfficeAffiliationRow desired = ClosedAffiliation(original,
-                pEndedYear, pEndedTime);
-            List<OfficialCareerRecord> active = ReadActiveCentralCareers(
-                pDb, pTransaction, original.ActorId);
-            if (GuestOfficeEndRecoveryRules.CanCloseMissingCareer(active.Count))
-                return GuestOfficeEndRequest.ForClosedCareer(original, desired,
+            HistoricalSchoolAffiliationSnapshot current = Snapshot(original);
+            bool currentServing = original.LifecycleState == "Serving" &&
+                                  original.ServiceKingdomId >= 0 &&
+                                  original.ServiceStartYear >= 0;
+            bool currentClosed = ClosedAffiliationShape(original);
+            bool sameServiceIdentity = SameServiceIdentity(
+                pExpectedAffiliation, original);
+            List<OfficialCareerRecord> active = currentServing &&
+                                                sameServiceIdentity
+                ? ReadActiveCentralCareers(pDb, pTransaction, original.ActorId)
+                : new List<OfficialCareerRecord>();
+            bool careerMatches = active.Count == 1 &&
+                                 GuestCareerMatches(original, active[0]);
+            GuestOfficeEndPreparationDecision decision =
+                GuestOfficeEndPreparationRules.Resolve(true, currentServing,
+                    currentClosed, sameServiceIdentity,
+                    active.Count, careerMatches);
+            GuestOfficeEndRequest request = null;
+            if (decision == GuestOfficeEndPreparationDecision.
+                    CloseOrphanAffiliation)
+            {
+                GuestOfficeAffiliationRow desired = ClosedAffiliation(original,
+                    pEndedYear, pEndedTime);
+                request = GuestOfficeEndRequest.ForClosedCareer(original, desired,
                     pOfficeId, pSchoolId, pEndedYear, pEndedTime, pEndReason);
-            if (active.Count != 1) return null;
-            var close = new OfficialCareerCloseRequest(original.ActorId,
-                original.ServiceKingdomId, CourtOfficeLayer.Central, null,
-                pEndedYear, pEndedTime, pEndReason ?? "");
-            OfficialCareerCloseToken career = OfficialCareerPersistence.CaptureClose(
-                pDb, pTransaction, close);
-            if (!GuestCareerMatches(original, career.Original)) return null;
-            return new GuestOfficeEndRequest(original, desired, career, pEndedYear,
-                pEndedTime, pEndReason);
+            }
+            else if (decision == GuestOfficeEndPreparationDecision.
+                         CloseCareerAndAffiliation)
+            {
+                GuestOfficeAffiliationRow desired = ClosedAffiliation(original,
+                    pEndedYear, pEndedTime);
+                var close = new OfficialCareerCloseRequest(original.ActorId,
+                    original.ServiceKingdomId, CourtOfficeLayer.Central, null,
+                    pEndedYear, pEndedTime, pEndReason ?? "");
+                OfficialCareerCloseToken career =
+                    OfficialCareerPersistence.CaptureClose(pDb, pTransaction,
+                        close);
+                request = new GuestOfficeEndRequest(original, desired, career,
+                    pEndedYear, pEndedTime, pEndReason);
+            }
+            return Preparation(decision, request, current, active.Count,
+                ConflictReason(decision, active.Count));
         }
 
         internal static GuestOfficeEndResult End(GuestOfficeEndRequest pRequest)
@@ -555,7 +611,6 @@ namespace AncientWarfare3.core.schools
                    pCareer.CityId == pAffiliation.ResidenceCityId &&
                    pCareer.Layer == CourtOfficeLayer.Central &&
                    pCareer.AppointedYear == pAffiliation.ServiceStartYear &&
-                   pCareer.AppointedTime.Equals(pAffiliation.UpdatedTime) &&
                    pCareer.UpdatedTime.Equals(pCareer.AppointedTime) &&
                    pCareer.EndedYear == -1 && pCareer.EndedTime.Equals(-1d) &&
                    pCareer.EndReason == "";
@@ -612,6 +667,43 @@ namespace AncientWarfare3.core.schools
                    (pAffiliation.LifecycleState == "AtHome" ||
                     pAffiliation.LifecycleState == "Resident") &&
                    FiniteNonNegative(pAffiliation.UpdatedTime);
+        }
+
+        private static GuestOfficeEndPreparationResult Preparation(
+            GuestOfficeEndPreparationDecision pDecision,
+            GuestOfficeEndRequest pRequest,
+            HistoricalSchoolAffiliationSnapshot pCurrentAffiliation,
+            int pActiveCentralCareerCount, string pConflictReason)
+        {
+            return new GuestOfficeEndPreparationResult(pDecision, pRequest,
+                pCurrentAffiliation, pActiveCentralCareerCount,
+                pConflictReason);
+        }
+
+        private static bool SameServiceIdentity(
+            HistoricalSchoolAffiliationSnapshot pExpected,
+            GuestOfficeAffiliationRow pCurrent)
+        {
+            return pExpected != null && pCurrent != null &&
+                   pExpected.ActorId == pCurrent.ActorId &&
+                   pExpected.ServiceKingdomId == pCurrent.ServiceKingdomId &&
+                   pExpected.ServiceStartYear == pCurrent.ServiceStartYear;
+        }
+
+        private static string ConflictReason(
+            GuestOfficeEndPreparationDecision pDecision,
+            int pActiveCentralCareerCount)
+        {
+            if (pDecision == GuestOfficeEndPreparationDecision.AlreadyEnded ||
+                pDecision == GuestOfficeEndPreparationDecision.Superseded)
+                return "";
+            if (pDecision != GuestOfficeEndPreparationDecision.RetryConflict)
+                return "";
+            if (pActiveCentralCareerCount > 1)
+                return "multiple_active_careers";
+            return pActiveCentralCareerCount == 1
+                ? "career_identity_mismatch"
+                : "affiliation_state_conflict";
         }
 
         private static bool ValidExpected(HistoricalSchoolAffiliationSnapshot pExpected,

@@ -66,22 +66,22 @@ internal static class ArmyRtsCaptainCombatRulesTests
                 missionActive: true, actorIsCaptain: true,
                 fieldCombatReleased: true, hasValidCombatTarget: true),
             "the captain keeps the captain-specific combat task");
-        Assert(ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
+        Assert(!ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: true, hasValidCombatTarget: false),
-            "an active field battle keeps every soldier on dedicated combat even during a transient personal target miss");
-        Assert(!ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
+            "a targetless soldier remains on native follow until vanilla acquisition finds an enemy");
+        Assert(ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: true, hasValidCombatTarget: false),
-            "an active field battle routes a targetless soldier into dedicated member combat instead of follow");
-        Assert(!ArmyRtsCaptainCombatRules.ShouldRestoreVanillaMemberFollow(
-                suppressVanillaFight: true,
-                isDedicatedMemberCombatTask: true),
-            "a transient target miss must not replace the dedicated member combat task with follow");
+            "an active field battle does not put a targetless soldier into an empty combat task");
         Assert(ArmyRtsCaptainCombatRules.ShouldRestoreVanillaMemberFollow(
                 suppressVanillaFight: true,
+                isDedicatedMemberCombatTask: true),
+            "a lost native target restores an RTS member to original follow");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRestoreVanillaMemberFollow(
+                suppressVanillaFight: true,
                 isDedicatedMemberCombatTask: false),
-            "only a vanilla fighting task is restored to native follow when its target becomes invalid");
+            "a member already following needs no task rewrite after a target miss");
         Assert(!ArmyRtsCaptainCombatRules.ShouldSuppressVanillaMemberFight(
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: true, hasValidCombatTarget: true),
@@ -118,9 +118,11 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    StringComparison.Ordinal),
             "the captain combat task is registered in the RTS captain job");
         Assert(content.Contains("MemberCombatTaskId", StringComparison.Ordinal) &&
-               content.Contains("new BehArmyRtsMemberCombat()",
+               content.Contains("new BehFightCheckEnemyIsOk()",
+                   StringComparison.Ordinal) &&
+               content.Contains("GoToActorTargetType.SameTile",
                    StringComparison.Ordinal),
-            "field soldiers receive a dedicated RTS combat task rather than the unstable vanilla fighting task");
+            "field soldiers use the original fighting chain after RTS selects a native target");
         Assert(content.Split(new[]
                    {
                        "task.addBeh(new BehRestartTask());"
@@ -168,10 +170,10 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    "HasValidMemberCombatTarget(pActor)",
                    StringComparison.Ordinal),
             "job repair cannot replace an individually engaged member combatant with follow before the army-wide threshold is reached");
-        Assert(memberMissionBody.Contains(
+        Assert(!memberMissionBody.Contains(
                    "runtime.FieldCombatReleased ||",
                    StringComparison.Ordinal),
-            "active field combat assigns targetless soldiers to member combat so the task can search for enemies");
+            "active field combat leaves targetless soldiers on original follow");
         Assert(memberMissionBody.Contains(
                    "ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(",
                    StringComparison.Ordinal) &&
@@ -197,23 +199,11 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    "ArmyRtsContent.SiegeCombatTaskId",
                    StringComparison.Ordinal),
             "siege entry evaluates each member's city position instead of assigning the siege task army-wide");
-        int memberBehaviourStart = behaviour.IndexOf(
-            "public sealed class BehArmyRtsMemberCombat",
-            StringComparison.Ordinal);
-        string memberBehaviour = memberBehaviourStart >= 0
-            ? behaviour.Substring(memberBehaviourStart)
-            : string.Empty;
-        Assert(memberBehaviour.Contains("IsValidMemberCombatTarget(",
+        Assert(!behaviour.Contains("BehArmyRtsMemberCombat",
                    StringComparison.Ordinal) &&
-               memberBehaviour.Contains("FindMemberCombatTarget(",
-                   StringComparison.Ordinal) &&
-               memberBehaviour.Contains("pActor.makeWait(0.15f);",
-                   StringComparison.Ordinal) &&
-               memberBehaviour.Contains("return BehResult.RepeatStep;",
-                   StringComparison.Ordinal) &&
-               !memberBehaviour.Contains("RestoreMemberFollowAfterCombatLull(",
+               !controller.Contains("FindMemberCombatTarget(",
                    StringComparison.Ordinal),
-            "member combat keeps its own chase target and waits inside combat after a transient target miss");
+            "member combat has no duplicate RTS target search or chase behavior");
         int assignedTargetStart = controller.IndexOf(
             "internal static bool IsValidAssignedCombatTarget(",
             StringComparison.Ordinal);

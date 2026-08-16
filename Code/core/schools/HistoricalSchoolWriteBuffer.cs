@@ -17,6 +17,11 @@ namespace AncientWarfare3.core.schools
         void OnCleanFailure();
     }
 
+    internal interface IHistoricalSchoolRetainedCleanFailure
+    {
+        bool RetainsPendingAfterCleanFailure { get; }
+    }
+
     internal interface IHistoricalSchoolWriteBatchExecutor
     {
         HistoricalSchoolWriteBatchResult Execute(

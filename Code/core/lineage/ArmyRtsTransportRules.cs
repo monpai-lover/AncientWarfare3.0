@@ -225,6 +225,18 @@ namespace AncientWarfare3.core.lineage
             return activeVoyageCount > 0;
         }
 
+        public static bool ShouldProcessInMilitaryP0(bool largeStepMode,
+            int activeVoyageCount)
+        {
+            return largeStepMode && activeVoyageCount > 0;
+        }
+
+        public static bool ShouldSuppressCombatForVoyage(
+            bool actorIsExpectedPassenger, bool voyageComplete)
+        {
+            return actorIsExpectedPassenger && !voyageComplete;
+        }
+
         public static bool ShouldAdmitTransportTarget(bool sameIsland,
             bool reachableFrom)
         {

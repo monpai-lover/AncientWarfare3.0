@@ -97,6 +97,13 @@ if (args.Length == 1 && args[0] == "--actor-kingdom-safety")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--kingdom-founder-safety")
+{
+    KingdomFounderSpeciesSafetyRulesTests.Run();
+    Console.WriteLine("Kingdom founder species safety rules passed.");
+    return;
+}
+
 HistoricalWriteModeRulesTests.Run();
 AWThirdPartySchedulerFaultRulesTests.Run();
 ActorVisualRoleRulesTests.Run();
@@ -195,6 +202,7 @@ if (args.Length == 1 && args[0] == "--xiaization-naming-transition")
 
 if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
 {
+    ArmyConquestReserveRulesTests.Run();
     ArmyRtsWarLifecycleRulesTests.Run();
     ArmyRtsFieldCombatRulesTests.Run();
     PreparationRecruitmentProtectionRulesTests.Run();
@@ -209,6 +217,34 @@ if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
     ArmySharedPathRecoveryRulesTests.Run();
     TemporaryLevyDiagnosticSamplingTests.Run();
     Console.WriteLine("RTS war lifecycle rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--rts-member-vanilla-fighting")
+{
+    RtsMemberGeneralCombatRegressionTests.Run();
+    Console.WriteLine("RTS member vanilla fighting rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--rts-transport-p0")
+{
+    ArmyRtsTransportP0RulesTests.Run();
+    Console.WriteLine("RTS transport P0 rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--peacetime-citizen-job")
+{
+    PeacetimeCitizenJobRulesTests.Run();
+    Console.WriteLine("Peacetime citizen job rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--peacetime-rts-release")
+{
+    PeacetimeRtsOwnershipReleaseRulesTests.Run();
+    Console.WriteLine("Peacetime RTS ownership release rules passed.");
     return;
 }
 
@@ -590,6 +626,13 @@ if (args.Length == 1 && args[0] == "--xiaization-ui-slice")
     XiaizationStatusDisplayRulesTests.Run();
     XiaMinimapVisualRulesTests.Run();
     Console.WriteLine("Xiaization UI rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--xia-bandit-heads")
+{
+    XiaBanditHeadRulesTests.Run();
+    Console.WriteLine("Xia bandit head rules passed.");
     return;
 }
 
@@ -4529,14 +4572,14 @@ Equal(false, StandingArmyRules.ShouldReleaseLegacyPeacetimePatrol(
 string peacetimeEnlistPatchSource = File.ReadAllText(Path.Combine(
     Directory.GetCurrentDirectory(), "Code", "patch", "AW_EnlistPatch.cs"));
 True(peacetimeEnlistPatchSource.Contains(
-        "ReleaseLegacyPatrolForJobSelection(__instance)"),
-    "job selection clears legacy patrol state before vanilla decides work");
-Equal(false, peacetimeEnlistPatchSource.Contains(
         "StandingArmyPeacetimeService.GetJob(__instance)"),
-    "job selection never returns the legacy peacetime patrol job");
+    "job selection routes peaceful warriors through the citizen selector");
 string peacetimeServiceSource = File.ReadAllText(Path.Combine(
     Directory.GetCurrentDirectory(), "Code", "core", "lineage",
     "StandingArmyPeacetimeService.cs"));
+True(peacetimeServiceSource.Contains(
+        "ReleaseLegacyPatrolForJobSelection(pActor)"),
+    "the citizen selector clears legacy patrol state before choosing work");
 Equal(false, peacetimeServiceSource.Contains(
         "pActor.ai.setJob(StandingArmyPeacetimeContent.JobId)"),
     "runtime refresh never assigns the legacy patrol job");
@@ -8536,6 +8579,8 @@ MilitaryGovernorateRulesTests.Run();
 MilitaryGovernorateWarRulesTests.Run();
 MilitaryGovernorateSuccessionRulesTests.Run();
 ReflectionDelegateFactoryTests.Run();
+PeacetimeCitizenJobRulesTests.Run();
+PeacetimeRtsOwnershipReleaseRulesTests.Run();
 PeasantRebelRouteRulesTests.Run();
 
 Console.WriteLine("Rule tests passed.");

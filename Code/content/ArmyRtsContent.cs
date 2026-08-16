@@ -21,6 +21,7 @@ namespace AncientWarfare3.content
             "aw_army_return_home_captain";
         public const string ReturnFollowerJobId =
             "aw_army_return_home_follower";
+        public const string CitizenJobId = "citizen";
         public const string MissionTaskId = "aw_army_rts_mission";
         public const string RallyTaskId = "aw_army_rts_rally";
         public const string ReplenishTaskId = "aw_army_rts_replenish";
@@ -75,6 +76,7 @@ namespace AncientWarfare3.content
             RegisterMobilizationStatus();
             ArmyRtsAttackSpeechBubbleService.RegisterAsset();
             InterceptVanillaStrategicDecisions();
+            RegisterCitizenJob();
             if (!AssetManager.job_actor.has(CaptainJobId))
             {
                 ActorJob job = AssetManager.job_actor.add(new ActorJob
@@ -226,6 +228,23 @@ namespace AncientWarfare3.content
             }
         }
 
+        private static void RegisterCitizenJob()
+        {
+            ActorJob job = AssetManager.job_actor.get(CitizenJobId);
+            if (job == null)
+            {
+                job = AssetManager.job_actor.add(new ActorJob
+                {
+                    id = CitizenJobId
+                });
+            }
+            for (int i = 0; i < job.tasks.Count; i++)
+            {
+                if (job.tasks[i]?.id == "make_decision") return;
+            }
+            job.addTask("make_decision");
+        }
+
         internal static string ResolveCaptainTaskId(ArmyRtsState pState,
             ArmyRtsTransportPhase pTransportPhase)
         {
@@ -310,11 +329,10 @@ namespace AncientWarfare3.content
                 locale_key = "task_unit_aw_army_rts_member_combat"
             });
             task.setIcon("ui/Icons/iconWar");
-            task.addBeh(new BehArmyRtsMemberCombat());
+            task.addBeh(new BehFightCheckEnemyIsOk());
             task.addBeh(new BehGoToActorTarget(
-                GoToActorTargetType.RaycastWithAttackRange,
-                false, true, true));
-            task.addBeh(new BehArmyRtsCaptainAttack());
+                GoToActorTargetType.SameTile,
+                true, true, true));
             task.addBeh(new BehRestartTask());
         }
 
