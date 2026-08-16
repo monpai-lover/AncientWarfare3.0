@@ -89,6 +89,31 @@ namespace AncientWarfare3.core.lineage
                 gateCenters);
         }
 
+        public static IReadOnlyList<CultiwayWallPoint>
+            RankInwardTowerCandidates(CultiwayWallPoint pGate,
+                CultiwayWallPoint pCenter, int pMaxInwardSteps)
+        {
+            if (pMaxInwardSteps < 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(pMaxInwardSteps));
+            int deltaX = pCenter.X - pGate.X;
+            int deltaY = pCenter.Y - pGate.Y;
+            int stepX = 0;
+            int stepY = 0;
+            if (Math.Abs(deltaX) > Math.Abs(deltaY))
+                stepX = Math.Sign(deltaX);
+            else stepY = Math.Sign(deltaY);
+            if (stepX == 0 && stepY == 0)
+                return new[] { pGate };
+
+            var result = new CultiwayWallPoint[pMaxInwardSteps + 1];
+            for (int step = 0; step <= pMaxInwardSteps; step++)
+                result[step] = new CultiwayWallPoint(
+                    pGate.X + stepX * step,
+                    pGate.Y + stepY * step);
+            return result;
+        }
+
         private static bool IsOuterBoundary(CultiwayWallPoint pPoint,
             HashSet<CultiwayWallPoint> pTerritory)
         {

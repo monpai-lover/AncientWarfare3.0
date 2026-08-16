@@ -11,6 +11,7 @@ internal static class PeasantRebelBanditZoneWallRulesTests
         TwoAdjacentZonesUseOneUnionPerimeter();
         IrregularUnionDoesNotWallSharedEdges();
         CarvesOneThreeTileGateOnEveryCardinalSide();
+        RanksGateTowerCandidatesTowardTheInterior();
     }
 
     private static void OneZoneUsesItsExactOuterEdge()
@@ -81,6 +82,39 @@ internal static class PeasantRebelBanditZoneWallRulesTests
                 plan.ClosedWallPoints.Contains(gate) &&
                 !plan.WallPoints.Contains(gate)),
             "each tower center is carved from the original perimeter");
+    }
+
+    private static void RanksGateTowerCandidatesTowardTheInterior()
+    {
+        AssertTowerCandidates(Point(12, 15), Point(11, 11), new[]
+        {
+            Point(12, 15), Point(12, 14), Point(12, 13), Point(12, 12)
+        }, "north gate scans south into the stronghold");
+        AssertTowerCandidates(Point(15, 12), Point(11, 11), new[]
+        {
+            Point(15, 12), Point(14, 12), Point(13, 12), Point(12, 12)
+        }, "east gate scans west into the stronghold");
+        AssertTowerCandidates(Point(12, 8), Point(11, 11), new[]
+        {
+            Point(12, 8), Point(12, 9), Point(12, 10), Point(12, 11)
+        }, "south gate scans north into the stronghold");
+        AssertTowerCandidates(Point(8, 12), Point(11, 11), new[]
+        {
+            Point(8, 12), Point(9, 12), Point(10, 12), Point(11, 12)
+        }, "west gate scans east into the stronghold");
+    }
+
+    private static void AssertTowerCandidates(CultiwayWallPoint gate,
+        CultiwayWallPoint center, IReadOnlyList<CultiwayWallPoint> expected,
+        string message)
+    {
+        IReadOnlyList<CultiwayWallPoint> actual =
+            PeasantRebelBanditZoneWallRules.RankInwardTowerCandidates(
+                gate, center, 3);
+        if (!expected.SequenceEqual(actual))
+            throw new InvalidOperationException(message + ": expected [" +
+                string.Join(", ", expected) + "], got [" +
+                string.Join(", ", actual) + "]");
     }
 
     private static BanditZoneWallPlan Plan(

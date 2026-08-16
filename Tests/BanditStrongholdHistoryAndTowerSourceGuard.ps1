@@ -20,12 +20,32 @@ foreach ($token in @('GateCenters', 'TowerAsset', 'TowerTiles')) {
     }
 }
 foreach ($token in @('ResolveTowerAsset(', 'getBuilding("order_watch_tower")',
-        'CanPlaceGateTower(', 'BuildPlacingType.Load',
+        'FindGateTowerTiles(', 'RankInwardTowerCandidates(',
+        'IsTowerFootprintInside(',
+        'reservedFootprint.Overlaps(',
+        'wallPoints.Contains(',
+        'CanPlaceGateTower(',
+        'aw_bandit_stronghold_tower_failed',
         'World.world.buildings.addBuilding(', 'building.setKingdom(',
         'Towers.Add(', 'RemoveStrongholdTowers(',
         'World.world.buildings.removeObject(')) {
     if (-not $service.Contains($token)) {
         throw "Stronghold tower lifecycle is missing $token"
+    }
+}
+
+$nativePlacement =
+    'canBuildFrom\s*\(\s*pTile,\s*pAsset,\s*null,\s*' +
+    'BuildPlacingType\.Load\s*\)'
+if ($service -notmatch $nativePlacement) {
+    throw 'Gate-tower preflight must match native cityless Load placement'
+}
+
+foreach ($forbidden in @(
+        'canBuildFrom(pTile, pAsset, pMother, BuildPlacingType.Load)',
+        'candidateWall.GateCenters\n                        .Select')) {
+    if ($service.Contains($forbidden)) {
+        throw "Rejected gate-center-only tower planning remains: $forbidden"
     }
 }
 
@@ -38,7 +58,7 @@ if ($candidateStart -lt 0 -or $candidateEnd -le $candidateStart) {
 }
 $candidateSelection = $service.Substring($candidateStart,
     $candidateEnd - $candidateStart)
-$towerCheckIndex = $candidateSelection.IndexOf('CanPlaceGateTower(')
+$towerCheckIndex = $candidateSelection.IndexOf('FindGateTowerTiles(')
 $acceptIndex = $candidateSelection.IndexOf('interior = candidate;')
 if ($towerCheckIndex -lt 0 -or $acceptIndex -le $towerCheckIndex) {
     throw 'Each four-zone candidate must validate gate towers before acceptance'

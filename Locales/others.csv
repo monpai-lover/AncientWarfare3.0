@@ -357,6 +357,7 @@ aw_spawn_bandit_stronghold_description,从所点城市分出一座土匪寨城,S
 aw_bandit_stronghold_invalid_city,请点击普通国家的城市区域,Select a city zone of an ordinary kingdom,請點擊普通國家的城市區域
 aw_bandit_stronghold_already_exists,此地已经存在寨城,This city already has a stronghold,此地已經存在寨城
 aw_bandit_stronghold_wall_failed,此城无法规划木墙,No wooden wall can be planned here,此城無法規劃木牆
+aw_bandit_stronghold_tower_failed,寨门附近无法安置箭塔,No valid gate-tower positions are available,寨門附近無法安置箭塔
 aw_bandit_stronghold_split_failed,城内外区域不足以分出寨城,The city cannot be split into a viable stronghold,城內外區域不足以分出寨城
 aw_bandit_stronghold_population_failed,城中没有足够成年人建立寨城,The city lacks enough adults for a stronghold,城中沒有足夠成年人建立寨城
 aw_bandit_stronghold_core_failed,母城无法保留基础市政核心,The mother city cannot retain a civic core,母城無法保留基礎市政核心

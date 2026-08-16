@@ -9,6 +9,8 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class PeasantRebelBanditStrongholdService
     {
+        private const int GateTowerInwardSearchSteps = 6;
+
         private sealed class ActorSnapshot
         {
             internal Actor Actor;
@@ -118,13 +120,10 @@ namespace AncientWarfare3.core.lineage
                     candidateWall.WallPoints.Count == 0) continue;
                 foundWallableCandidate = true;
                 List<WorldTile> candidateTowerTiles =
-                    candidateWall.GateCenters
-                        .Select(point => World.world.GetTile(
-                            point.X, point.Y))
-                        .Where(tile => tile != null).Distinct().ToList();
-                if (towerAsset == null || candidateTowerTiles.Count != 4 ||
-                    candidateTowerTiles.Any(tile => !CanPlaceGateTower(
-                        tile, towerAsset, pMother))) continue;
+                    FindGateTowerTiles(candidateWall, strongholdCenter,
+                        towerAsset, candidate);
+                if (candidateTowerTiles == null ||
+                    candidateTowerTiles.Count != 4) continue;
                 interior = candidate;
                 zoneWallPlan = candidateWall;
                 towerTiles = candidateTowerTiles;
@@ -132,7 +131,9 @@ namespace AncientWarfare3.core.lineage
             }
             if (interior == null || zoneWallPlan == null)
             {
-                pFailureKey = "aw_bandit_stronghold_wall_failed";
+                pFailureKey = foundWallableCandidate
+                    ? "aw_bandit_stronghold_tower_failed"
+                    : "aw_bandit_stronghold_wall_failed";
                 LogPlanFailure(foundWallableCandidate
                         ? "unbuildable_gate_towers"
                         : "no_wallable_four_zone_candidate",
@@ -218,6 +219,26 @@ namespace AncientWarfare3.core.lineage
                 pContext.FinalizeGovernment;
             plan.Context.RollbackGovernment =
                 pContext.RollbackGovernment;
+            return TryCreatePlanned(plan, out pStronghold,
+                out pFailureKey);
+        }
+
+        private static bool TryCreatePlanned(
+            PeasantRebelBanditStrongholdPlan pPlan,
+            out City pStronghold, out string pFailureKey)
+        {
+            pStronghold = null;
+            pFailureKey = "aw_bandit_stronghold_invalid_city";
+            if (pPlan?.Context?.Mother?.data == null ||
+                pPlan.Context.Bandit?.data == null ||
+                pPlan.Context.Origin?.data == null ||
+                pPlan.Context.Ruler?.data == null ||
+                pPlan.CenterZone == null ||
+                pPlan.InteriorZones?.Count != 4 ||
+                pPlan.WallPoints == null || pPlan.WallPoints.Count == 0 ||
+                pPlan.TowerTiles?.Count != 4 ||
+                pPlan.TowerAsset == null) return false;
+            PeasantRebelBanditStrongholdPlan plan = pPlan;
             var transaction = new Transaction { Plan = plan };
             try
             {
@@ -311,7 +332,8 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             if (!TryPlan(pMother, origin, origin, ruler,
-                    out _, out pFailureKey))
+                    out PeasantRebelBanditStrongholdPlan plan,
+                    out pFailureKey))
                 return false;
 
             try
@@ -347,20 +369,13 @@ namespace AncientWarfare3.core.lineage
                     LineageKeys.MANDATE_REBEL_ORIGIN_RULER_ID,
                     origin.king?.getID() ?? -1L);
 
-                var context = new PeasantRebelBanditCreationContext
-                {
-                    Bandit = bandit,
-                    Origin = origin,
-                    Mother = pMother,
-                    Ruler = ruler,
-                    RemoveBanditOnFailure = true,
-                    FinalizeGovernment = stronghold =>
-                        PeasantRebelRouteService.
-                            FinalizeDirectBanditGovernment(
-                                bandit, stronghold),
-                    RollbackGovernment = () => { }
-                };
-                if (!TryCreate(context, out pStronghold,
+                plan.Context.Bandit = bandit;
+                plan.Context.RemoveBanditOnFailure = true;
+                plan.Context.FinalizeGovernment = stronghold =>
+                    PeasantRebelRouteService.FinalizeDirectBanditGovernment(
+                        bandit, stronghold);
+                plan.Context.RollbackGovernment = () => { };
+                if (!TryCreatePlanned(plan, out pStronghold,
                         out pFailureKey))
                 {
                     if (bandit?.data != null && !bandit.isRekt())
@@ -931,13 +946,78 @@ namespace AncientWarfare3.core.lineage
             catch { return null; }
         }
 
-        private static bool CanPlaceGateTower(WorldTile pTile,
-            BuildingAsset pAsset, City pMother)
+        private static List<WorldTile> FindGateTowerTiles(
+            BanditZoneWallPlan pWallPlan, WorldTile pCenter,
+            BuildingAsset pAsset, IReadOnlyCollection<TileZone> pZones)
         {
-            return pTile != null && pAsset != null && pMother?.data != null &&
+            if (pWallPlan?.GateCenters == null ||
+                pWallPlan.GateCenters.Count != 4 || pCenter == null ||
+                pAsset?.fundament == null || pZones == null ||
+                pZones.Count != 4) return null;
+            var zones = new HashSet<TileZone>(pZones);
+            var wallPoints = new HashSet<CultiwayWallPoint>(
+                pWallPlan.WallPoints);
+            var reservedFootprint = new HashSet<WorldTile>();
+            var result = new List<WorldTile>(4);
+            var center = new CultiwayWallPoint(pCenter.x, pCenter.y);
+            foreach (CultiwayWallPoint gate in pWallPlan.GateCenters)
+            {
+                WorldTile selected = null;
+                foreach (CultiwayWallPoint point in
+                         PeasantRebelBanditZoneWallRules.
+                             RankInwardTowerCandidates(gate, center,
+                                 GateTowerInwardSearchSteps))
+                {
+                    WorldTile tile = World.world.GetTile(point.X, point.Y);
+                    if (!IsTowerFootprintInside(tile, pAsset, zones,
+                            out List<WorldTile> footprint) ||
+                        reservedFootprint.Overlaps(footprint) ||
+                        footprint.Any(footprintTile => wallPoints.Contains(
+                            new CultiwayWallPoint(footprintTile.x,
+                                footprintTile.y))) ||
+                        !CanPlaceGateTower(tile, pAsset)) continue;
+                    selected = tile;
+                    reservedFootprint.UnionWith(footprint);
+                    break;
+                }
+                if (selected == null) return null;
+                result.Add(selected);
+            }
+            return result.Distinct().Count() == 4 ? result : null;
+        }
+
+        private static bool IsTowerFootprintInside(WorldTile pTile,
+            BuildingAsset pAsset, HashSet<TileZone> pZones,
+            out List<WorldTile> pFootprint)
+        {
+            pFootprint = null;
+            BuildingFundament fundament = pAsset?.fundament;
+            if (pTile == null || fundament == null || pZones == null ||
+                pZones.Count == 0) return false;
+            var footprint = new List<WorldTile>(
+                fundament.width * fundament.height);
+            int originX = pTile.x - fundament.left;
+            int originY = pTile.y - fundament.bottom;
+            for (int x = 0; x < fundament.width; x++)
+            for (int y = 0; y < fundament.height; y++)
+            {
+                WorldTile tile = World.world.GetTile(
+                    originX + x, originY + y);
+                if (tile == null || !pZones.Contains(tile.zone))
+                    return false;
+                footprint.Add(tile);
+            }
+            pFootprint = footprint;
+            return true;
+        }
+
+        private static bool CanPlaceGateTower(WorldTile pTile,
+            BuildingAsset pAsset)
+        {
+            return pTile != null && pAsset != null &&
                    World.world?.buildings != null &&
                    World.world.buildings.canBuildFrom(pTile, pAsset,
-                       pMother, BuildPlacingType.Load);
+                       null, BuildPlacingType.Load);
         }
 
         private static void PlaceTowers(Transaction pTransaction,

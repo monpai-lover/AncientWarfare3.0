@@ -34,6 +34,7 @@ foreach ($token in @('TryCreateDirect(', 'makeNewCivKingdom',
 foreach ($key in @('aw_spawn_bandit_stronghold,',
         'aw_spawn_bandit_stronghold_description,',
         'aw_bandit_stronghold_invalid_city,',
+        'aw_bandit_stronghold_tower_failed,',
         'aw_bandit_stronghold_success,')) {
     if ($locale -notmatch [regex]::Escape($key)) {
         throw "Bandit god power localization is missing $key"

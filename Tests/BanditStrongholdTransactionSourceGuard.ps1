@@ -109,6 +109,14 @@ if ($directPreflightIndex -lt 0 -or
     $directKingdomIndex -le $directPreflightIndex) {
     throw 'Direct bandit creation must preflight before mutating ruler kingdom'
 }
+$directPlanCalls = [regex]::Matches($direct, '\bTryPlan\s*\(').Count
+if ($directPlanCalls -ne 1) {
+    throw "Direct bandit creation must plan exactly once, got $directPlanCalls"
+}
+if (-not $direct.Contains('TryCreatePlanned(') -or
+    $direct.Contains('TryCreate(context,')) {
+    throw 'Direct bandit creation must commit its preflight plan without replanning'
+}
 
 $tryPlanStart = $service.IndexOf('internal static bool TryPlan(')
 $tryCreateStart = $service.IndexOf('internal static bool TryCreate(')
