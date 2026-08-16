@@ -470,6 +470,8 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             if (pAuthoritative)
             {
+                PeasantRebelBanditStrongholdService.QueueOrphanCleanup(
+                    pKingdom);
                 try
                 {
                     foreach (Actor unit in pKingdom.getUnits())

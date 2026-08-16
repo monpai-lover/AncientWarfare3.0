@@ -1,0 +1,107 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditPressureRulesTests
+{
+    public static void Run()
+    {
+        AdvancesSixPointsPerUniqueWorldYear();
+        AppliesLoyaltyOnlyToTheActiveTarget();
+        StartsRevolutionAtHalfMandateStrength();
+        SelectsOneStableAdjacentOriginCity();
+        CleansUpOnlyAfterTheFinalCityIsLost();
+    }
+
+    private static void AdvancesSixPointsPerUniqueWorldYear()
+    {
+        Equal(294, PeasantRebelBanditPressureRules.AdvancePressure(
+            pressure: 0, lastYear: 100, currentYear: 149),
+            "forty-nine years remain below the threshold");
+        Equal(300, PeasantRebelBanditPressureRules.AdvancePressure(
+            pressure: 0, lastYear: 100, currentYear: 150),
+            "fifty years reach the threshold exactly");
+        Equal(120, PeasantRebelBanditPressureRules.AdvancePressure(
+            pressure: 120, lastYear: 150, currentYear: 150),
+            "the same world year is never counted twice");
+        Equal(120, PeasantRebelBanditPressureRules.AdvancePressure(
+            pressure: 120, lastYear: 151, currentYear: 150),
+            "a backwards year does not reduce pressure");
+    }
+
+    private static void AppliesLoyaltyOnlyToTheActiveTarget()
+    {
+        Equal(-25, PeasantRebelBanditPressureRules.LoyaltyPenalty(
+            active: true, targetMatches: true),
+            "the active pressure target receives the bandit penalty");
+        Equal(0, PeasantRebelBanditPressureRules.LoyaltyPenalty(
+            active: true, targetMatches: false),
+            "other cities receive no bandit penalty");
+        Equal(0, PeasantRebelBanditPressureRules.LoyaltyPenalty(
+            active: false, targetMatches: true),
+            "released or fallen strongholds restore loyalty");
+    }
+
+    private static void StartsRevolutionAtHalfMandateStrength()
+    {
+        False(PeasantRebelBanditPressureRules.ShouldStartRevolution(
+            banditStrength: 499, originStrength: 1000,
+            originViable: true),
+            "strength below one half remains bandit");
+        True(PeasantRebelBanditPressureRules.ShouldStartRevolution(
+            banditStrength: 500, originStrength: 1000,
+            originViable: true),
+            "the exact one-half boundary starts revolution");
+        True(PeasantRebelBanditPressureRules.ShouldStartRevolution(
+            banditStrength: 0, originStrength: 0,
+            originViable: false),
+            "a destroyed origin cannot block revolution");
+    }
+
+    private static void SelectsOneStableAdjacentOriginCity()
+    {
+        var candidates = new[]
+        {
+            new BanditPressureTargetCandidate(9, 30, true, true, true),
+            new BanditPressureTargetCandidate(8, 10, true, true, true),
+            new BanditPressureTargetCandidate(7, 10, true, true, true),
+            new BanditPressureTargetCandidate(6, 0, false, true, true),
+            new BanditPressureTargetCandidate(5, 0, true, false, true),
+            new BanditPressureTargetCandidate(4, 0, true, true, false)
+        };
+
+        Equal(7L, PeasantRebelBanditPressureRules.SelectTargetCityId(
+            candidates),
+            "lowest loyalty wins and city id breaks a tie");
+        Equal(-1L, PeasantRebelBanditPressureRules.SelectTargetCityId(
+            new[]
+            {
+                new BanditPressureTargetCandidate(
+                    1, 0, false, true, true)
+            }), "no enclave target is selected");
+    }
+
+    private static void CleansUpOnlyAfterTheFinalCityIsLost()
+    {
+        True(PeasantRebelBanditPressureRules.ShouldQueueOrphanCleanup(0),
+            "zero live cities require orphan cleanup");
+        False(PeasantRebelBanditPressureRules.ShouldQueueOrphanCleanup(1),
+            "a surviving city keeps the bandit state alive");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                message + $": expected {expected}, got {actual}");
+    }
+}

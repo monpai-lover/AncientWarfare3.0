@@ -12,6 +12,8 @@
     <Compile Include="PeasantRebelRouteRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelRouteRules.cs" Link="Production\PeasantRebelRouteRules.cs" />
     <Compile Include="PeasantRebelBanditStrongholdRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditPressureRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditPressureRules.cs" Link="Production\PeasantRebelBanditPressureRules.cs" />
     <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />

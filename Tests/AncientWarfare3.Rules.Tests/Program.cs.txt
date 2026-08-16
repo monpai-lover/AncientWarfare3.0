@@ -41,6 +41,20 @@ if (args.Length == 1 && args[0] == "--bandit-stronghold")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--bandit-pressure")
+{
+    PeasantRebelBanditPressureRulesTests.Run();
+    Console.WriteLine("Bandit pressure rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-history-localization")
+{
+    HistoryLocalizationRulesTests.Run();
+    Console.WriteLine("Bandit history localization rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--actor-kingdom-safety")
 {
     ActorKingdomSafetyRulesTests.Run();

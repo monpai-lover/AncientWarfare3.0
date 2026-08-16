@@ -495,9 +495,11 @@ namespace AncientWarfare3.core.lineage
         {
             if (!PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
                     out PeasantRebelBanditStrongholdState state)) return true;
-            return pCity?.data != null &&
-                   pCity.getID() == state.StrongholdCityId &&
-                   pCity.kingdom == pKingdom;
+            if (pCity?.data == null) return false;
+            if (pCity.kingdom == pKingdom) return true;
+            return state.Pressure >=
+                       PeasantRebelBanditPressureRules.MaximumPressure &&
+                   state.PressureTargetCityId == pCity.getID();
         }
 
         internal static bool CanAcquireZone(City pCity, TileZone pZone)
@@ -735,6 +737,31 @@ namespace AncientWarfare3.core.lineage
                                     e.Message);
                 return false;
             }
+        }
+
+        internal static void QueueOrphanCleanup(Kingdom pBandit)
+        {
+            if (!CanMutate() || pBandit?.data == null ||
+                !PeasantRebelBanditStateStore.TryRead(pBandit,
+                    out PeasantRebelBanditStrongholdState state)) return;
+            int liveCities = PeasantRebelRouteService.SafeCityCount(pBandit);
+            if (!PeasantRebelBanditPressureRules.ShouldQueueOrphanCleanup(
+                    liveCities)) return;
+            long banditId = pBandit.getID();
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "bandit_stronghold_orphan_cleanup:" + banditId,
+                DeferredWorkClass.CriticalRuntime,
+                () =>
+                {
+                    RemoveStrongholdTowers(state);
+                    RestoreWalls(state);
+                    Kingdom resolved = ResolveKingdom(banditId);
+                    if (resolved?.data != null &&
+                        PeasantRebelRouteService.SafeCityCount(resolved) == 0)
+                        PeasantRebelBanditStateStore.Clear(resolved);
+                    PeasantRebelBanditPressureService.
+                        InvalidateTargetIndex();
+                });
         }
 
         private static City ResolveCity(long pCityId)
@@ -1209,6 +1236,9 @@ namespace AncientWarfare3.core.lineage
                 StrongholdCityId = pStrongholdCityId,
                 MotherCityId = plan.Context.Mother.getID(),
                 OriginKingdomId = plan.Context.Origin.getID(),
+                PressureTargetCityId = plan.Context.Mother.getID(),
+                Pressure = 0,
+                LastPressureYear = Date.getCurrentYear(),
                 FixedZoneKeys = new List<string>(plan.FixedZoneKeys),
                 WallPoints = pTransaction.WallTiles.Select(snapshot =>
                     new BanditStrongholdPoint
