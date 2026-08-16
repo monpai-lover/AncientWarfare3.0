@@ -117,6 +117,9 @@ namespace AncientWarfare3.core.lineage
         public int military_obligation = 50;
         public int contract_tier = VassalContractTierRules.Outer;
         public bool is_tributary;
+        public int last_tribute_paid_year = -1;
+        public int next_tribute_due_year = -1;
+        public int last_tribute_factor_percent = -1;
         public VassalSubjectKind subject_kind = VassalSubjectKind.Ordinary;
         public double start_time = -1;
         public int years = -1;

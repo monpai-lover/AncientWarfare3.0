@@ -1235,6 +1235,9 @@ namespace AncientWarfare3.ui.windows
                 "non_aggression_pact" => AW_L10n.Text(
                     "aw_diplomacy_failure_non_aggression_pact",
                     "A treaty or truce currently prevents war"),
+                "active_tributary_protection" => AW_L10n.Text(
+                    "aw_diplomacy_failure_active_tributary_protection",
+                    "An active tributary protection relation prevents this war"),
                 "same_alliance" => AW_L10n.Text(
                     "aw_diplomacy_failure_same_alliance",
                     "Members of the same alliance cannot declare war"),

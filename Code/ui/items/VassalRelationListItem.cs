@@ -320,6 +320,22 @@ namespace AncientWarfare3.ui.items
                 sb.AppendLine(AW_L10n.Text("aw_vassal_autonomy", "\u81EA\u6CBB\u5EA6:") + pObject.autonomy);
                 sb.AppendLine(AW_L10n.Text("aw_vassal_tribute", "\u8D21\u8D4B:") + pObject.tribute_rate);
                 sb.AppendLine(AW_L10n.Text("aw_vassal_military", "\u519B\u5F79:") + pObject.military_obligation);
+                if (pObject.is_tributary)
+                {
+                    sb.AppendLine(AW_L10n.Text("aw_vassal_last_tribute_paid_year",
+                        "Last tribute paid: ") +
+                        (pObject.last_tribute_paid_year < 0 ?
+                            AW_L10n.Text("aw_vassal_tribute_never", "never") :
+                            pObject.last_tribute_paid_year.ToString()));
+                    sb.AppendLine(AW_L10n.Text("aw_vassal_last_tribute_factor",
+                        "Last payment factor: ") +
+                        (pObject.last_tribute_factor_percent < 0 ? "?" :
+                            pObject.last_tribute_factor_percent + "%"));
+                    sb.AppendLine(AW_L10n.Text("aw_vassal_next_tribute_due_year",
+                        "Next tribute due: ") +
+                        (pObject.next_tribute_due_year < 0 ? "?" :
+                            pObject.next_tribute_due_year.ToString()));
+                }
                 if (pObject.subject_kind ==
                     VassalSubjectKind.MilitaryGovernorate)
                 {

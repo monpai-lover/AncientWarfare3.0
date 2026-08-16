@@ -2,6 +2,7 @@ key,cz,en,ch
 aw_diplomacy_failure_war_target_option_changed,战争依据已变化，请重新选择,The basis for this war goal changed; select it again,戰爭依據已變化，請重新選擇
 aw_diplomacy_failure_invalid_participants,当前国家或目标国家已经无效,One of the realms is no longer valid,當前國家或目標國家已經無效
 aw_diplomacy_failure_invalid,当前双方不能互相宣战,These realms cannot declare war on each other,當前雙方不能互相宣戰
+aw_diplomacy_failure_active_tributary_protection,有效朝贡期内宗主与朝贡国不能互相宣战,An active tributary protection relation prevents this war,有效朝貢期內宗主與朝貢國不能互相宣戰
 aw_diplomacy_failure_non_aggression_pact,互不侵犯条约或停战期阻止了宣战,A treaty or truce currently prevents war,互不侵犯條約或停戰期阻止了宣戰
 aw_diplomacy_failure_same_alliance,同一联盟的成员不能互相宣战,Members of the same alliance cannot declare war,同一聯盟的成員不能互相宣戰
 aw_diplomacy_failure_vassal_external_war_blocked,该附庸没有独立对外宣战权,This subject lacks independent external war powers,該附庸沒有獨立對外宣戰權

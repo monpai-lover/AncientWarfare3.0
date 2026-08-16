@@ -69,8 +69,16 @@ namespace AncientWarfare3.core.lineage
                     if (!TributarySettlementPersistence.TryBeginAttempt(
                             db, relation.RelationId, year)) continue;
 
-                    SettleAttempt(db, relation, tributary, pSuzerain,
-                        year);
+                    TributarySettlementResult result = SettleAttempt(db,
+                        relation, tributary, pSuzerain, year);
+                    RecordSettlement(tributary, pSuzerain, result);
+                    ModClass.LogInfo("[TributarySettlement] relation=" +
+                        result.RelationId + " tributary=" + tributary.id +
+                        " suzerain=" + pSuzerain.id + " year=" + year +
+                        " factor=" + result.FactorPercent + " political=" +
+                        result.PoliticalTransferred.ToString("0.0") +
+                        " gold=" + result.GoldTransferred + " outcome=" +
+                        result.Outcome + " offering=" + result.OfferingOutcome);
                 }
                 catch (Exception error)
                 {
@@ -194,6 +202,27 @@ namespace AncientWarfare3.core.lineage
             return projectedRelationId == relationId &&
                    VassalService.GetTributarySuzerainId(tributary) ==
                    suzerain.id;
+        }
+
+        private static void RecordSettlement(Kingdom tributary,
+            Kingdom suzerain, TributarySettlementResult result)
+        {
+            string eventId = result.Outcome == "paid"
+                ? "tributary_paid"
+                : result.Outcome == "tribute_refused_power"
+                    ? "tributary_refused_power"
+                    : "tributary_unpaid";
+            string label = HistoryLocalizationRules.Text(
+                "aw_hist_" + eventId);
+            string text = (tributary?.name ?? "") + " -> " +
+                (suzerain?.name ?? "") + " " + label +
+                " political=" + result.PoliticalTransferred.ToString("0.0") +
+                " gold=" + result.GoldTransferred + " factor=" +
+                result.FactorPercent;
+            HistoryWriter.RecordKingdom(tributary, eventId, text,
+                HistoryTarget.Kingdom(suzerain));
+            HistoryWriter.RecordKingdom(suzerain, eventId, text,
+                HistoryTarget.Kingdom(tributary));
         }
     }
 }

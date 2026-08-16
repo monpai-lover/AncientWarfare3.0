@@ -150,6 +150,10 @@ aw_vassal_years,臣属年数:,Years as vassal:,臣屬年數：
 aw_vassal_autonomy,自治度:,Autonomy:,自治度：
 aw_vassal_tribute,贡赋:,Tribute:,貢賦：
 aw_vassal_military,军役:,Military obligation:,軍役：
+aw_vassal_last_tribute_paid_year,上次纳贡:,Last tribute paid:,上次納貢：
+aw_vassal_last_tribute_factor,实缴档位:,Last payment factor:,實繳檔位：
+aw_vassal_next_tribute_due_year,下次应缴:,Next tribute due:,下次應繳：
+aw_vassal_tribute_never,从未,Never,從未
 aw_vassal_contract_tier,契约:,Contract:,契約：
 aw_vassal_contract_inner,内藩,Inner Vassal,內藩
 aw_vassal_contract_outer,外藩,Outer Vassal,外藩

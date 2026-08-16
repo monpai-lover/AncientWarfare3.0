@@ -82,6 +82,9 @@ namespace AncientWarfare3.core.lineage
             public long suzerain_id = -1;
             public string suzerain_name = "";
             public string suzerain_color = "";
+            public int last_tribute_paid_year = -1;
+            public int next_tribute_due_year = -1;
+            public int last_tribute_factor_percent = -1;
         }
 
         public static bool IsVassalKingdom(Kingdom pKingdom)
@@ -1678,6 +1681,12 @@ namespace AncientWarfare3.core.lineage
                 row.contract_tier = relation.contract_tier;
                 row.subject_kind = relation.subject_kind;
                 row.is_tributary = VassalContractTierRules.IsLooseTributary(relation.contract_tier);
+                if (row.is_tributary)
+                {
+                    row.last_tribute_paid_year = relation.last_tribute_paid_year;
+                    row.next_tribute_due_year = relation.next_tribute_due_year;
+                    row.last_tribute_factor_percent = relation.last_tribute_factor_percent;
+                }
                 row.relation_reason_label = VassalGetReasonLabel(relation.relation_type);
                 row.autonomy = effective.Autonomy;
                 row.tribute_rate = effective.TributeRate;
@@ -1920,7 +1929,7 @@ namespace AncientWarfare3.core.lineage
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText =
                     $"SELECT RELATION_TYPE, AUTONOMY, TRIBUTE_RATE, MILITARY_OBLIGATION, CONTRACT_TIER, SUBJECT_KIND, START_TIME, " +
-                    $"SUZERAIN_ID, SUZERAIN_NAME, SUZERAIN_COLOR FROM {VassalRelationTableItem.GetTableName()} " +
+                    $"SUZERAIN_ID, SUZERAIN_NAME, SUZERAIN_COLOR,LAST_TRIBUTE_PAID_YEAR,NEXT_TRIBUTE_DUE_YEAR,LAST_TRIBUTE_FACTOR_PERCENT FROM {VassalRelationTableItem.GetTableName()} " +
                     "WHERE VASSAL_ID=@v AND ACTIVE=1 AND END_TIME<0 ORDER BY START_TIME DESC LIMIT 1";
                 cmd.Parameters.AddWithValue("@v", pVassalId);
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
@@ -1941,7 +1950,10 @@ namespace AncientWarfare3.core.lineage
                     start_time = reader.IsDBNull(6) ? -1 : reader.GetDouble(6),
                     suzerain_id = reader.IsDBNull(7) ? -1 : reader.GetInt64(7),
                     suzerain_name = reader.IsDBNull(8) ? "" : reader.GetString(8),
-                    suzerain_color = reader.IsDBNull(9) ? "" : reader.GetString(9)
+                    suzerain_color = reader.IsDBNull(9) ? "" : reader.GetString(9),
+                    last_tribute_paid_year = reader.IsDBNull(10) ? -1 : (int)reader.GetInt64(10),
+                    next_tribute_due_year = reader.IsDBNull(11) ? -1 : (int)reader.GetInt64(11),
+                    last_tribute_factor_percent = reader.IsDBNull(12) ? -1 : (int)reader.GetInt64(12)
                 };
             }
             catch { return null; }
