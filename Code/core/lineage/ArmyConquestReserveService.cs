@@ -68,6 +68,14 @@ namespace AncientWarfare3.core.lineage
             catch { return 0; }
         }
 
+        internal static void Refund(Army pArmy, int pCount)
+        {
+            if (pArmy?.data == null || pCount <= 0) return;
+            int next = ArmyConquestReserveRules.Add(Get(pArmy), pCount);
+            try { pArmy.data.set(LineageKeys.AW_ARMY_CONQUEST_RESERVE, next); }
+            catch { }
+        }
+
         private static bool HasGrantedCity(Army pArmy, long pCityId)
         {
             string encoded = ReadCityIds(pArmy);

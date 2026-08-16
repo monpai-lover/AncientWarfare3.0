@@ -147,6 +147,11 @@ namespace AncientWarfare3.core.lineage
             if (pArmy?.data == null) return false;
             Kingdom kingdom = SafeKingdom(pArmy);
             if (!IsLiveKingdom(kingdom)) return false;
+            if (ArmyConquestReserveService.Get(pArmy) > 0)
+            {
+                pAvailable = true;
+                return true;
+            }
 
             City sourceCity = null;
             if (TryRead(pArmy,
@@ -331,7 +336,8 @@ namespace AncientWarfare3.core.lineage
                 deadlineReached && SyntheticMobilizationLedgerService.
                     AvailableReplacement(
                         ResolveMissionWarId(army, kingdom),
-                        preferredCity?.id ?? -1L) <= 0;
+                        preferredCity?.id ?? -1L) <= 0 &&
+                ArmyConquestReserveService.Get(army) <= 0;
             if (ArmyReplenishmentOperationRules.ShouldFinish(
                     liveShortage <= 0, reservesConfirmedExhausted,
                     deadlineReached))
@@ -358,10 +364,31 @@ namespace AncientWarfare3.core.lineage
                 return 0;
 
             long emergencyId = war.data.id;
+            int reserveRequested = ArmyConquestReserveService.Consume(army,
+                requested);
+            int reserveCreated = 0;
+            if (reserveRequested > 0)
+            {
+                WorldTile reserveSpawnTile = null;
+                try { reserveSpawnTile = army.getCaptain()?.current_tile; }
+                catch { }
+                reserveCreated = SyntheticLevyService.CreateBatchAtTile(
+                    sourceCity, kingdom, army, reserveSpawnTile,
+                    reserveRequested, emergencyId, recruits);
+                if (reserveCreated < reserveRequested)
+                    ArmyConquestReserveService.Refund(army,
+                        reserveRequested - reserveCreated);
+            }
+            int remainingRequested = Math.Max(0, requested - reserveCreated);
+            if (remainingRequested <= 0)
+            {
+                confirmedExhausted = false;
+                return reserveCreated;
+            }
             int available = SyntheticMobilizationLedgerService.
                 AvailableReplacement(emergencyId, sourceCity.id);
             int syntheticRequest = TemporaryLevyRules.SyntheticFallbackRequest(
-                ArmyMobilizationPhase.War, requested, available);
+                ArmyMobilizationPhase.War, remainingRequested, available);
             int reserved = SyntheticMobilizationLedgerService.TryReserveReplacement(
                 emergencyId, sourceCity.id, syntheticRequest);
             WorldTile spawnTile = null;
