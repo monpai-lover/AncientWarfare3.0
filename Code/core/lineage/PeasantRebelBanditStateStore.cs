@@ -89,6 +89,10 @@ namespace AncientWarfare3.core.lineage
                 BanditStrongholdPoint>();
             foreach (BanditStrongholdPoint point in pState.WallPoints)
                 if (point != null) point.OriginalTopTypeId ??= "";
+            pState.Towers ??= new System.Collections.Generic.List<
+                BanditStrongholdTower>();
+            foreach (BanditStrongholdTower tower in pState.Towers)
+                if (tower != null) tower.AssetId ??= "";
             pState.Raid ??= new BanditRaidMissionState();
             pState.Raid.MemberActorIds ??=
                 new System.Collections.Generic.List<long>();

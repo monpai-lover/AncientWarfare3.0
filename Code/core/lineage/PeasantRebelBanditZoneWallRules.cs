@@ -8,15 +8,19 @@ namespace AncientWarfare3.core.lineage
     {
         public BanditZoneWallPlan(
             IReadOnlyList<CultiwayWallPoint> pClosedWallPoints,
-            IReadOnlyList<CultiwayWallPoint> pWallPoints)
+            IReadOnlyList<CultiwayWallPoint> pWallPoints,
+            IReadOnlyList<CultiwayWallPoint> pGateCenters)
         {
             ClosedWallPoints = pClosedWallPoints ??
                 Array.Empty<CultiwayWallPoint>();
             WallPoints = pWallPoints ?? Array.Empty<CultiwayWallPoint>();
+            GateCenters = pGateCenters ??
+                Array.Empty<CultiwayWallPoint>();
         }
 
         public IReadOnlyList<CultiwayWallPoint> ClosedWallPoints { get; }
         public IReadOnlyList<CultiwayWallPoint> WallPoints { get; }
+        public IReadOnlyList<CultiwayWallPoint> GateCenters { get; }
     }
 
     public static class PeasantRebelBanditZoneWallRules
@@ -69,16 +73,20 @@ namespace AncientWarfare3.core.lineage
                 out int minY, out int maxY, out int centerX,
                 out int centerY);
             var opened = new HashSet<CultiwayWallPoint>(closed);
-            CarveCardinalGate(opened, closed, roads, 0, 1,
-                maxY, centerX);
-            CarveCardinalGate(opened, closed, roads, 1, 0,
-                maxX, centerY);
-            CarveCardinalGate(opened, closed, roads, 0, -1,
-                minY, centerX);
-            CarveCardinalGate(opened, closed, roads, -1, 0,
-                minX, centerY);
+            var gateCenters = new List<CultiwayWallPoint>(4)
+            {
+                CarveCardinalGate(opened, closed, roads, 0, 1,
+                    maxY, centerX),
+                CarveCardinalGate(opened, closed, roads, 1, 0,
+                    maxX, centerY),
+                CarveCardinalGate(opened, closed, roads, 0, -1,
+                    minY, centerX),
+                CarveCardinalGate(opened, closed, roads, -1, 0,
+                    minX, centerY)
+            };
 
-            return new BanditZoneWallPlan(Order(closed), Order(opened));
+            return new BanditZoneWallPlan(Order(closed), Order(opened),
+                gateCenters);
         }
 
         private static bool IsOuterBoundary(CultiwayWallPoint pPoint,
@@ -94,7 +102,7 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
-        private static void CarveCardinalGate(
+        private static CultiwayWallPoint CarveCardinalGate(
             HashSet<CultiwayWallPoint> pOpened,
             HashSet<CultiwayWallPoint> pClosed,
             HashSet<CultiwayWallPoint> pRoads,
@@ -113,7 +121,9 @@ namespace AncientWarfare3.core.lineage
             if (candidates.Count == 0)
                 throw new InvalidOperationException(
                     "four cardinal gates unavailable");
-            MarkThreeTilePassage(pOpened, candidates[0]);
+            CultiwayWallPoint selected = candidates[0];
+            MarkThreeTilePassage(pOpened, selected);
+            return selected;
         }
 
         private static bool HasThreeTileRun(CultiwayWallPoint pPoint,

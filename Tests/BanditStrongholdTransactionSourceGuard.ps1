@@ -33,7 +33,7 @@ foreach ($token in @('TryCreate(', 'World.world.cities.newCity',
     }
 }
 
-foreach ($token in @('CurrentSchemaVersion = 3',
+foreach ($token in @('CurrentSchemaVersion = 4',
         'OriginalTopTypeId')) {
     if (-not $state.Contains($token)) {
         throw "Stronghold wall state is missing $token"

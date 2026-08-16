@@ -16,8 +16,11 @@ $store = Get-Content -Raw -Encoding UTF8 $storePath
 $keys = Get-Content -Raw -Encoding UTF8 $keysPath
 
 $requiredModelTokens = @(
+    'CurrentSchemaVersion = 4',
     'SchemaVersion', 'Phase', 'StrongholdCityId', 'MotherCityId',
     'OriginKingdomId', 'FixedZoneKeys', 'WallPoints', 'Raid',
+    'BanditStrongholdTower', 'TowerBuildingId', 'AssetId',
+    'LastHostileKillerKingdomId',
     'Stage', 'MemberActorIds', 'TargetCityId', 'CarriedFood',
     'CooldownUntilYear', 'SuppressionExpiryByKingdomId'
 )

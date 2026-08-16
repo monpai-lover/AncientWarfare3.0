@@ -71,6 +71,16 @@ internal static class PeasantRebelBanditZoneWallRulesTests
             Point(15, 11), Point(15, 12), Point(15, 13)
         }, removed,
             "north, south, east, and west each have one three-tile gate");
+        SetEqual(new HashSet<CultiwayWallPoint>
+        {
+            Point(12, 8), Point(12, 15),
+            Point(8, 12), Point(15, 12)
+        }, plan.GateCenters.ToHashSet(),
+            "the wall plan exposes one center for each cardinal gate");
+        True(plan.GateCenters.All(gate =>
+                plan.ClosedWallPoints.Contains(gate) &&
+                !plan.WallPoints.Contains(gate)),
+            "each tower center is carved from the original perimeter");
     }
 
     private static BanditZoneWallPlan Plan(

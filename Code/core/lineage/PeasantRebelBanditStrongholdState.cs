@@ -30,6 +30,14 @@ namespace AncientWarfare3.core.lineage
         public string Key => X + ":" + Y;
     }
 
+    internal sealed class BanditStrongholdTower
+    {
+        public long TowerBuildingId = -1L;
+        public int X = 0;
+        public int Y = 0;
+        public string AssetId = "";
+    }
+
     internal sealed class BanditRaidMissionState
     {
         public BanditRaidStage Stage = BanditRaidStage.None;
@@ -47,7 +55,7 @@ namespace AncientWarfare3.core.lineage
 
     internal sealed class PeasantRebelBanditStrongholdState
     {
-        public const int CurrentSchemaVersion = 3;
+        public const int CurrentSchemaVersion = 4;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public BanditStrongholdPhase Phase = BanditStrongholdPhase.None;
@@ -57,6 +65,9 @@ namespace AncientWarfare3.core.lineage
         public List<string> FixedZoneKeys = new List<string>();
         public List<BanditStrongholdPoint> WallPoints =
             new List<BanditStrongholdPoint>();
+        public List<BanditStrongholdTower> Towers =
+            new List<BanditStrongholdTower>();
+        public long LastHostileKillerKingdomId = -1L;
         public BanditRaidMissionState Raid = new BanditRaidMissionState();
         public Dictionary<long, int> SuppressionExpiryByKingdomId =
             new Dictionary<long, int>();
