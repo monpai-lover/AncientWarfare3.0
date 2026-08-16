@@ -9,6 +9,13 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--simulation-worker")
+{
+    SimulationWorkerPoolTests.Run();
+    Console.WriteLine("PASS: simulation worker slice");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--cultiway-wall")
 {
     CultiwayStyleWallGeometryRulesTests.Run();
