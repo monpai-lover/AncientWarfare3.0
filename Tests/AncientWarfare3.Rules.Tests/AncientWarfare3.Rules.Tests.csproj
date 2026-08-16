@@ -87,6 +87,9 @@
     <Compile Include="..\..\Code\core\performance\ActorScalePerformanceRules.cs" Link="Production\ActorScalePerformanceRules.cs" />
     <Compile Include="PathMovementExecutorRulesTests.cs.txt" />
     <Compile Include="PathMovementSafetyRulesTests.cs.txt" />
+    <Compile Include="PreparedNativePathCommitRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\pathfinding\PreparedNativePathCommitRules.cs" Link="Production\PreparedNativePathCommitRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PathfindingSafetyRules.cs" Link="Production\PathfindingSafetyRules.cs" />
     <Compile Include="RuntimePerformanceBudgetRulesTests.cs.txt" />
     <Compile Include="MonthlyAuthorityWorkQueueTests.cs.txt" />
     <Compile Include="CourtReplacementSqlTests.cs.txt" />

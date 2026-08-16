@@ -1,0 +1,56 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class PreparedNativePathCommitRulesTests
+{
+    internal static void Run()
+    {
+        Equal(PreparedNativePathCommitDecision.Commit,
+            PreparedNativePathCommitRules.Decide(Facts()),
+            "unchanged prepared native path commits");
+        Equal(PreparedNativePathCommitDecision.Drop,
+            PreparedNativePathCommitRules.Decide(
+                Facts(actorAlive: false)),
+            "dead prepared actor is dropped");
+        Equal(PreparedNativePathCommitDecision.RetryLater,
+            PreparedNativePathCommitRules.Decide(
+                Facts(currentTileId: 12, preparedTileId: 11)),
+            "changed prepared tile retries on a later pass");
+        Equal(PreparedNativePathCommitDecision.Drop,
+            PreparedNativePathCommitRules.Decide(
+                Facts(currentRegionValid: false)),
+            "missing current region is dropped");
+    }
+
+    private static PreparedNativePathFacts Facts(
+        bool actorAlive = true,
+        int currentTileId = 11,
+        int preparedTileId = 11,
+        bool currentRegionValid = true)
+    {
+        return new PreparedNativePathFacts(
+            actorExists: true,
+            actorAlive: actorAlive,
+            actorIdMatches: true,
+            batchExists: true,
+            currentTileValid: true,
+            targetTileValid: true,
+            currentRegionValid: currentRegionValid,
+            targetRegionValid: true,
+            currentTileId: currentTileId,
+            preparedCurrentTileId: preparedTileId,
+            currentTargetTileId: 20,
+            preparedTargetTileId: 20,
+            currentPathIndex: 2,
+            preparedPathIndex: 2,
+            currentHasGlobalPath: false,
+            preparedHadGlobalPath: false);
+    }
+
+    private static void Equal(PreparedNativePathCommitDecision expected,
+        PreparedNativePathCommitDecision actual, string message)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(
+                message + $" (expected {expected}, actual {actual})");
+    }
+}

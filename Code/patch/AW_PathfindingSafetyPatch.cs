@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
 using AncientWarfare3.core.pathfinding;
@@ -8,6 +9,8 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_PathfindingSafetyPatch
     {
+        private static long _nextGlobalPathDiagnosticAt;
+
         [HarmonyPrepare]
         private static bool Prepare()
         {
@@ -23,7 +26,6 @@ namespace AncientWarfare3.patch
             ref PathFinderResult __result,
             Exception __exception)
         {
-            if (PathfindingOwnershipService.IsAw3Owner) return __exception;
             if (!PathfindingSafetyRules.ShouldConvertGlobalPathExceptionToNotFound(
                     __exception,
                     pHasStartTile: pFrom != null,
@@ -32,7 +34,29 @@ namespace AncientWarfare3.patch
 
             __result = PathFinderResult.NotFound;
             ClearLastGlobalPath(__instance);
+            LogConvertedGlobalPathFailure(pFrom, pTarget);
             return null;
+        }
+
+        private static void LogConvertedGlobalPathFailure(
+            WorldTile pFrom, WorldTile pTarget)
+        {
+            long now = DateTime.UtcNow.Ticks;
+            long next = Volatile.Read(ref _nextGlobalPathDiagnosticAt);
+            if (now < next || Interlocked.CompareExchange(
+                    ref _nextGlobalPathDiagnosticAt,
+                    now + TimeSpan.TicksPerMinute, next) != next)
+                return;
+            int fromTileId = pFrom?.data?.tile_id ?? -1;
+            int targetTileId = pTarget?.data?.tile_id ?? -1;
+            int fromRegionId = pFrom?.region?.id ?? -1;
+            int targetRegionId = pTarget?.region?.id ?? -1;
+            AncientWarfare3.ModClass.LogInfo(
+                "AW3 converted stale RegionPathFinder null failure to NotFound: " +
+                "fromTile=" + fromTileId +
+                ", targetTile=" + targetTileId +
+                ", fromRegion=" + fromRegionId +
+                ", targetRegion=" + targetRegionId + ".");
         }
 
         private static void ClearLastGlobalPath(RegionPathFinder pFinder)
