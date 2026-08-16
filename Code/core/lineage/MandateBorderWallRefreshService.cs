@@ -7,7 +7,7 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class MandateBorderWallRefreshService
     {
-        private const int WallWidth = 2;
+        private const int WallWidth = 1;
 
         internal static bool Activate(Kingdom pMandate)
         {
