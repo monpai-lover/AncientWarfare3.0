@@ -1,3 +1,4 @@
+using System.IO;
 using AncientWarfare3.core.lineage;
 
 internal static class FamilyTreeLabelLayoutRulesTests
@@ -16,6 +17,8 @@ internal static class FamilyTreeLabelLayoutRulesTests
 
     public static void Run()
     {
+        EntryBackButtonUsesVanillaWindowHistory();
+
         const string fullName = "姐优波离亚达夫萨维";
         string nameLabel = FamilyTreeLabelLayoutRules.BuildNodeNameLabel(
             "兄长", fullName, "男", "本人");
@@ -89,5 +92,32 @@ internal static class FamilyTreeLabelLayoutRulesTests
                 runtimeAuthorityReady: false,
                 runtimeActorMissing: true),
             "loading-time absence does not override the archive");
+    }
+
+    private static void EntryBackButtonUsesVanillaWindowHistory()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string source = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "FamilyTreeWindow.cs"));
+        string locale = File.ReadAllText(Path.Combine(root, "Locales",
+            "others.csv"));
+
+        True(source.Contains("EnsureEntryBackButton()",
+                StringComparison.Ordinal),
+            "family tree creates a dedicated entry-return button");
+        True(source.Contains("WindowHistory.clickBack",
+                StringComparison.Ordinal),
+            "entry return delegates to vanilla window history");
+        True(source.Contains("ui/icons/iconArrowMetaRight",
+                StringComparison.Ordinal) &&
+             source.Contains("localScale = new Vector3(-1f, 1f, 1f)",
+                StringComparison.Ordinal),
+            "entry return uses the mirrored vanilla back arrow");
+        True(source.Contains("closePosition + new Vector3(-30f, 0f, 0f)",
+                StringComparison.Ordinal),
+            "entry return remains immediately left of close");
+        True(locale.Contains("aw_family_tree_back_to_entry,",
+                StringComparison.Ordinal),
+            "entry return tooltip is localized");
     }
 }

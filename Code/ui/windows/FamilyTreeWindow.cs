@@ -59,6 +59,7 @@ namespace AncientWarfare3.ui.windows
         private Transform _canvas;
         private RectTransform _canvasRect;
         private RectTransform _viewportRect;
+        private Button _entryBackButton;
         private Button _backButton;
         private Text _backText;
         private Button _expandButton;
@@ -246,6 +247,7 @@ namespace AncientWarfare3.ui.windows
         protected override void Init()
         {
             ConfigureWideTreeWindow();
+            EnsureEntryBackButton();
 
             var canvasObj = new GameObject("TreeCanvas", typeof(RectTransform));
             canvasObj.transform.SetParent(ContentTransform, false);
@@ -371,6 +373,69 @@ namespace AncientWarfare3.ui.windows
                     FamilyTreeViewportLayoutRules.SizeDeltaForDesiredExtent(
                         VIEWPORT_H, VIEWPORT_H, verticalSpan));
             }
+        }
+
+        private void EnsureEntryBackButton()
+        {
+            if (_entryBackButton != null || BackgroundTransform?.parent == null)
+                return;
+
+            Transform parent = BackgroundTransform.parent;
+            var buttonObject = new GameObject("FamilyTreeBackToEntry",
+                typeof(RectTransform), typeof(Image), typeof(Button),
+                typeof(TipButton));
+            buttonObject.transform.SetParent(parent, false);
+
+            RectTransform buttonRect =
+                buttonObject.GetComponent<RectTransform>();
+            buttonRect.anchorMin = buttonRect.anchorMax =
+                new Vector2(0.5f, 0.5f);
+            buttonRect.pivot = new Vector2(0.5f, 0.5f);
+            buttonRect.sizeDelta = new Vector2(24f, 24f);
+
+            Image background = buttonObject.GetComponent<Image>();
+            AW_UIStyle.ApplyButton(background, 0.96f);
+            background.raycastTarget = true;
+
+            var iconObject = new GameObject("Icon", typeof(RectTransform),
+                typeof(Image));
+            iconObject.transform.SetParent(buttonObject.transform, false);
+            RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+            iconRect.anchorMin = iconRect.anchorMax =
+                new Vector2(0.5f, 0.5f);
+            iconRect.pivot = new Vector2(0.5f, 0.5f);
+            iconRect.anchoredPosition = Vector2.zero;
+            iconRect.sizeDelta = new Vector2(14f, 14f);
+            iconRect.localScale = new Vector3(-1f, 1f, 1f);
+            Image icon = iconObject.GetComponent<Image>();
+            icon.sprite = SpriteTextureLoader.getSprite(
+                "ui/icons/iconArrowMetaRight");
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+
+            _entryBackButton = buttonObject.GetComponent<Button>();
+            _entryBackButton.onClick.AddListener(WindowHistory.clickBack);
+
+            TipButton tip = buttonObject.GetComponent<TipButton>();
+            tip.enabled = true;
+            tip.type = AW_RawTooltip.TYPE;
+            tip.hoverAction = () => Tooltip.show(buttonObject,
+                AW_RawTooltip.TYPE, new TooltipData
+                {
+                    tip_name = AW_L10n.Text(
+                        "aw_family_tree_back_to_entry", "Back to Entry"),
+                    tip_description = ""
+                });
+
+            Transform close = parent.Find("CloseBackground");
+            Vector3 closePosition = close != null
+                ? close.localPosition
+                : new Vector3(WINDOW_W / 2f - 20f,
+                    WINDOW_H / 2f - 12f, 0f);
+            _entryBackButton.transform.localPosition =
+                closePosition + new Vector3(-30f, 0f, 0f);
+            _entryBackButton.transform.SetAsLastSibling();
+            if (close != null) close.SetAsLastSibling();
         }
 
         private Button MakeToolbarButton(string pName, string pText, Vector2 pTopRightOffset,

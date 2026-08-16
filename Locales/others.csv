@@ -301,6 +301,7 @@ task_unit_aw_guard_follow_king,跟随国王,Following the King,跟隨國王
 aw_family_name_unknown,未详,Unknown,未詳
 aw_home_shi_label,本家：,Home branch: ,本家：
 aw_return_home_shi,返回本家,Return to Home Branch,返回本家
+aw_family_tree_back_to_entry,返回入口,Back to Entry,返回入口
 aw_population,人口,Population,人口
 aw_unknown_city,某城,Unknown city,某城
 aw_hist_posthumous_total_label,总分：,Total: ,總分：
