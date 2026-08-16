@@ -60,10 +60,10 @@ namespace AncientWarfare3.core.lineage
             List<TileZone> motherZones = pMother.zones
                 .Where(zone => zone != null && zone.city == pMother)
                 .Distinct().ToList();
-            if (motherZones.Count < 5)
+            if (motherZones.Count < 10)
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
-                LogPlanFailure("fewer_than_five_mother_zones",
+                LogPlanFailure("fewer_than_ten_mother_zones",
                     motherZones.Count, 0, pFailureKey);
                 return false;
             }
@@ -91,11 +91,11 @@ namespace AncientWarfare3.core.lineage
 
             IReadOnlyList<IReadOnlyList<string>> candidates =
                 PeasantRebelBanditStrongholdRules.
-                    RankFourZoneCandidates(facts, ZoneKey(centerZone));
+                    RankNineZoneCandidates(facts, ZoneKey(centerZone));
             if (candidates.Count == 0)
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
-                LogPlanFailure("no_connected_four_zone_candidate",
+                LogPlanFailure("no_complete_nine_zone_candidate",
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
@@ -104,10 +104,10 @@ namespace AncientWarfare3.core.lineage
             BanditZoneWallPlan zoneWallPlan = null;
             foreach (IReadOnlyList<string> candidateKeys in candidates)
             {
-                if (candidateKeys.Count != 4) continue;
+                if (candidateKeys.Count != 9) continue;
                 List<TileZone> candidate = motherZones.Where(zone =>
                     candidateKeys.Contains(ZoneKey(zone))).ToList();
-                if (candidate.Count != 4) continue;
+                if (candidate.Count != 9) continue;
                 if (!PeasantRebelBanditZoneWallService.TryPlan(
                         pMother, candidate, strongholdCenter,
                         out BanditZoneWallPlan candidateWall) ||
@@ -119,7 +119,7 @@ namespace AncientWarfare3.core.lineage
             if (interior == null || zoneWallPlan == null)
             {
                 pFailureKey = "aw_bandit_stronghold_wall_failed";
-                LogPlanFailure("no_wallable_four_zone_candidate",
+                LogPlanFailure("no_wallable_nine_zone_candidate",
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }

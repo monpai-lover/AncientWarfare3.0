@@ -31,19 +31,18 @@ namespace AncientWarfare3.core.lineage
 
     public static class PeasantRebelBanditStrongholdRules
     {
-        private const int StrongholdZoneCount = 4;
+        private const int StrongholdZoneCount = 9;
 
         private sealed class RankedCandidate
         {
             internal IReadOnlyList<string> Keys;
-            internal bool IsTwoByTwo;
-            internal long BoundingArea;
+            internal bool IsCentered;
             internal long DistanceFromCenter;
             internal string Canonical;
         }
 
         public static IReadOnlyList<IReadOnlyList<string>>
-            RankFourZoneCandidates(IReadOnlyList<BanditZoneFact> zones,
+            RankNineZoneCandidates(IReadOnlyList<BanditZoneFact> zones,
                 string centerKey)
         {
             if (zones == null || zones.Count < StrongholdZoneCount ||
@@ -61,75 +60,50 @@ namespace AncientWarfare3.core.lineage
             if (!byKey.TryGetValue(centerKey, out BanditZoneFact center))
                 return Array.Empty<IReadOnlyList<string>>();
 
+            var byCoordinate = new Dictionary<(int X, int Y),
+                BanditZoneFact>();
+            foreach (BanditZoneFact zone in byKey.Values)
+                byCoordinate[(zone.X, zone.Y)] = zone;
+
             var ranked = new List<RankedCandidate>();
-            var visited = new HashSet<string>(StringComparer.Ordinal);
-            ExpandCandidate(new HashSet<string>(StringComparer.Ordinal)
-                { centerKey }, byKey, center, visited, ranked);
-            return ranked.OrderBy(candidate => candidate.IsTwoByTwo ? 0 : 1)
-                .ThenBy(candidate => candidate.BoundingArea)
+            for (int offsetY = 0; offsetY < 3; offsetY++)
+            for (int offsetX = 0; offsetX < 3; offsetX++)
+            {
+                int originX = center.X - offsetX;
+                int originY = center.Y - offsetY;
+                var facts = new List<BanditZoneFact>(StrongholdZoneCount);
+                bool complete = true;
+                for (int y = originY; y < originY + 3 && complete; y++)
+                for (int x = originX; x < originX + 3; x++)
+                {
+                    if (!byCoordinate.TryGetValue((x, y),
+                            out BanditZoneFact fact))
+                    {
+                        complete = false;
+                        break;
+                    }
+                    facts.Add(fact);
+                }
+                if (!complete || facts.Count != StrongholdZoneCount)
+                    continue;
+                string[] keys = facts.Select(fact => fact.Key)
+                    .OrderBy(key => key, StringComparer.Ordinal).ToArray();
+                ranked.Add(new RankedCandidate
+                {
+                    Keys = keys,
+                    IsCentered = offsetX == 1 && offsetY == 1,
+                    DistanceFromCenter = facts.Sum(fact =>
+                        (long)Math.Abs(fact.X - center.X) +
+                        Math.Abs(fact.Y - center.Y)),
+                    Canonical = CanonicalKey(keys)
+                });
+            }
+
+            return ranked.OrderBy(candidate => candidate.IsCentered ? 0 : 1)
                 .ThenBy(candidate => candidate.DistanceFromCenter)
                 .ThenBy(candidate => candidate.Canonical,
                     StringComparer.Ordinal)
                 .Select(candidate => candidate.Keys).ToArray();
-        }
-
-        private static void ExpandCandidate(HashSet<string> selected,
-            IReadOnlyDictionary<string, BanditZoneFact> byKey,
-            BanditZoneFact center, HashSet<string> visited,
-            List<RankedCandidate> ranked)
-        {
-            string canonical = CanonicalKey(selected);
-            if (!visited.Add(canonical)) return;
-            if (selected.Count == StrongholdZoneCount)
-            {
-                BanditZoneFact[] facts = selected.Select(key => byKey[key])
-                    .ToArray();
-                ranked.Add(new RankedCandidate
-                {
-                    Keys = selected.OrderBy(key => key,
-                        StringComparer.Ordinal).ToArray(),
-                    IsTwoByTwo = IsTwoByTwo(facts),
-                    BoundingArea = BoundingArea(facts),
-                    DistanceFromCenter = facts.Sum(fact =>
-                        (long)Math.Abs(fact.X - center.X) +
-                        Math.Abs(fact.Y - center.Y)),
-                    Canonical = canonical
-                });
-                return;
-            }
-
-            string[] frontier = selected.SelectMany(key =>
-                    byKey[key].NeighbourKeys)
-                .Where(key => !selected.Contains(key) &&
-                              byKey.ContainsKey(key))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(key => key, StringComparer.Ordinal).ToArray();
-            for (int i = 0; i < frontier.Length; i++)
-            {
-                selected.Add(frontier[i]);
-                ExpandCandidate(selected, byKey, center, visited, ranked);
-                selected.Remove(frontier[i]);
-            }
-        }
-
-        private static bool IsTwoByTwo(IReadOnlyList<BanditZoneFact> facts)
-        {
-            if (facts == null || facts.Count != StrongholdZoneCount)
-                return false;
-            int[] xs = facts.Select(fact => fact.X).Distinct().ToArray();
-            int[] ys = facts.Select(fact => fact.Y).Distinct().ToArray();
-            if (xs.Length != 2 || ys.Length != 2) return false;
-            return xs.All(x => ys.All(y => facts.Any(fact =>
-                fact.X == x && fact.Y == y)));
-        }
-
-        private static long BoundingArea(IReadOnlyList<BanditZoneFact> facts)
-        {
-            long width = (long)facts.Max(fact => fact.X) -
-                         facts.Min(fact => fact.X) + 1L;
-            long height = (long)facts.Max(fact => fact.Y) -
-                          facts.Min(fact => fact.Y) + 1L;
-            return width * height;
         }
 
         private static string CanonicalKey(IEnumerable<string> keys)
