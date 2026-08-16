@@ -35,9 +35,8 @@ namespace AncientWarfare3.core.lineage
 
         public static string GetJob(Actor pActor)
         {
-            return ShouldUsePeacetimeJob(pActor)
-                ? StandingArmyPeacetimeContent.JobId
-                : "";
+            ReleaseLegacyPatrolForJobSelection(pActor);
+            return "";
         }
 
         public static bool ShouldUsePeacetimeJob(Actor pActor)
@@ -51,12 +50,9 @@ namespace AncientWarfare3.core.lineage
 
         public static bool CanYieldToReproduction(Actor pActor)
         {
-            return DynasticReproductionRules
-                .ShouldAllowPeacetimeStandingReproduction(
-                    IsCareerStandingSoldier(pActor),
-                    HasMilitaryEmergency(pActor),
-                    IsInCombat(pActor),
-                    HasCityAttackOrder(pActor));
+            if (pActor?.ai == null) return false;
+            return StandingArmyRules.ShouldReleaseLegacyPeacetimePatrol(
+                pActor.ai.job?.id ?? "", pActor.ai.task?.id ?? "");
         }
 
         public static bool IsCareerStandingSoldier(Actor pActor)
@@ -137,40 +133,8 @@ namespace AncientWarfare3.core.lineage
                 WarArmyReturnService.TryPrepareMilitaryP0Actor(pActor);
                 return;
             }
-            bool shouldUsePeacetimeJob = ShouldUsePeacetimeJob(pActor);
-            string taskId = pActor.ai.task?.id ?? "";
-            if (DynasticReproductionRules.IsSexualReproductionTask(taskId))
-            {
-                bool isWarrior;
-                try { isWarrior = pActor.isWarrior(); }
-                catch { isWarrior = false; }
-                bool observeTimeout = DynasticReproductionRules
-                    .ShouldObserveReproductionTimeout(isWarrior,
-                        HasMilitaryEmergency(pActor), IsInCombat(pActor),
-                        HasCityAttackOrder(pActor));
-                if (HandleActiveReproduction(pActor,
-                        observeTimeout, taskId)) return;
-            }
-            else
-            {
-                ClearReproductionObservation(pActor);
-            }
-
-            if (shouldUsePeacetimeJob)
-            {
-                if (pActor.ai.job?.id !=
-                        StandingArmyPeacetimeContent.JobId ||
-                    !pActor.isTask(
-                        StandingArmyPeacetimeContent.PatrolTaskId))
-                {
-                    pActor.cancelAllBeh();
-                    pActor.ai.setJob(StandingArmyPeacetimeContent.JobId);
-                    pActor.ai.setTask(
-                        StandingArmyPeacetimeContent.PatrolTaskId);
-                }
-                return;
-            }
-            RestoreMilitaryJob(pActor);
+            ReleaseLegacyPeacetimePatrol(pActor,
+                pRestoreImmediately: true);
         }
 
         private static bool HandleActiveReproduction(Actor pActor,
@@ -232,9 +196,31 @@ namespace AncientWarfare3.core.lineage
 
         public static void RestoreMilitaryJob(Actor pActor)
         {
-            if (pActor?.data == null || pActor.ai?.job?.id !=
-                StandingArmyPeacetimeContent.JobId) return;
+            ReleaseLegacyPeacetimePatrol(pActor,
+                pRestoreImmediately: true);
+        }
+
+        public static void ReleaseLegacyPatrolForJobSelection(Actor pActor)
+        {
+            ReleaseLegacyPeacetimePatrol(pActor,
+                pRestoreImmediately: false);
+        }
+
+        private static void ReleaseLegacyPeacetimePatrol(Actor pActor,
+            bool pRestoreImmediately)
+        {
+            if (pActor?.data == null || pActor.ai == null) return;
+            string jobId = pActor.ai.job?.id ?? "";
+            string taskId = pActor.ai.task?.id ?? "";
+            if (!StandingArmyRules.ShouldReleaseLegacyPeacetimePatrol(
+                    jobId, taskId)) return;
             pActor.cancelAllBeh();
+            pActor.data.set(PatrolCursorKey, 0);
+            if (!pRestoreImmediately)
+            {
+                pActor.ai.clearJob();
+                return;
+            }
             try { pActor.ai.setJob(Actor.nextJobActor(pActor)); }
             catch { pActor.ai.clearJob(); }
         }
