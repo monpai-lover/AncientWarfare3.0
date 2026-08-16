@@ -14,8 +14,14 @@ namespace AncientWarfare3.core.lineage
         public double EndTime = -1d;
         public int Status;
         public long SourceProposalId = -1L;
+        public string OwnerRoleAtEntry = "";
+        public string SourceKind = "";
+        public long SourceRelationId = -1L;
+        public int SourceTributeYear = -1;
 
         public bool Active => Status == 0 && EndTime < 0d;
+        public bool IsTributaryOffering =>
+            SourceKind == "tributary_offering";
     }
 
     internal sealed class RulerHouseholdDisplayRow

@@ -294,8 +294,19 @@ namespace AncientWarfare3.core.lineage
             bool rulerAlive, bool partnerAlive, bool rulerStillReigning,
             bool sameRecipientRealm)
         {
-            return active && (!rulerAlive || !partnerAlive ||
-                              !rulerStillReigning || !sameRecipientRealm);
+            return ShouldCloseRelationship(active, rulerAlive, partnerAlive,
+                rulerStillReigning, sameRecipientRealm,
+                tributaryOffering: false);
+        }
+
+        public static bool ShouldCloseRelationship(bool active,
+            bool ownerAlive, bool partnerAlive, bool ownerStillReigning,
+            bool sameRecipientRealm, bool tributaryOffering)
+        {
+            if (!active) return false;
+            if (!ownerAlive || !partnerAlive || !sameRecipientRealm)
+                return true;
+            return !tributaryOffering && !ownerStillReigning;
         }
 
         public static int PregnancyStartsForYear(int eligibleConsorts)

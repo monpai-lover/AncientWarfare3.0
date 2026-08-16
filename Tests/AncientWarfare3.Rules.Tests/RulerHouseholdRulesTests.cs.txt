@@ -5,6 +5,20 @@ internal static class RulerHouseholdRulesTests
 {
     public static void Run()
     {
+        Equal(false, RulerHouseholdRules.ShouldCloseRelationship(
+            true, ownerAlive: true, partnerAlive: true,
+            ownerStillReigning: false, sameRecipientRealm: true,
+            tributaryOffering: true),
+            "tribute consort survives role change");
+        Equal(true, RulerHouseholdRules.ShouldCloseRelationship(
+            true, true, true, false, true, tributaryOffering: false),
+            "ordinary household keeps legacy reign closure");
+        Equal(true, RulerHouseholdRules.ShouldCloseRelationship(
+            true, false, true, false, true, tributaryOffering: true),
+            "owner death closes");
+        Equal(true, RulerHouseholdRules.ShouldCloseRelationship(
+            true, true, true, false, false, tributaryOffering: true),
+            "leaving recipient realm closes");
         Equal(15, (int)DiplomacyProposalType.HouseholdOffering,
             "household offering keeps its stable proposal identifier");
 

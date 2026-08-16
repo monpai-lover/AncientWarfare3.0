@@ -1,0 +1,33 @@
+using System.IO;
+
+internal static class TributaryHouseholdOfferingSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string offeringPath = Path.Combine(root, "Code", "core", "lineage",
+            "TributaryHouseholdOfferingService.cs");
+        True(File.Exists(offeringPath), "offering service exists");
+        if (!File.Exists(offeringPath)) return;
+        string offering = File.ReadAllText(offeringPath);
+        string settlement = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "TributarySettlementService.cs"));
+        False(offering.Contains("World.world.units"),
+            "offering cannot scan world actors");
+        True(offering.Contains("SuccessionRelationshipIndex.GetChildIds"),
+            "offering reads indexed direct sons");
+        True(offering.Contains("TryCommitTributaryConsort("),
+            "offering uses explicit-owner household commit");
+        True(settlement.IndexOf("MarkPaid", StringComparison.Ordinal) <
+             settlement.IndexOf("TributaryHouseholdOfferingService.TryOffer",
+                 StringComparison.Ordinal),
+            "offering occurs only after paid renewal");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name) => True(!value, name);
+}

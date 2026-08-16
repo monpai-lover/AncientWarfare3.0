@@ -14,7 +14,8 @@ namespace AncientWarfare3.core.lineage
             "RELATIONSHIP_ID,RULER_ACTOR_ID,PARTNER_ACTOR_ID," +
             "SOURCE_KINGDOM_ID,RECIPIENT_KINGDOM_ID,RELATIONSHIP_KIND," +
             "RANK_CODE,START_YEAR,START_TIME,END_TIME,STATUS," +
-            "SOURCE_PROPOSAL_ID";
+            "SOURCE_PROPOSAL_ID,OWNER_ROLE_AT_ENTRY,SOURCE_KIND," +
+            "SOURCE_RELATION_ID,SOURCE_TRIBUTE_YEAR";
 
         private readonly SQLiteConnection _db;
 
@@ -74,6 +75,46 @@ namespace AncientWarfare3.core.lineage
         {
             return TryReadOne("SOURCE_PROPOSAL_ID=@id", pProposalId,
                 out pRecord);
+        }
+
+        public bool HasTributaryOffering(long pRelationId,
+            int pTributeYear)
+        {
+            using var command = new SQLiteCommand(
+                "SELECT 1 FROM RulerHousehold WHERE " +
+                "SOURCE_KIND='tributary_offering' AND " +
+                "SOURCE_RELATION_ID=@relation AND SOURCE_TRIBUTE_YEAR=@year " +
+                "LIMIT 1", _db);
+            command.Parameters.AddWithValue("@relation", pRelationId);
+            command.Parameters.AddWithValue("@year", pTributeYear);
+            return command.ExecuteScalar() != null;
+        }
+
+        public IReadOnlyList<long> ReadActiveOwnerIdsByRecipient(
+            long pKingdomId, int pLimit)
+        {
+            int limit = Math.Min(MaximumMaintenanceRows,
+                Math.Max(0, pLimit));
+            var result = new List<long>(limit);
+            if (pKingdomId < 0L || limit == 0) return result;
+            using var command = new SQLiteCommand(
+                "SELECT DISTINCT RULER_ACTOR_ID FROM RulerHousehold WHERE " +
+                "RECIPIENT_KINGDOM_ID=@kingdom AND STATUS=0 AND END_TIME<0 " +
+                "ORDER BY RULER_ACTOR_ID LIMIT @limit", _db);
+            command.Parameters.AddWithValue("@kingdom", pKingdomId);
+            command.Parameters.AddWithValue("@limit", limit);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            while (reader.Read()) result.Add(reader.GetInt64(0));
+            return result;
+        }
+
+        public IReadOnlyList<RulerHouseholdRecord> ReadActiveByOwner(
+            long pOwnerActorId, int pLimit)
+        {
+            int limit = Math.Min(MaximumRowsPerRuler,
+                Math.Max(0, pLimit));
+            return ReadMany("RULER_ACTOR_ID=@id", pOwnerActorId,
+                pAfterId: -1L, limit);
         }
 
         public IReadOnlyList<long> ReadOfferCandidateIds(long pKingdomId,
@@ -155,7 +196,15 @@ namespace AncientWarfare3.core.lineage
                 StartTime = Convert.ToDouble(pReader.GetValue(8)),
                 EndTime = Convert.ToDouble(pReader.GetValue(9)),
                 Status = Convert.ToInt32(pReader.GetValue(10)),
-                SourceProposalId = Convert.ToInt64(pReader.GetValue(11))
+                SourceProposalId = Convert.ToInt64(pReader.GetValue(11)),
+                OwnerRoleAtEntry = pReader.IsDBNull(12) ? "" :
+                    Convert.ToString(pReader.GetValue(12)) ?? "",
+                SourceKind = pReader.IsDBNull(13) ? "" :
+                    Convert.ToString(pReader.GetValue(13)) ?? "",
+                SourceRelationId = pReader.IsDBNull(14) ? -1L :
+                    Convert.ToInt64(pReader.GetValue(14)),
+                SourceTributeYear = pReader.IsDBNull(15) ? -1 :
+                    Convert.ToInt32(pReader.GetValue(15))
             };
         }
 

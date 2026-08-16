@@ -140,9 +140,12 @@ namespace AncientWarfare3.core.lineage
 
             TributarySettlementPersistence.MarkPaid(db,
                 relation.RelationId, year, factor);
+            string offeringOutcome =
+                TributaryHouseholdOfferingService.TryOffer(tributary,
+                    pSuzerain, relation.RelationId, year);
             return new TributarySettlementResult(relation.RelationId,
                 year, ratio, factor, politicalTransferred,
-                goldTransferred, "paid", "");
+                goldTransferred, "paid", offeringOutcome);
         }
 
         private static List<DueRelation> ReadRelations(

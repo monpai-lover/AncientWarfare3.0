@@ -434,6 +434,10 @@
     <Compile Include="TributaryProtectionRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\TributaryProtectionRules.cs" Link="Production\TributaryProtectionRules.cs" />
     <Compile Include="TributaryProtectionSourceGuardTests.cs.txt" />
+    <Compile Include="RoyalHouseholdRecipientRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\RoyalHouseholdRecipientRules.cs" Link="Production\RoyalHouseholdRecipientRules.cs" />
+    <Compile Include="RulerHouseholdOwnerSourceGuardTests.cs.txt" />
+    <Compile Include="TributaryHouseholdOfferingSourceGuardTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\VassalContractTierRules.cs" Link="Production\VassalContractTierRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalRuntimeProjectionRules.cs" Link="Production\VassalRuntimeProjectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyProposalOpportunityRules.cs" Link="Production\DiplomacyProposalOpportunityRules.cs" />

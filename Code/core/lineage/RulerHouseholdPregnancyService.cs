@@ -42,14 +42,13 @@ namespace AncientWarfare3.core.lineage
                         out RulerHouseholdRecord row) ||
                     row.Kind != RulerHouseholdKind.Consort)
                     return null;
-                Actor ruler = FindActor(row.RulerActorId);
-                if (!IsLiveActor(ruler) || ruler.kingdom?.data == null ||
-                    pMother.kingdom != ruler.kingdom ||
-                    ruler.kingdom.id != row.RecipientKingdomId ||
-                    ruler.kingdom.king != ruler)
+                Actor owner = FindActor(row.RulerActorId);
+                if (!IsLiveActor(owner) || owner.kingdom?.data == null ||
+                    pMother.kingdom != owner.kingdom ||
+                    owner.kingdom.id != row.RecipientKingdomId)
                     return null;
                 pKind = RulerHouseholdConceptionKind.Consort;
-                return ruler;
+                return owner;
             }
             catch
             {
@@ -154,14 +153,19 @@ namespace AncientWarfare3.core.lineage
             int pMonthKey)
         {
             if (!IsAuthority() || !Ready || pKingdom?.data == null ||
-                pKingdom.isRekt() || pKingdom.king?.data == null)
+                pKingdom.isRekt())
                 return;
-            Actor ruler = pKingdom.king;
-            int capacity = RulerHouseholdRules.ConsortCapacity(
-                RulerHouseholdService.ResolveRealmTier(pKingdom));
+            var query = new RulerHouseholdQuery(DB);
+            IReadOnlyList<long> ownerIds =
+                query.ReadActiveOwnerIdsByRecipient(pKingdom.id, 8);
+            if (ownerIds.Count == 0) return;
+            int ownerIndex = RulerHouseholdPregnancyRules
+                .RotatingCandidateIndex(pMonthKey, pKingdom.id,
+                    ownerIds.Count);
+            Actor ruler = FindActor(ownerIds[ownerIndex]);
+            if (!IsLiveActor(ruler) || ruler.kingdom != pKingdom) return;
             IReadOnlyList<RulerHouseholdRecord> rows =
-                new RulerHouseholdQuery(DB).ReadActiveByRuler(
-                    ruler.data.id, capacity);
+                query.ReadActiveByOwner(ruler.data.id, 9);
             if (rows.Count == 0) return;
             int started = 0;
             int startIndex = RulerHouseholdPregnancyRules

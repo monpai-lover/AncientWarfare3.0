@@ -1,0 +1,66 @@
+using AncientWarfare3.core.lineage;
+
+internal static class RoyalHouseholdRecipientRulesTests
+{
+    public static void Run()
+    {
+        var king = new RoyalHouseholdRecipientCandidate(1L,
+            RoyalHouseholdOwnerRole.King, true, 1, 4, true, 1d);
+        var heir = new RoyalHouseholdRecipientCandidate(2L,
+            RoyalHouseholdOwnerRole.Heir, true, 0, 2, true, 2d);
+        var prince = new RoyalHouseholdRecipientCandidate(3L,
+            RoyalHouseholdOwnerRole.Prince, true, 0, 1, true, 3d);
+
+        True(RoyalHouseholdRecipientRules.Compare(king, heir) < 0,
+            "king before heir");
+        True(RoyalHouseholdRecipientRules.Compare(heir, prince) < 0,
+            "heir before prince");
+        True(prince.HasVacancy, "eligible prince vacancy");
+        False(new RoyalHouseholdRecipientCandidate(4L,
+            RoyalHouseholdOwnerRole.Prince, true, 1, 1, true, 4d)
+            .HasVacancy, "full prince");
+        False(new RoyalHouseholdRecipientCandidate(5L,
+            RoyalHouseholdOwnerRole.Prince, false, 0, 1, true, 5d)
+            .HasVacancy, "ineligible prince");
+
+        Equal(2, RoyalHouseholdRecipientRules.Capacity(
+            RoyalHouseholdOwnerRole.King,
+            RulerHouseholdRealmTier.Lower), "lower ruler capacity");
+        Equal(4, RoyalHouseholdRecipientRules.Capacity(
+            RoyalHouseholdOwnerRole.King,
+            RulerHouseholdRealmTier.Kingdom), "kingdom ruler capacity");
+        Equal(8, RoyalHouseholdRecipientRules.Capacity(
+            RoyalHouseholdOwnerRole.King,
+            RulerHouseholdRealmTier.Empire), "emperor capacity");
+        Equal(2, RoyalHouseholdRecipientRules.Capacity(
+            RoyalHouseholdOwnerRole.Heir,
+            RulerHouseholdRealmTier.Empire), "heir capacity");
+        Equal(1, RoyalHouseholdRecipientRules.Capacity(
+            RoyalHouseholdOwnerRole.Prince,
+            RulerHouseholdRealmTier.Empire), "prince capacity");
+        Equal(0, RoyalHouseholdRecipientRules.Capacity(
+            RoyalHouseholdOwnerRole.None,
+            RulerHouseholdRealmTier.Empire), "former role capacity");
+
+        var legitimate = new RoyalHouseholdRecipientCandidate(9L,
+            RoyalHouseholdOwnerRole.Prince, true, 0, 1, true, 10d);
+        var illegitimate = new RoyalHouseholdRecipientCandidate(1L,
+            RoyalHouseholdOwnerRole.Prince, true, 0, 1, false, 1d);
+        True(RoyalHouseholdRecipientRules.Compare(legitimate,
+            illegitimate) < 0, "legitimate prince first");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name) => True(!value, name);
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

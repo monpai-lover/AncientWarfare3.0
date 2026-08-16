@@ -18,5 +18,9 @@ namespace AncientWarfare3.core.db
         [TableItemDef(pDefaultValue: "-1")] public double end_time = -1;
         public int status;
         public long source_proposal_id = -1;
+        [TableItemDef(pDefaultValue: "")] public string owner_role_at_entry = "";
+        [TableItemDef(pDefaultValue: "")] public string source_kind = "";
+        [TableItemDef(pDefaultValue: "-1")] public long source_relation_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public int source_tribute_year = -1;
     }
 }

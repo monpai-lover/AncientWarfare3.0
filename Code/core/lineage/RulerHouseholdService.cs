@@ -460,7 +460,7 @@ namespace AncientWarfare3.core.lineage
                                      partner.kingdom == pKingdom;
                     bool close = RulerHouseholdRules.ShouldCloseRelationship(
                         row.Active, rulerAlive, partnerAlive, stillReigning,
-                        sameRealm);
+                        sameRealm, row.IsTributaryOffering);
                     if (!close &&
                         row.Kind == RulerHouseholdKind.PrincipalWife)
                         close = ruler.lover != partner ||
@@ -510,10 +510,9 @@ namespace AncientWarfare3.core.lineage
                         out RulerHouseholdRecord partnerRow))
                     CloseRelationship(partnerRow.RelationshipId, pActor);
 
-                int capacity = RulerHouseholdRules.ConsortCapacity(
-                    ResolveRealmTier(pActor.kingdom));
                 IReadOnlyList<RulerHouseholdRecord> ruled =
-                    query.ReadActiveByRuler(pActor.data.id, capacity);
+                    query.ReadActiveByOwner(pActor.data.id,
+                        MaximumMaintenanceRows);
                 for (int i = 0; i < ruled.Count; i++)
                     CloseRelationship(ruled[i].RelationshipId,
                         FindActor(ruled[i].PartnerActorId));
@@ -558,7 +557,9 @@ namespace AncientWarfare3.core.lineage
         private static void InsertRelationship(SQLiteTransaction transaction,
             long pRelationshipId, Actor pRuler, Actor pPartner,
             Kingdom pSource, Kingdom pRecipient, RulerHouseholdKind pKind,
-            int pYear, long pProposalId)
+            int pYear, long pProposalId, string pOwnerRole = "king",
+            string pSourceKind = "diplomatic_offer",
+            long pSourceRelationId = -1L, int pSourceTributeYear = -1)
         {
             using var command = new SQLiteCommand(DB)
             {
@@ -568,9 +569,11 @@ namespace AncientWarfare3.core.lineage
                     "(RELATIONSHIP_ID,RULER_ACTOR_ID,PARTNER_ACTOR_ID," +
                     "SOURCE_KINGDOM_ID,RECIPIENT_KINGDOM_ID," +
                     "RELATIONSHIP_KIND,RANK_CODE,START_YEAR,START_TIME," +
-                    "END_TIME,STATUS,SOURCE_PROPOSAL_ID) VALUES " +
+                    "END_TIME,STATUS,SOURCE_PROPOSAL_ID,OWNER_ROLE_AT_ENTRY," +
+                    "SOURCE_KIND,SOURCE_RELATION_ID,SOURCE_TRIBUTE_YEAR) VALUES " +
                     "(@id,@ruler,@partner,@source,@recipient,@kind,@rank," +
-                    "@year,@time,-1,0,@proposal)"
+                    "@year,@time,-1,0,@proposal,@ownerRole,@sourceKind," +
+                    "@sourceRelation,@sourceTributeYear)"
             };
             command.Parameters.AddWithValue("@id", pRelationshipId);
             command.Parameters.AddWithValue("@ruler", pRuler.data.id);
@@ -584,6 +587,10 @@ namespace AncientWarfare3.core.lineage
             command.Parameters.AddWithValue("@year", pYear);
             command.Parameters.AddWithValue("@time", LineageService.CurTime());
             command.Parameters.AddWithValue("@proposal", pProposalId);
+            command.Parameters.AddWithValue("@ownerRole", pOwnerRole ?? "");
+            command.Parameters.AddWithValue("@sourceKind", pSourceKind ?? "");
+            command.Parameters.AddWithValue("@sourceRelation", pSourceRelationId);
+            command.Parameters.AddWithValue("@sourceTributeYear", pSourceTributeYear);
             if (command.ExecuteNonQuery() != 1)
                 throw new InvalidOperationException(
                     "household relationship insert failed");
@@ -761,6 +768,131 @@ namespace AncientWarfare3.core.lineage
                    pRuler.kingdom == pRealm && pRuler.isSexMale() &&
                    pRuler.isAdult() && pRuler.isBreedingAge() &&
                    !RepublicGovernmentService.IsRepublic(pRealm);
+        }
+
+        internal static bool TryCommitTributaryConsort(Kingdom pSource,
+            Kingdom pRecipient, Actor pOwner, Actor pCandidate,
+            string pOwnerRoleAtEntry, long pRelationId, int pTributeYear,
+            int pCapacity, out string pReason)
+        {
+            pReason = "household_commit_failed";
+            if (!IsAuthority() || !Ready || !IsLiveRealm(pSource) ||
+                !IsLiveRealm(pRecipient) || pSource == pRecipient ||
+                !IsEligibleTributaryOwner(pOwner, pRecipient) ||
+                pCandidate?.data == null || pRelationId < 0L)
+                return false;
+            var query = new RulerHouseholdQuery(DB);
+            if (query.HasTributaryOffering(pRelationId, pTributeYear))
+            {
+                pReason = "duplicate";
+                return false;
+            }
+            if (!IsEligibleCandidate(pCandidate, pSource, out pReason) ||
+                query.TryReadActiveByPartner(pCandidate.data.id, out _) ||
+                SafeRelated(pOwner, pCandidate))
+            {
+                if (string.IsNullOrEmpty(pReason)) pReason = "no_candidate";
+                return false;
+            }
+            if (query.CountActiveConsorts(pOwner.data.id) >=
+                Math.Max(0, pCapacity))
+            {
+                pReason = "consort_capacity_full";
+                return false;
+            }
+            City capital = pRecipient.capital;
+            if (capital?.data == null || capital.isRekt() ||
+                capital.kingdom != pRecipient)
+            {
+                pReason = "invalid_recipient_capital";
+                return false;
+            }
+            try
+            {
+                LineageService.ArchiveActor(pCandidate, pAlive: true);
+                LineageService.ArchiveActor(pOwner, pAlive: true);
+                long relationshipId = TableIdAllocator.Next(DB,
+                    RulerHouseholdTableItem.GetTableName(),
+                    "RELATIONSHIP_ID");
+                using SQLiteTransaction transaction = DB.BeginTransaction();
+                InsertRelationship(transaction, relationshipId, pOwner,
+                    pCandidate, pSource, pRecipient,
+                    RulerHouseholdKind.Consort, SafeYear(), -1L,
+                    pOwnerRoleAtEntry, "tributary_offering", pRelationId,
+                    pTributeYear);
+                transaction.Commit();
+                if (!MovePartner(pCandidate, pRecipient, capital))
+                {
+                    CloseRelationship(relationshipId, pCandidate);
+                    pReason = "migration_failed";
+                    return false;
+                }
+                pCandidate.data.set(LineageKeys.RULER_HOUSEHOLD_RULER_ID,
+                    pOwner.data.id);
+                LineageService.ArchiveActor(pCandidate, pAlive: true);
+                LineageService.ArchiveActor(pOwner, pAlive: true);
+                RecordHouseholdHistory(pSource, pRecipient, pCandidate,
+                    pOwner, RulerHouseholdKind.Consort);
+                pReason = "";
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Tributary household commit failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        internal static bool IsEligibleTributaryOwner(Actor pOwner,
+            Kingdom pRecipient)
+        {
+            return IsLiveActor(pOwner) && pOwner.kingdom == pRecipient &&
+                   pOwner.isSexMale() && pOwner.isAdult() &&
+                   pOwner.isBreedingAge() && pOwner.canBreed() &&
+                   pOwner.canProduceBabies() &&
+                   !RepublicGovernmentService.IsRepublic(pRecipient);
+        }
+
+        internal static IReadOnlyList<Actor>
+            BuildEligibleConsortCandidates(Kingdom pSource)
+        {
+            var result = new List<Actor>();
+            if (!Ready || !IsLiveRealm(pSource)) return result;
+            var query = new RulerHouseholdQuery(DB);
+            long lineageId = ResolveRulingLineageId(pSource);
+            IReadOnlyList<long> ids = query.ReadOfferCandidateIds(
+                pSource.id, lineageId, MaximumPlayerCandidateActors);
+            for (int index = 0; index < ids.Count; index++)
+            {
+                Actor candidate = FindActor(ids[index]);
+                if (!IsEligibleCandidate(candidate, pSource, out _) ||
+                    query.TryReadActiveByPartner(ids[index], out _))
+                    continue;
+                result.Add(candidate);
+            }
+            result.Sort((left, right) =>
+            {
+                left.data.get(LineageKeys.LINEAGE_ID, out long leftLineage,
+                    -1L);
+                right.data.get(LineageKeys.LINEAGE_ID, out long rightLineage,
+                    -1L);
+                int priority = RulerHouseholdRules.HouseholdCandidatePriority(
+                    leftLineage == lineageId,
+                    IsDirectChildOfRuler(left, pSource.king)).CompareTo(
+                    RulerHouseholdRules.HouseholdCandidatePriority(
+                        rightLineage == lineageId,
+                        IsDirectChildOfRuler(right, pSource.king)));
+                if (priority != 0) return priority;
+                int age = SafeAge(left).CompareTo(SafeAge(right));
+                return age != 0 ? age : left.data.id.CompareTo(right.data.id);
+            });
+            return result;
+        }
+
+        internal static bool AreRelated(Actor pFirst, Actor pSecond)
+        {
+            return SafeRelated(pFirst, pSecond);
         }
 
         private static bool HasLivingMutualSpouse(Actor pRuler)

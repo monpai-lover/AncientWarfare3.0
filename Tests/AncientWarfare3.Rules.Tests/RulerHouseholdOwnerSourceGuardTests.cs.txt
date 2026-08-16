@@ -1,0 +1,40 @@
+using System.IO;
+
+internal static class RulerHouseholdOwnerSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string query = Read(root, "Code", "core", "lineage",
+            "RulerHouseholdQuery.cs");
+        string service = Read(root, "Code", "core", "lineage",
+            "RulerHouseholdService.cs");
+        string pregnancy = Read(root, "Code", "core", "lineage",
+            "RulerHouseholdPregnancyService.cs");
+        string table = Read(root, "Code", "core", "db",
+            "RulerHouseholdTableItem.cs");
+
+        True(table.Contains("owner_role_at_entry"),
+            "household records retain owner role");
+        True(table.Contains("source_relation_id"),
+            "household records retain tributary relation");
+        True(query.Contains("HasTributaryOffering("),
+            "household query deduplicates annual offerings");
+        True(query.Contains("ReadActiveOwnerIdsByRecipient("),
+            "pregnancy owner query stays bounded");
+        True(service.Contains("TryCommitTributaryConsort("),
+            "tributary consort commits explicit owner");
+        True(pregnancy.Contains("ReadActiveOwnerIdsByRecipient("),
+            "monthly pregnancy reads bounded owner ids");
+        True(pregnancy.Contains("owner.kingdom.id != row.RecipientKingdomId"),
+            "managed father accepts a non-ruler owner in recipient realm");
+    }
+
+    private static string Read(string root, params string[] parts) =>
+        File.ReadAllText(Path.Combine(new[] { root }.Concat(parts).ToArray()));
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+}
