@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.content;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.policy;
@@ -40,6 +41,8 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ExecuteDecision(Kingdom pMandate)
         {
+            if (!MandateBorderWallRefreshService.Activate(pMandate))
+                return false;
             if (ReinforceBorder(pMandate, YEARLY_GUARD_CAP,
                     true, YEARLY_TOWER_CAP, "decision"))
                 return true;
@@ -58,6 +61,8 @@ namespace AncientWarfare3.core.lineage
                     report.active, report.kingdom_id, attacker.id, defender.id)) return;
             Kingdom mandate = MandateService.GetCurrentMandateKingdom();
             if (mandate?.data == null) return;
+            if (!MandateBorderWallRefreshService.IsActivated(mandate))
+                return;
 
             ReinforceBorder(mandate, WAR_GUARD_CAP, true,
                 WAR_TOWER_CAP, "war");
@@ -68,23 +73,27 @@ namespace AncientWarfare3.core.lineage
         {
             if (pMandate?.data == null) return false;
             pGuardCap = LimitedGuardCap(pMandate, pGuardCap);
-            List<City> cities = CollectBorderCities(pMandate);
-            if (cities.Count == 0) return false;
-            cities = SelectBorderArmyCities(cities);
-            ReanchorBorderArmies(pMandate, cities);
+            List<City> wallCities = CollectBorderCities(pMandate);
+            if (wallCities.Count == 0) return false;
+            List<City> armyCities = SelectBorderArmyCities(wallCities);
+            ReanchorBorderArmies(pMandate, armyCities);
 
             var result = new BorderResult();
-            foreach (City city in cities)
+            foreach (City city in armyCities)
             {
                 if (result.guards < pGuardCap)
                     result.guards += AppointBorderGuards(city, pMandate, pGuardCap - result.guards);
                 if (result.towers < pTowerCap)
                     result.towers += BuildBorderTowers(city, pMandate, pTowerCap - result.towers);
-                if (pBuildWalls)
-                    result.walls += BuildBorderWalls(city, pMandate);
-                if (result.main_city == null && (result.guards > 0 || result.walls > 0 || result.towers > 0))
+                if (result.main_city == null &&
+                    (result.guards > 0 || result.towers > 0))
                     result.main_city = city;
             }
+            if (pBuildWalls)
+                result.walls += MandateBorderWallRefreshService.
+                    RefreshCitiesNow(pMandate, wallCities);
+            if (result.main_city == null && result.walls > 0)
+                result.main_city = wallCities[0];
 
             if (result.guards <= 0 && result.walls <= 0 && result.towers <= 0) return false;
 
@@ -137,18 +146,26 @@ namespace AncientWarfare3.core.lineage
 
         private static List<City> CollectBorderCities(Kingdom pMandate)
         {
-            var result = new List<City>();
-            foreach (long id in MandateService.GetCurrentCoreCityIds())
+            var candidates = new Dictionary<long, City>();
+            if (pMandate?.data == null) return new List<City>();
+            try
             {
-                City city = FindCity(id);
-                if (city?.data == null || city.isRekt()) continue;
-                Kingdom owner = city.kingdom;
-                if (owner?.data == null) continue;
-                if (owner != pMandate && VassalService.GetRootSuzerain(owner) != pMandate) continue;
-                if (!HasOutsideNeighbour(city, pMandate)) continue;
-                result.Add(city);
+                foreach (City city in pMandate.getCities())
+                    if (city?.data != null && !city.isRekt())
+                        candidates[city.getID()] = city;
+                foreach (Kingdom vassal in VassalService.GetVassals(
+                             pMandate, true))
+                {
+                    if (vassal?.data == null || vassal.isRekt()) continue;
+                    foreach (City city in vassal.getCities())
+                        if (city?.data != null && !city.isRekt())
+                            candidates[city.getID()] = city;
+                }
             }
+            catch { }
 
+            var result = candidates.Values.Where(city =>
+                    IsEligibleWallCity(city, pMandate)).ToList();
             result.Sort((a, b) => BorderScore(b, pMandate).CompareTo(BorderScore(a, pMandate)));
             return result;
         }
@@ -228,6 +245,18 @@ namespace AncientWarfare3.core.lineage
                 try { pArmy.setCaptain(null); } catch { }
                 try { World.world?.armies?.removeObject(pArmy); } catch { }
             }
+        }
+
+        internal static bool IsEligibleWallCity(City pCity,
+            Kingdom pMandate)
+        {
+            if (pCity?.data == null || pCity.isRekt() ||
+                pMandate?.data == null) return false;
+            Kingdom owner = pCity.kingdom;
+            if (owner?.data == null || owner != pMandate &&
+                VassalService.GetRootSuzerain(owner) != pMandate)
+                return false;
+            return HasOutsideNeighbour(pCity, pMandate);
         }
 
         private static bool HasOutsideNeighbour(City pCity, Kingdom pMandate)
@@ -367,18 +396,7 @@ namespace AncientWarfare3.core.lineage
             return string.IsNullOrEmpty(cityName) ? name : cityName + " " + name;
         }
 
-        private static int BuildBorderWalls(City pCity, Kingdom pMandate)
-        {
-            TopTileType wall = ResolveBorderWallType();
-            if (pCity?.data == null || pMandate?.data == null ||
-                wall == null) return 0;
-            return CultiwayStyleCityWallService.BuildFrontier(
-                pCity, wall, 2,
-                kingdom => IsFortificationTarget(
-                    pMandate, kingdom)).Changed;
-        }
-
-        private static TopTileType ResolveBorderWallType()
+        internal static TopTileType ResolveBorderWallType()
         {
             TopTileType preferred = TopTileLibrary.wall_order;
             if (preferred != null && preferred.id == MandateBorderWallRules.PreferredWallTopTileId)

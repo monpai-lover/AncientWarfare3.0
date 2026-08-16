@@ -12,6 +12,19 @@ namespace AncientWarfare3.core.lineage
             IEnumerable<CultiwayWallPoint> pFrontierSeeds,
             IEnumerable<CultiwayWallPoint> pRoads,
             int pWallWidth)
+            : this(pCityLand, pPassable, pFrontierSeeds, pRoads,
+                Array.Empty<CultiwayWallPoint>(), pWallWidth,
+                pCarveRoadPassages: true)
+        {
+        }
+
+        public CultiwayFrontierWallGeometryInput(
+            IEnumerable<CultiwayWallPoint> pCityLand,
+            IEnumerable<CultiwayWallPoint> pPassable,
+            IEnumerable<CultiwayWallPoint> pFrontierSeeds,
+            IEnumerable<CultiwayWallPoint> pRoads,
+            IEnumerable<CultiwayWallPoint> pReservedPassages,
+            int pWallWidth, bool pCarveRoadPassages)
         {
             if (pWallWidth <= 0)
                 throw new ArgumentOutOfRangeException(nameof(pWallWidth));
@@ -24,14 +37,19 @@ namespace AncientWarfare3.core.lineage
                 pFrontierSeeds ?? Array.Empty<CultiwayWallPoint>());
             Roads = new HashSet<CultiwayWallPoint>(
                 pRoads ?? Array.Empty<CultiwayWallPoint>());
+            ReservedPassages = new HashSet<CultiwayWallPoint>(
+                pReservedPassages ?? Array.Empty<CultiwayWallPoint>());
             WallWidth = pWallWidth;
+            CarveRoadPassages = pCarveRoadPassages;
         }
 
         public HashSet<CultiwayWallPoint> CityLand { get; }
         public HashSet<CultiwayWallPoint> Passable { get; }
         public HashSet<CultiwayWallPoint> FrontierSeeds { get; }
         public HashSet<CultiwayWallPoint> Roads { get; }
+        public HashSet<CultiwayWallPoint> ReservedPassages { get; }
         public int WallWidth { get; }
+        public bool CarveRoadPassages { get; }
     }
 
     public static class CultiwayStyleFrontierWallGeometryRules
@@ -70,7 +88,9 @@ namespace AncientWarfare3.core.lineage
             }
 
             SealDiagonalGaps(walls, available);
-            CarveRoadPassages(walls, pInput.Roads);
+            if (pInput.CarveRoadPassages)
+                CarveRoadPassages(walls, pInput.Roads);
+            walls.ExceptWith(pInput.ReservedPassages);
             return walls.OrderBy(point => point.X)
                 .ThenBy(point => point.Y).ToArray();
         }

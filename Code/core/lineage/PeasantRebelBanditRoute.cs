@@ -75,14 +75,8 @@ namespace AncientWarfare3.core.lineage
             if (!PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return;
-            City transitionCity = ResolveTransitionCity(pKingdom);
             MandateRebelService.RunBanditRouteYear(pKingdom);
-            if (transitionCity?.data != null &&
-                TryConvertToFounding(pKingdom, transitionCity))
-            {
-                MandateRebelService.RunFoundingRouteYear(pKingdom);
-                return;
-            }
+            PeasantRebelBanditPressureService.OnKingdomYear(pKingdom);
             PeasantRebelBanditRaidService.ScheduleYear(pKingdom);
             PeasantRebelBanditWallService.RepairYear(pKingdom,
                 IsOriginSuppressionActive(pKingdom));

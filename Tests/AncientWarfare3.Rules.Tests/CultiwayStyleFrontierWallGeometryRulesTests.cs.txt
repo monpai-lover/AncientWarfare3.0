@@ -11,6 +11,7 @@ internal static class CultiwayStyleFrontierWallGeometryRulesTests
         IndependentSegmentsDoNotBecomeAClosedCityRing();
         DiagonalSegmentsReceiveAnOrthogonalBridge();
         RoadCrossingCarvesAThreeTilePassage();
+        WatchTowerFootprintIsTheOnlyMandatePassage();
         InvalidAndForeignTilesAreClipped();
         EmptyFrontierProducesNoWalls();
     }
@@ -80,6 +81,28 @@ internal static class CultiwayStyleFrontierWallGeometryRulesTests
             "the road passage does not remove the remaining frontier");
     }
 
+    private static void WatchTowerFootprintIsTheOnlyMandatePassage()
+    {
+        HashSet<CultiwayWallPoint> land = Rectangle(1, 1, 5, 7);
+        HashSet<CultiwayWallPoint> actual = Compute(Input(
+            land, land, Vertical(5, 1, 7),
+            roads: new[] { Point(5, 4) }, width: 2,
+            reservedPassages: new[] { Point(5, 4), Point(4, 4) },
+            carveRoadPassages: false));
+
+        False(actual.Contains(Point(5, 4)),
+            "the tower anchor receives no wall");
+        False(actual.Contains(Point(4, 4)),
+            "the complete tower footprint receives no wall");
+        True(actual.Contains(Point(5, 3)),
+            "the tile before the tower remains walled");
+        True(actual.Contains(Point(5, 5)),
+            "the tile after the tower remains walled");
+        True(actual.Contains(Point(4, 3)) &&
+             actual.Contains(Point(4, 5)),
+            "the tower does not carve a surrounding artificial gap");
+    }
+
     private static void InvalidAndForeignTilesAreClipped()
     {
         HashSet<CultiwayWallPoint> land = Rectangle(1, 1, 5, 5);
@@ -112,11 +135,15 @@ internal static class CultiwayStyleFrontierWallGeometryRulesTests
         IEnumerable<CultiwayWallPoint> passable,
         IEnumerable<CultiwayWallPoint> seeds,
         IEnumerable<CultiwayWallPoint> roads = null,
-        int width = 1)
+        int width = 1,
+        IEnumerable<CultiwayWallPoint> reservedPassages = null,
+        bool carveRoadPassages = true)
     {
         return new CultiwayFrontierWallGeometryInput(
             land, passable, seeds,
-            roads ?? Array.Empty<CultiwayWallPoint>(), width);
+            roads ?? Array.Empty<CultiwayWallPoint>(),
+            reservedPassages ?? Array.Empty<CultiwayWallPoint>(),
+            width, carveRoadPassages);
     }
 
     private static HashSet<CultiwayWallPoint> Compute(

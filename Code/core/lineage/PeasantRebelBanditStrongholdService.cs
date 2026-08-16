@@ -495,9 +495,11 @@ namespace AncientWarfare3.core.lineage
         {
             if (!PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
                     out PeasantRebelBanditStrongholdState state)) return true;
-            return pCity?.data != null &&
-                   pCity.getID() == state.StrongholdCityId &&
-                   pCity.kingdom == pKingdom;
+            if (pCity?.data == null) return false;
+            if (pCity.kingdom == pKingdom) return true;
+            return state.Pressure >=
+                       PeasantRebelBanditPressureRules.MaximumPressure &&
+                   state.PressureTargetCityId == pCity.getID();
         }
 
         internal static bool CanAcquireZone(City pCity, TileZone pZone)
@@ -530,7 +532,8 @@ namespace AncientWarfare3.core.lineage
                 return true;
             pHandled = true;
             if (!CanMutate()) return false;
-            return CompleteFall(bandit, pCity, state, pOccupier);
+            QueueFall(pCity.getID(), pOccupier?.getID() ?? -1L);
+            return false;
         }
 
         internal static bool IsHostileKingdom(Kingdom pBandit,
@@ -574,8 +577,21 @@ namespace AncientWarfare3.core.lineage
             int population;
             try { population = stronghold.getPopulationPeople(); }
             catch { return; }
-            if (population <= 0)
-                CompleteFall(bandit, stronghold, state);
+            BanditStrongholdFallAction action =
+                PeasantRebelBanditStrongholdRules.ResolveFallAction(
+                    population, pHostileKillerKingdomId,
+                    captureFinished: false);
+            if (action == BanditStrongholdFallAction.QueueFall)
+            {
+                if (pHostileKillerKingdomId <= 0 &&
+                    state.LastHostileKillerKingdomId > 0)
+                {
+                    state.LastHostileKillerKingdomId = -1L;
+                    if (!PeasantRebelBanditStateStore.Write(bandit, state))
+                        return;
+                }
+                QueueFall(pStrongholdCityId, -1L);
+            }
         }
 
         internal static void RestoreRuntime()
@@ -593,7 +609,22 @@ namespace AncientWarfare3.core.lineage
                 if (state.Phase == BanditStrongholdPhase.Active)
                 {
                     if (stronghold?.data != null && mother?.data != null)
+                    {
+                        int population;
+                        try
+                        {
+                            population = stronghold.getPopulationPeople();
+                        }
+                        catch { continue; }
+                        BanditStrongholdFallAction action =
+                            PeasantRebelBanditStrongholdRules.
+                                ResolveFallAction(population,
+                                    state.LastHostileKillerKingdomId,
+                                    captureFinished: false);
+                        if (action == BanditStrongholdFallAction.QueueFall)
+                            QueueFall(stronghold.getID(), -1L);
                         continue;
+                    }
                     if (stronghold?.data == null)
                     {
                         state.Phase = BanditStrongholdPhase.Completed;
@@ -609,8 +640,35 @@ namespace AncientWarfare3.core.lineage
                 if ((state.Phase == BanditStrongholdPhase.Falling ||
                      state.Phase == BanditStrongholdPhase.Completed) &&
                     stronghold?.data != null)
-                    CompleteFall(kingdom, stronghold, state);
+                    QueueFall(stronghold.getID(),
+                        state.SuppressorKingdomId);
             }
+        }
+
+        private static void QueueFall(long pStrongholdCityId,
+            long pSuppressorKingdomId)
+        {
+            if (pStrongholdCityId <= 0) return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "bandit_stronghold_fall:" + pStrongholdCityId,
+                DeferredWorkClass.CriticalRuntime,
+                () =>
+                {
+                    if (!CanMutate()) return;
+                    City stronghold = ResolveCity(pStrongholdCityId);
+                    Kingdom bandit = stronghold?.kingdom;
+                    if (stronghold?.data == null || bandit?.data == null ||
+                        !PeasantRebelBanditStateStore.TryRead(bandit,
+                            out PeasantRebelBanditStrongholdState state) ||
+                        state.StrongholdCityId != pStrongholdCityId ||
+                        state.Phase != BanditStrongholdPhase.Active &&
+                        state.Phase != BanditStrongholdPhase.Falling &&
+                        state.Phase != BanditStrongholdPhase.Completed)
+                        return;
+                    Kingdom suppressor = ResolveKingdom(
+                        pSuppressorKingdomId);
+                    CompleteFall(bandit, stronghold, state, suppressor);
+                });
         }
 
         private static bool CompleteFall(Kingdom pBandit,
@@ -679,6 +737,31 @@ namespace AncientWarfare3.core.lineage
                                     e.Message);
                 return false;
             }
+        }
+
+        internal static void QueueOrphanCleanup(Kingdom pBandit)
+        {
+            if (!CanMutate() || pBandit?.data == null ||
+                !PeasantRebelBanditStateStore.TryRead(pBandit,
+                    out PeasantRebelBanditStrongholdState state)) return;
+            int liveCities = PeasantRebelRouteService.SafeCityCount(pBandit);
+            if (!PeasantRebelBanditPressureRules.ShouldQueueOrphanCleanup(
+                    liveCities)) return;
+            long banditId = pBandit.getID();
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "bandit_stronghold_orphan_cleanup:" + banditId,
+                DeferredWorkClass.CriticalRuntime,
+                () =>
+                {
+                    RemoveStrongholdTowers(state);
+                    RestoreWalls(state);
+                    Kingdom resolved = ResolveKingdom(banditId);
+                    if (resolved?.data != null &&
+                        PeasantRebelRouteService.SafeCityCount(resolved) == 0)
+                        PeasantRebelBanditStateStore.Clear(resolved);
+                    PeasantRebelBanditPressureService.
+                        InvalidateTargetIndex();
+                });
         }
 
         private static City ResolveCity(long pCityId)
@@ -1153,6 +1236,9 @@ namespace AncientWarfare3.core.lineage
                 StrongholdCityId = pStrongholdCityId,
                 MotherCityId = plan.Context.Mother.getID(),
                 OriginKingdomId = plan.Context.Origin.getID(),
+                PressureTargetCityId = plan.Context.Mother.getID(),
+                Pressure = 0,
+                LastPressureYear = Date.getCurrentYear(),
                 FixedZoneKeys = new List<string>(plan.FixedZoneKeys),
                 WallPoints = pTransaction.WallTiles.Select(snapshot =>
                     new BanditStrongholdPoint

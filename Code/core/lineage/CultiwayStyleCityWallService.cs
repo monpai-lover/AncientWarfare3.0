@@ -125,6 +125,18 @@ namespace AncientWarfare3.core.lineage
             Func<Kingdom, bool> pIsFortificationTarget,
             out IReadOnlyList<CultiwayWallPoint> pPoints)
         {
+            return TryPlanFrontier(pCity, pWidth,
+                pIsFortificationTarget,
+                Array.Empty<CultiwayWallPoint>(),
+                pCarveRoadPassages: true, out pPoints);
+        }
+
+        internal static bool TryPlanFrontier(City pCity, int pWidth,
+            Func<Kingdom, bool> pIsFortificationTarget,
+            IReadOnlyCollection<CultiwayWallPoint> pReservedPassages,
+            bool pCarveRoadPassages,
+            out IReadOnlyList<CultiwayWallPoint> pPoints)
+        {
             pPoints = Array.Empty<CultiwayWallPoint>();
             if (pCity?.data == null || pCity.isRekt() || pWidth <= 0 ||
                 pIsFortificationTarget == null || World.world == null)
@@ -151,7 +163,10 @@ namespace AncientWarfare3.core.lineage
                 if (frontier.Count == 0) return false;
 
                 var input = new CultiwayFrontierWallGeometryInput(
-                    cityLand, passable, frontier, roads, pWidth);
+                    cityLand, passable, frontier, roads,
+                    pReservedPassages ??
+                        Array.Empty<CultiwayWallPoint>(),
+                    pWidth, pCarveRoadPassages);
                 IReadOnlyList<CultiwayWallPoint> computed =
                     CultiwayStyleFrontierWallGeometryRules.Compute(input);
                 pPoints = computed.Where(point => CanPlaceAt(pCity,
@@ -174,8 +189,21 @@ namespace AncientWarfare3.core.lineage
             City pCity, TopTileType pWallType, int pWidth,
             Func<Kingdom, bool> pIsFortificationTarget)
         {
+            return BuildFrontier(pCity, pWallType, pWidth,
+                pIsFortificationTarget,
+                Array.Empty<CultiwayWallPoint>(),
+                pCarveRoadPassages: true);
+        }
+
+        internal static CultiwayStyleCityWallResult BuildFrontier(
+            City pCity, TopTileType pWallType, int pWidth,
+            Func<Kingdom, bool> pIsFortificationTarget,
+            IReadOnlyCollection<CultiwayWallPoint> pReservedPassages,
+            bool pCarveRoadPassages)
+        {
             if (pWallType == null || !TryPlanFrontier(pCity, pWidth,
-                    pIsFortificationTarget,
+                    pIsFortificationTarget, pReservedPassages,
+                    pCarveRoadPassages,
                     out IReadOnlyList<CultiwayWallPoint> planned))
                 return new CultiwayStyleCityWallResult(
                     new List<CultiwayWallPoint>(), 0);

@@ -9,11 +9,28 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--runtime-stability")
+{
+    SimulationWorkerPoolTests.Run();
+    PreparedNativePathCommitRulesTests.Run();
+    PathMovementSafetyRulesTests.Run();
+    Console.WriteLine("PASS: runtime stability slice");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--simulation-worker")
+{
+    SimulationWorkerPoolTests.Run();
+    Console.WriteLine("PASS: simulation worker slice");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--cultiway-wall")
 {
     CultiwayStyleWallGeometryRulesTests.Run();
     CultiwayStyleFrontierWallGeometryRulesTests.Run();
     MandateBorderWallRulesTests.Run();
+    MandateBorderWallRefreshRulesTests.Run();
     Console.WriteLine("Cultiway wall geometry rules passed.");
     return;
 }
@@ -38,6 +55,20 @@ if (args.Length == 1 && args[0] == "--bandit-stronghold")
     PeasantRebelBanditZoneWallRulesTests.Run();
     PeasantRebelBanditRaidRulesTests.Run();
     Console.WriteLine("Bandit stronghold and raid rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-pressure")
+{
+    PeasantRebelBanditPressureRulesTests.Run();
+    Console.WriteLine("Bandit pressure rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-history-localization")
+{
+    HistoryLocalizationRulesTests.Run();
+    Console.WriteLine("Bandit history localization rules passed.");
     return;
 }
 

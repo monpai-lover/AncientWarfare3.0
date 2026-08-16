@@ -58,7 +58,7 @@ namespace AncientWarfare3.core.lineage
 
     internal sealed class PeasantRebelBanditStrongholdState
     {
-        public const int CurrentSchemaVersion = 4;
+        public const int CurrentSchemaVersion = 5;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public BanditStrongholdPhase Phase = BanditStrongholdPhase.None;
@@ -72,6 +72,9 @@ namespace AncientWarfare3.core.lineage
             new List<BanditStrongholdTower>();
         public long LastHostileKillerKingdomId = -1L;
         public long SuppressorKingdomId = -1L;
+        public long PressureTargetCityId = -1L;
+        public int Pressure = 0;
+        public int LastPressureYear = int.MinValue;
         public BanditRaidMissionState Raid = new BanditRaidMissionState();
         public Dictionary<long, int> SuppressionExpiryByKingdomId =
             new Dictionary<long, int>();

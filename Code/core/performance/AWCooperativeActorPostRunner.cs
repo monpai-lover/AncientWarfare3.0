@@ -2782,8 +2782,15 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             {
                 PathMovementWorkEntry entry = work.Entries[i];
                 if (entry.Kind == PathMovementWorkKind.RequiresSerial)
-                    AWPathMovementBridge.CommitPreparedPathMovement(
-                        work.Actors[i], entry.Prepared);
+                {
+                    Actor actor = work.Actors[i];
+                    PreparedNativePathCommitDecision decision =
+                        AWPathMovementBridge.CommitPreparedPathMovement(
+                            actor, entry.Prepared);
+                    if (decision ==
+                        PreparedNativePathCommitDecision.Commit)
+                        actor?.skipBehaviour();
+                }
             }
         }
         else if (work.Fallback)
@@ -2803,10 +2810,24 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 bool retain = entry.Kind == PathMovementWorkKind.Retain;
                 if (entry.Kind == PathMovementWorkKind.RequiresSerial)
                 {
-                    AWPathMovementBridge.CommitPreparedPathMovement(
-                        actor, entry.Prepared);
-                    actor.skipBehaviour();
-                    retain = false;
+                    PreparedNativePathCommitDecision decision =
+                        AWPathMovementBridge.CommitPreparedPathMovement(
+                            actor, entry.Prepared);
+                    if (decision ==
+                        PreparedNativePathCommitDecision.Commit)
+                    {
+                        actor.skipBehaviour();
+                        retain = false;
+                    }
+                    else if (decision ==
+                        PreparedNativePathCommitDecision.RetryLater)
+                    {
+                        retain = IsLivePathMovementActor(actor);
+                    }
+                    else
+                    {
+                        retain = false;
+                    }
                 }
 
                 if (!retain)
@@ -2854,6 +2875,13 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         }
 
         work.Reset();
+    }
+
+    private static bool IsLivePathMovementActor(Actor pActor)
+    {
+        if (pActor?.data == null || pActor.batch == null) return false;
+        try { return !pActor.isRekt() && pActor.isAlive(); }
+        catch { return false; }
     }
 
     private void PrepareSmoothMovementWorkItems()
@@ -3984,6 +4012,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             {
                 Actor actor = actors[i];
                 EnemyPrepareKind kind;
+                if (!(actor?.data != null && !actor.isRekt() &&
+                      actor.isAlive() && actor.asset != null &&
+                      actor.kingdom?.data != null))
+                {
+                    continue;
+                }
                 if (actor._update_done ||
                     actor._beh_skip)
                 {

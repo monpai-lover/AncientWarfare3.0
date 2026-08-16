@@ -44,6 +44,7 @@ namespace AncientWarfare3.core.lineage
                 pKingdom.data.set(
                     LineageKeys.MANDATE_REBEL_BANDIT_STRONGHOLD_STATE,
                     JsonConvert.SerializeObject(pState));
+                PeasantRebelBanditPressureService.InvalidateTargetIndex();
                 return true;
             }
             catch (Exception e)
@@ -59,6 +60,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             pKingdom.data.set(
                 LineageKeys.MANDATE_REBEL_BANDIT_STRONGHOLD_STATE, "");
+            PeasantRebelBanditPressureService.InvalidateTargetIndex();
         }
 
         internal static bool TryResolveActive(Kingdom pKingdom,
@@ -107,6 +109,9 @@ namespace AncientWarfare3.core.lineage
                     new System.Collections.Generic.Dictionary<string, int>();
             pState.SuppressionExpiryByKingdomId ??=
                 new System.Collections.Generic.Dictionary<long, int>();
+            pState.Pressure = System.Math.Max(0, System.Math.Min(
+                PeasantRebelBanditPressureRules.MaximumPressure,
+                pState.Pressure));
         }
     }
 }

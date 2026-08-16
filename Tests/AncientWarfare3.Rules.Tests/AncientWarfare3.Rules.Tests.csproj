@@ -12,6 +12,8 @@
     <Compile Include="PeasantRebelRouteRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelRouteRules.cs" Link="Production\PeasantRebelRouteRules.cs" />
     <Compile Include="PeasantRebelBanditStrongholdRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditPressureRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditPressureRules.cs" Link="Production\PeasantRebelBanditPressureRules.cs" />
     <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />
@@ -22,6 +24,9 @@
     <Compile Include="CultiwayStyleFrontierWallGeometryRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\CultiwayStyleFrontierWallGeometryRules.cs" Link="Production\CultiwayStyleFrontierWallGeometryRules.cs" />
     <Compile Include="MandateBorderWallRulesTests.cs.txt" />
+    <Compile Include="MandateBorderWallRefreshRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandateBorderWallState.cs" Link="Production\MandateBorderWallState.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateBorderWallRefreshRules.cs" Link="Production\MandateBorderWallRefreshRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateBorderWallRules.cs" Link="Production\MandateBorderWallRules.cs" />
     <Compile Include="PeasantRebelOutlawNameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelOutlawNameRules.cs" Link="Production\PeasantRebelOutlawNameRules.cs" />
@@ -76,11 +81,15 @@
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
     <Compile Include="SimulationWorkerPoolTests.cs.txt" />
+    <Compile Include="..\..\Code\core\performance\AWSimulationWorkerDispatchGate.cs" Link="Production\AWSimulationWorkerDispatchGate.cs" />
     <Compile Include="..\..\Code\core\performance\AWSimulationWorkerPool.cs" Link="Production\AWSimulationWorkerPool.cs" />
     <Compile Include="ActorScalePerformanceRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\ActorScalePerformanceRules.cs" Link="Production\ActorScalePerformanceRules.cs" />
     <Compile Include="PathMovementExecutorRulesTests.cs.txt" />
     <Compile Include="PathMovementSafetyRulesTests.cs.txt" />
+    <Compile Include="PreparedNativePathCommitRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\pathfinding\PreparedNativePathCommitRules.cs" Link="Production\PreparedNativePathCommitRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PathfindingSafetyRules.cs" Link="Production\PathfindingSafetyRules.cs" />
     <Compile Include="RuntimePerformanceBudgetRulesTests.cs.txt" />
     <Compile Include="MonthlyAuthorityWorkQueueTests.cs.txt" />
     <Compile Include="CourtReplacementSqlTests.cs.txt" />

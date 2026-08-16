@@ -1,4 +1,5 @@
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.lineage;
 
 internal static class PathMovementSafetyRulesTests
 {
@@ -28,6 +29,24 @@ internal static class PathMovementSafetyRulesTests
                 currentOutside: true, nextOutside: false,
                 nextTargetEmpty: true, actorMoving: false),
             "an out-of-bounds current position is always anomalous");
+        True(PathfindingSafetyRules.
+                ShouldConvertGlobalPathExceptionToNotFound(
+                    new NullReferenceException(),
+                    pHasStartTile: true,
+                    pHasTargetTile: true),
+            "global path null reference with live endpoints becomes not found");
+        False(PathfindingSafetyRules.
+                ShouldConvertGlobalPathExceptionToNotFound(
+                    new InvalidOperationException(),
+                    pHasStartTile: true,
+                    pHasTargetTile: true),
+            "unrelated global path exceptions still propagate");
+        False(PathfindingSafetyRules.
+                ShouldConvertGlobalPathExceptionToNotFound(
+                    new NullReferenceException(),
+                    pHasStartTile: false,
+                    pHasTargetTile: true),
+            "missing global path endpoint is not reclassified");
     }
 
     private static void True(bool pValue, string pMessage)

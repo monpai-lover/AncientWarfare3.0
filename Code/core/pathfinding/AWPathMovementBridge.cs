@@ -501,11 +501,16 @@ namespace AncientWarfare3.core.pathfinding
 
         internal readonly struct AWPreparedPathMovement
         {
-            internal AWPreparedPathMovement(bool pVanilla)
+            internal AWPreparedPathMovement(Actor pActor, bool pVanilla)
             {
                 Vanilla = pVanilla;
                 Poll = default;
                 Cursor = default;
+                ActorId = pActor?.data?.id ?? -1L;
+                CurrentTileId = pActor?.current_tile?.data?.tile_id ?? -1;
+                TargetTileId = pActor?.tile_target?.data?.tile_id ?? -1;
+                LocalPathIndex = pActor?.current_path_index ?? -1;
+                HadGlobalPath = pActor?.current_path_global != null;
             }
 
             internal AWPreparedPathMovement(AWPathPollResult pPoll,
@@ -514,11 +519,21 @@ namespace AncientWarfare3.core.pathfinding
                 Vanilla = false;
                 Poll = pPoll;
                 Cursor = pCursor;
+                ActorId = -1L;
+                CurrentTileId = -1;
+                TargetTileId = -1;
+                LocalPathIndex = -1;
+                HadGlobalPath = false;
             }
 
             internal bool Vanilla { get; }
             internal AWPathPollResult Poll { get; }
             internal AWPathFinder.ReadyPathCursor Cursor { get; }
+            internal long ActorId { get; }
+            internal int CurrentTileId { get; }
+            internal int TargetTileId { get; }
+            internal int LocalPathIndex { get; }
+            internal bool HadGlobalPath { get; }
         }
 
         internal readonly struct AWPreparedSmoothMovement
@@ -554,13 +569,15 @@ namespace AncientWarfare3.core.pathfinding
             // parallel-safe movement path.
             if (HasArmyMarchState(pActor))
             {
-                pPrepared = new AWPreparedPathMovement(pVanilla: true);
+                pPrepared = new AWPreparedPathMovement(pActor,
+                    pVanilla: true);
                 return AWParallelPathMovementResult.RequiresSerial;
             }
             if (pActor.isFollowingLocalPath() ||
                 pActor.current_path_global != null)
             {
-                pPrepared = new AWPreparedPathMovement(pVanilla: true);
+                pPrepared = new AWPreparedPathMovement(pActor,
+                    pVanilla: true);
                 return AWParallelPathMovementResult.RequiresSerial;
             }
 
@@ -586,21 +603,70 @@ namespace AncientWarfare3.core.pathfinding
             return AWParallelPathMovementResult.Handled;
         }
 
-        internal static bool CommitPreparedPathMovement(Actor pActor,
+        internal static PreparedNativePathCommitDecision
+            CommitPreparedPathMovement(Actor pActor,
             AWPreparedPathMovement pPrepared)
         {
             if (pActor == null || pActor.data == null)
-                return false;
+                return PreparedNativePathCommitDecision.Drop;
             if (pPrepared.Vanilla)
             {
+                bool actorAlive = false;
+                try
+                {
+                    actorAlive = !pActor.isRekt() && pActor.isAlive();
+                }
+                catch { }
+                WorldTile currentTile = pActor.current_tile;
+                WorldTile targetTile = pActor.tile_target;
+                var facts = new PreparedNativePathFacts(
+                    actorExists: pActor.data != null,
+                    actorAlive: actorAlive,
+                    actorIdMatches: pActor.data != null &&
+                        pActor.data.id == pPrepared.ActorId,
+                    batchExists: pActor.batch != null,
+                    currentTileValid: currentTile?.data != null,
+                    targetTileValid: targetTile?.data != null,
+                    currentRegionValid: currentTile?.region != null,
+                    targetRegionValid: targetTile?.region != null,
+                    currentTileId: currentTile?.data?.tile_id ?? -1,
+                    preparedCurrentTileId: pPrepared.CurrentTileId,
+                    currentTargetTileId: targetTile?.data?.tile_id ?? -1,
+                    preparedTargetTileId: pPrepared.TargetTileId,
+                    currentPathIndex: pActor.current_path_index,
+                    preparedPathIndex: pPrepared.LocalPathIndex,
+                    currentHasGlobalPath:
+                        pActor.current_path_global != null,
+                    preparedHadGlobalPath: pPrepared.HadGlobalPath);
+                PreparedNativePathCommitDecision decision =
+                    PreparedNativePathCommitRules.Decide(facts);
+                if (decision == PreparedNativePathCommitDecision.Drop)
+                {
+                    DropPreparedNativePath(pActor);
+                    return decision;
+                }
+                if (decision == PreparedNativePathCommitDecision.RetryLater)
+                    return decision;
                 pActor.updatePathMovement();
-                return true;
+                return PreparedNativePathCommitDecision.Commit;
             }
 
             AWPathFinder.ReadyPathCursor cursor = pPrepared.Cursor;
             HandlePoll(pActor, pPrepared.Poll, ref cursor,
                 pHandleNoRequest: true);
-            return true;
+            return PreparedNativePathCommitDecision.Commit;
+        }
+
+        private static void DropPreparedNativePath(Actor pActor)
+        {
+            if (pActor == null) return;
+            try { pActor.clearOldPath(); }
+            catch { }
+            try { pActor.clearTileTarget(); }
+            catch { }
+            try { pActor.beh_tile_target = null; }
+            catch { }
+            TrySetNotMoving(pActor);
         }
 
         internal static AWParallelSmoothMovementResult

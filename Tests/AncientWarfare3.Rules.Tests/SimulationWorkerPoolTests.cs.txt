@@ -4,10 +4,25 @@ internal static class SimulationWorkerPoolTests
 {
     internal static void Run()
     {
+        DispatchGenerationCanOnlyBeConsumedOnce();
         ExecutesEveryIndexExactlyOnce();
         WaitingThreadCanAssistAsynchronousWork();
         RejectsConcurrentOperations();
         PropagatesWorkerExceptionsAndRemainsReusable();
+        AlternatingOperationsDoNotReuseWorkerWakeups();
+    }
+
+    private static void DispatchGenerationCanOnlyBeConsumedOnce()
+    {
+        var gate = new AWSimulationWorkerDispatchGate(2);
+        gate.Assign(0, 7);
+        Equal(7, gate.Consume(0),
+            "assigned generation is consumed");
+        Equal(0, gate.Consume(0),
+            "duplicate wake has no participation token");
+        gate.Assign(0, 8);
+        Equal(8, gate.Consume(0),
+            "new operation receives its own generation");
     }
 
     private static void ExecutesEveryIndexExactlyOnce()
@@ -121,6 +136,34 @@ internal static class SimulationWorkerPoolTests
             _ => Interlocked.Increment(ref executed));
         Equal(8, executed,
             "worker pool remains reusable after an operation exception");
+    }
+
+    private static void AlternatingOperationsDoNotReuseWorkerWakeups()
+    {
+        const int iterations = 2000;
+        for (int iteration = 0; iteration < iterations; iteration++)
+        {
+            int synchronousExecuted = 0;
+            AWSimulationWorkerPool.WorkResult synchronous =
+                AWSimulationWorkerPool.Instance.RunIndexed(0, 9,
+                    _ => Interlocked.Increment(ref synchronousExecuted));
+            Equal(9, synchronousExecuted,
+                "synchronous operation executes every item");
+            Equal(synchronous.ScheduledItems, synchronous.ExecutedItems,
+                "synchronous result remains complete");
+
+            int asynchronousExecuted = 0;
+            AWSimulationWorkerPool.WorkTicket ticket =
+                AWSimulationWorkerPool.Instance.BeginIndexed(0, 1,
+                    _ => Interlocked.Increment(ref asynchronousExecuted));
+            AWSimulationWorkerPool.Instance.Wait(ticket);
+            AWSimulationWorkerPool.WorkResult asynchronous =
+                AWSimulationWorkerPool.Instance.Complete(ticket);
+            Equal(1, asynchronousExecuted,
+                "asynchronous operation executes its item");
+            Equal(asynchronous.ScheduledItems, asynchronous.ExecutedItems,
+                "asynchronous result remains complete");
+        }
     }
 
     private static void True(bool condition, string message)
