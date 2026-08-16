@@ -1,59 +1,96 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.core.lineage;
 
 internal static class PeasantRebelBanditStrongholdRulesTests
 {
     public static void Run()
     {
-        SelectsCenterAsMinimumNativeZone();
-        SelectsConnectedDesiredZonesWithoutMajorityThreshold();
+        RanksTwoByTwoContainingCenterFirst();
+        FallsBackToConnectedFourZoneShape();
+        RejectsWhenFourConnectedZonesAreUnavailable();
         RequiresZonesOnBothSidesOfSplit();
         LocksBanditGrowthToPersistedZones();
         ComposesStrongholdNamesAndTitles();
     }
 
-    private static void SelectsCenterAsMinimumNativeZone()
+    private static void RanksTwoByTwoContainingCenterFirst()
     {
         var zones = new[]
         {
-            Zone("center", 0, 64, "east"),
-            Zone("east", 0, 64, "center")
+            Zone("1:1", 1, 1, "2:1", "1:2", "0:1"),
+            Zone("2:1", 2, 1, "1:1", "2:2", "3:1"),
+            Zone("1:2", 1, 2, "1:1", "2:2"),
+            Zone("2:2", 2, 2, "2:1", "1:2"),
+            Zone("0:1", 0, 1, "1:1"),
+            Zone("3:1", 3, 1, "2:1")
         };
 
-        HashSet<string> selected =
-            PeasantRebelBanditStrongholdRules.SelectZoneAlignedKeys(
-                zones, "center");
+        IReadOnlyList<IReadOnlyList<string>> ranked =
+            PeasantRebelBanditStrongholdRules.RankFourZoneCandidates(
+                zones, "1:1");
 
-        True(selected.SetEquals(new[] { "center" }),
-            "the civic-core zone is the one-zone minimum");
+        True(ranked.Count > 0,
+            "a connected four-zone candidate exists");
+        True(new HashSet<string>(ranked[0]).SetEquals(new[]
+            { "1:1", "2:1", "1:2", "2:2" }),
+            "a 2 by 2 block containing the seed ranks first");
+        True(ranked.All(candidate => candidate.Count == 4),
+            "every ranked candidate contains exactly four zones");
     }
 
-    private static void SelectsConnectedDesiredZonesWithoutMajorityThreshold()
+    private static void FallsBackToConnectedFourZoneShape()
     {
         var zones = new[]
         {
-            Zone("center", 64, 64, "east", "dry"),
-            Zone("east", 1, 64, "center"),
-            Zone("dry", 0, 64, "center"),
-            Zone("isolated", 64, 64)
+            Zone("0:0", 0, 0, "1:0"),
+            Zone("1:0", 1, 0, "0:0", "2:0"),
+            Zone("2:0", 2, 0, "1:0", "3:0"),
+            Zone("3:0", 3, 0, "2:0"),
+            Zone("9:9", 9, 9)
         };
 
-        HashSet<string> selected =
-            PeasantRebelBanditStrongholdRules.SelectZoneAlignedKeys(
-                zones, "center");
+        IReadOnlyList<IReadOnlyList<string>> ranked =
+            PeasantRebelBanditStrongholdRules.RankFourZoneCandidates(
+                zones, "0:0");
 
-        True(selected.SetEquals(new[] { "center", "east" }),
-            "all and only connected zones touched by the desired enclosure transfer");
+        Equal(1, ranked.Count,
+            "an irregular city still supplies one connected candidate");
+        True(new HashSet<string>(ranked[0]).SetEquals(new[]
+            { "0:0", "1:0", "2:0", "3:0" }),
+            "the fallback remains connected to the civic-core zone");
+    }
+
+    private static void RejectsWhenFourConnectedZonesAreUnavailable()
+    {
+        var zones = new[]
+        {
+            Zone("0:0", 0, 0, "1:0"),
+            Zone("1:0", 1, 0, "0:0", "2:0"),
+            Zone("2:0", 2, 0, "1:0"),
+            Zone("9:9", 9, 9)
+        };
+
+        IReadOnlyList<IReadOnlyList<string>> ranked =
+            PeasantRebelBanditStrongholdRules.RankFourZoneCandidates(
+                zones, "0:0");
+
+        Equal(0, ranked.Count,
+            "disconnected zones cannot pad a stronghold to four zones");
     }
 
     private static void RequiresZonesOnBothSidesOfSplit()
     {
-        True(PeasantRebelBanditStrongholdRules.IsViableSplit(1, 1),
-            "one zone on each side is viable");
+        True(PeasantRebelBanditStrongholdRules.IsViableSplit(4, 1),
+            "four stronghold zones and one mother zone are viable");
         False(PeasantRebelBanditStrongholdRules.IsViableSplit(0, 3),
-            "stronghold needs an interior zone");
-        False(PeasantRebelBanditStrongholdRules.IsViableSplit(3, 0),
+            "stronghold needs exactly four interior zones");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(3, 2),
+            "three stronghold zones are below the fixed size");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(5, 1),
+            "five stronghold zones exceed the fixed size");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(4, 0),
             "mother city needs an exterior zone");
     }
 
@@ -91,12 +128,10 @@ internal static class PeasantRebelBanditStrongholdRulesTests
             "localized role text follows the canonical stronghold name");
     }
 
-    private static BanditZoneFact Zone(string key, int enclosedTiles,
-        int totalTiles,
+    private static BanditZoneFact Zone(string key, int x, int y,
         params string[] neighbours)
     {
-        return new BanditZoneFact(key, enclosedTiles, totalTiles,
-            neighbours);
+        return BanditZoneFact.At(key, x, y, neighbours);
     }
 
     private static void True(bool value, string message)
