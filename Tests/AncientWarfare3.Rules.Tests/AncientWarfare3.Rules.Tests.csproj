@@ -445,6 +445,8 @@
     <Compile Include="..\..\Code\core\db\SuccessionDisputeIndexRules.cs" Link="Production\SuccessionDisputeIndexRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirMinimapScaleRules.cs" Link="Production\HeirMinimapScaleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirMinimapVisualRules.cs" Link="Production\HeirMinimapVisualRules.cs" />
+    <Compile Include="XiaMinimapVisualRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\XiaMinimapVisualRules.cs" Link="Production\XiaMinimapVisualRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirRegistrationRules.cs" Link="Production\HeirRegistrationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MinimapActorMarkerRules.cs" Link="Production\MinimapActorMarkerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyMapInformationRules.cs" Link="Production\ArmyMapInformationRules.cs" />

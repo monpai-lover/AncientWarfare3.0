@@ -29,8 +29,13 @@ namespace AncientWarfare3.patch
             bool markersEnabled = PlayerConfig.optionBoolEnabled("map_kings_leaders");
             if (!markersEnabled) return;
 
-            Sprite baseIcon = SpriteTextureLoader.getSprite("civ/icons/minimap_heir");
-            if (baseIcon == null) return;
+            Sprite defaultIcon = SpriteTextureLoader.getSprite(
+                XiaMinimapVisualRules.ResolveHeirIconPath(
+                    cultureIntegrated: false));
+            Sprite xiaIcon = SpriteTextureLoader.getSprite(
+                XiaMinimapVisualRules.ResolveHeirIconPath(
+                    cultureIntegrated: true));
+            if (defaultIcon == null && xiaIcon == null) return;
 
             DrawnHeirActorIds.Clear();
             int createdThisFrame = 0;
@@ -77,6 +82,12 @@ namespace AncientWarfare3.patch
                         ? kingdom
                         : null;
                 if (visualKingdom == null) continue;
+                bool integrated = XiaCultureIntegrationService.IsIntegrated(
+                    visualKingdom.culture);
+                Sprite baseIcon = integrated
+                    ? xiaIcon ?? defaultIcon
+                    : defaultIcon;
+                if (baseIcon == null) continue;
 
                 Vector3 pos = unit.current_position;
                 pos.y -= 3f;

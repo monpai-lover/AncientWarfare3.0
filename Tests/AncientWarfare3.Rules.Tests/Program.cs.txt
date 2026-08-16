@@ -500,6 +500,7 @@ if (args.Length == 1 && args[0] == "--zhulu-war-slice")
 if (args.Length == 1 && args[0] == "--xiaization-ui-slice")
 {
     XiaizationStatusDisplayRulesTests.Run();
+    XiaMinimapVisualRulesTests.Run();
     Console.WriteLine("Xiaization UI rules passed.");
     return;
 }
