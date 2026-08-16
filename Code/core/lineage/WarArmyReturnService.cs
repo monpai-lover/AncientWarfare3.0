@@ -501,7 +501,12 @@ namespace AncientWarfare3.core.lineage
             string jobId = captain
                 ? ArmyRtsContent.ReturnCaptainJobId
                 : ArmyRtsContent.ReturnFollowerJobId;
-            string taskId = arrivalVerified
+            bool captainAtTargetCenter = captain &&
+                IsAtPersistedTargetCityCenter(pActor, pArmy);
+            bool waitAtArrival = WarArmyReturnRules.
+                ShouldWaitAtReturnArrival(arrivalVerified, captain,
+                    captainAtTargetCenter);
+            string taskId = waitAtArrival
                 ? "wait"
                 : captain
                 ? ArmyRtsContent.ReturnTaskId
@@ -528,6 +533,18 @@ namespace AncientWarfare3.core.lineage
             }
             ArmyMilitaryMovementPriorityIndex.Register(pActor.data.id,
                 ArmyMilitaryMovementPriorityKind.RtsMember);
+        }
+
+        private static bool IsAtPersistedTargetCityCenter(Actor pActor,
+            Army pArmy)
+        {
+            if (pActor?.current_tile?.data == null || pArmy?.data == null)
+                return false;
+            WarArmyReturnStoredIntent stored = ReadPersisted(pArmy);
+            City city = ResolveCity(stored?.TargetCityId ?? -1L);
+            WorldTile center = SafeCityTile(city);
+            if (center?.data == null) return false;
+            return pActor.current_tile.data.tile_id == center.data.tile_id;
         }
 
         private static void ReleaseReturnJobs(Army pArmy)
@@ -593,7 +610,14 @@ namespace AncientWarfare3.core.lineage
             City city;
             try { city = pActor?.current_tile?.zone?.city; }
             catch { city = null; }
-            return IsFriendlySafeCity(city, pKingdom);
+            if (!IsFriendlySafeCity(city, pKingdom)) return false;
+            WorldTile center = SafeCityTile(city);
+            WorldTile current = pActor?.current_tile;
+            if (center?.data == null || current?.data == null) return false;
+            return WarArmyReturnRules.IsInsideReturnArrivalRadius(
+                insideFriendlySafeCity: true,
+                deltaX: (long)current.x - center.x,
+                deltaY: (long)current.y - center.y);
         }
 
         internal static bool IsInsideFriendlySafeCity(Actor pActor)

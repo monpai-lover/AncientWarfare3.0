@@ -23,9 +23,44 @@ internal static class WarArmyReturnRulesTests
         Equal(false, WarArmyReturnRules.HasArrived(
                 armyAlive: true, insideFriendlySafeCity: false),
             "an army abroad retains return intent");
+        var arrivalRadius = typeof(WarArmyReturnRules).GetMethod(
+            "IsInsideReturnArrivalRadius");
+        Equal(true, arrivalRadius != null,
+            "return rules expose a bounded city-center arrival predicate");
+        if (arrivalRadius != null)
+        {
+            Equal(true, (bool)arrivalRadius.Invoke(null,
+                    new object[] { true, 16L, 0L })!,
+                "the bounded city-center arrival radius accepts its edge");
+            Equal(false, (bool)arrivalRadius.Invoke(null,
+                    new object[] { true, 17L, 0L })!,
+                "friendly city territory beyond the center radius is not arrival");
+            Equal(false, (bool)arrivalRadius.Invoke(null,
+                    new object[] { false, 0L, 0L })!,
+                "a matching coordinate outside a friendly safe city is not arrival");
+            Equal(false, (bool)arrivalRadius.Invoke(null,
+                    new object[] { true, long.MinValue, long.MinValue })!,
+                "extreme invalid coordinates cannot overflow into the arrival radius");
+        }
         Equal(false, WarArmyReturnRules.ShouldAllowPeacetimeJob(
                 returnActive: true),
             "active return intent blocks patrol and social ownership");
+        Equal(true, WarArmyReturnRules.ShouldWaitAtReturnArrival(
+                arrivalVerified: true, actorIsCaptain: false,
+                captainAtTargetCenter: false),
+            "an arrived follower may wait while the formation completes return");
+        Equal(false, WarArmyReturnRules.ShouldWaitAtReturnArrival(
+                arrivalVerified: true, actorIsCaptain: true,
+                captainAtTargetCenter: false),
+            "an arrived captain must keep moving until reaching the target city center");
+        Equal(true, WarArmyReturnRules.ShouldWaitAtReturnArrival(
+                arrivalVerified: true, actorIsCaptain: true,
+                captainAtTargetCenter: true),
+            "a captain may wait after reaching the persisted target city center");
+        Equal(false, WarArmyReturnRules.ShouldWaitAtReturnArrival(
+                arrivalVerified: false, actorIsCaptain: true,
+                captainAtTargetCenter: true),
+            "an unverified captain cannot stop merely because it crosses a city center");
         Equal(true, WarArmyReturnRules.ShouldAllowPeacetimeJob(
                 returnActive: false),
             "peacetime ownership resumes after return completes");
@@ -104,6 +139,16 @@ internal static class WarArmyReturnRulesTests
              service.Contains("TryPrepareMilitaryP0Actor(") &&
              service.Contains("TryGetTarget("),
             "return owns task repair, P0 preparation, and target publication");
+        string returnJobRepair = Section(service,
+            "private static void EnsureReturnActorJob(Actor pActor, Army pArmy,",
+            "private static void ReleaseReturnJobs(Army pArmy)");
+        True(returnJobRepair.Contains(
+                 "ShouldWaitAtReturnArrival(",
+                 StringComparison.Ordinal) &&
+             returnJobRepair.Contains(
+                 "IsAtPersistedTargetCityCenter(pActor, pArmy)",
+                 StringComparison.Ordinal),
+            "an arrived captain keeps its return task until reaching the persisted target city center");
         string content = File.ReadAllText(Path.Combine(root, "Code",
             "content", "ArmyRtsContent.cs"));
         True(content.Contains("ReturnCaptainJobId") &&
@@ -213,9 +258,9 @@ internal static class WarArmyReturnRulesTests
                  "SyntheticLevyService.IsSynthetic(pActor)",
                  StringComparison.Ordinal) &&
              releaseAfterReturn.Contains(
-                 "pActor.ai.setJob(Actor.nextJobActor(pActor))",
+                 "pActor.ai.setJob(pActor.getNextJob())",
                  StringComparison.Ordinal) &&
-             !releaseAfterReturn.Contains("pActor.getNextJob()",
+             !releaseAfterReturn.Contains("Actor.nextJobActor(pActor)",
                  StringComparison.Ordinal) &&
              !releaseAfterReturn.Contains("WarArmyReturnService.TryBegin",
                  StringComparison.Ordinal) &&
@@ -226,6 +271,15 @@ internal static class WarArmyReturnRulesTests
                  "RefreshReleasedArmyPeacetimeJobs",
                  StringComparison.Ordinal),
             "post-return release destroys RTS ownership and hands only permanent survivors to native AI");
+        string arrivalPredicate = Section(service,
+            "private static bool IsInsideFriendlySafeCity(Actor pActor,",
+            "internal static bool IsInsideFriendlySafeCity(Actor pActor)");
+        True(arrivalPredicate.Contains(
+                 "WarArmyReturnRules.IsInsideReturnArrivalRadius(",
+                 StringComparison.Ordinal) &&
+             arrivalPredicate.Contains("SafeCityTile(city)",
+                 StringComparison.Ordinal),
+            "return arrival requires the friendly safe city and its bounded center radius");
         string peacetimeRefresh = Section(peacetime,
             "public static void RefreshJob(Actor pActor)",
             "private static bool HandleActiveReproduction(");

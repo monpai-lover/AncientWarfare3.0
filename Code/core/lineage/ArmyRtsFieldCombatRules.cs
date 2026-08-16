@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.lineage
             bool pAlreadyReleased, int pEngagedCombatants,
             int pLiveCombatants, bool pCaptainEngaged)
         {
+            if (pCaptainEngaged) return true;
             int engaged = pEngagedCombatants < 0 ? 0 : pEngagedCombatants;
             if (pLiveCombatants <= 0) return false;
             if (engaged > pLiveCombatants) engaged = pLiveCombatants;
@@ -54,6 +55,15 @@ namespace AncientWarfare3.core.lineage
             bool pValidBehaviourTarget)
         {
             return pImmediateAttackTarget || pValidBehaviourTarget;
+        }
+
+        public static bool ShouldRequestFieldCombatFromP0(
+            bool missionActive, bool alreadyReleased,
+            bool contactActorIsCaptain,
+            bool captainHasValidCombatTarget)
+        {
+            return missionActive && !alreadyReleased &&
+                   contactActorIsCaptain && captainHasValidCombatTarget;
         }
     }
 }

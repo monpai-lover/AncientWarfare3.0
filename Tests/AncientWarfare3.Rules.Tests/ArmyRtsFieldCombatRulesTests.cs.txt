@@ -6,14 +6,14 @@ internal static class ArmyRtsFieldCombatRulesTests
     public static void Run()
     {
         // 将领单独接敌可以自行还击，但不能中断全军的战略推进。
-        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
                 pAlreadyReleased: false, pEngagedCombatants: 0,
                 pLiveCombatants: 10, pCaptainEngaged: true),
-            "a lone captain contact does not release strategic movement");
-        Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
+            "captain contact releases followers from strategic movement");
+        Assert(ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(
                 pAlreadyReleased: true, pEngagedCombatants: 0,
                 pLiveCombatants: 10, pCaptainEngaged: true),
-            "a lone captain contact does not retain a released field battle");
+            "captain contact retains an active field battle");
 
         // 未释放：达到 25% 触发，低于则不触发。
         Assert(!ArmyRtsFieldCombatRules.ShouldReleaseToFieldCombat(

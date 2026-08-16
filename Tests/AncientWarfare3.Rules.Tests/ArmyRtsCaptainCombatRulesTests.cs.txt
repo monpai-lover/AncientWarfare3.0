@@ -26,10 +26,10 @@ internal static class ArmyRtsCaptainCombatRulesTests
                 alreadyInCombat: false, engagedCombatants: 3,
                 liveCombatants: 10, captainEngaged: false),
             "a 25 percent field contact enters captain combat");
-        Assert(!ArmyRtsCaptainCombatRules.ShouldEnterCombat(
+        Assert(ArmyRtsCaptainCombatRules.ShouldEnterCombat(
                 alreadyInCombat: false, engagedCombatants: 0,
                 liveCombatants: 10, captainEngaged: true),
-            "a lone captain contact does not stop strategic movement");
+            "captain contact releases followers into the field battle");
         Assert(!ArmyRtsCaptainCombatRules.ShouldEnterCombat(
                 alreadyInCombat: false, engagedCombatants: 2,
                 liveCombatants: 10, captainEngaged: false),
@@ -70,6 +70,18 @@ internal static class ArmyRtsCaptainCombatRulesTests
                 missionActive: true, actorIsCaptain: false,
                 fieldCombatReleased: false, hasValidCombatTarget: false),
             "an RTS soldier without a valid close enemy cannot remain in vanilla fighting during a march");
+        Assert(ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(
+                siegeCombatActive: true,
+                actorInsideTargetCityCombatZone: true),
+            "a soldier inside the active target-city combat zone joins siege combat");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(
+                siegeCombatActive: true,
+                actorInsideTargetCityCombatZone: false),
+            "an outlying soldier keeps following the captain instead of attacking a distant city target");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(
+                siegeCombatActive: false,
+                actorInsideTargetCityCombatZone: true),
+            "standing inside a city cannot create siege combat without an active army siege");
 
         string root = Directory.GetCurrentDirectory();
         string content = File.ReadAllText(Path.Combine(root, "Code",
@@ -140,6 +152,31 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    "runtime.FieldCombatReleased ||",
                    StringComparison.Ordinal),
             "active field combat assigns targetless soldiers to member combat so the task can search for enemies");
+        Assert(memberMissionBody.Contains(
+                   "ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(",
+                   StringComparison.Ordinal) &&
+               memberMissionBody.Contains(
+                   "IsInsideCityCombatZone(pActor, activeSiegeCity)",
+                   StringComparison.Ordinal),
+            "routine member job repair gates siege combat by the individual soldier's target-city position");
+        int siegeRegisterStart = controller.IndexOf(
+            "private static void RegisterTargetCitySiegeMembers(",
+            StringComparison.Ordinal);
+        int siegeRegisterEnd = controller.IndexOf(
+            "private static void ExitTargetCitySiegeCombat(",
+            Math.Max(0, siegeRegisterStart), StringComparison.Ordinal);
+        string siegeRegisterBody = siegeRegisterStart >= 0 &&
+            siegeRegisterEnd > siegeRegisterStart
+            ? controller.Substring(siegeRegisterStart,
+                siegeRegisterEnd - siegeRegisterStart)
+            : string.Empty;
+        Assert(siegeRegisterBody.Contains(
+                   "SetNativeMemberMissionTask(actor, pArmy",
+                   StringComparison.Ordinal) &&
+               !siegeRegisterBody.Contains(
+                   "ArmyRtsContent.SiegeCombatTaskId",
+                   StringComparison.Ordinal),
+            "siege entry evaluates each member's city position instead of assigning the siege task army-wide");
         int memberBehaviourStart = behaviour.IndexOf(
             "public sealed class BehArmyRtsMemberCombat",
             StringComparison.Ordinal);

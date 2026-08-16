@@ -435,8 +435,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     "retreat_combat_suppressed", actor,
                     "kind=" + kind);
             }
-            else if (ArmyRtsControllerService.
-                         HasImmediateCombatPriority(actor))
+            else if (HasMilitaryCombatPriority(actor))
             {
                 RunMilitaryP0Combat(actor, actorId, kind, cycleElapsed,
                     "entry");
@@ -523,15 +522,16 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             ArmyRtsMovementDiagnostic.Log("p0", "native_ai", actor,
                 "kind=" + kind);
             int actionIndexBeforeAi = actor.ai?.action_index ?? -1;
-            bool followerTask = kind ==
-                                    ArmyMilitaryMovementPriorityKind.RtsMember &&
-                                actor.isTask(
-                                    "warrior_army_follow_leader");
             actor.b6_updateAI(cycleElapsed);
             int actionIndexAfterAi = actor.ai?.action_index ?? -1;
+            bool followerTaskAfterAi = kind ==
+                                           ArmyMilitaryMovementPriorityKind.
+                                               RtsMember &&
+                                       actor.isTask(
+                                           "warrior_army_follow_leader");
             if (ArmyMilitaryMovementPriorityRules.
                     ShouldAdvanceFollowerMoveInSameP0(
-                        followerTask, actionIndexBeforeAi,
+                        followerTaskAfterAi, actionIndexBeforeAi,
                         actionIndexAfterAi,
                         actor.beh_tile_target?.data != null,
                         actor._beh_skip, actor.is_moving))
@@ -542,7 +542,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     "follower_after_move_command", actor,
                     "kind=" + kind);
             }
-            if (followerTask)
+            if (followerTaskAfterAi)
             {
                 bool followerStalled = !actor.is_moving &&
                     actor.beh_tile_target?.data == null &&
@@ -651,6 +651,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         actor.b3_findEnemyTarget(cycleElapsed);
         if (kind == ArmyMilitaryMovementPriorityKind.RtsMember)
         {
+            ArmyRtsControllerService.TryEnterFieldCombatFromP0(actor);
             ArmyRtsControllerService.TrySetCaptainTacticalTask(actor);
             ArmyRtsControllerService.TrySetMemberCombatTask(actor);
         }
@@ -672,7 +673,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     actor._beh_skip, actor.is_moving) ||
             ArmyMilitaryMovementPriorityRules.
                 ShouldAdvanceMemberCombatApproachInSameP0(
-                    actor.has_attack_target, memberCombatTask,
+                    HasMilitaryCombatPriority(actor), memberCombatTask,
                     actionIndexBeforeAi, actionIndexAfterAi,
                     actor._beh_skip, actor.is_moving))
         {
@@ -705,8 +706,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         bool royalGuardThreat =
             kind == ArmyMilitaryMovementPriorityKind.RoyalGuard &&
             actor.beh_actor_target != null;
-        if (royalGuardThreat ||
-            ArmyRtsControllerService.HasImmediateCombatPriority(actor))
+        if (royalGuardThreat || HasMilitaryCombatPriority(actor))
         {
             RunMilitaryP0Combat(actor, actorId, kind, cycleElapsed,
                 boundary, resumeNativeCombatAfterEnemyAcquisition);
@@ -723,6 +723,16 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             "boundary=" + boundary + " kind=" + kind);
         ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
         return true;
+    }
+
+    private static bool HasMilitaryCombatPriority(Actor actor)
+    {
+        bool immediateAttack = ArmyRtsControllerService.
+            HasImmediateCombatPriority(actor);
+        bool validBehaviourTarget = ArmyRtsControllerService.
+            IsValidCaptainCombatTarget(actor, actor?.beh_actor_target?.a);
+        return ArmyMilitaryMovementPriorityRules.ShouldEnterCombatP0(
+            immediateAttack, validBehaviourTarget);
     }
 
     private static bool HasLiveMilitaryP0Objective(Actor actor,

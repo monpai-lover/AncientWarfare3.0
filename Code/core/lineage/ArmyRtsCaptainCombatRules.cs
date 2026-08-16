@@ -37,5 +37,11 @@ namespace AncientWarfare3.core.lineage
         {
             return suppressVanillaFight && !isDedicatedMemberCombatTask;
         }
+
+        public static bool ShouldUseSiegeCombatTask(
+            bool siegeCombatActive, bool actorInsideTargetCityCombatZone)
+        {
+            return siegeCombatActive && actorInsideTargetCityCombatZone;
+        }
     }
 }
