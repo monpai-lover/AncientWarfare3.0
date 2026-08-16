@@ -200,3 +200,6 @@ aw_west_policy_royal_direct_rule,王室直辖制,Royal Direct Rule,王室直轄�
 aw_west_policy_royal_direct_rule_desc,将财政军事和地方任命重新收归王室直接统治,Return finance military command and appointments to direct royal rule,將財政軍事和地方任命重新收歸王室直接統治
 aw_mandate_decision_great_enfeoffment,大封诸王,Enfeoff the Princes,大封諸王
 aw_mandate_decision_great_enfeoffment_desc,将成年宗室分封至京畿以外的边疆藩国，城市仍由流官治理。,Establish frontier feudatories outside the imperial core while ordinary governors continue to administer their cities.,將成年宗室分封至京畿以外的邊疆藩國，城市仍由流官治理。
+aw_policy_class_peasant_bandit,土匪,Bandits,土匪
+aw_policy_class_peasant_bandit_desc,与母国和平，固守落草时领地，并在国界修筑木墙,At peace with the origin realm; holds only its entry territory and builds wooden walls on the national border,與母國和平，固守落草時領地，並在國界修築木牆
+aw_policy_class_transition_locked,土匪只能与农民义军政体互相转换,Bandit government can transition only to or from peasant rebels,土匪只能與農民義軍政體互相轉換

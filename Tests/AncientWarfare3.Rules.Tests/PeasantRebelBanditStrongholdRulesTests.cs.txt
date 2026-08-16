@@ -1,0 +1,196 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditStrongholdRulesTests
+{
+    public static void Run()
+    {
+        RanksCenteredThreeByThreeFirst();
+        RejectsIncompleteThreeByThreeBlock();
+        RanksOffsetThreeByThreeContainingCore();
+        RequiresZonesOnBothSidesOfSplit();
+        LocksBanditGrowthToPersistedZones();
+        RestoresOnlyUnchangedStrongholdWalls();
+        ResolvesSuppressionVictorByConfirmedPrecedence();
+        AttributesOnlyLiveCombatAttackers();
+        ComposesStrongholdNamesAndTitles();
+    }
+
+    private static void RanksCenteredThreeByThreeFirst()
+    {
+        IReadOnlyList<BanditZoneFact> zones = Grid(0, 0, 3, 3);
+
+        IReadOnlyList<IReadOnlyList<string>> ranked =
+            PeasantRebelBanditStrongholdRules.RankNineZoneCandidates(
+                zones, "1:1");
+
+        True(ranked.Count > 0,
+            "a complete nine-zone candidate exists");
+        True(new HashSet<string>(ranked[0]).SetEquals(new[]
+        {
+            "0:0", "1:0", "2:0",
+            "0:1", "1:1", "2:1",
+            "0:2", "1:2", "2:2"
+        }), "the block centered on the civic core ranks first");
+        True(ranked.All(candidate => candidate.Count == 9),
+            "every ranked candidate contains exactly nine zones");
+    }
+
+    private static void RejectsIncompleteThreeByThreeBlock()
+    {
+        List<BanditZoneFact> zones = Grid(0, 0, 2, 2).ToList();
+        zones.RemoveAll(zone => zone.Key == "2:2");
+
+        IReadOnlyList<IReadOnlyList<string>> ranked =
+            PeasantRebelBanditStrongholdRules.RankNineZoneCandidates(
+                zones, "1:1");
+
+        Equal(0, ranked.Count,
+            "a connected but incomplete block cannot form a stronghold");
+    }
+
+    private static void RanksOffsetThreeByThreeContainingCore()
+    {
+        IReadOnlyList<BanditZoneFact> zones = Grid(5, 7, 7, 9);
+
+        IReadOnlyList<IReadOnlyList<string>> ranked =
+            PeasantRebelBanditStrongholdRules.RankNineZoneCandidates(
+                zones, "5:7");
+
+        Equal(1, ranked.Count,
+            "a corner core may belong to an offset three-by-three block");
+        Equal(9, ranked[0].Count,
+            "the offset candidate still contains exactly nine zones");
+    }
+
+    private static void RequiresZonesOnBothSidesOfSplit()
+    {
+        True(PeasantRebelBanditStrongholdRules.IsViableSplit(9, 1),
+            "nine stronghold zones and one mother zone are viable");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(0, 3),
+            "stronghold needs exactly nine interior zones");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(8, 2),
+            "eight stronghold zones are below the fixed size");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(10, 1),
+            "ten stronghold zones exceed the fixed size");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(9, 0),
+            "mother city needs an exterior zone");
+    }
+
+    private static void LocksBanditGrowthToPersistedZones()
+    {
+        var fixedZones = new HashSet<string> { "center", "east" };
+        True(PeasantRebelBanditStrongholdRules.CanAcquireZone(
+                true, "east", fixedZones),
+            "bandit stronghold may restore a fixed zone");
+        False(PeasantRebelBanditStrongholdRules.CanAcquireZone(
+                true, "outside", fixedZones),
+            "bandit stronghold cannot grow beyond its walls");
+        True(PeasantRebelBanditStrongholdRules.CanAcquireZone(
+                false, "outside", fixedZones),
+            "non-bandit city growth remains unrestricted");
+    }
+
+    private static void RestoresOnlyUnchangedStrongholdWalls()
+    {
+        True(PeasantRebelBanditStrongholdRules.ShouldRestoreWall(
+                "wall_wild"),
+            "an unchanged stronghold wall is restored during suppression");
+        False(PeasantRebelBanditStrongholdRules.ShouldRestoreWall("road"),
+            "later terrain changes are preserved");
+        False(PeasantRebelBanditStrongholdRules.ShouldRestoreWall(null),
+            "an already removed wall is ignored");
+    }
+
+    private static void ResolvesSuppressionVictorByConfirmedPrecedence()
+    {
+        Equal(31L,
+            PeasantRebelBanditStrongholdRules.ResolveSuppressorKingdomId(
+                31L, 20L, true),
+            "last hostile killer wins attribution");
+        Equal(20L,
+            PeasantRebelBanditStrongholdRules.ResolveSuppressorKingdomId(
+                -1L, 20L, true),
+            "warring mother kingdom is the fallback");
+        Equal(-1L,
+            PeasantRebelBanditStrongholdRules.ResolveSuppressorKingdomId(
+                -1L, 20L, false),
+            "starvation without a war has no suppressing kingdom");
+    }
+
+    private static void AttributesOnlyLiveCombatAttackers()
+    {
+        True(PeasantRebelBanditStrongholdRules.CanAttributeHostileKiller(
+                hostileAttacker: true, deathClearsAttacker: false),
+            "a combat death may retain its hostile killer");
+        False(PeasantRebelBanditStrongholdRules.CanAttributeHostileKiller(
+                hostileAttacker: true, deathClearsAttacker: true),
+            "starvation and other native clear-attacker deaths have no killer");
+        False(PeasantRebelBanditStrongholdRules.CanAttributeHostileKiller(
+                hostileAttacker: false, deathClearsAttacker: false),
+            "a non-hostile attacker is never credited");
+    }
+
+    private static void ComposesStrongholdNamesAndTitles()
+    {
+        Equal("\u864e\u8e1e\u5be8",
+            PeasantRebelBanditStrongholdRules.ComposeStrongholdName(
+                "\u864e\u8e1e\u8d3c\u4e49\u519b"),
+            "stronghold city uses canonical root plus stronghold suffix");
+        Equal("\u864e\u8e1e\u5be8\u5927\u5f53\u5bb6",
+            PeasantRebelBanditStrongholdRules.ComposeCeremonialTitle(
+                "\u864e\u8e1e\u8d3c", false),
+            "ruler title includes stronghold name");
+        Equal("\u864e\u8e1e\u5be8\u5c11\u5f53\u5bb6",
+            PeasantRebelBanditStrongholdRules.ComposeCeremonialTitle(
+                "\u864e\u8e1e\u4e49\u519b", true),
+            "heir title includes stronghold name");
+        Equal("\u864e\u8e1e\u5be8Chief",
+            PeasantRebelBanditStrongholdRules.ComposeCeremonialTitle(
+                "\u864e\u8e1e", "Chief"),
+            "localized role text follows the canonical stronghold name");
+    }
+
+    private static BanditZoneFact Zone(string key, int x, int y,
+        params string[] neighbours)
+    {
+        return BanditZoneFact.At(key, x, y, neighbours);
+    }
+
+    private static IReadOnlyList<BanditZoneFact> Grid(
+        int minX, int minY, int maxX, int maxY)
+    {
+        var zones = new List<BanditZoneFact>();
+        for (int y = minY; y <= maxY; y++)
+        for (int x = minX; x <= maxX; x++)
+        {
+            var neighbours = new List<string>();
+            if (x > minX) neighbours.Add((x - 1) + ":" + y);
+            if (x < maxX) neighbours.Add((x + 1) + ":" + y);
+            if (y > minY) neighbours.Add(x + ":" + (y - 1));
+            if (y < maxY) neighbours.Add(x + ":" + (y + 1));
+            zones.Add(Zone(x + ":" + y, x, y,
+                neighbours.ToArray()));
+        }
+        return zones;
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                message + $": expected {expected}, got {actual}");
+    }
+}

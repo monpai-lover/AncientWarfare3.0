@@ -8,7 +8,8 @@ namespace AncientWarfare3.core.lineage
             string pOriginType, string pClaimantKind)
         {
             if (pRebelFlag) return true;
-            return pClassState == KingdomPolicyDefs.ClassRebel;
+            return pClassState == KingdomPolicyDefs.ClassRebel ||
+                   pClassState == KingdomPolicyDefs.ClassBandit;
         }
 
         public static string SettledClassAfterRebellion(string pClassState)

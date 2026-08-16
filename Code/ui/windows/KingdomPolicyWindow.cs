@@ -1032,6 +1032,7 @@ namespace AncientWarfare3.ui.windows
             {
                 string classId = KingdomPolicyDefs.ClassStates[i];
                 bool active = classId == current;
+                bool canSwitch = PeasantRebelRouteRules.CanSwitchGovernment(current, classId);
                 Vector2 pos = TopLeft(CONTENT_PAD_X + 4f + (i % columns) * (cardW + gapX),
                     pY + 28f + (i / columns) * (cardH + gapY));
                 var box = CreateButtonBox("Class_" + classId, ClassName(classId), pos, new Vector2(cardW, cardH),
@@ -1044,16 +1045,55 @@ namespace AncientWarfare3.ui.windows
                         Refresh();
                     });
 
+                AddClassStateIcon(box.transform, classId);
+                Button button = box.GetComponent<Button>();
+                if (button != null)
+                {
+                    button.interactable = !active && canSwitch;
+                    if (_commandPending) button.interactable = false;
+                }
+
                 Image img = box.GetComponent<Image>();
                 if (img != null)
                     img.color = active ? new Color(0.65f, 0.52f, 0.22f, 0.95f) : Color.white;
-                SetTip(box, ClassName(classId),
-                    ClassDesc(classId) + "\n" +
-                    AW_L10n.Text("aw_policy_class_manual_desc", "\u624B\u52A8\u5207\u6362\u5C5E\u4E8E\u4E0A\u5E1D\u7C7B\u64CD\u4F5C\uFF1BAI\u53EA\u4F1A\u5728\u5B8C\u6210\u5BF9\u5E94\u79D1\u6280\u548C\u56FD\u7B56\u540E\u81EA\u52A8\u6539\u53D8\u653F\u4F53\u3002"));
+                string tip = ClassDesc(classId) + "\n" +
+                    AW_L10n.Text("aw_policy_class_manual_desc", "\u624B\u52A8\u5207\u6362\u5C5E\u4E8E\u4E0A\u5E1D\u7C7B\u64CD\u4F5C\uFF1BAI\u53EA\u4F1A\u5728\u5B8C\u6210\u5BF9\u5E94\u79D1\u6280\u548C\u56FD\u7B56\u540E\u81EA\u52A8\u6539\u53D8\u653F\u4F53\u3002");
+                if (!active && !canSwitch)
+                    tip += "\n" + AW_L10n.Text(
+                        "aw_policy_class_transition_locked",
+                        "\u571F\u532A\u53EA\u80FD\u4E0E\u519C\u6C11\u4E49\u519B\u653F\u4F53\u4E92\u76F8\u8F6C\u6362");
+                SetTip(box, ClassName(classId), tip);
             }
 
             int rows = Mathf.CeilToInt(KingdomPolicyDefs.ClassStates.Length / (float)columns);
             return pY + 28f + rows * (cardH + gapY) + CONTENT_PAD_BOTTOM;
+        }
+
+        private static void AddClassStateIcon(Transform pParent,
+            string pClassId)
+        {
+            var iconObject = new GameObject("ClassIcon",
+                typeof(RectTransform), typeof(Image));
+            iconObject.transform.SetParent(pParent, false);
+            RectTransform rect = iconObject.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(0f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(15f, 0f);
+            rect.sizeDelta = new Vector2(18f, 18f);
+            Image image = iconObject.GetComponent<Image>();
+            image.sprite = SpriteTextureLoader.getSprite(
+                               KingdomPolicyService.GetClassIconPath(
+                                   pClassId)) ??
+                           SpriteTextureLoader.getSprite(
+                               "ui/icons/iconKnowledge");
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+
+            RectTransform textRect =
+                pParent.Find("Text") as RectTransform;
+            if (textRect == null) return;
+            textRect.offsetMin = new Vector2(28f, textRect.offsetMin.y);
+            textRect.offsetMax = new Vector2(-4f, textRect.offsetMax.y);
         }
 
         private float BuildDecisionChooser(Kingdom pKingdom, float pY)
@@ -1847,6 +1887,7 @@ namespace AncientWarfare3.ui.windows
                     KingdomPolicyDefs.ClassReform => "\u6539\u9769\u5236",
                     KingdomPolicyDefs.ClassRepublic => "\u5171\u548C\u653F\u4F53",
                     KingdomPolicyDefs.ClassRebel => "\u519C\u6C11\u4E49\u519B",
+                    KingdomPolicyDefs.ClassBandit => "\u571F\u532A",
                     _ => "\u90E8\u843D\u5236"
                 });
         }
@@ -1865,6 +1906,9 @@ namespace AncientWarfare3.ui.windows
                 return AW_L10n.Text("aw_policy_class_republic_desc", "\u65E0\u53EF\u7ACB\u4E4B\u541B\u65F6\u7684\u5171\u548C\u653F\u4F53\uFF0C\u56FD\u5BB6\u4E0D\u518D\u4F7F\u7528\u541B\u4E3B\u7235\u4F4D\u540E\u7F00\u3002");
             if (pClassId == KingdomPolicyDefs.ClassRebel)
                 return AW_L10n.Text("aw_policy_class_peasant_rebel_desc", "\u4E49\u519B\u519B\u653F\u5E9C\u4E0D\u8BBE\u7981\u536B\u519B\uFF0C\u5E76\u52A8\u5458\u6210\u5E74\u7537\u6027\u4FDD\u536B\u8D77\u4E49\u3002");
+            if (pClassId == KingdomPolicyDefs.ClassBandit)
+                return AW_L10n.Text("aw_policy_class_peasant_bandit_desc",
+                    "\u4E0E\u6BCD\u56FD\u548C\u5E73\uFF0C\u56FA\u5B88\u843D\u8349\u65F6\u9886\u5730\uFF0C\u5E76\u5728\u56FD\u754C\u4FEE\u7B51\u6728\u5899\u3002");
             return AW_L10n.Text("aw_policy_class_default_desc", "\u4EE5\u57FA\u7840\u8840\u7F18\u548C\u805A\u843D\u79E9\u5E8F\u7EF4\u6301\u7684\u65E9\u671F\u56FD\u5BB6\u3002");
         }
 

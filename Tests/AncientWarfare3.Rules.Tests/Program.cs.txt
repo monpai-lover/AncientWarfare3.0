@@ -9,6 +9,45 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--cultiway-wall")
+{
+    CultiwayStyleWallGeometryRulesTests.Run();
+    CultiwayStyleFrontierWallGeometryRulesTests.Run();
+    MandateBorderWallRulesTests.Run();
+    Console.WriteLine("Cultiway wall geometry rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-outlaw-names")
+{
+    PeasantRebelOutlawNameRulesTests.Run();
+    Console.WriteLine("Bandit outlaw naming rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--peasant-rebel-routes")
+{
+    PeasantRebelRouteRulesTests.Run();
+    Console.WriteLine("Peasant rebel route rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-stronghold")
+{
+    PeasantRebelBanditStrongholdRulesTests.Run();
+    PeasantRebelBanditZoneWallRulesTests.Run();
+    PeasantRebelBanditRaidRulesTests.Run();
+    Console.WriteLine("Bandit stronghold and raid rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--actor-kingdom-safety")
+{
+    ActorKingdomSafetyRulesTests.Run();
+    Console.WriteLine("Actor kingdom safety rules passed.");
+    return;
+}
+
 HistoricalWriteModeRulesTests.Run();
 AWThirdPartySchedulerFaultRulesTests.Run();
 ActorVisualRoleRulesTests.Run();
@@ -8416,5 +8455,6 @@ MilitaryGovernorateRulesTests.Run();
 MilitaryGovernorateWarRulesTests.Run();
 MilitaryGovernorateSuccessionRulesTests.Run();
 ReflectionDelegateFactoryTests.Run();
+PeasantRebelRouteRulesTests.Run();
 
 Console.WriteLine("Rule tests passed.");

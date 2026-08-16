@@ -15,19 +15,28 @@ namespace AncientWarfare3.core.multiplayer
         IReadOnlyList<AW3MultiplayerActorProjection> CaptureActors();
         IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
             CaptureMilitaryGovernorates();
+        IReadOnlyList<AW3MultiplayerBanditStrongholdProjection>
+            CaptureBanditStrongholds();
         bool HasArmy(long pArmyId);
         bool HasActor(long pActorId);
         bool CanApplyMilitaryGovernorate(
             AW3MultiplayerMilitaryGovernorateProjection pGovernorate);
+        bool CanApplyBanditStronghold(
+            AW3MultiplayerBanditStrongholdProjection pStronghold);
         void ApplyArmy(AW3MultiplayerArmyProjection pArmy);
         void ApplyActor(AW3MultiplayerActorProjection pActor);
         void ApplyMilitaryGovernorate(
             AW3MultiplayerMilitaryGovernorateProjection pGovernorate);
+        void ApplyBanditStronghold(
+            AW3MultiplayerBanditStrongholdProjection pStronghold);
         void CompleteArmySnapshot(
             IReadOnlyList<AW3MultiplayerArmyProjection> pArmies);
         void CompleteMilitaryGovernorateSnapshot(
             IReadOnlyList<AW3MultiplayerMilitaryGovernorateProjection>
                 pGovernorates);
+        void CompleteBanditStrongholdSnapshot(
+            IReadOnlyList<AW3MultiplayerBanditStrongholdProjection>
+                pStrongholds);
         void RebuildMilitaryReadModels();
     }
 
@@ -47,7 +56,8 @@ namespace AncientWarfare3.core.multiplayer
             {
                 return new AW3MultiplayerStrategicSnapshot(pTick,
                     pStore.CaptureArmies(), pStore.CaptureActors(),
-                    pStore.CaptureMilitaryGovernorates());
+                    pStore.CaptureMilitaryGovernorates(),
+                    pStore.CaptureBanditStrongholds());
             }
             catch (AW3MultiplayerStrategicCaptureException)
             {
@@ -105,6 +115,17 @@ namespace AncientWarfare3.core.multiplayer
                         "Snapshot governorate identities do not exist.",
                         governorate.StateId);
             }
+            for (var index = 0;
+                 index < pSnapshot.BanditStrongholds.Count; index++)
+            {
+                AW3MultiplayerBanditStrongholdProjection stronghold =
+                    pSnapshot.BanditStrongholds[index];
+                if (!pStore.CanApplyBanditStronghold(stronghold))
+                    return AW3MultiplayerStrategicApplyResult.Failure(
+                        AW3MultiplayerStrategicError.InvalidSnapshot,
+                        "Snapshot bandit kingdom identity does not exist.",
+                        stronghold.KingdomId);
+            }
 
             try
             {
@@ -121,9 +142,16 @@ namespace AncientWarfare3.core.multiplayer
                          index++)
                         pStore.ApplyMilitaryGovernorate(
                             pSnapshot.MilitaryGovernorates[index]);
+                    for (var index = 0;
+                         index < pSnapshot.BanditStrongholds.Count;
+                         index++)
+                        pStore.ApplyBanditStronghold(
+                            pSnapshot.BanditStrongholds[index]);
                     pStore.CompleteArmySnapshot(pSnapshot.Armies);
                     pStore.CompleteMilitaryGovernorateSnapshot(
                         pSnapshot.MilitaryGovernorates);
+                    pStore.CompleteBanditStrongholdSnapshot(
+                        pSnapshot.BanditStrongholds);
                     pStore.RebuildMilitaryReadModels();
                 }
                 return AW3MultiplayerStrategicApplyResult.Success(
@@ -268,6 +296,25 @@ namespace AncientWarfare3.core.multiplayer
             return result;
         }
 
+        public IReadOnlyList<AW3MultiplayerBanditStrongholdProjection>
+            CaptureBanditStrongholds()
+        {
+            var result =
+                new List<AW3MultiplayerBanditStrongholdProjection>();
+            if (World.world?.kingdoms == null) return result;
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null || kingdom.isRekt()) continue;
+                kingdom.data.get(
+                    LineageKeys.MANDATE_REBEL_BANDIT_STRONGHOLD_STATE,
+                    out string stateJson, "");
+                if (string.IsNullOrWhiteSpace(stateJson)) continue;
+                result.Add(new AW3MultiplayerBanditStrongholdProjection(
+                    kingdom.getID(), stateJson));
+            }
+            return result;
+        }
+
         public bool HasArmy(long pArmyId)
         {
             if (pArmyId < 0 || World.world?.armies == null) return false;
@@ -308,6 +355,19 @@ namespace AncientWarfare3.core.multiplayer
             return HasActor(pGovernorate.GovernorActorId) &&
                    (pGovernorate.SuccessorActorId < 0 ||
                     HasActor(pGovernorate.SuccessorActorId));
+        }
+
+        public bool CanApplyBanditStronghold(
+            AW3MultiplayerBanditStrongholdProjection pStronghold)
+        {
+            if (pStronghold == null || World.world?.kingdoms == null)
+                return false;
+            try
+            {
+                return World.world.kingdoms.get(
+                           pStronghold.KingdomId)?.data != null;
+            }
+            catch { return false; }
         }
 
         public void ApplyArmy(AW3MultiplayerArmyProjection pArmy)
@@ -373,6 +433,19 @@ namespace AncientWarfare3.core.multiplayer
                 pGovernorate.ReplacementAllowed, pGovernorate.Active);
         }
 
+        public void ApplyBanditStronghold(
+            AW3MultiplayerBanditStrongholdProjection pStronghold)
+        {
+            Kingdom kingdom = World.world.kingdoms.get(
+                pStronghold.KingdomId);
+            if (kingdom?.data == null)
+                throw new InvalidOperationException(
+                    "Snapshot bandit kingdom identity no longer exists.");
+            kingdom.data.set(
+                LineageKeys.MANDATE_REBEL_BANDIT_STRONGHOLD_STATE,
+                pStronghold.StateJson);
+        }
+
         public void CompleteArmySnapshot(
             IReadOnlyList<AW3MultiplayerArmyProjection> pArmies)
         {
@@ -391,6 +464,28 @@ namespace AncientWarfare3.core.multiplayer
                 retained[index] = pGovernorates[index].SubjectKingdomId;
             MilitaryGovernorateStore.RetainAuthoritativeProjections(
                 retained);
+        }
+
+        public void CompleteBanditStrongholdSnapshot(
+            IReadOnlyList<AW3MultiplayerBanditStrongholdProjection>
+                pStrongholds)
+        {
+            var retained = new HashSet<long>();
+            for (var index = 0; index < pStrongholds.Count; index++)
+                retained.Add(pStrongholds[index].KingdomId);
+            if (World.world?.kingdoms == null) return;
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null || kingdom.isRekt() ||
+                    retained.Contains(kingdom.getID())) continue;
+                kingdom.data.get(
+                    LineageKeys.MANDATE_REBEL_BANDIT_STRONGHOLD_STATE,
+                    out string stateJson, "");
+                if (!string.IsNullOrWhiteSpace(stateJson))
+                    kingdom.data.set(
+                        LineageKeys.MANDATE_REBEL_BANDIT_STRONGHOLD_STATE,
+                        "");
+            }
         }
 
         public void RebuildMilitaryReadModels()

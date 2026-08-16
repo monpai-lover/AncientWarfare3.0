@@ -231,10 +231,11 @@ internal static class ArmyRtsCaptainCombatRulesTests
         Assert(publishFieldCombat >= 0 &&
                assignFieldMembers > publishFieldCombat,
             "field combat ownership must be published before member tasks are assigned");
-        Assert(behaviour.Contains("beh_actor_target", StringComparison.Ordinal) &&
-               behaviour.Contains("tryToAttack", StringComparison.Ordinal) &&
-               behaviour.Contains("pActor?.makeWait(0.15f);\n                return BehResult.Continue;",
-                   StringComparison.Ordinal),
+        string normalizedBehaviour = behaviour.Replace("\r\n", "\n");
+        Assert(normalizedBehaviour.Contains("beh_actor_target", StringComparison.Ordinal) &&
+               normalizedBehaviour.Contains("tryToAttack", StringComparison.Ordinal) &&
+               normalizedBehaviour.Contains("pActor?.makeWait(0.15f);\n                return BehResult.Continue;",
+                    StringComparison.Ordinal),
             "an attack-stage target miss advances into task restart instead of repeating forever on an empty target");
     }
 

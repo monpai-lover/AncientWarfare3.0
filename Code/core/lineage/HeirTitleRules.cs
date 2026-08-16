@@ -1,3 +1,5 @@
+using AncientWarfare3.ui;
+
 namespace AncientWarfare3.core.lineage
 {
     public static class HeirTitleRules
@@ -57,6 +59,8 @@ namespace AncientWarfare3.core.lineage
 
         internal static string TitleKey(Kingdom pKingdom)
         {
+            if (PeasantRebelRouteService.IsBandit(pKingdom))
+                return HeirTitleSelectionRules.RouteHeirTitleKey(true);
             string successionMode = SuccessionMode.NONE;
             if (pKingdom?.data != null)
                 pKingdom.data.get(LineageKeys.INHERITANCE_CANDIDATE_MODE,
@@ -67,6 +71,8 @@ namespace AncientWarfare3.core.lineage
         internal static string TitleKey(Kingdom pKingdom,
             string pSuccessionMode)
         {
+            if (PeasantRebelRouteService.IsBandit(pKingdom))
+                return HeirTitleSelectionRules.RouteHeirTitleKey(true);
             bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
                                        VassalSubjectKind.MilitaryGovernorate;
             if (militaryGovernorate) return LiuhouKey;
@@ -80,6 +86,9 @@ namespace AncientWarfare3.core.lineage
         internal static string DefaultTitleText(Kingdom pKingdom,
             string pSuccessionMode)
         {
+            if (PeasantRebelRouteService.IsBandit(pKingdom))
+                return PeasantRebelBanditStrongholdService.
+                    ComposeCeremonialTitle(pKingdom, true);
             bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
                                        VassalSubjectKind.MilitaryGovernorate;
             return HeirTitleSelectionRules.DefaultTitleText(
@@ -89,6 +98,9 @@ namespace AncientWarfare3.core.lineage
 
         internal static string BuildSocialTitle(string pKingdomName, Kingdom pKingdom)
         {
+            if (PeasantRebelRouteService.IsBandit(pKingdom))
+                return PeasantRebelBanditStrongholdService.
+                    ComposeCeremonialTitle(pKingdom, true);
             bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
                                        VassalSubjectKind.MilitaryGovernorate;
             if (militaryGovernorate)

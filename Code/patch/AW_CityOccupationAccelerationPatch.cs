@@ -180,6 +180,11 @@ namespace AncientWarfare3.patch
             Kingdom oldOwner = __instance?.kingdom;
             __state = new RebellionDirectCaptureState(oldOwner,
                 pNewKingdom, -1L, pDirect: false);
+            PeasantRebelBanditStrongholdService.TryHandleCapture(
+                __instance, pNewKingdom, out bool strongholdHandled);
+            if (strongholdHandled) return false;
+            if (!PeasantRebelRouteService.CanAcquireCity(
+                    pNewKingdom, __instance)) return false;
             if (ZhuluWarService.IsOpposingZhuluCapture(__instance,
                     pNewKingdom)) return true;
             if (_captureResistanceCity == __instance &&
@@ -206,6 +211,8 @@ namespace AncientWarfare3.patch
             Kingdom hostileParticipant = pNewKingdom;
             pNewKingdom = VassalCaptureService.ResolveCaptureRecipient(
                 __instance, pNewKingdom);
+            if (!PeasantRebelRouteService.CanAcquireCity(
+                    pNewKingdom, __instance)) return false;
             bool activeHostileWar = WarScoreService.HasActiveHostileWar(
                 __instance, pNewKingdom) ||
                 WarScoreService.HasActiveHostileWar(__instance,
@@ -272,16 +279,20 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(City), nameof(City.joinAnotherKingdom))]
-        public static void JoinCapturedCity_Prefix(City __instance,
+        public static bool JoinCapturedCity_Prefix(City __instance,
             ref Kingdom pNewSetKingdom, bool pCaptured)
         {
-            if (!pCaptured) return;
+            if (!PeasantRebelRouteService.CanAcquireCity(
+                    pNewSetKingdom, __instance)) return false;
+            if (!pCaptured) return true;
             if (ZhuluWarService.IsOpposingZhuluCapture(__instance,
-                    pNewSetKingdom)) return;
+                    pNewSetKingdom)) return true;
             if (RebellionDirectTerritoryTransferService.TryResolve(
-                    __instance, pNewSetKingdom, out _)) return;
+                    __instance, pNewSetKingdom, out _)) return true;
             pNewSetKingdom = VassalCaptureService.ResolveCaptureRecipient(
                 __instance, pNewSetKingdom);
+            return PeasantRebelRouteService.CanAcquireCity(
+                pNewSetKingdom, __instance);
         }
 
         private static void ClearCaptureResistanceContext()

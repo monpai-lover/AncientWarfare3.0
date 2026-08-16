@@ -52,6 +52,11 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
 
+            if (!PeasantRebelRouteService.CanStartWar(pAttacker,
+                    pDefender, out _, out pReason)) return false;
+            if (PeasantRebelRouteService.IsOriginSuppressionPair(
+                    pAttacker, pDefender)) return true;
+
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
             if (DiplomacyProposalRules.BlocksWarWithActivePact(
                     DiplomacyProposalService.HasActiveWarBlocker(
@@ -82,6 +87,8 @@ namespace AncientWarfare3.core.lineage
         {
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
             if (!CanQueueWarPair(pAttacker, pDefender, type, out pReason)) return false;
+            if (PeasantRebelRouteService.IsOriginSuppressionPair(
+                    pAttacker, pDefender)) return true;
 
             if (pNoCb)
             {
@@ -106,6 +113,22 @@ namespace AncientWarfare3.core.lineage
             }
 
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (!PeasantRebelRouteService.CanStartWar(pAttacker,
+                    pDefender, out bool routeBypass, out pReason))
+                return false;
+            Kingdom queueDefender = ResolveWarMainDefender(pDefender);
+            try
+            {
+                if (World.world?.wars?.getWar(pAttacker, queueDefender,
+                        pOnlyMain: false) != null)
+                {
+                    pReason = "already_at_war";
+                    return false;
+                }
+            }
+            catch { }
+            if (routeBypass) return true;
+
             if (DiplomacyProposalRules.BlocksWarWithActivePact(
                     DiplomacyProposalService.HasActiveWarBlocker(
                         pAttacker, pDefender), systemWar: pSystemWar,
@@ -117,19 +140,8 @@ namespace AncientWarfare3.core.lineage
             if (!pSystemWar &&
                 !CanPassVassalWarRules(pAttacker, pDefender, type,
                     out pReason)) return false;
-            Kingdom queueDefender = ResolveWarMainDefender(pDefender);
             if (!CanPassAllianceWarRules(pAttacker, queueDefender, type,
                     pSystemWar, out pReason)) return false;
-            try
-            {
-                if (World.world?.wars?.getWar(pAttacker, queueDefender,
-                        pOnlyMain: false) != null)
-                {
-                    pReason = "already_at_war";
-                    return false;
-                }
-            }
-            catch { }
 
             return true;
         }
@@ -317,6 +329,10 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldBlockWarStart(Kingdom pAttacker, Kingdom pDefender, WarTypeAsset pType)
         {
+            if (!PeasantRebelRouteService.CanStartWar(pAttacker,
+                    pDefender, out _, out _)) return true;
+            if (PeasantRebelRouteService.IsOriginSuppressionPair(
+                    pAttacker, pDefender)) return false;
             if (IsAw3AllowedWarStart) return false;
             if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender)) return false;
             string type = pType?.id ?? "";
@@ -338,12 +354,15 @@ namespace AncientWarfare3.core.lineage
                 pFailureReason = "invalid_participants";
                 return null;
             }
+            if (!PeasantRebelRouteService.CanStartWar(pAttacker,
+                    pDefender, out bool routeBypass,
+                    out pFailureReason)) return null;
             Kingdom declaredDefender = pDefender;
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
             bool revalidateMutableEligibility =
                 DiplomaticWarDeclarationLedgerRules
                     .ShouldRevalidateMutableEligibility(pCasusBelliLocked);
-            if (revalidateMutableEligibility &&
+            if (!routeBypass && revalidateMutableEligibility &&
                 type == MandateService.WAR_TIANMING &&
                 !MandatePhaseService.CanContestMandate)
             {
@@ -352,11 +371,26 @@ namespace AncientWarfare3.core.lineage
             }
             bool independenceWar = type == "independence_war";
             Kingdom mainDefender = ResolveWarMainDefender(declaredDefender);
+            if (!IsCivilKingdom(mainDefender) || mainDefender == pAttacker)
+            {
+                pFailureReason = "invalid_main_defender";
+                return null;
+            }
+            try
+            {
+                if (World.world?.wars?.getWar(pAttacker, mainDefender,
+                        pOnlyMain: false) != null)
+                {
+                    pFailureReason = "already_at_war";
+                    return null;
+                }
+            }
+            catch { }
             bool activeTreaty = DiplomacyProposalService.HasActiveWarBlocker(
                 pAttacker, pDefender) || mainDefender != pDefender &&
                 DiplomacyProposalService.HasActiveWarBlocker(
                     pAttacker, mainDefender);
-            if (DiplomaticWarDeclarationLedgerRules
+            if (!routeBypass && DiplomaticWarDeclarationLedgerRules
                     .ShouldBlockWarWithActiveTreaty(activeTreaty,
                         independenceWar, pTreatyExemptInternalWar))
             {
@@ -370,34 +404,20 @@ namespace AncientWarfare3.core.lineage
                 return null;
             }
 
-            if (revalidateMutableEligibility && !pSystemWar &&
+            if (!routeBypass && revalidateMutableEligibility && !pSystemWar &&
                 !CanPassVassalWarRules(pAttacker, pDefender, type,
                     out pFailureReason)) return null;
-            if (!IsCivilKingdom(mainDefender) || mainDefender == pAttacker)
-            {
-                pFailureReason = "invalid_main_defender";
-                return null;
-            }
-            if (revalidateMutableEligibility &&
+            if (!routeBypass && revalidateMutableEligibility &&
                 !CanPassAllianceWarRules(pAttacker, mainDefender, type,
                     pSystemWar, out pFailureReason)) return null;
-            try
-            {
-                if (World.world?.wars?.getWar(pAttacker, mainDefender,
-                        pOnlyMain: false) != null)
-                {
-                    pFailureReason = "already_at_war";
-                    return null;
-                }
-            }
-            catch { }
-            if (!pCasusBelliLocked && !pSystemWar && !pNoCb &&
+            if (!routeBypass && !pCasusBelliLocked && !pSystemWar && !pNoCb &&
                 !HasValidCasusBelli(pAttacker, pDefender, type))
             {
                 pFailureReason = "missing_cb";
                 return null;
             }
-            if (!pCasusBelliLocked && pNoCb && !CanForceNoCb(pAttacker))
+            if (!routeBypass && !pCasusBelliLocked && pNoCb &&
+                !CanForceNoCb(pAttacker))
             {
                 pFailureReason = "no_cb_cooldown";
                 return null;
@@ -418,8 +438,9 @@ namespace AncientWarfare3.core.lineage
                     return null;
                 }
 
-                if (pNoCb) ApplyNoCbPenalty(pAttacker, declaredDefender);
-                else if (!pSystemWar)
+                if (!routeBypass && pNoCb)
+                    ApplyNoCbPenalty(pAttacker, declaredDefender);
+                else if (!routeBypass && !pSystemWar)
                     ConsumeClaim(pAttacker, declaredDefender, type);
 
                 RecordWarDecision(pAttacker, declaredDefender, type,

@@ -23,6 +23,14 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
+                if (PeasantRebelRouteService.IsBandit(pActor.kingdom) &&
+                    HeirService.IsCurrentHeir(pActor.kingdom, pActor))
+                    return HeirTitleRules.BuildSocialTitle("", pActor.kingdom);
+            }
+            catch { }
+
+            try
+            {
                 string formal = NobleRankService.GetDisplayTitle(pActor);
                 if (!string.IsNullOrWhiteSpace(formal)) return formal;
             }

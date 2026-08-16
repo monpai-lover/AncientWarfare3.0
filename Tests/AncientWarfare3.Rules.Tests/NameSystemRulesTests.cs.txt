@@ -618,6 +618,9 @@ internal static class NameSystemRulesTests
         Equal("国王", RulerAppellationRules.ResolveWindowRulerLabel(
                 false, false, false, "", "元首", "国王", "皇帝"),
             "the kingdom window keeps the ordinary monarchy label below empire rank");
+        Equal("大当家", RulerAppellationRules.ResolveWindowRulerLabel(
+                false, false, false, "大当家", "元首", "国王", "皇帝"),
+            "the kingdom window honors a route-specific living ruler title");
         Equal("鲁武伯", RulerAppellationRules.DeadRanked("鲁", "武", RulerRank.Bo),
             "dead Bo keeps the correct Zhou rank");
         Equal("太祖武皇帝", RulerAppellationRules.DeadEmperor("太祖", "武", false),
@@ -628,6 +631,14 @@ internal static class NameSystemRulesTests
             "a republic is excluded from imperial naming");
         Equal("宣祖", RulerAppellationRules.Retrospective("宣祖"),
             "retrospective ancestors do not gain fabricated suffixes");
+        Equal("aw_bandit_ruler_title",
+            RulerAppellationRules.RouteRulerTitleKey(true),
+            "bandit ruler uses the shared title key");
+        Equal("", RulerAppellationRules.RouteRulerTitleKey(false),
+            "ordinary rulers retain existing logic");
+        Equal("aw_bandit_heir_title",
+            HeirTitleSelectionRules.RouteHeirTitleKey(true),
+            "bandit heir uses the shared title key");
 
         Equal(HeirTitleSelectionRules.TaiziKey,
             HeirTitleSelectionRules.TitleKey(

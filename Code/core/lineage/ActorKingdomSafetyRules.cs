@@ -10,17 +10,23 @@ namespace AncientWarfare3.core.lineage
     public static class ActorKingdomSafetyRules
     {
         public static bool CanRunEnemyCheck(bool actorExists,
-            bool actorAssetExists, bool kingdomAssetExists)
+            bool actorAssetExists, bool kingdomDataExists,
+            bool kingdomAssetExists)
         {
-            return actorExists && actorAssetExists && kingdomAssetExists;
+            return actorExists && actorAssetExists &&
+                   HasUsableKingdom(kingdomDataExists,
+                       kingdomAssetExists);
         }
 
         public static bool CanEnterVanillaZoneProcessing(bool actorExists,
             bool actorAssetExists, bool tileExists,
-            bool professionAssetExists, bool kingdomAssetExists)
+            bool professionAssetExists, bool kingdomDataExists,
+            bool kingdomAssetExists)
         {
             return actorExists && actorAssetExists && tileExists &&
-                   professionAssetExists && kingdomAssetExists;
+                   professionAssetExists &&
+                   HasUsableKingdom(kingdomDataExists,
+                       kingdomAssetExists);
         }
 
         public static bool CanRenderUnit(bool actorExists,
@@ -58,17 +64,23 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool ShouldDetachInvalidKingdomBeforeRepair(
-            bool kingdomObjectExists, bool kingdomAssetExists)
+            bool kingdomObjectExists, bool kingdomDataExists,
+            bool kingdomAssetExists)
         {
-            return kingdomObjectExists && !kingdomAssetExists;
+            return kingdomObjectExists &&
+                   !HasUsableKingdom(kingdomDataExists,
+                       kingdomAssetExists);
         }
 
         public static ActorKingdomRepairSource SelectRepairSource(
             bool actorExists, bool actorAssetExists,
-            bool kingdomAssetExists, bool cityKingdomAssetExists,
+            bool kingdomDataExists, bool kingdomAssetExists,
+            bool cityKingdomAssetExists,
             bool cityKingdomIsRekt, bool wildKingdomIdExists)
         {
-            if (!actorExists || !actorAssetExists || kingdomAssetExists)
+            if (!actorExists || !actorAssetExists ||
+                HasUsableKingdom(kingdomDataExists,
+                    kingdomAssetExists))
                 return ActorKingdomRepairSource.None;
             if (IsCityKingdomRepairable(cityKingdomAssetExists,
                     cityKingdomIsRekt))
@@ -76,6 +88,12 @@ namespace AncientWarfare3.core.lineage
             return wildKingdomIdExists
                 ? ActorKingdomRepairSource.Wild
                 : ActorKingdomRepairSource.None;
+        }
+
+        private static bool HasUsableKingdom(bool kingdomDataExists,
+            bool kingdomAssetExists)
+        {
+            return kingdomDataExists && kingdomAssetExists;
         }
     }
 }

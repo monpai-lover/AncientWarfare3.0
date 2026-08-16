@@ -85,6 +85,33 @@ internal static class ActorVisualRoleRulesTests
                 pActorKingdomMatches: true, pActorId: 13L,
                 pGovernorActorId: 11L, pSuccessorActorId: 12L),
             "ordinary governorate members preserve vanilla presentation");
+
+        Equal(ActorVisualRole.Warrior,
+            ActorVisualRoleRules.ResolvePeasantRebelRole(
+                pRebelActive: true, pActorAlive: true,
+                pActorKingdomMatches: true, pActorId: 11L,
+                pKingActorId: 11L, pHeirActorId: 12L),
+            "founding or bandit rebel king uses warrior presentation");
+        Equal(ActorVisualRole.Warrior,
+            ActorVisualRoleRules.ResolvePeasantRebelRole(
+                true, true, true, 12L, 11L, 12L),
+            "rebel heir uses warrior presentation");
+        Equal(ActorVisualRole.Default,
+            ActorVisualRoleRules.ResolvePeasantRebelRole(
+                false, true, true, 11L, 11L, 12L),
+            "former rebel king restores vanilla presentation");
+        Equal(ActorVisualRole.Default,
+            ActorVisualRoleRules.ResolvePeasantRebelRole(
+                true, true, true, 13L, 11L, 12L),
+            "ordinary rebel actor keeps vanilla presentation");
+        Equal(ActorVisualRole.Default,
+            ActorVisualRoleRules.ResolvePeasantRebelRole(
+                true, false, true, 11L, 11L, 12L),
+            "dead rebel rulers are not overridden");
+        Equal(ActorVisualRole.Default,
+            ActorVisualRoleRules.ResolvePeasantRebelRole(
+                true, true, false, 12L, 11L, 12L),
+            "stale cross-kingdom rebel heir IDs are ignored");
     }
 
     private sealed class FixedProvider : IActorVisualRoleProvider

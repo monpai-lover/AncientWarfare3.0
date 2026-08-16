@@ -1,0 +1,134 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditRaidRulesTests
+{
+    public static void Run()
+    {
+        ShortageAndCooldownUseConfirmedThresholds();
+        PartySizeUsesAvailableWarriors();
+        LootIsBoundedByNeedShareAndReserve();
+        TargetsPreferDistanceThenFood();
+        SuppressionRightLastsThreeYears();
+        ExcludesWarriorsAlreadyCarryingResources();
+        DistributesCargoByStableActorId();
+    }
+
+    private static void ShortageAndCooldownUseConfirmedThresholds()
+    {
+        True(PeasantRebelBanditRaidRules.NeedsRaid(19, 10),
+            "food below two per person triggers a raid");
+        False(PeasantRebelBanditRaidRules.NeedsRaid(20, 10),
+            "threshold equality does not trigger a raid");
+        False(PeasantRebelBanditRaidRules.CooldownExpired(11, 12),
+            "one-year cooldown blocks early scheduling");
+        True(PeasantRebelBanditRaidRules.CooldownExpired(12, 12),
+            "cooldown expires at its persisted year");
+    }
+
+    private static void PartySizeUsesAvailableWarriors()
+    {
+        Equal(0, PeasantRebelBanditRaidRules.PartySize(0),
+            "no warrior means no raid party");
+        Equal(1, PeasantRebelBanditRaidRules.PartySize(1),
+            "a short stronghold may send its one warrior");
+        Equal(3, PeasantRebelBanditRaidRules.PartySize(3),
+            "normal party minimum is three");
+        Equal(8, PeasantRebelBanditRaidRules.PartySize(25),
+            "party size is capped at eight");
+    }
+
+    private static void LootIsBoundedByNeedShareAndReserve()
+    {
+        Equal(30, PeasantRebelBanditRaidRules.StealableFood(
+                20, 10, 120, 20),
+            "twenty-five percent target share is the minimum");
+        Equal(10, PeasantRebelBanditRaidRules.StealableFood(
+                40, 10, 120, 20),
+            "stronghold stock target caps the raid");
+        Equal(5, PeasantRebelBanditRaidRules.StealableFood(
+                0, 10, 45, 20),
+            "target protected reserve caps the raid");
+        Equal(0, PeasantRebelBanditRaidRules.StealableFood(
+                50, 10, 120, 20),
+            "full stronghold takes no food");
+    }
+
+    private static void TargetsPreferDistanceThenFood()
+    {
+        var candidates = new[]
+        {
+            new BanditRaidCandidate(1, 6, 80, true, false, false),
+            new BanditRaidCandidate(2, 4, 20, true, false, false),
+            new BanditRaidCandidate(3, 4, 60, true, false, false),
+            new BanditRaidCandidate(4, 1, 100, false, false, false),
+            new BanditRaidCandidate(5, 1, 100, true, true, false),
+            new BanditRaidCandidate(6, 1, 100, true, false, true)
+        };
+
+        long[] ranked = PeasantRebelBanditRaidRules.RankTargets(candidates)
+            .Select(candidate => candidate.CityId).ToArray();
+
+        SequenceEqual(new long[] { 3, 2, 1 }, ranked,
+            "unreachable allied and stronghold targets are excluded");
+    }
+
+    private static void SuppressionRightLastsThreeYears()
+    {
+        Equal(103, PeasantRebelBanditRaidRules.SuppressionExpiryYear(100),
+            "victim receives a three-year suppression right");
+    }
+
+    private static void ExcludesWarriorsAlreadyCarryingResources()
+    {
+        True(PeasantRebelBanditRaidRules.CanJoinRaid(
+                alive: true, warrior: true, ruler: false, heir: false,
+                carryingResources: false),
+            "an empty-handed ordinary warrior may raid");
+        False(PeasantRebelBanditRaidRules.CanJoinRaid(
+                alive: true, warrior: true, ruler: false, heir: false,
+                carryingResources: true),
+            "a preloaded warrior cannot mix unrelated cargo into a raid");
+    }
+
+    private static void DistributesCargoByStableActorId()
+    {
+        IReadOnlyDictionary<long, int> shares =
+            PeasantRebelBanditRaidRules.DistributeCargo(
+                new long[] { 9L, 3L, 6L }, 8);
+        Equal(3, shares[3L],
+            "lowest actor ID receives the first remainder");
+        Equal(3, shares[6L],
+            "second actor ID receives the second remainder");
+        Equal(2, shares[9L],
+            "last actor receives the base share");
+        Equal(8, shares.Values.Sum(),
+            "distribution preserves the removed resource total");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                message + $": expected {expected}, got {actual}");
+    }
+
+    private static void SequenceEqual<T>(IEnumerable<T> expected,
+        IEnumerable<T> actual, string message)
+    {
+        if (!expected.SequenceEqual(actual))
+            throw new InvalidOperationException(message);
+    }
+}

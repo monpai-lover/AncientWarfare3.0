@@ -9,6 +9,22 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="PeasantRebelRouteRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelRouteRules.cs" Link="Production\PeasantRebelRouteRules.cs" />
+    <Compile Include="PeasantRebelBanditStrongholdRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditZoneWallRules.cs" Link="Production\PeasantRebelBanditZoneWallRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditRaidRules.cs" Link="Production\PeasantRebelBanditRaidRules.cs" />
+    <Compile Include="CultiwayStyleWallGeometryRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\CultiwayStyleWallGeometryRules.cs" Link="Production\CultiwayStyleWallGeometryRules.cs" />
+    <Compile Include="CultiwayStyleFrontierWallGeometryRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\CultiwayStyleFrontierWallGeometryRules.cs" Link="Production\CultiwayStyleFrontierWallGeometryRules.cs" />
+    <Compile Include="MandateBorderWallRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandateBorderWallRules.cs" Link="Production\MandateBorderWallRules.cs" />
+    <Compile Include="PeasantRebelOutlawNameRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelOutlawNameRules.cs" Link="Production\PeasantRebelOutlawNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />
     <Compile Include="MilitaryGovernorateCourtRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\MilitaryGovernorateCourtRules.cs" Link="Production\MilitaryGovernorateCourtRules.cs" />

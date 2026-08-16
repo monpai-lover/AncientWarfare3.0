@@ -1,0 +1,145 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditZoneWallRulesTests
+{
+    public static void Run()
+    {
+        OneZoneUsesItsExactOuterEdge();
+        TwoAdjacentZonesUseOneUnionPerimeter();
+        IrregularUnionDoesNotWallSharedEdges();
+        CarvesOneThreeTileGateOnEveryCardinalSide();
+    }
+
+    private static void OneZoneUsesItsExactOuterEdge()
+    {
+        HashSet<CultiwayWallPoint> territory = Rectangle(8, 8, 15, 15);
+        BanditZoneWallPlan plan = Plan(territory, Point(11, 11));
+
+        SetEqual(RectanglePerimeter(8, 8, 15, 15),
+            plan.ClosedWallPoints.ToHashSet(),
+            "one native zone owns one exact perimeter");
+    }
+
+    private static void TwoAdjacentZonesUseOneUnionPerimeter()
+    {
+        HashSet<CultiwayWallPoint> territory = Rectangle(8, 8, 23, 15);
+        BanditZoneWallPlan plan = Plan(territory, Point(11, 11));
+
+        SetEqual(RectanglePerimeter(8, 8, 23, 15),
+            plan.ClosedWallPoints.ToHashSet(),
+            "the shared zone edge is not walled");
+    }
+
+    private static void IrregularUnionDoesNotWallSharedEdges()
+    {
+        HashSet<CultiwayWallPoint> territory = Rectangle(8, 8, 23, 15);
+        territory.UnionWith(Rectangle(8, 16, 15, 23));
+        BanditZoneWallPlan plan = Plan(territory, Point(11, 11));
+        HashSet<CultiwayWallPoint> closed =
+            plan.ClosedWallPoints.ToHashSet();
+
+        True(closed.All(territory.Contains),
+            "every wall point remains inside the selected native zones");
+        False(closed.Contains(Point(15, 10)) ||
+              closed.Contains(Point(16, 10)),
+            "horizontal shared zone edge is not walled");
+        False(closed.Contains(Point(10, 15)) ||
+              closed.Contains(Point(10, 16)),
+            "vertical shared zone edge is not walled");
+        True(closed.Contains(Point(8, 8)) &&
+             closed.Contains(Point(23, 15)) &&
+             closed.Contains(Point(8, 23)),
+            "the irregular union retains its outside corners");
+    }
+
+    private static void CarvesOneThreeTileGateOnEveryCardinalSide()
+    {
+        HashSet<CultiwayWallPoint> territory = Rectangle(8, 8, 15, 15);
+        BanditZoneWallPlan plan = Plan(territory, Point(11, 11));
+        HashSet<CultiwayWallPoint> removed =
+            plan.ClosedWallPoints.ToHashSet();
+        removed.ExceptWith(plan.WallPoints);
+
+        SetEqual(new HashSet<CultiwayWallPoint>
+        {
+            Point(11, 8), Point(12, 8), Point(13, 8),
+            Point(11, 15), Point(12, 15), Point(13, 15),
+            Point(8, 11), Point(8, 12), Point(8, 13),
+            Point(15, 11), Point(15, 12), Point(15, 13)
+        }, removed,
+            "north, south, east, and west each have one three-tile gate");
+        SetEqual(new HashSet<CultiwayWallPoint>
+        {
+            Point(12, 8), Point(12, 15),
+            Point(8, 12), Point(15, 12)
+        }, plan.GateCenters.ToHashSet(),
+            "the wall plan exposes one center for each cardinal gate");
+        True(plan.GateCenters.All(gate =>
+                plan.ClosedWallPoints.Contains(gate) &&
+                !plan.WallPoints.Contains(gate)),
+            "each tower center is carved from the original perimeter");
+    }
+
+    private static BanditZoneWallPlan Plan(
+        HashSet<CultiwayWallPoint> territory,
+        CultiwayWallPoint center)
+    {
+        return PeasantRebelBanditZoneWallRules.Build(40, 40, center,
+            territory, Rectangle(0, 0, 39, 39),
+            Array.Empty<CultiwayWallPoint>());
+    }
+
+    private static CultiwayWallPoint Point(int x, int y)
+    {
+        return new CultiwayWallPoint(x, y);
+    }
+
+    private static HashSet<CultiwayWallPoint> Rectangle(
+        int minX, int minY, int maxX, int maxY)
+    {
+        var points = new HashSet<CultiwayWallPoint>();
+        for (int y = minY; y <= maxY; y++)
+        for (int x = minX; x <= maxX; x++) points.Add(Point(x, y));
+        return points;
+    }
+
+    private static HashSet<CultiwayWallPoint> RectanglePerimeter(
+        int minX, int minY, int maxX, int maxY)
+    {
+        var points = new HashSet<CultiwayWallPoint>();
+        for (int x = minX; x <= maxX; x++)
+        {
+            points.Add(Point(x, minY));
+            points.Add(Point(x, maxY));
+        }
+        for (int y = minY + 1; y < maxY; y++)
+        {
+            points.Add(Point(minX, y));
+            points.Add(Point(maxX, y));
+        }
+        return points;
+    }
+
+    private static void SetEqual(HashSet<CultiwayWallPoint> expected,
+        HashSet<CultiwayWallPoint> actual, string message)
+    {
+        if (expected.SetEquals(actual)) return;
+        string missing = string.Join(", ", expected.Except(actual));
+        string extra = string.Join(", ", actual.Except(expected));
+        throw new InvalidOperationException(message +
+            $": missing [{missing}], extra [{extra}]");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}

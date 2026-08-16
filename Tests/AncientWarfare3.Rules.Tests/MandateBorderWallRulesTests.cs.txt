@@ -1,0 +1,72 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class MandateBorderWallRulesTests
+{
+    public static void Run()
+    {
+        IndependentLivingKingdomIsFortified();
+        FriendlyAndInvalidKingdomsAreIgnored();
+        OnlyValidForeignLandCreatesAFrontierTile();
+    }
+
+    private static void IndependentLivingKingdomIsFortified()
+    {
+        True(Target(),
+            "an independent living non-allied kingdom is fortified");
+    }
+
+    private static void FriendlyAndInvalidKingdomsAreIgnored()
+    {
+        False(Target(hasKingdom: false), "missing kingdom is ignored");
+        False(Target(alive: false), "destroyed kingdom is ignored");
+        False(Target(neutral: true), "neutral kingdom is ignored");
+        False(Target(sameSystem: true),
+            "the Mandate political system is ignored");
+        False(Target(sameAlliance: true), "allied kingdom is ignored");
+        False(Target(tributary: true), "Mandate tributary is ignored");
+    }
+
+    private static void OnlyValidForeignLandCreatesAFrontierTile()
+    {
+        True(Land(), "qualifying foreign ground creates a frontier tile");
+        False(Land(target: false),
+            "a non-target kingdom does not create a frontier tile");
+        False(Land(hasCity: false),
+            "unclaimed land does not create a frontier tile");
+        False(Land(ground: false, liquid: true),
+            "water does not create a frontier tile");
+        False(Land(ground: false, lava: true),
+            "lava does not create a frontier tile");
+        False(Land(ground: false, block: true),
+            "blocked terrain does not create a frontier tile");
+    }
+
+    private static bool Target(bool hasKingdom = true,
+        bool alive = true, bool neutral = false,
+        bool sameSystem = false, bool sameAlliance = false,
+        bool tributary = false)
+    {
+        return MandateBorderWallRules.ShouldFortifyKingdom(
+            hasKingdom, alive, neutral, sameSystem, sameAlliance,
+            tributary);
+    }
+
+    private static bool Land(bool target = true, bool hasCity = true,
+        bool ground = true, bool liquid = false, bool lava = false,
+        bool block = false)
+    {
+        return MandateBorderWallRules.IsExternalLandBorderNeighbor(
+            target, hasCity, ground, liquid, lava, block);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}

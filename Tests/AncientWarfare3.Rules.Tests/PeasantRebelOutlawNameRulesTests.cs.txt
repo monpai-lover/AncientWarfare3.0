@@ -1,0 +1,95 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelOutlawNameRulesTests
+{
+    private static readonly string[] Roots =
+        { "赤眉", "黄巾", "绿林", "黑风" };
+
+    public static void Run()
+    {
+        DeterministicSelectionUsesLibraryMembers();
+        ValidationRequiresHanLibraryRoot();
+        LatinLegacyRootIsReplaced();
+        RepeatedRouteSuffixesAreStripped();
+        RouteCompositionUsesExactlyOneSuffix();
+    }
+
+    private static void DeterministicSelectionUsesLibraryMembers()
+    {
+        string first = PeasantRebelOutlawNameRules.SelectRoot(Roots, 928L);
+        string second = PeasantRebelOutlawNameRules.SelectRoot(Roots, 928L);
+
+        Equal(first, second, "the same seed selects the same outlaw root");
+        True(Roots.Contains(first),
+            "deterministic selection returns a dedicated library member");
+    }
+
+    private static void ValidationRequiresHanLibraryRoot()
+    {
+        True(PeasantRebelOutlawNameRules.IsValidLibraryRoot(
+                "赤眉", Roots),
+            "Chinese dedicated root is valid");
+        True(PeasantRebelOutlawNameRules.IsValidLibraryRoot(
+                "赤眉义军", Roots),
+            "a valid stored root survives legacy suffix normalization");
+        False(PeasantRebelOutlawNameRules.IsValidLibraryRoot(
+                "Giug", Roots),
+            "Latin legacy root is invalid");
+        False(PeasantRebelOutlawNameRules.IsValidLibraryRoot(
+                "赤星", Roots),
+            "Chinese text outside the dedicated library is invalid");
+    }
+
+    private static void LatinLegacyRootIsReplaced()
+    {
+        string repaired = PeasantRebelOutlawNameRules.ResolveRoot(
+            "Giug贼", Roots, 1123L);
+
+        True(Roots.Contains(repaired),
+            "Latin legacy value migrates to a library root");
+        False(repaired.Contains("Giug", StringComparison.Ordinal),
+            "migration does not preserve the Latin legacy stem");
+        Equal("赤眉", PeasantRebelOutlawNameRules.ResolveRoot(
+                "赤眉贼", Roots, 9911L),
+            "valid persisted root remains stable across transitions");
+    }
+
+    private static void RepeatedRouteSuffixesAreStripped()
+    {
+        Equal("赤眉", PeasantRebelOutlawNameRules.NormalizeRoot(
+                "  赤眉义军贼义军贼  "),
+            "all repeated rebel and bandit suffixes are removed");
+        Equal("", PeasantRebelOutlawNameRules.NormalizeRoot(
+                "义军贼义军"),
+            "suffix-only legacy values normalize to empty");
+    }
+
+    private static void RouteCompositionUsesExactlyOneSuffix()
+    {
+        Equal("赤眉义军", PeasantRebelOutlawNameRules.ComposeName(
+                "赤眉贼义军", PeasantRebelRouteIds.Founding),
+            "founding route ends with exactly one rebel suffix");
+        Equal("赤眉贼", PeasantRebelOutlawNameRules.ComposeName(
+                "赤眉义军贼", PeasantRebelRouteIds.Bandit),
+            "bandit route ends with exactly one bandit suffix");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                message + $": expected {expected}, got {actual}");
+    }
+}

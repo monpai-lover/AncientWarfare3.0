@@ -40,15 +40,20 @@ namespace AncientWarfare3.core.lineage
             {
                 City city = pActor?.city;
                 Kingdom cityKingdom = city?.kingdom;
-                bool cityKingdomIsRekt = city == null || city.isRekt() ||
-                                          cityKingdom == null ||
+                bool cityKingdomIsRekt = city?.data == null ||
+                                          city.isRekt() ||
+                                          cityKingdom?.data == null ||
+                                          cityKingdom.asset == null ||
                                           cityKingdom.isRekt();
                 source =
                     ActorKingdomSafetyRules.SelectRepairSource(
                         actorExists: pActor?.data != null,
                         actorAssetExists: pActor?.asset != null,
+                        kingdomDataExists: pActor?.kingdom?.data != null,
                         kingdomAssetExists: pActor?.kingdom?.asset != null,
-                        cityKingdomAssetExists: cityKingdom?.asset != null,
+                        cityKingdomAssetExists:
+                            cityKingdom?.data != null &&
+                            cityKingdom.asset != null,
                         cityKingdomIsRekt: cityKingdomIsRekt,
                         wildKingdomIdExists: !string.IsNullOrEmpty(
                             pActor?.asset?.kingdom_id_wild));
@@ -67,7 +72,8 @@ namespace AncientWarfare3.core.lineage
                 if (target != null)
                     AttachRepairTarget(pActor, target, city);
 
-                bool repaired = pActor?.kingdom?.asset != null;
+                bool repaired = pActor?.kingdom?.data != null &&
+                                pActor.kingdom.asset != null;
                 if (repaired)
                 {
                     if (actorId >= 0L) LastFailures.TryRemove(actorId, out _);
@@ -81,7 +87,8 @@ namespace AncientWarfare3.core.lineage
             }
             catch (Exception error)
             {
-                if (pActor?.kingdom?.asset != null)
+                if (pActor?.kingdom?.data != null &&
+                    pActor.kingdom.asset != null)
                 {
                     if (actorId >= 0L) LastFailures.TryRemove(actorId, out _);
                     return true;
@@ -94,9 +101,12 @@ namespace AncientWarfare3.core.lineage
         private static void AttachRepairTarget(Actor pActor, Kingdom pTarget,
             City pCity)
         {
-            if (pActor?.data == null || pTarget?.asset == null) return;
+            if (pActor?.data == null || pTarget?.data == null ||
+                pTarget.asset == null) return;
             if (ActorKingdomSafetyRules.ShouldDetachInvalidKingdomBeforeRepair(
-                    pActor.kingdom != null, pActor.kingdom?.asset != null))
+                    pActor.kingdom != null,
+                    pActor.kingdom?.data != null,
+                    pActor.kingdom?.asset != null))
             {
                 // Vanilla joinKingdom calls isCiv() on the old kingdom first.
                 pActor.kingdom = null;
