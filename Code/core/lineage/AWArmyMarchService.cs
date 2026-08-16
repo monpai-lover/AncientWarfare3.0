@@ -1348,6 +1348,12 @@ namespace AncientWarfare3.core.lineage
                 sameIslandAsCaptain: IsOnCaptainIsland(pActor, army));
         }
 
+        public static bool HasSerialMarchState(Actor pActor)
+        {
+            Army army = pActor?.army;
+            return army?.data != null && States.ContainsKey(army.id);
+        }
+
         public static bool HasOwnedMarch(Actor pActor)
         {
             Army army = pActor?.army;

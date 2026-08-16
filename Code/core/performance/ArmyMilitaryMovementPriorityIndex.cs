@@ -35,9 +35,14 @@ namespace AncientWarfare3.core.performance
 
         internal static void Unregister(long actorId)
         {
-            if (!Entries.Remove(actorId)) return;
-            int index = Order.IndexOf(actorId);
-            if (index >= 0) Order.RemoveAt(index);
+            if (actorId < 0L) return;
+            if (Entries.Remove(actorId))
+            {
+                int index = Order.IndexOf(actorId);
+                if (index >= 0) Order.RemoveAt(index);
+            }
+            ProcessedThisCycle.Remove(actorId);
+            VanillaTaxiActors.Remove(actorId);
         }
 
         internal static void CopySnapshot(List<long> destination)

@@ -839,11 +839,11 @@ namespace AncientWarfare3.core.pathfinding
         {
             try
             {
-                return pActor?.army?.data != null;
+                return AWArmyMarchService.HasSerialMarchState(pActor);
             }
             catch
             {
-                return true;
+                return false;
             }
         }
 
