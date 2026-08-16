@@ -265,6 +265,10 @@ namespace AncientWarfare3.core.lineage
                         plan.Context.Bandit, active))
                     throw new InvalidOperationException(
                         "cannot persist active phase");
+                if (!RecordEstablishment(stronghold,
+                        plan.Context.Bandit))
+                    throw new InvalidOperationException(
+                        "cannot record stronghold establishment");
                 WorldLog.logNewCity(stronghold);
                 pStronghold = stronghold;
                 pFailureKey = "";
@@ -495,7 +499,52 @@ namespace AncientWarfare3.core.lineage
                 return true;
             pHandled = true;
             if (!CanMutate()) return false;
-            return CompleteFall(bandit, pCity, state);
+            return CompleteFall(bandit, pCity, state, pOccupier);
+        }
+
+        internal static bool IsHostileKingdom(Kingdom pBandit,
+            Kingdom pOther)
+        {
+            if (pBandit?.data == null || pOther?.data == null ||
+                pBandit == pOther || pBandit.isRekt() || pOther.isRekt())
+                return false;
+            try
+            {
+                foreach (War war in pBandit.getWars())
+                    if (war?.data != null && !war.hasEnded() &&
+                        war.hasKingdom(pOther)) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        internal static void OnBanditResidentDied(long pStrongholdCityId,
+            long pHostileKillerKingdomId)
+        {
+            if (!CanMutate() || pStrongholdCityId <= 0) return;
+            City stronghold = ResolveCity(pStrongholdCityId);
+            Kingdom bandit = stronghold?.kingdom;
+            if (stronghold?.data == null || bandit?.data == null ||
+                !PeasantRebelBanditStateStore.TryRead(bandit,
+                    out PeasantRebelBanditStrongholdState state) ||
+                state.Phase != BanditStrongholdPhase.Active ||
+                state.StrongholdCityId != pStrongholdCityId) return;
+
+            if (pHostileKillerKingdomId > 0 &&
+                state.LastHostileKillerKingdomId !=
+                pHostileKillerKingdomId)
+            {
+                state.LastHostileKillerKingdomId =
+                    pHostileKillerKingdomId;
+                if (!PeasantRebelBanditStateStore.Write(bandit, state))
+                    return;
+            }
+
+            int population;
+            try { population = stronghold.getPopulationPeople(); }
+            catch { return; }
+            if (population <= 0)
+                CompleteFall(bandit, stronghold, state);
         }
 
         internal static void RestoreRuntime()
@@ -533,19 +582,38 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool CompleteFall(Kingdom pBandit,
-            City pStronghold, PeasantRebelBanditStrongholdState pState)
+            City pStronghold, PeasantRebelBanditStrongholdState pState,
+            Kingdom pSuppressor = null)
         {
             City mother = ResolveCity(pState.MotherCityId);
             if (pBandit?.data == null || pStronghold?.data == null ||
                 mother?.data == null || mother.isRekt()) return false;
             try
             {
+                if (pSuppressor?.data != null &&
+                    pSuppressor != pBandit && !pSuppressor.isRekt())
+                    pState.SuppressorKingdomId = pSuppressor.getID();
+                if (pState.SuppressorKingdomId <= 0)
+                {
+                    Kingdom origin = ResolveKingdom(pState.OriginKingdomId);
+                    pState.SuppressorKingdomId =
+                        PeasantRebelBanditStrongholdRules.
+                            ResolveSuppressorKingdomId(
+                                pState.LastHostileKillerKingdomId,
+                                pState.OriginKingdomId,
+                                IsHostileKingdom(pBandit, origin));
+                }
                 if (pState.Phase == BanditStrongholdPhase.Active)
                 {
                     pState.Phase = BanditStrongholdPhase.Falling;
                     if (!PeasantRebelBanditStateStore.Write(pBandit,
                             pState)) return false;
                 }
+
+                Kingdom suppressor = ResolveKingdom(
+                    pState.SuppressorKingdomId);
+                if (!RecordSuppressionChronicles(pBandit, pStronghold,
+                        suppressor)) return false;
 
                 WorldTile motherTile = mother.getTile();
                 foreach (Actor actor in pStronghold.units.ToList())
@@ -589,6 +657,93 @@ namespace AncientWarfare3.core.lineage
                 return city?.data != null && !city.isRekt() ? city : null;
             }
             catch { return null; }
+        }
+
+        private static Kingdom ResolveKingdom(long pKingdomId)
+        {
+            if (pKingdomId <= 0 || World.world?.kingdoms == null)
+                return null;
+            try
+            {
+                Kingdom kingdom = World.world.kingdoms.get(pKingdomId);
+                return kingdom?.data != null && !kingdom.isRekt()
+                    ? kingdom
+                    : null;
+            }
+            catch { return null; }
+        }
+
+        private static bool RecordEstablishment(City pStronghold,
+            Kingdom pBandit)
+        {
+            if (pStronghold?.data == null || pBandit?.data == null)
+                return false;
+            return HistoryWriter.TryRecordCity(pStronghold, pBandit,
+                CityEvent.BANDIT_STRONGHOLD_ESTABLISHED,
+                HistoryLocalizationRules.H(
+                    "aw_hist_bandit_stronghold_established_prefix") +
+                HistoryText.City(pStronghold, pBandit),
+                HistoryTarget.City(pStronghold),
+                "bandit-stronghold-established:" + pStronghold.getID());
+        }
+
+        private static bool RecordSuppressionChronicles(Kingdom pBandit,
+            City pStronghold, Kingdom pSuppressor)
+        {
+            if (pBandit?.data == null || pStronghold?.data == null)
+                return false;
+            long cityId = pStronghold.getID();
+            long banditId = pBandit.getID();
+            bool hasSuppressor = pSuppressor?.data != null &&
+                                 pSuppressor != pBandit &&
+                                 !pSuppressor.isRekt();
+            HistoryText cityFall = HistoryText.City(pStronghold, pBandit);
+            if (hasSuppressor)
+                cityFall += HistoryLocalizationRules.H(
+                                "aw_hist_bandit_stronghold_suppressed_by") +
+                            HistoryText.Kingdom(pSuppressor) +
+                            HistoryLocalizationRules.H(
+                                "aw_hist_bandit_stronghold_suppressed_suffix");
+            else
+                cityFall += HistoryLocalizationRules.H(
+                    "aw_hist_bandit_stronghold_empty_suffix");
+
+            if (!HistoryWriter.TryRecordCity(pStronghold, pBandit,
+                    CityEvent.BANDIT_STRONGHOLD_SUPPRESSED, cityFall,
+                    hasSuppressor
+                        ? HistoryTarget.Kingdom(pSuppressor)
+                        : HistoryTarget.City(pStronghold),
+                    "bandit-suppressed-city:" + cityId)) return false;
+
+            HistoryText realmFall = HistoryText.Kingdom(pBandit);
+            if (hasSuppressor)
+                realmFall += HistoryLocalizationRules.H(
+                                 "aw_hist_bandit_suppressed_mid") +
+                             HistoryText.Kingdom(pSuppressor) +
+                             HistoryLocalizationRules.H(
+                                 "aw_hist_bandit_suppressed_suffix");
+            else
+                realmFall += HistoryLocalizationRules.H(
+                    "aw_hist_bandit_stronghold_empty_suffix");
+            if (!HistoryWriter.TryRecordKingdom(pBandit,
+                    KingdomEvent.BANDIT_SUPPRESSED, realmFall,
+                    hasSuppressor
+                        ? HistoryTarget.Kingdom(pSuppressor)
+                        : HistoryTarget.City(pStronghold),
+                    "bandit-suppressed-kingdom:" + banditId + ":" +
+                    cityId)) return false;
+
+            if (!hasSuppressor) return true;
+            return HistoryWriter.TryRecordKingdom(pSuppressor,
+                KingdomEvent.BANDIT_SUPPRESSION_VICTORY,
+                HistoryLocalizationRules.H(
+                    "aw_hist_bandit_suppression_victory_prefix") +
+                HistoryText.City(pStronghold, pBandit) +
+                HistoryLocalizationRules.H(
+                    "aw_hist_bandit_suppression_victory_suffix"),
+                HistoryTarget.Kingdom(pBandit),
+                "bandit-suppression-victory:" + pSuppressor.getID() +
+                ":" + cityId);
         }
 
         internal static bool HasChildStronghold(City pMother)

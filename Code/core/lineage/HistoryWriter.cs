@@ -405,6 +405,25 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("KINGDOM_COLOR", HistoryColors.FromKingdom(pContextKingdom)));
         }
 
+        public static bool TryRecordCity(City pCity,
+            Kingdom pContextKingdom, string pEventType,
+            HistoryText pContent, HistoryTarget pTarget,
+            string pProjectionKey)
+        {
+            if (pCity?.data == null) return false;
+            string kingdomName = pContextKingdom?.data != null
+                ? pContextKingdom.name
+                : "";
+            return InsertProjection(CityHistoryTableItem.GetTableName(),
+                pContextKingdom, pEventType, pContent, pCity.data.name,
+                pTarget.IsValid ? pTarget : HistoryTarget.City(pCity),
+                pProjectionKey,
+                ColumnVal.Create("CITY_ID", pCity.data.id),
+                ColumnVal.Create("KINGDOM_NAME", kingdomName ?? ""),
+                ColumnVal.Create("KINGDOM_COLOR",
+                    HistoryColors.FromKingdom(pContextKingdom)));
+        }
+
         internal static string BuildYearPrefix(double pTime, Kingdom pKingdom)
         {
             int[] raw = Date.getRawDate(pTime); // [day, month, year]

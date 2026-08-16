@@ -459,10 +459,6 @@ namespace AncientWarfare3.core.lineage
             bool pAuthoritative)
         {
             if (pKingdom?.data == null) return;
-            bool bandit = string.Equals(ReadRouteRaw(pKingdom),
-                PeasantRebelRouteIds.Bandit, StringComparison.Ordinal);
-            if (pAuthoritative && bandit)
-                PeasantRebelBanditRoute.RecordDestruction(pKingdom);
             if (pAuthoritative)
             {
                 try

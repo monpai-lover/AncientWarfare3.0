@@ -13,6 +13,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         RequiresZonesOnBothSidesOfSplit();
         LocksBanditGrowthToPersistedZones();
         RestoresOnlyUnchangedStrongholdWalls();
+        ResolvesSuppressionVictorByConfirmedPrecedence();
         ComposesStrongholdNamesAndTitles();
     }
 
@@ -100,6 +101,22 @@ internal static class PeasantRebelBanditStrongholdRulesTests
             "later terrain changes are preserved");
         False(PeasantRebelBanditStrongholdRules.ShouldRestoreWall(null),
             "an already removed wall is ignored");
+    }
+
+    private static void ResolvesSuppressionVictorByConfirmedPrecedence()
+    {
+        Equal(31L,
+            PeasantRebelBanditStrongholdRules.ResolveSuppressorKingdomId(
+                31L, 20L, true),
+            "last hostile killer wins attribution");
+        Equal(20L,
+            PeasantRebelBanditStrongholdRules.ResolveSuppressorKingdomId(
+                -1L, 20L, true),
+            "warring mother kingdom is the fallback");
+        Equal(-1L,
+            PeasantRebelBanditStrongholdRules.ResolveSuppressorKingdomId(
+                -1L, 20L, false),
+            "starvation without a war has no suppressing kingdom");
     }
 
     private static void ComposesStrongholdNamesAndTitles()

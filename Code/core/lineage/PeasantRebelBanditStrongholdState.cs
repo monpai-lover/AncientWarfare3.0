@@ -68,6 +68,7 @@ namespace AncientWarfare3.core.lineage
         public List<BanditStrongholdTower> Towers =
             new List<BanditStrongholdTower>();
         public long LastHostileKillerKingdomId = -1L;
+        public long SuppressorKingdomId = -1L;
         public BanditRaidMissionState Raid = new BanditRaidMissionState();
         public Dictionary<long, int> SuppressionExpiryByKingdomId =
             new Dictionary<long, int>();

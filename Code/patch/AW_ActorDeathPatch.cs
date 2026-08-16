@@ -20,6 +20,8 @@ namespace AncientWarfare3.patch
             public long DyingKingActorId = -1L;
             public Army DyingCaptainArmy;
             public long DyingCaptainActorId = -1L;
+            public long BanditStrongholdCityId = -1L;
+            public long HostileKillerKingdomId = -1L;
         }
 
         [HarmonyPriority(Priority.Last)]
@@ -41,6 +43,15 @@ namespace AncientWarfare3.patch
             __state = new DieState();
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
+            City dyingCity = __instance.getCity();
+            if (PeasantRebelBanditStrongholdService.IsStronghold(dyingCity))
+            {
+                __state.BanditStrongholdCityId = dyingCity.getID();
+                Kingdom attacker = __instance.attackedBy?.kingdom;
+                if (PeasantRebelBanditStrongholdService.IsHostileKingdom(
+                        dyingCity.kingdom, attacker))
+                    __state.HostileKillerKingdomId = attacker.getID();
+            }
             Army dyingArmy = __instance.army;
             bool wasCaptain = false;
             try
@@ -218,6 +229,22 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying ||
                 AW3MultiplayerReplicaScope.IsReplicaSession) return;
             SyntheticLevyService.OnActorDied(__instance);
+            if (__state?.BanditStrongholdCityId > 0 &&
+                __instance != null && !__instance.isAlive())
+            {
+                try
+                {
+                    PeasantRebelBanditStrongholdService.
+                        OnBanditResidentDied(
+                            __state.BanditStrongholdCityId,
+                            __state.HostileKillerKingdomId);
+                }
+                catch (Exception error)
+                {
+                    LogDeathStageFailure(__instance,
+                        "bandit stronghold settlement", error);
+                }
+            }
             if (__state?.DyingCaptainArmy?.data != null &&
                 __state.DyingCaptainActorId >= 0L &&
                 __instance != null && !__instance.isAlive())

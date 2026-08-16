@@ -167,25 +167,6 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
-        internal static void RecordDestruction(Kingdom pKingdom)
-        {
-            if (pKingdom?.data == null ||
-                !IsOriginSuppressionActive(pKingdom)) return;
-            pKingdom.data.get(
-                LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
-                out long originId, -1L);
-            Kingdom origin = null;
-            try { origin = World.world?.kingdoms?.get(originId); }
-            catch { }
-            HistoryWriter.RecordKingdom(pKingdom,
-                KingdomEvent.MANDATE_REBELLION,
-                HistoryText.Kingdom(pKingdom) +
-                HistoryLocalizationRules.H("aw_hist_bandit_destroyed"),
-                HistoryTarget.Kingdom(origin?.data != null
-                    ? origin
-                    : pKingdom));
-        }
-
         private static bool TryConvertToFounding(Kingdom pKingdom,
             City pFoundingCity)
         {

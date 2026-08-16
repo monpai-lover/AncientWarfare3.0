@@ -25,3 +25,11 @@ aw_hist_rebel_route_bandit,落草为寇并筑寨, became bandits and fortified a
 aw_hist_bandit_suppression_started,发兵剿匪, began a suppression campaign,發兵剿匪
 aw_hist_bandit_converted,改旗建号，转为建国义军, raised a state banner and became founding rebels,改旗建號，轉為建國義軍
 aw_hist_bandit_destroyed,山寨被攻破，贼国覆灭, lost its hideout and was destroyed,山寨被攻破，賊國覆滅
+aw_hist_bandit_stronghold_established_prefix,匪众在此落草，建立,Bandits settled here and established ,匪眾在此落草，建立
+aw_hist_bandit_suppression_victory_prefix,攻破,Captured ,攻破
+aw_hist_bandit_suppression_victory_suffix,，平定匪患, ending the bandit threat,，平定匪患
+aw_hist_bandit_suppressed_mid,被, was captured by ,被
+aw_hist_bandit_suppressed_suffix,攻破，贼国覆灭, and the bandit realm was destroyed,攻破，賊國覆滅
+aw_hist_bandit_stronghold_suppressed_by,被, was suppressed by ,被
+aw_hist_bandit_stronghold_suppressed_suffix,剿灭，匪众覆灭, and its bandits were destroyed,剿滅，匪眾覆滅
+aw_hist_bandit_stronghold_empty_suffix,人口尽失，山寨覆灭, lost its entire population and collapsed,人口盡失，山寨覆滅

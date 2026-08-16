@@ -53,22 +53,19 @@ if ($fallStart -lt 0 -or $towerRemoveIndex -lt 0 -or
 $events = @('bandit_stronghold_established',
     'bandit_suppression_victory', 'bandit_suppressed',
     'bandit_stronghold_suppressed')
-$historyReady = $true
 foreach ($event in $events) {
     if (-not ($keys + $service).Contains($event)) {
-        $historyReady = $false
+        throw "Stronghold chronicle lifecycle is missing $event"
     }
     if ($atlas.Contains($event)) {
         throw "$event must not enter atlas territorial queries"
     }
 }
-if ($historyReady) {
-    foreach ($token in @('TryRecordCity(', 'bandit-stronghold-established:',
-            'bandit-suppressed-city:', 'bandit-suppressed-kingdom:',
-            'bandit-suppression-victory:', 'OnBanditResidentDied(')) {
-        if (-not ($history + $service + $death).Contains($token)) {
-            throw "Stronghold chronicle lifecycle is missing $token"
-        }
+foreach ($token in @('TryRecordCity(', 'bandit-stronghold-established:',
+        'bandit-suppressed-city:', 'bandit-suppressed-kingdom:',
+        'bandit-suppression-victory:', 'OnBanditResidentDied(')) {
+    if (-not ($history + $service + $death).Contains($token)) {
+        throw "Stronghold chronicle lifecycle is missing $token"
     }
 }
 

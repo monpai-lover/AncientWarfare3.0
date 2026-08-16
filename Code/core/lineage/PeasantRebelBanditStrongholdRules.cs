@@ -122,7 +122,18 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldRestoreWall(string currentTopTypeId)
         {
             return string.Equals(currentTopTypeId, "wall_wild",
-                StringComparison.Ordinal);
+                   StringComparison.Ordinal);
+        }
+
+        public static long ResolveSuppressorKingdomId(
+            long lastHostileKillerKingdomId, long originKingdomId,
+            bool originAtWar)
+        {
+            if (lastHostileKillerKingdomId > 0)
+                return lastHostileKillerKingdomId;
+            return originAtWar && originKingdomId > 0
+                ? originKingdomId
+                : -1L;
         }
 
         public static bool CanAcquireZone(bool bandit, string zoneKey,
