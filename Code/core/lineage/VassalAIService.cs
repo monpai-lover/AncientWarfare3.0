@@ -29,14 +29,17 @@ namespace AncientWarfare3.core.lineage
             if (year - lastAction < ACTION_COOLDOWN) return;
             CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
 
-            bool isSubject = VassalService.GetDiplomaticSuzerain(pKingdom)?.data != null;
-            isSubject |= VassalService.GetSuzerainId(pKingdom) >= 0 ||
-                         VassalService.GetTributarySuzerainId(pKingdom) >= 0;
-            bool acted = isSubject
+            bool formalVassal =
+                VassalService.GetSuzerainId(pKingdom) >= 0;
+            bool tributary =
+                VassalService.GetTributarySuzerainId(pKingdom) >= 0;
+            bool acted = formalVassal
                 ? TryIndependenceWar(pKingdom)
-                : TryAbsorbVassal(pKingdom, court) ||
-                  TryVassalWar(pKingdom, court) ||
-                  TryActiveVassal(pKingdom, court);
+                : tributary
+                    ? false
+                    : TryAbsorbVassal(pKingdom, court) ||
+                      TryVassalWar(pKingdom, court) ||
+                      TryActiveVassal(pKingdom, court);
             if (acted)
             {
                 pKingdom.data.set(LAST_ACTION_YEAR, year);
@@ -118,7 +121,7 @@ namespace AncientWarfare3.core.lineage
 
         private static bool TryIndependenceWar(Kingdom pKingdom)
         {
-            Kingdom suzerain = VassalService.GetDiplomaticSuzerain(pKingdom);
+            Kingdom suzerain = VassalService.GetSuzerain(pKingdom);
             if (suzerain?.data == null || suzerain.isRekt()) return VassalService.EndVassal(pKingdom, "suzerain_missing");
             if (pKingdom.hasEnemies()) return false;
 

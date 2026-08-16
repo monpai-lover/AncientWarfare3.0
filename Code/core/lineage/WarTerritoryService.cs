@@ -1494,6 +1494,8 @@ namespace AncientWarfare3.core.lineage
         public static bool IsVassalDecisionOnlyTarget(Kingdom pSource, Kingdom pTarget)
         {
             if (pSource?.data == null || pTarget?.data == null || pSource == pTarget) return false;
+            if (TributaryProtectionService.IsProtectedPair(pSource,
+                    pTarget)) return true;
             Kingdom sourceSuzerain = VassalService.GetSuzerain(pSource);
             Kingdom targetSuzerain = VassalService.GetSuzerain(pTarget);
             bool sourceSubject = sourceSuzerain?.data != null &&

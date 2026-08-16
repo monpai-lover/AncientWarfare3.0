@@ -1,0 +1,109 @@
+using System.IO;
+
+internal static class TributaryProtectionSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string decisions = Read(root, "Code", "core", "lineage",
+            "WarDecisionService.cs");
+        string territory = Read(root, "Code", "core", "lineage",
+            "WarTerritoryService.cs");
+        string declaration = Read(root, "Code", "core", "lineage",
+            "DiplomaticWarDeclarationService.cs");
+        string subjectAi = Read(root, "Code", "core", "lineage",
+            "VassalAIService.cs");
+
+        string canQueue = Slice(decisions,
+            "public static bool CanQueueWarPair(",
+            "public static bool TryStartWar(");
+        string startWar = Slice(decisions,
+            "private static War StartWar(",
+            "internal static Kingdom ResolveWarMainDefender(");
+        string finalGate = Slice(decisions,
+            "public static bool ShouldBlockWarStart(",
+            "private static War StartWar(");
+        string targetGate = Slice(territory,
+            "public static bool IsVassalDecisionOnlyTarget(",
+            "private static bool IsSameAlliance(");
+        string submission = Slice(declaration,
+            "private static bool CanQueueCurrentGoal(",
+            "private static void UpdateResolvedTarget(");
+        string independence = Slice(subjectAi,
+            "private static bool TryIndependenceWar(",
+            "private static Kingdom FindThreat(");
+
+        True(canQueue.Contains("TributaryProtectionService.IsProtectedPair("),
+            "queue gate");
+        True(startWar.Contains("TributaryProtectionService.IsProtectedPair("),
+            "service start gate");
+        True(targetGate.Contains("TributaryProtectionService.IsProtectedPair("),
+            "UI and AI target gate");
+        True(submission.Contains("CanQueueWarPair("),
+            "submission uses pair gate");
+        True(finalGate.IndexOf(
+                 "TributaryProtectionService.IsProtectedPair(",
+                 StringComparison.Ordinal) >= 0 &&
+             finalGate.IndexOf(
+                 "TributaryProtectionService.IsProtectedPair(",
+                 StringComparison.Ordinal) <
+             finalGate.IndexOf("IsAw3AllowedWarStart",
+                 StringComparison.Ordinal),
+            "final protection precedes AW3 depth bypass");
+        False(independence.Contains("GetTributarySuzerain"),
+            "tributary skips independence AI");
+
+        string allCode = string.Join("\n", Directory.GetFiles(
+            Path.Combine(root, "Code"), "*.cs",
+            SearchOption.AllDirectories).Select(File.ReadAllText));
+        Equal(1, Count(allCode, "World.world.diplomacy.startWar("),
+            "only guarded WarDecisionService starts the engine");
+    }
+
+    private static string Read(string root, params string[] parts)
+    {
+        return File.ReadAllText(Path.Combine(
+            new[] { root }.Concat(parts).ToArray()));
+    }
+
+    private static string Slice(string source, string start, string end)
+    {
+        int from = source.IndexOf(start, StringComparison.Ordinal);
+        int to = source.IndexOf(end, from < 0 ? 0 : from,
+            StringComparison.Ordinal);
+        if (from < 0 || to <= from)
+            throw new InvalidOperationException(
+                "Could not extract source section: " + start);
+        return source.Substring(from, to - from);
+    }
+
+    private static int Count(string source, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(value, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

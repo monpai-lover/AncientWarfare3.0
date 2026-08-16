@@ -1,0 +1,40 @@
+using AncientWarfare3.core.lineage;
+
+internal static class TributaryProtectionRulesTests
+{
+    public static void Run()
+    {
+        bool forward = TributaryProtectionRules.IsDirectActivePair(
+            10L, 20L, relationVassalId: 10L, relationSuzerainId: 20L,
+            relationActive: true, relationEndTime: -1d,
+            relationContractTier: VassalContractTierRules.Tributary);
+        bool reverse = TributaryProtectionRules.IsDirectActivePair(
+            20L, 10L, 10L, 20L, true, -1d,
+            VassalContractTierRules.Tributary);
+
+        Equal(true, forward, "forward pair protected");
+        Equal(true, reverse, "reverse pair protected");
+        Equal(false, TributaryProtectionRules.IsDirectActivePair(
+            10L, 20L, 10L, 20L, false, -1d,
+            VassalContractTierRules.Tributary), "inactive relation");
+        Equal(false, TributaryProtectionRules.IsDirectActivePair(
+            10L, 20L, 10L, 20L, true, 100d,
+            VassalContractTierRules.Tributary), "ended relation");
+        Equal(false, TributaryProtectionRules.IsDirectActivePair(
+            10L, 20L, 10L, 20L, true, -1d,
+            VassalContractTierRules.Outer), "formal vassal relation");
+        Equal(false, TributaryProtectionRules.IsDirectActivePair(
+            10L, 10L, 10L, 20L, true, -1d,
+            VassalContractTierRules.Tributary), "same kingdom");
+        Equal(false, TributaryProtectionRules.IsDirectActivePair(
+            10L, 30L, 10L, 20L, true, -1d,
+            VassalContractTierRules.Tributary), "unrelated third party");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

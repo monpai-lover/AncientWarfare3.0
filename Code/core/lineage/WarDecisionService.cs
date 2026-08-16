@@ -112,6 +112,13 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
+            if (TributaryProtectionService.IsProtectedPair(
+                    pAttacker, pDefender))
+            {
+                pReason = "active_tributary_protection";
+                return false;
+            }
+
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
             if (!PeasantRebelRouteService.CanStartWar(pAttacker,
                     pDefender, out bool routeBypass, out pReason))
@@ -329,6 +336,13 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldBlockWarStart(Kingdom pAttacker, Kingdom pDefender, WarTypeAsset pType)
         {
+            if (TributaryProtectionService.IsProtectedPair(
+                    pAttacker, pDefender))
+            {
+                LogBlockedWar(pAttacker, pDefender,
+                    pType?.id ?? "tributary_protection");
+                return true;
+            }
             if (!PeasantRebelRouteService.CanStartWar(pAttacker,
                     pDefender, out _, out _)) return true;
             if (PeasantRebelRouteService.IsOriginSuppressionPair(
@@ -352,6 +366,12 @@ namespace AncientWarfare3.core.lineage
                 pAttacker == pDefender)
             {
                 pFailureReason = "invalid_participants";
+                return null;
+            }
+            if (TributaryProtectionService.IsProtectedPair(
+                    pAttacker, pDefender))
+            {
+                pFailureReason = "active_tributary_protection";
                 return null;
             }
             if (!PeasantRebelRouteService.CanStartWar(pAttacker,
