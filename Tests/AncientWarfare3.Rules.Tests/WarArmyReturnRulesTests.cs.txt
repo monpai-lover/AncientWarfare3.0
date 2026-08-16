@@ -257,11 +257,6 @@ internal static class WarArmyReturnRulesTests
              releaseAfterReturn.Contains(
                  "SyntheticLevyService.IsSynthetic(pActor)",
                  StringComparison.Ordinal) &&
-             releaseAfterReturn.Contains(
-                 "pActor.ai.setJob(pActor.getNextJob())",
-                 StringComparison.Ordinal) &&
-             !releaseAfterReturn.Contains("Actor.nextJobActor(pActor)",
-                 StringComparison.Ordinal) &&
              !releaseAfterReturn.Contains("WarArmyReturnService.TryBegin",
                  StringComparison.Ordinal) &&
              !releaseAfterReturn.Contains(
@@ -271,6 +266,21 @@ internal static class WarArmyReturnRulesTests
                  "RefreshReleasedArmyPeacetimeJobs",
                  StringComparison.Ordinal),
             "post-return release destroys RTS ownership and hands only permanent survivors to native AI");
+        int releaseActorStart = releaseAfterReturn.IndexOf(
+            "private static void ReleaseAfterReturnActor(Actor pActor)",
+            StringComparison.Ordinal);
+        string releaseActorBody = releaseActorStart >= 0
+            ? releaseAfterReturn.Substring(releaseActorStart)
+            : string.Empty;
+        int clearReturnJob = releaseActorBody.IndexOf(
+            "pActor.ai.clearJob();", StringComparison.Ordinal);
+        int selectVanillaJob = releaseActorBody.IndexOf(
+            "pActor.ai.setJob(Actor.nextJobActor(pActor));",
+            StringComparison.Ordinal);
+        True(clearReturnJob >= 0 && selectVanillaJob > clearReturnJob &&
+             !releaseActorBody.Contains("pActor.getNextJob()",
+                 StringComparison.Ordinal),
+            "completed return clears RTS return ownership before vanilla job selection");
         string arrivalPredicate = Section(service,
             "private static bool IsInsideFriendlySafeCity(Actor pActor,",
             "internal static bool IsInsideFriendlySafeCity(Actor pActor)");
