@@ -24,20 +24,22 @@ internal static class RoyalGuardTaskRecoveryRulesTests
             "an empty or unknown guard task repairs directly to follow");
 
         string root = Directory.GetCurrentDirectory();
-        string follow = File.ReadAllText(Path.Combine(root, "Code",
-            "ai", "behaviours", "actor", "BehRoyalGuardFollowKing.cs"));
-        string attack = File.ReadAllText(Path.Combine(root, "Code",
-            "ai", "behaviours", "actor", "BehRoyalGuardAttackThreat.cs"));
-        string service = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "lineage", "RoyalGuardService.cs"));
-        string rtsService = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "lineage", "ArmyRtsControllerService.cs"));
-        string priorityIndex = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "performance", "ArmyMilitaryMovementPriorityIndex.cs"));
-        string postRunner = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "performance", "AWCooperativeActorPostRunner.cs"));
-        string content = File.ReadAllText(Path.Combine(root, "Code",
-            "content", "GuardContent.cs"));
+        string ReadSource(params string[] parts) => File.ReadAllText(
+            Path.Combine(new[] { root }.Concat(parts).ToArray()))
+            .Replace("\r\n", "\n");
+        string follow = ReadSource("Code", "ai", "behaviours", "actor",
+            "BehRoyalGuardFollowKing.cs");
+        string attack = ReadSource("Code", "ai", "behaviours", "actor",
+            "BehRoyalGuardAttackThreat.cs");
+        string service = ReadSource("Code", "core", "lineage",
+            "RoyalGuardService.cs");
+        string rtsService = ReadSource("Code", "core", "lineage",
+            "ArmyRtsControllerService.cs");
+        string priorityIndex = ReadSource("Code", "core", "performance",
+            "ArmyMilitaryMovementPriorityIndex.cs");
+        string postRunner = ReadSource("Code", "core", "performance",
+            "AWCooperativeActorPostRunner.cs");
+        string content = ReadSource("Code", "content", "GuardContent.cs");
         Assert(follow.Contains("return BehResult.RepeatStep;",
                    StringComparison.Ordinal),
             "follow idle/current-tile cases keep the task alive");
