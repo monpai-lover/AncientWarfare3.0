@@ -1,14 +1,16 @@
-# Bandit Zone-Aligned Stronghold Design
+# Fixed Four-Zone Bandit Stronghold Design
 
 ## Goal
 
-Make a newly generated bandit stronghold own exactly the native WorldBox
-territory enclosed by its wooden wall. The smallest valid stronghold owns one
-native `TileZone` (an 8 by 8 tile region). Land outside the wall remains with
-the mother city.
+Make every newly generated bandit stronghold own exactly four native WorldBox
+`TileZone` regions. The wooden wall follows the union of those four zones and
+land outside the wall remains with the mother city. When the stronghold is
+suppressed, its zones return to the mother city and its wooden wall disappears,
+restoring the top terrain that existed before construction.
 
-This design supersedes the majority-coverage selection in
-`2026-08-16-bandit-wall-zone-fit-design.md`.
+This design supersedes both the majority-coverage selection in
+`2026-08-16-bandit-wall-zone-fit-design.md` and the variable-size selection in
+the previous revision of this document.
 
 ## Native Constraint
 
@@ -23,30 +25,35 @@ wall conform to those zones.
 
 ## Territory Planning
 
-Planning begins with the mother-city zone containing the selected civic core.
-That seed is always included, so the minimum territory is one zone.
+Planning begins with the mother-city zone containing the hall, then the
+bonfire, then the city tile. That seed is always selected. The planner chooses
+exactly three more mother-owned zones through cardinal adjacency.
 
-The existing Cultiway-style building bounds and six-tile margin remain the
-desired size signal. The planner projects that desired enclosure onto the
-smallest connected set of complete mother-city zones that covers the desired
-core area. It removes unnecessary edge zones while preserving:
+Candidate four-zone sets are ranked deterministically:
 
-- the seed zone;
-- connectivity through cardinally adjacent zones;
-- all protected civic-core buildings needed by the new stronghold;
-- at least one retained zone for the mother city.
+- a complete 2 by 2 native-zone block containing the seed ranks first;
+- otherwise the set with the smallest bounding-box area ranks first;
+- ties prefer the smallest summed distance from the seed, then stable zone
+  coordinates.
 
-If the desired area fits in the seed zone, the stronghold receives exactly
-one zone. Additional zones are included only when the desired core enclosure
-crosses their native boundaries. Disconnected zones are never transferred.
+This produces a compact connected four-zone stronghold while allowing coastal,
+border, and irregular cities to use a non-rectangular four-zone shape when no
+2 by 2 block exists. The mother city must own at least five zones before the
+split, because it must retain at least one zone. The original city's usual
+growth threshold does not change the stronghold size: successful creation
+always yields `stronghold.zones.Count == 4`.
+
+Preflight evaluates candidates in that ranking order and selects the first one
+whose terrain can support the required four-gate wall. A blocked coastal
+candidate therefore falls through to the next compact connected candidate
+instead of making the whole creation fail.
 
 ## Wall Planning
 
-The bandit stronghold receives a dedicated zone-aligned wall planner. It
-constructs the wooden wall from the outer tile edge of the selected zone
-union. Consequently, every non-wall tile reached from the stronghold center
-without crossing the perimeter belongs to a selected stronghold zone, and
-every tile immediately beyond the perimeter belongs to an unselected zone.
+The dedicated bandit wall planner constructs the wooden wall from the outer
+tile edge of the selected four-zone union. Consequently, every non-wall tile
+inside the perimeter belongs to the stronghold and every tile immediately
+beyond it remains outside the stronghold.
 
 Diagonal gaps are sealed using the existing Cultiway-style geometry rules.
 The wall keeps the existing four-direction gate rule: one three-tile opening
@@ -63,42 +70,62 @@ walls retain their current geometry.
 
 ## Creation And Persistence
 
-Preflight produces one authoritative plan containing the selected zones,
-closed wall perimeter, carved wall points, center zone, and retained
-mother-city zones. Commit creates the stronghold with the center zone, moves
-exactly the planned zones through original `City.addZone`, and then places
-the planned original wooden-wall tiles.
+Preflight produces one authoritative plan containing exactly four selected
+zones, the carved wall points, center zone, and retained mother-city zones.
+Commit creates the stronghold with the center zone, moves exactly the four
+planned zones through original `City.addZone`, and then places the original
+`wall_wild` wooden-wall tiles.
 
-`FixedZoneKeys` continues to persist the selected zone coordinates and
-`WallPoints` continues to persist the placed wall coordinates. Stronghold
-fall returns all persisted stronghold zones to the mother city through the
-existing transaction.
+`FixedZoneKeys` persists the four selected zone coordinates. Every persisted
+wall point also records the identifier of the top tile that construction
+replaced; an empty identifier represents no prior top tile. This state is
+written before the active phase and survives save/reload.
+
+Stronghold fall performs cleanup in this order:
+
+1. mark the state as falling;
+2. return residents and all four zones to the mother city;
+3. for each recorded wall point, restore its original top tile only when the
+   current tile is still `wall_wild`;
+4. mark the state completed and remove the stronghold city.
+
+The current-tile check preserves any later terrain replacement. Schema-2
+strongholds have no recorded original top type; they remove a surviving
+`wall_wild` by restoring `null`, exposing the native main terrain. Completed
+states do not run wall cleanup again.
 
 Existing saved strongholds are not migrated or rebuilt. Only strongholds
 created after this change use zone-aligned walls.
 
 ## Failure Handling
 
-Creation fails before mutation when no seed zone exists, the selected zones
-are disconnected, the mother would retain no zone, or a closed perimeter
-cannot be generated. Existing rollback restores zones, actors, walls, city
-ownership, and government state in reverse order.
+Creation fails before mutation when no seed zone exists, fewer than four
+connected mother-owned zones can be selected, the mother would retain no zone,
+or a four-gate perimeter cannot be generated. The failure log records the
+specific planning stage and relevant zone counts. Existing transactional
+rollback restores zones, actors, walls, city ownership, and government state
+in reverse order.
 
 ## Verification
 
-Pure geometry tests cover:
+Pure rule and geometry tests cover:
 
-- a one-zone stronghold and its exact perimeter;
-- expansion to multiple zones when the desired core crosses a zone edge;
-- removal of unnecessary edge zones;
+- exact selection of four zones from a larger city;
+- preference for a 2 by 2 block containing the civic-core zone;
+- deterministic compact fallback when no 2 by 2 block exists;
+- rejection with fewer than four connected zones or no retained mother zone;
 - cardinal connectivity and diagonal-gap sealing;
 - four three-tile cardinal gates without changing the closed logical
   enclosure;
-- rejection when the mother city would retain no zone.
+- exact prior-top restoration data for every planned wall point;
+- idempotent wall cleanup that ignores tiles no longer using `wall_wild`.
 
-Source/runtime guards reject the old 50-percent coverage rule and require the
-same selected zone set to drive both `City.addZone` and wall generation.
+Source/runtime guards reject flood-fill selection and require the same
+four-zone set to drive both `City.addZone` and wall generation. They also
+require `CompleteFall` to restore walls before removing the stronghold.
 
 After focused tests pass, build the net48 project, deploy the source tree with
 a timestamped backup, launch WorldBox visibly, and verify that a god-power
-stronghold shows only its wall-enclosed native zones under the city map mode.
+stronghold reports exactly four zones under the city map mode. Capture the
+stronghold and verify its city is removed, all four zones return to the mother,
+and the recorded wooden walls disappear without overwriting later terrain.
