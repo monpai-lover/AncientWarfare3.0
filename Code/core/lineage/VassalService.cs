@@ -831,6 +831,28 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("ABSORBED", 0),
                 ColumnVal.Create("END_REASON", ""));
 
+            if (VassalContractTierRules.IsLooseTributary(contractTier))
+            {
+                try
+                {
+                    TributarySettlementPersistence.InitializeNewRelation(
+                        DB, relationId, Date.getCurrentYear());
+                }
+                catch (Exception error)
+                {
+                    try
+                    {
+                        CloseRelation(relationId, "creation_rollback",
+                            absorbed: false);
+                    }
+                    catch { }
+                    ModClass.LogWarning(
+                        "Tributary settlement initialization failed: relation=" +
+                        relationId + " error=" + error.Message);
+                    return false;
+                }
+            }
+
             pVassal.data.set(LineageKeys.VASSAL_CONTRACT_TIER, contractTier);
             pVassal.data.set(LineageKeys.MILITARY_GOVERNORATE_SUBJECT_KIND,
                 (int)pSubjectKind);
@@ -1262,12 +1284,16 @@ namespace AncientWarfare3.core.lineage
             if (GetDirectVassalCount(pSuzerain) <= 0 &&
                 GetDirectTributaryCount(pSuzerain) <= 0) return;
 
+            TributarySettlementService.SettleDueRelations(pSuzerain);
+
             int year = Date.getCurrentYear();
             pSuzerain.data.get(LineageKeys.VASSAL_TRIBUTE_LAST_YEAR, out int lastYear, int.MinValue);
             if (lastYear == year) return;
             pSuzerain.data.set(LineageKeys.VASSAL_TRIBUTE_LAST_YEAR, year);
 
-            List<ActiveRelationDetails> relations = ReadDirectRelations(pSuzerain);
+            List<ActiveRelationDetails> relations = ReadDirectRelations(pSuzerain)
+                .Where(relation => VassalContractTierRules.CountsAsVassal(relation.contract_tier))
+                .ToList();
             if (relations.Count == 0) return;
             CentralizationEffects effects = CentralizationService.ReadSnapshot(pSuzerain).effects;
             CourtInstitutionEffects institution =
@@ -2393,6 +2419,17 @@ namespace AncientWarfare3.core.lineage
             if (pSuzerain?.data == null || pDelta == 0) return;
             int current = GetDirectTributaryCount(pSuzerain);
             pSuzerain.data.set(LineageKeys.TRIBUTARY_DIRECT_COUNT, Math.Max(0, current + pDelta));
+        }
+
+        internal static int GetTributaryCapitalGold(Kingdom pKingdom)
+        {
+            return GetCapitalGold(pKingdom);
+        }
+
+        internal static int TransferTributaryCapitalGold(Kingdom pSource,
+            Kingdom pTarget, int pRequested)
+        {
+            return TransferCapitalGold(pSource, pTarget, pRequested);
         }
 
         private static int GetCapitalGold(Kingdom pKingdom)

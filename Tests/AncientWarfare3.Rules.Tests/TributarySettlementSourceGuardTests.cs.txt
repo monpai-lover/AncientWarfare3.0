@@ -1,0 +1,57 @@
+using System.IO;
+
+internal static class TributarySettlementSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string vassalService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "VassalService.cs"));
+        string settlementPath = Path.Combine(root, "Code", "core",
+            "lineage", "TributarySettlementService.cs");
+        string create = Slice(vassalService, "private static bool SetVassalInternal(",
+            "public static bool CanInternalizeTributary(");
+        string annual = Slice(vassalService, "public static void SettleAnnualTribute(",
+            "public static VassalEffectiveTerms GetEffectiveRelationTerms(");
+
+        True(create.Contains(
+                "TributarySettlementPersistence.InitializeNewRelation("),
+            "new tributary receives due year");
+        True(annual.Contains(
+                "TributarySettlementService.SettleDueRelations(pSuzerain)"),
+            "annual entry delegates loose settlement");
+        True(annual.Contains(
+                "VassalContractTierRules.CountsAsVassal(relation.contract_tier)"),
+            "legacy annual loop is formal-only");
+        True(annual.IndexOf("SettleDueRelations", StringComparison.Ordinal) <
+             annual.IndexOf("VASSAL_TRIBUTE_LAST_YEAR", StringComparison.Ordinal),
+            "formal aggregate marker cannot suppress loose settlement");
+
+        True(File.Exists(settlementPath),
+            "tributary settlement service exists");
+        if (!File.Exists(settlementPath)) return;
+        string settlement = File.ReadAllText(settlementPath);
+        True(settlement.Contains(
+                "GetWarPowerScore(tributary, pIncludeVassals: true)"),
+            "tributary power includes formal vassals");
+        True(settlement.Contains(
+                "GetWarPowerScore(pSuzerain, pIncludeVassals: true)"),
+            "suzerain power includes formal vassals");
+    }
+
+    private static string Slice(string source, string start, string end)
+    {
+        int from = source.IndexOf(start, StringComparison.Ordinal);
+        int to = source.IndexOf(end, from < 0 ? 0 : from,
+            StringComparison.Ordinal);
+        if (from < 0 || to <= from)
+            throw new InvalidOperationException(
+                "Could not extract source section: " + start);
+        return source.Substring(from, to - from);
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+}

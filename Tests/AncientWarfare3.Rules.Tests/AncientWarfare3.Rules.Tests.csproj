@@ -430,6 +430,7 @@
     <Compile Include="..\..\Code\core\lineage\TributaryPaymentRules.cs" Link="Production\TributaryPaymentRules.cs" />
     <Compile Include="TributaryRelationPersistenceTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\TributarySettlementPersistence.cs" Link="Production\TributarySettlementPersistence.cs" />
+    <Compile Include="TributarySettlementSourceGuardTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\VassalContractTierRules.cs" Link="Production\VassalContractTierRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalRuntimeProjectionRules.cs" Link="Production\VassalRuntimeProjectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyProposalOpportunityRules.cs" Link="Production\DiplomacyProposalOpportunityRules.cs" />

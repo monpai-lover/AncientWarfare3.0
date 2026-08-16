@@ -13,6 +13,7 @@ if (args.Length == 1 && args[0] == "--tributary-protection-only")
 {
     TributaryPaymentRulesTests.Run();
     TributaryRelationPersistenceTests.Run();
+    TributarySettlementSourceGuardTests.Run();
     Console.WriteLine("Tributary paid protection tests passed.");
     return;
 }
