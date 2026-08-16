@@ -57,38 +57,25 @@ namespace AncientWarfare3.core.lineage
                 pFailureKey = "aw_bandit_stronghold_already_exists";
                 return false;
             }
-            if (!CultiwayStyleCityWallService.TryPlanDetailed(
-                    pMother, 1, true,
-                    out CultiwayStyleCityWallPlan wallPlan) ||
-                wallPlan.EnclosedLand.Count == 0)
-            {
-                pFailureKey = "aw_bandit_stronghold_wall_failed";
-                return false;
-            }
-
             List<TileZone> motherZones = pMother.zones
                 .Where(zone => zone != null && zone.city == pMother)
                 .Distinct().ToList();
-            if (motherZones.Count < 2)
+            if (motherZones.Count < 5)
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
+                LogPlanFailure("fewer_than_five_mother_zones",
+                    motherZones.Count, 0, pFailureKey);
                 return false;
             }
             var motherSet = new HashSet<TileZone>(motherZones);
-            var enclosedLand = new HashSet<CultiwayWallPoint>(
-                wallPlan.EnclosedLand);
             var facts = new List<BanditZoneFact>(motherZones.Count);
             foreach (TileZone zone in motherZones)
             {
-                int totalTiles = zone.tiles?.Count(tile => tile != null) ?? 0;
-                int enclosedTiles = zone.tiles?.Count(tile =>
-                    tile != null && enclosedLand.Contains(
-                        new CultiwayWallPoint(tile.x, tile.y))) ?? 0;
                 IEnumerable<string> neighbours = (zone.neighbours ??
                         Array.Empty<TileZone>())
                     .Where(motherSet.Contains).Select(ZoneKey);
-                facts.Add(new BanditZoneFact(ZoneKey(zone), enclosedTiles,
-                    totalTiles, neighbours));
+                facts.Add(BanditZoneFact.At(ZoneKey(zone), zone.x, zone.y,
+                    neighbours));
             }
             WorldTile cityTile = pMother.getTile();
             WorldTile strongholdCenter =
@@ -102,25 +89,49 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
-            HashSet<string> interiorKeys =
-                PeasantRebelBanditStrongholdRules.SelectZoneAlignedKeys(
-                    facts, ZoneKey(centerZone));
-            List<TileZone> interior = motherZones.Where(zone =>
-                interiorKeys.Contains(ZoneKey(zone))).ToList();
+            IReadOnlyList<IReadOnlyList<string>> candidates =
+                PeasantRebelBanditStrongholdRules.
+                    RankFourZoneCandidates(facts, ZoneKey(centerZone));
+            if (candidates.Count == 0)
+            {
+                pFailureKey = "aw_bandit_stronghold_split_failed";
+                LogPlanFailure("no_connected_four_zone_candidate",
+                    motherZones.Count, candidates.Count, pFailureKey);
+                return false;
+            }
+
+            List<TileZone> interior = null;
+            BanditZoneWallPlan zoneWallPlan = null;
+            foreach (IReadOnlyList<string> candidateKeys in candidates)
+            {
+                if (candidateKeys.Count != 4) continue;
+                List<TileZone> candidate = motherZones.Where(zone =>
+                    candidateKeys.Contains(ZoneKey(zone))).ToList();
+                if (candidate.Count != 4) continue;
+                if (!PeasantRebelBanditZoneWallService.TryPlan(
+                        pMother, candidate, strongholdCenter,
+                        out BanditZoneWallPlan candidateWall) ||
+                    candidateWall.WallPoints.Count == 0) continue;
+                interior = candidate;
+                zoneWallPlan = candidateWall;
+                break;
+            }
+            if (interior == null || zoneWallPlan == null)
+            {
+                pFailureKey = "aw_bandit_stronghold_wall_failed";
+                LogPlanFailure("no_wallable_four_zone_candidate",
+                    motherZones.Count, candidates.Count, pFailureKey);
+                return false;
+            }
+            var interiorSet = new HashSet<TileZone>(interior);
             List<TileZone> exterior = motherZones.Where(zone =>
-                !interiorKeys.Contains(ZoneKey(zone))).ToList();
+                !interiorSet.Contains(zone)).ToList();
             if (!PeasantRebelBanditStrongholdRules.IsViableSplit(
                     interior.Count, exterior.Count))
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
-                return false;
-            }
-            if (!PeasantRebelBanditZoneWallService.TryPlan(
-                    pMother, interior, strongholdCenter,
-                    out BanditZoneWallPlan zoneWallPlan) ||
-                zoneWallPlan.WallPoints.Count == 0)
-            {
-                pFailureKey = "aw_bandit_stronghold_wall_failed";
+                LogPlanFailure("invalid_exact_four_zone_split",
+                    motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
 
@@ -606,6 +617,15 @@ namespace AncientWarfare3.core.lineage
         {
             WorldTile center = pZone?.centerTile;
             return center == null ? "" : center.x + ":" + center.y;
+        }
+
+        private static void LogPlanFailure(string pStage,
+            int pMotherZoneCount, int pCandidateCount, string pFailureKey)
+        {
+            ModClass.LogWarning("Bandit stronghold plan failed: stage=" +
+                pStage + ", mother_zones=" + pMotherZoneCount +
+                ", candidates=" + pCandidateCount + ", failure=" +
+                pFailureKey);
         }
 
         private static int DistanceSquared(WorldTile pLeft,

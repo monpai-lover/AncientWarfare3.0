@@ -44,11 +44,12 @@ foreach ($token in @('CultiwayStyleCityWallPlan', 'TryPlanDetailed(',
     }
 }
 
-foreach ($token in @('TryPlanDetailed(', '.EnclosedLand',
-        'zone.tiles', 'enclosedTiles', 'totalTiles',
-        'new BanditZoneFact(ZoneKey(zone), enclosedTiles,',
-        'SelectZoneAlignedKeys(',
+foreach ($token in @('motherZones.Count < 5',
+        'RankFourZoneCandidates(',
+        'foreach (IReadOnlyList<string> candidateKeys in candidates)',
+        'candidateKeys.Count != 4', 'candidate.Count != 4',
         'PeasantRebelBanditZoneWallService.TryPlan(',
+        'interior.Count, exterior.Count',
         'InteriorZones = interior',
         'WallPoints = zoneWallPlan.WallPoints.ToList()',
         'FixedZoneKeys = interior.Select(ZoneKey)')) {
@@ -57,18 +58,19 @@ foreach ($token in @('TryPlanDetailed(', '.EnclosedLand',
     }
 }
 
-$selectionIndex = $strongholdService.IndexOf('SelectZoneAlignedKeys(')
+$selectionIndex = $strongholdService.IndexOf('RankFourZoneCandidates(')
 $wallIndex = $strongholdService.IndexOf(
     'PeasantRebelBanditZoneWallService.TryPlan(')
 if ($selectionIndex -lt 0 -or $wallIndex -le $selectionIndex) {
-    throw 'Stronghold must select native zones before planning its wall'
+    throw 'Stronghold must rank exact-four candidates before planning walls'
 }
 
 foreach ($forbidden in @('wallPoints.Min(', 'wallPoints.Max(',
         'center.x > minX', 'center.y > minY',
-        'IsMajorityEnclosed', 'SelectInteriorZoneKeys(')) {
-    if ($strongholdService.Contains($forbidden) -or
-        $strongholdRules.Contains($forbidden)) {
+        'IsMajorityEnclosed', 'SelectInteriorZoneKeys(',
+        'SelectZoneAlignedKeys(', 'TryPlanDetailed(',
+        'EnclosedLand', 'enclosedTiles')) {
+    if ($strongholdService.Contains($forbidden)) {
         throw "Rejected stronghold zone rule remains: $forbidden"
     }
 }

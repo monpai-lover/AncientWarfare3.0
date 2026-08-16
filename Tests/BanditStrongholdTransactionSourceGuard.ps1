@@ -12,7 +12,7 @@ if (-not (Test-Path -LiteralPath $servicePath)) {
 
 $plan = Get-Content -Raw -Encoding UTF8 $planPath
 $service = Get-Content -Raw -Encoding UTF8 $servicePath
-foreach ($token in @('TryPlan(', 'CultiwayStyleCityWallService.TryPlan',
+foreach ($token in @('TryPlan(', 'PeasantRebelBanditZoneWallService.TryPlan',
         'TopTileLibrary.wall_wild', 'IsViableSplit', 'FixedZoneKeys',
         'ReserveMotherActor', 'MotherCoreTile')) {
     if (($plan + $service) -notmatch [regex]::Escape($token)) {
