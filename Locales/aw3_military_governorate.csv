@@ -1,6 +1,7 @@
 key,cz,en,ch
 aw_military_governorate,设置节度军镇,Create Military Command,設置節度軍鎮
 aw_military_governorate Description,选择本国边境城市并任命大将建立军镇,Select a frontier city and appoint a general to establish a military command,選擇本國邊境城市並任命大將建立軍鎮
+aw_military_governorate_description,选择本国边境城市并任命大将建立军镇,Select a frontier city and appoint a general to establish a military command,選擇本國邊境城市並任命大將建立軍鎮
 aw_military_governorate_window,节度军镇,Military Command,節度軍鎮
 aw_military_governorate_choose_general,选择镇守大将,Choose the commanding general,選擇鎮守大將
 aw_military_governorate_general_stats,功绩 {0}  忠诚 {1}  野心 {2},Merit {0}  Loyalty {1}  Ambition {2},功績 {0}  忠誠 {1}  野心 {2}
