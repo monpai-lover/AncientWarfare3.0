@@ -22,6 +22,26 @@ internal static class ArmyRtsCaptainCombatRulesTests
                 targetAlive: true, targetHostile: true,
                 withinEnvelope: false),
             "a target outside the bounded encounter envelope is cleared");
+        Assert(ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: true, targetHostile: true,
+                sameIsland: true, combatOwned: true),
+            "an RTS member retains a hostile target outside the captain envelope");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: false, targetHostile: true,
+                sameIsland: true, combatOwned: true),
+            "a dead member target is rejected");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: true, targetHostile: false,
+                sameIsland: true, combatOwned: true),
+            "a friendly member target is rejected");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: true, targetHostile: true,
+                sameIsland: false, combatOwned: true),
+            "a cross-island member target is rejected");
+        Assert(!ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: true, targetHostile: true,
+                sameIsland: true, combatOwned: false),
+            "a target is released after RTS combat ownership ends");
         Assert(ArmyRtsCaptainCombatRules.ShouldEnterCombat(
                 alreadyInCombat: false, engagedCombatants: 3,
                 liveCombatants: 10, captainEngaged: false),
@@ -183,9 +203,9 @@ internal static class ArmyRtsCaptainCombatRulesTests
         string memberBehaviour = memberBehaviourStart >= 0
             ? behaviour.Substring(memberBehaviourStart)
             : string.Empty;
-        Assert(memberBehaviour.Contains("IsValidCaptainCombatTarget(",
+        Assert(memberBehaviour.Contains("IsValidMemberCombatTarget(",
                    StringComparison.Ordinal) &&
-               memberBehaviour.Contains("FindCaptainCombatTarget(",
+               memberBehaviour.Contains("FindMemberCombatTarget(",
                    StringComparison.Ordinal) &&
                memberBehaviour.Contains("pActor.makeWait(0.15f);",
                    StringComparison.Ordinal) &&
@@ -193,7 +213,7 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    StringComparison.Ordinal) &&
                !memberBehaviour.Contains("RestoreMemberFollowAfterCombatLull(",
                    StringComparison.Ordinal),
-            "member combat mirrors captain target search and waits inside combat after a transient target miss");
+            "member combat keeps its own chase target and waits inside combat after a transient target miss");
         int assignedTargetStart = controller.IndexOf(
             "internal static bool IsValidAssignedCombatTarget(",
             StringComparison.Ordinal);
@@ -205,12 +225,18 @@ internal static class ArmyRtsCaptainCombatRulesTests
             ? controller.Substring(assignedTargetStart,
                 assignedTargetEnd - assignedTargetStart)
             : string.Empty;
-        Assert(!assignedTargetBody.Contains(
+        Assert(assignedTargetBody.Contains(
                    "ArmyRtsContent.MemberCombatTaskId",
+                   StringComparison.Ordinal) &&
+               assignedTargetBody.Contains("IsValidMemberCombatTarget(",
                    StringComparison.Ordinal) &&
                assignedTargetBody.Contains("IsValidCaptainCombatTarget(",
                    StringComparison.Ordinal),
-            "the shared attack stage applies the working captain target contract to ordinary soldiers");
+            "the shared attack stage keeps separate captain and member target contracts");
+        Assert(controller.Contains(
+                   "bool behaviourTarget = IsValidMemberCombatTarget(actor,",
+                   StringComparison.Ordinal),
+            "field engagement counts a member target outside the captain envelope");
         int enterFieldStart = controller.IndexOf(
             "private static void EnterFieldCombat(",
             StringComparison.Ordinal);

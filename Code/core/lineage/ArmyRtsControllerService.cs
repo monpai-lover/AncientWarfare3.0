@@ -1851,6 +1851,26 @@ namespace AncientWarfare3.core.lineage
                     pCaptain, pTarget));
         }
 
+        internal static bool IsValidMemberCombatTarget(Actor pActor,
+            Actor pTarget)
+        {
+            bool actorsAlive = pActor?.data != null &&
+                               pTarget?.data != null &&
+                               !pActor.isRekt() && !pTarget.isRekt() &&
+                               pActor.isAlive() && pTarget.isAlive();
+            bool sameIsland = actorsAlive &&
+                              pActor.current_tile?.data != null &&
+                              pTarget.current_tile?.data != null &&
+                              pActor.current_tile.isSameIsland(
+                                  pTarget.current_tile) == true;
+            return ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
+                targetAlive: actorsAlive,
+                targetHostile: actorsAlive &&
+                               IsHostileCaptainTarget(pActor, pTarget),
+                sameIsland,
+                combatOwned: HasMemberCombatMission(pActor));
+        }
+
         private static bool IsViableSiegeCombatTarget(Actor pActor,
             Actor pTarget)
         {
@@ -1889,6 +1909,30 @@ namespace AncientWarfare3.core.lineage
             return best;
         }
 
+        internal static Actor FindMemberCombatTarget(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.current_tile?.data == null ||
+                !HasMemberCombatMission(pActor)) return null;
+            Actor best = null;
+            int bestDistance = int.MaxValue;
+            try
+            {
+                foreach (Actor candidate in Finder.getUnitsFromChunk(
+                             pActor.current_tile, 2, 10))
+                {
+                    if (!IsValidMemberCombatTarget(pActor, candidate))
+                        continue;
+                    int distance = Toolbox.SquaredDistTile(
+                        pActor.current_tile, candidate.current_tile);
+                    if (distance >= bestDistance) continue;
+                    bestDistance = distance;
+                    best = candidate;
+                }
+            }
+            catch { }
+            return best;
+        }
+
         internal static bool HasActiveTargetCitySiege(Actor pActor)
         {
             return TryGetActiveTargetCitySiege(pActor, out _, out _);
@@ -1897,9 +1941,11 @@ namespace AncientWarfare3.core.lineage
         internal static bool IsValidAssignedCombatTarget(Actor pActor,
             Actor pTarget)
         {
-            return HasActiveTargetCitySiege(pActor)
-                ? IsValidSiegeCombatTarget(pActor, pTarget)
-                : IsValidCaptainCombatTarget(pActor, pTarget);
+            if (HasActiveTargetCitySiege(pActor))
+                return IsValidSiegeCombatTarget(pActor, pTarget);
+            if (pActor?.isTask(ArmyRtsContent.MemberCombatTaskId) == true)
+                return IsValidMemberCombatTarget(pActor, pTarget);
+            return IsValidCaptainCombatTarget(pActor, pTarget);
         }
 
         internal static bool IsValidSiegeCombatTarget(Actor pActor,
@@ -2262,8 +2308,8 @@ namespace AncientWarfare3.core.lineage
         private static bool HasValidMemberCombatTarget(Actor pActor)
         {
             Actor attackTarget = pActor?.attack_target?.a;
-            if (IsValidCaptainCombatTarget(pActor, attackTarget)) return true;
-            return IsValidCaptainCombatTarget(pActor,
+            if (IsValidMemberCombatTarget(pActor, attackTarget)) return true;
+            return IsValidMemberCombatTarget(pActor,
                 pActor?.beh_actor_target?.a);
         }
 
@@ -4513,14 +4559,21 @@ namespace AncientWarfare3.core.lineage
                     out RuntimeState runtime)) return false;
 
             Actor captain = SafeCaptain(army);
+            bool contactIsCaptain = pContactActor == captain;
             Actor combatTarget = pContactActor?.attack_target?.a;
-            if (!IsValidCaptainCombatTarget(pContactActor, combatTarget))
+            bool validContactTarget = contactIsCaptain
+                ? IsValidCaptainCombatTarget(pContactActor, combatTarget)
+                : IsValidMemberCombatTarget(pContactActor, combatTarget);
+            if (!validContactTarget)
+            {
                 combatTarget = pContactActor?.beh_actor_target?.a;
-            bool validCaptainTarget = IsValidCaptainCombatTarget(
-                pContactActor, combatTarget);
+                validContactTarget = contactIsCaptain
+                    ? IsValidCaptainCombatTarget(pContactActor, combatTarget)
+                    : IsValidMemberCombatTarget(pContactActor, combatTarget);
+            }
             if (!ArmyRtsFieldCombatRules.ShouldRequestFieldCombatFromP0(
                     missionActive, runtime.FieldCombatReleased,
-                    pContactActor == captain, validCaptainTarget))
+                    contactIsCaptain, validContactTarget))
                 return runtime.FieldCombatReleased;
             if (runtime.SiegeCombatActive ||
                 ArmyRtsTransportService.HasActiveVoyage(army) ||
@@ -4573,7 +4626,7 @@ namespace AncientWarfare3.core.lineage
                 if (!IsLiveCombatantActor(actor)) continue;
                 pLiveCombatants++;
                 bool immediateAttack = HasImmediateCombatPriority(actor);
-                bool behaviourTarget = IsValidCaptainCombatTarget(actor,
+                bool behaviourTarget = IsValidMemberCombatTarget(actor,
                     actor.beh_actor_target?.a);
                 if (ArmyRtsFieldCombatRules.IsMemberEngaged(
                         immediateAttack, behaviourTarget)) pEngaged++;
