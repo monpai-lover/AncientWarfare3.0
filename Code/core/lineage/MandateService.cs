@@ -2057,6 +2057,20 @@ namespace AncientWarfare3.core.lineage
                    !after.active;
         }
 
+        internal static bool TryRefundMandateValue(Kingdom pKingdom,
+            int pCost, string pEventType)
+        {
+            if (pCost <= 0 || pKingdom?.data == null ||
+                !MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession)) return false;
+            MandateReport before = ReadReport();
+            if (!before.active || before.kingdom_id != pKingdom.id) return false;
+            ChangeMandate(pKingdom, pCost, pEventType);
+            MandateReport after = ReadReport();
+            return after.mandate_value == before.mandate_value + pCost ||
+                   !after.active;
+        }
+
         private static void HandleMandateCollapseThreshold(Kingdom pKingdom,
             int pMandateValue, bool pChaosTimeout, int pCurrentYear)
         {

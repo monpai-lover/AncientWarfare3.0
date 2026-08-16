@@ -422,7 +422,8 @@ namespace AncientWarfare3.core.lineage
                 return false;
             return PeasantRebelBanditStateStore.TryResolveActive(
                        pCity.kingdom, out PeasantRebelBanditStrongholdState
-                           state) && state.StrongholdCityId == pCity.getID();
+                           state) && IsTrackedStrongholdCity(state,
+                               pCity.getID());
         }
 
         internal static bool HasActiveStronghold(Kingdom pKingdom)
@@ -443,7 +444,15 @@ namespace AncientWarfare3.core.lineage
             return PeasantRebelBanditStateStore.TryResolveActive(
                        pCity.kingdom,
                        out PeasantRebelBanditStrongholdState state) &&
-                   state.StrongholdCityId == pCity.getID();
+                   IsTrackedStrongholdCity(state, pCity.getID());
+        }
+
+        private static bool IsTrackedStrongholdCity(
+            PeasantRebelBanditStrongholdState pState, long pCityId)
+        {
+            return pState != null && pCityId > 0 &&
+                (pState.StrongholdCityId == pCityId ||
+                 pState.InheritedStrongholdCityIds.Contains(pCityId));
         }
 
         internal static string ComposeCeremonialTitle(Kingdom pKingdom,
@@ -540,21 +549,26 @@ namespace AncientWarfare3.core.lineage
             Kingdom bandit = pCity.kingdom;
             if (!PeasantRebelBanditStateStore.TryRead(bandit,
                     out PeasantRebelBanditStrongholdState state) ||
-                state.StrongholdCityId != pCity.getID() ||
+                !IsTrackedStrongholdCity(state, pCity.getID()) ||
                 state.Phase != BanditStrongholdPhase.Active &&
                 state.Phase != BanditStrongholdPhase.Falling &&
                 state.Phase != BanditStrongholdPhase.Completed)
                 return true;
+            bool isPrimaryStronghold = state.StrongholdCityId ==
+                pCity.getID();
             if (PeasantRebelBanditAnnexationRules.CanAnnex(
                     PeasantRebelBanditStateStore.TryResolveActive(
                         pOccupier, out _),
-                    state.Phase == BanditStrongholdPhase.Active, true,
+                    state.Phase == BanditStrongholdPhase.Active &&
+                        (isPrimaryStronghold || state.InheritedStrongholdCityIds
+                            .Contains(pCity.getID())), true,
                     pOccupier != bandit))
             {
                 pHandled = CompleteBanditAnnexation(pCity, bandit,
                     pOccupier, state);
                 return !pHandled;
             }
+            if (!isPrimaryStronghold) return true;
             pHandled = true;
             if (!CanMutate()) return false;
             QueueFall(pCity.getID(), pOccupier?.getID() ?? -1L);
@@ -584,7 +598,14 @@ namespace AncientWarfare3.core.lineage
                 }
                 pState.Phase = BanditStrongholdPhase.Completed;
                 pState.SuppressorKingdomId = pAttacker.getID();
-                PeasantRebelBanditStateStore.Clear(pDefender);
+                if (pState.StrongholdCityId == pStronghold.getID())
+                    PeasantRebelBanditStateStore.Clear(pDefender);
+                else
+                {
+                    pState.InheritedStrongholdCityIds.Remove(
+                        pStronghold.getID());
+                    PeasantRebelBanditStateStore.Write(pDefender, pState);
+                }
                 HistoryWriter.TryRecordCity(pStronghold, pAttacker,
                     CityEvent.BANDIT_STRONGHOLD_ESTABLISHED,
                     HistoryText.City(pStronghold, pAttacker) +

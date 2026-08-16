@@ -46,18 +46,37 @@ namespace AncientWarfare3.core.lineage
                 !MandateBorderDecisionRules.CanExecute(
                     MandateBorderDecisionUsageService.ReadUses(report.period_id),
                     report.mandate_value)) return false;
-            if (!MandateBorderWallRefreshService.Activate(pMandate))
+            if (!MandateBorderDecisionUsageService.TryRecordUse(
+                    report.period_id)) return false;
+            if (!MandateService.TrySpendMandateValue(pMandate,
+                    MandateBorderDecisionRules.MandateCost,
+                    "mandate_border_defense_cost"))
+            {
+                MandateBorderDecisionUsageService.TryRollbackUse(
+                    report.period_id);
                 return false;
+            }
+            if (!MandateBorderWallRefreshService.Activate(pMandate))
+            {
+                RefundDecisionCost(pMandate, report.period_id);
+                return false;
+            }
             bool applied = ReinforceBorder(pMandate, YEARLY_GUARD_CAP,
                     true, YEARLY_TOWER_CAP, "decision")
                 || CityEconomyService.TryGetLatestCachedForeignLandBorder(
                     pMandate, out bool hasBorder) && hasBorder;
-            if (!applied) return false;
-            if (!MandateService.TrySpendMandateValue(pMandate,
-                    MandateBorderDecisionRules.MandateCost,
-                    "mandate_border_defense_cost")) return false;
-            return MandateBorderDecisionUsageService.TryRecordUse(
-                report.period_id);
+            if (applied) return true;
+            RefundDecisionCost(pMandate, report.period_id);
+            return false;
+        }
+
+        private static void RefundDecisionCost(Kingdom pMandate,
+            long pPeriodId)
+        {
+            MandateService.TryRefundMandateValue(pMandate,
+                MandateBorderDecisionRules.MandateCost,
+                "mandate_border_defense_refund");
+            MandateBorderDecisionUsageService.TryRollbackUse(pPeriodId);
         }
 
         public static void OnMandateWarStarted(War pWar)

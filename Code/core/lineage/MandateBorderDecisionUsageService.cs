@@ -50,6 +50,27 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        internal static bool TryRollbackUse(long pPeriodId)
+        {
+            if (!CanMutate() || pPeriodId <= 0 || DB == null) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " +
+                    DynastyPeriodTableItem.GetTableName() +
+                    " SET BORDER_DEFENSE_USES=BORDER_DEFENSE_USES-1 " +
+                    "WHERE DYNASTY_ID=@id AND BORDER_DEFENSE_USES>0";
+                command.Parameters.AddWithValue("@id", pPeriodId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Mandate border use rollback failed: " +
+                                    e.Message);
+                return false;
+            }
+        }
+
         private static bool CanMutate()
         {
             return MandateAuthorityMutationRules.CanMutate(
