@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.lineage
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public bool Activated { get; set; }
+        public long SourceKingdomId { get; set; } = -1L;
         public Dictionary<long, MandateBorderCityWallManifest> Cities
             { get; set; } =
             new Dictionary<long, MandateBorderCityWallManifest>();

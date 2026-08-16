@@ -1,0 +1,22 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class MandateBorderDecisionRulesTests
+{
+    public static void Run()
+    {
+        True(MandateBorderDecisionRules.CanExecute(0, 20), "exact cost is enough");
+        True(MandateBorderDecisionRules.CanExecute(1, 100), "second use is allowed");
+        False(MandateBorderDecisionRules.CanExecute(2, 100), "third use is blocked");
+        False(MandateBorderDecisionRules.CanExecute(0, 19), "insufficient mandate is blocked");
+        Equal(1, MandateBorderDecisionRules.NextUseCount(0), "success consumes a dynasty use");
+        Equal(0, MandateBorderDecisionRules.RemainingMandate(20), "success spends twenty mandate");
+    }
+
+    private static void True(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
+    private static void False(bool value, string message) { if (value) throw new InvalidOperationException(message); }
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual)) throw new InvalidOperationException(message + ": expected " + expected + ", got " + actual);
+    }
+}

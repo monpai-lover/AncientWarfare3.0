@@ -2042,6 +2042,21 @@ namespace AncientWarfare3.core.lineage
                     false, Date.getCurrentYear());
         }
 
+        internal static bool TrySpendMandateValue(Kingdom pKingdom,
+            int pCost, string pEventType, string pContent = null)
+        {
+            if (pCost <= 0 || pKingdom?.data == null ||
+                !MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession)) return false;
+            MandateReport before = ReadReport();
+            if (!before.active || before.kingdom_id != pKingdom.id ||
+                before.mandate_value < pCost) return false;
+            ChangeMandate(pKingdom, -pCost, pEventType, pContent);
+            MandateReport after = ReadReport();
+            return after.mandate_value == before.mandate_value - pCost ||
+                   !after.active;
+        }
+
         private static void HandleMandateCollapseThreshold(Kingdom pKingdom,
             int pMandateValue, bool pChaosTimeout, int pCurrentYear)
         {

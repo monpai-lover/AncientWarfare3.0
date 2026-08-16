@@ -28,6 +28,7 @@ namespace AncientWarfare3.core.lineage
         public static bool CanDeclareWar(bool attackerBandit,
             bool defenderBandit, bool attackerIsOrigin)
         {
+            if (attackerBandit && defenderBandit) return true;
             if (attackerBandit) return false;
             return !defenderBandit || attackerIsOrigin;
         }

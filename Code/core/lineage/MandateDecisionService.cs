@@ -238,6 +238,13 @@ namespace AncientWarfare3.core.lineage
             switch (pDef.Id)
             {
                 case "aw_mandate_decision_border_defense":
+                    {
+                        MandateReport report = MandateService.ReadReport();
+                        if (!MandateBorderDecisionRules.CanExecute(
+                                MandateBorderDecisionUsageService.ReadUses(
+                                    report.period_id), report.mandate_value))
+                            return false;
+                    }
                     if (CityEconomyService.TryGetLatestCachedForeignLandBorder(
                             pKingdom, out bool hasBorder) && !hasBorder)
                         return false;

@@ -12,11 +12,15 @@
     <Compile Include="PeasantRebelRouteRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelRouteRules.cs" Link="Production\PeasantRebelRouteRules.cs" />
     <Compile Include="PeasantRebelBanditStrongholdRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditAnnexationRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditSpawnRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditPressureRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditPressureRules.cs" Link="Production\PeasantRebelBanditPressureRules.cs" />
     <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditAnnexationRules.cs" Link="Production\PeasantRebelBanditAnnexationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditSpawnRules.cs" Link="Production\PeasantRebelBanditSpawnRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditZoneWallRules.cs" Link="Production\PeasantRebelBanditZoneWallRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditRaidRules.cs" Link="Production\PeasantRebelBanditRaidRules.cs" />
     <Compile Include="CultiwayStyleWallGeometryRulesTests.cs.txt" />
@@ -24,10 +28,12 @@
     <Compile Include="CultiwayStyleFrontierWallGeometryRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\CultiwayStyleFrontierWallGeometryRules.cs" Link="Production\CultiwayStyleFrontierWallGeometryRules.cs" />
     <Compile Include="MandateBorderWallRulesTests.cs.txt" />
+    <Compile Include="MandateBorderDecisionRulesTests.cs.txt" />
     <Compile Include="MandateBorderWallRefreshRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\MandateBorderWallState.cs" Link="Production\MandateBorderWallState.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateBorderWallRefreshRules.cs" Link="Production\MandateBorderWallRefreshRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateBorderWallRules.cs" Link="Production\MandateBorderWallRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateBorderDecisionRules.cs" Link="Production\MandateBorderDecisionRules.cs" />
     <Compile Include="PeasantRebelOutlawNameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelOutlawNameRules.cs" Link="Production\PeasantRebelOutlawNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />

@@ -87,6 +87,8 @@ aw_mandate_decision_idle_desc,点击切换为可执行的天朝决议,Click to s
 aw_mandate_decision_click_cycle,点击切换天朝决议,Click to cycle Mandate decision,点击切换天朝决议
 aw_mandate_decision_border_defense,整备边防,Reinforce Border Defense,整备边防
 aw_mandate_decision_border_defense_desc,以天朝决议整备法理边界，修筑边墙并在兵力充足时抽调边军,Prepare legal frontiers by building border walls and assigning border troops when manpower is sufficient,以天朝决议整备法理边界，修筑边墙并在兵力充足时抽调边军
+aw_mandate_border_uses,本朝边防,Border decisions this dynasty,本朝邊防
+aw_mandate_border_cost,天命消耗,Mandate cost,天命消耗
 aw_mandate_decision_sacrifice_gamble,赌大斋戒,Gamble Grand Sacrifice,賭大齋戒
 aw_mandate_decision_sacrifice_gamble_desc,高风险大祭。合格时吉39% 平60% 凶1%；不合格时吉25% 平65% 凶10%。吉兆天命+12 皇权+6 威望+8且五年每年+2；凶兆效果相反。,High risk rite. Qualified odds are 39% auspicious / 60% neutral / 1% ominous; unqualified odds are 25% / 65% / 10%. An auspicious result grants Mandate +12 Authority +6 Prestige +8 and +2 yearly for five years; an ominous result reverses these effects.,高風險大祭。合格時吉39% 平60% 兇1%；不合格時吉25% 平65% 兇10%。吉兆天命+12 皇權+6 威望+8且五年每年+2；兇兆效果相反。
 aw_mandate_decision_sacrifice_moderate,中庸斋戒,Moderate Grand Sacrifice,中庸齋戒

@@ -109,6 +109,8 @@ namespace AncientWarfare3.core.lineage
                     new System.Collections.Generic.Dictionary<string, int>();
             pState.SuppressionExpiryByKingdomId ??=
                 new System.Collections.Generic.Dictionary<long, int>();
+            pState.InheritedStrongholdCityIds ??=
+                new System.Collections.Generic.List<long>();
             pState.Pressure = System.Math.Max(0, System.Math.Min(
                 PeasantRebelBanditPressureRules.MaximumPressure,
                 pState.Pressure));

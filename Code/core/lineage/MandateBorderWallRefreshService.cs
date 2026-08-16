@@ -14,8 +14,32 @@ namespace AncientWarfare3.core.lineage
             if (!CanMutate() || pMandate?.data == null) return false;
             MandateBorderWallState state =
                 MandateBorderWallStateStore.Read(pMandate);
+            if (!state.Activated)
+                state = AdoptPreviousWallState(pMandate, state);
             state.Activated = true;
+            state.SourceKingdomId = pMandate.getID();
             return MandateBorderWallStateStore.Write(pMandate, state);
+        }
+
+        private static MandateBorderWallState AdoptPreviousWallState(
+            Kingdom pMandate, MandateBorderWallState pCurrent)
+        {
+            if (pCurrent == null || World.world?.kingdoms == null)
+                return pCurrent ?? new MandateBorderWallState();
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null || kingdom == pMandate) continue;
+                MandateBorderWallState previous =
+                    MandateBorderWallStateStore.Read(kingdom);
+                if (!previous.Activated) continue;
+                pCurrent.Cities = previous.Cities ??
+                    new Dictionary<long, MandateBorderCityWallManifest>();
+                pCurrent.SourceKingdomId = kingdom.getID();
+                previous.Activated = false;
+                MandateBorderWallStateStore.Write(kingdom, previous);
+                return pCurrent;
+            }
+            return pCurrent;
         }
 
         internal static bool IsActivated(Kingdom pMandate)

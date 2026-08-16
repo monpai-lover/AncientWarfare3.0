@@ -425,6 +425,19 @@ namespace AncientWarfare3.ui.windows
                 ? AW_L10n.Text("aw_mandate_sacrifice_yearly_spend", "\u672C\u5E74\u6295\u5165")
                 : AW_L10n.Text("aw_policy_yearly_gain", "\u5E74\u589E\u957F");
             string qualification = "";
+            string borderLimit = "";
+            if (pDef.Id == "aw_mandate_decision_border_defense")
+            {
+                MandateReport report = MandateService.ReadReportReadOnly();
+                int uses = MandateBorderDecisionUsageService.ReadUses(
+                    report.period_id);
+                borderLimit = "\n" + AW_L10n.Text("aw_mandate_border_uses",
+                    "本朝边防") + ": " + uses + "/" +
+                    MandateBorderDecisionRules.MaximumUsesPerDynasty +
+                    "\n" + AW_L10n.Text("aw_mandate_border_cost",
+                        "天命消耗") + ": " +
+                    MandateBorderDecisionRules.MandateCost;
+            }
             if (pDef.SacrificeLevel.HasValue)
             {
                 string value = MandateSacrificeService.IsQualified(pKingdom)
@@ -440,6 +453,7 @@ namespace AncientWarfare3.ui.windows
                    "\n" + AW_L10n.Text("aw_policy_remaining", "\u5269\u4F59") + ": " + Mathf.CeilToInt(remaining) +
                    "\n" + yearlyLabel + ": " +
                    MandateDecisionService.EstimateYearlyGain(pKingdom, pDef).ToString("0.0") +
+                   borderLimit +
                    qualification +
                    "\n" + AW_L10n.Text("aw_mandate_decision_click_cycle", "\u70B9\u51FB\u5207\u6362\u5929\u671D\u51B3\u8BAE");
         }

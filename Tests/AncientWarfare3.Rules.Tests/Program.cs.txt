@@ -46,6 +46,7 @@ if (args.Length == 1 && args[0] == "--cultiway-wall")
     CultiwayStyleFrontierWallGeometryRulesTests.Run();
     MandateBorderWallRulesTests.Run();
     MandateBorderWallRefreshRulesTests.Run();
+    MandateBorderDecisionRulesTests.Run();
     Console.WriteLine("Cultiway wall geometry rules passed.");
     return;
 }
@@ -67,6 +68,8 @@ if (args.Length == 1 && args[0] == "--peasant-rebel-routes")
 if (args.Length == 1 && args[0] == "--bandit-stronghold")
 {
     PeasantRebelBanditStrongholdRulesTests.Run();
+    PeasantRebelBanditAnnexationRulesTests.Run();
+    PeasantRebelBanditSpawnRulesTests.Run();
     PeasantRebelBanditZoneWallRulesTests.Run();
     PeasantRebelBanditRaidRulesTests.Run();
     Console.WriteLine("Bandit stronghold and raid rules passed.");

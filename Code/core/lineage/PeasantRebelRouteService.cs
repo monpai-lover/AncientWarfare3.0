@@ -348,6 +348,11 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool CanAcquireCity(Kingdom pRecipient, City pCity)
         {
+            if (pRecipient?.data != null && pCity?.kingdom?.data != null &&
+                pCity.kingdom != pRecipient &&
+                IsBanditOrEntering(pRecipient) &&
+                PeasantRebelBanditStrongholdService.IsStrongholdCity(pCity))
+                return true;
             if (PeasantRebelBanditStrongholdService.HasActiveStronghold(
                     pRecipient))
                 return PeasantRebelBanditStrongholdService.
@@ -369,6 +374,15 @@ namespace AncientWarfare3.core.lineage
             bool attackerHasSuppressionRight = defenderBandit &&
                 Behaviors[PeasantRebelRouteIds.Bandit].
                     CanReceiveDirectWar(pDefender, pAttacker);
+            if (attackerBandit && defenderBandit &&
+                PeasantRebelBanditStrongholdService.HasActiveStronghold(
+                    pAttacker) &&
+                PeasantRebelBanditStrongholdService.IsStrongholdKingdom(
+                    pDefender))
+            {
+                pBypassTruce = true;
+                return true;
+            }
             if (!PeasantRebelRouteRules.CanDeclareWar(attackerBandit,
                     defenderBandit, attackerHasSuppressionRight))
             {

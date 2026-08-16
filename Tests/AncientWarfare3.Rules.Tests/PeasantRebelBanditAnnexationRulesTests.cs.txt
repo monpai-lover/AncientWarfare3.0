@@ -1,0 +1,17 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditAnnexationRulesTests
+{
+    public static void Run()
+    {
+        True(PeasantRebelBanditAnnexationRules.CanAnnex(true, true, true, true), "two active bandit strongholds may annex");
+        False(PeasantRebelBanditAnnexationRules.CanAnnex(true, true, false, true), "ordinary defender uses suppression");
+        False(PeasantRebelBanditAnnexationRules.CanAnnex(true, true, true, false), "non-stronghold city cannot be annexed");
+        True(PeasantRebelBanditAnnexationRules.ShouldPreserveStronghold(true), "annexation preserves the stronghold");
+        False(PeasantRebelBanditAnnexationRules.ShouldPreserveStronghold(false), "suppression destroys the stronghold");
+    }
+
+    private static void True(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
+    private static void False(bool value, string message) { if (value) throw new InvalidOperationException(message); }
+}

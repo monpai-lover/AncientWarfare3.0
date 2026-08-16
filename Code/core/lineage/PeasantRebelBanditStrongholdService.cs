@@ -431,6 +431,21 @@ namespace AncientWarfare3.core.lineage
                 out _);
         }
 
+        internal static bool IsStrongholdKingdom(Kingdom pKingdom)
+        {
+            return HasActiveStronghold(pKingdom);
+        }
+
+        internal static bool IsStrongholdCity(City pCity)
+        {
+            if (pCity?.data == null || pCity.kingdom?.data == null)
+                return false;
+            return PeasantRebelBanditStateStore.TryResolveActive(
+                       pCity.kingdom,
+                       out PeasantRebelBanditStrongholdState state) &&
+                   state.StrongholdCityId == pCity.getID();
+        }
+
         internal static string ComposeCeremonialTitle(Kingdom pKingdom,
             bool pHeir)
         {
@@ -530,10 +545,61 @@ namespace AncientWarfare3.core.lineage
                 state.Phase != BanditStrongholdPhase.Falling &&
                 state.Phase != BanditStrongholdPhase.Completed)
                 return true;
+            if (PeasantRebelBanditAnnexationRules.CanAnnex(
+                    PeasantRebelBanditStateStore.TryResolveActive(
+                        pOccupier, out _),
+                    state.Phase == BanditStrongholdPhase.Active, true,
+                    pOccupier != bandit))
+            {
+                pHandled = CompleteBanditAnnexation(pCity, bandit,
+                    pOccupier, state);
+                return !pHandled;
+            }
             pHandled = true;
             if (!CanMutate()) return false;
             QueueFall(pCity.getID(), pOccupier?.getID() ?? -1L);
             return false;
+        }
+
+        private static bool CompleteBanditAnnexation(City pStronghold,
+            Kingdom pDefender, Kingdom pAttacker,
+            PeasantRebelBanditStrongholdState pState)
+        {
+            if (!CanMutate() || pStronghold?.data == null ||
+                pDefender?.data == null || pAttacker?.data == null) return false;
+            try
+            {
+                pStronghold.joinAnotherKingdom(pAttacker,
+                    pCaptured: false, pRebellion: false);
+                if (pStronghold.kingdom != pAttacker) return false;
+                if (PeasantRebelBanditStateStore.TryRead(pAttacker,
+                        out PeasantRebelBanditStrongholdState attackerState))
+                {
+                    if (!attackerState.InheritedStrongholdCityIds.Contains(
+                            pStronghold.getID()))
+                        attackerState.InheritedStrongholdCityIds.Add(
+                            pStronghold.getID());
+                    PeasantRebelBanditStateStore.Write(pAttacker,
+                        attackerState);
+                }
+                pState.Phase = BanditStrongholdPhase.Completed;
+                pState.SuppressorKingdomId = pAttacker.getID();
+                PeasantRebelBanditStateStore.Clear(pDefender);
+                HistoryWriter.TryRecordCity(pStronghold, pAttacker,
+                    CityEvent.BANDIT_STRONGHOLD_ESTABLISHED,
+                    HistoryText.City(pStronghold, pAttacker) +
+                    HistoryLocalizationRules.H(
+                        "aw_hist_bandit_stronghold_annexed"),
+                    HistoryTarget.Kingdom(pAttacker),
+                    "bandit-stronghold-annexed:" + pStronghold.getID());
+                return true;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Bandit stronghold annexation failed: " +
+                                    e.Message);
+                return false;
+            }
         }
 
         internal static bool IsHostileKingdom(Kingdom pBandit,

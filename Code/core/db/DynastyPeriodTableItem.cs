@@ -21,5 +21,6 @@ namespace AncientWarfare3.core.db
         public double start_time;
         [TableItemDef(pDefaultValue: "-1")] public double end_time;
         public string end_reason          = "";
+        [TableItemDef(pDefaultValue: "0")] public int border_defense_uses = 0;
     }
 }

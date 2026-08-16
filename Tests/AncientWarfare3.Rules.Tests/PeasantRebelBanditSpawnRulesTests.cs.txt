@@ -1,0 +1,27 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditSpawnRulesTests
+{
+    public static void Run()
+    {
+        True(PeasantRebelBanditSpawnRules.IsEligibleKingdom(true, false, false, false), "ordinary civilization is eligible");
+        False(PeasantRebelBanditSpawnRules.IsEligibleKingdom(true, true, false, false), "bandit realm is ineligible");
+        Equal(9L, PeasantRebelBanditSpawnRules.SelectCandidateCityId(new List<BanditLoyaltyCityCandidate>
+        {
+            new BanditLoyaltyCityCandidate(10, -51, true), new BanditLoyaltyCityCandidate(9, -51, true), new BanditLoyaltyCityCandidate(8, -50, true)
+        }), "lowest loyalty then city id wins");
+        Equal(-1L, PeasantRebelBanditSpawnRules.SelectCandidateCityId(new List<BanditLoyaltyCityCandidate>
+        {
+            new BanditLoyaltyCityCandidate(7, -50, true), new BanditLoyaltyCityCandidate(6, -90, false)
+        }), "only live cities below threshold qualify");
+    }
+
+    private static void True(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
+    private static void False(bool value, string message) { if (value) throw new InvalidOperationException(message); }
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual)) throw new InvalidOperationException(message + ": expected " + expected + ", got " + actual);
+    }
+}

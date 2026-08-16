@@ -41,13 +41,23 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ExecuteDecision(Kingdom pMandate)
         {
+            MandateReport report = MandateService.ReadReport();
+            if (report.period_id <= 0 ||
+                !MandateBorderDecisionRules.CanExecute(
+                    MandateBorderDecisionUsageService.ReadUses(report.period_id),
+                    report.mandate_value)) return false;
             if (!MandateBorderWallRefreshService.Activate(pMandate))
                 return false;
-            if (ReinforceBorder(pMandate, YEARLY_GUARD_CAP,
-                    true, YEARLY_TOWER_CAP, "decision"))
-                return true;
-            return CityEconomyService.TryGetLatestCachedForeignLandBorder(
-                       pMandate, out bool hasBorder) && hasBorder;
+            bool applied = ReinforceBorder(pMandate, YEARLY_GUARD_CAP,
+                    true, YEARLY_TOWER_CAP, "decision")
+                || CityEconomyService.TryGetLatestCachedForeignLandBorder(
+                    pMandate, out bool hasBorder) && hasBorder;
+            if (!applied) return false;
+            if (!MandateService.TrySpendMandateValue(pMandate,
+                    MandateBorderDecisionRules.MandateCost,
+                    "mandate_border_defense_cost")) return false;
+            return MandateBorderDecisionUsageService.TryRecordUse(
+                report.period_id);
         }
 
         public static void OnMandateWarStarted(War pWar)
