@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.presentation;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -97,6 +98,7 @@ namespace AncientWarfare3.core.lineage
             if (!entered) return false;
             pRebel.data.set(LineageKeys.MANDATE_REBEL_ROUTE, route.Id);
             RuntimeByKingdom[pRebel.getID()] = route.Id;
+            PeasantRebelAppearanceService.OnProjectionChanged(pRebel);
             return true;
         }
 
@@ -119,6 +121,7 @@ namespace AncientWarfare3.core.lineage
             if (!HasRouteName(pRebel, routeId)) return false;
             RulerAppellationService.RefreshLivingProjection(pRebel);
             KingdomRenameProjectionService.Refresh(pRebel);
+            PeasantRebelAppearanceService.OnProjectionChanged(pRebel);
             return true;
         }
 
@@ -173,6 +176,7 @@ namespace AncientWarfare3.core.lineage
             RenameForRoute(pRebel, route.Id);
             MandateRebelService.EnterFoundingRoute(pRebel, pOrigin,
                 pFoundingCity);
+            PeasantRebelAppearanceService.OnProjectionChanged(pRebel);
         }
 
         internal static bool TryApplyRouteName(Kingdom pKingdom,
@@ -240,6 +244,7 @@ namespace AncientWarfare3.core.lineage
             RulerAppellationService.RefreshLivingProjection(pKingdom);
             KingdomRenameProjectionService.Refresh(pKingdom);
             PeasantRebelFoundingRoute.RecordTransition(pKingdom, pOrigin);
+            PeasantRebelAppearanceService.OnProjectionChanged(pKingdom);
             if (pOrigin?.data != null && !pOrigin.isRekt())
                 MandateRebelService.StartExistingRebelWar(pOrigin,
                     pKingdom);
@@ -266,6 +271,7 @@ namespace AncientWarfare3.core.lineage
             RuntimeByKingdom[pRebel.getID()] = route.Id;
             RulerAppellationService.RefreshLivingProjection(pRebel);
             KingdomRenameProjectionService.Refresh(pRebel);
+            PeasantRebelAppearanceService.OnProjectionChanged(pRebel);
             return true;
         }
 
@@ -288,6 +294,7 @@ namespace AncientWarfare3.core.lineage
             RenameForRoute(pBandit, PeasantRebelRouteIds.Bandit);
             RulerAppellationService.RefreshLivingProjection(pBandit);
             KingdomRenameProjectionService.Refresh(pBandit);
+            PeasantRebelAppearanceService.OnProjectionChanged(pBandit);
             return HasRouteName(pBandit, PeasantRebelRouteIds.Bandit);
         }
 
@@ -445,12 +452,14 @@ namespace AncientWarfare3.core.lineage
                 if (authority)
                     EnsureCanonicalName(kingdom, resolvedRoute);
                 RulerAppellationService.RefreshLivingProjection(kingdom);
+                PeasantRebelAppearanceService.OnProjectionChanged(kingdom);
             }
         }
 
         internal static void RemoveRuntime(Kingdom pKingdom)
         {
             if (pKingdom == null) return;
+            PeasantRebelAppearanceService.OnProjectionChanged(pKingdom);
             RuntimeByKingdom.Remove(pKingdom.getID());
             RulerAppellationService.RemoveKingdom(pKingdom.getID());
         }
