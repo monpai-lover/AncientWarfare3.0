@@ -44,10 +44,10 @@ foreach ($token in @('CultiwayStyleCityWallPlan', 'TryPlanDetailed(',
     }
 }
 
-foreach ($token in @('motherZones.Count < 5',
-        'RankFourZoneCandidates(',
+foreach ($token in @('motherZones.Count < 10',
+        'RankNineZoneCandidates(',
         'foreach (IReadOnlyList<string> candidateKeys in candidates)',
-        'candidateKeys.Count != 4', 'candidate.Count != 4',
+        'candidateKeys.Count != 9', 'candidate.Count != 9',
         'PeasantRebelBanditZoneWallService.TryPlan(',
         'interior.Count, exterior.Count',
         'InteriorZones = interior',
@@ -58,11 +58,11 @@ foreach ($token in @('motherZones.Count < 5',
     }
 }
 
-$selectionIndex = $strongholdService.IndexOf('RankFourZoneCandidates(')
+$selectionIndex = $strongholdService.IndexOf('RankNineZoneCandidates(')
 $wallIndex = $strongholdService.IndexOf(
     'PeasantRebelBanditZoneWallService.TryPlan(')
 if ($selectionIndex -lt 0 -or $wallIndex -le $selectionIndex) {
-    throw 'Stronghold must rank exact-four candidates before planning walls'
+    throw 'Stronghold must rank exact-nine candidates before planning walls'
 }
 
 foreach ($forbidden in @('wallPoints.Min(', 'wallPoints.Max(',
