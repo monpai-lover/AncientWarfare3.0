@@ -20,12 +20,28 @@ foreach ($token in @('GateCenters', 'TowerAsset', 'TowerTiles')) {
     }
 }
 foreach ($token in @('ResolveTowerAsset(', 'getBuilding("order_watch_tower")',
+        'CanPlaceGateTower(', 'BuildPlacingType.Load',
         'World.world.buildings.addBuilding(', 'building.setKingdom(',
         'Towers.Add(', 'RemoveStrongholdTowers(',
         'World.world.buildings.removeObject(')) {
     if (-not $service.Contains($token)) {
         throw "Stronghold tower lifecycle is missing $token"
     }
+}
+
+$candidateStart = $service.IndexOf(
+    'foreach (IReadOnlyList<string> candidateKeys in candidates)')
+$candidateEnd = $service.IndexOf(
+    'if (interior == null || zoneWallPlan == null', $candidateStart)
+if ($candidateStart -lt 0 -or $candidateEnd -le $candidateStart) {
+    throw 'Could not isolate stronghold candidate selection'
+}
+$candidateSelection = $service.Substring($candidateStart,
+    $candidateEnd - $candidateStart)
+$towerCheckIndex = $candidateSelection.IndexOf('CanPlaceGateTower(')
+$acceptIndex = $candidateSelection.IndexOf('interior = candidate;')
+if ($towerCheckIndex -lt 0 -or $acceptIndex -le $towerCheckIndex) {
+    throw 'Each nine-zone candidate must validate gate towers before acceptance'
 }
 
 $createStart = $service.IndexOf('internal static bool TryCreate(')

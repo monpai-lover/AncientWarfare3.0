@@ -103,6 +103,9 @@ namespace AncientWarfare3.core.lineage
 
             List<TileZone> interior = null;
             BanditZoneWallPlan zoneWallPlan = null;
+            BuildingAsset towerAsset = ResolveTowerAsset(pRuler);
+            List<WorldTile> towerTiles = null;
+            bool foundWallableCandidate = false;
             foreach (IReadOnlyList<string> candidateKeys in candidates)
             {
                 if (candidateKeys.Count != 9) continue;
@@ -113,27 +116,26 @@ namespace AncientWarfare3.core.lineage
                         pMother, candidate, strongholdCenter,
                         out BanditZoneWallPlan candidateWall) ||
                     candidateWall.WallPoints.Count == 0) continue;
+                foundWallableCandidate = true;
+                List<WorldTile> candidateTowerTiles =
+                    candidateWall.GateCenters
+                        .Select(point => World.world.GetTile(
+                            point.X, point.Y))
+                        .Where(tile => tile != null).Distinct().ToList();
+                if (towerAsset == null || candidateTowerTiles.Count != 4 ||
+                    candidateTowerTiles.Any(tile => !CanPlaceGateTower(
+                        tile, towerAsset, pMother))) continue;
                 interior = candidate;
                 zoneWallPlan = candidateWall;
+                towerTiles = candidateTowerTiles;
                 break;
             }
             if (interior == null || zoneWallPlan == null)
             {
                 pFailureKey = "aw_bandit_stronghold_wall_failed";
-                LogPlanFailure("no_wallable_nine_zone_candidate",
-                    motherZones.Count, candidates.Count, pFailureKey);
-                return false;
-            }
-            BuildingAsset towerAsset = ResolveTowerAsset(pRuler);
-            List<WorldTile> towerTiles = zoneWallPlan.GateCenters
-                .Select(point => World.world.GetTile(point.X, point.Y))
-                .Where(tile => tile != null).Distinct().ToList();
-            if (towerAsset == null || towerTiles.Count != 4 ||
-                towerTiles.Any(tile => !World.world.buildings.canBuildFrom(
-                    tile, towerAsset, pMother, BuildPlacingType.New)))
-            {
-                pFailureKey = "aw_bandit_stronghold_wall_failed";
-                LogPlanFailure("unbuildable_gate_towers",
+                LogPlanFailure(foundWallableCandidate
+                        ? "unbuildable_gate_towers"
+                        : "no_wallable_nine_zone_candidate",
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
@@ -925,6 +927,15 @@ namespace AncientWarfare3.core.lineage
             catch { return null; }
         }
 
+        private static bool CanPlaceGateTower(WorldTile pTile,
+            BuildingAsset pAsset, City pMother)
+        {
+            return pTile != null && pAsset != null && pMother?.data != null &&
+                   World.world?.buildings != null &&
+                   World.world.buildings.canBuildFrom(pTile, pAsset,
+                       pMother, BuildPlacingType.Load);
+        }
+
         private static void PlaceTowers(Transaction pTransaction,
             City pStronghold)
         {
@@ -937,7 +948,7 @@ namespace AncientWarfare3.core.lineage
             {
                 Building building = World.world.buildings.addBuilding(
                     plan.TowerAsset, tile, pCheckForBuild: true,
-                    pSfx: false, pType: BuildPlacingType.New);
+                    pSfx: false, pType: BuildPlacingType.Load);
                 if (building?.data == null)
                     throw new InvalidOperationException(
                         "native gate tower creation failed");
