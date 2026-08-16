@@ -7,10 +7,10 @@ internal static class PeasantRebelBanditStrongholdRulesTests
 {
     public static void Run()
     {
-        RanksCenteredThreeByThreeFirst();
-        RejectsIncompleteThreeByThreeBlock();
-        RanksOffsetThreeByThreeContainingCore();
-        RequiresZonesOnBothSidesOfSplit();
+        RanksTwoByTwoContainingCore();
+        RejectsIncompleteTwoByTwoBlock();
+        RanksOffsetTwoByTwoContainingCore();
+        RequiresExactlyFourStrongholdZones();
         LocksBanditGrowthToPersistedZones();
         RestoresOnlyUnchangedStrongholdWalls();
         ResolvesSuppressionVictorByConfirmedPrecedence();
@@ -18,65 +18,63 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         ComposesStrongholdNamesAndTitles();
     }
 
-    private static void RanksCenteredThreeByThreeFirst()
+    private static void RanksTwoByTwoContainingCore()
     {
-        IReadOnlyList<BanditZoneFact> zones = Grid(0, 0, 3, 3);
+        IReadOnlyList<BanditZoneFact> zones = Grid(0, 0, 2, 2);
 
         IReadOnlyList<IReadOnlyList<string>> ranked =
-            PeasantRebelBanditStrongholdRules.RankNineZoneCandidates(
+            PeasantRebelBanditStrongholdRules.RankFourZoneCandidates(
                 zones, "1:1");
 
         True(ranked.Count > 0,
-            "a complete nine-zone candidate exists");
+            "a complete two-by-two candidate exists");
         True(new HashSet<string>(ranked[0]).SetEquals(new[]
         {
-            "0:0", "1:0", "2:0",
-            "0:1", "1:1", "2:1",
-            "0:2", "1:2", "2:2"
-        }), "the block centered on the civic core ranks first");
-        True(ranked.All(candidate => candidate.Count == 9),
-            "every ranked candidate contains exactly nine zones");
+            "0:0", "1:0", "0:1", "1:1"
+        }), "the stable two-by-two block containing the civic core ranks first");
+        True(ranked.All(candidate => candidate.Count == 4),
+            "every ranked candidate contains exactly four zones");
     }
 
-    private static void RejectsIncompleteThreeByThreeBlock()
+    private static void RejectsIncompleteTwoByTwoBlock()
     {
-        List<BanditZoneFact> zones = Grid(0, 0, 2, 2).ToList();
-        zones.RemoveAll(zone => zone.Key == "2:2");
+        List<BanditZoneFact> zones = Grid(0, 0, 1, 1).ToList();
+        zones.RemoveAll(zone => zone.Key == "1:1");
 
         IReadOnlyList<IReadOnlyList<string>> ranked =
-            PeasantRebelBanditStrongholdRules.RankNineZoneCandidates(
-                zones, "1:1");
+            PeasantRebelBanditStrongholdRules.RankFourZoneCandidates(
+                zones, "0:0");
 
         Equal(0, ranked.Count,
             "a connected but incomplete block cannot form a stronghold");
     }
 
-    private static void RanksOffsetThreeByThreeContainingCore()
+    private static void RanksOffsetTwoByTwoContainingCore()
     {
-        IReadOnlyList<BanditZoneFact> zones = Grid(5, 7, 7, 9);
+        IReadOnlyList<BanditZoneFact> zones = Grid(5, 7, 6, 8);
 
         IReadOnlyList<IReadOnlyList<string>> ranked =
-            PeasantRebelBanditStrongholdRules.RankNineZoneCandidates(
+            PeasantRebelBanditStrongholdRules.RankFourZoneCandidates(
                 zones, "5:7");
 
         Equal(1, ranked.Count,
-            "a corner core may belong to an offset three-by-three block");
-        Equal(9, ranked[0].Count,
-            "the offset candidate still contains exactly nine zones");
+            "a corner core may belong to an offset two-by-two block");
+        Equal(4, ranked[0].Count,
+            "the offset candidate still contains exactly four zones");
     }
 
-    private static void RequiresZonesOnBothSidesOfSplit()
+    private static void RequiresExactlyFourStrongholdZones()
     {
-        True(PeasantRebelBanditStrongholdRules.IsViableSplit(9, 1),
-            "nine stronghold zones and one mother zone are viable");
+        True(PeasantRebelBanditStrongholdRules.IsViableSplit(4, 1),
+            "four stronghold zones and one mother zone are viable");
+        True(PeasantRebelBanditStrongholdRules.IsViableSplit(4, 0),
+            "the protected mother city may temporarily retain zero zones");
         False(PeasantRebelBanditStrongholdRules.IsViableSplit(0, 3),
-            "stronghold needs exactly nine interior zones");
-        False(PeasantRebelBanditStrongholdRules.IsViableSplit(8, 2),
-            "eight stronghold zones are below the fixed size");
-        False(PeasantRebelBanditStrongholdRules.IsViableSplit(10, 1),
-            "ten stronghold zones exceed the fixed size");
-        False(PeasantRebelBanditStrongholdRules.IsViableSplit(9, 0),
-            "mother city needs an exterior zone");
+            "stronghold needs exactly four interior zones");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(3, 2),
+            "three stronghold zones are below the fixed size");
+        False(PeasantRebelBanditStrongholdRules.IsViableSplit(5, 1),
+            "five stronghold zones exceed the fixed size");
     }
 
     private static void LocksBanditGrowthToPersistedZones()

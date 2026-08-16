@@ -44,10 +44,10 @@ foreach ($token in @('CultiwayStyleCityWallPlan', 'TryPlanDetailed(',
     }
 }
 
-foreach ($token in @('motherZones.Count < 10',
-        'RankNineZoneCandidates(',
+foreach ($token in @('motherZones.Count < 4',
+        'RankFourZoneCandidates(',
         'foreach (IReadOnlyList<string> candidateKeys in candidates)',
-        'candidateKeys.Count != 9', 'candidate.Count != 9',
+        'candidateKeys.Count != 4', 'candidate.Count != 4',
         'PeasantRebelBanditZoneWallService.TryPlan(',
         'interior.Count, exterior.Count',
         'InteriorZones = interior',
@@ -58,11 +58,19 @@ foreach ($token in @('motherZones.Count < 10',
     }
 }
 
-$selectionIndex = $strongholdService.IndexOf('RankNineZoneCandidates(')
+$selectionIndex = $strongholdService.IndexOf('RankFourZoneCandidates(')
 $wallIndex = $strongholdService.IndexOf(
     'PeasantRebelBanditZoneWallService.TryPlan(')
 if ($selectionIndex -lt 0 -or $wallIndex -le $selectionIndex) {
-    throw 'Stronghold must rank exact-nine candidates before planning walls'
+    throw 'Stronghold must rank exact-four candidates before planning walls'
+}
+
+foreach ($token in @('exterior.Count == 0',
+        'pPlan.ReserveMotherActor != null',
+        'plan.ReserveMotherActor?.joinCity(')) {
+    if (-not $strongholdService.Contains($token)) {
+        throw "Zero-zone mother-city handling is missing $token"
+    }
 }
 
 foreach ($forbidden in @('wallPoints.Min(', 'wallPoints.Max(',

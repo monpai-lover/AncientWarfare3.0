@@ -61,10 +61,10 @@ namespace AncientWarfare3.core.lineage
             List<TileZone> motherZones = pMother.zones
                 .Where(zone => zone != null && zone.city == pMother)
                 .Distinct().ToList();
-            if (motherZones.Count < 10)
+            if (motherZones.Count < 4)
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
-                LogPlanFailure("fewer_than_ten_mother_zones",
+                LogPlanFailure("fewer_than_four_mother_zones",
                     motherZones.Count, 0, pFailureKey);
                 return false;
             }
@@ -92,11 +92,11 @@ namespace AncientWarfare3.core.lineage
 
             IReadOnlyList<IReadOnlyList<string>> candidates =
                 PeasantRebelBanditStrongholdRules.
-                    RankNineZoneCandidates(facts, ZoneKey(centerZone));
+                    RankFourZoneCandidates(facts, ZoneKey(centerZone));
             if (candidates.Count == 0)
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
-                LogPlanFailure("no_complete_nine_zone_candidate",
+                LogPlanFailure("no_complete_four_zone_candidate",
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
@@ -108,10 +108,10 @@ namespace AncientWarfare3.core.lineage
             bool foundWallableCandidate = false;
             foreach (IReadOnlyList<string> candidateKeys in candidates)
             {
-                if (candidateKeys.Count != 9) continue;
+                if (candidateKeys.Count != 4) continue;
                 List<TileZone> candidate = motherZones.Where(zone =>
                     candidateKeys.Contains(ZoneKey(zone))).ToList();
-                if (candidate.Count != 9) continue;
+                if (candidate.Count != 4) continue;
                 if (!PeasantRebelBanditZoneWallService.TryPlan(
                         pMother, candidate, strongholdCenter,
                         out BanditZoneWallPlan candidateWall) ||
@@ -135,7 +135,7 @@ namespace AncientWarfare3.core.lineage
                 pFailureKey = "aw_bandit_stronghold_wall_failed";
                 LogPlanFailure(foundWallableCandidate
                         ? "unbuildable_gate_towers"
-                        : "no_wallable_nine_zone_candidate",
+                        : "no_wallable_four_zone_candidate",
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
@@ -146,16 +146,18 @@ namespace AncientWarfare3.core.lineage
                     interior.Count, exterior.Count))
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
-                LogPlanFailure("invalid_exact_nine_zone_split",
+                LogPlanFailure("invalid_exact_four_zone_split",
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
 
             var exteriorSet = new HashSet<TileZone>(exterior);
-            Actor reserve = FindMotherReserve(pMother, pRuler, exteriorSet,
-                false) ?? FindMotherReserve(pMother, pRuler,
+            Actor reserve = exterior.Count == 0
+                ? null
+                : FindMotherReserve(pMother, pRuler, exteriorSet,
+                    false) ?? FindMotherReserve(pMother, pRuler,
                     new HashSet<TileZone>(interior), true);
-            if (reserve == null)
+            if (exterior.Count > 0 && reserve == null)
             {
                 pFailureKey = "aw_bandit_stronghold_population_failed";
                 return false;
@@ -168,7 +170,7 @@ namespace AncientWarfare3.core.lineage
                 .OrderBy(zone => DistanceSquared(zone.centerTile, cityTile))
                 .Select(zone => zone.centerTile)
                 .FirstOrDefault(tile => tile != null);
-            if (!hasExteriorCore && (coreTile == null ||
+            if (exterior.Count > 0 && !hasExteriorCore && (coreTile == null ||
                 AssetManager.buildings.get("bonfire") == null))
             {
                 pFailureKey = "aw_bandit_stronghold_core_failed";
@@ -195,7 +197,7 @@ namespace AncientWarfare3.core.lineage
                     .OrderBy(key => key, StringComparer.Ordinal).ToList(),
                 ReserveMotherActor = reserve,
                 MotherCoreTile = coreTile,
-                RequiresMotherCore = !hasExteriorCore
+                RequiresMotherCore = exterior.Count > 0 && !hasExteriorCore
             };
             return true;
         }
@@ -269,8 +271,9 @@ namespace AncientWarfare3.core.lineage
                         "cannot persist active phase");
                 if (!RecordEstablishment(stronghold,
                         plan.Context.Bandit))
-                    throw new InvalidOperationException(
-                        "cannot record stronghold establishment");
+                    ModClass.LogWarning(
+                        "Stronghold establishment chronicle failed; " +
+                        "world state was retained");
                 WorldLog.logNewCity(stronghold);
                 pStronghold = stronghold;
                 pFailureKey = "";
@@ -871,7 +874,8 @@ namespace AncientWarfare3.core.lineage
             }
             pPlan.Context.Ruler.joinCity(pStronghold);
             pPlan.Context.Ruler.spawnOn(pStronghold.getTile());
-            if (interior.Contains(
+            if (pPlan.ReserveMotherActor != null &&
+                pPlan.MotherCoreTile != null && interior.Contains(
                     pPlan.ReserveMotherActor.current_tile?.zone))
                 pPlan.ReserveMotherActor.spawnOn(pPlan.MotherCoreTile);
         }
@@ -895,7 +899,7 @@ namespace AncientWarfare3.core.lineage
                 plan.Context.Mother.joinAnotherKingdom(plan.Context.Origin,
                     pCaptured: false, pRebellion: false);
             }
-            plan.ReserveMotherActor.joinCity(plan.Context.Mother);
+            plan.ReserveMotherActor?.joinCity(plan.Context.Mother);
         }
 
         private static void EnsureMotherCore(Transaction pTransaction)

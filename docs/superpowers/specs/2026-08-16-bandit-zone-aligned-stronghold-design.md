@@ -29,17 +29,11 @@ Planning begins with the mother-city zone containing the hall, then the
 bonfire, then the city tile. That seed is always selected. The planner chooses
 exactly three more mother-owned zones through cardinal adjacency.
 
-Candidate four-zone sets are ranked deterministically:
-
-- a complete 2 by 2 native-zone block containing the seed ranks first;
-- otherwise the set with the smallest bounding-box area ranks first;
-- ties prefer the smallest summed distance from the seed, then stable zone
-  coordinates.
-
-This produces a compact connected four-zone stronghold while allowing coastal,
-border, and irregular cities to use a non-rectangular four-zone shape when no
-2 by 2 block exists. The mother city must own at least five zones before the
-split, because it must retain at least one zone. The original city's usual
+Candidate four-zone sets are the complete 2 by 2 native-zone blocks containing
+the seed. Ties use distance from the seed and stable zone coordinates. Irregular
+four-zone shapes are not accepted. A mother city with exactly four zones may
+transfer all four because the existing empty-city protection keeps the mother
+city alive until suppression returns the zones. The original city's usual
 growth threshold does not change the stronghold size: successful creation
 always yields `stronghold.zones.Count == 4`.
 
@@ -99,9 +93,9 @@ created after this change use zone-aligned walls.
 
 ## Failure Handling
 
-Creation fails before mutation when no seed zone exists, fewer than four
-connected mother-owned zones can be selected, the mother would retain no zone,
-or a four-gate perimeter cannot be generated. The failure log records the
+Creation fails before mutation when no seed zone exists, no complete 2 by 2
+mother-owned block containing it can be selected, or a four-gate perimeter
+cannot be generated. The failure log records the
 specific planning stage and relevant zone counts. Existing transactional
 rollback restores zones, actors, walls, city ownership, and government state
 in reverse order.
@@ -112,8 +106,8 @@ Pure rule and geometry tests cover:
 
 - exact selection of four zones from a larger city;
 - preference for a 2 by 2 block containing the civic-core zone;
-- deterministic compact fallback when no 2 by 2 block exists;
-- rejection with fewer than four connected zones or no retained mother zone;
+- rejection when no complete 2 by 2 block containing the seed exists;
+- acceptance when a protected mother city transfers its final four zones;
 - cardinal connectivity and diagonal-gap sealing;
 - four three-tile cardinal gates without changing the closed logical
   enclosure;

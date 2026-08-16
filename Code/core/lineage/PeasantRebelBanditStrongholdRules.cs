@@ -31,7 +31,7 @@ namespace AncientWarfare3.core.lineage
 
     public static class PeasantRebelBanditStrongholdRules
     {
-        private const int StrongholdZoneCount = 9;
+        private const int StrongholdZoneCount = 4;
 
         private sealed class RankedCandidate
         {
@@ -42,7 +42,7 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static IReadOnlyList<IReadOnlyList<string>>
-            RankNineZoneCandidates(IReadOnlyList<BanditZoneFact> zones,
+            RankFourZoneCandidates(IReadOnlyList<BanditZoneFact> zones,
                 string centerKey)
         {
             if (zones == null || zones.Count < StrongholdZoneCount ||
@@ -66,15 +66,15 @@ namespace AncientWarfare3.core.lineage
                 byCoordinate[(zone.X, zone.Y)] = zone;
 
             var ranked = new List<RankedCandidate>();
-            for (int offsetY = 0; offsetY < 3; offsetY++)
-            for (int offsetX = 0; offsetX < 3; offsetX++)
+            for (int offsetY = 0; offsetY < 2; offsetY++)
+            for (int offsetX = 0; offsetX < 2; offsetX++)
             {
                 int originX = center.X - offsetX;
                 int originY = center.Y - offsetY;
                 var facts = new List<BanditZoneFact>(StrongholdZoneCount);
                 bool complete = true;
-                for (int y = originY; y < originY + 3 && complete; y++)
-                for (int x = originX; x < originX + 3; x++)
+                for (int y = originY; y < originY + 2 && complete; y++)
+                for (int x = originX; x < originX + 2; x++)
                 {
                     if (!byCoordinate.TryGetValue((x, y),
                             out BanditZoneFact fact))
@@ -116,7 +116,7 @@ namespace AncientWarfare3.core.lineage
             int exteriorCount)
         {
             return interiorCount == StrongholdZoneCount &&
-                   exteriorCount > 0;
+                   exteriorCount >= 0;
         }
 
         public static bool ShouldRestoreWall(string currentTopTypeId)

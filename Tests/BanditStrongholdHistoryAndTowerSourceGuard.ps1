@@ -41,7 +41,7 @@ $candidateSelection = $service.Substring($candidateStart,
 $towerCheckIndex = $candidateSelection.IndexOf('CanPlaceGateTower(')
 $acceptIndex = $candidateSelection.IndexOf('interior = candidate;')
 if ($towerCheckIndex -lt 0 -or $acceptIndex -le $towerCheckIndex) {
-    throw 'Each nine-zone candidate must validate gate towers before acceptance'
+    throw 'Each four-zone candidate must validate gate towers before acceptance'
 }
 
 $createStart = $service.IndexOf('internal static bool TryCreate(')
