@@ -13,7 +13,7 @@
 ### Task 1: Release Peacetime Warriors to Vanilla AI
 
 **Files:**
-- Modify: `Tests/NobleRemarriageRulesTests.cs:160-188,366-406`
+- Modify: `Tests/AncientWarfare3.Rules.Tests/Program.cs.txt:4366-4478`
 - Modify: `Code/core/lineage/StandingArmyRules.cs:27-47`
 - Modify: `Code/core/lineage/StandingArmyPeacetimeService.cs:36-50,132-174,233-240`
 - Modify: `Code/patch/AW_EnlistPatch.cs:247-272`
@@ -47,7 +47,7 @@ Update source assertions so `AW_EnlistPatch.GetNextJob_Asylum_Prefix` calls `Rel
 Run:
 
 ```powershell
-dotnet run --project Tests\NobleRemarriageRulesTests.csproj --no-restore
+dotnet run --project Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tests.csproj --no-restore
 ```
 
 Expected: FAIL because complete peace still returns `true` for patrol selection and `ShouldReleaseLegacyPeacetimePatrol` does not exist.
@@ -120,7 +120,6 @@ Replace the standing-army `GetJob` interception block in `AW_EnlistPatch.GetNext
 Run:
 
 ```powershell
-dotnet run --project Tests\NobleRemarriageRulesTests.csproj --no-restore
 dotnet run --project Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tests.csproj --no-restore
 ```
 
@@ -129,7 +128,7 @@ Expected: both exit 0; no assertion still requires peaceful soldiers to receive 
 - [ ] **Step 5: Commit the peacetime fix**
 
 ```powershell
-git add -- Tests/NobleRemarriageRulesTests.cs Code/core/lineage/StandingArmyRules.cs Code/core/lineage/StandingArmyPeacetimeService.cs Code/patch/AW_EnlistPatch.cs
+git add -- Tests/AncientWarfare3.Rules.Tests/Program.cs.txt Code/core/lineage/StandingArmyRules.cs Code/core/lineage/StandingArmyPeacetimeService.cs Code/patch/AW_EnlistPatch.cs
 git commit -m "fix: release peacetime armies to vanilla AI"
 ```
 
@@ -236,7 +235,6 @@ git commit -m "fix: keep RTS members pursuing detected enemies"
 - [ ] **Step 1: Run the full required verification set**
 
 ```powershell
-dotnet run --project Tests\NobleRemarriageRulesTests.csproj --no-restore
 dotnet run --project Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tests.csproj --no-restore
 dotnet run --project Tests\ArmyRtsAdversarialSimulation\ArmyRtsAdversarialSimulation.csproj --no-restore
 $aw3Ref='C:\Users\24908\.nuget\packages\microsoft.netframework.referenceassemblies.net48\1.0.3\build\.NETFramework\v4.8'
