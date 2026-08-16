@@ -433,6 +433,59 @@ internal static class ArmyRtsCombatHandoffRulesTests
 
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"));
+        string combatBehaviours = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
+        int memberCombatStart = combatBehaviours.IndexOf(
+            "public sealed class BehArmyRtsMemberCombat",
+            StringComparison.Ordinal);
+        string memberCombatBody = memberCombatStart >= 0
+            ? combatBehaviours.Substring(memberCombatStart)
+            : string.Empty;
+        Assert(CountOccurrences(memberCombatBody,
+                   "IsValidMemberCombatTarget(") == 1 &&
+               memberCombatBody.Contains("FindMemberCombatTarget(",
+                   StringComparison.Ordinal) &&
+               !memberCombatBody.Contains("attack_target",
+                   StringComparison.Ordinal),
+            "member combat validates each selected target once without changing target sources");
+
+        int memberSearchStart = controller.IndexOf(
+            "internal static Actor FindMemberCombatTarget(",
+            StringComparison.Ordinal);
+        int memberSearchEnd = controller.IndexOf(
+            "internal static bool HasActiveTargetCitySiege(",
+            memberSearchStart, StringComparison.Ordinal);
+        string memberSearchBody = memberSearchStart >= 0 &&
+            memberSearchEnd > memberSearchStart
+                ? controller.Substring(memberSearchStart,
+                    memberSearchEnd - memberSearchStart)
+                : string.Empty;
+        Assert(memberSearchBody.Contains(
+                   "IsValidOwnedMemberCombatTarget(",
+                   StringComparison.Ordinal) &&
+               !memberSearchBody.Contains(
+                   "IsValidMemberCombatTarget(pActor, candidate)",
+                   StringComparison.Ordinal),
+            "member target search hoists actor ownership outside candidate validation");
+
+        int prepareP0Start = controller.IndexOf(
+            "internal static bool TryPrepareMilitaryP0Actor(",
+            StringComparison.Ordinal);
+        int prepareP0End = controller.IndexOf(
+            "private static bool IsMissionTargetEnemy(", prepareP0Start,
+            StringComparison.Ordinal);
+        string prepareP0Body = prepareP0Start >= 0 &&
+            prepareP0End > prepareP0Start
+                ? controller.Substring(prepareP0Start,
+                    prepareP0End - prepareP0Start)
+                : string.Empty;
+        int noCaptainTargetGuard = prepareP0Body.IndexOf(
+            "if (combatTarget == null)", StringComparison.Ordinal);
+        int engagementScan = prepareP0Body.IndexOf(
+            "CountFieldCombatEngagement(army", StringComparison.Ordinal);
+        Assert(noCaptainTargetGuard >= 0 && engagementScan >
+                   noCaptainTargetGuard,
+            "captain P0 scans the roster only when a missing captain target can permit combat exit");
         Assert(controller.Contains(
                    "ArmyRtsFieldCombatRules.IsMemberEngaged(\n                    HasImmediateCombatPriority(captain)",
                    StringComparison.Ordinal),
@@ -1190,5 +1243,18 @@ internal static class ArmyRtsCombatHandoffRulesTests
     private static void Assert(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(value, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 }

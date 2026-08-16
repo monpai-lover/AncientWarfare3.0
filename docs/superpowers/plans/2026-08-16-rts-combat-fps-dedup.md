@@ -67,8 +67,10 @@ Assert(memberSearchBody.Contains(
 
 - [ ] **Step 4: Guard the captain-P0 roster scan**
 
-Isolate `TryPrepareMilitaryP0Actor`, find `if (combatTarget == null)` and
-`CountFieldCombatEngagement(army`, and assert the guard occurs first:
+Isolate `TryPrepareMilitaryP0Actor` up to the following
+`private static bool IsMissionTargetEnemy` method, find
+`if (combatTarget == null)` and `CountFieldCombatEngagement(army`, and assert
+the guard occurs first:
 
 ```csharp
 Assert(noCaptainTargetGuard >= 0 && engagementScan > noCaptainTargetGuard,
