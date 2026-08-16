@@ -40,6 +40,14 @@ viability, once before iterating search candidates. Candidate-level validation
 continues to check target life, hostility, and island compatibility for every
 candidate. Public validation behavior remains unchanged.
 
+### Task admission
+
+Do not resolve a personal combat target when task admission is already fixed:
+captains and inactive missions reject the member task, active siege members use
+the siege task, and members in an already-released field battle use the member
+combat task even during a transient target miss. Preserve target validation for
+strategic movement, where a newly detected target decides whether combat starts.
+
 ## Explicit Non-Goals
 
 - Do not change or rate-limit RTS diagnostic output.

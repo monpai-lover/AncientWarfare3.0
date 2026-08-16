@@ -144,7 +144,16 @@ Finder.getUnitsFromChunk(pActor.current_tile, 2, 10)
 
 Also preserve squared-distance comparison and first-nearest tie behavior.
 
-- [ ] **Step 4: Run the rules harness**
+- [ ] **Step 4: Short-circuit task admission whose result is already fixed**
+
+Add a failing source guard for `TrySetMemberCombatTask` requiring the
+inactive-mission/captain rejection before target validation, the siege branch
+before `hasValidCombatTarget`, and a `fieldCombatReleased ? false` branch that
+avoids unused personal-target validation. Then refactor the method to satisfy
+those requirements while preserving target validation during strategic
+movement.
+
+- [ ] **Step 5: Run the rules harness**
 
 ```powershell
 dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj -c Release
@@ -152,7 +161,7 @@ dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tes
 
 Expected: member guards pass; captain-P0 roster-scan guard still fails.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```powershell
 git add Code/ai/behaviours/actor/BehArmyRtsCaptainCombat.cs Code/core/lineage/ArmyRtsControllerService.cs

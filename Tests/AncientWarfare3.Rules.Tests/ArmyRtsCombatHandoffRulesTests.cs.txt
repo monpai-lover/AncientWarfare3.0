@@ -468,6 +468,31 @@ internal static class ArmyRtsCombatHandoffRulesTests
                    StringComparison.Ordinal),
             "member target search hoists actor ownership outside candidate validation");
 
+        int setMemberCombatStart = controller.IndexOf(
+            "internal static bool TrySetMemberCombatTask(",
+            StringComparison.Ordinal);
+        int setMemberCombatEnd = controller.IndexOf(
+            "private static bool SetMemberSiegeCombatTask(",
+            setMemberCombatStart, StringComparison.Ordinal);
+        string setMemberCombatBody = setMemberCombatStart >= 0 &&
+            setMemberCombatEnd > setMemberCombatStart
+                ? controller.Substring(setMemberCombatStart,
+                    setMemberCombatEnd - setMemberCombatStart)
+                : string.Empty;
+        int fixedAdmissionGate = setMemberCombatBody.IndexOf(
+            "if (!missionActive || actorIsCaptain) return false;",
+            StringComparison.Ordinal);
+        int siegeAdmission = setMemberCombatBody.IndexOf(
+            "if (useSiegeCombatTask)", StringComparison.Ordinal);
+        int personalTargetValidation = setMemberCombatBody.IndexOf(
+            "bool hasValidCombatTarget", StringComparison.Ordinal);
+        Assert(fixedAdmissionGate >= 0 && siegeAdmission >
+                   fixedAdmissionGate && personalTargetValidation >
+                   siegeAdmission && setMemberCombatBody.Contains(
+                       "fieldCombatReleased\n                ? false\n                : HasValidMemberCombatTarget(pActor)",
+                       StringComparison.Ordinal),
+            "member task admission skips personal target work when mission, captain, siege, or released-field state fixes the result");
+
         int prepareP0Start = controller.IndexOf(
             "internal static bool TryPrepareMilitaryP0Actor(",
             StringComparison.Ordinal);
