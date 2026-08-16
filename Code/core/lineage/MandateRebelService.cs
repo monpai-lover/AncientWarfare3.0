@@ -309,6 +309,10 @@ namespace AncientWarfare3.core.lineage
                 target == KingdomPolicyDefs.ClassBandit ||
                 Array.IndexOf(KingdomPolicyDefs.ClassStates, target) < 0)
                 return false;
+            if (target != KingdomPolicyDefs.ClassRebel &&
+                target != KingdomPolicyDefs.ClassBandit &&
+                !PeasantRebelBanditStrongholdService.
+                    DestroyForOrdinaryGovernment(pKingdom)) return false;
 
             pKingdom.data.set(LineageKeys.MANDATE_REBEL, false);
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,

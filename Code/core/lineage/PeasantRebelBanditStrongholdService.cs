@@ -515,6 +515,91 @@ namespace AncientWarfare3.core.lineage
             return PeasantRebelBanditStateStore.Write(pKingdom, state);
         }
 
+        internal static bool DestroyForOrdinaryGovernment(Kingdom pKingdom)
+        {
+            if (!CanMutate() || pKingdom?.data == null || pKingdom.isRekt())
+                return false;
+            if (!PeasantRebelBanditStateStore.TryRead(pKingdom,
+                    out PeasantRebelBanditStrongholdState state)) return true;
+            City stronghold = ResolveCity(state.StrongholdCityId);
+            if (stronghold?.data == null || stronghold.kingdom != pKingdom)
+            {
+                PeasantRebelBanditStateStore.Clear(pKingdom);
+                return true;
+            }
+            City mother = ResolveCity(state.MotherCityId);
+            if (mother?.data == null || mother.isRekt() ||
+                mother == stronghold)
+            {
+                mother = pKingdom.getCities().FirstOrDefault(city =>
+                    city?.data != null && !city.isRekt() &&
+                    city != stronghold);
+                if (mother?.data == null) return false;
+                state.MotherCityId = mother.getID();
+            }
+            foreach (long inheritedCityId in state.InheritedStrongholdCityIds
+                         .ToList())
+            {
+                if (inheritedCityId <= 0 ||
+                    inheritedCityId == state.StrongholdCityId) continue;
+                City inherited = ResolveCity(inheritedCityId);
+                if (inherited?.data == null || inherited.kingdom != pKingdom)
+                    continue;
+                if (!DestroyInheritedStronghold(inherited, mother))
+                    return false;
+            }
+            if (!CompleteFall(pKingdom, stronghold, state,
+                    pSuppressor: null, pRecordSuppressionChronicle: false))
+                return false;
+            PeasantRebelBanditStateStore.Clear(pKingdom);
+            return true;
+        }
+
+        private static bool DestroyInheritedStronghold(City pStronghold,
+            City pMother)
+        {
+            if (pStronghold?.data == null || pMother?.data == null ||
+                pStronghold == pMother) return false;
+            try
+            {
+                WorldTile motherTile = pMother.getTile();
+                foreach (Actor actor in pStronghold.units.ToList())
+                {
+                    if (actor?.data == null || actor.isRekt()) continue;
+                    actor.joinCity(pMother);
+                    if (motherTile != null) actor.spawnOn(motherTile);
+                }
+                List<TileZone> zones = pStronghold.zones.ToList();
+                foreach (TileZone zone in zones)
+                    pMother.addZone(zone);
+                if (pStronghold.buildings != null &&
+                    World.world?.buildings != null)
+                    foreach (Building building in pStronghold.buildings
+                                 .ToList())
+                    {
+                        if (building?.data == null) continue;
+                        World.world.buildings.removeObject(building);
+                    }
+                foreach (TileZone zone in zones)
+                    if (zone?.tiles != null)
+                        foreach (WorldTile tile in zone.tiles)
+                            if (tile?.top_type == TopTileLibrary.wall_wild)
+                                tile.setTopTileType(null);
+                pMother.recalculateNeighbourZones();
+                pStronghold.recalculateNeighbourZones();
+                if (!pStronghold.isRekt())
+                    World.world.cities.removeObject(pStronghold);
+                return true;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Inherited bandit stronghold destruction failed: " +
+                    e.Message);
+                return false;
+            }
+        }
+
         internal static bool CanAcquireCity(Kingdom pKingdom, City pCity)
         {
             if (!PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
@@ -762,7 +847,8 @@ namespace AncientWarfare3.core.lineage
 
         private static bool CompleteFall(Kingdom pBandit,
             City pStronghold, PeasantRebelBanditStrongholdState pState,
-            Kingdom pSuppressor = null)
+            Kingdom pSuppressor = null,
+            bool pRecordSuppressionChronicle = true)
         {
             City mother = ResolveCity(pState.MotherCityId);
             if (pBandit?.data == null || pStronghold?.data == null ||
@@ -791,7 +877,8 @@ namespace AncientWarfare3.core.lineage
 
                 Kingdom suppressor = ResolveKingdom(
                     pState.SuppressorKingdomId);
-                if (!RecordSuppressionChronicles(pBandit, pStronghold,
+                if (pRecordSuppressionChronicle &&
+                    !RecordSuppressionChronicles(pBandit, pStronghold,
                         suppressor)) return false;
 
                 WorldTile motherTile = mother.getTile();
