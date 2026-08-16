@@ -25,11 +25,13 @@
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditPressureRules.cs" Link="Production\PeasantRebelBanditPressureRules.cs" />
     <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditAmnestyRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditAnnexationRules.cs" Link="Production\PeasantRebelBanditAnnexationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditSpawnRules.cs" Link="Production\PeasantRebelBanditSpawnRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditZoneWallRules.cs" Link="Production\PeasantRebelBanditZoneWallRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditRaidRules.cs" Link="Production\PeasantRebelBanditRaidRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditAmnestyRules.cs" Link="Production\PeasantRebelBanditAmnestyRules.cs" />
     <Compile Include="CultiwayStyleWallGeometryRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\CultiwayStyleWallGeometryRules.cs" Link="Production\CultiwayStyleWallGeometryRules.cs" />
     <Compile Include="CultiwayStyleFrontierWallGeometryRulesTests.cs.txt" />

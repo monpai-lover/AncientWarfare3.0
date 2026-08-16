@@ -49,7 +49,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         internal static int RefreshCitiesNow(Kingdom pMandate,
-            IEnumerable<City> pWallCities)
+            IEnumerable<City> pWallCities,
+            Func<Kingdom, bool> pIsFortificationTarget = null)
         {
             if (!CanMutate() || pMandate?.data == null) return 0;
             MandateBorderWallState state =
@@ -61,9 +62,11 @@ namespace AncientWarfare3.core.lineage
                 foreach (City city in pWallCities)
                     if (city?.data != null && !city.isRekt())
                         ids.Add(city.getID());
+            pIsFortificationTarget ??= BuildCurrentTargetPredicate(pMandate);
             int changed = 0;
             foreach (long cityId in ids.OrderBy(id => id))
-                changed += RefreshCity(pMandate, cityId);
+                changed += RefreshCity(pMandate, cityId,
+                    pIsFortificationTarget);
             return changed;
         }
 
@@ -108,15 +111,18 @@ namespace AncientWarfare3.core.lineage
                     Kingdom mandate = ResolveKingdom(pMandateId);
                     if (mandate?.data == null || !IsActivated(mandate))
                         return;
-                    RefreshCity(mandate, pCityId);
+                    RefreshCity(mandate, pCityId,
+                        BuildCurrentTargetPredicate(mandate));
                 });
         }
 
-        private static int RefreshCity(Kingdom pMandate, long pCityId)
+        private static int RefreshCity(Kingdom pMandate, long pCityId,
+            Func<Kingdom, bool> pIsFortificationTarget)
         {
             MandateBorderWallState state =
                 MandateBorderWallStateStore.Read(pMandate);
             if (!state.Activated) return 0;
+            pIsFortificationTarget ??= BuildCurrentTargetPredicate(pMandate);
             int changed = 0;
             if (state.Cities.TryGetValue(pCityId,
                     out MandateBorderCityWallManifest previous))
@@ -137,10 +143,9 @@ namespace AncientWarfare3.core.lineage
                     CollectWatchTowerFootprint(city);
                 if (wall != null && CultiwayStyleCityWallService.
                         TryPlanFrontier(city, WallWidth,
-                            kingdom => MandateBorderDefenseService.
-                                IsFortificationTarget(pMandate, kingdom),
-                            reserved, pCarveRoadPassages: false,
-                            out IReadOnlyList<CultiwayWallPoint> planned))
+                        pIsFortificationTarget,
+                        reserved, pCarveRoadPassages: false,
+                        out IReadOnlyList<CultiwayWallPoint> planned))
                 {
                     var manifest = new MandateBorderCityWallManifest
                     {
@@ -168,6 +173,24 @@ namespace AncientWarfare3.core.lineage
             }
             MandateBorderWallStateStore.Write(pMandate, state);
             return changed;
+        }
+
+        private static Func<Kingdom, bool> BuildCurrentTargetPredicate(
+            Kingdom pMandate)
+        {
+            int completedUses = 0;
+            try
+            {
+                MandateReport report = MandateService.ReadReport();
+                if (report?.period_id > 0)
+                    completedUses = MandateBorderDecisionUsageService.
+                        ReadUses(report.period_id);
+            }
+            catch { }
+            bool poorRelationOnly = MandateBorderWallRules.
+                ShouldUsePoorRelationTargets(completedUses);
+            return kingdom => MandateBorderDefenseService.
+                IsFortificationTarget(pMandate, kingdom, poorRelationOnly);
         }
 
         private static int RestoreManifest(

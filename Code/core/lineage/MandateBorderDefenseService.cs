@@ -42,10 +42,12 @@ namespace AncientWarfare3.core.lineage
         public static bool ExecuteDecision(Kingdom pMandate)
         {
             MandateReport report = MandateService.ReadReport();
+            int usesBeforeDecision = report.period_id <= 0
+                ? MandateBorderDecisionRules.MaximumUsesPerDynasty
+                : MandateBorderDecisionUsageService.ReadUses(report.period_id);
             if (report.period_id <= 0 ||
                 !MandateBorderDecisionRules.CanExecute(
-                    MandateBorderDecisionUsageService.ReadUses(report.period_id),
-                    report.mandate_value)) return false;
+                    usesBeforeDecision, report.mandate_value)) return false;
             if (!MandateBorderDecisionUsageService.TryRecordUse(
                     report.period_id)) return false;
             if (!MandateService.TrySpendMandateValue(pMandate,
@@ -62,7 +64,10 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             bool applied = ReinforceBorder(pMandate, YEARLY_GUARD_CAP,
-                    true, YEARLY_TOWER_CAP, "decision")
+                    true, YEARLY_TOWER_CAP, "decision",
+                    MandateBorderWallRules.
+                        ShouldUsePoorRelationTargetsForDecision(
+                            usesBeforeDecision))
                 || CityEconomyService.TryGetLatestCachedForeignLandBorder(
                     pMandate, out bool hasBorder) && hasBorder;
             if (applied) return true;
@@ -93,12 +98,19 @@ namespace AncientWarfare3.core.lineage
             if (!MandateBorderWallRefreshService.IsActivated(mandate))
                 return;
 
+            int completedUses = report.period_id <= 0
+                ? 0
+                : MandateBorderDecisionUsageService.ReadUses(
+                    report.period_id);
             ReinforceBorder(mandate, WAR_GUARD_CAP, true,
-                WAR_TOWER_CAP, "war");
+                WAR_TOWER_CAP, "war",
+                MandateBorderWallRules.ShouldUsePoorRelationTargets(
+                    completedUses));
         }
 
         private static bool ReinforceBorder(Kingdom pMandate,
-            int pGuardCap, bool pBuildWalls, int pTowerCap, string pReason)
+            int pGuardCap, bool pBuildWalls, int pTowerCap, string pReason,
+            bool pPoorRelationOnly)
         {
             if (pMandate?.data == null) return false;
             pGuardCap = LimitedGuardCap(pMandate, pGuardCap);
@@ -120,7 +132,9 @@ namespace AncientWarfare3.core.lineage
             }
             if (pBuildWalls)
                 result.walls += MandateBorderWallRefreshService.
-                    RefreshCitiesNow(pMandate, wallCities);
+                    RefreshCitiesNow(pMandate, wallCities,
+                        kingdom => IsFortificationTarget(pMandate, kingdom,
+                            pPoorRelationOnly));
             if (result.main_city == null && result.walls > 0)
                 result.main_city = wallCities[0];
 
@@ -544,6 +558,13 @@ namespace AncientWarfare3.core.lineage
         internal static bool IsFortificationTarget(Kingdom pMandate,
             Kingdom pNeighbour)
         {
+            return IsFortificationTarget(pMandate, pNeighbour,
+                pPoorRelationOnly: false);
+        }
+
+        internal static bool IsFortificationTarget(Kingdom pMandate,
+            Kingdom pNeighbour, bool pPoorRelationOnly)
+        {
             if (pMandate?.data == null || pNeighbour?.data == null)
                 return false;
             try
@@ -555,9 +576,17 @@ namespace AncientWarfare3.core.lineage
                 bool mandateTributary =
                     VassalService.GetTributarySuzerain(pNeighbour) ==
                     pMandate;
-                return MandateBorderWallRules.ShouldFortifyKingdom(
+                bool target = MandateBorderWallRules.ShouldFortifyKingdom(
                     true, !pNeighbour.isRekt(), pNeighbour.isNeutral(),
                     sameSystem, sameAlliance, mandateTributary);
+                if (!target || !pPoorRelationOnly) return target;
+                try
+                {
+                    int opinion = World.world.diplomacy.
+                        getOpinion(pMandate, pNeighbour).total;
+                    return MandateBorderWallRules.IsPoorRelation(opinion);
+                }
+                catch { return false; }
             }
             catch { return false; }
         }

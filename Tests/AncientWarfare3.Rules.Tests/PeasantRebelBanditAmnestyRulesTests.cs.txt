@@ -1,0 +1,30 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditAmnestyRulesTests
+{
+    internal static void Run()
+    {
+        Assert(PeasantRebelBanditAmnestyRules.CanAccept(
+                bandit: true, strongholdActive: true, originValid: true,
+                offeringIsOrigin: true, authoritative: true, applying: false),
+            "the origin may grant amnesty to an active bandit stronghold");
+        Assert(!PeasantRebelBanditAmnestyRules.CanAccept(
+                bandit: true, strongholdActive: true, originValid: true,
+                offeringIsOrigin: false, authoritative: true, applying: false),
+            "a third party cannot grant origin amnesty");
+        Assert(PeasantRebelBanditAmnestyRules.ShouldEndWars(true),
+            "accepted amnesty ends bandit wars");
+        Assert(PeasantRebelBanditAmnestyRules.ResolveSettlementClass(true) ==
+                "default",
+            "accepted amnesty restores the ordinary government class");
+        Assert(PeasantRebelBanditAmnestyRules.ResolveFailureKey(
+                false, false, false, false) == "not_bandit_stronghold",
+            "invalid target has a stable failure reason");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

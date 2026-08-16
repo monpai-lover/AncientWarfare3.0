@@ -67,6 +67,7 @@ if (args.Length == 1 && args[0] == "--peasant-rebel-routes")
 
 if (args.Length == 1 && args[0] == "--bandit-stronghold")
 {
+    PeasantRebelBanditAmnestyRulesTests.Run();
     PeasantRebelBanditStrongholdRulesTests.Run();
     PeasantRebelBanditAnnexationRulesTests.Run();
     PeasantRebelBanditSpawnRulesTests.Run();

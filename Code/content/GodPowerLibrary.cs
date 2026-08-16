@@ -21,6 +21,7 @@ namespace AncientWarfare3.content
         public const string GRANT_MANDATE = "aw_grant_mandate";
         public const string SPAWN_BANDIT_STRONGHOLD =
             "aw_spawn_bandit_stronghold";
+        public const string AMNESTY_BANDIT = "aw_amnesty_bandit";
 
         private static Kingdom _pendingVassal;
         private static readonly List<City> SchoolNameplateCandidates = new List<City>();
@@ -60,6 +61,7 @@ namespace AncientWarfare3.content
             RegisterMilitaryGovernoratePower();
             RegisterMandateGrantPower();
             RegisterBanditStrongholdPower();
+            RegisterBanditAmnestyPower();
         }
 
         public static void ClearRuntime()
@@ -937,6 +939,22 @@ namespace AncientWarfare3.content
             });
         }
 
+        private static void RegisterBanditAmnestyPower()
+        {
+            if (AssetManager.powers.get(AMNESTY_BANDIT) != null) return;
+            AssetManager.powers.add(new GodPower
+            {
+                id = AMNESTY_BANDIT,
+                name = AMNESTY_BANDIT,
+                path_icon = "ui/icons/iconPeace",
+                force_map_mode = MetaType.City,
+                unselect_when_window = true,
+                allow_unit_selection = false,
+                click_special_action = new PowerActionWithID(
+                    BanditAmnestyClick)
+            });
+        }
+
         private static bool BanditStrongholdClick(WorldTile pTile,
             string pPowerId)
         {
@@ -957,6 +975,24 @@ namespace AncientWarfare3.content
             }
             Tip(AW_L10n.Text("aw_bandit_stronghold_success",
                 "Bandit stronghold created") + ": " + stronghold.name);
+            return true;
+        }
+
+        private static bool BanditAmnestyClick(WorldTile pTile,
+            string pPowerId)
+        {
+            City city = pTile?.zone?.city;
+            Kingdom bandit = city?.kingdom;
+            Kingdom origin = PeasantRebelRouteService.ResolveOrigin(bandit);
+            if (!PeasantRebelBanditAmnestyService.TryAmnesty(bandit, origin,
+                    out string failureKey))
+            {
+                Tip(AW_L10n.Text(failureKey,
+                    "Bandit amnesty is unavailable"));
+                return false;
+            }
+            Tip(AW_L10n.Text("aw_bandit_amnesty_success",
+                "Bandit stronghold accepted amnesty"));
             return true;
         }
 
