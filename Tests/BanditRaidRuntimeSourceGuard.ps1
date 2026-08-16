@@ -36,9 +36,11 @@ if ($raid -notmatch 'Stage\s*!=\s*BanditRaidStage\.None' -or
     $raid -notmatch 'Stage\s*==\s*BanditRaidStage\.Cooldown') {
     throw 'Raid scheduling does not enforce one active mission per stronghold'
 }
-if ($raid -notmatch 'isWarrior\(\)' -or
-    $raid -notmatch '!actor\.isKing\(\)' -or
-    $raid -notmatch '!HeirService\.IsCurrentHeir') {
+if ($raid -notmatch 'PeasantRebelBanditRaidRules\.CanJoinRaid' -or
+    $raid -notmatch 'actor\.isWarrior\(\)' -or
+    $raid -notmatch 'actor\.isKing\(\)' -or
+    $raid -notmatch 'HeirService\.IsCurrentHeir' -or
+    $raid -notmatch 'actor\.isCarryingResources\(\)') {
     throw 'Raid party must use warriors without forcing ruler or heir'
 }
 if ($raid -notmatch 'OrderByDescending\([\s\S]{0,160}GeneralService\.IsGeneral') {

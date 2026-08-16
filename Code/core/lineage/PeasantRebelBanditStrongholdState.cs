@@ -49,6 +49,9 @@ namespace AncientWarfare3.core.lineage
         public int CarriedFood = 0;
         public Dictionary<string, int> CarriedFoodByResourceId =
             new Dictionary<string, int>();
+        public Dictionary<long, Dictionary<string, int>>
+            CarriedFoodByActorId =
+                new Dictionary<long, Dictionary<string, int>>();
         public int CooldownUntilYear = 0;
         public int LastRouteDistance = 0;
     }

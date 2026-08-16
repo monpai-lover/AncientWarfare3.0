@@ -13,6 +13,7 @@ $route = Get-Content -Raw -Encoding UTF8 $routePath
 $routeService = Get-Content -Raw -Encoding UTF8 $routeServicePath
 
 foreach ($token in @('CarriedFoodByResourceId',
+        'CarriedFoodByActorId',
         'SuppressionExpiryByKingdomId')) {
     if ($state -notmatch [regex]::Escape($token)) {
         throw "Persistent raid custody is missing $token"
@@ -21,11 +22,16 @@ foreach ($token in @('CarriedFoodByResourceId',
 if ($store -notmatch 'CarriedFoodByResourceId\s*\?\?=') {
     throw 'Legacy state normalization does not initialize food cargo'
 }
+if ($store -notmatch 'CarriedFoodByActorId\s*\?\?=') {
+    throw 'Legacy state normalization does not initialize actor cargo audit'
+}
 
 foreach ($token in @(
         'getTotalResourceSlots(', 'ResType.Food',
         'ResType.Ingredient_Food', '.takeResource(',
-        '.addResourcesToRandomStockpile(', 'CarriedFoodByResourceId',
+        '.isCarryingResources()', '.addToInventory(',
+        '.giveInventoryResourcesToCity()', 'CarriedFoodByActorId',
+        'DistributeCargo(',
         'PeasantRebelBanditRaidRules.StealableFood',
         'SuppressionExpiryByKingdomId', 'RestoreObservedInventory(',
         'PruneSuppressionRights(')) {
@@ -46,15 +52,19 @@ if ($takeIndex -lt 0 -or $lootedIndex -lt 0 -or $lootWriteIndex -lt 0) {
     throw 'Loot is not removed, placed in custody, and persisted'
 }
 
-$deliveryIndex = $raid.IndexOf('.addResourcesToRandomStockpile(')
-$cooldownIndex = $raid.LastIndexOf('BanditRaidStage.Cooldown',
-    $deliveryIndex)
-if ($deliveryIndex -lt 0 -or $cooldownIndex -lt 0 -or
-    $cooldownIndex -gt $deliveryIndex) {
-    throw 'Delivery must durably clear custody before adding food once'
+$deliveryIndex = $raid.IndexOf('.giveInventoryResourcesToCity()')
+$deliveryMethod = $raid.IndexOf('DeliverFoodAndBeginCooldown(')
+$cooldownIndex = $raid.IndexOf('BeginCooldown(', $deliveryIndex)
+if ($deliveryMethod -lt 0 -or $deliveryIndex -lt $deliveryMethod -or
+    $cooldownIndex -lt $deliveryIndex) {
+    throw 'Native carrier inventory must unload before cooldown'
 }
 if ($raid -notmatch 'survivors\.Count\s*==\s*0[\s\S]{0,260}CarriedFood') {
     throw 'Total party loss does not explicitly discard carried food'
+}
+if ($raid -match
+    'DeliverFoodAndBeginCooldown[\s\S]{0,1800}CarriedFoodByResourceId[\s\S]{0,800}addResourcesToRandomStockpile') {
+    throw 'Legacy virtual cargo must not be delivered directly to storage'
 }
 
 foreach ($token in @('OriginKingdomId', 'Date.getCurrentYear()',

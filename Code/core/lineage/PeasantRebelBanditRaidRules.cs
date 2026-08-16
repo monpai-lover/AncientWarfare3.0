@@ -39,6 +39,31 @@ namespace AncientWarfare3.core.lineage
             return Math.Min(8, availableWarriors);
         }
 
+        public static bool CanJoinRaid(bool alive, bool warrior,
+            bool ruler, bool heir, bool carryingResources)
+        {
+            return alive && warrior && !ruler && !heir &&
+                   !carryingResources;
+        }
+
+        public static IReadOnlyDictionary<long, int> DistributeCargo(
+            IEnumerable<long> actorIds, int amount)
+        {
+            long[] ordered = (actorIds ?? Enumerable.Empty<long>())
+                .Where(id => id > 0).Distinct().OrderBy(id => id).ToArray();
+            var result = new Dictionary<long, int>();
+            int total = Math.Max(0, amount);
+            if (ordered.Length == 0 || total == 0) return result;
+            int share = total / ordered.Length;
+            int remainder = total % ordered.Length;
+            for (int index = 0; index < ordered.Length; index++)
+            {
+                int actorShare = share + (index < remainder ? 1 : 0);
+                if (actorShare > 0) result[ordered[index]] = actorShare;
+            }
+            return result;
+        }
+
         public static int StealableFood(int strongholdFood,
             int strongholdPopulation, int targetFood, int targetPopulation)
         {

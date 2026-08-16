@@ -73,6 +73,7 @@ namespace AncientWarfare3.core.lineage
             state.Raid.TargetY = destination.y;
             state.Raid.CarriedFood = 0;
             state.Raid.CarriedFoodByResourceId.Clear();
+            state.Raid.CarriedFoodByActorId.Clear();
             state.Raid.LastRouteDistance = selected.RouteDistance;
             if (!PeasantRebelBanditStateStore.Write(pKingdom, state))
                 return;
@@ -123,6 +124,7 @@ namespace AncientWarfare3.core.lineage
             {
                 pState.Raid.CarriedFood = 0;
                 pState.Raid.CarriedFoodByResourceId.Clear();
+                pState.Raid.CarriedFoodByActorId.Clear();
                 BeginCooldown(pKingdom, pState, currentYear);
                 return;
             }
@@ -155,6 +157,14 @@ namespace AncientWarfare3.core.lineage
                     return;
                 case BanditRaidStage.Returning:
                     if (stronghold?.data == null || stronghold.isRekt())
+                    {
+                        BeginCooldown(pKingdom, pState, currentYear);
+                        return;
+                    }
+                    if (PruneLostCargoAudit(pKingdom, pState.Raid) &&
+                        !PeasantRebelBanditStateStore.Write(pKingdom,
+                            pState)) return;
+                    if (pState.Raid.CarriedFoodByActorId.Count == 0)
                     {
                         BeginCooldown(pKingdom, pState, currentYear);
                         return;
@@ -209,9 +219,11 @@ namespace AncientWarfare3.core.lineage
         {
             if (pStronghold?.units == null) return new List<Actor>();
             return pStronghold.units.Where(actor => actor?.data != null &&
-                    !actor.isRekt() && actor.isAlive() && actor.isWarrior() &&
-                    actor.kingdom == pKingdom && !actor.isKing() &&
-                    !HeirService.IsCurrentHeir(pKingdom, actor))
+                    !actor.isRekt() && actor.kingdom == pKingdom &&
+                    PeasantRebelBanditRaidRules.CanJoinRaid(
+                        actor.isAlive(), actor.isWarrior(), actor.isKing(),
+                        HeirService.IsCurrentHeir(pKingdom, actor),
+                        actor.isCarryingResources()))
                 .OrderByDescending(actor => GeneralService.IsGeneral(actor))
                 .ThenBy(actor => actor.getID()).ToList();
         }
@@ -258,6 +270,7 @@ namespace AncientWarfare3.core.lineage
             pRaid.TargetY = 0;
             pRaid.CarriedFood = 0;
             pRaid.CarriedFoodByResourceId.Clear();
+            pRaid.CarriedFoodByActorId.Clear();
             pRaid.LastRouteDistance = 0;
         }
 
@@ -273,9 +286,16 @@ namespace AncientWarfare3.core.lineage
             Dictionary<string, int> plan = BuildFoodCargo(pTarget,
                 requested);
             if (plan.Count == 0) return false;
+            List<Actor> carriers = ResolveSurvivors(pBandit, pState.Raid)
+                .Where(actor => IsInside(actor, pTarget) &&
+                                !actor.isCarryingResources())
+                .OrderBy(actor => actor.getID()).ToList();
+            if (carriers.Count == 0) return false;
             var observed = plan.Keys.ToDictionary(id => id,
                 id => SafeResourceAmount(pTarget, id));
             var removed = new Dictionary<string, int>();
+            var manifest = new Dictionary<long,
+                Dictionary<string, int>>();
             int totalRemoved = 0;
             bool durable = false;
             long victimId = pTarget.kingdom.getID();
@@ -295,7 +315,33 @@ namespace AncientWarfare3.core.lineage
                 }
                 if (totalRemoved <= 0) return false;
 
+                var carriersById = carriers.ToDictionary(
+                    actor => actor.getID());
+                foreach (KeyValuePair<string, int> item in removed)
+                {
+                    IReadOnlyDictionary<long, int> shares =
+                        PeasantRebelBanditRaidRules.DistributeCargo(
+                            carriersById.Keys, item.Value);
+                    foreach (KeyValuePair<long, int> share in shares)
+                    {
+                        Actor carrier = carriersById[share.Key];
+                        carrier.addToInventory(item.Key, share.Value);
+                        if (!manifest.TryGetValue(share.Key,
+                                out Dictionary<string, int> cargo))
+                        {
+                            cargo = new Dictionary<string, int>(
+                                StringComparer.Ordinal);
+                            manifest[share.Key] = cargo;
+                        }
+                        cargo[item.Key] = share.Value;
+                    }
+                }
+                if (manifest.Count == 0)
+                    throw new InvalidOperationException(
+                        "native cargo distribution produced no carriers");
+
                 pState.Raid.CarriedFoodByResourceId = removed;
+                pState.Raid.CarriedFoodByActorId = manifest;
                 pState.Raid.CarriedFood = totalRemoved;
                 int expiry = PeasantRebelBanditRaidRules.
                     SuppressionExpiryYear(Date.getCurrentYear());
@@ -312,10 +358,15 @@ namespace AncientWarfare3.core.lineage
                                     error.Message);
             }
 
-            if (!durable) RestoreObservedInventory(pTarget, observed);
+            if (!durable)
+            {
+                RemoveAssignedCargo(manifest, carriers);
+                RestoreObservedInventory(pTarget, observed);
+            }
             pState.Raid.Stage = BanditRaidStage.Outbound;
             pState.Raid.CarriedFood = 0;
             pState.Raid.CarriedFoodByResourceId.Clear();
+            pState.Raid.CarriedFoodByActorId.Clear();
             if (hadExpiry)
                 pState.SuppressionExpiryByKingdomId[victimId] =
                     previousExpiry;
@@ -351,30 +402,64 @@ namespace AncientWarfare3.core.lineage
             PeasantRebelBanditStrongholdState pState, City pStronghold,
             int pCurrentYear)
         {
-            var cargo = new Dictionary<string, int>(
-                pState.Raid.CarriedFoodByResourceId,
-                StringComparer.Ordinal);
-            ClearMission(pState.Raid, BanditRaidStage.Cooldown);
-            pState.Raid.CooldownUntilYear = pCurrentYear + 1;
-            if (!PeasantRebelBanditStateStore.Write(pBandit, pState))
-                return;
-
-            foreach (KeyValuePair<string, int> item in cargo)
+            List<long> resolved = new List<long>();
+            foreach (long actorId in pState.Raid.CarriedFoodByActorId.Keys.
+                         OrderBy(id => id).ToList())
             {
-                int remaining = Math.Max(0, item.Value);
-                for (int attempt = 0; attempt < 8 && remaining > 0;
-                     attempt++)
+                Actor carrier = ResolveActor(actorId);
+                if (carrier?.data == null || carrier.isRekt() ||
+                    !carrier.isAlive() || carrier.kingdom != pBandit)
                 {
-                    int accepted = pStronghold.
-                        addResourcesToRandomStockpile(item.Key, remaining);
-                    if (accepted <= 0) continue;
-                    remaining -= Math.Min(remaining, accepted);
+                    resolved.Add(actorId);
+                    continue;
                 }
-                if (remaining > 0)
-                    ModClass.LogWarning("Bandit raid delivery discarded " +
-                        remaining + " " + item.Key +
-                        " because the stronghold storage was full.");
+                if (!IsInside(carrier, pStronghold)) continue;
+                carrier.giveInventoryResourcesToCity();
+                resolved.Add(actorId);
             }
+            foreach (long actorId in resolved)
+                pState.Raid.CarriedFoodByActorId.Remove(actorId);
+            if (pState.Raid.CarriedFoodByActorId.Count > 0)
+            {
+                PeasantRebelBanditStateStore.Write(pBandit, pState);
+                return;
+            }
+            BeginCooldown(pBandit, pState, pCurrentYear);
+        }
+
+        private static void RemoveAssignedCargo(
+            Dictionary<long, Dictionary<string, int>> pManifest,
+            IEnumerable<Actor> pCarriers)
+        {
+            if (pManifest == null || pCarriers == null) return;
+            Dictionary<long, Actor> carriers = pCarriers
+                .Where(actor => actor?.data != null)
+                .GroupBy(actor => actor.getID())
+                .ToDictionary(group => group.Key, group => group.First());
+            foreach (KeyValuePair<long, Dictionary<string, int>> actorCargo
+                     in pManifest)
+            {
+                if (!carriers.TryGetValue(actorCargo.Key,
+                        out Actor carrier)) continue;
+                foreach (KeyValuePair<string, int> item in actorCargo.Value)
+                    carrier.takeFromInventory(item.Key,
+                        Math.Max(0, item.Value));
+            }
+        }
+
+        private static bool PruneLostCargoAudit(Kingdom pBandit,
+            BanditRaidMissionState pRaid)
+        {
+            if (pRaid?.CarriedFoodByActorId == null) return false;
+            List<long> lost = pRaid.CarriedFoodByActorId.Keys.Where(id =>
+            {
+                Actor actor = ResolveActor(id);
+                return actor?.data == null || actor.isRekt() ||
+                       !actor.isAlive() || actor.kingdom != pBandit;
+            }).ToList();
+            foreach (long actorId in lost)
+                pRaid.CarriedFoodByActorId.Remove(actorId);
+            return lost.Count > 0;
         }
 
         private static void RestoreObservedInventory(City pCity,
@@ -495,6 +580,17 @@ namespace AncientWarfare3.core.lineage
             {
                 City city = World.world.cities.get(pCityId);
                 return city?.data != null && !city.isRekt() ? city : null;
+            }
+            catch { return null; }
+        }
+
+        private static Actor ResolveActor(long pActorId)
+        {
+            if (pActorId <= 0 || World.world?.units == null) return null;
+            try
+            {
+                Actor actor = World.world.units.get(pActorId);
+                return actor?.data != null ? actor : null;
             }
             catch { return null; }
         }

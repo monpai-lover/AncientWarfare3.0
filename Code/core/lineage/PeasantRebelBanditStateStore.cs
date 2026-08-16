@@ -98,6 +98,13 @@ namespace AncientWarfare3.core.lineage
                 new System.Collections.Generic.List<long>();
             pState.Raid.CarriedFoodByResourceId ??=
                 new System.Collections.Generic.Dictionary<string, int>();
+            pState.Raid.CarriedFoodByActorId ??=
+                new System.Collections.Generic.Dictionary<long,
+                    System.Collections.Generic.Dictionary<string, int>>();
+            foreach (long actorId in new System.Collections.Generic.List<long>(
+                         pState.Raid.CarriedFoodByActorId.Keys))
+                pState.Raid.CarriedFoodByActorId[actorId] ??=
+                    new System.Collections.Generic.Dictionary<string, int>();
             pState.SuppressionExpiryByKingdomId ??=
                 new System.Collections.Generic.Dictionary<long, int>();
         }

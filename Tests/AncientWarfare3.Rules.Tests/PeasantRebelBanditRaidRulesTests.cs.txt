@@ -12,6 +12,8 @@ internal static class PeasantRebelBanditRaidRulesTests
         LootIsBoundedByNeedShareAndReserve();
         TargetsPreferDistanceThenFood();
         SuppressionRightLastsThreeYears();
+        ExcludesWarriorsAlreadyCarryingResources();
+        DistributesCargoByStableActorId();
     }
 
     private static void ShortageAndCooldownUseConfirmedThresholds()
@@ -77,6 +79,33 @@ internal static class PeasantRebelBanditRaidRulesTests
     {
         Equal(103, PeasantRebelBanditRaidRules.SuppressionExpiryYear(100),
             "victim receives a three-year suppression right");
+    }
+
+    private static void ExcludesWarriorsAlreadyCarryingResources()
+    {
+        True(PeasantRebelBanditRaidRules.CanJoinRaid(
+                alive: true, warrior: true, ruler: false, heir: false,
+                carryingResources: false),
+            "an empty-handed ordinary warrior may raid");
+        False(PeasantRebelBanditRaidRules.CanJoinRaid(
+                alive: true, warrior: true, ruler: false, heir: false,
+                carryingResources: true),
+            "a preloaded warrior cannot mix unrelated cargo into a raid");
+    }
+
+    private static void DistributesCargoByStableActorId()
+    {
+        IReadOnlyDictionary<long, int> shares =
+            PeasantRebelBanditRaidRules.DistributeCargo(
+                new long[] { 9L, 3L, 6L }, 8);
+        Equal(3, shares[3L],
+            "lowest actor ID receives the first remainder");
+        Equal(3, shares[6L],
+            "second actor ID receives the second remainder");
+        Equal(2, shares[9L],
+            "last actor receives the base share");
+        Equal(8, shares.Values.Sum(),
+            "distribution preserves the removed resource total");
     }
 
     private static void True(bool value, string message)
