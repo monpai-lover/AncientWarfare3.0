@@ -4,6 +4,13 @@ using System.Linq;
 
 namespace AncientWarfare3.core.lineage
 {
+    public enum BanditStrongholdFallAction
+    {
+        None,
+        RecordSuppressorOnly,
+        QueueFall
+    }
+
     public sealed class BanditZoneFact
     {
         private BanditZoneFact(string key, int x, int y,
@@ -140,6 +147,17 @@ namespace AncientWarfare3.core.lineage
             bool hostileAttacker, bool deathClearsAttacker)
         {
             return hostileAttacker && !deathClearsAttacker;
+        }
+
+        public static BanditStrongholdFallAction ResolveFallAction(
+            int population, long hostileKillerKingdomId,
+            bool captureFinished)
+        {
+            if (captureFinished) return BanditStrongholdFallAction.QueueFall;
+            if (population > 0) return BanditStrongholdFallAction.None;
+            return hostileKillerKingdomId > 0
+                ? BanditStrongholdFallAction.RecordSuppressorOnly
+                : BanditStrongholdFallAction.QueueFall;
         }
 
         public static bool CanRelocateOrdinaryResident(bool adult,

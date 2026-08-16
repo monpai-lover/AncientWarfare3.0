@@ -15,6 +15,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         RestoresOnlyUnchangedStrongholdWalls();
         ResolvesSuppressionVictorByConfirmedPrecedence();
         AttributesOnlyLiveCombatAttackers();
+        DefersStrongholdFallUntilTheCorrectBoundary();
         RelocatesOnlyOrdinaryResidents();
         ComposesStrongholdNamesAndTitles();
     }
@@ -130,6 +131,30 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         False(PeasantRebelBanditStrongholdRules.CanAttributeHostileKiller(
                 hostileAttacker: false, deathClearsAttacker: false),
             "a non-hostile attacker is never credited");
+    }
+
+    private static void DefersStrongholdFallUntilTheCorrectBoundary()
+    {
+        Equal(BanditStrongholdFallAction.RecordSuppressorOnly,
+            PeasantRebelBanditStrongholdRules.ResolveFallAction(
+                population: 0, hostileKillerKingdomId: 42,
+                captureFinished: false),
+            "hostile population loss records attribution until capture finishes");
+        Equal(BanditStrongholdFallAction.QueueFall,
+            PeasantRebelBanditStrongholdRules.ResolveFallAction(
+                population: 0, hostileKillerKingdomId: -1,
+                captureFinished: false),
+            "environmental population loss queues immediate fall");
+        Equal(BanditStrongholdFallAction.QueueFall,
+            PeasantRebelBanditStrongholdRules.ResolveFallAction(
+                population: 12, hostileKillerKingdomId: 42,
+                captureFinished: true),
+            "completed capture queues fall regardless of remaining population");
+        Equal(BanditStrongholdFallAction.None,
+            PeasantRebelBanditStrongholdRules.ResolveFallAction(
+                population: 12, hostileKillerKingdomId: -1,
+                captureFinished: false),
+            "a populated uncaptured stronghold remains active");
     }
 
     private static void RelocatesOnlyOrdinaryResidents()

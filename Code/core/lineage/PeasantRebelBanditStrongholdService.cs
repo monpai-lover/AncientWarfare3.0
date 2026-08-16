@@ -530,7 +530,8 @@ namespace AncientWarfare3.core.lineage
                 return true;
             pHandled = true;
             if (!CanMutate()) return false;
-            return CompleteFall(bandit, pCity, state, pOccupier);
+            QueueFall(pCity.getID(), pOccupier?.getID() ?? -1L);
+            return false;
         }
 
         internal static bool IsHostileKingdom(Kingdom pBandit,
@@ -574,8 +575,21 @@ namespace AncientWarfare3.core.lineage
             int population;
             try { population = stronghold.getPopulationPeople(); }
             catch { return; }
-            if (population <= 0)
-                CompleteFall(bandit, stronghold, state);
+            BanditStrongholdFallAction action =
+                PeasantRebelBanditStrongholdRules.ResolveFallAction(
+                    population, pHostileKillerKingdomId,
+                    captureFinished: false);
+            if (action == BanditStrongholdFallAction.QueueFall)
+            {
+                if (pHostileKillerKingdomId <= 0 &&
+                    state.LastHostileKillerKingdomId > 0)
+                {
+                    state.LastHostileKillerKingdomId = -1L;
+                    if (!PeasantRebelBanditStateStore.Write(bandit, state))
+                        return;
+                }
+                QueueFall(pStrongholdCityId, -1L);
+            }
         }
 
         internal static void RestoreRuntime()
@@ -593,7 +607,22 @@ namespace AncientWarfare3.core.lineage
                 if (state.Phase == BanditStrongholdPhase.Active)
                 {
                     if (stronghold?.data != null && mother?.data != null)
+                    {
+                        int population;
+                        try
+                        {
+                            population = stronghold.getPopulationPeople();
+                        }
+                        catch { continue; }
+                        BanditStrongholdFallAction action =
+                            PeasantRebelBanditStrongholdRules.
+                                ResolveFallAction(population,
+                                    state.LastHostileKillerKingdomId,
+                                    captureFinished: false);
+                        if (action == BanditStrongholdFallAction.QueueFall)
+                            QueueFall(stronghold.getID(), -1L);
                         continue;
+                    }
                     if (stronghold?.data == null)
                     {
                         state.Phase = BanditStrongholdPhase.Completed;
@@ -609,8 +638,35 @@ namespace AncientWarfare3.core.lineage
                 if ((state.Phase == BanditStrongholdPhase.Falling ||
                      state.Phase == BanditStrongholdPhase.Completed) &&
                     stronghold?.data != null)
-                    CompleteFall(kingdom, stronghold, state);
+                    QueueFall(stronghold.getID(),
+                        state.SuppressorKingdomId);
             }
+        }
+
+        private static void QueueFall(long pStrongholdCityId,
+            long pSuppressorKingdomId)
+        {
+            if (pStrongholdCityId <= 0) return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "bandit_stronghold_fall:" + pStrongholdCityId,
+                DeferredWorkClass.CriticalRuntime,
+                () =>
+                {
+                    if (!CanMutate()) return;
+                    City stronghold = ResolveCity(pStrongholdCityId);
+                    Kingdom bandit = stronghold?.kingdom;
+                    if (stronghold?.data == null || bandit?.data == null ||
+                        !PeasantRebelBanditStateStore.TryRead(bandit,
+                            out PeasantRebelBanditStrongholdState state) ||
+                        state.StrongholdCityId != pStrongholdCityId ||
+                        state.Phase != BanditStrongholdPhase.Active &&
+                        state.Phase != BanditStrongholdPhase.Falling &&
+                        state.Phase != BanditStrongholdPhase.Completed)
+                        return;
+                    Kingdom suppressor = ResolveKingdom(
+                        pSuppressorKingdomId);
+                    CompleteFall(bandit, stronghold, state, suppressor);
+                });
         }
 
         private static bool CompleteFall(Kingdom pBandit,

@@ -3984,6 +3984,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             {
                 Actor actor = actors[i];
                 EnemyPrepareKind kind;
+                if (!(actor?.data != null && !actor.isRekt() &&
+                      actor.isAlive() && actor.asset != null &&
+                      actor.kingdom?.data != null))
+                {
+                    continue;
+                }
                 if (actor._update_done ||
                     actor._beh_skip)
                 {
