@@ -4462,6 +4462,38 @@ True(StandingArmyRules.ShouldAllowGuardRecruitment(
         standingCoreReady: true,
         militaryEmergency: true),
     "mobilization still permits replacement royal guards");
+Equal(false, StandingArmyRules.ShouldUsePeacetimePatrol(
+        isCareerStandingSoldier: true,
+        militaryEmergency: false,
+        inCombat: false,
+        cityAttackOrder: false),
+    "complete peace leaves career soldiers under vanilla AI");
+Equal(true, StandingArmyRules.ShouldReleaseLegacyPeacetimePatrol(
+        "aw_standing_army_peacetime_job", ""),
+    "a legacy patrol job is released");
+Equal(true, StandingArmyRules.ShouldReleaseLegacyPeacetimePatrol(
+        "", "aw_standing_army_peacetime_patrol"),
+    "a legacy patrol task is released");
+Equal(false, StandingArmyRules.ShouldReleaseLegacyPeacetimePatrol(
+        "unit", "sexual_reproduction_civ_go"),
+    "unrelated vanilla work is not cleared");
+string peacetimeEnlistPatchSource = File.ReadAllText(Path.Combine(
+    Directory.GetCurrentDirectory(), "Code", "patch", "AW_EnlistPatch.cs"));
+True(peacetimeEnlistPatchSource.Contains(
+        "ReleaseLegacyPatrolForJobSelection(__instance)"),
+    "job selection clears legacy patrol state before vanilla decides work");
+Equal(false, peacetimeEnlistPatchSource.Contains(
+        "StandingArmyPeacetimeService.GetJob(__instance)"),
+    "job selection never returns the legacy peacetime patrol job");
+string peacetimeServiceSource = File.ReadAllText(Path.Combine(
+    Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+    "StandingArmyPeacetimeService.cs"));
+Equal(false, peacetimeServiceSource.Contains(
+        "pActor.ai.setJob(StandingArmyPeacetimeContent.JobId)"),
+    "runtime refresh never assigns the legacy patrol job");
+Equal(false, peacetimeServiceSource.Contains(
+        "pActor.ai.setTask(\n                        StandingArmyPeacetimeContent.PatrolTaskId)"),
+    "runtime refresh never assigns the legacy patrol task");
 True(StandingArmyRules.ShouldRetryPeacetimePatrol(
         pHasPatrolTarget: false,
         pTargetIsCurrentTile: false),
