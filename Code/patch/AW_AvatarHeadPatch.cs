@@ -1,4 +1,6 @@
 using HarmonyLib;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.presentation;
 using UnityEngine;
 
 namespace AncientWarfare3.patch
@@ -21,12 +23,33 @@ namespace AncientWarfare3.patch
         {
             if (pAsset == null || pAsset.id != XIA) return;
             if (pEgg || pAsset.is_boat) return;
-            if (pKing || pWarrior) return;
             if (pRandom) return;
             if (!pAdult && (pContainer == null || !pContainer.render_heads_for_children)) return;
 
             ActorTextureSubAsset tex = pAsset.texture_asset;
             if (tex == null || !tex.has_advanced_textures) return;
+
+            Actor actor = null;
+            try { actor = World.world?.units?.get(pActorId); }
+            catch { }
+            bool bandit = false;
+            bool synthetic = false;
+            try { bandit = PeasantRebelRouteService.IsBandit(actor?.kingdom); }
+            catch { }
+            try { synthetic = SyntheticLevyService.IsSynthetic(actor); }
+            catch { }
+            if (XiaBanditHeadRules.ShouldUse(pAsset.id, bandit, synthetic))
+            {
+                string banditHeadPath = tex.texture_path_base +
+                    XiaBanditHeadRules.HeadDirectory;
+                Sprite banditHead = ActorAnimationLoader.getHead(
+                    banditHeadPath,
+                    XiaBanditHeadRules.ResolveHeadIndex(pActorId));
+                if (banditHead != null) __result = banditHead;
+                return;
+            }
+
+            if (pKing || pWarrior) return;
 
             if (AW_AgePatch.ShouldUseXiaOldHead(pActorId))
             {

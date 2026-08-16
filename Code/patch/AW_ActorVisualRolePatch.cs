@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.presentation;
 using HarmonyLib;
 using UnityEngine;
@@ -44,6 +45,17 @@ namespace AncientWarfare3.patch
 
             ActorTextureSubAsset textureAsset = __instance.getTextureAsset();
             if (textureAsset == null) return false;
+            if (ShouldUseBanditHead(__instance))
+            {
+                string banditHeadPath = textureAsset.texture_path_base +
+                    XiaBanditHeadRules.HeadDirectory;
+                int headIndex = XiaBanditHeadRules.ResolveHeadIndex(
+                    __instance.data.id);
+                __instance.data.head = headIndex;
+                __instance.cached_sprite_head =
+                    ActorAnimationLoader.getHead(banditHeadPath, headIndex);
+                return false;
+            }
             if (!textureAsset.has_advanced_textures)
             {
                 ApplyHeadId(__instance, container.heads);
@@ -196,6 +208,19 @@ namespace AncientWarfare3.patch
             if (pActor.data.head == -1)
                 pActor.data.head = AnimationHelper.getSpriteIndex(
                     pActor.data.id, pHeads.Length);
+        }
+
+        private static bool ShouldUseBanditHead(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.asset == null) return false;
+            bool bandit = false;
+            bool synthetic = false;
+            try { bandit = PeasantRebelRouteService.IsBandit(pActor.kingdom); }
+            catch { }
+            try { synthetic = SyntheticLevyService.IsSynthetic(pActor); }
+            catch { }
+            return XiaBanditHeadRules.ShouldUse(pActor.asset.id, bandit,
+                synthetic);
         }
     }
 }

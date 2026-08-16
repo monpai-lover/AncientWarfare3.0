@@ -45,6 +45,7 @@
     <Compile Include="..\..\Code\core\lineage\PeasantRebelOutlawNameRules.cs" Link="Production\PeasantRebelOutlawNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />
     <Compile Include="XiaBanditHeadRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\presentation\XiaBanditHeadRules.cs" Link="Production\XiaBanditHeadRules.cs" />
     <Compile Include="MilitaryGovernorateCourtRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\MilitaryGovernorateCourtRules.cs" Link="Production\MilitaryGovernorateCourtRules.cs" />
     <Compile Include="TestActorVisualRoleStubs.cs.txt" />
