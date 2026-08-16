@@ -91,27 +91,48 @@ namespace AncientWarfare3.core.lineage
 
         public static IReadOnlyList<CultiwayWallPoint>
             RankInwardTowerCandidates(CultiwayWallPoint pGate,
-                CultiwayWallPoint pCenter, int pMaxInwardSteps)
+                CultiwayWallPoint pInwardDirection,
+                int pMaxInwardSteps)
         {
             if (pMaxInwardSteps < 0)
                 throw new ArgumentOutOfRangeException(
                     nameof(pMaxInwardSteps));
-            int deltaX = pCenter.X - pGate.X;
-            int deltaY = pCenter.Y - pGate.Y;
-            int stepX = 0;
-            int stepY = 0;
-            if (Math.Abs(deltaX) > Math.Abs(deltaY))
-                stepX = Math.Sign(deltaX);
-            else stepY = Math.Sign(deltaY);
-            if (stepX == 0 && stepY == 0)
-                return new[] { pGate };
+            if (Math.Abs(pInwardDirection.X) +
+                Math.Abs(pInwardDirection.Y) != 1)
+                throw new ArgumentOutOfRangeException(
+                    nameof(pInwardDirection));
 
+            int firstStep = pInwardDirection.Y > 0 ? -1 : 0;
             var result = new CultiwayWallPoint[pMaxInwardSteps + 1];
-            for (int step = 0; step <= pMaxInwardSteps; step++)
-                result[step] = new CultiwayWallPoint(
-                    pGate.X + stepX * step,
-                    pGate.Y + stepY * step);
+            for (int index = 0; index <= pMaxInwardSteps; index++)
+            {
+                int step = firstStep + index;
+                result[index] = new CultiwayWallPoint(
+                    pGate.X + pInwardDirection.X * step,
+                    pGate.Y + pInwardDirection.Y * step);
+            }
             return result;
+        }
+
+        public static bool IsOneTileBoundaryStraddleAllowed(
+            IEnumerable<CultiwayWallPoint> pFootprint,
+            ISet<CultiwayWallPoint> pTerritory)
+        {
+            if (pFootprint == null || pTerritory == null ||
+                pTerritory.Count == 0) return false;
+            CultiwayWallPoint[] footprint = pFootprint.Distinct().ToArray();
+            if (footprint.Length == 0 ||
+                !footprint.Any(pTerritory.Contains)) return false;
+            foreach (CultiwayWallPoint point in footprint)
+            {
+                if (pTerritory.Contains(point)) continue;
+                bool adjacent = CardinalDirections.Any(direction =>
+                    pTerritory.Contains(new CultiwayWallPoint(
+                        point.X + direction.X,
+                        point.Y + direction.Y)));
+                if (!adjacent) return false;
+            }
+            return true;
         }
 
         private static bool IsOuterBoundary(CultiwayWallPoint pPoint,

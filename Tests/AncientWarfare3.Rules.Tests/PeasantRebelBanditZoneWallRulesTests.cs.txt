@@ -12,6 +12,7 @@ internal static class PeasantRebelBanditZoneWallRulesTests
         IrregularUnionDoesNotWallSharedEdges();
         CarvesOneThreeTileGateOnEveryCardinalSide();
         RanksGateTowerCandidatesTowardTheInterior();
+        AllowsOnlyOneTileBoundaryStraddleForVerticalGateTowers();
     }
 
     private static void OneZoneUsesItsExactOuterEdge()
@@ -86,31 +87,62 @@ internal static class PeasantRebelBanditZoneWallRulesTests
 
     private static void RanksGateTowerCandidatesTowardTheInterior()
     {
-        AssertTowerCandidates(Point(12, 15), Point(11, 11), new[]
+        AssertTowerCandidates(Point(72, 127), Point(0, -1), new[]
+        {
+            Point(72, 127), Point(72, 126), Point(72, 125), Point(72, 124)
+        }, "an offset north gate still scans south instead of toward the center's dominant axis");
+        AssertTowerCandidates(Point(12, 15), Point(0, -1), new[]
         {
             Point(12, 15), Point(12, 14), Point(12, 13), Point(12, 12)
         }, "north gate scans south into the stronghold");
-        AssertTowerCandidates(Point(15, 12), Point(11, 11), new[]
+        AssertTowerCandidates(Point(15, 12), Point(-1, 0), new[]
         {
             Point(15, 12), Point(14, 12), Point(13, 12), Point(12, 12)
         }, "east gate scans west into the stronghold");
-        AssertTowerCandidates(Point(12, 8), Point(11, 11), new[]
+        AssertTowerCandidates(Point(12, 8), Point(0, 1), new[]
         {
-            Point(12, 8), Point(12, 9), Point(12, 10), Point(12, 11)
-        }, "south gate scans north into the stronghold");
-        AssertTowerCandidates(Point(8, 12), Point(11, 11), new[]
+            Point(12, 7), Point(12, 8), Point(12, 9), Point(12, 10)
+        }, "south tower starts one tile outside before scanning north");
+        AssertTowerCandidates(Point(8, 12), Point(1, 0), new[]
         {
             Point(8, 12), Point(9, 12), Point(10, 12), Point(11, 12)
         }, "west gate scans east into the stronghold");
     }
 
+    private static void AllowsOnlyOneTileBoundaryStraddleForVerticalGateTowers()
+    {
+        HashSet<CultiwayWallPoint> territory = Rectangle(8, 8, 15, 15);
+        True(PeasantRebelBanditZoneWallRules.
+                IsOneTileBoundaryStraddleAllowed(new[]
+                {
+                    Point(11, 15), Point(12, 15), Point(13, 15),
+                    Point(11, 16), Point(12, 16), Point(13, 16)
+                }, territory),
+            "a vertical gate tower may straddle one row outside the wall");
+        False(PeasantRebelBanditZoneWallRules.
+                IsOneTileBoundaryStraddleAllowed(new[]
+                {
+                    Point(11, 16), Point(12, 16), Point(13, 16),
+                    Point(11, 17), Point(12, 17), Point(13, 17)
+                }, territory),
+            "a tower cannot sit entirely outside the stronghold");
+        False(PeasantRebelBanditZoneWallRules.
+                IsOneTileBoundaryStraddleAllowed(new[]
+                {
+                    Point(11, 15), Point(12, 15), Point(13, 15),
+                    Point(11, 17), Point(12, 17), Point(13, 17)
+                }, territory),
+            "a tower cannot skip over the first exterior row");
+    }
+
     private static void AssertTowerCandidates(CultiwayWallPoint gate,
-        CultiwayWallPoint center, IReadOnlyList<CultiwayWallPoint> expected,
+        CultiwayWallPoint inwardDirection,
+        IReadOnlyList<CultiwayWallPoint> expected,
         string message)
     {
         IReadOnlyList<CultiwayWallPoint> actual =
             PeasantRebelBanditZoneWallRules.RankInwardTowerCandidates(
-                gate, center, 3);
+                gate, inwardDirection, 3);
         if (!expected.SequenceEqual(actual))
             throw new InvalidOperationException(message + ": expected [" +
                 string.Join(", ", expected) + "], got [" +

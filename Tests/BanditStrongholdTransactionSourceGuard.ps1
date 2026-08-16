@@ -27,7 +27,9 @@ foreach ($token in @('TryPlan(', 'PeasantRebelBanditZoneWallService.TryPlan',
 foreach ($token in @('TryCreate(', 'World.world.cities.newCity',
         'setUnitMetas', 'newCityEvent', 'addZone(', 'joinCity(',
         'spawnOn(', 'joinAnotherKingdom(', 'addBuilding("bonfire"',
-        'setTopTileType', 'Rollback', 'PeasantRebelBanditStateStore.Write')) {
+        'setTopTileType', 'Rollback', 'PeasantRebelBanditStateStore.Write',
+        'CanRelocateOrdinaryResident(',
+        'HeirService.IsCurrentHeir(pOrigin, pActor)')) {
     if ($service -notmatch [regex]::Escape($token)) {
         throw "Stronghold transaction is missing $token"
     }

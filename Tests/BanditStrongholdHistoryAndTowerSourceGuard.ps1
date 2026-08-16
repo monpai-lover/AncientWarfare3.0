@@ -22,6 +22,8 @@ foreach ($token in @('GateCenters', 'TowerAsset', 'TowerTiles')) {
 foreach ($token in @('ResolveTowerAsset(', 'getBuilding("order_watch_tower")',
         'FindGateTowerTiles(', 'RankInwardTowerCandidates(',
         'IsTowerFootprintInside(',
+        'IsOneTileBoundaryStraddleAllowed(',
+        'bool verticalGate = gateIndex == 0 || gateIndex == 2;',
         'reservedFootprint.Overlaps(',
         'wallPoints.Contains(',
         'CanPlaceGateTower(',

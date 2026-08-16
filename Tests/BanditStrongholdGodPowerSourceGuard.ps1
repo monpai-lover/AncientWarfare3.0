@@ -26,10 +26,14 @@ if ($tab -notmatch 'GodPowerLibrary\.SPAWN_BANDIT_STRONGHOLD') {
 }
 foreach ($token in @('TryCreateDirect(', 'makeNewCivKingdom',
         'copyMetasFromOtherKingdom', 'TryCreate(',
-        'RemoveBanditOnFailure')) {
+        'RemoveBanditOnFailure', 'SelectDirectRuler(',
+        'IsOrdinaryResident(actor, origin)')) {
     if ($service -notmatch [regex]::Escape($token)) {
         throw "Direct stronghold service is missing $token"
     }
+}
+if ($service.Contains('Actor leader = pMother?.leader;')) {
+    throw 'Direct stronghold creation must not conscript the mother-city leader'
 }
 foreach ($key in @('aw_spawn_bandit_stronghold,',
         'aw_spawn_bandit_stronghold_description,',

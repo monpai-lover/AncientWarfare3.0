@@ -46,8 +46,10 @@ Require-Contains $retreat 'PrepareForRetreatSelection(pArmy)' `
     'Retreat selection must cancel the old route before asynchronous candidate selection.'
 Require-Contains $controller 'runtime.NoSafeRetreat)' `
     'A no-safe-city army must not resolve the old mission endpoint.'
-Require-Contains $controller '[AW3 RTS handoff] army=' `
-    'Diagnostics must record each successful target-city vanilla combat handoff.'
+Require-Contains $controller '"attack_order_unavailable", pActor,' `
+    'Diagnostics must record a failed target-city attack-order publication.'
+Require-Contains $controller 'Keep city capture metadata published, but retain RTS' `
+    'Target-city combat must publish vanilla capture metadata without releasing RTS tactical ownership.'
 Require-Contains $controller 'RefreshReleasedArmyPeacetimeJobs(army);' `
     'Invalidating an RTS mission must immediately restore released standing-army jobs.'
 Require-Contains $controller 'StandingArmyPeacetimeService.RefreshJob(actor);' `

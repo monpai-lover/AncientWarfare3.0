@@ -11,6 +11,15 @@ namespace AncientWarfare3.core.lineage
     {
         private const int GateTowerInwardSearchSteps = 6;
 
+        private static readonly CultiwayWallPoint[]
+            GateTowerInwardDirections =
+            {
+                new CultiwayWallPoint(0, -1),
+                new CultiwayWallPoint(-1, 0),
+                new CultiwayWallPoint(0, 1),
+                new CultiwayWallPoint(1, 0)
+            };
+
         private sealed class ActorSnapshot
         {
             internal Actor Actor;
@@ -445,11 +454,9 @@ namespace AncientWarfare3.core.lineage
 
         private static Actor SelectDirectRuler(City pMother)
         {
-            Actor leader = pMother?.leader;
-            if (leader?.data != null && !leader.isRekt() &&
-                !leader.isBaby()) return leader;
-            return pMother?.units?.Where(actor => actor?.data != null &&
-                    !actor.isRekt() && !actor.isBaby())
+            Kingdom origin = pMother?.kingdom;
+            return pMother?.units?.Where(actor =>
+                    IsOrdinaryResident(actor, origin))
                 .OrderBy(actor => actor.getID()).FirstOrDefault();
         }
 
@@ -883,8 +890,13 @@ namespace AncientWarfare3.core.lineage
             {
                 if (actor?.data == null || actor.isRekt() ||
                     actor == pPlan.ReserveMotherActor) continue;
-                if (actor == pPlan.Context.Ruler ||
-                    interior.Contains(actor.current_tile?.zone))
+                if (actor == pPlan.Context.Ruler)
+                {
+                    actor.joinCity(pStronghold);
+                    continue;
+                }
+                if (interior.Contains(actor.current_tile?.zone) &&
+                    IsOrdinaryResident(actor, pPlan.Context.Origin))
                     actor.joinCity(pStronghold);
             }
             pPlan.Context.Ruler.joinCity(pStronghold);
@@ -893,6 +905,27 @@ namespace AncientWarfare3.core.lineage
                 pPlan.MotherCoreTile != null && interior.Contains(
                     pPlan.ReserveMotherActor.current_tile?.zone))
                 pPlan.ReserveMotherActor.spawnOn(pPlan.MotherCoreTile);
+        }
+
+        private static bool IsOrdinaryResident(Actor pActor,
+            Kingdom pOrigin)
+        {
+            if (pActor?.data == null || pActor.isRekt()) return false;
+            bool adult;
+            bool king;
+            bool cityLeader;
+            try
+            {
+                adult = pActor.isAdult();
+                king = pActor.isKing();
+                cityLeader = pActor.isCityLeader();
+            }
+            catch { return false; }
+            return PeasantRebelBanditStrongholdRules.
+                CanRelocateOrdinaryResident(adult,
+                    pActor.profession_asset?.is_civilian == true, king,
+                    cityLeader,
+                    HeirService.IsCurrentHeir(pOrigin, pActor));
         }
 
         private static void ReturnOrdinaryCities(Transaction pTransaction)
@@ -953,41 +986,100 @@ namespace AncientWarfare3.core.lineage
             if (pWallPlan?.GateCenters == null ||
                 pWallPlan.GateCenters.Count != 4 || pCenter == null ||
                 pAsset?.fundament == null || pZones == null ||
-                pZones.Count != 4) return null;
+                pZones.Count != 4)
+            {
+                LogGateTowerFailure("invalid_input", pAsset, pCenter,
+                    pZones?.Count ?? 0, null, null);
+                return null;
+            }
             var zones = new HashSet<TileZone>(pZones);
+            var territoryPoints = new HashSet<CultiwayWallPoint>();
+            foreach (TileZone zone in zones)
+            {
+                if (zone?.tiles == null) continue;
+                foreach (WorldTile tile in zone.tiles)
+                    if (tile != null)
+                        territoryPoints.Add(new CultiwayWallPoint(
+                            tile.x, tile.y));
+            }
             var wallPoints = new HashSet<CultiwayWallPoint>(
                 pWallPlan.WallPoints);
             var reservedFootprint = new HashSet<WorldTile>();
             var result = new List<WorldTile>(4);
-            var center = new CultiwayWallPoint(pCenter.x, pCenter.y);
-            foreach (CultiwayWallPoint gate in pWallPlan.GateCenters)
+            for (int gateIndex = 0;
+                 gateIndex < pWallPlan.GateCenters.Count;
+                 gateIndex++)
             {
+                CultiwayWallPoint gate = pWallPlan.GateCenters[gateIndex];
                 WorldTile selected = null;
+                var rejected = new List<string>();
                 foreach (CultiwayWallPoint point in
                          PeasantRebelBanditZoneWallRules.
-                             RankInwardTowerCandidates(gate, center,
+                             RankInwardTowerCandidates(gate,
+                                 GateTowerInwardDirections[gateIndex],
                                  GateTowerInwardSearchSteps))
                 {
                     WorldTile tile = World.world.GetTile(point.X, point.Y);
+                    string reason = null;
+                    bool verticalGate = gateIndex == 0 || gateIndex == 2;
                     if (!IsTowerFootprintInside(tile, pAsset, zones,
-                            out List<WorldTile> footprint) ||
-                        reservedFootprint.Overlaps(footprint) ||
-                        footprint.Any(footprintTile => wallPoints.Contains(
-                            new CultiwayWallPoint(footprintTile.x,
-                                footprintTile.y))) ||
-                        !CanPlaceGateTower(tile, pAsset)) continue;
+                            territoryPoints, verticalGate,
+                            out List<WorldTile> footprint))
+                        reason = "footprint";
+                    else if (reservedFootprint.Overlaps(footprint))
+                        reason = "reserved";
+                    else if (footprint.Any(footprintTile =>
+                                 wallPoints.Contains(new CultiwayWallPoint(
+                                     footprintTile.x, footprintTile.y))))
+                        reason = "wall";
+                    else if (!CanPlaceGateTower(tile, pAsset))
+                        reason = "native";
+                    if (reason != null)
+                    {
+                        rejected.Add(point.X + ":" + point.Y + "=" +
+                                     reason);
+                        continue;
+                    }
                     selected = tile;
                     reservedFootprint.UnionWith(footprint);
                     break;
                 }
-                if (selected == null) return null;
+                if (selected == null)
+                {
+                    LogGateTowerFailure("gate_rejected", pAsset, pCenter,
+                        pZones.Count, gate, rejected);
+                    return null;
+                }
                 result.Add(selected);
             }
             return result.Distinct().Count() == 4 ? result : null;
         }
 
+        private static void LogGateTowerFailure(string pStage,
+            BuildingAsset pAsset, WorldTile pCenter, int pZoneCount,
+            CultiwayWallPoint? pGate,
+            IReadOnlyCollection<string> pRejected)
+        {
+            BuildingFundament fundament = pAsset?.fundament;
+            string footprint = fundament == null
+                ? "null"
+                : fundament.left + "/" + fundament.right + "/" +
+                  fundament.top + "/" + fundament.bottom;
+            ModClass.LogWarning("Bandit gate tower preflight failed: stage=" +
+                pStage + ", asset=" + (pAsset?.id ?? "null") +
+                ", footprint=" + footprint + ", center=" +
+                (pCenter == null ? "null" : pCenter.x + ":" + pCenter.y) +
+                ", zones=" + pZoneCount + ", gate=" +
+                (!pGate.HasValue ? "null" :
+                    pGate.Value.X + ":" + pGate.Value.Y) +
+                ", rejected=[" + string.Join(",", pRejected ??
+                    Array.Empty<string>()) + "]");
+        }
+
         private static bool IsTowerFootprintInside(WorldTile pTile,
             BuildingAsset pAsset, HashSet<TileZone> pZones,
+            HashSet<CultiwayWallPoint> pTerritoryPoints,
+            bool pAllowOneTileBoundaryStraddle,
             out List<WorldTile> pFootprint)
         {
             pFootprint = null;
@@ -1003,10 +1095,19 @@ namespace AncientWarfare3.core.lineage
             {
                 WorldTile tile = World.world.GetTile(
                     originX + x, originY + y);
-                if (tile == null || !pZones.Contains(tile.zone))
-                    return false;
+                if (tile == null) return false;
                 footprint.Add(tile);
             }
+            if (pAllowOneTileBoundaryStraddle)
+            {
+                if (!PeasantRebelBanditZoneWallRules.
+                        IsOneTileBoundaryStraddleAllowed(
+                            footprint.Select(tile =>
+                                new CultiwayWallPoint(tile.x, tile.y)),
+                            pTerritoryPoints)) return false;
+            }
+            else if (footprint.Any(tile => !pZones.Contains(tile.zone)))
+                return false;
             pFootprint = footprint;
             return true;
         }

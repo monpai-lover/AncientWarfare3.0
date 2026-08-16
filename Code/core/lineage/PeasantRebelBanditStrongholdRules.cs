@@ -142,6 +142,14 @@ namespace AncientWarfare3.core.lineage
             return hostileAttacker && !deathClearsAttacker;
         }
 
+        public static bool CanRelocateOrdinaryResident(bool adult,
+            bool civilianProfession, bool king, bool cityLeader,
+            bool heir)
+        {
+            return adult && civilianProfession && !king && !cityLeader &&
+                   !heir;
+        }
+
         public static bool CanAcquireZone(bool bandit, string zoneKey,
             ISet<string> fixedZoneKeys)
         {
