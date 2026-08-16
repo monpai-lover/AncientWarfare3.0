@@ -272,12 +272,22 @@ internal static class WarArmyReturnRulesTests
         string releaseActorBody = releaseActorStart >= 0
             ? releaseAfterReturn.Substring(releaseActorStart)
             : string.Empty;
+        int ordinaryActorBranch = releaseActorBody.IndexOf(
+            "else", StringComparison.Ordinal);
+        int releaseActorCatch = releaseActorBody.IndexOf(
+            "catch", Math.Max(0, ordinaryActorBranch),
+            StringComparison.Ordinal);
         int clearReturnJob = releaseActorBody.IndexOf(
-            "pActor.ai.clearJob();", StringComparison.Ordinal);
+            "pActor.ai.clearJob();", Math.Max(0, ordinaryActorBranch),
+            StringComparison.Ordinal);
         int selectVanillaJob = releaseActorBody.IndexOf(
             "pActor.ai.setJob(Actor.nextJobActor(pActor));",
-            StringComparison.Ordinal);
-        True(clearReturnJob >= 0 && selectVanillaJob > clearReturnJob &&
+            Math.Max(0, ordinaryActorBranch), StringComparison.Ordinal);
+        True(ordinaryActorBranch >= 0 &&
+             releaseActorCatch > ordinaryActorBranch &&
+             clearReturnJob > ordinaryActorBranch &&
+             selectVanillaJob > clearReturnJob &&
+             selectVanillaJob < releaseActorCatch &&
              !releaseActorBody.Contains("pActor.getNextJob()",
                  StringComparison.Ordinal),
             "completed return clears RTS return ownership before vanilla job selection");
