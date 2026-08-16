@@ -129,7 +129,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pPickup?.data == null ||
                 pTarget?.data == null) return false;
-            return FindRouteDock(pKingdom, pPickup, pTarget) != null;
+            return FindRouteDock(pKingdom, pPickup, pTarget,
+                pIgnoreDemand: true, pAllowFullDock: true) != null;
         }
 
         // RTS voyages own a new boat for their entire lifetime. The normal
@@ -152,7 +153,11 @@ namespace AncientWarfare3.core.lineage
             ProductionDock routeDock = FindRouteDock(pKingdom, pickup,
                 target, pIgnoreDemand: true, pAllowFullDock: true);
             if (routeDock?.City?.data == null || routeDock.Dock == null)
+            {
+                LogOutcomeOnce(pKingdom?.id ?? -1L,
+                    "temporary_no_route_dock", null, pRequest);
                 return false;
+            }
             Actor boatActor = null;
             try
             {
@@ -166,11 +171,25 @@ namespace AncientWarfare3.core.lineage
                 {
                     TemporaryBoatBuildCityIds.Remove(routeDock.City.id);
                 }
-                if (boatActor?.data == null) return false;
+                if (boatActor?.data == null)
+                {
+                    LogOutcomeOnce(pKingdom.id,
+                        "temporary_build_returned_null", routeDock.City,
+                        pRequest);
+                    return false;
+                }
                 boatActor.joinKingdom(pKingdom);
                 boatActor.joinCity(routeDock.City);
                 Boat boat = boatActor.getSimpleComponent<Boat>();
-                if (boat == null) return false;
+                if (boat == null)
+                {
+                    LogOutcomeOnce(pKingdom.id,
+                        "temporary_boat_component_missing",
+                        routeDock.City, pRequest,
+                        " boat=" + boatActor.data.id);
+                    ActionLibrary.removeUnit(boatActor);
+                    return false;
+                }
                 TemporaryBoatIds[boatActor.data.id] = boatActor;
                 boat.taxi_request = pRequest;
                 pRequest.assign(boat);
@@ -182,8 +201,11 @@ namespace AncientWarfare3.core.lineage
                     " boat=" + boatActor.data.id);
                 return true;
             }
-            catch
+            catch (Exception error)
             {
+                LogOutcomeOnce(pKingdom?.id ?? -1L,
+                    "temporary_build_exception", routeDock?.City,
+                    pRequest, " error=" + error.GetType().Name);
                 if (boatActor?.data != null)
                     DestroyTemporaryTransportBoat(boatActor.data.id);
                 return false;
@@ -249,6 +271,65 @@ namespace AncientWarfare3.core.lineage
                    demand.KingdomId == pCity.kingdom.id &&
                    demand.ExpiresAt > now &&
                    IsPendingFor(demand.Request, pCity.kingdom);
+        }
+
+        internal static bool IsTemporaryBoatBuild(City pCity)
+        {
+            return pCity?.data != null &&
+                   TemporaryBoatBuildCityIds.Contains(pCity.id);
+        }
+
+        internal static bool TryBuildTemporaryTransportAtDock(
+            Docks pDock, City pCity, out Actor pBoatActor)
+        {
+            pBoatActor = null;
+            if (pDock == null || pCity?.data == null ||
+                !IsTemporaryBoatBuild(pCity)) return false;
+            Actor created = null;
+            try
+            {
+                string transportId = pCity.getActorAsset()?
+                    .architecture_asset?.actor_asset_id_transport;
+                if (string.IsNullOrEmpty(transportId)) return false;
+                ActorAsset transport = AssetManager.actor_library.get(
+                    transportId);
+                if (transport == null) return false;
+                if (pDock.tiles_ocean == null ||
+                    pDock.tiles_ocean.Count == 0)
+                    pDock.recalculateOceanTiles();
+                if (pDock.tiles_ocean == null ||
+                    pDock.tiles_ocean.Count == 0) return false;
+
+                WorldTile spawnTile = pDock.tiles_ocean.GetRandom();
+                if (spawnTile?.region?.island?.goodForDocks() != true)
+                {
+                    spawnTile = null;
+                    foreach (WorldTile candidate in pDock.tiles_ocean)
+                    {
+                        if (candidate?.region?.island?.goodForDocks() !=
+                            true) continue;
+                        spawnTile = candidate;
+                        break;
+                    }
+                }
+                if (spawnTile?.data == null) return false;
+                created = World.world.units.createNewUnit(transport.id,
+                    spawnTile);
+                if (created?.data == null) return false;
+                pDock.addBoatToDock(created);
+                pBoatActor = created;
+                return true;
+            }
+            catch
+            {
+                if (created?.data != null)
+                {
+                    try { ActionLibrary.removeUnit(created); }
+                    catch { }
+                }
+                pBoatActor = null;
+                return false;
+            }
         }
 
         internal static void OnAssigned(TaxiRequest pRequest)

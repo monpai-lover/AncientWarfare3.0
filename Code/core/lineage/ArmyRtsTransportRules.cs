@@ -23,6 +23,16 @@ namespace AncientWarfare3.core.lineage
         Retry = 2
     }
 
+    public enum ArmyRtsPassengerTaskAction
+    {
+        None = 0,
+        WaitForLoading = 1,
+        StartVanillaEmbark = 2,
+        PreserveVanillaBoatTask = 3,
+        PreserveLandingTask = 4,
+        ResumeRts = 5
+    }
+
     public sealed class ArmyRtsTransportActiveClock
     {
         private double _pausedSeconds;
@@ -177,6 +187,37 @@ namespace AncientWarfare3.core.lineage
             bool activeVoyage, bool transportRouteConfirmed)
         {
             return activeVoyage || transportRouteConfirmed;
+        }
+
+        public static bool IsProtectedVanillaPassengerTask(string pTaskId)
+        {
+            return pTaskId == "check_warrior_transport" ||
+                   pTaskId == "force_into_a_boat" ||
+                   pTaskId == "embark_into_boat" ||
+                   pTaskId == "sit_inside_boat";
+        }
+
+        public static ArmyRtsPassengerTaskAction ResolvePassengerTaskAction(
+            bool transportOwned, bool insideBoat, bool requestLoading,
+            bool protectedBoatTask, bool landingTask,
+            bool stableTargetLand)
+        {
+            if (!transportOwned) return ArmyRtsPassengerTaskAction.None;
+            if (insideBoat || protectedBoatTask)
+                return ArmyRtsPassengerTaskAction.PreserveVanillaBoatTask;
+            if (landingTask)
+                return ArmyRtsPassengerTaskAction.PreserveLandingTask;
+            if (stableTargetLand)
+                return ArmyRtsPassengerTaskAction.ResumeRts;
+            return requestLoading
+                ? ArmyRtsPassengerTaskAction.StartVanillaEmbark
+                : ArmyRtsPassengerTaskAction.WaitForLoading;
+        }
+
+        public static bool ShouldDrivePassengerTaskInMilitaryP0(
+            bool insideBoat, bool protectedBoatTask, bool landingTask)
+        {
+            return !insideBoat && (protectedBoatTask || landingTask);
         }
 
         public static bool ShouldProcessFrame(int activeVoyageCount)

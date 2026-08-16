@@ -9,6 +9,19 @@ namespace AncientWarfare3.patch
     internal static class AW_ArmyRtsTransportProductionPatch
     {
         [HarmonyPrefix]
+        [HarmonyPatch(typeof(Docks), nameof(Docks.buildBoatFromHere))]
+        private static bool BuildBoatFromHere_Prefix(Docks __instance,
+            City pCity, ref Actor __result)
+        {
+            if (!ArmyRtsTransportProductionService.
+                    IsTemporaryBoatBuild(pCity)) return true;
+            ArmyRtsTransportProductionService.
+                TryBuildTemporaryTransportAtDock(__instance, pCity,
+                    out __result);
+            return false;
+        }
+
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(BuildingAsset),
             nameof(BuildingAsset.getRandomBoatAssetToBuild))]
         private static bool GetRandomBoatAssetToBuild_Prefix(

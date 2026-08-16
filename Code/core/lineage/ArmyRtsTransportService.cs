@@ -29,6 +29,9 @@ namespace AncientWarfare3.core.lineage
         private const double BoatWakeIntervalSeconds = 1d;
         private const float ProductionQueueCost = 48f;
         private const float BoatTravelCostPerTile = 0.6f;
+        private const string VanillaForceEmbarkTaskId =
+            "force_into_a_boat";
+        private const string VanillaLandingTaskId = "short_move";
 
         private sealed class TransportState
         {
@@ -162,6 +165,14 @@ namespace AncientWarfare3.core.lineage
             return state.Members.TryGetValue(pActor.data.id,
                        out Actor member) &&
                    ReferenceEquals(member, pActor);
+        }
+
+        internal static bool IsExecutingVanillaPassengerTask(Actor pActor)
+        {
+            string taskId = pActor?.ai?.task?.id ?? "";
+            return ArmyRtsTransportRules.IsProtectedVanillaPassengerTask(
+                       taskId) ||
+                   taskId == VanillaLandingTaskId;
         }
 
         public static void LogDirectorOmissionPreserved(Army pArmy)
@@ -299,36 +310,61 @@ namespace AncientWarfare3.core.lineage
                 {
                     Actor member = pair.Value;
                     bool validMember = IsValidMember(member, army);
-                    bool landed = validMember &&
-                                  member.is_inside_boat == false &&
-                                  ArmyRtsTransportRules.ShouldCountAsLanded(
-                                      sameTargetIsland: SameIsland(
-                                          member.current_tile, target),
-                                      actorOnStableLand:
-                                          IsStableLandingTile(
-                                              member.current_tile),
-                                      targetOnStableLand:
-                                          IsStableLandingTile(target));
-                    ArmyRtsTransportExpectedMemberAction memberAction =
-                        ArmyRtsTransportRules.ResolveExpectedMemberAction(
-                            validMember, landed);
-                    if (memberAction ==
-                        ArmyRtsTransportExpectedMemberAction.RemoveInvalid)
+                    if (!validMember)
                     {
                         ReleaseRequest(member);
                         invalidMemberIds.Add(pair.Key);
                         continue;
                     }
                     validExpectedMembers++;
-                    if (memberAction ==
-                        ArmyRtsTransportExpectedMemberAction.HoldLanded)
+
+                    bool insideBoat = member.is_inside_boat;
+                    TaxiRequest request = insideBoat
+                        ? null
+                        : SafeRequest(member);
+                    string taskId = member.ai?.task?.id ?? "";
+                    bool protectedBoatTask = ArmyRtsTransportRules.
+                        IsProtectedVanillaPassengerTask(taskId);
+                    bool landingTask = taskId == VanillaLandingTaskId;
+                    bool stableTargetLand = !insideBoat &&
+                        ArmyRtsTransportRules.ShouldCountAsLanded(
+                            sameTargetIsland: SameIsland(
+                                member.current_tile, target),
+                            actorOnStableLand: IsStableLandingTile(
+                                member.current_tile),
+                            targetOnStableLand:
+                                IsStableLandingTile(target));
+                    bool requestLoading = false;
+                    try
+                    {
+                        requestLoading = request?.isState(
+                            TaxiRequestState.Loading) == true;
+                    }
+                    catch { }
+                    ArmyRtsPassengerTaskAction passengerAction =
+                        ArmyRtsTransportRules.ResolvePassengerTaskAction(
+                            transportOwned: true,
+                            insideBoat: insideBoat,
+                            requestLoading: requestLoading,
+                            protectedBoatTask: protectedBoatTask,
+                            landingTask: landingTask,
+                            stableTargetLand: stableTargetLand);
+                    if (passengerAction ==
+                        ArmyRtsPassengerTaskAction.ResumeRts)
                     {
                         landedExpectedMembers++;
                         state.HadLandedMember = true;
                         HoldLandedMember(member);
                         continue;
                     }
-                    if (member?.is_inside_boat == true)
+                    if (passengerAction ==
+                        ArmyRtsPassengerTaskAction.StartVanillaEmbark)
+                    {
+                        member.setTask(VanillaForceEmbarkTaskId,
+                            pClean: true, pCleanJob: false,
+                            pForceAction: true);
+                    }
+                    if (insideBoat)
                     {
                         hasAssignedBoat = true;
                         hasEmbarkedMember = true;
@@ -338,7 +374,6 @@ namespace AncientWarfare3.core.lineage
                             ref markerActorId, ref movementTileId);
                         continue;
                     }
-                    TaxiRequest request = SafeRequest(member);
                     try
                     {
                         if (request?.hasAssignedBoat() == true)
@@ -708,9 +743,7 @@ namespace AncientWarfare3.core.lineage
             {
                 pActor.clearTileTarget();
                 pActor.beh_tile_target = null;
-                pActor.beh_actor_target = null;
                 pActor.setNotMoving();
-                pActor.makeWait(0.2f);
             }
             catch { }
         }

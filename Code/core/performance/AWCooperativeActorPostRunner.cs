@@ -418,6 +418,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 TryConsumeHomeRationScheduled(actor);
             if (TryRunSelfLandingP0(actor, actorId, kind, cycleElapsed))
                 return;
+            if (TryRunVanillaPassengerTransportP0(actor, actorId, kind,
+                    cycleElapsed))
+                return;
             bool returnActive =
                 WarArmyReturnService.IsActive(actor?.army);
             bool suppressCombatPreemption = returnActive
@@ -631,6 +634,67 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             ArmyRtsMovementDiagnostic.Log("p0",
                 "self_landing_exception", actor,
                 "kind=" + kind + " error=" +
+                error.GetType().Name + ":" + error.Message);
+            ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+        }
+        return true;
+    }
+
+    private static bool TryRunVanillaPassengerTransportP0(Actor actor,
+        long actorId, ArmyMilitaryMovementPriorityKind kind,
+        float cycleElapsed)
+    {
+        bool transportOwned = kind ==
+                                  ArmyMilitaryMovementPriorityKind.RtsMember &&
+                              ArmyRtsTransportService.OwnsActorTask(actor);
+        if (!transportOwned ||
+            !ArmyRtsTransportService.IsExecutingVanillaPassengerTask(actor))
+            return false;
+
+        string taskId = actor.ai?.task?.id ?? "";
+        bool protectedBoatTask = ArmyRtsTransportRules.
+            IsProtectedVanillaPassengerTask(taskId);
+        bool landingTask = taskId == "short_move";
+        bool shouldDrive = ArmyRtsTransportRules.ShouldDrivePassengerTaskInMilitaryP0(
+                actor.is_inside_boat, protectedBoatTask, landingTask);
+        if (!shouldDrive)
+        {
+            ArmyRtsMovementDiagnostic.Log("p0", "passenger_boat_yield",
+                actor, "kind=" + kind + " task=" + taskId);
+            ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
+            return true;
+        }
+
+        try
+        {
+            ArmyRtsMovementDiagnostic.Log("p0", "passenger_task_enter",
+                actor, "kind=" + kind + " task=" + taskId);
+            actor.b4_checkTaskVerifier(cycleElapsed);
+            actor.b5_checkPathMovement(cycleElapsed);
+            bool hadBehaviourTileTarget =
+                actor.beh_tile_target?.data != null;
+            actor.b6_updateAI(cycleElapsed);
+            bool producedBehaviourTileTarget =
+                !hadBehaviourTileTarget &&
+                actor.beh_tile_target?.data != null &&
+                !actor._beh_skip && !actor.is_moving;
+            if (producedBehaviourTileTarget)
+            {
+                actor.b6_updateAI(cycleElapsed);
+                actor.b5_checkPathMovement(cycleElapsed);
+                ArmyRtsMovementDiagnostic.Log("p0",
+                    "passenger_move_command", actor,
+                    "kind=" + kind + " task=" + taskId);
+            }
+            actor.u10_checkSmoothMovement(cycleElapsed);
+            actor.skipBehaviour();
+            ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
+        }
+        catch (Exception error)
+        {
+            ArmyRtsMovementDiagnostic.Log("p0",
+                "passenger_task_exception", actor,
+                "kind=" + kind + " task=" + taskId + " error=" +
                 error.GetType().Name + ":" + error.Message);
             ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
         }

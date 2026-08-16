@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.performance;
@@ -434,6 +434,70 @@ internal static class ArmyRtsCombatHandoffRulesTests
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"))
             .Replace("\r\n", "\n");
+        string transport = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsTransportService.cs"));
+        string transportProduction = File.ReadAllText(Path.Combine(root,
+            "Code", "core", "lineage",
+            "ArmyRtsTransportProductionService.cs"));
+        string transportProductionPatch = File.ReadAllText(Path.Combine(
+            root, "Code", "patch",
+            "AW_ArmyRtsTransportProductionPatch.cs"));
+        Assert(transport.Contains("TaxiRequestState.Loading",
+                   StringComparison.Ordinal) &&
+               transport.Contains(
+                   "ArmyRtsTransportRules.ResolvePassengerTaskAction(",
+                   StringComparison.Ordinal) &&
+               transport.Contains("\"force_into_a_boat\"",
+                   StringComparison.Ordinal) &&
+               transport.Contains("pClean: true", StringComparison.Ordinal) &&
+               transport.Contains("pCleanJob: false",
+                   StringComparison.Ordinal) &&
+               transport.Contains("pForceAction: true",
+                   StringComparison.Ordinal) &&
+               transport.Contains("IsExecutingVanillaPassengerTask(",
+                   StringComparison.Ordinal),
+            "RTS transport must hand loading passengers to the original embark task without restarting active boat work");
+        Assert(!transport.Contains(".embarkInto(",
+                   StringComparison.Ordinal) &&
+               !transport.Contains(".disembarkTo(",
+                   StringComparison.Ordinal) &&
+               !transport.Contains(".spawnOn(", StringComparison.Ordinal),
+            "RTS transport coordination must not perform physical embark, unload, or teleport operations");
+        Assert(transportProduction.Contains(
+                "boatActor.setTask(\"boat_transport_go_load\"",
+                StringComparison.Ordinal),
+            "temporary RTS transports must enter the original boat loading task");
+        int provisionRouteStart = transportProduction.IndexOf(
+            "internal static bool CanProvisionRoute(",
+            StringComparison.Ordinal);
+        int provisionRouteEnd = transportProduction.IndexOf(
+            "internal static bool TryProvisionAndBind(",
+            Math.Max(0, provisionRouteStart), StringComparison.Ordinal);
+        string provisionRouteBody = provisionRouteStart >= 0 &&
+            provisionRouteEnd > provisionRouteStart
+            ? transportProduction.Substring(provisionRouteStart,
+                provisionRouteEnd - provisionRouteStart)
+            : string.Empty;
+        Assert(provisionRouteBody.Contains("pIgnoreDemand: true",
+                   StringComparison.Ordinal) &&
+               provisionRouteBody.Contains("pAllowFullDock: true",
+                   StringComparison.Ordinal),
+            "temporary RTS route admission must not be blocked by ordinary boat demand or dock type capacity");
+        Assert(transportProductionPatch.Contains(
+                   "HarmonyPatch(typeof(Docks), nameof(Docks.buildBoatFromHere))",
+                   StringComparison.Ordinal) &&
+               transportProductionPatch.Contains(
+                   "IsTemporaryBoatBuild(", StringComparison.Ordinal) &&
+               transportProductionPatch.Contains(
+                   "TryBuildTemporaryTransportAtDock(",
+                   StringComparison.Ordinal) &&
+               transportProduction.Contains(
+                   "World.world.units.createNewUnit(",
+                   StringComparison.Ordinal) &&
+               transportProduction.Contains("pDock.addBoatToDock(",
+                   StringComparison.Ordinal),
+            "temporary RTS boats must use the original dock spawn path while bypassing permanent-fleet resource and capacity gates");
+
         string combatBehaviours = File.ReadAllText(Path.Combine(root, "Code",
             "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
         int memberCombatStart = combatBehaviours.IndexOf(
@@ -1022,6 +1086,49 @@ internal static class ArmyRtsCombatHandoffRulesTests
         string p0Body = p0Start >= 0 && p0End > p0Start
             ? postRunner.Substring(p0Start, p0End - p0Start)
             : string.Empty;
+        int passengerTransportCall = p0Body.IndexOf(
+            "TryRunVanillaPassengerTransportP0(",
+            StringComparison.Ordinal);
+        int ordinaryCombatPreemption = p0Body.IndexOf(
+            "HasMilitaryCombatPriority(actor)",
+            StringComparison.Ordinal);
+        Assert(passengerTransportCall >= 0 &&
+               ordinaryCombatPreemption > passengerTransportCall,
+            "protected original embark and landing tasks must run before RTS combat can preempt them");
+        int passengerP0Start = postRunner.IndexOf(
+            "private static bool TryRunVanillaPassengerTransportP0(",
+            StringComparison.Ordinal);
+        int passengerP0End = postRunner.IndexOf(
+            "private static void RunMilitaryP0Combat(",
+            Math.Max(0, passengerP0Start), StringComparison.Ordinal);
+        string passengerP0Body = passengerP0Start >= 0 &&
+            passengerP0End > passengerP0Start
+            ? postRunner.Substring(passengerP0Start,
+                passengerP0End - passengerP0Start)
+            : string.Empty;
+        Assert(passengerP0Body.Contains(
+                   "ArmyRtsTransportService.IsExecutingVanillaPassengerTask(actor)",
+                   StringComparison.Ordinal) &&
+               passengerP0Body.Contains(
+                   "ShouldDrivePassengerTaskInMilitaryP0(",
+                   StringComparison.Ordinal) &&
+               passengerP0Body.Contains(
+                   "actor.b4_checkTaskVerifier(cycleElapsed)",
+                   StringComparison.Ordinal) &&
+               passengerP0Body.Contains(
+                   "actor.b5_checkPathMovement(cycleElapsed)",
+                   StringComparison.Ordinal) &&
+               passengerP0Body.Contains(
+                   "actor.b6_updateAI(cycleElapsed)",
+                   StringComparison.Ordinal) &&
+               passengerP0Body.Contains(
+                   "actor.u10_checkSmoothMovement(cycleElapsed)",
+                   StringComparison.Ordinal) &&
+               passengerP0Body.Contains(
+                   "ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId)",
+                   StringComparison.Ordinal),
+            "large-world military P0 must advance the original passenger task pipeline and mark it processed once");
+
         int currentEnemy = p0Body.IndexOf(
             "actor.b2_checkCurrentEnemyTarget(cycleElapsed)",
             StringComparison.Ordinal);

@@ -41,6 +41,7 @@ internal static class ArmyRtsRouteChoiceRulesTests
         Assert(ArmyRtsTransportRules.CanCreateVoyageState(
                 actorInsideBoat: true, physicalRouteAvailable: false),
             "an already embarked actor must retain transport ownership while its route is active");
+        VanillaPassengerTasksOwnLoadingAndLanding();
         Assert(!ArmyRtsTransportRules.ShouldCountAsLanded(
                 sameTargetIsland: true, actorOnStableLand: false,
                 targetOnStableLand: true),
@@ -170,6 +171,54 @@ internal static class ArmyRtsRouteChoiceRulesTests
                 ArmyStallRecoveryAction.EnterTransport) ==
                ArmyStallRecoveryAction.EnterTransport,
             "a cross-island retreat may still hand movement to transport");
+    }
+
+    private static void VanillaPassengerTasksOwnLoadingAndLanding()
+    {
+        Assert(ArmyRtsTransportRules.ResolvePassengerTaskAction(
+                transportOwned: true, insideBoat: false,
+                requestLoading: false, protectedBoatTask: false,
+                landingTask: false, stableTargetLand: false) ==
+               ArmyRtsPassengerTaskAction.WaitForLoading,
+            "a pending taxi request waits for the original boat to enter loading");
+        Assert(ArmyRtsTransportRules.ResolvePassengerTaskAction(
+                transportOwned: true, insideBoat: false,
+                requestLoading: true, protectedBoatTask: false,
+                landingTask: false, stableTargetLand: false) ==
+               ArmyRtsPassengerTaskAction.StartVanillaEmbark,
+            "a loading request hands the passenger to the original embark task");
+        Assert(ArmyRtsTransportRules.ResolvePassengerTaskAction(
+                transportOwned: true, insideBoat: false,
+                requestLoading: true, protectedBoatTask: true,
+                landingTask: false, stableTargetLand: false) ==
+               ArmyRtsPassengerTaskAction.PreserveVanillaBoatTask,
+            "an active vanilla boat task is never restarted");
+        Assert(ArmyRtsTransportRules.ResolvePassengerTaskAction(
+                transportOwned: true, insideBoat: false,
+                requestLoading: false, protectedBoatTask: false,
+                landingTask: true, stableTargetLand: true) ==
+               ArmyRtsPassengerTaskAction.PreserveLandingTask,
+            "the original short move finishes before RTS recovery");
+        Assert(ArmyRtsTransportRules.ResolvePassengerTaskAction(
+                transportOwned: true, insideBoat: false,
+                requestLoading: false, protectedBoatTask: false,
+                landingTask: false, stableTargetLand: true) ==
+               ArmyRtsPassengerTaskAction.ResumeRts,
+            "stable target-island land returns ownership to RTS");
+        Assert(ArmyRtsTransportRules.IsProtectedVanillaPassengerTask(
+                "force_into_a_boat"),
+            "the original pickup path is protected");
+        Assert(ArmyRtsTransportRules.IsProtectedVanillaPassengerTask(
+                "sit_inside_boat"),
+            "the original passenger state is protected");
+        Assert(ArmyRtsTransportRules.ShouldDrivePassengerTaskInMilitaryP0(
+                insideBoat: false, protectedBoatTask: true,
+                landingTask: false),
+            "large-world P0 advances an actor walking to its assigned boat");
+        Assert(!ArmyRtsTransportRules.ShouldDrivePassengerTaskInMilitaryP0(
+                insideBoat: true, protectedBoatTask: true,
+                landingTask: false),
+            "the boat moves an embarked passenger");
     }
 
     private static void TransportRecoveryUsesLockedStrategicEndpoint()
