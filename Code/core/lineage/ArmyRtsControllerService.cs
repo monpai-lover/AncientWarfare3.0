@@ -2253,6 +2253,7 @@ namespace AncientWarfare3.core.lineage
             bool missionActive = army?.data != null &&
                                  HasActiveMission(army.id);
             bool actorIsCaptain = IsCaptain(pActor, army);
+            if (!missionActive || actorIsCaptain) return false;
             RuntimeState runtime = null;
             bool fieldCombatReleased = army?.data != null &&
                 RuntimeByArmy.TryGetValue(army.id, out runtime) &&
@@ -2264,18 +2265,14 @@ namespace AncientWarfare3.core.lineage
                 ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(
                     siegeCombatActive,
                     IsInsideCityCombatZone(pActor, activeSiegeCity));
-            bool hasValidCombatTarget = useSiegeCombatTask
-                ? IsValidSiegeCombatTarget(pActor,
-                    pActor?.attack_target?.a) ||
-                  IsValidSiegeCombatTarget(pActor,
-                    pActor?.beh_actor_target?.a) ||
-                  FindSiegeCombatTarget(pActor) != null
-                : HasValidMemberCombatTarget(pActor);
             if (useSiegeCombatTask)
             {
                 if (!HasMemberCombatMission(pActor)) return false;
                 return SetMemberSiegeCombatTask(pActor);
             }
+            bool hasValidCombatTarget = fieldCombatReleased
+                ? false
+                : HasValidMemberCombatTarget(pActor);
             if (!ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
                 missionActive, actorIsCaptain, fieldCombatReleased,
                     hasValidCombatTarget))
