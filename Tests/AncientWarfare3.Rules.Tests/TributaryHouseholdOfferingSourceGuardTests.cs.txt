@@ -18,6 +18,8 @@ internal static class TributaryHouseholdOfferingSourceGuardTests
             "offering reads indexed direct sons");
         True(offering.Contains("TryCommitTributaryConsort("),
             "offering uses explicit-owner household commit");
+        True(offering.Contains("acceptedPrinceCandidates"),
+            "invalid princes do not exhaust the bounded recipient page");
         True(settlement.IndexOf("MarkPaid", StringComparison.Ordinal) <
              settlement.IndexOf("TributaryHouseholdOfferingService.TryOffer",
                  StringComparison.Ordinal),

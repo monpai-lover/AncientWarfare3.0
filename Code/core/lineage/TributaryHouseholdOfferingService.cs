@@ -76,13 +76,16 @@ namespace AncientWarfare3.core.lineage
             {
                 IReadOnlyList<long> childIds =
                     SuccessionRelationshipIndex.GetChildIds(king.data.id);
+                int acceptedPrinceCandidates = 0;
                 for (int index = 0; index < childIds.Count &&
-                     candidates.Count < MaximumRecipientCandidates; index++)
+                     acceptedPrinceCandidates < MaximumRecipientCandidates;
+                     index++)
                 {
                     Actor prince = FindActor(childIds[index]);
                     if (prince == heir) continue;
-                    AddCandidate(candidates, kingdom, prince,
-                        RoyalHouseholdOwnerRole.Prince, query);
+                    if (AddCandidate(candidates, kingdom, prince,
+                            RoyalHouseholdOwnerRole.Prince, query))
+                        acceptedPrinceCandidates++;
                 }
             }
             candidates.Sort(RoyalHouseholdRecipientRules.Compare);
@@ -91,24 +94,27 @@ namespace AncientWarfare3.core.lineage
             return default;
         }
 
-        private static void AddCandidate(
+        private static bool AddCandidate(
             List<RoyalHouseholdRecipientCandidate> candidates,
             Kingdom kingdom, Actor actor, RoyalHouseholdOwnerRole role,
             RulerHouseholdQuery query)
         {
             if (actor?.data == null || candidates.Any(candidate =>
-                    candidate.ActorId == actor.data.id)) return;
+                    candidate.ActorId == actor.data.id)) return false;
             int capacity = RoyalHouseholdRecipientRules.Capacity(role,
                 RulerHouseholdService.ResolveRealmTier(kingdom));
             bool eligible = RulerHouseholdService.IsEligibleTributaryOwner(
                 actor, kingdom);
+            if (!eligible) return false;
+            int activeConsorts = query.CountActiveConsorts(actor.data.id);
+            if (activeConsorts >= capacity) return false;
             bool legitimate = true;
             actor.data.get(LineageKeys.BIRTH_LEGITIMACY, out legitimate,
                 true);
             candidates.Add(new RoyalHouseholdRecipientCandidate(
-                actor.data.id, role, eligible,
-                query.CountActiveConsorts(actor.data.id), capacity,
+                actor.data.id, role, true, activeConsorts, capacity,
                 legitimate, actor.data.created_time));
+            return true;
         }
 
         private static Actor FindActor(long actorId)

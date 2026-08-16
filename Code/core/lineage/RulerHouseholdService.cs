@@ -485,24 +485,6 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorDying(Actor pActor)
         {
             if (!IsAuthority() || !Ready || pActor?.data == null) return;
-            bool currentRuler;
-            try
-            {
-                currentRuler = pActor.isKing() &&
-                               pActor.kingdom?.king == pActor;
-            }
-            catch { currentRuler = false; }
-            bool formerRuler;
-            try
-            {
-                formerRuler = pActor.hasTrait(
-                    LineageKeys.TRAIT_FORMER_KING);
-            }
-            catch { formerRuler = false; }
-            pActor.data.get(LineageKeys.RULER_HOUSEHOLD_RULER_ID,
-                out long cachedRulerId, -1L);
-            if (!RulerHouseholdRules.ShouldQueryOnDeath(currentRuler,
-                    formerRuler, cachedRulerId >= 0L)) return;
             try
             {
                 var query = new RulerHouseholdQuery(DB);
@@ -599,6 +581,8 @@ namespace AncientWarfare3.core.lineage
         private static bool MovePartner(Actor partner, Kingdom pRecipient,
             City pCapital)
         {
+            Kingdom sourceKingdom = partner?.kingdom;
+            City sourceCity = partner?.city;
             try
             {
                 partner.cancelAllBeh();
@@ -610,13 +594,37 @@ namespace AncientWarfare3.core.lineage
                     if (partner.city != pCapital)
                         partner.joinCity(pCapital);
                 }
-                return partner.kingdom == pRecipient &&
-                       partner.city == pCapital;
+                if (partner.kingdom == pRecipient && partner.city == pCapital)
+                    return true;
+                RestorePartnerAffiliation(partner, sourceKingdom, sourceCity);
+                return false;
             }
             catch
             {
+                RestorePartnerAffiliation(partner, sourceKingdom, sourceCity);
                 return false;
             }
+        }
+
+        private static void RestorePartnerAffiliation(Actor partner,
+            Kingdom sourceKingdom, City sourceCity)
+        {
+            if (partner?.data == null || sourceKingdom?.data == null ||
+                sourceKingdom.isRekt()) return;
+            try
+            {
+                using (FormalAffiliationTransferScope.Open(partner.data.id,
+                           sourceKingdom.id, sourceCity?.data?.id ?? -1L))
+                {
+                    if (partner.kingdom != sourceKingdom)
+                        partner.joinKingdom(sourceKingdom);
+                    if (sourceCity?.data != null && !sourceCity.isRekt() &&
+                        sourceCity.kingdom == sourceKingdom &&
+                        partner.city != sourceCity)
+                        partner.joinCity(sourceCity);
+                }
+            }
+            catch { }
         }
 
         private static void CloseRelationship(long pRelationshipId,

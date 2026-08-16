@@ -26,15 +26,35 @@ internal static class RulerHouseholdOwnerSourceGuardTests
             "tributary consort commits explicit owner");
         True(pregnancy.Contains("ReadActiveOwnerIdsByRecipient("),
             "monthly pregnancy reads bounded owner ids");
+        True(pregnancy.Contains("ownerCursor, 8"),
+            "monthly pregnancy rotates past the first owner page");
         True(pregnancy.Contains("owner.kingdom.id != row.RecipientKingdomId"),
             "managed father accepts a non-ruler owner in recipient realm");
+        string death = Slice(service, "public static void OnActorDying(",
+            "public static void OnActorLoaded(");
+        False(death.Contains("if (!RulerHouseholdRules.ShouldQueryOnDeath"),
+            "non-ruler household owners are checked on death");
+        True(service.Contains("RestorePartnerAffiliation("),
+            "failed migration restores original affiliation");
     }
 
     private static string Read(string root, params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { root }.Concat(parts).ToArray()));
 
+    private static string Slice(string source, string start, string end)
+    {
+        int from = source.IndexOf(start, StringComparison.Ordinal);
+        int to = source.IndexOf(end, from < 0 ? 0 : from,
+            StringComparison.Ordinal);
+        if (from < 0 || to <= from)
+            throw new InvalidOperationException("Could not extract source section");
+        return source.Substring(from, to - from);
+    }
+
     private static void True(bool value, string name)
     {
         if (!value) throw new InvalidOperationException(name);
     }
+
+    private static void False(bool value, string name) => True(!value, name);
 }

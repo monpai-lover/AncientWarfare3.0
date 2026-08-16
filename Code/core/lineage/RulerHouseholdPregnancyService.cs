@@ -13,6 +13,8 @@ namespace AncientWarfare3.core.lineage
         private const int KingdomsPerAuthorityCycle = 1;
         private static readonly MonthlyAuthorityWorkQueue<Kingdom>
             MonthlyWork = new MonthlyAuthorityWorkQueue<Kingdom>();
+        private static readonly Dictionary<long, long> OwnerCursors =
+            new Dictionary<long, long>();
 
         internal static int PendingMonthlyWorkForDiagnostics =>
             MonthlyWork.PendingCount;
@@ -124,6 +126,7 @@ namespace AncientWarfare3.core.lineage
         public static void Reset()
         {
             MonthlyWork.Clear();
+            OwnerCursors.Clear();
         }
 
         public static void ProcessAuthorityCycle()
@@ -156,13 +159,17 @@ namespace AncientWarfare3.core.lineage
                 pKingdom.isRekt())
                 return;
             var query = new RulerHouseholdQuery(DB);
+            OwnerCursors.TryGetValue(pKingdom.id, out long ownerCursor);
             IReadOnlyList<long> ownerIds =
-                query.ReadActiveOwnerIdsByRecipient(pKingdom.id, 8);
+                query.ReadActiveOwnerIdsByRecipient(pKingdom.id,
+                    ownerCursor, 8);
+            if (ownerIds.Count == 0 && ownerCursor >= 0L)
+                ownerIds = query.ReadActiveOwnerIdsByRecipient(pKingdom.id,
+                    -1L, 8);
             if (ownerIds.Count == 0) return;
-            int ownerIndex = RulerHouseholdPregnancyRules
-                .RotatingCandidateIndex(pMonthKey, pKingdom.id,
-                    ownerIds.Count);
+            int ownerIndex = 0;
             Actor ruler = FindActor(ownerIds[ownerIndex]);
+            OwnerCursors[pKingdom.id] = ownerIds[ownerIndex];
             if (!IsLiveActor(ruler) || ruler.kingdom != pKingdom) return;
             IReadOnlyList<RulerHouseholdRecord> rows =
                 query.ReadActiveByOwner(ruler.data.id, 9);

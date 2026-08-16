@@ -93,6 +93,12 @@ namespace AncientWarfare3.core.lineage
         public IReadOnlyList<long> ReadActiveOwnerIdsByRecipient(
             long pKingdomId, int pLimit)
         {
+            return ReadActiveOwnerIdsByRecipient(pKingdomId, -1L, pLimit);
+        }
+
+        public IReadOnlyList<long> ReadActiveOwnerIdsByRecipient(
+            long pKingdomId, long pAfterOwnerId, int pLimit)
+        {
             int limit = Math.Min(MaximumMaintenanceRows,
                 Math.Max(0, pLimit));
             var result = new List<long>(limit);
@@ -100,8 +106,9 @@ namespace AncientWarfare3.core.lineage
             using var command = new SQLiteCommand(
                 "SELECT DISTINCT RULER_ACTOR_ID FROM RulerHousehold WHERE " +
                 "RECIPIENT_KINGDOM_ID=@kingdom AND STATUS=0 AND END_TIME<0 " +
-                "ORDER BY RULER_ACTOR_ID LIMIT @limit", _db);
+                "AND RULER_ACTOR_ID>@after ORDER BY RULER_ACTOR_ID LIMIT @limit", _db);
             command.Parameters.AddWithValue("@kingdom", pKingdomId);
+            command.Parameters.AddWithValue("@after", pAfterOwnerId);
             command.Parameters.AddWithValue("@limit", limit);
             using SQLiteDataReader reader = command.ExecuteReader();
             while (reader.Read()) result.Add(reader.GetInt64(0));
