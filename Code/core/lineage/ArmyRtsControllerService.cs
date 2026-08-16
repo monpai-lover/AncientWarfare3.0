@@ -2639,24 +2639,27 @@ namespace AncientWarfare3.core.lineage
                 Actor combatTarget = pActor.beh_actor_target?.a;
                 if (!IsValidCaptainCombatTarget(pActor, combatTarget))
                     combatTarget = FindCaptainCombatTarget(pActor);
-                CountFieldCombatEngagement(army, out int engaged,
-                    out _, out _);
-                if (ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
-                        fieldCombatRuntime.FieldCombatReleased,
-                        combatTarget != null, engaged > 0))
+                if (combatTarget == null)
                 {
-                    ExitFieldCombat(army, fieldCombatRuntime);
-                    if (Controllers.TryGet(army.id,
-                            out ArmyRtsControllerRecord fieldCombatRecord) &&
-                        fieldCombatRecord?.Mission != null)
+                    CountFieldCombatEngagement(army, out int engaged,
+                        out _, out _);
+                    if (ArmyRtsFieldCombatRules.ShouldAbortFieldCombatFromP0(
+                            fieldCombatRuntime.FieldCombatReleased,
+                            pCaptainHasCombatTarget: false, engaged > 0))
                     {
-                        EnsureJobs(army, fieldCombatRuntime,
-                            fieldCombatRecord.Mission,
-                            fieldCombatRecord.State);
+                        ExitFieldCombat(army, fieldCombatRuntime);
+                        if (Controllers.TryGet(army.id,
+                                out ArmyRtsControllerRecord fieldCombatRecord) &&
+                            fieldCombatRecord?.Mission != null)
+                        {
+                            EnsureJobs(army, fieldCombatRuntime,
+                                fieldCombatRecord.Mission,
+                                fieldCombatRecord.State);
+                        }
+                        ArmyRtsMovementDiagnostic.Log("rts",
+                            "field_combat_cleared_p0", pActor,
+                            "reason=no_captain_target");
                     }
-                    ArmyRtsMovementDiagnostic.Log("rts",
-                        "field_combat_cleared_p0", pActor,
-                        "reason=no_captain_target");
                 }
             }
             if (!captain || !UsesNativeMissionExecution(army, record))
