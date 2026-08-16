@@ -3886,7 +3886,10 @@ namespace AncientWarfare3.core.lineage
                     pActor.ai.clearJob();
                 }
                 else
-                    pActor.ai.setJob(pActor.getNextJob());
+                {
+                    pActor.ai.clearJob();
+                    pActor.ai.setJob(Actor.nextJobActor(pActor));
+                }
             }
             catch
             {
