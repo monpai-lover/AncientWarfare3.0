@@ -1,0 +1,80 @@
+using System;
+using System.IO;
+
+internal static class RtsMemberGeneralCombatRegressionTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string content = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "ArmyRtsContent.cs"));
+        string behaviour = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehArmyRtsCaptainCombat.cs"));
+
+        Assert(content.Contains("warrior_army_leader_move_to_attack_target",
+                StringComparison.Ordinal),
+            "captains must retain the native city attack movement decision");
+        Assert(!behaviour.Contains("BehArmyRtsMemberCombat",
+                StringComparison.Ordinal),
+            "member combat must not retain a duplicate custom target finder");
+        Assert(!behaviour.Contains("b2_updateAI", StringComparison.Ordinal) &&
+               !behaviour.Contains("b5_checkPathMovement", StringComparison.Ordinal) &&
+               !behaviour.Contains("b6_updateMovement", StringComparison.Ordinal),
+            "member combat must not manually advance the native actor lifecycle");
+
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"))
+            .Replace("\r\n", "\n");
+        Assert(controller.Contains(
+                   "// A member's fighting task is the native task that just acquired its target.",
+                   StringComparison.Ordinal) &&
+               controller.Contains("if (!IsCaptain(pActor, army)) return false;",
+                   StringComparison.Ordinal),
+            "member fighting must never be redirected into an RTS job");
+        Assert(controller.Contains("HasValidMemberCombatTarget(pActor) &&",
+                   StringComparison.Ordinal) &&
+               controller.Contains("pActor.isTask(\"fighting\")) return;",
+                   StringComparison.Ordinal),
+            "member mission repair must preserve an active native fighting task");
+
+        string scheduler = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        int beforeEnemySearchStage = scheduler.IndexOf(
+            "case PostStage.BeforeEnemySearch:", StringComparison.Ordinal);
+        int prepareEnemySearchStage = scheduler.IndexOf(
+            "case PostStage.PrepareEnemySearch:", beforeEnemySearchStage,
+            StringComparison.Ordinal);
+        string enemySearchTransition = scheduler.Substring(
+            beforeEnemySearchStage,
+            prepareEnemySearchStage - beforeEnemySearchStage);
+        Assert(enemySearchTransition.Contains(
+                   "stage = PostStage.MilitaryP0;",
+                   StringComparison.Ordinal) &&
+               enemySearchTransition.Contains(
+                   "BeginEnemySearchPreparation();",
+                   StringComparison.Ordinal),
+            "military P0 must run after native timers/current-target checks " +
+            "and before the ordinary enemy-search stage");
+
+        int priorityRefreshStart = controller.IndexOf(
+            "internal static bool TryRefreshMilitaryPriority(Actor pActor)",
+            StringComparison.Ordinal);
+        int priorityRefreshEnd = controller.IndexOf(
+            "public static bool ShouldHoldDeploymentMove(Actor pActor)",
+            priorityRefreshStart, StringComparison.Ordinal);
+        string priorityRefresh = priorityRefreshStart >= 0 &&
+            priorityRefreshEnd > priorityRefreshStart
+            ? controller.Substring(priorityRefreshStart,
+                priorityRefreshEnd - priorityRefreshStart)
+            : string.Empty;
+        Assert(priorityRefresh.Contains("HasMemberCombatMission(pActor)",
+                   StringComparison.Ordinal),
+            "a member holding a native fighting target remains in military " +
+            "P0 for every combat cycle");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

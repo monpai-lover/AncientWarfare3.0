@@ -1870,13 +1870,16 @@ namespace AncientWarfare3.core.lineage
         {
             bool targetAlive = pTarget?.data != null &&
                                !pTarget.isRekt() && pTarget.isAlive();
+            bool canAttack = false;
+            try { canAttack = targetAlive && pActor.isTargetOkToAttack(pTarget); }
+            catch { }
             bool sameIsland = targetAlive &&
                               pTarget.current_tile?.data != null &&
                               pActor.current_tile.isSameIsland(
                                   pTarget.current_tile) == true;
             return ArmyRtsCaptainCombatRules.ShouldRetainMemberTarget(
                 targetAlive,
-                targetHostile: targetAlive &&
+                targetHostile: canAttack &&
                                 IsHostileCaptainTarget(pActor, pTarget),
                 sameIsland,
                 combatOwned: true);
@@ -1911,29 +1914,6 @@ namespace AncientWarfare3.core.lineage
                         continue;
                     int distance = Toolbox.SquaredDistTile(
                         pCaptain.current_tile, candidate.current_tile);
-                    if (distance >= bestDistance) continue;
-                    bestDistance = distance;
-                    best = candidate;
-                }
-            }
-            catch { }
-            return best;
-        }
-
-        internal static Actor FindMemberCombatTarget(Actor pActor)
-        {
-            if (!HasValidMemberCombatActorContext(pActor)) return null;
-            Actor best = null;
-            int bestDistance = int.MaxValue;
-            try
-            {
-                foreach (Actor candidate in Finder.getUnitsFromChunk(
-                             pActor.current_tile, 2, 10))
-                {
-                    if (!IsValidOwnedMemberCombatTarget(pActor, candidate))
-                        continue;
-                    int distance = Toolbox.SquaredDistTile(
-                        pActor.current_tile, candidate.current_tile);
                     if (distance >= bestDistance) continue;
                     bestDistance = distance;
                     best = candidate;
@@ -2149,27 +2129,24 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || army?.data == null ||
                 !HasActiveMission(army.id) ||
                 RoyalGuardService.IsRoyalGuard(pActor)) return false;
-            if (IsCaptain(pActor, army))
+            // A member's fighting task is the native task that just acquired its target.
+            // Replacing its job here clears that handoff before native fighting can run.
+            if (!IsCaptain(pActor, army)) return false;
+            Actor target = pActor.attack_target?.a;
+            if (!IsValidCaptainCombatTarget(pActor, target))
+                target = pActor.beh_actor_target?.a;
+            if (!IsValidCaptainCombatTarget(pActor, target))
+                target = FindCaptainCombatTarget(pActor);
+            if (IsValidCaptainCombatTarget(pActor, target))
             {
-                Actor target = pActor.attack_target?.a;
-                if (!IsValidCaptainCombatTarget(pActor, target))
-                    target = pActor.beh_actor_target?.a;
-                if (!IsValidCaptainCombatTarget(pActor, target))
-                    target = FindCaptainCombatTarget(pActor);
-                if (IsValidCaptainCombatTarget(pActor, target))
-                {
-                    pActor.beh_actor_target = target;
-                    SetCaptainTacticalTask(pActor);
-                }
-                else
-                {
-                    ClearActorAttackTarget(pActor);
-                    ReassertCaptainMissionTask(pActor);
-                }
-                return true;
+                pActor.beh_actor_target = target;
+                SetCaptainTacticalTask(pActor);
             }
-            if (!HasMemberCombatMission(pActor)) return false;
-            TrySetMemberCombatTask(pActor);
+            else
+            {
+                ClearActorAttackTarget(pActor);
+                ReassertCaptainMissionTask(pActor);
+            }
             return true;
         }
 
@@ -2270,33 +2247,11 @@ namespace AncientWarfare3.core.lineage
                 if (!HasMemberCombatMission(pActor)) return false;
                 return SetMemberSiegeCombatTask(pActor);
             }
-            bool hasValidCombatTarget = fieldCombatReleased
-                ? false
-                : HasValidMemberCombatTarget(pActor);
-            if (!ArmyRtsCaptainCombatRules.ShouldUseMemberCombatTask(
-                missionActive, actorIsCaptain, fieldCombatReleased,
-                    hasValidCombatTarget))
-            {
-                bool suppressVanillaFight = ArmyRtsCaptainCombatRules.
-                    ShouldSuppressVanillaMemberFight(missionActive,
-                        actorIsCaptain, fieldCombatReleased,
-                        hasValidCombatTarget);
-                if (ArmyRtsCaptainCombatRules.ShouldRestoreVanillaMemberFollow(
-                        suppressVanillaFight,
-                        pActor?.isTask(ArmyRtsContent.MemberCombatTaskId) == true))
-                    RestoreVanillaMemberFollow(pActor);
-                return false;
-            }
-            if (!HasMemberCombatMission(pActor)) return false;
-            try
-            {
-                if (pActor.isTask(ArmyRtsContent.MemberCombatTaskId))
-                    return true;
-                pActor.ai.setJob(ArmyRtsContent.MemberCombatJobId);
-                pActor.ai.setTask(ArmyRtsContent.MemberCombatTaskId);
-                return pActor.isTask(ArmyRtsContent.MemberCombatTaskId);
-            }
-            catch { return false; }
+            if (pActor.isTask("fighting"))
+                return HasValidMemberCombatTarget(pActor);
+            if (pActor.isTask(ArmyRtsContent.MemberCombatTaskId))
+                RestoreVanillaMemberFollow(pActor);
+            return false;
         }
 
         private static bool SetMemberSiegeCombatTask(Actor pActor)
@@ -2315,9 +2270,7 @@ namespace AncientWarfare3.core.lineage
         private static bool HasValidMemberCombatTarget(Actor pActor)
         {
             Actor attackTarget = pActor?.attack_target?.a;
-            if (IsValidMemberCombatTarget(pActor, attackTarget)) return true;
-            return IsValidMemberCombatTarget(pActor,
-                pActor?.beh_actor_target?.a);
+            return IsValidMemberCombatTarget(pActor, attackTarget);
         }
 
         private static void RestoreVanillaMemberFollow(Actor pActor)
@@ -2363,8 +2316,10 @@ namespace AncientWarfare3.core.lineage
                     ArmyMilitaryMovementPriorityKind.RtsMember);
                 return true;
             }
+            bool ownsNativeCombatCycle = HasMemberCombatMission(pActor) &&
+                HasImmediateCombatPriority(pActor);
             if (HasActiveCaptainObjective(pActor) ||
-                HasActiveMemberObjective(pActor))
+                HasActiveMemberObjective(pActor) || ownsNativeCombatCycle)
             {
                 ArmyMilitaryMovementPriorityIndex.Register(pActor.data.id,
                     ArmyMilitaryMovementPriorityKind.RtsMember);
@@ -3886,7 +3841,10 @@ namespace AncientWarfare3.core.lineage
                     pActor.ai.clearJob();
                 }
                 else
-                    pActor.ai.setJob(pActor.getNextJob());
+                {
+                    pActor.ai.clearJob();
+                    StandingArmyPeacetimeService.RefreshAfterReturn(pActor);
+                }
             }
             catch
             {
@@ -5988,12 +5946,8 @@ namespace AncientWarfare3.core.lineage
                     jobId = ArmyRtsContent.MemberCombatJobId;
                     taskId = ArmyRtsContent.SiegeCombatTaskId;
                 }
-                else if (runtime.FieldCombatReleased ||
-                         HasValidMemberCombatTarget(pActor))
-                {
-                    jobId = ArmyRtsContent.MemberCombatJobId;
-                    taskId = ArmyRtsContent.MemberCombatTaskId;
-                }
+                else if (HasValidMemberCombatTarget(pActor) &&
+                    pActor.isTask("fighting")) return;
             }
             bool taskMissing = !pActor.isTask(taskId);
             SetJob(pActor, jobId, taskId,
