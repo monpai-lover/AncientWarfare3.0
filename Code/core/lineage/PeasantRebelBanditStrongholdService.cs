@@ -596,10 +596,12 @@ namespace AncientWarfare3.core.lineage
                     PeasantRebelBanditStateStore.Write(pAttacker,
                         attackerState);
                 }
-                pState.Phase = BanditStrongholdPhase.Completed;
-                pState.SuppressorKingdomId = pAttacker.getID();
                 if (pState.StrongholdCityId == pStronghold.getID())
+                {
+                    pState.Phase = BanditStrongholdPhase.Completed;
+                    pState.SuppressorKingdomId = pAttacker.getID();
                     PeasantRebelBanditStateStore.Clear(pDefender);
+                }
                 else
                 {
                     pState.InheritedStrongholdCityIds.Remove(
