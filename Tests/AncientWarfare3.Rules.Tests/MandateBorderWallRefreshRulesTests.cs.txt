@@ -1,0 +1,100 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class MandateBorderWallRefreshRulesTests
+{
+    public static void Run()
+    {
+        StateStartsInactiveAndEmpty();
+        RequiresDecisionActivation();
+        SelectsOnlyTheChangedLocalNeighborhood();
+        RestoresOnlyTheWallTypeOwnedByTheManifest();
+    }
+
+    private static void StateStartsInactiveAndEmpty()
+    {
+        var state = new MandateBorderWallState();
+        Equal(1, state.SchemaVersion,
+            "wall state starts at schema version one");
+        False(state.Activated,
+            "wall lifecycle is not active before the decision");
+        Equal(0, state.Cities.Count,
+            "wall state owns no city manifests initially");
+        var point = new MandateBorderWallPointState
+        {
+            X = 3,
+            Y = 4,
+            OriginalTopTypeId = "road"
+        };
+        Equal("road", point.OriginalTopTypeId,
+            "manifest point preserves the prior top tile id");
+    }
+
+    private static void RequiresDecisionActivation()
+    {
+        False(MandateBorderWallRefreshRules.ShouldRefresh(
+            activated: false, cityEligible: true),
+            "war and ownership events do not activate border walls");
+        True(MandateBorderWallRefreshRules.ShouldRefresh(
+            activated: true, cityEligible: true),
+            "an activated eligible border city refreshes");
+        False(MandateBorderWallRefreshRules.ShouldRefresh(
+            activated: true, cityEligible: false),
+            "an obsolete border city restores without rebuilding");
+    }
+
+    private static void SelectsOnlyTheChangedLocalNeighborhood()
+    {
+        SetEqual(new long[] { 2, 3, 4 },
+            MandateBorderWallRefreshRules.AffectedCityIds(
+                changedCityId: 2, previousCityId: 3,
+                neighbourCityIds: new long[] { 2, 4, -1, 4 }),
+            "refresh scope is the changed city, old city, and direct neighbor");
+    }
+
+    private static void RestoresOnlyTheWallTypeOwnedByTheManifest()
+    {
+        True(MandateBorderWallRefreshRules.ShouldRestore(
+            currentTopTypeId: "wall_order",
+            placedWallTypeId: "wall_order"),
+            "an unchanged owned wall may be restored");
+        False(MandateBorderWallRefreshRules.ShouldRestore(
+            currentTopTypeId: "road",
+            placedWallTypeId: "wall_order"),
+            "a later player or system edit is preserved");
+        False(MandateBorderWallRefreshRules.ShouldRestore(
+            currentTopTypeId: "wall_order",
+            placedWallTypeId: ""),
+            "a corrupt manifest cannot restore a tile");
+    }
+
+    private static void SetEqual(IEnumerable<long> expected,
+        IEnumerable<long> actual, string message)
+    {
+        long[] left = expected.OrderBy(value => value).ToArray();
+        long[] right = actual.OrderBy(value => value).ToArray();
+        if (left.SequenceEqual(right)) return;
+        throw new InvalidOperationException(message + ": expected [" +
+            string.Join(",", left) + "], got [" +
+            string.Join(",", right) + "]");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $": expected {expected}, got {actual}");
+    }
+}
