@@ -179,24 +179,49 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    "IsInsideCityCombatZone(pActor, activeSiegeCity)",
                    StringComparison.Ordinal),
             "routine member job repair gates siege combat by the individual soldier's target-city position");
-        int siegeRegisterStart = controller.IndexOf(
-            "private static void RegisterTargetCitySiegeMembers(",
+        int siegeEntryStart = controller.IndexOf(
+            "private static bool EnterTargetCitySiegeCombat(",
             StringComparison.Ordinal);
-        int siegeRegisterEnd = controller.IndexOf(
-            "private static void ExitTargetCitySiegeCombat(",
-            Math.Max(0, siegeRegisterStart), StringComparison.Ordinal);
-        string siegeRegisterBody = siegeRegisterStart >= 0 &&
-            siegeRegisterEnd > siegeRegisterStart
-            ? controller.Substring(siegeRegisterStart,
-                siegeRegisterEnd - siegeRegisterStart)
+        int siegeEntryEnd = controller.IndexOf(
+            "private static void EnsureTargetCitySiegeTasks(",
+            Math.Max(0, siegeEntryStart), StringComparison.Ordinal);
+        string siegeEntryBody = siegeEntryStart >= 0 &&
+            siegeEntryEnd > siegeEntryStart
+            ? controller.Substring(siegeEntryStart,
+                siegeEntryEnd - siegeEntryStart)
             : string.Empty;
-        Assert(siegeRegisterBody.Contains(
-                   "SetNativeMemberMissionTask(actor, pArmy",
+        int refreshTarget = siegeEntryBody.IndexOf(
+            "pRuntime.SiegeTargetActorId = target.data.id;",
+            StringComparison.Ordinal);
+        int ensureTasks = siegeEntryBody.IndexOf(
+            "EnsureTargetCitySiegeTasks(pArmy, pRuntime);",
+            StringComparison.Ordinal);
+        int activeReturn = siegeEntryBody.IndexOf(
+            "if (!enteringSiege) return true;", StringComparison.Ordinal);
+        Assert(refreshTarget >= 0 && ensureTasks > refreshTarget &&
+               (activeReturn < 0 || ensureTasks < activeReturn),
+            "every active siege tick repairs tactical task ownership before returning");
+
+        int siegeEnsureStart = controller.IndexOf(
+            "private static void EnsureTargetCitySiegeTasks(",
+            StringComparison.Ordinal);
+        int siegeEnsureEnd = controller.IndexOf(
+            "private static void ExitTargetCitySiegeCombat(",
+            Math.Max(0, siegeEnsureStart), StringComparison.Ordinal);
+        string siegeEnsureBody = siegeEnsureStart >= 0 &&
+            siegeEnsureEnd > siegeEnsureStart
+            ? controller.Substring(siegeEnsureStart,
+                siegeEnsureEnd - siegeEnsureStart)
+            : string.Empty;
+        Assert(siegeEnsureBody.Contains("SetCaptainTacticalTask(captain)",
                    StringComparison.Ordinal) &&
-               !siegeRegisterBody.Contains(
-                   "ArmyRtsContent.SiegeCombatTaskId",
+               siegeEnsureBody.Contains("TryReopenJobOwnershipRepair(pRuntime)",
+                   StringComparison.Ordinal) &&
+               siegeEnsureBody.Contains("MaximumJobMutationsPerController",
+                   StringComparison.Ordinal) &&
+               siegeEnsureBody.Contains("SetNativeMemberMissionTask(actor, pArmy)",
                    StringComparison.Ordinal),
-            "siege entry evaluates each member's city position instead of assigning the siege task army-wide");
+            "active siege repairs the captain immediately and members in bounded batches");
         int memberBehaviourStart = behaviour.IndexOf(
             "public sealed class BehArmyRtsMemberCombat",
             StringComparison.Ordinal);
