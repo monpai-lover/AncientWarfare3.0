@@ -22,6 +22,10 @@ namespace AncientWarfare3.core.lineage
         internal List<TileZone> ExteriorZones = new List<TileZone>();
         internal List<CultiwayWallPoint> WallPoints =
             new List<CultiwayWallPoint>();
+        internal List<CultiwayWallPoint> GateCenters =
+            new List<CultiwayWallPoint>();
+        internal List<WorldTile> TowerTiles = new List<WorldTile>();
+        internal BuildingAsset TowerAsset;
         internal List<string> FixedZoneKeys = new List<string>();
         internal Actor ReserveMotherActor;
         internal WorldTile MotherCoreTile;

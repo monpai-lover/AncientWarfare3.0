@@ -31,6 +31,7 @@ namespace AncientWarfare3.core.lineage
             internal List<City> ReturnedCities = new List<City>();
             internal List<ActorSnapshot> Actors = new List<ActorSnapshot>();
             internal List<TileSnapshot> WallTiles = new List<TileSnapshot>();
+            internal List<Building> Towers = new List<Building>();
             internal PeasantRebelBanditStrongholdState PreviousState;
             internal bool HadPreviousState;
             internal bool GovernmentFinalized;
@@ -123,6 +124,19 @@ namespace AncientWarfare3.core.lineage
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
+            BuildingAsset towerAsset = ResolveTowerAsset(pRuler);
+            List<WorldTile> towerTiles = zoneWallPlan.GateCenters
+                .Select(point => World.world.GetTile(point.X, point.Y))
+                .Where(tile => tile != null).Distinct().ToList();
+            if (towerAsset == null || towerTiles.Count != 4 ||
+                towerTiles.Any(tile => !World.world.buildings.canBuildFrom(
+                    tile, towerAsset, pMother, BuildPlacingType.New)))
+            {
+                pFailureKey = "aw_bandit_stronghold_wall_failed";
+                LogPlanFailure("unbuildable_gate_towers",
+                    motherZones.Count, candidates.Count, pFailureKey);
+                return false;
+            }
             var interiorSet = new HashSet<TileZone>(interior);
             List<TileZone> exterior = motherZones.Where(zone =>
                 !interiorSet.Contains(zone)).ToList();
@@ -130,7 +144,7 @@ namespace AncientWarfare3.core.lineage
                     interior.Count, exterior.Count))
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
-                LogPlanFailure("invalid_exact_four_zone_split",
+                LogPlanFailure("invalid_exact_nine_zone_split",
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
@@ -172,6 +186,9 @@ namespace AncientWarfare3.core.lineage
                 InteriorZones = interior,
                 ExteriorZones = exterior,
                 WallPoints = zoneWallPlan.WallPoints.ToList(),
+                GateCenters = zoneWallPlan.GateCenters.ToList(),
+                TowerTiles = towerTiles,
+                TowerAsset = towerAsset,
                 FixedZoneKeys = interior.Select(ZoneKey)
                     .OrderBy(key => key, StringComparer.Ordinal).ToList(),
                 ReserveMotherActor = reserve,
@@ -229,6 +246,7 @@ namespace AncientWarfare3.core.lineage
                 ReturnOrdinaryCities(transaction);
                 EnsureMotherCore(transaction);
                 PlaceWalls(transaction);
+                PlaceTowers(transaction, stronghold);
                 stronghold.recalculateNeighbourZones();
                 plan.Context.Mother.recalculateNeighbourZones();
                 plan.Context.Bandit.setCityMetas(stronghold);
@@ -540,6 +558,7 @@ namespace AncientWarfare3.core.lineage
                     mother.addZone(zone);
                 mother.recalculateNeighbourZones();
                 pStronghold.recalculateNeighbourZones();
+                if (!RemoveStrongholdTowers(pState)) return false;
                 if (!RestoreWalls(pState)) return false;
 
                 pState.Phase = BanditStrongholdPhase.Completed;
@@ -735,6 +754,37 @@ namespace AncientWarfare3.core.lineage
                 snapshot.Tile.setTopTileType(TopTileLibrary.wall_wild);
         }
 
+        private static BuildingAsset ResolveTowerAsset(Actor pRuler)
+        {
+            try
+            {
+                return pRuler?.asset?.architecture_asset?
+                    .getBuilding("order_watch_tower");
+            }
+            catch { return null; }
+        }
+
+        private static void PlaceTowers(Transaction pTransaction,
+            City pStronghold)
+        {
+            PeasantRebelBanditStrongholdPlan plan = pTransaction.Plan;
+            if (pStronghold?.data == null || plan?.TowerAsset == null ||
+                plan.TowerTiles.Count != 4)
+                throw new InvalidOperationException(
+                    "gate tower plan is incomplete");
+            foreach (WorldTile tile in plan.TowerTiles)
+            {
+                Building building = World.world.buildings.addBuilding(
+                    plan.TowerAsset, tile, pCheckForBuild: true,
+                    pSfx: false, pType: BuildPlacingType.New);
+                if (building?.data == null)
+                    throw new InvalidOperationException(
+                        "native gate tower creation failed");
+                building.setKingdom(plan.Context.Bandit);
+                pTransaction.Towers.Add(building);
+            }
+        }
+
         private static PeasantRebelBanditStrongholdState BuildState(
             Transaction pTransaction,
             BanditStrongholdPhase pPhase, long pStrongholdCityId)
@@ -753,8 +803,48 @@ namespace AncientWarfare3.core.lineage
                         X = snapshot.Tile.x,
                         Y = snapshot.Tile.y,
                         OriginalTopTypeId = snapshot.TopType?.id ?? ""
+                    }).ToList(),
+                Towers = pTransaction.Towers.Select(building =>
+                    new BanditStrongholdTower
+                    {
+                        TowerBuildingId = building.getID(),
+                        X = building.current_tile.x,
+                        Y = building.current_tile.y,
+                        AssetId = building.asset?.id ?? ""
                     }).ToList()
             };
+        }
+
+        private static bool RemoveStrongholdTowers(
+            PeasantRebelBanditStrongholdState pState)
+        {
+            if (pState?.Towers == null || World.world?.buildings == null)
+                return true;
+            foreach (BanditStrongholdTower towerState in pState.Towers)
+            {
+                if (towerState == null || towerState.TowerBuildingId <= 0)
+                    continue;
+                Building building = null;
+                try
+                {
+                    building = World.world.buildings.get(
+                        towerState.TowerBuildingId);
+                }
+                catch { }
+                if (building?.data == null) continue;
+                try
+                {
+                    World.world.buildings.removeObject(building);
+                }
+                catch (Exception e)
+                {
+                    ModClass.LogWarning(
+                        "Bandit stronghold tower removal failed: " +
+                        e.Message);
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static bool RestoreWalls(
@@ -795,6 +885,9 @@ namespace AncientWarfare3.core.lineage
             PeasantRebelBanditStrongholdPlan plan = pTransaction.Plan;
             try
             {
+                foreach (Building tower in pTransaction.Towers)
+                    if (tower?.data != null)
+                        World.world.buildings.removeObject(tower);
                 foreach (TileSnapshot snapshot in pTransaction.WallTiles)
                     snapshot.Tile?.setTopTileType(snapshot.TopType);
                 if (pTransaction.BuiltMotherCore?.data != null)

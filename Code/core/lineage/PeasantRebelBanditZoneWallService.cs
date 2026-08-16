@@ -56,8 +56,14 @@ namespace AncientWarfare3.core.lineage
                         World.world.GetTile(point.X, point.Y)))
                     .OrderBy(point => point.X).ThenBy(point => point.Y)
                     .ToArray();
-                if (closed.Length == 0 || opened.Length == 0) return false;
-                pPlan = new BanditZoneWallPlan(closed, opened);
+                CultiwayWallPoint[] gateCenters = computed.GateCenters
+                    .Where(point => CanPlaceAt(pMother, selected,
+                        World.world.GetTile(point.X, point.Y)))
+                    .Distinct().ToArray();
+                if (closed.Length == 0 || opened.Length == 0 ||
+                    gateCenters.Length != 4) return false;
+                pPlan = new BanditZoneWallPlan(closed, opened,
+                    gateCenters);
                 return true;
             }
             catch (Exception e)
