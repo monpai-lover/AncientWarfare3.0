@@ -5671,6 +5671,8 @@ namespace AncientWarfare3.core.lineage
         private static void TrySubmitMemberObjectiveRoute(Actor pActor,
             RuntimeState pRuntime)
         {
+            if (ArmyRtsTransportService.HasActiveVoyage(pActor?.army))
+                return;
             if (ResolveFollowerTarget(pActor, out WorldTile target) !=
                     ArmyFollowerTargetResult.Move) return;
             TrySubmitActorObjectiveRoute(pActor, target, pRuntime);
@@ -5679,9 +5681,10 @@ namespace AncientWarfare3.core.lineage
         private static void TrySubmitCaptainObjectiveRoute(Actor pActor,
             RuntimeState pRuntime)
         {
+            Army army = pActor?.army;
+            if (ArmyRtsTransportService.HasActiveVoyage(army)) return;
             if (!TryGetCaptainTarget(pActor, out WorldTile target) ||
                 target == pActor?.current_tile) return;
-            Army army = pActor?.army;
             long armyId = army?.data?.id ?? -1L;
             long captainId = pActor?.data?.id ?? -1L;
             long targetCityId = ResolveCaptainMissionTargetCityId(army);

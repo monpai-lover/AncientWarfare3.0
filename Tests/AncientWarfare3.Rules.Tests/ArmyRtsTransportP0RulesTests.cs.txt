@@ -70,6 +70,42 @@ internal static class ArmyRtsTransportP0RulesTests
                 StringComparison.Ordinal),
             "the embark handoff is driven by a live assigned boat after " +
             "the native request enters Loading");
+        Assert(transport.Contains("ClearMovementForTransport(",
+                StringComparison.Ordinal),
+            "switching from a failed land route clears stale RTS movement " +
+            "before the voyage can take ownership");
+
+        int captainRouteStart = controller.IndexOf(
+            "private static void TrySubmitCaptainObjectiveRoute(",
+            StringComparison.Ordinal);
+        int captainRouteEnd = controller.IndexOf(
+            "private static long ResolveCaptainMissionTargetCityId(",
+            captainRouteStart, StringComparison.Ordinal);
+        string captainRouteBody = captainRouteStart >= 0 &&
+            captainRouteEnd > captainRouteStart
+            ? controller.Substring(captainRouteStart,
+                captainRouteEnd - captainRouteStart)
+            : string.Empty;
+        Assert(captainRouteBody.Contains("HasActiveVoyage(army)",
+                StringComparison.Ordinal),
+            "the captain cannot resubmit a land route while transport owns " +
+            "the army");
+
+        int followerRouteStart = controller.IndexOf(
+            "private static void TrySubmitMemberObjectiveRoute(",
+            StringComparison.Ordinal);
+        int followerRouteEnd = controller.IndexOf(
+            "private static void TrySubmitCaptainObjectiveRoute(",
+            followerRouteStart, StringComparison.Ordinal);
+        string followerRouteBody = followerRouteStart >= 0 &&
+            followerRouteEnd > followerRouteStart
+            ? controller.Substring(followerRouteStart,
+                followerRouteEnd - followerRouteStart)
+            : string.Empty;
+        Assert(followerRouteBody.Contains("HasActiveVoyage(pActor?.army)",
+                StringComparison.Ordinal),
+            "followers cannot resubmit formation paths while transport owns " +
+            "the army");
 
         int transportP0Start = transport.IndexOf(
             "internal static void ProcessMilitaryP0(float pCycleElapsed)",

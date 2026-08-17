@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.performance;
 using life.taxi;
 using UnityEngine;
@@ -777,6 +778,7 @@ namespace AncientWarfare3.core.lineage
         private static TransportState Begin(Army pArmy, WorldTile pTarget,
             bool pForceTransport)
         {
+            ClearMovementForTransport(pArmy);
             var state = new TransportState
             {
                 Army = pArmy,
@@ -811,6 +813,33 @@ namespace AncientWarfare3.core.lineage
                 " captain_tile=" +
                 (captain?.current_tile?.data?.tile_id ?? -1));
             return state;
+        }
+
+        private static void ClearMovementForTransport(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            int count;
+            try { count = pArmy.units?.Count ?? 0; }
+            catch { count = 0; }
+            for (int i = 0; i < count; i++)
+            {
+                Actor member;
+                try { member = pArmy.units[i]; }
+                catch { continue; }
+                if (!IsValidMember(member, pArmy) ||
+                    member.is_inside_boat) continue;
+                try
+                {
+                    AWPathMovementBridge.Cancel(member,
+                        AWPathFailureReason.CancelledByNewRequest);
+                    member.stopMovement();
+                    member.clearOldPath();
+                    member.clearTileTarget();
+                    member.beh_tile_target = null;
+                    member.beh_actor_target = null;
+                }
+                catch { }
+            }
         }
 
         private static void OpenRequests(TransportState pState,
