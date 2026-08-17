@@ -19,5 +19,10 @@ namespace AncientWarfare3.ui.components
         {
             if (card != null) _cards.Remove(card);
         }
+
+        public void Clear()
+        {
+            _cards.Clear();
+        }
     }
 }

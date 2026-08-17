@@ -10,6 +10,10 @@ internal static class CustomCourtWorkflowSourceGuardTests
             "windows", "CustomCourtWorkflowWindow.cs"));
         string canvas = File.ReadAllText(Path.Combine(root, "Code", "ui",
             "components", "CourtWorkflowCanvas.cs"));
+        string card = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "components", "CourtWorkflowOfficeCard.cs"));
+        string edge = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "components", "CourtWorkflowEdgeView.cs"));
         string courtWindow = File.ReadAllText(Path.Combine(root, "Code", "ui",
             "windows", "CourtWindow.cs"));
         string store = File.ReadAllText(Path.Combine(root, "Code", "core",
@@ -19,7 +23,14 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "CreateManagementEdge");
         Contains(window, "CreateAppointmentPrerequisiteEdge");
         Contains(window, "ApplyCustomCourtTemplate");
+        Contains(window, "CourtWorkflowTools");
+        Contains(window, "CourtNameInput");
+        Contains(window, "SaveTemplate");
+        Contains(window, "RenderEdges");
         Contains(canvas, "CourtWorkflowCanvas");
+        Contains(card, "DeleteButton");
+        Contains(card, "deleteRequested");
+        Contains(edge, "Bind(CustomCourtEdge edge, RectTransform from");
         Contains(store, "TryImport");
     }
 

@@ -7,18 +7,24 @@ using UnityEngine.UI;
 namespace AncientWarfare3.ui.components
 {
     public sealed class CourtWorkflowOfficeCard : MonoBehaviour,
-        IBeginDragHandler, IDragHandler, IPointerClickHandler
+        IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         private Text _label;
         private Action<CourtWorkflowOfficeCard> _clicked;
+        private Action<CourtWorkflowOfficeCard> _deleteRequested;
+        private Action<CourtWorkflowOfficeCard> _dragEnded;
 
         public CustomCourtOffice Office { get; private set; }
 
         public void Bind(CustomCourtOffice office,
-            Action<CourtWorkflowOfficeCard> clicked)
+            Action<CourtWorkflowOfficeCard> clicked,
+            Action<CourtWorkflowOfficeCard> deleteRequested,
+            Action<CourtWorkflowOfficeCard> dragEnded)
         {
             Office = office;
             _clicked = clicked;
+            _deleteRequested = deleteRequested;
+            _dragEnded = dragEnded;
             if (_label != null)
                 _label.text = office == null ? string.Empty : office.Id;
         }
@@ -39,18 +45,22 @@ namespace AncientWarfare3.ui.components
                 ((RectTransform)transform).anchoredPosition = local;
             if (Office != null)
             {
+                if (Office.Layout == null)
+                    Office.Layout = new CustomCourtOfficeLayout();
                 Office.Layout.X = local.x;
                 Office.Layout.Y = -local.y;
             }
         }
 
-        public void OnPointerClick(PointerEventData eventData)
+        public void OnEndDrag(PointerEventData eventData)
         {
-            _clicked?.Invoke(this);
+            _dragEnded?.Invoke(this);
         }
 
         public static CourtWorkflowOfficeCard Create(Transform parent,
-            CustomCourtOffice office, Action<CourtWorkflowOfficeCard> clicked)
+            CustomCourtOffice office, Action<CourtWorkflowOfficeCard> clicked,
+            Action<CourtWorkflowOfficeCard> deleteRequested,
+            Action<CourtWorkflowOfficeCard> dragEnded)
         {
             var gameObject = new GameObject("CourtOfficeCard",
                 typeof(RectTransform), typeof(Image), typeof(Button),
@@ -71,8 +81,41 @@ namespace AncientWarfare3.ui.components
                 new Color(0.12f, 0.14f, 0.18f, 0.96f);
             gameObject.GetComponent<Button>().onClick.AddListener(
                 () => clicked?.Invoke(card));
-            card.Bind(office, clicked);
+            Button deleteButton = CreateDeleteButton(gameObject.transform,
+                () => deleteRequested?.Invoke(card));
+            deleteButton.gameObject.name = "DeleteButton";
+            card.Bind(office, clicked, deleteRequested, dragEnded);
             return card;
+        }
+
+        private static Button CreateDeleteButton(Transform parent,
+            Action deleteRequested)
+        {
+            var obj = new GameObject("DeleteButton", typeof(RectTransform),
+                typeof(Image), typeof(Button));
+            obj.transform.SetParent(parent, false);
+            RectTransform rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.anchoredPosition = new Vector2(-3f, -3f);
+            rect.sizeDelta = new Vector2(16f, 16f);
+            obj.GetComponent<Image>().color = new Color(0.7f, 0.12f, 0.12f,
+                0.96f);
+            Button button = obj.GetComponent<Button>();
+            button.onClick.AddListener(() => deleteRequested?.Invoke());
+            var textObject = new GameObject("Text", typeof(RectTransform),
+                typeof(Text));
+            textObject.transform.SetParent(obj.transform, false);
+            Text text = textObject.GetComponent<Text>();
+            text.text = "X";
+            text.fontSize = 10;
+            text.color = Color.white;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.rectTransform.anchorMin = Vector2.zero;
+            text.rectTransform.anchorMax = Vector2.one;
+            text.rectTransform.offsetMin = Vector2.zero;
+            text.rectTransform.offsetMax = Vector2.zero;
+            return button;
         }
     }
 }
