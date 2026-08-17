@@ -7,6 +7,10 @@ aw_custom_court_management_edge,管理关系,Management,管理关系
 aw_custom_court_prerequisite_edge,任职前置,Prerequisite,任职前置
 aw_custom_court_export,导出,Export,导出
 aw_custom_court_import,导入,Import,导入
+aw_custom_court_exported_path,导出成功：{0},Exported successfully: {0},导出成功：{0}
+aw_custom_court_import_select,导入 JSON,Import JSON,导入 JSON
+aw_custom_court_import_no_files,没有 JSON 文件,No JSON files,没有 JSON 文件
+aw_custom_court_import_invalid,选择的 JSON 文件无效,The selected JSON file is invalid,选择的 JSON 文件无效
 aw_custom_court_apply,应用,Apply,应用
 aw_custom_court_save,保存,Save,保存
 aw_custom_court_name,官场名称,Court name,官场名称
@@ -41,6 +45,12 @@ aw_custom_court_settings_confirm,确定,Confirm,確定
 aw_custom_court_settings_confirm_desc,验证设置并返回自定义官场编辑器,Validate settings and return to the custom court editor,驗證設定並返回自訂官場編輯器
 aw_custom_court_settings_cancel,取消,Cancel,取消
 aw_custom_court_settings_cancel_desc,放弃本窗口内尚未确认的改动,Discard unconfirmed changes made in this window,放棄本視窗內尚未確認的改動
+aw_custom_court_settings_preset,原版官职预设,Built-in office preset,原版官職預設
+aw_custom_court_settings_preset_desc,复制当前国家已经解锁的原版官职属性并保留自定义任职条件和效果,Copy properties from an unlocked built-in office while preserving custom requirements and effects,複製目前國家已解鎖的原版官職屬性並保留自訂任職條件和效果
+aw_custom_court_settings_preset_select,选择原版官职预设,Select built-in office preset,選擇原版官職預設
+aw_custom_court_settings_preset_locked,未解锁,Locked,未解鎖
+aw_custom_court_settings_preset_locked_message,当前国家官制尚未解锁这个官职预设,The current court institution has not unlocked this office preset,目前國家官制尚未解鎖這個官職預設
+aw_custom_court_settings_preset_applied,已应用原版官职预设,Built-in office preset applied,已套用原版官職預設
 aw_custom_court_office_name_desc,这个名称会显示在官场和官职卡片上,This name is displayed in the court and on the office card,這個名稱會顯示在官場和官職卡片上
 aw_custom_court_settings_layer,官场层级,Layer,官場層級
 aw_custom_court_settings_layer_desc,决定官职所属的官场区域和层级分类,Controls the court section and hierarchy containing this office,決定官職所屬的官場區域和層級分類

@@ -32,6 +32,7 @@ namespace AncientWarfare3.ui.windows
         private static readonly Vector2 DefaultSize = new Vector2(558f, 360f);
         private static readonly Vector2 MinimumSize = new Vector2(558f, 360f);
         private static readonly Vector2 MaximumSize = new Vector2(738f, 504f);
+        private static long _kingdomId = -1L;
         private static CustomCourtTemplate _template;
         private static CustomCourtOffice _source;
         private static Action<CustomCourtOffice> _confirmed;
@@ -60,6 +61,9 @@ namespace AncientWarfare3.ui.windows
         private Text _requiredSchoolText;
         private Button _requiredOfficeButton;
         private Text _requiredOfficeText;
+        private Text _presetLabel;
+        private AWStringDropdown _presetDropdown;
+        private string _selectedPresetId = string.Empty;
         private Text _status;
         private Button _confirmButton;
         private Button _cancelButton;
@@ -67,9 +71,10 @@ namespace AncientWarfare3.ui.windows
         private WideWindowChrome _chrome;
         private bool _showEffects;
 
-        public static void Open(CustomCourtTemplate template,
+        public static void Open(long kingdomId, CustomCourtTemplate template,
             CustomCourtOffice office, Action<CustomCourtOffice> confirmed)
         {
+            _kingdomId = kingdomId;
             _template = template;
             _source = office;
             _confirmed = confirmed;
@@ -110,6 +115,7 @@ namespace AncientWarfare3.ui.windows
                 return;
             }
             BindDraft();
+            RefreshPresetOptions();
             ShowTab(false);
             ApplyLayout();
             SetStatus(string.Empty);
@@ -168,6 +174,22 @@ namespace AncientWarfare3.ui.windows
 
         private void BuildBasePanel()
         {
+            _presetLabel = CreateText(_basePanel, "BuiltInPresetLabel", 8,
+                TextAnchor.MiddleLeft,
+                new Color(0.86f, 0.78f, 0.62f, 1f));
+            _presetLabel.text = AW_L10n.Text(
+                "aw_custom_court_settings_preset", "Built-in preset");
+            AttachTooltip(_presetLabel.gameObject,
+                "aw_custom_court_settings_preset", "Built-in preset",
+                "aw_custom_court_settings_preset_desc",
+                "Copy unlocked built-in office properties into this office.");
+            _presetDropdown = AWStringDropdown.Create(_basePanel,
+                "BuiltInOfficePreset", 320f, 20f, ApplyPreset,
+                ShowLockedPreset);
+            AttachTooltip(_presetDropdown.gameObject,
+                "aw_custom_court_settings_preset", "Built-in preset",
+                "aw_custom_court_settings_preset_desc",
+                "Copy unlocked built-in office properties into this office.");
             _nameInput = AddInputField(_basePanel, "OfficeName", 0, 0,
                 "aw_custom_court_office_name", "Office name",
                 "aw_custom_court_office_name_desc",
@@ -220,6 +242,26 @@ namespace AncientWarfare3.ui.windows
                 "aw_custom_court_settings_required_office_desc",
                 "The candidate must already hold this prerequisite office.",
                 CycleRequiredOffice, out _requiredOfficeText);
+            AddFieldHelp(_basePanel, "Grade",
+                "aw_custom_court_settings_grade", "Grade",
+                "aw_custom_court_settings_grade_desc",
+                "The formal grade used to rank this office against others.");
+            AddFieldHelp(_basePanel, "MinimumRank",
+                "aw_custom_court_settings_minimum_rank", "Minimum rank",
+                "aw_custom_court_settings_minimum_rank_desc",
+                "The lowest career rank eligible for appointment.");
+            AddFieldHelp(_basePanel, "RequiredSchool",
+                "aw_custom_court_settings_required_school", "Required school",
+                "aw_custom_court_settings_required_school_desc",
+                "Only candidates belonging to this school may be appointed.");
+            AddFieldHelp(_basePanel, "RequiredTrait",
+                "aw_custom_court_settings_required_trait", "Required trait",
+                "aw_custom_court_settings_required_trait_desc",
+                "Only candidates with this exact trait ID may be appointed.");
+            AddFieldHelp(_basePanel, "RequiredOffice",
+                "aw_custom_court_settings_required_office", "Required office",
+                "aw_custom_court_settings_required_office_desc",
+                "The candidate must already hold this prerequisite office.");
         }
 
         private void BuildEffectsPanel()
@@ -528,6 +570,72 @@ namespace AncientWarfare3.ui.windows
                 _draft.Requirements?.RequiredOfficeId);
         }
 
+        private void RefreshPresetOptions()
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            ICourtProfile profile = CourtProfileRegistry.For(kingdom);
+            string institution = CourtInstitutionService.GetInstitution(
+                kingdom);
+            var options = new List<AWStringDropdownOption>();
+            foreach (CourtOfficeDefinition definition in profile?.Offices ??
+                     Array.Empty<CourtOfficeDefinition>())
+            {
+                bool unlocked = definition.AvailableIn(institution);
+                string name = AW_L10n.Text(definition.LocalizationKey,
+                    definition.Id);
+                options.Add(new AWStringDropdownOption
+                {
+                    Id = definition.Id,
+                    Label = unlocked ? name : name + " (" +
+                        AW_L10n.Text(
+                            "aw_custom_court_settings_preset_locked",
+                            "Locked") + ")",
+                    Enabled = unlocked,
+                    DisabledMessage = AW_L10n.Text(
+                        "aw_custom_court_settings_preset_locked_message",
+                        "The current court institution has not unlocked this preset.")
+                });
+            }
+            _presetDropdown?.SetOptions(options, _selectedPresetId,
+                AW_L10n.Text("aw_custom_court_settings_preset_select",
+                    "Select built-in preset"));
+        }
+
+        private void ApplyPreset(AWStringDropdownOption option)
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            ICourtProfile profile = CourtProfileRegistry.For(kingdom);
+            CourtOfficeDefinition definition = profile?.FindOffice(option?.Id);
+            string institution = CourtInstitutionService.GetInstitution(
+                kingdom);
+            if (!CustomCourtOfficePresetRules.CanApply(definition,
+                    institution))
+            {
+                ShowLockedPreset(option);
+                return;
+            }
+            string name = AW_L10n.Text(definition.LocalizationKey,
+                definition.Id);
+            CustomCourtOfficePresetRules.ApplyDefinition(_draft, definition,
+                new CustomCourtLocalizedText
+                {
+                    Chinese = name,
+                    English = name
+                });
+            _selectedPresetId = definition.Id;
+            BindDraft();
+            SetStatus(AW_L10n.Text(
+                "aw_custom_court_settings_preset_applied",
+                "Built-in office preset applied."));
+        }
+
+        private void ShowLockedPreset(AWStringDropdownOption option)
+        {
+            SetStatus(option?.DisabledMessage ?? AW_L10n.Text(
+                "aw_custom_court_settings_preset_locked_message",
+                "The current court institution has not unlocked this preset."));
+        }
+
         private void RefreshEffectRow(EffectRow row)
         {
             row.EnabledText.text = BoolText(row.Enabled);
@@ -612,6 +720,9 @@ namespace AncientWarfare3.ui.windows
 
         private void LayoutBaseFields(float panelWidth)
         {
+            SetRect(_presetLabel?.rectTransform, 8f, 4f, 106f, 22f);
+            SetRect(_presetDropdown?.RectTransform, 116f, 4f,
+                Mathf.Max(1f, panelWidth - 124f), 22f);
             float columnWidth = (panelWidth - 18f) * 0.5f;
             LayoutColumn(_basePanel, 0, 6f, columnWidth);
             LayoutColumn(_basePanel, 1, 12f + columnWidth, columnWidth);
@@ -630,8 +741,29 @@ namespace AncientWarfare3.ui.windows
                 Transform field = panel.Find(names[column][row]);
                 if (field == null) continue;
                 SetRect(field.GetComponent<RectTransform>(), x,
-                    6f + row * 40f, width, 38f);
+                    30f + row * 40f, width, 38f);
             }
+        }
+
+        private static void AddFieldHelp(Transform panel, string fieldName,
+            string titleKey, string titleFallback, string descriptionKey,
+            string descriptionFallback)
+        {
+            Transform field = panel?.Find(fieldName);
+            if (field == null) return;
+            Transform labelTransform = field.Find("Label");
+            RectTransform labelRect = labelTransform as RectTransform;
+            if (labelRect != null) labelRect.sizeDelta = new Vector2(-26f, 15f);
+            Button help = CreateButton(field, "Help_" + fieldName,
+                out Text helpText, () => { });
+            helpText.text = "?";
+            RectTransform rect = help.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.anchoredPosition = new Vector2(-2f, 0f);
+            rect.sizeDelta = new Vector2(14f, 14f);
+            AttachTooltip(help.gameObject, titleKey, titleFallback,
+                descriptionKey, descriptionFallback);
         }
 
         private InputField AddInputField(Transform parent, string name,

@@ -14,6 +14,7 @@ using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.presentation;
+using AncientWarfare3.core.court;
 using AncientWarfare3.patch;
 
 namespace AncientWarfare3
@@ -34,6 +35,8 @@ namespace AncientWarfare3
 
         protected override void OnModLoad()
         {
+            CustomCourtTemplatePathService.Initialize(
+                GetDeclaration().FolderPath);
             MilitaryGovernorateAppearanceService.Initialize();
             PeasantRebelAppearanceService.Initialize();
             HierarchicalVassalMapFontSettings.InitializeConfig();

@@ -46,3 +46,4 @@ AWPerformanceSettings,AW3 性能设置,AW3 Performance,AW3 效能設定
 AWMapModeSettings,AW3 地图模式设置,AW3 Map Modes,AW3 地圖模式設定
 AW3_USE_BUNDLED_HIERARCHICAL_VASSAL_MAP_FONT,层级附庸地图字体,Hierarchical vassal map font,層級附庸地圖字體
 AW3_USE_BUNDLED_HIERARCHICAL_VASSAL_MAP_FONT Description,点击下拉栏选择 AW3 魏碑或 Unity 可用的系统字体,Select AW3 Beiwei or any Unity-exposed system font from the dropdown,點擊下拉選單選擇 AW3 魏碑或 Unity 可用的系統字體
+aw_settings_experimental_warning,实验性功能 可能会卡死游戏 介意别开,Experimental; may freeze the game. Avoid if concerned.,實驗性功能 可能會卡死遊戲 介意別開

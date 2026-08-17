@@ -33,6 +33,14 @@ namespace AncientWarfare3.core.court
         public bool TrySave(CustomCourtTemplate template,
             out CustomCourtTemplateValidationError error)
         {
+            return TrySave(template, out error, out _);
+        }
+
+        public bool TrySave(CustomCourtTemplate template,
+            out CustomCourtTemplateValidationError error,
+            out string savedPath)
+        {
+            savedPath = null;
             error = CustomCourtTemplateRules.Validate(template);
             if (error != CustomCourtTemplateValidationError.None ||
                 !IsSafeRoot() || template == null)
@@ -70,6 +78,7 @@ namespace AncientWarfare3.core.court
                     File.Replace(temporary, path, null);
                 else
                     File.Move(temporary, path);
+                savedPath = path;
                 return true;
             }
             catch (IOException)
@@ -95,6 +104,75 @@ namespace AncientWarfare3.core.court
             string path;
             if (!TryGetPath(templateId, out path) || !File.Exists(path))
                 return false;
+            return TryLoadPath(path, out template, out error);
+        }
+
+        public string[] ListFileNames()
+        {
+            if (!IsSafeRoot() || !Directory.Exists(_rootPath))
+                return Array.Empty<string>();
+            try
+            {
+                string[] paths = Directory.GetFiles(_rootPath, "*.json",
+                    SearchOption.TopDirectoryOnly);
+                string[] names = Array.ConvertAll(paths, Path.GetFileName);
+                Array.Sort(names, StringComparer.OrdinalIgnoreCase);
+                return names;
+            }
+            catch (IOException)
+            {
+                return Array.Empty<string>();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Array.Empty<string>();
+            }
+        }
+
+        public bool TryLoadFile(string fileName,
+            out CustomCourtTemplate template,
+            out CustomCourtTemplateValidationError error)
+        {
+            template = null;
+            error = CustomCourtTemplateValidationError.InvalidTemplateId;
+            if (!TryGetFilePath(fileName, out string path) ||
+                !File.Exists(path)) return false;
+            return TryLoadPath(path, out template, out error);
+        }
+
+        private bool TryGetPath(string templateId, out string path)
+        {
+            path = null;
+            if (!CustomCourtTemplateRules.IsValidTemplateId(templateId) ||
+                !IsSafeRoot())
+                return false;
+            return TryGetFilePath(templateId + ".json", out path);
+        }
+
+        private bool TryGetFilePath(string fileName, out string path)
+        {
+            path = null;
+            if (!IsSafeRoot() || string.IsNullOrWhiteSpace(fileName) ||
+                !string.Equals(Path.GetFileName(fileName), fileName,
+                    StringComparison.Ordinal) ||
+                !string.Equals(Path.GetExtension(fileName), ".json",
+                    StringComparison.OrdinalIgnoreCase)) return false;
+            string candidate = Path.GetFullPath(Path.Combine(_rootPath,
+                fileName));
+            string prefix = _rootPath.TrimEnd(Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+            path = candidate;
+            return true;
+        }
+
+        private static bool TryLoadPath(string path,
+            out CustomCourtTemplate template,
+            out CustomCourtTemplateValidationError error)
+        {
+            template = null;
+            error = CustomCourtTemplateValidationError.InvalidTemplateId;
             try
             {
                 return CustomCourtTemplateJsonCodec.TryImport(
@@ -109,22 +187,6 @@ namespace AncientWarfare3.core.court
             {
                 return false;
             }
-        }
-
-        private bool TryGetPath(string templateId, out string path)
-        {
-            path = null;
-            if (!CustomCourtTemplateRules.IsValidTemplateId(templateId) ||
-                !IsSafeRoot())
-                return false;
-            string candidate = Path.GetFullPath(Path.Combine(
-                _rootPath, templateId + ".json"));
-            string prefix = _rootPath.TrimEnd(Path.DirectorySeparatorChar,
-                Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            if (!candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return false;
-            path = candidate;
-            return true;
         }
 
         private bool IsSafeRoot()

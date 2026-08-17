@@ -464,4 +464,101 @@ namespace AncientWarfare3.patch
             catch { return pKey; }
         }
     }
+
+    [HarmonyPatch(typeof(ModConfigureWindow),
+        nameof(ModConfigureWindow.ShowWindow))]
+    internal static class AW_ModConfigWindowTitlePatch
+    {
+        private const string WarningKey =
+            "aw_settings_experimental_warning";
+        private const string WarningFallback =
+            "Experimental; may freeze the game. Avoid if concerned.";
+        private static bool _defaultsCaptured;
+        private static Vector2 _defaultSize;
+        private static int _defaultFontSize;
+        private static bool _defaultResizeTextForBestFit;
+        private static int _defaultResizeTextMinSize;
+        private static int _defaultResizeTextMaxSize;
+        private static HorizontalWrapMode _defaultHorizontalOverflow;
+        private static VerticalWrapMode _defaultVerticalOverflow;
+        private static bool _defaultSupportRichText;
+
+        [HarmonyPostfix]
+        private static void Postfix(ModConfig pConfig)
+        {
+            ModConfigureWindow configureWindow = ModConfigureWindow.Instance;
+            ScrollWindow scrollWindow =
+                configureWindow?.GetComponent<ScrollWindow>();
+            Text title = scrollWindow?.titleText;
+            if (title == null) return;
+
+            CaptureDefaults(title);
+            RestoreDefaults(title);
+            title.text = SafeLocalized("ModConfigure Title",
+                "Mod Configuration");
+
+            ModConfig aw3Config = ModClass.Instance?.GetConfig();
+            if (!ReferenceEquals(pConfig, aw3Config)) return;
+
+            RectTransform titleRect = title.GetComponent<RectTransform>();
+            if (titleRect != null)
+                titleRect.sizeDelta = new Vector2(
+                    Mathf.Max(_defaultSize.x, 250f),
+                    Mathf.Max(_defaultSize.y, 34f));
+            title.supportRichText = true;
+            title.resizeTextForBestFit = false;
+            title.horizontalOverflow = HorizontalWrapMode.Wrap;
+            title.verticalOverflow = VerticalWrapMode.Overflow;
+            title.text = AncientWarfare3.ui.AW_L10n.Text(
+                             "aw_settings_btn", "AW3 Settings") +
+                         "\n<size=6><color=#C94B3C>" +
+                         AncientWarfare3.ui.AW_L10n.Text(WarningKey,
+                             WarningFallback) + "</color></size>";
+        }
+
+        private static void CaptureDefaults(Text pTitle)
+        {
+            if (_defaultsCaptured) return;
+            RectTransform titleRect = pTitle.GetComponent<RectTransform>();
+            _defaultSize = titleRect == null
+                ? Vector2.zero
+                : titleRect.sizeDelta;
+            _defaultFontSize = pTitle.fontSize;
+            _defaultResizeTextForBestFit = pTitle.resizeTextForBestFit;
+            _defaultResizeTextMinSize = pTitle.resizeTextMinSize;
+            _defaultResizeTextMaxSize = pTitle.resizeTextMaxSize;
+            _defaultHorizontalOverflow = pTitle.horizontalOverflow;
+            _defaultVerticalOverflow = pTitle.verticalOverflow;
+            _defaultSupportRichText = pTitle.supportRichText;
+            _defaultsCaptured = true;
+        }
+
+        private static void RestoreDefaults(Text pTitle)
+        {
+            RectTransform titleRect = pTitle.GetComponent<RectTransform>();
+            if (titleRect != null) titleRect.sizeDelta = _defaultSize;
+            pTitle.fontSize = _defaultFontSize;
+            pTitle.resizeTextForBestFit = _defaultResizeTextForBestFit;
+            pTitle.resizeTextMinSize = _defaultResizeTextMinSize;
+            pTitle.resizeTextMaxSize = _defaultResizeTextMaxSize;
+            pTitle.horizontalOverflow = _defaultHorizontalOverflow;
+            pTitle.verticalOverflow = _defaultVerticalOverflow;
+            pTitle.supportRichText = _defaultSupportRichText;
+        }
+
+        private static string SafeLocalized(string pKey, string pFallback)
+        {
+            try
+            {
+                string value = LM.Get(pKey);
+                return string.IsNullOrWhiteSpace(value) || value == pKey
+                    ? pFallback
+                    : value;
+            }
+            catch
+            {
+                return pFallback;
+            }
+        }
+    }
 }

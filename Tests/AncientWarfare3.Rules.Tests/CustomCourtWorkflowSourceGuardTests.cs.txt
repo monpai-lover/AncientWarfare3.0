@@ -17,6 +17,8 @@ internal static class CustomCourtWorkflowSourceGuardTests
             "components", "CourtWorkflowVacancyCard.cs"));
         string edge = File.ReadAllText(Path.Combine(root, "Code", "ui",
             "components", "CourtWorkflowEdgeView.cs"));
+        string stringDropdown = File.ReadAllText(Path.Combine(root, "Code",
+            "ui", "components", "AWStringDropdown.cs"));
         string officeSettings = File.ReadAllText(Path.Combine(root, "Code",
             "ui", "windows", "CustomCourtOfficeSettingsWindow.cs"));
         string runtime = File.ReadAllText(Path.Combine(root, "Code", "core",
@@ -43,6 +45,10 @@ internal static class CustomCourtWorkflowSourceGuardTests
             "GodPowerLibrary.cs"));
         string lineageTab = File.ReadAllText(Path.Combine(root, "Code", "ui",
             "AW_LineageTab.cs"));
+        string modConfigPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ModConfigSelectPatch.cs"));
+        string configLocalization = File.ReadAllText(Path.Combine(root,
+            "Locales", "aw3_config.csv"));
         Contains(window, "public static void Open(");
         Contains(courtWindow, "CustomCourtWorkflowWindow.Open(");
         Contains(window, "CreateManagementEdge");
@@ -54,6 +60,12 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "aw_custom_court_office_name");
         Contains(window, "ApplyOfficeName");
         Contains(window, "SaveTemplate");
+        Contains(window, "AWStringDropdown _importDropdown");
+        Contains(window, "CustomCourtTemplatePathService.RootPath");
+        Contains(window, "store.ListFileNames()");
+        Contains(window, "store.TryLoadFile(option.Id");
+        Contains(window, "out string savedPath");
+        Contains(window, "RefreshImportFiles(");
         Contains(window, "RenderEdges");
         Contains(window, "RefreshSelectionVisuals");
         Contains(window, "SetSelectionState(1)");
@@ -98,6 +110,17 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(vacancyCard, "SettingsButton");
         Contains(vacancyCard, "settingsRequested");
         Contains(window, "CustomCourtOfficeSettingsWindow.Open(");
+        Contains(window, "CustomCourtOfficeSettingsWindow.Open(_kingdomId,");
+        Contains(officeSettings, "Open(long kingdomId,");
+        Contains(officeSettings, "BuiltInOfficePreset");
+        Contains(officeSettings, "AWStringDropdown.Create(");
+        Contains(officeSettings, "CustomCourtOfficePresetRules.CanApply(");
+        Contains(officeSettings, "definition.AvailableIn(institution)");
+        Contains(officeSettings, "AddFieldHelp(_basePanel, \"Grade\"");
+        Contains(officeSettings, "AddFieldHelp(_basePanel, \"MinimumRank\"");
+        Contains(officeSettings, "AddFieldHelp(_basePanel, \"RequiredSchool\"");
+        Contains(officeSettings, "AddFieldHelp(_basePanel, \"RequiredTrait\"");
+        Contains(officeSettings, "AddFieldHelp(_basePanel, \"RequiredOffice\"");
         Contains(officeSettings, "BaseAndRequirementsTab");
         Contains(officeSettings, "FunctionalEffectsTab");
         Contains(officeSettings, "ConfirmOfficeSettings");
@@ -112,6 +135,13 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(edge, "private void LateUpdate()");
         Contains(edge, "aw_custom_court_edge_management_short");
         Contains(edge, "aw_custom_court_edge_prerequisite_short");
+        Contains(stringDropdown, "class AWStringDropdownOption");
+        Contains(stringDropdown, "class AWStringDropdown");
+        Contains(stringDropdown, "SetOptions(");
+        Contains(stringDropdown, "typeof(ScrollRect)");
+        Contains(stringDropdown, "typeof(DismissArea)");
+        Contains(stringDropdown, "if (!option.Enabled)");
+        Contains(stringDropdown, "_onUnavailable?.Invoke(option)");
         Contains(runtime, "DisplayName(Kingdom kingdom");
         Contains(runtime, "OfficeDisplayName(Kingdom kingdom");
         DoesNotContain(courtReadModel, "ApplyCustomOfficeLayout");
@@ -129,6 +159,15 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(store, "TryImport");
         Contains(powers, "BanditAmnestyIconPath");
         Contains(lineageTab, "BanditAmnestyIconPath");
+        Contains(modConfigPatch, "class AW_ModConfigWindowTitlePatch");
+        Contains(modConfigPatch,
+            "HarmonyPatch(typeof(ModConfigureWindow),");
+        Contains(modConfigPatch,
+            "nameof(ModConfigureWindow.ShowWindow))]");
+        Contains(modConfigPatch, "ReferenceEquals(pConfig,");
+        Contains(modConfigPatch, "aw_settings_experimental_warning");
+        DoesNotContain(officeSettings,
+            "aw_settings_experimental_warning");
         RequiresFile(Path.Combine(root, "GameResources", "ui", "icons",
             "aw_bandit_amnesty.png"));
         HasLocalizationKey(localization, "aw_custom_court_workflow");
@@ -151,8 +190,19 @@ internal static class CustomCourtWorkflowSourceGuardTests
             "aw_custom_court_settings_layer_desc");
         HasLocalizationKey(localization,
             "aw_custom_court_settings_enabled_desc");
+        HasLocalizationKey(localization, "aw_custom_court_settings_preset");
+        HasLocalizationKey(localization,
+            "aw_custom_court_settings_preset_locked");
+        HasLocalizationKey(localization,
+            "aw_custom_court_settings_preset_applied");
         HasLocalizationKey(localization, "aw_custom_court_apply");
         HasLocalizationKey(localization, "aw_custom_court_saved");
+        HasLocalizationKey(localization, "aw_custom_court_exported_path");
+        HasLocalizationKey(localization, "aw_custom_court_import_select");
+        HasLocalizationKey(localization, "aw_custom_court_import_no_files");
+        HasLocalizationKey(localization, "aw_custom_court_import_invalid");
+        HasLocalizationKey(configLocalization,
+            "aw_settings_experimental_warning");
         CsvRowsHaveFourColumns(otherLocalization, "others.csv");
     }
 

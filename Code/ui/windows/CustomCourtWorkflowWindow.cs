@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.components;
@@ -27,6 +28,8 @@ namespace AncientWarfare3.ui.windows
         private RectTransform _toolPanel;
         private InputField _courtNameInput;
         private InputField _officeNameInput;
+        private AWStringDropdown _importDropdown;
+        private string _selectedImportFile = string.Empty;
         private Text _status;
         private CustomCourtTemplate _template;
         private CourtWorkflowVacancyCard _edgeSource;
@@ -121,8 +124,8 @@ namespace AncientWarfare3.ui.windows
                 "aw_custom_court_save", "Save", SaveTemplate);
             Button export = CreateButton(_toolPanel, "Export",
                 "aw_custom_court_export", "Export", ExportTemplate);
-            Button importButton = CreateButton(_toolPanel, "Import",
-                "aw_custom_court_import", "Import", ImportTemplate);
+            _importDropdown = AWStringDropdown.Create(_toolPanel,
+                "ImportJson", 148f, 22f, ImportTemplate);
             Button apply = CreateButton(_toolPanel, "Apply",
                 "aw_custom_court_apply", "Apply", ApplyCustomCourtTemplate);
             _status = CreateText(_toolPanel, "Status", 9,
@@ -139,8 +142,7 @@ namespace AncientWarfare3.ui.windows
                 148f, 22f);
             Layout(save.GetComponent<RectTransform>(), 8f, 172f, 148f, 22f);
             Layout(export.GetComponent<RectTransform>(), 8f, 198f, 148f, 22f);
-            Layout(importButton.GetComponent<RectTransform>(), 8f, 224f,
-                148f, 22f);
+            Layout(_importDropdown.RectTransform, 8f, 224f, 148f, 22f);
             Layout(apply.GetComponent<RectTransform>(), 8f, 250f, 148f, 22f);
         }
 
@@ -228,6 +230,7 @@ namespace AncientWarfare3.ui.windows
                 _courtNameInput.text = _template.Name?.Chinese ??
                     _template.Name?.English ?? string.Empty;
             RenderCards();
+            RefreshImportFiles();
             SetStatus(AW_L10n.Text("aw_custom_court_ready", "Ready"));
         }
 
@@ -471,7 +474,8 @@ namespace AncientWarfare3.ui.windows
         private void OpenOfficeSettings(CourtWorkflowVacancyCard card)
         {
             if (card?.Office == null || _template == null) return;
-            CustomCourtOfficeSettingsWindow.Open(_template, card.Office,
+            CustomCourtOfficeSettingsWindow.Open(_kingdomId, _template,
+                card.Office,
                 draft =>
                 {
                     CustomCourtOfficeSettingsRules.CopyEditableSettings(
@@ -490,18 +494,24 @@ namespace AncientWarfare3.ui.windows
 
         private string TemplateRoot()
         {
-            return Path.Combine(Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData), "WorldBox",
-                "AncientWarfare3.0", "court-templates");
+            return CustomCourtTemplatePathService.RootPath;
         }
 
         private void ExportTemplate()
         {
+            if (!SyncCourtNameFromInput()) return;
             var store = new CustomCourtTemplateStore(TemplateRoot());
             CustomCourtTemplateValidationError error;
-            SetStatus(store.TrySave(_template, out error)
-                ? AW_L10n.Text("aw_custom_court_exported", "Template exported.")
-                : AW_L10n.Text("aw_custom_court_invalid", "Template is invalid."));
+            if (store.TrySave(_template, out error, out string savedPath))
+            {
+                _selectedImportFile = Path.GetFileName(savedPath);
+                RefreshImportFiles();
+                SetStatus(string.Format(CultureInfo.CurrentCulture,
+                    AW_L10n.Text("aw_custom_court_exported_path",
+                        "Template exported: {0}"), savedPath));
+            }
+            else SetStatus(AW_L10n.Text("aw_custom_court_invalid",
+                "Template is invalid."));
         }
 
         private void SaveTemplate()
@@ -515,21 +525,44 @@ namespace AncientWarfare3.ui.windows
                 : AW_L10n.Text("aw_custom_court_invalid", "Template is invalid."));
         }
 
-        private void ImportTemplate()
+        private void RefreshImportFiles()
         {
+            var store = new CustomCourtTemplateStore(TemplateRoot());
+            string[] files = store.ListFileNames();
+            var options = files.Select(file => new AWStringDropdownOption
+            {
+                Id = file,
+                Label = Path.GetFileNameWithoutExtension(file),
+                Enabled = true
+            }).ToArray();
+            _importDropdown?.SetOptions(options, _selectedImportFile,
+                files.Length == 0
+                    ? AW_L10n.Text("aw_custom_court_import_no_files",
+                        "No JSON files")
+                    : AW_L10n.Text("aw_custom_court_import_select",
+                        "Import JSON"));
+        }
+
+        private void ImportTemplate(AWStringDropdownOption option)
+        {
+            if (option == null || string.IsNullOrEmpty(option.Id)) return;
             var store = new CustomCourtTemplateStore(TemplateRoot());
             CustomCourtTemplate imported;
             CustomCourtTemplateValidationError error;
-            if (store.TryLoad(_template.Id, out imported, out error))
+            if (store.TryLoadFile(option.Id, out imported, out error))
             {
                 _template = imported;
+                _selectedImportFile = option.Id;
                 if (_courtNameInput != null)
                     _courtNameInput.text = _template.Name?.Chinese ??
                         _template.Name?.English ?? string.Empty;
                 RenderCards();
-                SetStatus(AW_L10n.Text("aw_custom_court_imported", "Template imported."));
+                RefreshImportFiles();
+                SetStatus(AW_L10n.Text("aw_custom_court_imported",
+                    "Template imported."));
             }
-            else SetStatus(AW_L10n.Text("aw_custom_court_not_found", "Template not found."));
+            else SetStatus(AW_L10n.Text("aw_custom_court_import_invalid",
+                "The selected JSON file is invalid."));
         }
 
         public void ApplyCustomCourtTemplate()

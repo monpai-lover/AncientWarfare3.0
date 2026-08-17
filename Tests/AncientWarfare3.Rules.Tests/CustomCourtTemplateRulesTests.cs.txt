@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using AncientWarfare3.core.court;
 
 internal static class CustomCourtTemplateRulesTests
@@ -28,6 +29,73 @@ internal static class CustomCourtTemplateRulesTests
                 CustomCourtEffectId.TaxIncome,
                 CustomCourtEffectMode.AddPercent, 999),
             "effects are bounded by their preset module");
+
+        string modRoot = Path.Combine(Path.GetTempPath(), "aw3-courtjson-" +
+            Guid.NewGuid().ToString("N"));
+        string courtJson = CustomCourtTemplatePathService.ResolveCourtJsonRoot(
+            modRoot);
+        Equal(Path.Combine(Path.GetFullPath(modRoot), "Courtjson"), courtJson,
+            "court templates resolve inside the mod folder");
+        Directory.CreateDirectory(modRoot);
+        try
+        {
+            var store = new CustomCourtTemplateStore(courtJson);
+            var template = new CustomCourtTemplate
+            {
+                Id = "court_alpha",
+                Name = new CustomCourtLocalizedText
+                {
+                    Chinese = "甲朝廷",
+                    English = "Alpha Court"
+                },
+                Offices =
+                {
+                    new CustomCourtOffice
+                    {
+                        Id = "office_a",
+                        Name = new CustomCourtLocalizedText
+                        {
+                            Chinese = "甲官",
+                            English = "Office A"
+                        },
+                        Layer = CourtOfficeLayer.Central,
+                        Grade = 10,
+                        Slots = 1
+                    }
+                }
+            };
+            True(store.TrySave(template, out CustomCourtTemplateValidationError
+                    saveError, out string savedPath),
+                "valid template exports to Courtjson");
+            Equal(CustomCourtTemplateValidationError.None, saveError,
+                "export reports no validation error");
+            Equal(Path.Combine(courtJson, "court_alpha.json"), savedPath,
+                "export reports its full path");
+            File.WriteAllText(Path.Combine(courtJson, "zeta.json"), "{}");
+            File.WriteAllText(Path.Combine(courtJson, "ignored.txt"), "{}");
+            string[] files = store.ListFileNames();
+            Equal(2, files.Length, "only json files are listed");
+            Equal("court_alpha.json", files[0],
+                "json files are sorted by file name");
+            Equal("zeta.json", files[1],
+                "later json file follows sorted order");
+            True(store.TryLoadFile("court_alpha.json",
+                    out CustomCourtTemplate loaded,
+                    out CustomCourtTemplateValidationError loadError),
+                "selected json file imports successfully");
+            Equal("court_alpha", loaded.Id,
+                "selected import returns the stored template");
+            False(store.TryLoadFile("..\\court_alpha.json", out _, out _),
+                "selected import rejects path traversal");
+        }
+        finally
+        {
+            string fullTemp = Path.GetFullPath(modRoot);
+            if (fullTemp.StartsWith(Path.GetFullPath(Path.GetTempPath()),
+                    StringComparison.OrdinalIgnoreCase) &&
+                Directory.Exists(fullTemp))
+                Directory.Delete(fullTemp, true);
+        }
     }
 
     private static CustomCourtEdge Edge(string fromOfficeId, string toOfficeId,

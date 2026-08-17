@@ -73,6 +73,56 @@ internal static class CustomCourtEffectRulesTests
                 "custom_office_1", 42L, "custom_office_1", true, false,
                 7L, 7L, "custom_office_1"),
             "dead incumbent cannot activate effects");
+
+        var preset = new CourtOfficeDefinition("marshal",
+            CourtOfficeLayer.Military, 20, CourtSchoolId.Military,
+            "aw_court_office_marshal", true, CourtInstitutionId.Han);
+        False(CustomCourtOfficePresetRules.CanApply(preset,
+                CourtInstitutionId.Zhou),
+            "preset is locked outside its institution");
+        True(CustomCourtOfficePresetRules.CanApply(preset,
+                CourtInstitutionId.Han),
+            "preset is unlocked in its institution");
+        var presetTarget = new CustomCourtOffice
+        {
+            Id = "custom_office_9",
+            Name = new CustomCourtLocalizedText { Chinese = "旧", English = "Old" },
+            Layer = CourtOfficeLayer.Central,
+            Grade = 10,
+            Slots = 3,
+            PreferredSchoolId = CourtSchoolId.Ru,
+            Layout = new CustomCourtOfficeLayout { X = 42f, Y = 84f, Lane = 2 },
+            Requirements = new CustomCourtOfficeRequirement
+            {
+                MinimumRank = 7,
+                RequiredTraitId = "wise"
+            },
+            Effects = new List<CustomCourtOfficeEffect>
+            {
+                Effect(CustomCourtEffectId.CourtInfluence,
+                    CustomCourtEffectMode.AddFlat, 3f)
+            }
+        };
+        CustomCourtOfficePresetRules.ApplyDefinition(presetTarget, preset,
+            new CustomCourtLocalizedText { Chinese = "大司马", English = "Marshal" });
+        Equal("custom_office_9", presetTarget.Id,
+            "preset preserves custom office identity");
+        Equal("大司马", presetTarget.Name.Chinese,
+            "preset copies localized display name");
+        Equal(CourtOfficeLayer.Military, presetTarget.Layer,
+            "preset copies court layer");
+        Equal(20, presetTarget.Grade, "preset copies grade");
+        Equal(CourtSchoolId.Military, presetTarget.PreferredSchoolId,
+            "preset copies preferred school");
+        True(presetTarget.MilitaryCapable,
+            "preset copies military capability");
+        Equal(3, presetTarget.Slots, "preset preserves slot count");
+        Equal(7, presetTarget.Requirements.MinimumRank,
+            "preset preserves appointment requirements");
+        Equal(3f, presetTarget.Effects[0].Value,
+            "preset preserves functional effects");
+        Equal(42f, presetTarget.Layout.X,
+            "preset preserves editor layout");
     }
 
     private static CustomCourtOfficeEffect Effect(CustomCourtEffectId id,

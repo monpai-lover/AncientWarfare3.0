@@ -19,6 +19,7 @@
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateRules.cs" Link="Production\CustomCourtTemplateRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateJsonCodec.cs" Link="Production\CustomCourtTemplateJsonCodec.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateStore.cs" Link="Production\CustomCourtTemplateStore.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplatePathService.cs" Link="Production\CustomCourtTemplatePathService.cs" />
     <Compile Include="CustomCourtInstanceRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CustomCourtInstanceModels.cs" Link="Production\CustomCourtInstanceModels.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtInstanceRules.cs" Link="Production\CustomCourtInstanceRules.cs" />
@@ -33,6 +34,7 @@
     <Compile Include="CustomCourtEffectRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CustomCourtEffectRules.cs" Link="Production\CustomCourtEffectRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtOfficeSettingsRules.cs" Link="Production\CustomCourtOfficeSettingsRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtOfficePresetRules.cs" Link="Production\CustomCourtOfficePresetRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtHierarchyLayoutRules.cs" Link="Production\CustomCourtHierarchyLayoutRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtRuntimeEffectRules.cs" Link="Production\CustomCourtRuntimeEffectRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtEffectService.cs" Link="Production\CustomCourtEffectService.cs" />
