@@ -88,6 +88,9 @@ namespace AncientWarfare3.core.court
                 {
                     float weight = 4f * OfficialCareerRankRules.InfluenceMultiplier(
                         OfficialCareerStateService.ReadRankFast(actor));
+                    weight = Math.Max(0f,
+                        CustomCourtRuntimeEffectService.GetOfficeInfluenceModifier(
+                            pKingdom, office, actor.data.id).Apply(weight));
                     if (actor.data.id == ministerialPremierId)
                         weight *= ministerialMultiplier;
                     result.Add(new CourtInfluenceContribution(actor.data.id, school,

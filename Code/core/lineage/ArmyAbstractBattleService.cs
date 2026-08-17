@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.pathfinding;
 
 namespace AncientWarfare3.core.lineage
@@ -154,6 +155,8 @@ namespace AncientWarfare3.core.lineage
                     out canonicalDefender)) canonicalDefender = null;
 
             var attackers = new List<ArmyAbstractBattleParticipant>();
+            var moraleByKingdom = new Dictionary<long,
+                CustomCourtEffectModifier>();
             Kingdom defenderKingdom = target.kingdom;
             for (int i = 0; i < pMissions.Count; i++)
             {
@@ -176,6 +179,8 @@ namespace AncientWarfare3.core.lineage
                     ActorId = captain?.data?.id ?? -1L,
                     UnitCount = count,
                     CommanderStrength = CommanderStrength(captain),
+                    MoraleModifier = ResolveMoraleModifier(kingdom,
+                        moraleByKingdom),
                     IsAttacker = true,
                     IsSynthetic = false,
                     OwningCityId = AWArmyService.GetAnchorCityId(army)
@@ -199,6 +204,8 @@ namespace AncientWarfare3.core.lineage
                         ActorId = captain?.data?.id ?? -1L,
                         UnitCount = count,
                         CommanderStrength = CommanderStrength(captain),
+                        MoraleModifier = ResolveMoraleModifier(defenderKingdom,
+                            moraleByKingdom),
                         IsAttacker = false,
                         IsSynthetic = false,
                         OwningCityId = target.id
@@ -641,6 +648,20 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null) return 0;
             try { return Math.Max(0, Math.Min(100, pActor.warfare)); }
             catch { return 0; }
+        }
+
+        private static CustomCourtEffectModifier ResolveMoraleModifier(
+            Kingdom pKingdom,
+            Dictionary<long, CustomCourtEffectModifier> pCache)
+        {
+            if (pKingdom?.data == null)
+                return CustomCourtEffectModifier.Identity;
+            if (pCache.TryGetValue(pKingdom.id,
+                    out CustomCourtEffectModifier modifier)) return modifier;
+            modifier = CustomCourtRuntimeEffectService.GetArmyModifier(
+                pKingdom);
+            pCache[pKingdom.id] = modifier;
+            return modifier;
         }
 
         private static bool IsWarParticipant(War pWar, Kingdom pKingdom)

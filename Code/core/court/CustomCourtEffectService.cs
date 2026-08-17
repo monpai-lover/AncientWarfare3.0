@@ -35,5 +35,39 @@ namespace AncientWarfare3.core.court
             }
             return result;
         }
+
+        public IDictionary<CustomCourtEffectId, CustomCourtEffectModifier>
+            AggregateModifiers(IEnumerable<CustomCourtOffice> offices,
+                Func<CustomCourtOffice, bool> hasLivingIncumbent)
+        {
+            var grouped = new Dictionary<CustomCourtEffectId,
+                List<CustomCourtOfficeEffect>>();
+            foreach (CustomCourtOffice office in offices ??
+                     Array.Empty<CustomCourtOffice>())
+            {
+                if (office == null || hasLivingIncumbent != null &&
+                    !hasLivingIncumbent(office)) continue;
+                foreach (CustomCourtOfficeEffect effect in office.Effects ??
+                         new List<CustomCourtOfficeEffect>())
+                {
+                    if (effect == null || !CustomCourtEffectRules.IsPreset(
+                            effect.Id, effect.Mode, effect.Scope)) continue;
+                    if (!grouped.TryGetValue(effect.Id,
+                            out List<CustomCourtOfficeEffect> list))
+                    {
+                        list = new List<CustomCourtOfficeEffect>();
+                        grouped.Add(effect.Id, list);
+                    }
+                    list.Add(effect);
+                }
+            }
+
+            var result = new Dictionary<CustomCourtEffectId,
+                CustomCourtEffectModifier>();
+            foreach (KeyValuePair<CustomCourtEffectId,
+                         List<CustomCourtOfficeEffect>> pair in grouped)
+                result[pair.Key] = CustomCourtEffectRules.Compose(pair.Value);
+            return result;
+        }
     }
 }

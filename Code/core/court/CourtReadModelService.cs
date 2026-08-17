@@ -18,10 +18,18 @@ namespace AncientWarfare3.core.court
             if (pKingdom?.data == null || pKingdom.isRekt()) return seeds;
 
             string tier = CourtService.ResolveTier(pKingdom);
+            CustomCourtTemplate customSnapshot;
+            IReadOnlyDictionary<string, int> customRanks =
+                CustomCourtRuntime.TryGetSnapshot(pKingdom,
+                    out customSnapshot)
+                    ? CustomCourtHierarchyLayoutRules.BuildRanks(
+                        customSnapshot.Offices, customSnapshot.Edges)
+                    : null;
             AddKing(seeds, pKingdom);
             AddPrimitiveHeir(seeds, pKingdom, tier);
             List<CourtOfficerView> officers = CourtService.GetActiveOfficers(pKingdom, 96);
-            AddOfficersAndVacancies(seeds, pKingdom, officers, tier);
+            AddOfficersAndVacancies(seeds, pKingdom, officers, tier,
+                customRanks);
             AddGenerals(seeds, pKingdom);
             AddMilitaryGovernorates(seeds, pKingdom);
             AddFeudatoryPrinces(seeds, pKingdom);
@@ -67,7 +75,8 @@ namespace AncientWarfare3.core.court
         }
 
         private static void AddOfficersAndVacancies(List<CourtPyramidNodeModel> pSeeds,
-            Kingdom pKingdom, List<CourtOfficerView> pOfficers, string pTier)
+            Kingdom pKingdom, List<CourtOfficerView> pOfficers, string pTier,
+            IReadOnlyDictionary<string, int> pCustomRanks)
         {
             string[] expected = CourtService.CentralOfficeIdsForCurrentProfile(
                     pKingdom)
@@ -76,16 +85,23 @@ namespace AncientWarfare3.core.court
                 .ToArray();
             var expectedOrder = new Dictionary<string, int>();
             for (int i = 0; i < expected.Length; i++) expectedOrder[expected[i]] = i;
+            bool customGraph = CustomCourtRuntime.HasInstance(pKingdom);
 
             var filled = new HashSet<string>();
             foreach (CourtOfficerView officer in pOfficers ?? new List<CourtOfficerView>())
             {
+                if (customGraph && !expectedOrder.ContainsKey(
+                        officer.office_id)) continue;
                 Actor actor = World.world?.units?.get(officer.actor_id);
                 if (!IsValid(actor, pKingdom)) continue;
                 int order = expectedOrder.TryGetValue(officer.office_id, out int officeOrder)
                     ? officeOrder
                     : expected.Length + StableStringOrder(officer.office_id);
-                int rank = officer.layer == CourtOfficeLayer.Feudatory
+                int rank = pCustomRanks != null &&
+                    pCustomRanks.TryGetValue(officer.office_id,
+                        out int customRank)
+                    ? customRank
+                    : officer.layer == CourtOfficeLayer.Feudatory
                     ? FeudatoryOfficeRules.InspectorRank
                     : officer.layer == CourtOfficeLayer.City
                     ? CourtPyramidRules.GovernorRank
@@ -123,7 +139,10 @@ namespace AncientWarfare3.core.court
                 if (filled.Contains(office)) continue;
                 CourtOfficeDefinition definition =
                     CourtProfileRegistry.FindOffice(pKingdom, office);
-                int rank = definition?.Layer == CourtOfficeLayer.Military
+                int rank = pCustomRanks != null &&
+                    pCustomRanks.TryGetValue(office, out int customRank)
+                    ? customRank
+                    : definition?.Layer == CourtOfficeLayer.Military
                     ? CourtPyramidRules.GeneralRank
                     : CourtPyramidRules.RankForOffice(office);
                 pSeeds.Add(new CourtPyramidNodeModel(-1L, office, office,

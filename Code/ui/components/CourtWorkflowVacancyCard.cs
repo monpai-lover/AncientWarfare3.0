@@ -15,10 +15,13 @@ namespace AncientWarfare3.ui.components
 
         private Text _name;
         private Text _subtitle;
+        private Text _selectionBadge;
+        private Outline _outline;
         private Action<CourtWorkflowVacancyCard> _clicked;
         private Action<CourtWorkflowVacancyCard> _deleteRequested;
         private Action<CourtWorkflowVacancyCard> _dragEnded;
         private Vector2 _pointerOffset;
+        private bool _suppressClick;
 
         public CustomCourtOffice Office { get; private set; }
 
@@ -38,15 +41,38 @@ namespace AncientWarfare3.ui.components
                 return;
             }
 
-            string name = office.Name?.Chinese;
-            if (string.IsNullOrWhiteSpace(name)) name = office.Name?.English;
-            if (string.IsNullOrWhiteSpace(name)) name = office.Id;
+            RefreshText();
+        }
+
+        public void RefreshText()
+        {
+            if (Office == null) return;
+            string name = Office.Name?.Chinese;
+            if (string.IsNullOrWhiteSpace(name)) name = Office.Name?.English;
+            if (string.IsNullOrWhiteSpace(name)) name = Office.Id;
             _name.text = name ?? string.Empty;
             _subtitle.text = AW_L10n.Text("aw_court_no_officer", "Vacant");
         }
 
+        public void SetSelectionState(int step)
+        {
+            if (_outline == null || _selectionBadge == null) return;
+            bool selected = step == 1 || step == 2;
+            _selectionBadge.transform.parent.gameObject.SetActive(selected);
+            _selectionBadge.text = selected ? step.ToString() : string.Empty;
+            _outline.effectColor = step == 1
+                ? new Color(0.18f, 0.86f, 1f, 1f)
+                : step == 2
+                    ? new Color(1f, 0.68f, 0.16f, 1f)
+                    : new Color(0.04f, 0.06f, 0.06f, 0.92f);
+            _outline.effectDistance = selected
+                ? new Vector2(4f, -4f)
+                : new Vector2(2f, -2f);
+        }
+
         public void OnBeginDrag(PointerEventData eventData)
         {
+            _suppressClick = false;
             transform.SetAsLastSibling();
             RectTransform parent = transform.parent as RectTransform;
             RectTransform rect = transform as RectTransform;
@@ -60,6 +86,7 @@ namespace AncientWarfare3.ui.components
 
         public void OnDrag(PointerEventData eventData)
         {
+            _suppressClick = true;
             RectTransform parent = transform.parent as RectTransform;
             RectTransform rect = transform as RectTransform;
             if (parent == null || rect == null) return;
@@ -78,10 +105,23 @@ namespace AncientWarfare3.ui.components
         public void OnEndDrag(PointerEventData eventData)
         {
             _dragEnded?.Invoke(this);
+            Invoke(nameof(ClearDragSuppression), 0f);
+        }
+
+        private void HandleClick()
+        {
+            if (_suppressClick) return;
+            _clicked?.Invoke(this);
+        }
+
+        private void ClearDragSuppression()
+        {
+            _suppressClick = false;
         }
 
         public static CourtWorkflowVacancyCard Create(Transform parent,
             CustomCourtOffice office, Action<CourtWorkflowVacancyCard> clicked,
+            Action<CourtWorkflowVacancyCard> settingsRequested,
             Action<CourtWorkflowVacancyCard> deleteRequested,
             Action<CourtWorkflowVacancyCard> dragEnded)
         {
@@ -97,8 +137,9 @@ namespace AncientWarfare3.ui.components
             CourtWorkflowVacancyCard card =
                 obj.GetComponent<CourtWorkflowVacancyCard>();
             card.BuildUi();
-            card.GetComponent<Button>().onClick.AddListener(
-                () => clicked?.Invoke(card));
+            card.GetComponent<Button>().onClick.AddListener(card.HandleClick);
+            CreateSettingsButton(obj.transform,
+                () => settingsRequested?.Invoke(card));
             CreateDeleteButton(obj.transform,
                 () => deleteRequested?.Invoke(card));
             card.Bind(office, clicked, deleteRequested, dragEnded);
@@ -109,9 +150,9 @@ namespace AncientWarfare3.ui.components
         {
             Image background = GetComponent<Image>();
             AW_UIStyle.ApplyButton(background, 0.96f);
-            Outline outline = GetComponent<Outline>();
-            outline.effectColor = new Color(0.04f, 0.06f, 0.06f, 0.92f);
-            outline.effectDistance = new Vector2(2f, -2f);
+            _outline = GetComponent<Outline>();
+            _outline.effectColor = new Color(0.04f, 0.06f, 0.06f, 0.92f);
+            _outline.effectDistance = new Vector2(2f, -2f);
 
             GameObject avatarObject = new GameObject("empty_slot",
                 typeof(RectTransform), typeof(Image));
@@ -119,7 +160,7 @@ namespace AncientWarfare3.ui.components
             RectTransform avatarRect = avatarObject.GetComponent<RectTransform>();
             avatarRect.anchorMin = avatarRect.anchorMax = new Vector2(0f, 1f);
             avatarRect.pivot = new Vector2(0f, 1f);
-            avatarRect.anchoredPosition = new Vector2(10f, -6f);
+            avatarRect.anchoredPosition = new Vector2(26f, -6f);
             avatarRect.sizeDelta = new Vector2(SlotSize, SlotSize);
             Image avatar = avatarObject.GetComponent<Image>();
             avatar.sprite = SpriteTextureLoader.getSprite(
@@ -138,6 +179,32 @@ namespace AncientWarfare3.ui.components
             _subtitle = CreateText("Subtitle", new Vector2(6f, -79f),
                 new Vector2(Width - 12f, 18f), 8, TextAnchor.UpperCenter);
             _subtitle.color = new Color(0.95f, 0.86f, 0.58f, 1f);
+            CreateSelectionBadge();
+        }
+
+        private void CreateSelectionBadge()
+        {
+            GameObject badge = new GameObject("SelectionBadge",
+                typeof(RectTransform), typeof(Image));
+            badge.transform.SetParent(transform, false);
+            RectTransform badgeRect = badge.GetComponent<RectTransform>();
+            badgeRect.anchorMin = badgeRect.anchorMax = new Vector2(0f, 1f);
+            badgeRect.pivot = new Vector2(0f, 1f);
+            badgeRect.anchoredPosition = new Vector2(60f, -5f);
+            badgeRect.sizeDelta = new Vector2(20f, 18f);
+            badge.GetComponent<Image>().color =
+                new Color(0.04f, 0.04f, 0.035f, 0.96f);
+            _selectionBadge = CreateText("Text", Vector2.zero,
+                badgeRect.sizeDelta, 11, TextAnchor.MiddleCenter);
+            _selectionBadge.transform.SetParent(badge.transform, false);
+            RectTransform textRect = _selectionBadge.rectTransform;
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.pivot = new Vector2(0.5f, 0.5f);
+            textRect.anchoredPosition = Vector2.zero;
+            textRect.sizeDelta = Vector2.zero;
+            _selectionBadge.color = Color.white;
+            badge.SetActive(false);
         }
 
         private Text CreateText(string name, Vector2 position, Vector2 size,
@@ -191,6 +258,50 @@ namespace AncientWarfare3.ui.components
             text.color = Color.white;
             text.alignment = TextAnchor.MiddleCenter;
             text.raycastTarget = false;
+            return button;
+        }
+
+        private static Button CreateSettingsButton(Transform parent,
+            Action settingsRequested)
+        {
+            GameObject obj = new GameObject("SettingsButton",
+                typeof(RectTransform), typeof(Image), typeof(Button),
+                typeof(TipButton));
+            obj.transform.SetParent(parent, false);
+            RectTransform rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(3f, -3f);
+            rect.sizeDelta = new Vector2(18f, 18f);
+            AW_UIStyle.ApplyButton(obj.GetComponent<Image>(), 0.96f);
+            Button button = obj.GetComponent<Button>();
+            button.onClick.AddListener(() => settingsRequested?.Invoke());
+
+            GameObject iconObject = new GameObject("Icon",
+                typeof(RectTransform), typeof(Image));
+            iconObject.transform.SetParent(obj.transform, false);
+            RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+            iconRect.anchorMin = Vector2.zero;
+            iconRect.anchorMax = Vector2.one;
+            iconRect.offsetMin = new Vector2(2f, 2f);
+            iconRect.offsetMax = new Vector2(-2f, -2f);
+            Image icon = iconObject.GetComponent<Image>();
+            icon.sprite = SpriteTextureLoader.getSprite("ui/icons/iconSettings") ??
+                          SpriteTextureLoader.getSprite("ui/icons/iconKingdomList");
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+
+            TipButton tip = obj.GetComponent<TipButton>();
+            tip.type = AW_RawTooltip.TYPE;
+            tip.hoverAction = () => Tooltip.show(obj, AW_RawTooltip.TYPE,
+                new TooltipData
+                {
+                    tip_name = AW_L10n.Text(
+                        "aw_custom_court_office_settings", "Office settings"),
+                    tip_description = AW_L10n.Text(
+                        "aw_custom_court_office_settings_desc",
+                        "Edit office attributes requirements and effects.")
+                });
             return button;
         }
     }

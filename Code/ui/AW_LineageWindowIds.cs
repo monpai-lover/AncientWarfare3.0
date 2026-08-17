@@ -17,6 +17,8 @@ namespace AncientWarfare3.ui
         public const string WAR_TARGETS = "aw_war_targets";
         public const string COURT = "aw_court";
         public const string CUSTOM_COURT_WORKFLOW = "aw_custom_court_workflow";
+        internal const string CUSTOM_COURT_OFFICE_SETTINGS =
+            "aw_custom_court_office_settings";
         public const string HAREM = "aw_ruler_household";
         public const string HOUSEHOLD_OFFER = "aw_ruler_household_offer";
         public const string CIVIL_SERVICE_EXAM = "aw_civil_service_exam";

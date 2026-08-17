@@ -32,6 +32,9 @@
     <Compile Include="..\..\Code\core\court\CustomCourtApplicationService.cs" Link="Production\CustomCourtApplicationService.cs" />
     <Compile Include="CustomCourtEffectRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CustomCourtEffectRules.cs" Link="Production\CustomCourtEffectRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtOfficeSettingsRules.cs" Link="Production\CustomCourtOfficeSettingsRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtHierarchyLayoutRules.cs" Link="Production\CustomCourtHierarchyLayoutRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtRuntimeEffectRules.cs" Link="Production\CustomCourtRuntimeEffectRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtEffectService.cs" Link="Production\CustomCourtEffectService.cs" />
     <Compile Include="CustomCourtMultiplayerRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\multiplayer\commands\CustomCourtMultiplayerRules.cs" Link="Production\CustomCourtMultiplayerRules.cs" />

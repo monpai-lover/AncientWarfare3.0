@@ -379,6 +379,38 @@ namespace AncientWarfare3.core.court
             return segments;
         }
 
+        public static List<CourtPyramidLinkSegment> BuildCustomManagementLinks(
+            IEnumerable<CourtPyramidNodeModel> pNodes,
+            IEnumerable<CustomCourtEdge> pEdges, float nodeHeight)
+        {
+            var segments = new List<CourtPyramidLinkSegment>();
+            var nodes = (pNodes ?? Array.Empty<CourtPyramidNodeModel>())
+                .Where(node => node != null &&
+                    !string.IsNullOrEmpty(node.OfficeId))
+                .GroupBy(node => node.OfficeId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(),
+                    StringComparer.Ordinal);
+            float safeHeight = Math.Max(1f, nodeHeight);
+            foreach (CustomCourtEdge edge in pEdges ??
+                     Array.Empty<CustomCourtEdge>())
+            {
+                if (edge == null ||
+                    edge.Kind != CustomCourtEdgeKind.Management ||
+                    !nodes.TryGetValue(edge.FromOfficeId,
+                        out CourtPyramidNodeModel from) ||
+                    !nodes.TryGetValue(edge.ToOfficeId,
+                        out CourtPyramidNodeModel to))
+                    continue;
+                float fromBottomY = from.Y - safeHeight;
+                float targetTopY = to.Y;
+                float busY = (fromBottomY + targetTopY) * 0.5f;
+                AddSegment(segments, from.X, fromBottomY, from.X, busY);
+                AddSegment(segments, from.X, busY, to.X, busY);
+                AddSegment(segments, to.X, busY, to.X, targetTopY);
+            }
+            return segments;
+        }
+
         public static CourtPyramidRenderedLink PlaceLink(CourtPyramidLinkSegment pSegment,
             float offsetX, float offsetY, float thickness)
         {

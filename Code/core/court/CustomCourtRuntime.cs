@@ -44,6 +44,53 @@ namespace AncientWarfare3.core.court
             return Instances.Save(instance);
         }
 
+        public static bool TryGetSnapshot(Kingdom kingdom,
+            out CustomCourtTemplate snapshot)
+        {
+            snapshot = null;
+            CustomCourtInstance instance;
+            if (!TryGetInstance(kingdom, out instance)) return false;
+            snapshot = instance?.ResolvedSnapshot;
+            return snapshot != null;
+        }
+
+        public static string DisplayName(Kingdom kingdom, string fallback)
+        {
+            CustomCourtTemplate snapshot;
+            return TryGetSnapshot(kingdom, out snapshot)
+                ? LocalizedName(snapshot.Name, fallback)
+                : fallback ?? string.Empty;
+        }
+
+        public static string OfficeDisplayName(Kingdom kingdom,
+            string officeId)
+        {
+            CustomCourtTemplate snapshot;
+            if (!TryGetSnapshot(kingdom, out snapshot) ||
+                snapshot.Offices == null) return string.Empty;
+            foreach (CustomCourtOffice office in snapshot.Offices)
+            {
+                if (office == null || office.Id != officeId) continue;
+                return LocalizedName(office.Name, office.Id);
+            }
+            return string.Empty;
+        }
+
+        private static string LocalizedName(CustomCourtLocalizedText value,
+            string fallback)
+        {
+            if (value == null) return fallback ?? string.Empty;
+            string primary = HistoryLocalizationRules.CurrentLanguage() == "en"
+                ? value.English
+                : value.Chinese;
+            string secondary = HistoryLocalizationRules.CurrentLanguage() == "en"
+                ? value.Chinese
+                : value.English;
+            if (!string.IsNullOrWhiteSpace(primary)) return primary;
+            if (!string.IsNullOrWhiteSpace(secondary)) return secondary;
+            return fallback ?? string.Empty;
+        }
+
         public static bool TryApply(Kingdom kingdom,
             CustomCourtTemplate template,
             IReadOnlyDictionary<string, long> incumbents)

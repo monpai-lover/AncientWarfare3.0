@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -61,7 +62,8 @@ namespace AncientWarfare3.core.lineage
             {
                 ArmyAbstractBattleParticipant participant = participants[i];
                 total += AdjustedCardValue(participant.UnitCount,
-                    participant.CommanderStrength);
+                    participant.CommanderStrength,
+                    participant.MoraleModifier);
                 if (total >= int.MaxValue) return int.MaxValue;
             }
             return (int)Math.Max(0L, total);
@@ -93,11 +95,26 @@ namespace AncientWarfare3.core.lineage
         public static int AdjustedCardValue(int pUnitCount,
             int pCommanderStrength)
         {
+            return AdjustedCardValue(pUnitCount, pCommanderStrength,
+                CustomCourtEffectModifier.Identity);
+        }
+
+        public static int AdjustedCardValue(int pUnitCount,
+            int pCommanderStrength,
+            CustomCourtEffectModifier pMoraleModifier)
+        {
             int units = Math.Max(0, pUnitCount);
             if (units == 0) return 0;
+            float adjustedUnits = pMoraleModifier.Apply(units);
+            if (float.IsNaN(adjustedUnits) || adjustedUnits <= 0f) return 0;
+            long moraleUnits = float.IsPositiveInfinity(adjustedUnits) ||
+                adjustedUnits >= int.MaxValue
+                ? int.MaxValue
+                : (long)Math.Round(adjustedUnits,
+                    MidpointRounding.AwayFromZero);
             int commander = Math.Max(0, Math.Min(
                 CommanderStrengthCap, pCommanderStrength));
-            long value = (long)units * (100L + commander) / 100L;
+            long value = moraleUnits * (100L + commander) / 100L;
             return value >= int.MaxValue ? int.MaxValue : (int)value;
         }
 
@@ -127,9 +144,9 @@ namespace AncientWarfare3.core.lineage
             ArmyAbstractBattleParticipant pSelected)
         {
             int candidateValue = AdjustedCardValue(pCandidate.UnitCount,
-                pCandidate.CommanderStrength);
+                pCandidate.CommanderStrength, pCandidate.MoraleModifier);
             int selectedValue = AdjustedCardValue(pSelected.UnitCount,
-                pSelected.CommanderStrength);
+                pSelected.CommanderStrength, pSelected.MoraleModifier);
             return candidateValue > selectedValue ||
                    (candidateValue == selectedValue &&
                     pCandidate.CardIdentity.CompareTo(
@@ -183,6 +200,14 @@ namespace AncientWarfare3.core.lineage
                 Mix(ref pHash, participant.ActorId);
                 Mix(ref pHash, participant.UnitCount);
                 Mix(ref pHash, participant.CommanderStrength);
+                MixSingle(ref pHash,
+                    participant.MoraleModifier.AdditiveFlat);
+                MixSingle(ref pHash,
+                    participant.MoraleModifier.AdditivePercent);
+                MixSingle(ref pHash,
+                    participant.MoraleModifier.MultiplicativeFactor);
+                Mix(ref pHash,
+                    participant.MoraleModifier.HasMultiplier ? 1L : 0L);
                 Mix(ref pHash, participant.OwningCityId);
                 Mix(ref pHash, participant.IsSynthetic ? 1L : 0L);
                 Mix(ref pHash, participant.IsProtectedCivilAuthority ? 1L : 0L);
@@ -212,6 +237,12 @@ namespace AncientWarfare3.core.lineage
                     value >>= 8;
                 }
             }
+        }
+
+        private static void MixSingle(ref ulong pHash, float pValue)
+        {
+            byte[] bytes = BitConverter.GetBytes(pValue);
+            Mix(ref pHash, BitConverter.ToInt32(bytes, 0));
         }
 
         private static ArmyAbstractBattleResult EmptyResult()

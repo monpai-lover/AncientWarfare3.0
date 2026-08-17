@@ -5,6 +5,7 @@ internal static class CustomCourtWorkflowSourceGuardTests
 {
     public static void Run()
     {
+        CustomHierarchyUsesManagementDepthInsteadOfEditorCoordinates();
         string root = Directory.GetCurrentDirectory();
         string window = File.ReadAllText(Path.Combine(root, "Code", "ui",
             "windows", "CustomCourtWorkflowWindow.cs"));
@@ -16,8 +17,22 @@ internal static class CustomCourtWorkflowSourceGuardTests
             "components", "CourtWorkflowVacancyCard.cs"));
         string edge = File.ReadAllText(Path.Combine(root, "Code", "ui",
             "components", "CourtWorkflowEdgeView.cs"));
+        string officeSettings = File.ReadAllText(Path.Combine(root, "Code",
+            "ui", "windows", "CustomCourtOfficeSettingsWindow.cs"));
+        string runtime = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CustomCourtRuntime.cs"));
+        string courtReadModel = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "court", "CourtReadModelService.cs"));
+        string pyramidRules = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "court", "CourtPyramidRules.cs"));
         string courtWindow = File.ReadAllText(Path.Combine(root, "Code", "ui",
             "windows", "CourtWindow.cs"));
+        string kingdomWindow = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "KingdomWindowAddition.cs"));
+        string institution = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CourtInstitutionService.cs"));
+        string resolver = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CourtDefinitionResolver.cs"));
         string localization = File.ReadAllText(Path.Combine(root, "Locales",
             "aw3_court.csv"));
         string otherLocalization = File.ReadAllText(Path.Combine(root, "Locales",
@@ -35,8 +50,19 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "ApplyCustomCourtTemplate");
         Contains(window, "CourtWorkflowTools");
         Contains(window, "CourtNameInput");
+        Contains(window, "OfficeNameInput");
+        Contains(window, "aw_custom_court_office_name");
+        Contains(window, "ApplyOfficeName");
         Contains(window, "SaveTemplate");
         Contains(window, "RenderEdges");
+        Contains(window, "RefreshSelectionVisuals");
+        Contains(window, "SetSelectionState(1)");
+        Contains(window, "SetSelectionState(2)");
+        Contains(window, "aw_custom_court_management_edge_desc");
+        Contains(window, "aw_custom_court_prerequisite_edge_desc");
+        Contains(window, "CourtWindow.OpenAndRefresh(_kingdomId)");
+        Contains(window, "text.raycastTarget = false;");
+        Contains(window, "SyncCourtNameFromInput()");
         Contains(window, "text.font = LocalizedTextManager.current_font;");
         Contains(window, "BackgroundTransform?.Find(\"Scroll View\")");
         Contains(window, "scrollRect.sizeDelta = new Vector2(contentWidth,");
@@ -50,7 +76,13 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "new Vector2(900f, 650f)");
         Contains(window, "CourtWorkflowVacancyCard.Create");
         Contains(window, "_toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f)");
-        Contains(window, "_canvasRect.offsetMax = new Vector2(-172f, -4f)");
+        Contains(window, "_toolPanel.anchoredPosition = new Vector2(-864f, -4f)");
+        Contains(window, "_toolPanel.SetAsLastSibling()");
+        Contains(window, "_canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f)");
+        Contains(window, "_canvasRect.sizeDelta = new Vector2(contentWidth,");
+        Contains(window, "_canvasRect.anchoredPosition = new Vector2(-480f, 0f)");
+        Contains(window, "CanvasCenterLayout()");
+        Contains(window, "_workspaceRect.InverseTransformPoint(");
         Contains(canvas, "CourtWorkflowCanvas");
         Contains(canvas, "List<CourtWorkflowVacancyCard>");
         Contains(card, "DeleteButton");
@@ -60,7 +92,40 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(vacancyCard, "empty_slot");
         Contains(vacancyCard, "LocalizedTextManager.current_font");
         Contains(vacancyCard, "deleteRequested");
+        Contains(vacancyCard, "SetSelectionState(int step)");
+        Contains(vacancyCard, "SelectionBadge");
+        Contains(vacancyCard, "HandleClick");
+        Contains(vacancyCard, "SettingsButton");
+        Contains(vacancyCard, "settingsRequested");
+        Contains(window, "CustomCourtOfficeSettingsWindow.Open(");
+        Contains(officeSettings, "BaseAndRequirementsTab");
+        Contains(officeSettings, "FunctionalEffectsTab");
+        Contains(officeSettings, "ConfirmOfficeSettings");
+        Contains(officeSettings,
+            "private static readonly Vector2 DefaultSize = new Vector2(558f, 360f)");
+        Contains(officeSettings,
+            "private static readonly Vector2 MaximumSize = new Vector2(738f, 504f)");
+        Contains(officeSettings, "AttachTooltip(");
+        Contains(officeSettings, "aw_custom_court_settings_layer_desc");
+        Contains(officeSettings, "aw_custom_court_settings_enabled_desc");
         Contains(edge, "Bind(CustomCourtEdge edge, RectTransform from");
+        Contains(edge, "private void LateUpdate()");
+        Contains(edge, "aw_custom_court_edge_management_short");
+        Contains(edge, "aw_custom_court_edge_prerequisite_short");
+        Contains(runtime, "DisplayName(Kingdom kingdom");
+        Contains(runtime, "OfficeDisplayName(Kingdom kingdom");
+        DoesNotContain(courtReadModel, "ApplyCustomOfficeLayout");
+        Contains(courtReadModel, "CustomCourtHierarchyLayoutRules.BuildRanks(");
+        Contains(courtReadModel, "customGraph && !expectedOrder.ContainsKey");
+        DoesNotContain(resolver, "item.Layout?.Lane");
+        DoesNotContain(resolver, "item.Layout?.Y");
+        Contains(pyramidRules, "BuildCustomManagementLinks(");
+        Contains(courtWindow, "CustomCourtRuntime.DisplayName(pKingdom");
+        Contains(courtWindow, "BuildCustomManagementLinks(");
+        Contains(courtWindow, "if (!customGraph)");
+        Contains(courtWindow, "pContentWidth - 84f), 31f, 76f, 23f");
+        Contains(kingdomWindow, "CustomCourtRuntime.DisplayName(pKingdom");
+        Contains(institution, "CustomCourtRuntime.OfficeDisplayName(");
         Contains(store, "TryImport");
         Contains(powers, "BanditAmnestyIconPath");
         Contains(lineageTab, "BanditAmnestyIconPath");
@@ -70,15 +135,86 @@ internal static class CustomCourtWorkflowSourceGuardTests
         HasLocalizationKey(localization, "aw_custom_court_workflow Title");
         HasLocalizationKey(localization, "aw_custom_court_workflow_title");
         HasLocalizationKey(localization, "aw_custom_court_add_office");
+        HasLocalizationKey(localization, "aw_custom_court_office_name");
+        HasLocalizationKey(localization, "aw_custom_court_office_name_placeholder");
+        HasLocalizationKey(localization, "aw_custom_court_management_edge_desc");
+        HasLocalizationKey(localization, "aw_custom_court_prerequisite_edge_desc");
+        HasLocalizationKey(localization, "aw_custom_court_edge_management_short");
+        HasLocalizationKey(localization, "aw_custom_court_edge_prerequisite_short");
+        HasLocalizationKey(localization, "aw_custom_court_office_settings");
+        HasLocalizationKey(localization,
+            "aw_custom_court_office_settings Title");
+        HasLocalizationKey(localization, "aw_custom_court_settings_base_tab");
+        HasLocalizationKey(localization, "aw_custom_court_settings_effects_tab");
+        HasLocalizationKey(localization, "aw_court_layer_primitive");
+        HasLocalizationKey(localization,
+            "aw_custom_court_settings_layer_desc");
+        HasLocalizationKey(localization,
+            "aw_custom_court_settings_enabled_desc");
         HasLocalizationKey(localization, "aw_custom_court_apply");
         HasLocalizationKey(localization, "aw_custom_court_saved");
         CsvRowsHaveFourColumns(otherLocalization, "others.csv");
+    }
+
+    private static void CustomHierarchyUsesManagementDepthInsteadOfEditorCoordinates()
+    {
+        var offices = new[]
+        {
+            new AncientWarfare3.core.court.CustomCourtOffice
+            {
+                Id = "root", Layer = AncientWarfare3.core.court.CourtOfficeLayer.Central,
+                Grade = 10,
+                Layout = new AncientWarfare3.core.court.CustomCourtOfficeLayout
+                    { X = 900f, Y = 900f, Lane = 9 }
+            },
+            new AncientWarfare3.core.court.CustomCourtOffice
+            {
+                Id = "child", Layer = AncientWarfare3.core.court.CourtOfficeLayer.Central,
+                Grade = 10,
+                Layout = new AncientWarfare3.core.court.CustomCourtOfficeLayout
+                    { X = -900f, Y = -900f, Lane = -9 }
+            },
+            new AncientWarfare3.core.court.CustomCourtOffice
+            {
+                Id = "specialist", Layer = AncientWarfare3.core.court.CourtOfficeLayer.Central,
+                Grade = 30
+            }
+        };
+        var edges = new[]
+        {
+            new AncientWarfare3.core.court.CustomCourtEdge
+            {
+                FromOfficeId = "root", ToOfficeId = "child",
+                Kind = AncientWarfare3.core.court.CustomCourtEdgeKind.Management
+            }
+        };
+        var ranks = AncientWarfare3.core.court.CustomCourtHierarchyLayoutRules
+            .BuildRanks(offices, edges);
+        Equal(10, ranks["root"], "root office keeps its grade-based tier");
+        Equal(11, ranks["child"],
+            "managed office is automatically placed below its manager");
+        Equal(30, ranks["specialist"],
+            "unconnected office uses its grade instead of editor coordinates");
     }
 
     private static void Contains(string text, string expected)
     {
         if (text.IndexOf(expected, StringComparison.Ordinal) < 0)
             throw new InvalidOperationException("missing source contract: " + expected);
+    }
+
+    private static void DoesNotContain(string text, string unexpected)
+    {
+        if (text.IndexOf(unexpected, StringComparison.Ordinal) >= 0)
+            throw new InvalidOperationException("forbidden source contract: " +
+                unexpected);
+    }
+
+    private static void Equal(int expected, int actual, string message)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
     }
 
     private static void HasLocalizationKey(string text, string key)

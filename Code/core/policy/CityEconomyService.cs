@@ -95,6 +95,15 @@ namespace AncientWarfare3.core.policy
                     policyEffects.AdministrationMultiplier;
                 float workshopTechMultiplier = 1f +
                     policyEffects.ExtraWorkshopAttempts * 0.05f;
+                CustomCourtEffectModifier customTax =
+                    CustomCourtRuntimeEffectService.GetCityModifier(pKingdom,
+                        CustomCourtEffectId.TaxIncome);
+                CustomCourtEffectModifier customFood =
+                    CustomCourtRuntimeEffectService.GetCityModifier(pKingdom,
+                        CustomCourtEffectId.FoodProduction);
+                CustomCourtEffectModifier customOrder =
+                    CustomCourtRuntimeEffectService.GetCityModifier(pKingdom,
+                        CustomCourtEffectId.CivilOrder);
                 var sums = new CityEconomyContributionSums { year = year };
                 foreach (City city in cities)
                 {
@@ -116,10 +125,11 @@ namespace AncientWarfare3.core.policy
                             institution.UnrestReduction,
                             institution.PolicyOutputMultiplier *
                             administrationMultiplier,
-                            institution.TechOutputMultiplier *
-                            administrationMultiplier * workshopTechMultiplier,
-                            policyEffects.FarmOutputMultiplier,
-                            out CityEconomyContribution contribution))
+                             institution.TechOutputMultiplier *
+                             administrationMultiplier * workshopTechMultiplier,
+                             policyEffects.FarmOutputMultiplier,
+                             customTax, customFood, customOrder,
+                             out CityEconomyContribution contribution))
                         continue;
                     if (!providesToRealm) continue;
                     sums.policy_points += contribution.PolicyPoints;
@@ -216,6 +226,9 @@ namespace AncientWarfare3.core.policy
             float pManpowerMultiplier, float pUnrestReduction,
             float pPolicyMultiplier, float pTechMultiplier,
             float pFarmOutputMultiplier,
+            CustomCourtEffectModifier pCustomTax,
+            CustomCourtEffectModifier pCustomFood,
+            CustomCourtEffectModifier pCustomOrder,
             out CityEconomyContribution pContribution)
         {
             pContribution = default;
@@ -268,6 +281,15 @@ namespace AncientWarfare3.core.policy
                     contribution.FoodStability,
                     contribution.UnrestRisk);
             }
+            contribution = new CityEconomyContribution(
+                contribution.PolicyPoints,
+                contribution.TechPoints,
+                Math.Max(0f, pCustomTax.Apply(contribution.TaxValue)),
+                contribution.Manpower,
+                Math.Max(0f, pCustomFood.Apply(
+                    contribution.FoodStability)),
+                CustomCourtEffectRules.ApplyCivilOrder(
+                    contribution.UnrestRisk, pCustomOrder));
             benchmark = UpdateAgeBenchmark.Begin();
             try
             {

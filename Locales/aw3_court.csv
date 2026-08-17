@@ -22,6 +22,77 @@ aw_custom_court_not_found,模板不存在,Template not found.,模板不存在
 aw_custom_court_select_two,请先选择两个官职卡片,Select two office cards first.,请先选择两个官职卡片
 aw_custom_court_cycle,连接会形成环,That connection would create a cycle.,连接会形成环
 aw_custom_court_edge_added,连接已添加,Connection added.,连接已添加
+aw_custom_court_office_name,官职名称,Office name,官職名稱
+aw_custom_court_office_name_placeholder,输入官职名称,Enter office name,輸入官職名稱
+aw_custom_court_office_default,官职,Office,官職
+aw_custom_court_office_renamed,官职已重命名,Office renamed.,官職已重新命名
+aw_custom_court_management_edge_desc,第一个官职管理第二个官职并决定官场层级排版,The first office manages the second and defines the court hierarchy.,第一個官職管理第二個官職並決定官場層級排版
+aw_custom_court_prerequisite_edge_desc,必须先担任第一个官职才可任命到第二个官职,The first office must be held before appointment to the second.,必須先擔任第一個官職才可任命到第二個官職
+aw_custom_court_edge_management_short,管理,Manage,管理
+aw_custom_court_edge_prerequisite_short,前置,Requires,前置
+aw_custom_court_office_settings,官职设置,Office Settings,官職設定
+aw_custom_court_office_settings Title,官职设置,Office Settings,官職設定
+aw_custom_court_office_settings_desc,设置官职属性、任职条件与实际效果,Configure office attributes appointment requirements and live effects,設定官職屬性、任職條件與實際效果
+aw_custom_court_settings_base_tab,基础与任职,Base and Appointment,基礎與任職
+aw_custom_court_settings_base_tab_desc,设置官职名称层级品级席位与任职条件,Edit office identity hierarchy grade slots and appointment requirements,設定官職名稱層級品級席位與任職條件
+aw_custom_court_settings_effects_tab,职能效果,Functional Effects,職能效果
+aw_custom_court_settings_effects_tab_desc,设置有人任职时实际生效的官职加成,Configure live bonuses while this office has an incumbent,設定有人任職時實際生效的官職加成
+aw_custom_court_settings_confirm,确定,Confirm,確定
+aw_custom_court_settings_confirm_desc,验证设置并返回自定义官场编辑器,Validate settings and return to the custom court editor,驗證設定並返回自訂官場編輯器
+aw_custom_court_settings_cancel,取消,Cancel,取消
+aw_custom_court_settings_cancel_desc,放弃本窗口内尚未确认的改动,Discard unconfirmed changes made in this window,放棄本視窗內尚未確認的改動
+aw_custom_court_office_name_desc,这个名称会显示在官场和官职卡片上,This name is displayed in the court and on the office card,這個名稱會顯示在官場和官職卡片上
+aw_custom_court_settings_layer,官场层级,Layer,官場層級
+aw_custom_court_settings_layer_desc,决定官职所属的官场区域和层级分类,Controls the court section and hierarchy containing this office,決定官職所屬的官場區域和層級分類
+aw_custom_court_settings_grade,品级,Grade,品級
+aw_custom_court_settings_grade_desc,用于比较官职地位和官场排序的正式品级,The formal grade used to rank this office against others,用於比較官職地位和官場排序的正式品級
+aw_custom_court_settings_slots,官位数量,Slots,官位數量
+aw_custom_court_settings_slots_desc,允许同时担任这个官职的人数,The number of officials who may hold this office at once,允許同時擔任這個官職的人數
+aw_custom_court_settings_military,可统军,Military capable,可統軍
+aw_custom_court_settings_military_desc,决定任职者是否可以承担军事职能,Controls whether office holders may perform military duties,決定任職者是否可以承擔軍事職能
+aw_custom_court_settings_preferred_school,偏好学派,Preferred school,偏好學派
+aw_custom_court_settings_preferred_school_desc,属于该学派的候选人会获得任职倾向,Applicants from this school receive appointment preference,屬於該學派的候選人會獲得任職傾向
+aw_custom_court_settings_minimum_rank,最低等级,Minimum rank,最低等級
+aw_custom_court_settings_minimum_rank_desc,候选人必须达到的最低仕途等级,The lowest career rank required for appointment,候選人必須達到的最低仕途等級
+aw_custom_court_settings_required_school,要求学派,Required school,要求學派
+aw_custom_court_settings_required_school_desc,只有属于指定学派的人才能担任该官职,Only members of the selected school may hold this office,只有屬於指定學派的人才能擔任該官職
+aw_custom_court_settings_required_trait,要求特质,Required trait,要求特質
+aw_custom_court_settings_required_trait_desc,只有拥有填写的准确特质ID才能担任该官职,Only candidates with the exact entered trait ID are eligible,只有擁有填寫的準確特質ID才能擔任該官職
+aw_custom_court_settings_required_office,前置官职,Required office,前置官職
+aw_custom_court_settings_required_office_desc,候选人必须已经担任指定官职,The candidate must already hold the selected prerequisite office,候選人必須已經擔任指定官職
+aw_custom_court_settings_effect,效果,Effect,效果
+aw_custom_court_settings_effect_desc,当前正在设置的官职加成种类,The type of office bonus being configured,目前正在設定的官職加成種類
+aw_custom_court_settings_enabled,启用,Enabled,啟用
+aw_custom_court_settings_enabled_desc,开启或关闭这一项官职加成,Enable or disable this office bonus,開啟或關閉這一項官職加成
+aw_custom_court_settings_disabled,停用,Disabled,停用
+aw_custom_court_settings_scope,作用范围,Scope,作用範圍
+aw_custom_court_settings_scope_desc,选择国家城市军队或官场等生效对象,Choose the realm area that receives this bonus,選擇國家城市軍隊或官場等生效對象
+aw_custom_court_settings_mode,计算方式,Mode,計算方式
+aw_custom_court_settings_mode_desc,选择固定增加百分比增加或倍率计算,Choose flat percentage or multiplier calculation,選擇固定增加百分比增加或倍率計算
+aw_custom_court_settings_value,数值,Value,數值
+aw_custom_court_settings_value_desc,填写当前计算方式使用的效果强度,Enter the magnitude used by the selected calculation mode,填寫目前計算方式使用的效果強度
+aw_custom_court_settings_none,无,None,無
+aw_custom_court_settings_invalid_number,品级、官位数量或最低等级不是有效数字,Grade slots or minimum rank is not a valid number,品級、官位數量或最低等級不是有效數字
+aw_custom_court_settings_name_required,请输入官职名称,Enter an office name,請輸入官職名稱
+aw_custom_court_settings_invalid_effect_value,效果数值无效,An effect value is invalid,效果數值無效
+aw_custom_court_settings_validation_failed,官职设置不符合规则,Office settings are invalid,官職設定不符合規則
+aw_custom_court_scope_kingdom,全国,Kingdom,全國
+aw_custom_court_scope_city,城市,City,城市
+aw_custom_court_scope_army,军队,Army,軍隊
+aw_custom_court_scope_court,官场,Court,官場
+aw_custom_court_mode_addpercent,百分比加成,Add Percent,百分比加成
+aw_custom_court_mode_addflat,固定加成,Add Flat,固定加成
+aw_custom_court_mode_multiply,倍率,Multiply,倍率
+aw_custom_court_effect_taxincome,税收,Tax Income,稅收
+aw_custom_court_effect_taxincome_desc,任职者在位时调整国家或城市税收,Adjusts kingdom or city tax while the office has an incumbent,任職者在位時調整國家或城市稅收
+aw_custom_court_effect_foodproduction,粮食生产,Food Production,糧食生產
+aw_custom_court_effect_foodproduction_desc,任职者在位时调整国家或城市粮食生产,Adjusts kingdom or city food production while the office has an incumbent,任職者在位時調整國家或城市糧食生產
+aw_custom_court_effect_armymorale,军队士气,Army Morale,軍隊士氣
+aw_custom_court_effect_armymorale_desc,任职者在位时调整抽象军队的战斗士气,Adjusts abstract army battle morale while the office has an incumbent,任職者在位時調整抽象軍隊的戰鬥士氣
+aw_custom_court_effect_civilorder,社会秩序,Civil Order,社會秩序
+aw_custom_court_effect_civilorder_desc,任职者在位时提高秩序并降低动乱风险,Raises order and lowers unrest while the office has an incumbent,任職者在位時提高秩序並降低動亂風險
+aw_custom_court_effect_courtinfluence,官场影响力,Court Influence,官場影響力
+aw_custom_court_effect_courtinfluence_desc,调整该任职者所属学派在官场中的影响权重,Adjusts the incumbent school influence weight in court,調整該任職者所屬學派在官場中的影響權重
 aw_court_disposition Title,宫廷处置,Court Disposition,宮廷處置
 aw_inheritance_laws Title,继承法,Inheritance Law,繼承法
 aw_court_auxiliary_laws Title,官制辅助法,Court Auxiliary Laws,官制輔助法
@@ -382,6 +453,7 @@ aw_court_layer_central,中央官场,Central Court,中央官場
 aw_court_layer_city,地方官署,City Bureau,地方官署
 aw_court_layer_military,军府,Military Bureau,軍府
 aw_court_layer_censor,监察,Inspection,監察
+aw_court_layer_primitive,原始官场,Primitive Court,原始官場
 aw_court_event_founded,建立官场,Founded the court,建立官場
 aw_court_event_primitive,设立东周六卿,Established the Eastern Zhou Six Ministers,設立東周六卿
 aw_court_event_dominant,学派主导官场,A school dominates the court,學派主導官場

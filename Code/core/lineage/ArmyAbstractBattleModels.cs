@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.court;
 using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
@@ -55,6 +56,8 @@ namespace AncientWarfare3.core.lineage
         public long ActorId { get; set; } = -1L;
         public int UnitCount { get; set; }
         public int CommanderStrength { get; set; }
+        public CustomCourtEffectModifier MoraleModifier { get; set; } =
+            CustomCourtEffectModifier.Identity;
         public bool IsAttacker { get; set; }
         public bool IsSynthetic { get; set; }
         public bool IsProtectedCivilAuthority { get; set; }

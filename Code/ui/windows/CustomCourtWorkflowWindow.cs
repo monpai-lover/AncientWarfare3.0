@@ -1,8 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.components;
 using AncientWarfare3.ui.items;
 using NeoModLoader.api;
@@ -24,6 +26,7 @@ namespace AncientWarfare3.ui.windows
         private RectTransform _workspaceRect;
         private RectTransform _toolPanel;
         private InputField _courtNameInput;
+        private InputField _officeNameInput;
         private Text _status;
         private CustomCourtTemplate _template;
         private CourtWorkflowVacancyCard _edgeSource;
@@ -88,6 +91,13 @@ namespace AncientWarfare3.ui.windows
             nameLabel.text = AW_L10n.Text("aw_custom_court_name",
                 "Court name");
             _courtNameInput = CreateInput(_toolPanel, "CourtNameInput");
+            Text officeNameLabel = CreateText(_toolPanel, "OfficeNameLabel", 9,
+                TextAnchor.MiddleLeft);
+            officeNameLabel.text = AW_L10n.Text("aw_custom_court_office_name",
+                "Office name");
+            _officeNameInput = CreateInput(_toolPanel, "OfficeNameInput",
+                "aw_custom_court_office_name_placeholder", "Office name");
+            _officeNameInput.onEndEdit.AddListener(ApplyOfficeName);
             Button add = CreateButton(_toolPanel, "AddOffice",
                 "aw_custom_court_add_office", "Add Office", AddOffice);
             Button manage = CreateButton(_toolPanel, "ManagementEdge",
@@ -96,6 +106,17 @@ namespace AncientWarfare3.ui.windows
             Button prerequisite = CreateButton(_toolPanel, "PrerequisiteEdge",
                 "aw_custom_court_prerequisite_edge", "Prerequisite",
                 CreateAppointmentPrerequisiteEdge);
+            manage.GetComponent<Image>().color =
+                new Color(0.08f, 0.28f, 0.34f, 1f);
+            prerequisite.GetComponent<Image>().color =
+                new Color(0.36f, 0.22f, 0.08f, 1f);
+            AttachTooltip(manage, "aw_custom_court_management_edge",
+                "Management", "aw_custom_court_management_edge_desc",
+                "The first office manages the second office and controls the hierarchy shown in the court.");
+            AttachTooltip(prerequisite,
+                "aw_custom_court_prerequisite_edge", "Prerequisite",
+                "aw_custom_court_prerequisite_edge_desc",
+                "The first office must be held before appointment to the second office.");
             Button save = CreateButton(_toolPanel, "Save",
                 "aw_custom_court_save", "Save", SaveTemplate);
             Button export = CreateButton(_toolPanel, "Export",
@@ -109,15 +130,18 @@ namespace AncientWarfare3.ui.windows
             Layout(nameLabel.rectTransform, 8f, 6f, 148f, 16f);
             Layout(_courtNameInput.GetComponent<RectTransform>(), 8f, 24f,
                 148f, 20f);
-            Layout(add.GetComponent<RectTransform>(), 8f, 52f, 148f, 22f);
-            Layout(manage.GetComponent<RectTransform>(), 8f, 78f, 148f, 22f);
-            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 104f,
+            Layout(officeNameLabel.rectTransform, 8f, 50f, 148f, 16f);
+            Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 68f,
+                148f, 20f);
+            Layout(add.GetComponent<RectTransform>(), 8f, 94f, 148f, 22f);
+            Layout(manage.GetComponent<RectTransform>(), 8f, 120f, 148f, 22f);
+            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 146f,
                 148f, 22f);
-            Layout(save.GetComponent<RectTransform>(), 8f, 130f, 148f, 22f);
-            Layout(export.GetComponent<RectTransform>(), 8f, 156f, 148f, 22f);
-            Layout(importButton.GetComponent<RectTransform>(), 8f, 182f,
+            Layout(save.GetComponent<RectTransform>(), 8f, 172f, 148f, 22f);
+            Layout(export.GetComponent<RectTransform>(), 8f, 198f, 148f, 22f);
+            Layout(importButton.GetComponent<RectTransform>(), 8f, 224f,
                 148f, 22f);
-            Layout(apply.GetComponent<RectTransform>(), 8f, 208f, 148f, 22f);
+            Layout(apply.GetComponent<RectTransform>(), 8f, 250f, 148f, 22f);
         }
 
         private void ApplyLayout()
@@ -179,15 +203,17 @@ namespace AncientWarfare3.ui.windows
             _root.anchoredPosition = new Vector2(0f, -8f);
             _toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f);
             _toolPanel.pivot = new Vector2(1f, 1f);
-            _toolPanel.anchoredPosition = new Vector2(-4f, -4f);
+            _toolPanel.anchoredPosition = new Vector2(-864f, -4f);
             _toolPanel.sizeDelta = new Vector2(164f,
                 Mathf.Max(1f, viewportHeight - 8f));
-            Layout(_status.rectTransform, 8f, 238f, 148f,
-                Mathf.Max(1f, _toolPanel.sizeDelta.y - 246f));
-            _canvasRect.anchorMin = new Vector2(0f, 0f);
-            _canvasRect.anchorMax = new Vector2(1f, 1f);
-            _canvasRect.offsetMin = new Vector2(4f, 4f);
-            _canvasRect.offsetMax = new Vector2(-172f, -4f);
+            _toolPanel.SetAsLastSibling();
+            Layout(_status.rectTransform, 8f, 278f, 148f,
+                Mathf.Max(1f, _toolPanel.sizeDelta.y - 286f));
+            _canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f);
+            _canvasRect.pivot = new Vector2(0.5f, 0.5f);
+            _canvasRect.sizeDelta = new Vector2(contentWidth,
+                viewportHeight);
+            _canvasRect.anchoredPosition = new Vector2(-480f, 0f);
             _canvasRect.GetComponent<TreeDragPanHandler>().Setup(_workspaceRect,
                 _canvasRect);
             _chrome?.RepositionResizeHandle();
@@ -224,7 +250,7 @@ namespace AncientWarfare3.ui.windows
                 Layer = CourtOfficeLayer.Central,
                 Grade = 10,
                 Slots = 1,
-                Layout = new CustomCourtOfficeLayout { X = 80f, Y = 80f }
+                Layout = CanvasCenterLayout()
             });
             return template;
         }
@@ -242,7 +268,8 @@ namespace AncientWarfare3.ui.windows
             foreach (CustomCourtOffice office in _template.Offices)
             {
                 CourtWorkflowVacancyCard card = CourtWorkflowVacancyCard.Create(
-                    _workspaceRect, office, SelectCard, DeleteOffice,
+                    _workspaceRect, office, SelectCard, OpenOfficeSettings,
+                    DeleteOffice,
                     _ => RenderEdges());
                 canvas.AddCard(card);
                 RectTransform rect = card.GetComponent<RectTransform>();
@@ -254,6 +281,7 @@ namespace AncientWarfare3.ui.windows
                     -office.Layout.Y);
             }
             RenderEdges();
+            RefreshSelectionVisuals();
         }
 
         private void RenderEdges()
@@ -298,9 +326,25 @@ namespace AncientWarfare3.ui.windows
             if (_edgeSource == null) _edgeSource = card;
             else if (_edgeTarget == null && card != _edgeSource) _edgeTarget = card;
             else { _edgeSource = card; _edgeTarget = null; }
+            if (_officeNameInput != null && card?.Office != null)
+                _officeNameInput.text = OfficeDisplayName(card.Office);
+            RefreshSelectionVisuals();
             SetStatus(_edgeTarget == null
                 ? "1: " + (_edgeSource?.Office?.Id ?? "")
                 : "2: " + _edgeTarget.Office.Id);
+        }
+
+        private void RefreshSelectionVisuals()
+        {
+            CourtWorkflowCanvas canvas = _workspaceRect?.GetComponent<
+                CourtWorkflowCanvas>();
+            if (canvas == null) return;
+            foreach (CourtWorkflowVacancyCard card in canvas.Cards)
+            {
+                if (card == _edgeSource) card.SetSelectionState(1);
+                else if (card == _edgeTarget) card.SetSelectionState(2);
+                else card.SetSelectionState(0);
+            }
         }
 
         public void CreateManagementEdge()
@@ -338,23 +382,73 @@ namespace AncientWarfare3.ui.windows
             }
             SetStatus(AW_L10n.Text("aw_custom_court_edge_added", "Connection added."));
             _edgeSource = _edgeTarget = null;
+            RenderEdges();
+            RefreshSelectionVisuals();
         }
 
         private void AddOffice()
         {
             int number = _template.Offices.Count + 1;
+            string name = _officeNameInput?.text?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(name))
+                name = AW_L10n.Text("aw_custom_court_office_default",
+                    "Office") + " " + number;
             _template.Offices.Add(new CustomCourtOffice
             {
                 Id = "custom_office_" + number,
+                Name = new CustomCourtLocalizedText
+                {
+                    Chinese = name,
+                    English = name
+                },
                 Layer = CourtOfficeLayer.Central,
                 Grade = 10,
                 Slots = 1,
-                Layout = new CustomCourtOfficeLayout
-                {
-                    X = 80f + number * 24f, Y = 80f + number * 24f
-                }
+                Layout = CanvasCenterLayout()
             });
+            _edgeSource = _edgeTarget = null;
+            if (_officeNameInput != null) _officeNameInput.text = string.Empty;
             RenderCards();
+        }
+
+        private CustomCourtOfficeLayout CanvasCenterLayout()
+        {
+            if (_canvasRect == null || _workspaceRect == null)
+                return new CustomCourtOfficeLayout { X = 1000f, Y = 700f };
+            Vector3 worldCenter = _canvasRect.TransformPoint(
+                _canvasRect.rect.center);
+            Vector3 localCenter = _workspaceRect.InverseTransformPoint(
+                worldCenter);
+            return new CustomCourtOfficeLayout
+            {
+                X = localCenter.x - _workspaceRect.rect.xMin,
+                Y = _workspaceRect.rect.yMax - localCenter.y -
+                    CourtWorkflowVacancyCard.Height * 0.5f
+            };
+        }
+
+        private void ApplyOfficeName(string value)
+        {
+            CourtWorkflowVacancyCard card = _edgeTarget ?? _edgeSource;
+            string name = value?.Trim() ?? string.Empty;
+            if (card?.Office == null || string.IsNullOrEmpty(name)) return;
+            card.Office.Name = card.Office.Name ?? new CustomCourtLocalizedText();
+            card.Office.Name.Chinese = name;
+            card.Office.Name.English = name;
+            card.RefreshText();
+            SetStatus(AW_L10n.Text("aw_custom_court_office_renamed",
+                "Office renamed."));
+        }
+
+        private static string OfficeDisplayName(CustomCourtOffice office)
+        {
+            if (office == null) return string.Empty;
+            string value = HistoryLocalizationRules.CurrentLanguage() == "en"
+                ? office.Name?.English
+                : office.Name?.Chinese;
+            if (string.IsNullOrWhiteSpace(value)) value = office.Name?.English;
+            if (string.IsNullOrWhiteSpace(value)) value = office.Name?.Chinese;
+            return string.IsNullOrWhiteSpace(value) ? office.Id : value;
         }
 
         private void DeleteOffice(CourtWorkflowVacancyCard card)
@@ -370,7 +464,28 @@ namespace AncientWarfare3.ui.windows
                     StringComparison.Ordinal));
             _edgeSource = null;
             _edgeTarget = null;
+            if (_officeNameInput != null) _officeNameInput.text = string.Empty;
             RenderCards();
+        }
+
+        private void OpenOfficeSettings(CourtWorkflowVacancyCard card)
+        {
+            if (card?.Office == null || _template == null) return;
+            CustomCourtOfficeSettingsWindow.Open(_template, card.Office,
+                draft =>
+                {
+                    CustomCourtOfficeSettingsRules.CopyEditableSettings(
+                        card.Office, draft);
+                    card.RefreshText();
+                    if (_officeNameInput != null &&
+                        (card == _edgeSource || card == _edgeTarget))
+                        _officeNameInput.text = OfficeDisplayName(card.Office);
+                    RenderEdges();
+                    RefreshSelectionVisuals();
+                    SetStatus(AW_L10n.Text(
+                        "aw_custom_court_office_settings_saved",
+                        "Office settings saved."));
+                });
         }
 
         private string TemplateRoot()
@@ -391,16 +506,7 @@ namespace AncientWarfare3.ui.windows
 
         private void SaveTemplate()
         {
-            string name = _courtNameInput?.text?.Trim() ?? string.Empty;
-            if (string.IsNullOrEmpty(name))
-            {
-                SetStatus(AW_L10n.Text("aw_custom_court_name_required",
-                    "Enter a court name before saving."));
-                return;
-            }
-            _template.Name = _template.Name ?? new CustomCourtLocalizedText();
-            _template.Name.Chinese = name;
-            _template.Name.English = name;
+            if (!SyncCourtNameFromInput()) return;
             _template.Revision = Math.Max(1, _template.Revision + 1);
             var store = new CustomCourtTemplateStore(TemplateRoot());
             CustomCourtTemplateValidationError error;
@@ -428,12 +534,35 @@ namespace AncientWarfare3.ui.windows
 
         public void ApplyCustomCourtTemplate()
         {
+            if (!SyncCourtNameFromInput()) return;
             Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
             bool applied = CustomCourtRuntime.TryApply(kingdom, _template,
                 new Dictionary<string, long>());
             SetStatus(applied
                 ? AW_L10n.Text("aw_custom_court_applied", "Template applied.")
                 : AW_L10n.Text("aw_custom_court_invalid", "Template is invalid."));
+            if (applied) StartCoroutine(ReturnToCourtAfterApply());
+        }
+
+        private bool SyncCourtNameFromInput()
+        {
+            string name = _courtNameInput?.text?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(name))
+            {
+                SetStatus(AW_L10n.Text("aw_custom_court_name_required",
+                    "Enter a court name before saving."));
+                return false;
+            }
+            _template.Name = _template.Name ?? new CustomCourtLocalizedText();
+            _template.Name.Chinese = name;
+            _template.Name.English = name;
+            return true;
+        }
+
+        private IEnumerator ReturnToCourtAfterApply()
+        {
+            yield return null;
+            CourtWindow.OpenAndRefresh(_kingdomId);
         }
 
         private void SetStatus(string value)
@@ -451,10 +580,13 @@ namespace AncientWarfare3.ui.windows
             text.fontSize = size;
             text.alignment = alignment;
             text.color = new Color(0.94f, 0.86f, 0.68f, 1f);
+            text.raycastTarget = false;
             return text;
         }
 
-        private static InputField CreateInput(Transform parent, string name)
+        private static InputField CreateInput(Transform parent, string name,
+            string placeholderKey = "aw_custom_court_name_placeholder",
+            string placeholderFallback = "Court name")
         {
             GameObject obj = new GameObject(name, typeof(RectTransform),
                 typeof(Image), typeof(InputField));
@@ -474,8 +606,8 @@ namespace AncientWarfare3.ui.windows
             placeholder.rectTransform.offsetMin = new Vector2(5f, 1f);
             placeholder.rectTransform.offsetMax = new Vector2(-5f, -1f);
             placeholder.color = new Color(1f, 1f, 1f, 0.45f);
-            placeholder.text = AW_L10n.Text("aw_custom_court_name_placeholder",
-                "Court name");
+            placeholder.text = AW_L10n.Text(placeholderKey,
+                placeholderFallback);
             InputField input = obj.GetComponent<InputField>();
             input.textComponent = value;
             input.placeholder = placeholder;
@@ -488,14 +620,35 @@ namespace AncientWarfare3.ui.windows
             string key, string fallback, UnityEngine.Events.UnityAction action)
         {
             GameObject obj = new GameObject(name, typeof(RectTransform),
-                typeof(Image), typeof(Button));
+                typeof(Image), typeof(Button), typeof(TipButton));
             obj.transform.SetParent(parent, false);
             obj.GetComponent<Image>().color = new Color(0.22f, 0.16f, 0.09f, 1f);
             Button button = obj.GetComponent<Button>();
             button.onClick.AddListener(action);
             Text text = CreateText(obj.transform, "Text", 9, TextAnchor.MiddleCenter);
             text.text = AW_L10n.Text(key, fallback);
+            text.rectTransform.anchorMin = Vector2.zero;
+            text.rectTransform.anchorMax = Vector2.one;
+            text.rectTransform.offsetMin = new Vector2(2f, 1f);
+            text.rectTransform.offsetMax = new Vector2(-2f, -1f);
             return button;
+        }
+
+        private static void AttachTooltip(Button button, string titleKey,
+            string titleFallback, string descriptionKey,
+            string descriptionFallback)
+        {
+            if (button == null) return;
+            TipButton tip = button.GetComponent<TipButton>() ??
+                button.gameObject.AddComponent<TipButton>();
+            tip.type = AW_RawTooltip.TYPE;
+            tip.hoverAction = () => Tooltip.show(button.gameObject,
+                AW_RawTooltip.TYPE, new TooltipData
+                {
+                    tip_name = AW_L10n.Text(titleKey, titleFallback),
+                    tip_description = AW_L10n.Text(descriptionKey,
+                        descriptionFallback)
+                });
         }
 
         private static void Layout(RectTransform rect, float x, float y,

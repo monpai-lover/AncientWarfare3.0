@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 
 internal static class ArmyAbstractBattleRulesTests
@@ -175,6 +176,30 @@ internal static class ArmyAbstractBattleRulesTests
                 new[] { Participant(50, 110, 0, true),
                        Participant(40, 100, 0, true) }).ArmyId,
             "primary attacker chooses the largest adjusted card");
+
+        ArmyAbstractBattleParticipant identityMorale =
+            Participant(80, 100, 0, true);
+        ArmyAbstractBattleParticipant boostedMorale =
+            Participant(80, 100, 0, true);
+        boostedMorale.MoraleModifier = new CustomCourtEffectModifier(
+            0f, 20f, 1f);
+        Equal(100, ArmyAbstractBattleRules.Aggregate(
+                new[] { identityMorale }),
+            "identity morale preserves abstract strength");
+        Equal(120, ArmyAbstractBattleRules.Aggregate(
+                new[] { boostedMorale }),
+            "custom court morale changes abstract strength");
+        False(ArmyAbstractBattleRules.ParticipantHash(
+                    new ArmyAbstractBattleFacts
+                    {
+                        Attackers = new[] { identityMorale }
+                    }) ==
+              ArmyAbstractBattleRules.ParticipantHash(
+                    new ArmyAbstractBattleFacts
+                    {
+                        Attackers = new[] { boostedMorale }
+                    }),
+            "morale facts participate in deterministic hashing");
     }
 
     private static ArmyAbstractBattleFacts OneSided(int pAttack,
@@ -212,5 +237,10 @@ internal static class ArmyAbstractBattleRulesTests
         if (!Equals(expected, actual))
             throw new InvalidOperationException(
                 message + $" (expected {expected}, actual {actual})");
+    }
+
+    private static void False(bool actual, string message)
+    {
+        if (actual) throw new InvalidOperationException(message);
     }
 }

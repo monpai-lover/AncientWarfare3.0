@@ -711,6 +711,8 @@ namespace AncientWarfare3.ui.windows
                     : officialCourt
                         ? AW_L10n.Text("aw_court_button_official", "\u767E\u5BB6\u5B98\u573A")
                         : AW_L10n.Text("aw_court_button_primitive", "\u539F\u59CB\u671D\u4F1A");
+            if (policyEnabled && CustomCourtRuntime.HasInstance(pKingdom))
+                title = CustomCourtRuntime.DisplayName(pKingdom, title);
 
             if (_courtText != null)
             {

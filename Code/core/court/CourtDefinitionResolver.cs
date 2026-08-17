@@ -40,10 +40,16 @@ namespace AncientWarfare3.core.court
             CustomCourtInstance instance;
             if (_instances != null && _instances.TryGet(kingdomId, out instance))
             {
-                return (instance.ResolvedSnapshot?.Offices ??
+                CustomCourtTemplate snapshot = instance.ResolvedSnapshot;
+                List<CustomCourtOffice> offices = (snapshot?.Offices ??
                     new List<CustomCourtOffice>()).Where(item => item != null)
-                    .OrderBy(item => item.Layout?.Lane ?? 0)
-                    .ThenBy(item => item.Layout?.Y ?? 0f)
+                    .ToList();
+                IReadOnlyDictionary<string, int> ranks =
+                    CustomCourtHierarchyLayoutRules.BuildRanks(offices,
+                        snapshot?.Edges);
+                return offices.OrderBy(item => ranks.TryGetValue(item.Id,
+                        out int rank) ? rank : int.MaxValue)
+                    .ThenBy(item => item.Grade)
                     .ThenBy(item => item.Id, StringComparer.Ordinal)
                     .Select(item => ToDefinition(item, institutionId)).ToList();
             }

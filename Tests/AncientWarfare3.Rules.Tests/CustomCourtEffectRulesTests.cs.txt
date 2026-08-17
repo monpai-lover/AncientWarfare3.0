@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AncientWarfare3.core.court;
 
 internal static class CustomCourtEffectRulesTests
@@ -16,6 +17,76 @@ internal static class CustomCourtEffectRulesTests
         True(CustomCourtEffectRules.CanApplyToScope(
                 CustomCourtEffectId.ArmyMorale, CustomCourtEffectScope.Army),
             "army morale targets armies");
+
+        CustomCourtEffectModifier modifier = CustomCourtEffectRules.Compose(
+            new[]
+            {
+                Effect(CustomCourtEffectId.TaxIncome,
+                    CustomCourtEffectMode.AddFlat, 10f),
+                Effect(CustomCourtEffectId.TaxIncome,
+                    CustomCourtEffectMode.AddPercent, 20f),
+                Effect(CustomCourtEffectId.TaxIncome,
+                    CustomCourtEffectMode.Multiply, 1.5f)
+            });
+        Equal(198f, modifier.Apply(100f),
+            "flat percent and multiply compose in order");
+        Equal(20f, CustomCourtEffectRules.ApplyCivilOrder(25f,
+                CustomCourtEffectRules.Compose(new[]
+                {
+                    Effect(CustomCourtEffectId.CivilOrder,
+                        CustomCourtEffectMode.AddFlat, 5f)
+                })),
+            "positive civil order lowers unrest");
+
+        var original = new CustomCourtOffice
+        {
+            Id = "custom_office_1",
+            Name = new CustomCourtLocalizedText { Chinese = "甲", English = "A" },
+            Requirements = new CustomCourtOfficeRequirement
+            {
+                RequiredTraitId = "strong"
+            },
+            Effects = new List<CustomCourtOfficeEffect>
+            {
+                Effect(CustomCourtEffectId.TaxIncome,
+                    CustomCourtEffectMode.AddPercent, 10f)
+            }
+        };
+        CustomCourtOffice draft =
+            CustomCourtOfficeSettingsRules.CloneOffice(original);
+        draft.Requirements.RequiredTraitId = "wise";
+        draft.Effects[0].Value = 20f;
+        Equal("strong", original.Requirements.RequiredTraitId,
+            "settings draft does not mutate source requirements");
+        Equal(10f, original.Effects[0].Value,
+            "settings draft does not mutate source effects");
+
+        True(CustomCourtRuntimeEffectRules.IsActiveIncumbent(7L,
+                "custom_office_1", 42L, "custom_office_1", true, true,
+                7L, 7L, "custom_office_1"),
+            "matching living incumbent activates effects");
+        False(CustomCourtRuntimeEffectRules.IsActiveIncumbent(7L,
+                "custom_office_1", 42L, "custom_office_1", true, true,
+                9L, 7L, "custom_office_1"),
+            "foreign actor cannot activate effects");
+        False(CustomCourtRuntimeEffectRules.IsActiveIncumbent(7L,
+                "custom_office_1", 42L, "custom_office_1", true, false,
+                7L, 7L, "custom_office_1"),
+            "dead incumbent cannot activate effects");
+    }
+
+    private static CustomCourtOfficeEffect Effect(CustomCourtEffectId id,
+        CustomCourtEffectMode mode, float value)
+    {
+        return new CustomCourtOfficeEffect
+        {
+            Id = id,
+            Mode = mode,
+            Scope = id == CustomCourtEffectId.CivilOrder
+                ? CustomCourtEffectScope.City
+                : CustomCourtEffectScope.Kingdom,
+            Value = value
+        };
     }
 
     private static void True(bool actual, string message)

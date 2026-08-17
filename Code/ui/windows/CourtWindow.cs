@@ -269,7 +269,7 @@ namespace AncientWarfare3.ui.windows
                 LayoutSummaryText(_summaryPrimary, 44f, 4f,
                     Mathf.Max(1f, pContentWidth - 294f), 25f);
                 LayoutSummaryText(_summarySecondary, 44f, 29f,
-                    pContentWidth - 52f, 79f);
+                    Mathf.Max(1f, pContentWidth - 136f), 79f);
                 LayoutSummaryButton(_kingdomBack,
                     Mathf.Max(44f, pContentWidth - 84f), 4f, 76f, 23f);
                 LayoutSummaryButton(_civilServiceExamButton,
@@ -277,7 +277,7 @@ namespace AncientWarfare3.ui.windows
                 LayoutSummaryButton(_householdButton,
                     Mathf.Max(44f, pContentWidth - 248f), 4f, 76f, 23f);
                 LayoutSummaryButton(_customCourtWorkflowButton,
-                    Mathf.Max(44f, pContentWidth - 330f), 4f, 76f, 23f);
+                    Mathf.Max(44f, pContentWidth - 84f), 31f, 76f, 23f);
             }
             RectTransform surface = _dragSurface?.GetComponent<RectTransform>();
             if (surface != null)
@@ -338,7 +338,8 @@ namespace AncientWarfare3.ui.windows
                     CourtActorNodeView.Width, CourtActorNodeView.Height, CanvasPadding);
                 _canvasRect.sizeDelta = new Vector2(bounds.Width, bounds.Height);
                 Vector2 nodeOffset = new Vector2(bounds.OffsetX, bounds.OffsetY);
-                BuildLinks(nodes, KingdomColor(kingdom), nodeOffset, bounds);
+                BuildLinks(nodes, kingdom, KingdomColor(kingdom), nodeOffset,
+                    bounds);
                 LayoutSectionMarkers(nodes, bounds, nodeOffset, KingdomColor(kingdom));
                 int renderVersion = _renderVersion;
                 _renderCoroutine = StartCoroutine(RenderNodesBatched(
@@ -364,9 +365,13 @@ namespace AncientWarfare3.ui.windows
                 : AW_L10n.Text("aw_government_monarchy", "Monarchy");
             string tier = TierName(CourtService.ResolveTier(pKingdom));
             string institution = CourtInstitutionService.InstitutionName(pKingdom);
+            string courtIdentity = CustomCourtRuntime.HasInstance(pKingdom)
+                ? CustomCourtRuntime.DisplayName(pKingdom,
+                    AW_L10n.Text("aw_custom_court_workflow", "Custom Court"))
+                : institution + " · " + tier;
             _summaryPrimary.color = KingdomColor(pKingdom);
             _summaryPrimary.text = pKingdom.name + "  |  " + government + "  |  " +
-                                   institution + " · " + tier + "  |  " +
+                                   courtIdentity + "  |  " +
                                    AW_L10n.Text("aw_court_efficiency", "Court Efficiency") + " " +
                                    Mathf.FloorToInt(pSnapshot.efficiency);
             string schools = SchoolName(pSnapshot.dominant_school);
@@ -528,20 +533,34 @@ namespace AncientWarfare3.ui.windows
             if (pVersion == _renderVersion) _renderCoroutine = null;
         }
 
-        private void BuildLinks(List<CourtPyramidNodeModel> pNodes, Color pColor, Vector2 pOffset,
+        private void BuildLinks(List<CourtPyramidNodeModel> pNodes,
+            Kingdom pKingdom, Color pColor, Vector2 pOffset,
             CourtPyramidCanvasBounds pBounds)
         {
             if (pNodes == null || pNodes.Count <= 1) return;
-            foreach (CourtPyramidLinkSegment segment in CourtPyramidRules.BuildOrthogonalLinks(
-                         pNodes, CourtActorNodeView.Height))
-                CreateLink(segment, pOffset, pColor, pBounds);
+            CustomCourtTemplate snapshot;
+            bool customGraph = CustomCourtRuntime.TryGetSnapshot(pKingdom,
+                out snapshot);
+            if (!customGraph)
+                foreach (CourtPyramidLinkSegment segment in
+                         CourtPyramidRules.BuildOrthogonalLinks(pNodes,
+                             CourtActorNodeView.Height))
+                    CreateLink(segment, pOffset, pColor, pBounds);
+            if (!customGraph) return;
+            Color managementColor = new Color(0.22f, 0.82f, 0.94f, 1f);
+            foreach (CourtPyramidLinkSegment segment in
+                     CourtPyramidRules.BuildCustomManagementLinks(pNodes,
+                         snapshot.Edges, CourtActorNodeView.Height))
+                CreateLink(segment, pOffset, managementColor, pBounds, 3f,
+                    0.88f);
         }
 
         private void CreateLink(CourtPyramidLinkSegment pSegment, Vector2 pOffset, Color pColor,
-            CourtPyramidCanvasBounds pBounds)
+            CourtPyramidCanvasBounds pBounds, float pThickness = 2f,
+            float pAlpha = 0.48f)
         {
             CourtPyramidRenderedLink placement = CourtPyramidRules.PlaceLink(
-                pSegment, pOffset.x, pOffset.y, 2f);
+                pSegment, pOffset.x, pOffset.y, pThickness);
             if (!CourtPyramidRules.IsRenderedLinkInsideCanvas(placement, pBounds.Width, pBounds.Height)) return;
 
             GameObject obj = AcquireLink();
@@ -556,7 +575,7 @@ namespace AncientWarfare3.ui.windows
             obj.transform.localScale = Vector3.one;
             Image image = obj.GetComponent<Image>();
             image.sprite = WhiteSprite();
-            image.color = new Color(pColor.r, pColor.g, pColor.b, 0.48f);
+            image.color = new Color(pColor.r, pColor.g, pColor.b, pAlpha);
             image.raycastTarget = false;
         }
 
@@ -613,9 +632,11 @@ namespace AncientWarfare3.ui.windows
             if (scrollWindow?.titleText == null) return;
             bool western = CourtProfileRegistry.For(pKingdom)?.Id ==
                            CourtProfileId.Western;
-            scrollWindow.titleText.text = western
+            string fallback = western
                 ? AW_L10n.Text("aw_court_title_western", "Western Court")
                 : AW_L10n.Text("aw_court_title", "Court of the Hundred Schools");
+            scrollWindow.titleText.text = CustomCourtRuntime.DisplayName(
+                pKingdom, fallback);
         }
 
         private static Image EnsureSectionDivider(Transform pCanvas,
