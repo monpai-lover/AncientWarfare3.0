@@ -157,8 +157,8 @@ namespace AncientWarfare3.core.multiplayer.commands
 
             string kingdomKey = CustomCourtRuntime.KingdomKey(kingdom);
             CustomCourtInstance current;
-            bool hasCurrent = CustomCourtRuntime.Instances.TryGet(
-                kingdomKey, out current);
+            bool hasCurrent = CustomCourtRuntime.TryGetInstance(kingdom,
+                out current);
             bool revisionMatches = hasCurrent
                 ? current.InstanceRevision == request.SecondaryId
                 : request.SecondaryId == 1;
@@ -167,9 +167,7 @@ namespace AncientWarfare3.core.multiplayer.commands
                 return AW3CommandResult.Rejected(AW3CommandError.StaleState,
                     "aw_custom_court_instance_stale", request.CountryId);
 
-            var application = new CustomCourtApplicationService(
-                CustomCourtRuntime.Instances);
-            if (!application.TryApply(kingdomKey, template, current,
+            if (!CustomCourtRuntime.TryApply(kingdom, template,
                     new Dictionary<string, long>()))
                 return AW3CommandResult.Rejected(AW3CommandError.ExecutionFailed,
                     "aw_custom_court_apply_failed", request.CountryId);

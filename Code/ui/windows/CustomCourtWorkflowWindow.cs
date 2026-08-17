@@ -265,13 +265,8 @@ namespace AncientWarfare3.ui.windows
 
         public void ApplyCustomCourtTemplate()
         {
-            CustomCourtInstance current;
-            CustomCourtRuntime.Instances.TryGet(_kingdomId.ToString(
-                CultureInfo.InvariantCulture), out current);
-            var application = new CustomCourtApplicationService(
-                CustomCourtRuntime.Instances);
-            bool applied = application.TryApply(_kingdomId.ToString(
-                CultureInfo.InvariantCulture), _template, current,
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            bool applied = CustomCourtRuntime.TryApply(kingdom, _template,
                 new Dictionary<string, long>());
             SetStatus(applied
                 ? AW_L10n.Text("aw_custom_court_applied", "Template applied.")
