@@ -104,16 +104,16 @@ git add Code\ui\components\CourtWorkflowVacancyCard.cs Code\ui\components\CourtW
 git commit -m "feat: render custom court offices as vacancy cards"
 ```
 
-### Task 3: Restore wide layout and isolate the pannable workspace
+### Task 3: Preserve window size and isolate the pannable workspace
 
 **Files:**
 - Modify: `Code/ui/windows/CustomCourtWorkflowWindow.cs`
 - Modify: `Code/ui/items/TreeDragPanHandler.cs` only if viewport drag routing requires a guard
 - Test: `Tests/AncientWarfare3.Rules.Tests/CustomCourtWorkflowSourceGuardTests.cs.txt`
 
-- [ ] **Step 1: Restore court window dimensions**
+- [ ] **Step 1: Preserve the existing window dimensions**
 
-Set `DefaultSize` to `new Vector2(920f, 620f)`, `MinimumSize` to `new Vector2(620f, 420f)`, and `MaximumSize` to `new Vector2(1400f, 900f)`, matching the existing court wide-window range.
+Do not change the existing `DefaultSize`, `MinimumSize`, or `MaximumSize` values. The fix is limited to the internal viewport and card rendering.
 
 - [ ] **Step 2: Anchor the toolbar to the viewport**
 

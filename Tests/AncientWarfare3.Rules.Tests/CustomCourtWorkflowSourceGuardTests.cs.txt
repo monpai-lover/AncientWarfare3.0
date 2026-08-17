@@ -45,7 +45,9 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "Setup(_workspaceRect,");
         Contains(window, "_canvasRect);");
         Contains(window, "ContentTransform.GetComponents<ContentSizeFitter>()");
-        Contains(window, "new Vector2(920f, 620f)");
+        Contains(window, "new Vector2(560f, 360f)");
+        Contains(window, "new Vector2(420f, 280f)");
+        Contains(window, "new Vector2(900f, 650f)");
         Contains(window, "CourtWorkflowVacancyCard.Create");
         Contains(window, "_toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f)");
         Contains(window, "_canvasRect.offsetMax = new Vector2(-172f, -4f)");

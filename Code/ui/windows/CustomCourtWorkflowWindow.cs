@@ -15,9 +15,9 @@ namespace AncientWarfare3.ui.windows
         AbstractWindow<CustomCourtWorkflowWindow>
     {
         private static long _kingdomId = -1L;
-        private static readonly Vector2 DefaultSize = new Vector2(920f, 620f);
-        private static readonly Vector2 MinimumSize = new Vector2(620f, 420f);
-        private static readonly Vector2 MaximumSize = new Vector2(1400f, 900f);
+        private static readonly Vector2 DefaultSize = new Vector2(560f, 360f);
+        private static readonly Vector2 MinimumSize = new Vector2(420f, 280f);
+        private static readonly Vector2 MaximumSize = new Vector2(900f, 650f);
         private Vector2 _windowSize = DefaultSize;
         private RectTransform _root;
         private RectTransform _canvasRect;
