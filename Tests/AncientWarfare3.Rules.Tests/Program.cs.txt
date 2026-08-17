@@ -45,6 +45,14 @@ if (args.Length == 1 && args[0] == "--custom-court-effect")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--custom-court-multiplayer")
+{
+    CustomCourtMultiplayerRulesTests.Run();
+    CustomCourtWorkflowSourceGuardTests.Run();
+    Console.WriteLine("Custom court multiplayer rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--tributary-protection-only")
 {
     TributaryPaymentRulesTests.Run();

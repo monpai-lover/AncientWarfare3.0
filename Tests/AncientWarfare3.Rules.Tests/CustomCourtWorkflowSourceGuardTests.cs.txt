@@ -1,0 +1,31 @@
+using System;
+using System.IO;
+
+internal static class CustomCourtWorkflowSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string window = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "CustomCourtWorkflowWindow.cs"));
+        string canvas = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "components", "CourtWorkflowCanvas.cs"));
+        string courtWindow = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "CourtWindow.cs"));
+        string store = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CustomCourtTemplateStore.cs"));
+        Contains(window, "public static void Open(");
+        Contains(courtWindow, "CustomCourtWorkflowWindow.Open(");
+        Contains(window, "CreateManagementEdge");
+        Contains(window, "CreateAppointmentPrerequisiteEdge");
+        Contains(window, "ApplyCustomCourtTemplate");
+        Contains(canvas, "CourtWorkflowCanvas");
+        Contains(store, "TryImport");
+    }
+
+    private static void Contains(string text, string expected)
+    {
+        if (text.IndexOf(expected, StringComparison.Ordinal) < 0)
+            throw new InvalidOperationException("missing source contract: " + expected);
+    }
+}

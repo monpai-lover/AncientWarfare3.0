@@ -32,6 +32,7 @@ namespace AncientWarfare3.core.court
                 KingdomId = kingdomId,
                 TemplateId = snapshot.Id,
                 TemplateRevision = snapshot.Revision,
+                InstanceRevision = (current?.InstanceRevision ?? 0) + 1,
                 TemplateHash = CustomCourtTemplateJsonCodec.Hash(snapshot),
                 ResolvedSnapshot = snapshot
             };

@@ -1,4 +1,21 @@
 key,cz,en,ch
+aw_custom_court_workflow,自定义朝廷,Custom Court Workflow,自定义朝廷
+aw_custom_court_workflow_title,自定义朝廷工作流,Custom Court Workflow,自定义朝廷工作流
+aw_custom_court_add_office,添加官职,Add Office,添加官职
+aw_custom_court_management_edge,管理关系,Management,管理关系
+aw_custom_court_prerequisite_edge,任职前置,Prerequisite,任职前置
+aw_custom_court_export,导出,Export,导出
+aw_custom_court_import,导入,Import,导入
+aw_custom_court_apply,应用,Apply,应用
+aw_custom_court_ready,就绪,Ready,就绪
+aw_custom_court_exported,模板已导出,Template exported.,模板已导出
+aw_custom_court_imported,模板已导入,Template imported.,模板已导入
+aw_custom_court_applied,模板已应用,Template applied.,模板已应用
+aw_custom_court_invalid,模板无效,Template is invalid.,模板无效
+aw_custom_court_not_found,模板不存在,Template not found.,模板不存在
+aw_custom_court_select_two,请先选择两个官职卡片,Select two office cards first.,请先选择两个官职卡片
+aw_custom_court_cycle,连接会形成环,That connection would create a cycle.,连接会形成环
+aw_custom_court_edge_added,连接已添加,Connection added.,连接已添加
 aw_court_disposition Title,宫廷处置,Court Disposition,宮廷處置
 aw_inheritance_laws Title,继承法,Inheritance Law,繼承法
 aw_court_auxiliary_laws Title,官制辅助法,Court Auxiliary Laws,官制輔助法

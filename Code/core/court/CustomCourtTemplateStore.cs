@@ -22,6 +22,14 @@ namespace AncientWarfare3.core.court
             _rootPath = Path.GetFullPath(rootPath ?? string.Empty);
         }
 
+        public static bool TryImport(string json,
+            out CustomCourtTemplate template,
+            out CustomCourtTemplateValidationError error)
+        {
+            return CustomCourtTemplateJsonCodec.TryImport(json, out template,
+                out error);
+        }
+
         public bool TrySave(CustomCourtTemplate template,
             out CustomCourtTemplateValidationError error)
         {

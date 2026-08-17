@@ -16,6 +16,7 @@ namespace AncientWarfare3.ui
         public const string VASSAL_RELATIONS = "aw_vassal_relations";
         public const string WAR_TARGETS = "aw_war_targets";
         public const string COURT = "aw_court";
+        public const string CUSTOM_COURT_WORKFLOW = "aw_custom_court_workflow";
         public const string HAREM = "aw_ruler_household";
         public const string HOUSEHOLD_OFFER = "aw_ruler_household_offer";
         public const string CIVIL_SERVICE_EXAM = "aw_civil_service_exam";

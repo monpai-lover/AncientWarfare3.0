@@ -52,6 +52,7 @@ namespace AncientWarfare3.ui.windows
         private Button _householdButton;
         private Text _householdText;
         private TipButton _householdTip;
+        private Button _customCourtWorkflowButton;
         private Text _centralSectionLabel;
         private Text _militarySectionLabel;
         private Text _localSectionLabel;
@@ -218,6 +219,10 @@ namespace AncientWarfare3.ui.windows
             _householdTip = _householdButton.GetComponent<TipButton>() ??
                 _householdButton.gameObject.AddComponent<TipButton>();
             _householdTip.type = AW_RawTooltip.TYPE;
+            _customCourtWorkflowButton = EnsureButton(summary.transform,
+                "CustomCourtWorkflow",
+                AW_L10n.Text("aw_custom_court_workflow", "Court Editor"),
+                OpenCustomCourtWorkflow);
 
             Transform existingSurface = ContentTransform.Find("CourtDragSurface");
             _dragSurface = existingSurface != null
@@ -271,6 +276,8 @@ namespace AncientWarfare3.ui.windows
                     Mathf.Max(44f, pContentWidth - 166f), 4f, 76f, 23f);
                 LayoutSummaryButton(_householdButton,
                     Mathf.Max(44f, pContentWidth - 248f), 4f, 76f, 23f);
+                LayoutSummaryButton(_customCourtWorkflowButton,
+                    Mathf.Max(44f, pContentWidth - 330f), 4f, 76f, 23f);
             }
             RectTransform surface = _dragSurface?.GetComponent<RectTransform>();
             if (surface != null)
@@ -785,6 +792,11 @@ namespace AncientWarfare3.ui.windows
         private void OpenRulerHousehold()
         {
             RulerHouseholdWindow.Open(_kingdomId);
+        }
+
+        private void OpenCustomCourtWorkflow()
+        {
+            CustomCourtWorkflowWindow.Open(_kingdomId);
         }
 
         private void EnsureSummaryFlag(Transform pParent)

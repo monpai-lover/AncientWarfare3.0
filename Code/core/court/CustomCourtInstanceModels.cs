@@ -27,6 +27,7 @@ namespace AncientWarfare3.core.court
         public string KingdomId { get; set; } = string.Empty;
         public string TemplateId { get; set; } = string.Empty;
         public int TemplateRevision { get; set; }
+        public int InstanceRevision { get; set; }
         public string TemplateHash { get; set; } = string.Empty;
         public CustomCourtTemplate ResolvedSnapshot { get; set; }
         public List<CustomCourtOfficeOverride> Overrides { get; set; } =

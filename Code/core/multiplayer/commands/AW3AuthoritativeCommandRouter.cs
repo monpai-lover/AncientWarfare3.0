@@ -33,6 +33,8 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return AW3CourtCommandHandler.Dispatch(request);
                 case AW3CommandKind.SubmitCivilServiceRanking:
                     return AW3CourtCommandHandler.Dispatch(request);
+                case AW3CommandKind.ApplyCustomCourtTemplate:
+                    return AW3CourtCommandHandler.Dispatch(request);
                 case AW3CommandKind.RelocateFeudatory:
                     return AW3RealmCommandHandler.Dispatch(request);
                 case AW3CommandKind.ReclaimFeudatoryCity:
