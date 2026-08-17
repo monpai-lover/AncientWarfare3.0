@@ -35,8 +35,17 @@ vanilla embark tile without advancing to `BehTaxiEmbark`. The observed result is
 `embarked`, `transporting`, or `landed` phase.
 
 Cultiway-Reborn avoids this gap by representing a dock transition as a portal
-with explicit entry and exit definitions. AncientWarfare3 needs the route
-metadata and ownership model, not the complete general-purpose portal system.
+with explicit entry and exit definitions. Despite the portal terminology, the
+framework is a general transport abstraction: docks, train stations, and
+teleport arrays are different portal assets that share route edges, driver
+assignment, passenger manifests, and load/unload requests.
+
+AncientWarfare3 also differs from Cultiway at the water-topology layer.
+`AWDockTransportService` currently uses `ocean.region.island.id` as a water
+component identifier. Cultiway instead performs a breadth-first traversal of
+ocean regions, merges intersecting traversals, and connects docks only when
+they belong to the same resulting water component. The current approximation
+can reject a valid dock pair or associate endpoints incorrectly.
 
 ## Scope
 
@@ -83,6 +92,42 @@ If no valid dock pair exists, the route resolver searches bounded stable
 shoreline candidates on the source and destination components. The fallback
 does not require a permanent port or an existing transport resource.
 
+## Reusable Transport Portal Core
+
+The implementation ports the reusable core of Cultiway's portal framework
+rather than adding more special cases to `AWDockTransportService`. The first
+registered transport type is `Dock`; train and teleport execution remain out
+of scope, but the route contracts do not assume that a portal is a ship.
+
+The core consists of four boundaries:
+
+1. A transport portal registry stores live endpoint definitions and publishes
+   immutable scalar snapshots for worker-thread route generation. Runtime
+   `Building`, `WorldTile`, and `Actor` references are resolved on the main
+   thread from stable IDs.
+2. A dock water-connectivity service rebuilds ocean components when docks or
+   relevant terrain topology change. It emits explicit directed connections
+   between dock endpoints in the same water component, including estimated
+   travel cost.
+3. The portal-aware path generator compares direct movement with connected
+   portal candidates and emits a transport step that retains entry and exit
+   endpoint IDs. When direct land movement is impossible, a valid transport
+   edge is admissible even when it is not cheaper than the geometric direct
+   estimate.
+4. A transport request stores the selected portal chain, assigned driver,
+   expected passenger IDs, load/unload endpoint data, state, and progress
+   timestamps. One RTS army voyage owns one request; it does not create one
+   independent vanilla `TaxiRequest` per soldier.
+
+The generic request states are `WaitingDriver`, `WaitingPassengers`, `Driving`,
+`Landing`, `Completed`, and `Failed`. `ArmyRtsTransportService` maps those
+states onto its visible RTS phases and advances them from military P0.
+
+The existing `AWDockRouteRegistry`, `AWDockRouteCandidate`, and
+`AWMovementMethod.Transport` contracts may be evolved or replaced, but the
+result must preserve the connected portal pair through path generation and
+execution. A final-target-only transport step is not a valid result.
+
 ## P0 Voyage State Machine
 
 The authoritative states are:
@@ -94,6 +139,8 @@ RoutePending -> AssembleAtEntry -> BoatToPickup -> Boarding
 
 `RoutePending` resolves and locks the route. Failure leaves the voyage active
 for bounded retry without issuing a land path to the unreachable final target.
+For dock routes, this creates one transport request containing the full army
+manifest and selected entry/exit endpoints.
 
 `AssembleAtEntry` gives the captain the entry land tile as the movement target.
 Members continue the existing RTS captain-follow behavior. This stage is
@@ -141,9 +188,10 @@ replenishment ownership, or restore ordinary movement while the voyage is
 active.
 
 The generic AW pathfinder may still emit a transport-required result. That
-result must include or allow retrieval of the chosen physical route rather than
-collapsing it to the final target tile. RTS consumes the route once and hands
-all subsequent physical execution to `ArmyRtsTransportService`.
+result must retain the selected entry and exit portal IDs rather than collapsing
+them to the final target tile. RTS consumes the route once, creates or adopts
+the army-level transport request, and hands all subsequent physical execution
+to `ArmyRtsTransportService`.
 
 ## Failure Recovery
 
@@ -172,6 +220,12 @@ endpoint is invalidated. P0 frame processing performs constant-time state
 checks plus one pass over the army roster during boarding and landing. It does
 not recalculate a general route for each member and does not scan all world
 docks every frame.
+
+Ocean connectivity is rebuilt on topology invalidation, not per request. Route
+generation reads a revisioned immutable portal snapshot. An active pre-boarding
+request whose snapshot revision is stale is revalidated once; an embarked
+request retains its source endpoint and only re-resolves an invalid destination
+endpoint.
 
 The resolved physical route is cached in the voyage state. Boats use one locked
 pickup target and one locked destination target, preventing repeated path
@@ -204,6 +258,9 @@ changes.
 Pure rule tests cover:
 
 - dock portal preference over shoreline fallback;
+- water-component connection generation and invalidation;
+- portal-aware steps retaining entry and exit endpoint IDs;
+- army-level manifest and driver assignment;
 - route locking after first embarkation;
 - P0 transition conditions for every state;
 - boarding and landing roster completion;
@@ -213,8 +270,9 @@ Pure rule tests cover:
 
 Source guards verify that RTS transport no longer requires
 `force_into_a_boat`, `BehTaxiEmbark`, or vanilla boat loading action progress,
-and that route metadata is retained instead of returning a final-target-only
-transport step.
+that route metadata is retained instead of returning a final-target-only
+transport step, and that water connectivity is not inferred from
+`ocean.region.island.id`.
 
 Runtime acceptance requires all of the following:
 
@@ -230,4 +288,3 @@ Runtime acceptance requires all of the following:
    replenishment while the voyage owns the army.
 6. Temporary boats are destroyed after successful landing; permanent boats are
    preserved.
-
