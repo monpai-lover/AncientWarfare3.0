@@ -9,6 +9,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="CustomCourtTemplateRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateModels.cs" Link="Production\CustomCourtTemplateModels.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateRules.cs" Link="Production\CustomCourtTemplateRules.cs" />
     <Compile Include="ArmyConquestReserveRulesTests.cs.txt" />
     <Compile Include="PeacetimeCitizenJobRulesTests.cs.txt" />
     <Compile Include="RtsMemberGeneralCombatRegressionTests.cs.txt" />
