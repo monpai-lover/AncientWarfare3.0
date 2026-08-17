@@ -235,14 +235,39 @@ namespace AncientWarfare3.core.lineage
                    !alreadyFoundedForDestination;
         }
 
+        public static long ResolveRestorationIdentityId(long liveId,
+            long storedId)
+        {
+            return liveId >= 0L ? liveId : storedId;
+        }
+
+        public static string ResolveRestorationIdentityText(string liveText,
+            string storedText)
+        {
+            return !string.IsNullOrWhiteSpace(liveText)
+                ? liveText.Trim()
+                : storedText?.Trim() ?? "";
+        }
+
+        public static string ResolveRestorationRequestStateName(bool hasLiveShi,
+            string currentBoundStateName, string storedStateName)
+        {
+            if (StateNameRules.IsValid(currentBoundStateName))
+                return currentBoundStateName.Trim();
+            if (hasLiveShi) return "";
+            return StateNameRules.IsValid(storedStateName)
+                ? storedStateName.Trim()
+                : "";
+        }
+
         public static string ResolveRestoredKingdomName(
             string continuityName, string archiveName, string originalName,
             string boundStateName, string requestStateName)
         {
             string[] candidates =
             {
-                continuityName, archiveName, originalName,
-                boundStateName, requestStateName
+                boundStateName, requestStateName, continuityName,
+                archiveName, originalName
             };
             for (int i = 0; i < candidates.Length; i++)
             {

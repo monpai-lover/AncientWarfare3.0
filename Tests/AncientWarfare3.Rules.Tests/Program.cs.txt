@@ -5470,12 +5470,35 @@ Equal(false, RoyalRestorationRules.ShouldFoundRestorationCadetBranch(
         isLineageRootFounder: false,
         alreadyFoundedForDestination: true),
     "a restoration does not duplicate its cadet Shi on retry");
-Equal("周", RoyalRestorationRules.ResolveRestoredKingdomName(
+Equal("赵", RoyalRestorationRules.ResolveRestoredKingdomName(
         "周", "周", "周", "赵", "赵"),
-    "restoration prefers the archived kingdom name over a claimant Shi name");
+    "restoration prefers the claimant current Shi state name over archived names");
+Equal("赵", RoyalRestorationRules.ResolveRestoredKingdomName(
+        "周", "周", "周", "", "赵"),
+    "restoration uses the request family state name when the live binding is unavailable");
 Equal("周", RoyalRestorationRules.ResolveRestoredKingdomName(
-        "", "周", "", "赵", "赵"),
+        "周", "周", "周", "", ""),
+    "restoration falls back to continuity and archive names without a family state name");
+Equal("周", RoyalRestorationRules.ResolveRestoredKingdomName(
+        "", "周", "", "", ""),
     "restoration falls back to the archive name when continuity is missing");
+Equal(22L, RoyalRestorationRules.ResolveRestorationIdentityId(22L, 11L),
+    "live restoration identity replaces the stored claim identity");
+Equal(11L, RoyalRestorationRules.ResolveRestorationIdentityId(-1L, 11L),
+    "stored restoration identity remains the fallback when live identity is missing");
+Equal("赵氏", RoyalRestorationRules.ResolveRestorationIdentityText("赵氏", "姬氏"),
+    "live clan name replaces the stored claim clan name");
+Equal("姬氏", RoyalRestorationRules.ResolveRestorationIdentityText("", "姬氏"),
+    "stored clan name remains the fallback when live clan name is missing");
+Equal("赵", RoyalRestorationRules.ResolveRestorationRequestStateName(
+        hasLiveShi: true, currentBoundStateName: "赵", storedStateName: "周"),
+    "the current Shi binding replaces a stale stored family state name");
+Equal("", RoyalRestorationRules.ResolveRestorationRequestStateName(
+        hasLiveShi: true, currentBoundStateName: "", storedStateName: "周"),
+    "a live Shi without an effective state name clears a stale prior-branch name");
+Equal("周", RoyalRestorationRules.ResolveRestorationRequestStateName(
+        hasLiveShi: false, currentBoundStateName: "", storedStateName: "周"),
+    "stored family state name remains a fallback when live Shi identity is unavailable");
 
 var restorationFathers = new Dictionary<long, long>
 {

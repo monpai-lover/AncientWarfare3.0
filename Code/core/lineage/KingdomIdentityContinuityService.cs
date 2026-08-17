@@ -212,6 +212,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             ContinuitySnapshot continuity = ReadContinuity(pRequest.original_kingdom_id);
+            ReconcileClaimantIdentity(pClaimant, pRequest);
             Kingdom previousHost = PrepareClaimantForRestorationAccession(
                 pClaimant, out bool clearedHostHeir);
             PrepareClaimantLineage(pClaimant, pRequest);
@@ -320,6 +321,36 @@ namespace AncientWarfare3.core.lineage
                 pPreviousHost.isRekt()) return;
             try { HeirService.RefreshHeir(pPreviousHost); }
             catch { }
+        }
+
+        private static void ReconcileClaimantIdentity(Actor pClaimant,
+            KingdomRestorationRequest pRequest)
+        {
+            if (pClaimant?.data == null || pRequest == null) return;
+
+            pClaimant.data.get(LineageKeys.LINEAGE_ID,
+                out long liveLineageId, -1L);
+            pClaimant.data.get(LineageKeys.SHI_ID,
+                out long liveShiId, -1L);
+            pClaimant.data.get(LineageKeys.CLAN_NAME,
+                out string liveClanName, "");
+
+            bool hasLiveShi = liveShiId >= 0L;
+            pRequest.lineage_id = RoyalRestorationRules.
+                ResolveRestorationIdentityId(liveLineageId,
+                    pRequest.lineage_id);
+            pRequest.shi_id = RoyalRestorationRules.
+                ResolveRestorationIdentityId(liveShiId, pRequest.shi_id);
+            pRequest.clan_name = RoyalRestorationRules.
+                ResolveRestorationIdentityText(liveClanName,
+                    pRequest.clan_name);
+
+            string boundStateName = pRequest.shi_id >= 0L
+                ? StateNameService.GetBoundStateName(pRequest.shi_id)
+                : "";
+            pRequest.state_name = RoyalRestorationRules.
+                ResolveRestorationRequestStateName(hasLiveShi,
+                    boundStateName, pRequest.state_name);
         }
 
         private static void PrepareClaimantLineage(Actor pClaimant, KingdomRestorationRequest pRequest)
