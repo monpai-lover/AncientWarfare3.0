@@ -58,6 +58,14 @@ internal static class ArmyRtsTransportP0RulesTests
         Assert(transport.Contains("member.embarkInto(boat)",
                 StringComparison.Ordinal),
             "the fallback places every valid member into the assigned boat");
+        Assert(transport.Contains("TeleportRosterFromBoat(",
+                StringComparison.Ordinal) &&
+               transport.Contains("if (captainLanded)",
+                   StringComparison.Ordinal) &&
+               transport.Contains("member.disembarkTo(boat, pLandingTile)",
+                   StringComparison.Ordinal),
+            "after the captain reaches stable land, any residual passengers " +
+            "are moved to the same landing tile");
         string production = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsTransportProductionService.cs"));
         Assert(production.Contains("OceanTile", StringComparison.Ordinal),

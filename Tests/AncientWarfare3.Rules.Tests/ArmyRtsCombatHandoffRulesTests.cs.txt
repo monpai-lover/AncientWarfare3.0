@@ -463,10 +463,14 @@ internal static class ArmyRtsCombatHandoffRulesTests
                    StringComparison.Ordinal) &&
                transport.Contains("member.embarkInto(boat)",
                    StringComparison.Ordinal) &&
-               !transport.Contains(".disembarkTo(",
+               transport.Contains("TeleportRosterFromBoat(",
+                   StringComparison.Ordinal) &&
+               transport.Contains("member.disembarkTo(boat, pLandingTile)",
                    StringComparison.Ordinal) &&
                !transport.Contains(".spawnOn(", StringComparison.Ordinal),
-            "RTS transport may complete embark only after a member has boarded; it must not teleport landing or spawn actors");
+            "RTS transport may complete embark after a member has boarded and " +
+            "may recover residual passengers after captain landing, but must " +
+            "not spawn actors");
         Assert(transportProduction.Contains(
                 "boatActor.setTask(\"boat_transport_go_load\"",
                 StringComparison.Ordinal),

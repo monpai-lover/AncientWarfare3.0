@@ -361,6 +361,11 @@ namespace AncientWarfare3.core.lineage
                 int validExpectedMembers = 0;
                 int landedExpectedMembers = 0;
                 bool anyRequestLoading = false;
+                Actor captain = null;
+                try { captain = army.getCaptain(); }
+                catch { }
+                bool captainLanded = false;
+                WorldTile captainLandingTile = null;
                 long markerActorId = long.MaxValue;
                 int movementTileId = -1;
                 foreach (KeyValuePair<long, Actor> pair in state.Members)
@@ -391,6 +396,12 @@ namespace AncientWarfare3.core.lineage
                                 member.current_tile),
                             targetOnStableLand:
                                 IsStableLandingTile(target));
+                    if (ReferenceEquals(member, captain) &&
+                        stableTargetLand)
+                    {
+                        captainLanded = true;
+                        captainLandingTile = member.current_tile;
+                    }
                     bool requestLoading = false;
                     try
                     {
@@ -455,7 +466,13 @@ namespace AncientWarfare3.core.lineage
                     state.Members.Remove(
                         invalidMemberIds[memberIndex]);
                 if (hasEmbarkedMember)
-                    TeleportRosterToBoat(state, assignedBoat);
+                {
+                    if (captainLanded)
+                        TeleportRosterFromBoat(state, assignedBoat,
+                            captainLandingTile);
+                    else if (!state.HadLandedMember)
+                        TeleportRosterToBoat(state, assignedBoat);
+                }
                 ForceEmbarkRoster(state, anyRequestLoading, assignedBoat);
                 if (pDriveBoundBoats)
                     DriveBoundBoatP0(assignedBoat, pCycleElapsed);
@@ -686,6 +703,39 @@ namespace AncientWarfare3.core.lineage
                 catch { }
                 if (!sameBoat) continue;
                 try { member.embarkInto(boat); }
+                catch { }
+            }
+        }
+
+        private static void TeleportRosterFromBoat(TransportState pState,
+            Actor pAssignedBoat, WorldTile pLandingTile)
+        {
+            if (pState?.Army?.data == null ||
+                pAssignedBoat?.data == null || pLandingTile?.data == null)
+                return;
+            Boat boat;
+            try { boat = pAssignedBoat.getSimpleComponent<Boat>(); }
+            catch { boat = null; }
+            if (boat == null) return;
+            foreach (Actor member in pState.Members.Values)
+            {
+                if (!IsValidMember(member, pState.Army) ||
+                    !member.is_inside_boat) continue;
+                bool sameBoat;
+                try
+                {
+                    sameBoat = ReferenceEquals(member.inside_boat?.actor,
+                        pAssignedBoat);
+                }
+                catch { sameBoat = false; }
+                if (!sameBoat) continue;
+                try
+                {
+                    member.disembarkTo(boat, pLandingTile);
+                    ArmyMilitaryMovementPriorityIndex.Register(
+                        member.data.id,
+                        ArmyMilitaryMovementPriorityKind.RtsMember);
+                }
                 catch { }
             }
         }
