@@ -17,6 +17,13 @@ if (args.Length == 1 && args[0] == "--custom-court-template")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--custom-court-instance")
+{
+    CustomCourtInstanceRulesTests.Run();
+    Console.WriteLine("Custom court instance rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--tributary-protection-only")
 {
     TributaryPaymentRulesTests.Run();

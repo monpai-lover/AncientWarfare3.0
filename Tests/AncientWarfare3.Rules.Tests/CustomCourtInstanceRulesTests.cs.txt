@@ -1,0 +1,41 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CustomCourtInstanceRulesTests
+{
+    public static void Run()
+    {
+        Equal("local", CustomCourtInstanceRules.ResolveName(
+            "builtin", "template", "local"),
+            "local override has highest precedence");
+        Equal("template", CustomCourtInstanceRules.ResolveName(
+            "builtin", "template", ""),
+            "template name wins over builtin name");
+        Equal("builtin", CustomCourtInstanceRules.ResolveName(
+            "builtin", "", ""),
+            "builtin name remains the final fallback");
+        True(CustomCourtInstanceRules.CanUseSavedSnapshot(true, false),
+            "a current saved snapshot can be used");
+        False(CustomCourtInstanceRules.CanUseSavedSnapshot(false, false),
+            "a missing snapshot cannot be used");
+    }
+
+    private static void True(bool actual, string message)
+    {
+        if (!actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool actual, string message)
+    {
+        if (actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}
