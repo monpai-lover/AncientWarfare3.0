@@ -1,0 +1,62 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CustomCourtTemplateRulesTests
+{
+    public static void Run()
+    {
+        True(CustomCourtTemplateRules.IsValidTemplateId("xia_custom_1"),
+            "stable lower-case template identifiers are accepted");
+        False(CustomCourtTemplateRules.IsValidTemplateId("Xia Custom"),
+            "template identifiers reject display text");
+
+        Equal(CustomCourtTemplateValidationError.Cycle,
+            CustomCourtTemplateRules.ValidateGraph(new[]
+            {
+                Edge("a", "b", CustomCourtEdgeKind.Management),
+                Edge("b", "a", CustomCourtEdgeKind.Management)
+            }), "cycles are rejected across management edges");
+
+        Equal(CustomCourtTemplateValidationError.DanglingOffice,
+            CustomCourtTemplateRules.ValidateGraph(new[] { "a" }, new[]
+            {
+                Edge("a", "missing",
+                    CustomCourtEdgeKind.AppointmentPrerequisite)
+            }), "edges must reference defined offices");
+
+        False(CustomCourtTemplateRules.IsEffectValueValid(
+                CustomCourtEffectId.TaxIncome,
+                CustomCourtEffectMode.AddPercent, 999),
+            "effects are bounded by their preset module");
+    }
+
+    private static CustomCourtEdge Edge(string fromOfficeId, string toOfficeId,
+        CustomCourtEdgeKind kind)
+    {
+        return new CustomCourtEdge
+        {
+            FromOfficeId = fromOfficeId,
+            ToOfficeId = toOfficeId,
+            Kind = kind
+        };
+    }
+
+    private static void True(bool actual, string message)
+    {
+        if (!actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool actual, string message)
+    {
+        if (actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

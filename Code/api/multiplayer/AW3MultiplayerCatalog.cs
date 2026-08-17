@@ -126,7 +126,11 @@ namespace AncientWarfare3.api.multiplayer
                 Window(AW3WindowKind.MilitaryGovernorate,
                     "aw_military_governorate_window",
                     "ui/wars/war_vassal", AW3WindowCategory.Realm,
-                    AW3WindowContextRequirement.City)
+                    AW3WindowContextRequirement.City),
+                Window(AW3WindowKind.CustomCourtWorkflow,
+                    "aw_custom_court_workflow", "ui/icons/iconDiplomacy",
+                    AW3WindowCategory.Domestic,
+                    AW3WindowContextRequirement.Country)
             });
 
         private static readonly IReadOnlyList<AW3CommandDescriptor>
@@ -222,7 +226,9 @@ namespace AncientWarfare3.api.multiplayer
                 Command(AW3CommandKind.ReplaceMilitaryGovernorateGovernor,
                     AW3WindowCategory.Realm, Country() |
                     AW3WindowContextRequirement.TargetCountry |
-                    AW3WindowContextRequirement.Actor)
+                    AW3WindowContextRequirement.Actor),
+                Command(AW3CommandKind.ApplyCustomCourtTemplate,
+                    AW3WindowCategory.Domestic, Country())
             });
 
         public static IReadOnlyList<AW3WindowDescriptor> Windows =>

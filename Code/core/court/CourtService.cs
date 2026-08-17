@@ -1187,6 +1187,8 @@ namespace AncientWarfare3.core.court
                 kingdom, pOfficeId, vacancyPromotion);
             if (!candidateEligible)
                 return CourtManualAppointmentResult.CandidateIneligible;
+            if (!HasCustomAppointmentPrerequisites(kingdom, pOfficeId))
+                return CourtManualAppointmentResult.CandidateIneligible;
 
             string school = SchoolMembershipService.GetSchool(actor.data.id);
             bool committed = incumbent?.data != null
@@ -1198,6 +1200,19 @@ namespace AncientWarfare3.core.court
                 return CourtManualAppointmentResult.PersistenceFailed;
             CourtAristocraticGroupService.Refresh(kingdom, GetActiveOfficers(kingdom, 96));
             return CourtManualAppointmentResult.Success;
+        }
+
+        private static bool HasCustomAppointmentPrerequisites(
+            Kingdom kingdom, string officeId)
+        {
+            CustomCourtInstance instance;
+            if (!CustomCourtRuntime.TryGetInstance(kingdom, out instance))
+                return true;
+            var filled = new HashSet<string>(GetActiveOfficers(kingdom, 96)
+                .Where(item => item != null && item.actor_id >= 0)
+                .Select(item => item.office_id), StringComparer.Ordinal);
+            return CustomCourtPrerequisiteRules.HasPrerequisiteOffice(
+                instance.ResolvedSnapshot?.Edges, officeId, filled);
         }
 
         private static bool IsManualCentralCandidateEligible(Actor pActor,

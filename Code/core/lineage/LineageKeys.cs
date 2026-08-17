@@ -605,6 +605,18 @@ namespace AncientWarfare3.core.lineage
         public const string SCHOOL_EDUCATION_ADMISSION_LIMIT =
             "aw_school_education_admission_limit";
         public const string COURT_KINGDOM_ID = "aw_court_kingdom_id";
+        public const string CUSTOM_COURT_TEMPLATE_ID =
+            "aw_custom_court_template_id";
+        public const string CUSTOM_COURT_TEMPLATE_REVISION =
+            "aw_custom_court_template_revision";
+        public const string CUSTOM_COURT_TEMPLATE_HASH =
+            "aw_custom_court_template_hash";
+        public const string CUSTOM_COURT_INSTANCE_SNAPSHOT =
+            "aw_custom_court_instance_snapshot";
+        public const string CUSTOM_COURT_INSTANCE_OVERRIDES =
+            "aw_custom_court_instance_overrides";
+        public const string CUSTOM_COURT_LEGACY_OFFICES =
+            "aw_custom_court_legacy_offices";
         public const string COURT_CITY_ID = "aw_court_city_id";
         public const string OFFICER_RANK = "aw_officer_rank";
         public const string OFFICER_TRACK = "aw_officer_track";

@@ -1,0 +1,111 @@
+using System;
+using System.IO;
+
+internal static class CustomCourtWorkflowSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string window = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "CustomCourtWorkflowWindow.cs"));
+        string canvas = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "components", "CourtWorkflowCanvas.cs"));
+        string card = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "components", "CourtWorkflowOfficeCard.cs"));
+        string vacancyCard = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "components", "CourtWorkflowVacancyCard.cs"));
+        string edge = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "components", "CourtWorkflowEdgeView.cs"));
+        string courtWindow = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "CourtWindow.cs"));
+        string localization = File.ReadAllText(Path.Combine(root, "Locales",
+            "aw3_court.csv"));
+        string otherLocalization = File.ReadAllText(Path.Combine(root, "Locales",
+            "others.csv"));
+        string store = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CustomCourtTemplateStore.cs"));
+        string powers = File.ReadAllText(Path.Combine(root, "Code", "content",
+            "GodPowerLibrary.cs"));
+        string lineageTab = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "AW_LineageTab.cs"));
+        Contains(window, "public static void Open(");
+        Contains(courtWindow, "CustomCourtWorkflowWindow.Open(");
+        Contains(window, "CreateManagementEdge");
+        Contains(window, "CreateAppointmentPrerequisiteEdge");
+        Contains(window, "ApplyCustomCourtTemplate");
+        Contains(window, "CourtWorkflowTools");
+        Contains(window, "CourtNameInput");
+        Contains(window, "SaveTemplate");
+        Contains(window, "RenderEdges");
+        Contains(window, "text.font = LocalizedTextManager.current_font;");
+        Contains(window, "BackgroundTransform?.Find(\"Scroll View\")");
+        Contains(window, "scrollRect.sizeDelta = new Vector2(contentWidth,");
+        Contains(window, "contentRect.sizeDelta = new Vector2(contentWidth,");
+        Contains(window, "CourtWorkflowWorkspace");
+        Contains(window, "Setup(_workspaceRect,");
+        Contains(window, "_canvasRect);");
+        Contains(window, "ContentTransform.GetComponents<ContentSizeFitter>()");
+        Contains(window, "new Vector2(560f, 360f)");
+        Contains(window, "new Vector2(420f, 280f)");
+        Contains(window, "new Vector2(900f, 650f)");
+        Contains(window, "CourtWorkflowVacancyCard.Create");
+        Contains(window, "_toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f)");
+        Contains(window, "_canvasRect.offsetMax = new Vector2(-172f, -4f)");
+        Contains(canvas, "CourtWorkflowCanvas");
+        Contains(canvas, "List<CourtWorkflowVacancyCard>");
+        Contains(card, "DeleteButton");
+        Contains(card, "deleteRequested");
+        Contains(card, "LocalizedTextManager.current_font");
+        Contains(vacancyCard, "CourtWorkflowVacancyCard");
+        Contains(vacancyCard, "empty_slot");
+        Contains(vacancyCard, "LocalizedTextManager.current_font");
+        Contains(vacancyCard, "deleteRequested");
+        Contains(edge, "Bind(CustomCourtEdge edge, RectTransform from");
+        Contains(store, "TryImport");
+        Contains(powers, "BanditAmnestyIconPath");
+        Contains(lineageTab, "BanditAmnestyIconPath");
+        RequiresFile(Path.Combine(root, "GameResources", "ui", "icons",
+            "aw_bandit_amnesty.png"));
+        HasLocalizationKey(localization, "aw_custom_court_workflow");
+        HasLocalizationKey(localization, "aw_custom_court_workflow Title");
+        HasLocalizationKey(localization, "aw_custom_court_workflow_title");
+        HasLocalizationKey(localization, "aw_custom_court_add_office");
+        HasLocalizationKey(localization, "aw_custom_court_apply");
+        HasLocalizationKey(localization, "aw_custom_court_saved");
+        CsvRowsHaveFourColumns(otherLocalization, "others.csv");
+    }
+
+    private static void Contains(string text, string expected)
+    {
+        if (text.IndexOf(expected, StringComparison.Ordinal) < 0)
+            throw new InvalidOperationException("missing source contract: " + expected);
+    }
+
+    private static void HasLocalizationKey(string text, string key)
+    {
+        string prefix = key + ",";
+        foreach (string line in text.Split(new[] { "\r\n", "\n" },
+                     StringSplitOptions.None))
+            if (line.StartsWith(prefix, StringComparison.Ordinal)) return;
+        throw new InvalidOperationException("missing localization row: " + key);
+    }
+
+    private static void CsvRowsHaveFourColumns(string text, string fileName)
+    {
+        string[] rows = text.Split(new[] { "\r\n", "\n" },
+            StringSplitOptions.None);
+        for (int index = 1; index < rows.Length; index++)
+        {
+            if (string.IsNullOrEmpty(rows[index])) continue;
+            if (rows[index].Split(',').Length != 4)
+                throw new InvalidOperationException("invalid locale row in " +
+                    fileName + ": " + (index + 1));
+        }
+    }
+
+    private static void RequiresFile(string path)
+    {
+        if (!File.Exists(path))
+            throw new InvalidOperationException("missing required asset: " + path);
+    }
+}

@@ -1,0 +1,80 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.court;
+
+internal static class CustomCourtTemplateCodecTests
+{
+    public static void Run()
+    {
+        CustomCourtTemplate first = BuildTemplate(false);
+        CustomCourtTemplate second = BuildTemplate(true);
+
+        Equal(CustomCourtTemplateJsonCodec.Export(first),
+            CustomCourtTemplateJsonCodec.Export(
+                CustomCourtTemplateJsonCodec.Normalize(second)),
+            "normalization produces stable JSON");
+        Equal(CustomCourtTemplateJsonCodec.Hash(first),
+            CustomCourtTemplateJsonCodec.Hash(second),
+            "equivalent templates produce the same hash");
+        True(CustomCourtTemplateStoreRules.ShouldReplaceAtomically(true, true),
+            "atomic replacement requires successful write and validation");
+        False(CustomCourtTemplateStoreRules.ShouldReplaceAtomically(false, true),
+            "failed write cannot replace a saved template");
+        False(CustomCourtTemplateStoreRules.ShouldReplaceAtomically(true, false),
+            "failed read-back validation cannot replace a saved template");
+    }
+
+    private static CustomCourtTemplate BuildTemplate(bool reverse)
+    {
+        CustomCourtOffice alpha = new CustomCourtOffice
+        {
+            Id = "alpha",
+            Layer = CourtOfficeLayer.Central,
+            Grade = 10,
+            Slots = 1
+        };
+        CustomCourtOffice beta = new CustomCourtOffice
+        {
+            Id = "beta",
+            Layer = CourtOfficeLayer.City,
+            Grade = 20,
+            Slots = 2
+        };
+        CustomCourtEdge edge = new CustomCourtEdge
+        {
+            FromOfficeId = "alpha",
+            ToOfficeId = "beta",
+            Kind = CustomCourtEdgeKind.Management
+        };
+        return new CustomCourtTemplate
+        {
+            Id = "sample",
+            Revision = 2,
+            Offices = reverse
+                ? new[] { beta, alpha }.ToList()
+                : new[] { alpha, beta }.ToList(),
+            Edges = reverse
+                ? new[] { edge }.Reverse().ToList()
+                : new[] { edge }.ToList()
+        };
+    }
+
+    private static void True(bool actual, string message)
+    {
+        if (!actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool actual, string message)
+    {
+        if (actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

@@ -27,6 +27,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "checkSpriteHead")]
         public static bool CheckSpriteHeadPrefix(Actor __instance)
         {
+            if (ShouldUseBanditHead(__instance))
+                return ApplyBanditHead(__instance);
             ActorVisualRole role = ActorVisualRoleResolver.Resolve(__instance);
             if (role == ActorVisualRole.Default)
                 return true;
@@ -45,17 +47,6 @@ namespace AncientWarfare3.patch
 
             ActorTextureSubAsset textureAsset = __instance.getTextureAsset();
             if (textureAsset == null) return false;
-            if (ShouldUseBanditHead(__instance))
-            {
-                string banditHeadPath = textureAsset.texture_path_base +
-                    XiaBanditHeadRules.HeadDirectory;
-                int headIndex = XiaBanditHeadRules.ResolveHeadIndex(
-                    __instance.data.id);
-                __instance.data.head = headIndex;
-                __instance.cached_sprite_head =
-                    ActorAnimationLoader.getHead(banditHeadPath, headIndex);
-                return false;
-            }
             if (!textureAsset.has_advanced_textures)
             {
                 ApplyHeadId(__instance, container.heads);
@@ -208,6 +199,28 @@ namespace AncientWarfare3.patch
             if (pActor.data.head == -1)
                 pActor.data.head = AnimationHelper.getSpriteIndex(
                     pActor.data.id, pHeads.Length);
+        }
+
+        private static bool ApplyBanditHead(Actor pActor)
+        {
+            if (pActor?.data == null || !pActor.dirty_sprite_head)
+                return false;
+            pActor.dirty_sprite_head = false;
+            AnimationContainerUnit container = pActor.animation_container;
+            if (pActor.frame_data == null || !pActor.frame_data.show_head ||
+                container == null || container.heads == null ||
+                container.heads.Length == 0 || pActor.isEgg() ||
+                (pActor.isBaby() && !container.render_heads_for_children))
+                return false;
+            ActorTextureSubAsset textureAsset = pActor.getTextureAsset();
+            if (textureAsset == null) return false;
+
+            int headIndex = XiaBanditHeadRules.ResolveHeadIndex(pActor.data.id);
+            pActor.data.head = headIndex;
+            pActor.cached_sprite_head = SpriteTextureLoader.getSprite(
+                textureAsset.texture_path_base +
+                XiaBanditHeadRules.ResolveHeadPath(pActor.data.id));
+            return false;
         }
 
         private static bool ShouldUseBanditHead(Actor pActor)

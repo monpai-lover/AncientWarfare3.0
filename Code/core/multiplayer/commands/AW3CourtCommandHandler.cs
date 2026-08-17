@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
@@ -22,6 +23,8 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return ChangeInheritanceLaw(request);
                 case AW3CommandKind.SubmitCivilServiceRanking:
                     return SubmitCivilServiceRanking(request);
+                case AW3CommandKind.ApplyCustomCourtTemplate:
+                    return ApplyCustomCourtTemplate(request);
                 default:
                     return Invalid();
             }
@@ -124,6 +127,52 @@ namespace AncientWarfare3.core.multiplayer.commands
             return AW3CommandResult.Rejected(
                 CivilServiceRankingError(reasonKey), reasonKey,
                 request.SecondaryId);
+        }
+
+        private static AW3CommandResult ApplyCustomCourtTemplate(
+            AW3CommandRequest request)
+        {
+            Kingdom kingdom = FindKingdom(request.CountryId);
+            if (kingdom?.data == null || kingdom.isRekt())
+                return NotFound("aw_custom_court_invalid_kingdom");
+            if (request.IntValue < 1 || request.SecondaryId < 1 ||
+                string.IsNullOrEmpty(request.Key) ||
+                string.IsNullOrEmpty(request.SecondaryKey))
+                return Invalid();
+
+            string root = Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData),
+                "WorldBox", "AncientWarfare3.0", "court-templates");
+            var store = new CustomCourtTemplateStore(root);
+            CustomCourtTemplate template;
+            CustomCourtTemplateValidationError loadError;
+            if (!store.TryLoad(request.Key, out template, out loadError))
+                return NotFound("aw_custom_court_template_not_found");
+            if (template.Revision != request.IntValue ||
+                !string.Equals(CustomCourtTemplateJsonCodec.Hash(template),
+                    request.SecondaryKey, StringComparison.Ordinal))
+                return AW3CommandResult.Rejected(AW3CommandError.StaleState,
+                    "aw_custom_court_template_stale", request.CountryId);
+
+            string kingdomKey = CustomCourtRuntime.KingdomKey(kingdom);
+            CustomCourtInstance current;
+            bool hasCurrent = CustomCourtRuntime.TryGetInstance(kingdom,
+                out current);
+            bool revisionMatches = hasCurrent
+                ? current.InstanceRevision == request.SecondaryId
+                : request.SecondaryId == 1;
+            if (!CustomCourtMultiplayerRules.CanApply(true, true,
+                    revisionMatches))
+                return AW3CommandResult.Rejected(AW3CommandError.StaleState,
+                    "aw_custom_court_instance_stale", request.CountryId);
+
+            if (!CustomCourtRuntime.TryApply(kingdom, template,
+                    new Dictionary<string, long>()))
+                return AW3CommandResult.Rejected(AW3CommandError.ExecutionFailed,
+                    "aw_custom_court_apply_failed", request.CountryId);
+            return AW3CommandResult.Success("aw_custom_court_apply_ok",
+                request.CountryId);
         }
 
         private static AW3CommandError AppointmentError(

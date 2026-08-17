@@ -1,0 +1,36 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CustomCourtPrerequisiteRulesTests
+{
+    public static void Run()
+    {
+        True(CustomCourtPrerequisiteRules.CanAppoint(true, true, true, true),
+            "eligible vacancy can be appointed");
+        False(CustomCourtPrerequisiteRules.CanAppoint(true, true, false, true),
+            "missing custom prerequisite blocks appointment");
+        False(CustomCourtPrerequisiteRules.CanAppoint(true, true, true, false),
+            "ineligible candidate blocks appointment");
+        Equal(3, CustomCourtPrerequisiteRules.ResolveHierarchyRank(1, 2),
+            "hierarchy rank advances by edge distance");
+    }
+
+    private static void True(bool actual, string message)
+    {
+        if (!actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool actual, string message)
+    {
+        if (actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

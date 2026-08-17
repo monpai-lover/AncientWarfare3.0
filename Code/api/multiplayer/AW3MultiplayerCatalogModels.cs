@@ -61,7 +61,8 @@ namespace AncientWarfare3.api.multiplayer
         HouseholdOffer = 28,
         Supporters = 29,
         VirtualTitles = 30,
-        MilitaryGovernorate = 31
+        MilitaryGovernorate = 31,
+        CustomCourtWorkflow = 32
     }
 
     public enum AW3WindowOpenStatus : byte
@@ -342,7 +343,8 @@ namespace AncientWarfare3.api.multiplayer
         DeleteVirtualNobleTitle = 30,
         CreateMilitaryGovernorate = 31,
         DesignateMilitaryGovernorateSuccessor = 32,
-        ReplaceMilitaryGovernorateGovernor = 33
+        ReplaceMilitaryGovernorateGovernor = 33,
+        ApplyCustomCourtTemplate = 34
     }
 
     public enum AW3CommandStatus : byte
@@ -641,6 +643,19 @@ namespace AncientWarfare3.api.multiplayer
             targetCountryId: Positive(subjectCountryId,
                 nameof(subjectCountryId)),
             actorId: Positive(governorActorId, nameof(governorActorId)));
+
+        public static AW3CommandRequest ApplyCustomCourtTemplate(
+            long countryId, string templateId, int templateRevision,
+            string templateHash, long expectedInstanceRevision,
+            string migrationMode = "preserve") => Create(
+            AW3CommandKind.ApplyCustomCourtTemplate, countryId,
+            secondaryId: Positive(expectedInstanceRevision,
+                nameof(expectedInstanceRevision)),
+            key: Token(templateId, nameof(templateId)),
+            secondaryKey: Token(templateHash, nameof(templateHash)),
+            reasonKey: Token(migrationMode, nameof(migrationMode)),
+            intValue: NonNegative(templateRevision,
+                nameof(templateRevision)));
 
         public static AW3CommandRequest ChangeEra(long countryId,
             string eraName) => Create(AW3CommandKind.ChangeEra, countryId,

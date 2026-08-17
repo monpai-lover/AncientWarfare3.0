@@ -41,10 +41,9 @@ namespace AncientWarfare3.patch
             if (XiaBanditHeadRules.ShouldUse(pAsset.id, bandit, synthetic))
             {
                 string banditHeadPath = tex.texture_path_base +
-                    XiaBanditHeadRules.HeadDirectory;
-                Sprite banditHead = ActorAnimationLoader.getHead(
-                    banditHeadPath,
-                    XiaBanditHeadRules.ResolveHeadIndex(pActorId));
+                    XiaBanditHeadRules.ResolveHeadPath(pActorId);
+                Sprite banditHead = SpriteTextureLoader.getSprite(
+                    banditHeadPath);
                 if (banditHead != null) __result = banditHead;
                 return;
             }

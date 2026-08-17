@@ -1,0 +1,29 @@
+using System;
+using AncientWarfare3.core.multiplayer.commands;
+
+internal static class CustomCourtMultiplayerRulesTests
+{
+    public static void Run()
+    {
+        True(CustomCourtMultiplayerRules.CanApply(true, true, true),
+            "host applies a current template");
+        False(CustomCourtMultiplayerRules.CanApply(false, true, true),
+            "replicas cannot apply templates");
+        False(CustomCourtMultiplayerRules.CanApply(true, false, true),
+            "hash mismatches are rejected");
+        False(CustomCourtMultiplayerRules.CanApply(true, true, false),
+            "stale instance revisions are rejected");
+    }
+
+    private static void True(bool actual, string message)
+    {
+        if (!actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool actual, string message)
+    {
+        if (actual)
+            throw new InvalidOperationException(message);
+    }
+}

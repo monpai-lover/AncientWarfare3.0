@@ -53,8 +53,8 @@ internal static class AW3MultiplayerCatalogRulesTests
         IReadOnlyList<AW3CommandDescriptor> commands =
             AW3MultiplayerCatalog.Commands;
 
-        Equal(32, windows.Count, "current AW3 window count");
-        Equal(32, windows.Select(value => value.WindowId).Distinct(
+        Equal(33, windows.Count, "current AW3 window count");
+        Equal(33, windows.Select(value => value.WindowId).Distinct(
                 StringComparer.Ordinal).Count(),
             "window IDs are unique");
         Equal(Enum.GetValues<AW3WindowKind>().Length, windows.Count,
@@ -161,7 +161,11 @@ internal static class AW3MultiplayerCatalogRulesTests
             AW3CommandRequest.DesignateMilitaryGovernorateSuccessor(
                 7, 8, 31),
             AW3CommandRequest.ReplaceMilitaryGovernorateGovernor(
-                7, 8, 31)
+                7, 8, 31),
+            AW3CommandRequest.ApplyCustomCourtTemplate(7,
+                "custom_court_7", 1,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                1)
         };
 
         Equal(Enum.GetValues<AW3CommandKind>().Length, requests.Length,

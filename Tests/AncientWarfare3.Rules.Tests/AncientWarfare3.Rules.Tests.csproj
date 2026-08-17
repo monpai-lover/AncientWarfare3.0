@@ -6,9 +6,36 @@
     <Nullable>disable</Nullable>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
     <DefineConstants>$(DefineConstants);AW3_RULES_TESTS</DefineConstants>
+    <WorldBoxManaged Condition="'$(WorldBoxManaged)' == ''">D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed</WorldBoxManaged>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(WorldBoxManaged)\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="CustomCourtTemplateRulesTests.cs.txt" />
+    <Compile Include="CustomCourtTemplateCodecTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateModels.cs" Link="Production\CustomCourtTemplateModels.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateRules.cs" Link="Production\CustomCourtTemplateRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateJsonCodec.cs" Link="Production\CustomCourtTemplateJsonCodec.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateStore.cs" Link="Production\CustomCourtTemplateStore.cs" />
+    <Compile Include="CustomCourtInstanceRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtInstanceModels.cs" Link="Production\CustomCourtInstanceModels.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtInstanceRules.cs" Link="Production\CustomCourtInstanceRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtInstanceCodec.cs" Link="Production\CustomCourtInstanceCodec.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtInstanceService.cs" Link="Production\CustomCourtInstanceService.cs" />
+    <Compile Include="..\..\Code\core\court\CourtDefinitionResolver.cs" Link="Production\CourtDefinitionResolver.cs" />
+    <Compile Include="CustomCourtPrerequisiteRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtPrerequisiteRules.cs" Link="Production\CustomCourtPrerequisiteRules.cs" />
+    <Compile Include="CustomCourtApplicationRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtApplicationRules.cs" Link="Production\CustomCourtApplicationRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtApplicationService.cs" Link="Production\CustomCourtApplicationService.cs" />
+    <Compile Include="CustomCourtEffectRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtEffectRules.cs" Link="Production\CustomCourtEffectRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtEffectService.cs" Link="Production\CustomCourtEffectService.cs" />
+    <Compile Include="CustomCourtMultiplayerRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\multiplayer\commands\CustomCourtMultiplayerRules.cs" Link="Production\CustomCourtMultiplayerRules.cs" />
+    <Compile Include="CustomCourtWorkflowSourceGuardTests.cs.txt" />
     <Compile Include="ArmyConquestReserveRulesTests.cs.txt" />
     <Compile Include="PeacetimeCitizenJobRulesTests.cs.txt" />
     <Compile Include="RtsMemberGeneralCombatRegressionTests.cs.txt" />
