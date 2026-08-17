@@ -133,7 +133,9 @@ namespace AncientWarfare3.ui
             PowerButton amnestyBanditButton =
                 PowerButtonCreator.CreateGodPowerButton(
                     content.GodPowerLibrary.AMNESTY_BANDIT,
-                    SpriteTextureLoader.getSprite("ui/icons/iconPeace")
+                    SpriteTextureLoader.getSprite(
+                        content.GodPowerLibrary.BanditAmnestyIconPath)
+                    ?? SpriteTextureLoader.getSprite("ui/icons/iconPeace")
                     ?? SpriteTextureLoader.getSprite("ui/wars/war_rebellion"));
             Register(groups, AWLineageTabLayoutRules.Mandate,
                 amnestyBanditButton);

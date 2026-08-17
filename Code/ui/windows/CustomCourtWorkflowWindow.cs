@@ -15,12 +15,13 @@ namespace AncientWarfare3.ui.windows
         AbstractWindow<CustomCourtWorkflowWindow>
     {
         private static long _kingdomId = -1L;
-        private static readonly Vector2 DefaultSize = new Vector2(920f, 620f);
-        private static readonly Vector2 MinimumSize = new Vector2(620f, 420f);
-        private static readonly Vector2 MaximumSize = new Vector2(1400f, 900f);
+        private static readonly Vector2 DefaultSize = new Vector2(560f, 360f);
+        private static readonly Vector2 MinimumSize = new Vector2(420f, 280f);
+        private static readonly Vector2 MaximumSize = new Vector2(900f, 650f);
         private Vector2 _windowSize = DefaultSize;
         private RectTransform _root;
         private RectTransform _canvasRect;
+        private RectTransform _workspaceRect;
         private RectTransform _toolPanel;
         private InputField _courtNameInput;
         private Text _status;
@@ -56,21 +57,32 @@ namespace AncientWarfare3.ui.windows
             if (_root != null || ContentTransform == null) return;
             foreach (LayoutGroup group in ContentTransform.GetComponents<LayoutGroup>())
                 group.enabled = false;
+            foreach (ContentSizeFitter fitter in
+                     ContentTransform.GetComponents<ContentSizeFitter>())
+                fitter.enabled = false;
             GameObject root = new GameObject("CustomCourtWorkflowRoot",
                 typeof(RectTransform));
             root.transform.SetParent(ContentTransform, false);
             _root = root.GetComponent<RectTransform>();
             _canvasRect = new GameObject("CourtWorkflowCanvas",
-                typeof(RectTransform), typeof(Image), typeof(CourtWorkflowCanvas),
+                typeof(RectTransform), typeof(Image),
                 typeof(TreeDragPanHandler)).GetComponent<RectTransform>();
             _canvasRect.SetParent(_root, false);
             _canvasRect.GetComponent<Image>().color =
-                new Color(0.035f, 0.045f, 0.06f, 0.98f);
+                new Color(0.08f, 0.07f, 0.055f, 0.98f);
+            _workspaceRect = new GameObject("CourtWorkflowWorkspace",
+                typeof(RectTransform), typeof(CourtWorkflowCanvas))
+                .GetComponent<RectTransform>();
+            _workspaceRect.SetParent(_canvasRect, false);
+            _workspaceRect.anchorMin = _workspaceRect.anchorMax =
+                new Vector2(0.5f, 0.5f);
+            _workspaceRect.pivot = new Vector2(0.5f, 0.5f);
+            _workspaceRect.sizeDelta = new Vector2(2000f, 1500f);
             _toolPanel = new GameObject("CourtWorkflowTools",
                 typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
             _toolPanel.SetParent(_root, false);
             _toolPanel.GetComponent<Image>().color =
-                new Color(0.09f, 0.1f, 0.13f, 0.98f);
+                new Color(0.12f, 0.09f, 0.06f, 0.98f);
             Text nameLabel = CreateText(_toolPanel, "CourtNameLabel", 9,
                 TextAnchor.MiddleLeft);
             nameLabel.text = AW_L10n.Text("aw_custom_court_name",
@@ -94,23 +106,24 @@ namespace AncientWarfare3.ui.windows
                 "aw_custom_court_apply", "Apply", ApplyCustomCourtTemplate);
             _status = CreateText(_toolPanel, "Status", 9,
                 TextAnchor.UpperLeft);
-            Layout(nameLabel.rectTransform, 8f, 8f, 148f, 18f);
-            Layout(_courtNameInput.GetComponent<RectTransform>(), 8f, 28f,
+            Layout(nameLabel.rectTransform, 8f, 6f, 148f, 16f);
+            Layout(_courtNameInput.GetComponent<RectTransform>(), 8f, 24f,
+                148f, 20f);
+            Layout(add.GetComponent<RectTransform>(), 8f, 52f, 148f, 22f);
+            Layout(manage.GetComponent<RectTransform>(), 8f, 78f, 148f, 22f);
+            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 104f,
                 148f, 22f);
-            Layout(add.GetComponent<RectTransform>(), 8f, 58f, 148f, 24f);
-            Layout(manage.GetComponent<RectTransform>(), 8f, 88f, 148f, 24f);
-            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 118f,
-                148f, 24f);
-            Layout(save.GetComponent<RectTransform>(), 8f, 148f, 148f, 24f);
-            Layout(export.GetComponent<RectTransform>(), 8f, 178f, 148f, 24f);
-            Layout(importButton.GetComponent<RectTransform>(), 8f, 208f,
-                148f, 24f);
-            Layout(apply.GetComponent<RectTransform>(), 8f, 238f, 148f, 24f);
-            Layout(_status.rectTransform, 8f, 274f, 148f, 110f);
+            Layout(save.GetComponent<RectTransform>(), 8f, 130f, 148f, 22f);
+            Layout(export.GetComponent<RectTransform>(), 8f, 156f, 148f, 22f);
+            Layout(importButton.GetComponent<RectTransform>(), 8f, 182f,
+                148f, 22f);
+            Layout(apply.GetComponent<RectTransform>(), 8f, 208f, 148f, 22f);
         }
 
         private void ApplyLayout()
         {
+            float contentWidth = Mathf.Max(1f, _windowSize.x - 42f);
+            float viewportHeight = Mathf.Max(1f, _windowSize.y - 58f);
             RectTransform background = BackgroundTransform as RectTransform;
             if (background != null)
                 background.sizeDelta = _windowSize;
@@ -118,21 +131,68 @@ namespace AncientWarfare3.ui.windows
             if (close != null)
                 close.localPosition = new Vector3(_windowSize.x * 0.5f - 20f,
                     _windowSize.y * 0.5f - 12f);
+
+            Transform titleBackground = BackgroundTransform?.Find("TitleBackground");
+            RectTransform titleRect = titleBackground?.GetComponent<RectTransform>();
+            if (titleRect != null)
+            {
+                titleRect.sizeDelta = new Vector2(_windowSize.x * 0.52f, 30f);
+                titleRect.localPosition = new Vector3(0f,
+                    _windowSize.y * 0.5f - 16f, 0f);
+            }
+            ScrollWindow scrollWindow = GetComponent<ScrollWindow>();
+            if (scrollWindow?.titleText != null)
+            {
+                scrollWindow.titleText.text = AW_L10n.Text(
+                    "aw_custom_court_workflow_title", "Custom Court Workflow");
+                scrollWindow.titleText.transform.localPosition = new Vector3(0f,
+                    _windowSize.y * 0.5f - 16f, 0f);
+                scrollWindow.titleText.raycastTarget = false;
+            }
+            Transform scroll = BackgroundTransform?.Find("Scroll View");
+            RectTransform scrollRect = scroll?.GetComponent<RectTransform>();
+            if (scrollRect != null)
+            {
+                scrollRect.sizeDelta = new Vector2(contentWidth,
+                    viewportHeight);
+                scrollRect.localPosition = new Vector3(0f, -20f, 0f);
+            }
+            ScrollRect scrollComponent = scroll?.GetComponent<ScrollRect>();
+            if (scrollComponent != null)
+            {
+                scrollComponent.horizontal = false;
+                scrollComponent.vertical = false;
+            }
+            Transform viewport = ContentTransform?.parent;
+            RectTransform viewportRect = viewport?.GetComponent<RectTransform>();
+            if (viewportRect != null)
+                viewportRect.sizeDelta = new Vector2(contentWidth, viewportHeight);
+            if (viewport != null && viewport.GetComponent<RectMask2D>() == null)
+                viewport.gameObject.AddComponent<RectMask2D>();
+            RectTransform contentRect = ContentTransform as RectTransform;
+            if (contentRect != null)
+                contentRect.sizeDelta = new Vector2(contentWidth, viewportHeight);
             if (_root == null) return;
-            _root.anchorMin = _root.anchorMax = new Vector2(0.5f, 0.5f);
+            _root.anchorMin = Vector2.zero;
+            _root.anchorMax = Vector2.one;
             _root.pivot = new Vector2(0.5f, 0.5f);
-            _root.sizeDelta = new Vector2(_windowSize.x - 24f,
-                _windowSize.y - 56f);
-            _root.anchoredPosition = new Vector2(0f, -8f);
+            _root.offsetMin = Vector2.zero;
+            _root.offsetMax = Vector2.zero;
+            _root.sizeDelta = Vector2.zero;
+            _root.anchoredPosition = Vector2.zero;
             _toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f);
             _toolPanel.pivot = new Vector2(1f, 1f);
             _toolPanel.anchoredPosition = new Vector2(-4f, -4f);
             _toolPanel.sizeDelta = new Vector2(164f,
-                Mathf.Max(1f, _root.sizeDelta.y - 8f));
+                Mathf.Max(1f, viewportHeight - 8f));
+            Layout(_status.rectTransform, 8f, 238f, 148f,
+                Mathf.Max(1f, _toolPanel.sizeDelta.y - 246f));
             _canvasRect.anchorMin = new Vector2(0f, 0f);
             _canvasRect.anchorMax = new Vector2(1f, 1f);
             _canvasRect.offsetMin = new Vector2(4f, 4f);
             _canvasRect.offsetMax = new Vector2(-172f, -4f);
+            _canvasRect.GetComponent<TreeDragPanHandler>().Setup(_workspaceRect,
+                _canvasRect);
             _chrome?.RepositionResizeHandle();
         }
 
@@ -174,18 +234,18 @@ namespace AncientWarfare3.ui.windows
 
         private void RenderCards()
         {
-            if (_canvasRect == null || _template?.Offices == null) return;
-            foreach (Transform child in _canvasRect)
+            if (_workspaceRect == null || _template?.Offices == null) return;
+            foreach (Transform child in _workspaceRect)
                 if (child.GetComponent<CourtWorkflowOfficeCard>() != null ||
                     child.GetComponent<CourtWorkflowEdgeView>() != null)
                     Destroy(child.gameObject);
-            CourtWorkflowCanvas canvas = _canvasRect.GetComponent<
+            CourtWorkflowCanvas canvas = _workspaceRect.GetComponent<
                 CourtWorkflowCanvas>();
             canvas.Clear();
             foreach (CustomCourtOffice office in _template.Offices)
             {
                 CourtWorkflowOfficeCard card = CourtWorkflowOfficeCard.Create(
-                    _canvasRect, office, SelectCard, DeleteOffice,
+                    _workspaceRect, office, SelectCard, DeleteOffice,
                     _ => RenderEdges());
                 canvas.AddCard(card);
                 RectTransform rect = card.GetComponent<RectTransform>();
@@ -200,11 +260,11 @@ namespace AncientWarfare3.ui.windows
 
         private void RenderEdges()
         {
-            if (_canvasRect == null || _template?.Edges == null) return;
-            foreach (Transform child in _canvasRect)
+            if (_workspaceRect == null || _template?.Edges == null) return;
+            foreach (Transform child in _workspaceRect)
                 if (child.GetComponent<CourtWorkflowEdgeView>() != null)
                     Destroy(child.gameObject);
-            CourtWorkflowCanvas canvas = _canvasRect.GetComponent<
+            CourtWorkflowCanvas canvas = _workspaceRect.GetComponent<
                 CourtWorkflowCanvas>();
             foreach (CustomCourtEdge edge in _template.Edges)
             {
@@ -216,8 +276,10 @@ namespace AncientWarfare3.ui.windows
                 GameObject viewObject = new GameObject("CourtWorkflowEdge",
                     typeof(RectTransform), typeof(Image),
                     typeof(CourtWorkflowEdgeView));
-                viewObject.transform.SetParent(_canvasRect, false);
+                viewObject.transform.SetParent(_workspaceRect, false);
                 viewObject.transform.SetAsFirstSibling();
+                Image edgeImage = viewObject.GetComponent<Image>();
+                edgeImage.raycastTarget = false;
                 viewObject.GetComponent<CourtWorkflowEdgeView>().Bind(edge,
                     from.GetComponent<RectTransform>(),
                     to.GetComponent<RectTransform>());
@@ -387,9 +449,10 @@ namespace AncientWarfare3.ui.windows
             GameObject obj = new GameObject(name, typeof(RectTransform), typeof(Text));
             obj.transform.SetParent(parent, false);
             Text text = obj.GetComponent<Text>();
+            text.font = LocalizedTextManager.current_font;
             text.fontSize = size;
             text.alignment = alignment;
-            text.color = Color.white;
+            text.color = new Color(0.94f, 0.86f, 0.68f, 1f);
             return text;
         }
 
@@ -398,7 +461,7 @@ namespace AncientWarfare3.ui.windows
             GameObject obj = new GameObject(name, typeof(RectTransform),
                 typeof(Image), typeof(InputField));
             obj.transform.SetParent(parent, false);
-            obj.GetComponent<Image>().color = new Color(0.14f, 0.16f, 0.2f,
+            obj.GetComponent<Image>().color = new Color(0.14f, 0.1f, 0.06f,
                 1f);
             Text value = CreateText(obj.transform, "Text", 10,
                 TextAnchor.MiddleLeft);
@@ -429,7 +492,7 @@ namespace AncientWarfare3.ui.windows
             GameObject obj = new GameObject(name, typeof(RectTransform),
                 typeof(Image), typeof(Button));
             obj.transform.SetParent(parent, false);
-            obj.GetComponent<Image>().color = new Color(0.18f, 0.2f, 0.25f, 1f);
+            obj.GetComponent<Image>().color = new Color(0.22f, 0.16f, 0.09f, 1f);
             Button button = obj.GetComponent<Button>();
             button.onClick.AddListener(action);
             Text text = CreateText(obj.transform, "Text", 9, TextAnchor.MiddleCenter);

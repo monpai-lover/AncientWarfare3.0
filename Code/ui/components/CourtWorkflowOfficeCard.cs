@@ -71,14 +71,15 @@ namespace AncientWarfare3.ui.components
                 typeof(Text)).GetComponent<Text>();
             card._label.transform.SetParent(gameObject.transform, false);
             card._label.alignment = TextAnchor.MiddleCenter;
-            card._label.color = Color.white;
+            card._label.font = LocalizedTextManager.current_font;
+            card._label.color = new Color(0.94f, 0.86f, 0.68f, 1f);
             card._label.fontSize = 10;
             card._label.rectTransform.anchorMin = Vector2.zero;
             card._label.rectTransform.anchorMax = Vector2.one;
             card._label.rectTransform.offsetMin = Vector2.zero;
             card._label.rectTransform.offsetMax = Vector2.zero;
             gameObject.GetComponent<Image>().color =
-                new Color(0.12f, 0.14f, 0.18f, 0.96f);
+                new Color(0.16f, 0.11f, 0.065f, 0.96f);
             gameObject.GetComponent<Button>().onClick.AddListener(
                 () => clicked?.Invoke(card));
             Button deleteButton = CreateDeleteButton(gameObject.transform,
@@ -108,6 +109,7 @@ namespace AncientWarfare3.ui.components
             textObject.transform.SetParent(obj.transform, false);
             Text text = textObject.GetComponent<Text>();
             text.text = "X";
+            text.font = LocalizedTextManager.current_font;
             text.fontSize = 10;
             text.color = Color.white;
             text.alignment = TextAnchor.MiddleCenter;

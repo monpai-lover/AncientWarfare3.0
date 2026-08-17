@@ -22,6 +22,8 @@ namespace AncientWarfare3.content
         public const string SPAWN_BANDIT_STRONGHOLD =
             "aw_spawn_bandit_stronghold";
         public const string AMNESTY_BANDIT = "aw_amnesty_bandit";
+        public const string BanditAmnestyIconPath =
+            "ui/icons/aw_bandit_amnesty";
 
         private static Kingdom _pendingVassal;
         private static readonly List<City> SchoolNameplateCandidates = new List<City>();
@@ -946,7 +948,7 @@ namespace AncientWarfare3.content
             {
                 id = AMNESTY_BANDIT,
                 name = AMNESTY_BANDIT,
-                path_icon = "ui/icons/iconPeace",
+                path_icon = BanditAmnestyIconPath,
                 force_map_mode = MetaType.City,
                 unselect_when_window = true,
                 allow_unit_selection = false,

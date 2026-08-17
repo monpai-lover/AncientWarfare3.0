@@ -369,7 +369,7 @@ aw_bandit_stronghold_core_failed,母城无法保留基础市政核心,The mother
 aw_bandit_stronghold_transaction_failed,寨城创建失败并已回滚,Stronghold creation failed and was rolled back,寨城建立失敗並已回滾
 aw_bandit_stronghold_success,土匪寨城已经建立,Bandit stronghold created,土匪寨城已經建立
 aw_bandit_amnesty,招安土匪,Amnesty Bandits,招安土匪
-aw_bandit_amnesty_description,由母国招安选中的土匪寨，结束战争并恢复普通政体,The origin realm grants amnesty to the selected bandit stronghold, ending wars and restoring ordinary government,由母國招安選中的土匪寨，結束戰爭並恢復普通政體
+aw_bandit_amnesty_description,由母国招安选中的土匪寨，结束战争并恢复普通政体,The origin realm grants amnesty to the selected bandit stronghold; ending wars and restoring ordinary government,由母國招安選中的土匪寨，結束戰爭並恢復普通政體
 aw_bandit_amnesty_success,土匪已接受招安,Bandit stronghold accepted amnesty,土匪已接受招安
 aw_bandit_amnesty_not_bandit_stronghold,请选择有效的土匪寨,Select an active bandit stronghold,請選擇有效的土匪寨
 aw_bandit_amnesty_origin_missing,土匪的母国已经不存在,The bandit's origin realm no longer exists,土匪的母國已經不存在
@@ -378,4 +378,4 @@ aw_bandit_amnesty_amnesty_unavailable,当前无法招安该土匪,This bandit am
 aw_bandit_amnesty_war_failed,无法结束土匪的战争,The bandit's wars could not be ended,無法結束土匪的戰爭
 aw_bandit_amnesty_settlement_failed,招安结算失败,The amnesty settlement failed,招安結算失敗
 aw_amnesty_bandit,招安土匪,Amnesty Bandits,招安土匪
-aw_amnesty_bandit_description,由母国招安选中的土匪寨，结束战争并恢复普通政体,The origin realm grants amnesty to the selected bandit stronghold, ending wars and restoring ordinary government,由母國招安選中的土匪寨，結束戰爭並恢復普通政體
+aw_amnesty_bandit_description,由母国招安选中的土匪寨，结束战争并恢复普通政体,The origin realm grants amnesty to the selected bandit stronghold; ending wars and restoring ordinary government,由母國招安選中的土匪寨，結束戰爭並恢復普通政體
