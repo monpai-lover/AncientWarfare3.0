@@ -81,9 +81,10 @@ namespace AncientWarfare3.core.court
                 nextPower, NineBestowmentsThreshold);
         }
 
-        public static bool IsAmbitiousUsurper(bool ambitious, bool content)
+        public static bool IsAmbitiousUsurper(bool ambitious, bool content,
+            bool historicalFigure)
         {
-            return ambitious && !content;
+            return historicalFigure || ambitious && !content;
         }
 
         public static bool CanPrepareCoup(bool monarchy, bool atWar,

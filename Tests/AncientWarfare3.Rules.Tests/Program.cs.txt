@@ -6459,14 +6459,20 @@ True(MinisterialPowerRules.CrossedThreshold(39, 41, 40),
 Equal(false, MinisterialPowerRules.CrossedThreshold(41, 42, 40),
     "threshold history does not repeat above the same threshold");
 True(MinisterialPowerRules.IsAmbitiousUsurper(
-        ambitious: true, content: false),
-    "only an explicitly ambitious minister may pursue usurpation");
+        ambitious: true, content: false, historicalFigure: false),
+    "only an explicitly ambitious ordinary minister may pursue usurpation");
 Equal(false, MinisterialPowerRules.IsAmbitiousUsurper(
-        ambitious: false, content: false),
+        ambitious: false, content: false, historicalFigure: false),
     "ordinary ministers never usurp merely because they are powerful");
 Equal(false, MinisterialPowerRules.IsAmbitiousUsurper(
-        ambitious: true, content: true),
-    "a content minister never pursues usurpation");
+        ambitious: true, content: true, historicalFigure: false),
+    "an ordinary content minister never pursues usurpation");
+True(MinisterialPowerRules.IsAmbitiousUsurper(
+        ambitious: false, content: false, historicalFigure: true),
+    "a historical premier has usurpation intent without the ambitious trait");
+True(MinisterialPowerRules.IsAmbitiousUsurper(
+        ambitious: false, content: true, historicalFigure: true),
+    "the content trait does not suppress a historical premier's usurpation intent");
 True(MinisterialPowerRules.CanPrepareCoup(monarchy: true, atWar: false,
         power: 90, weakRuler: true, ambitiousUsurper: true),
     "an ambitious dominant premier may begin controlling a weak monarch");

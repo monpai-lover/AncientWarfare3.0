@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.content.figures;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.court
@@ -219,10 +220,14 @@ namespace AncientWarfare3.core.court
 
         private static bool IsAmbitiousUsurper(Actor pActor)
         {
-            return pActor?.data != null &&
-                   MinisterialPowerRules.IsAmbitiousUsurper(
-                       pActor.hasTrait("ambitious"),
-                       pActor.hasTrait("content"));
+            if (pActor?.data == null) return false;
+            bool historicalFigure =
+                pActor.hasTrait(HistoricalFigureService.TRAIT_FIGURE) ||
+                pActor.hasTrait(HistoricalFigureService.TRAIT_FIRST);
+            return MinisterialPowerRules.IsAmbitiousUsurper(
+                pActor.hasTrait("ambitious"),
+                pActor.hasTrait("content"),
+                historicalFigure: historicalFigure);
         }
 
         private static bool IsPuppetEligibleRuler(Actor pKing)
