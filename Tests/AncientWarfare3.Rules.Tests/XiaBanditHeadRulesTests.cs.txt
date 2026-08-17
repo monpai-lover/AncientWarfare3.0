@@ -8,14 +8,48 @@ internal static class XiaBanditHeadRulesTests
         string root = Environment.CurrentDirectory;
         string source = File.ReadAllText(Path.Combine(root, "Code", "core",
             "presentation", "XiaBanditHeadRules.cs"));
-        True(source.Contains("HeadDirectory = \"heads_bandit\"",
+        string avatarPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_AvatarHeadPatch.cs"));
+        string actorPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ActorVisualRolePatch.cs"));
+        True(source.Contains("HeadResourcePrefix", StringComparison.Ordinal) &&
+             source.Contains("\"heads_bandit/head_bandit_\"",
                 StringComparison.Ordinal),
-            "Xia bandit actors use the dedicated head directory");
+            "Xia bandit actors use the dedicated head resource prefix");
+        True(source.Contains("ResolveHeadPath(long pActorId)",
+                StringComparison.Ordinal) &&
+             source.Contains("HeadResourcePrefix + ResolveHeadIndex(pActorId)",
+                StringComparison.Ordinal),
+            "Xia bandit head lookup resolves an exact resource path");
         True(source.Contains("HeadCount = 5", StringComparison.Ordinal),
             "the dedicated bandit head set has five variants");
         True(source.Contains("pBandit || pSynthetic",
                 StringComparison.Ordinal),
             "bandit and synthetic levy actors share the dedicated heads");
+        True(avatarPatch.Contains("SpriteTextureLoader.getSprite(",
+                StringComparison.Ordinal) &&
+             avatarPatch.Contains("ResolveHeadPath(pActorId)",
+                StringComparison.Ordinal) &&
+             actorPatch.Contains("SpriteTextureLoader.getSprite(",
+                StringComparison.Ordinal) &&
+             actorPatch.Contains("ResolveHeadPath(",
+                StringComparison.Ordinal),
+            "all Xia bandit head consumers load the exact resource key");
+        int methodStart = actorPatch.IndexOf(
+            "public static bool CheckSpriteHeadPrefix", StringComparison.Ordinal);
+        int methodEnd = actorPatch.IndexOf("[HarmonyPostfix]", methodStart,
+            StringComparison.Ordinal);
+        string mapHeadMethod = methodStart >= 0 && methodEnd > methodStart
+            ? actorPatch.Substring(methodStart, methodEnd - methodStart) : "";
+        int banditCheck = mapHeadMethod.IndexOf(
+            "if (ShouldUseBanditHead(__instance))", StringComparison.Ordinal);
+        int roleCheck = mapHeadMethod.IndexOf(
+            "ActorVisualRole role = ActorVisualRoleResolver.Resolve(__instance);",
+            StringComparison.Ordinal);
+        True(banditCheck >= 0 && roleCheck > banditCheck &&
+             actorPatch.Contains("return ApplyBanditHead(__instance);",
+                StringComparison.Ordinal),
+            "map bandit head resolution precedes the default-role early return");
     }
 
     private static void True(bool value, string message)

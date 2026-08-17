@@ -5,7 +5,8 @@ namespace AncientWarfare3.core.presentation
     internal static class XiaBanditHeadRules
     {
         internal const string XiaAssetId = "Xia";
-        internal const string HeadDirectory = "heads_bandit";
+        internal const string HeadResourcePrefix =
+            "heads_bandit/head_bandit_";
         internal const int HeadCount = 5;
 
         internal static bool ShouldUse(string pAssetId, bool pBandit,
@@ -19,6 +20,11 @@ namespace AncientWarfare3.core.presentation
         {
             long value = pActorId < 0 ? -pActorId : pActorId;
             return (int)(value % HeadCount);
+        }
+
+        internal static string ResolveHeadPath(long pActorId)
+        {
+            return HeadResourcePrefix + ResolveHeadIndex(pActorId);
         }
     }
 }
