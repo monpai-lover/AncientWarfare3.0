@@ -44,6 +44,32 @@ internal static class ArmyRtsTransportP0RulesTests
         Assert(transport.Contains("landedExpectedMembers >= validExpectedMembers",
                 StringComparison.Ordinal),
             "voyage completion waits for every valid expected member to land");
+        Assert(transport.Contains("ForceEmbarkRoster(",
+                StringComparison.Ordinal),
+            "a loading transport explicitly transfers the full RTS roster " +
+            "to the native embark task");
+        Assert(transport.Contains("TeleportRosterToBoat(",
+                StringComparison.Ordinal),
+            "a bound RTS transport has a deterministic full-roster embark " +
+            "fallback");
+        Assert(transport.Contains("if (hasEmbarkedMember)",
+                StringComparison.Ordinal),
+            "the full-roster fallback waits until the captain has boarded");
+        Assert(transport.Contains("member.embarkInto(boat)",
+                StringComparison.Ordinal),
+            "the fallback places every valid member into the assigned boat");
+        string production = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsTransportProductionService.cs"));
+        Assert(production.Contains("OceanTile", StringComparison.Ordinal),
+            "temporary transport production retains the validated route " +
+            "ocean tile");
+        Assert(production.Contains("routeDock.OceanTile",
+                StringComparison.Ordinal),
+            "temporary transport spawning uses the validated route ocean");
+        Assert(transport.Contains("ForceEmbarkRoster(state, anyRequestLoading, assignedBoat)",
+                StringComparison.Ordinal),
+            "the embark handoff is driven by a live assigned boat after " +
+            "the native request enters Loading");
 
         int transportP0Start = transport.IndexOf(
             "internal static void ProcessMilitaryP0(float pCycleElapsed)",

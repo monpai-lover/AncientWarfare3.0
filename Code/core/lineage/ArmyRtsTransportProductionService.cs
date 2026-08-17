@@ -33,6 +33,9 @@ namespace AncientWarfare3.core.lineage
         {
             internal City City;
             internal Docks Dock;
+            // This sea tile was proven to connect both coasts. The temporary
+            // boat must spawn here rather than on an arbitrary dock ocean tile.
+            internal WorldTile OceanTile;
         }
 
         private static readonly Dictionary<long, ProductionDemand>
@@ -47,6 +50,9 @@ namespace AncientWarfare3.core.lineage
             new HashSet<long>();
         private static readonly HashSet<long> TemporaryBoatBuildCityIds =
             new HashSet<long>();
+        private static readonly Dictionary<long, WorldTile>
+            TemporaryBoatBuildOceanTilesByCity =
+                new Dictionary<long, WorldTile>();
 
         internal static int ActiveDemandCount
         {
@@ -162,6 +168,8 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 TemporaryBoatBuildCityIds.Add(routeDock.City.id);
+                TemporaryBoatBuildOceanTilesByCity[routeDock.City.id] =
+                    routeDock.OceanTile;
                 try
                 {
                     boatActor = routeDock.Dock.buildBoatFromHere(
@@ -170,6 +178,8 @@ namespace AncientWarfare3.core.lineage
                 finally
                 {
                     TemporaryBoatBuildCityIds.Remove(routeDock.City.id);
+                    TemporaryBoatBuildOceanTilesByCity.Remove(
+                        routeDock.City.id);
                 }
                 if (boatActor?.data == null)
                 {
@@ -300,7 +310,12 @@ namespace AncientWarfare3.core.lineage
                 if (pDock.tiles_ocean == null ||
                     pDock.tiles_ocean.Count == 0) return false;
 
-                WorldTile spawnTile = pDock.tiles_ocean.GetRandom();
+                WorldTile spawnTile = null;
+                TemporaryBoatBuildOceanTilesByCity.TryGetValue(pCity.id,
+                    out spawnTile);
+                if (spawnTile == null || !pDock.tiles_ocean.Contains(
+                        spawnTile))
+                    spawnTile = pDock.tiles_ocean.GetRandom();
                 if (spawnTile?.region?.island?.goodForDocks() != true)
                 {
                     spawnTile = null;
@@ -350,6 +365,7 @@ namespace AncientWarfare3.core.lineage
             TemporaryBoatIds.Clear();
             PendingTemporaryBoatRemovalIds.Clear();
             TemporaryBoatBuildCityIds.Clear();
+            TemporaryBoatBuildOceanTilesByCity.Clear();
         }
 
         private static bool TryRefreshExisting(TaxiRequest pRequest,
@@ -538,7 +554,8 @@ namespace AncientWarfare3.core.lineage
                                 return new ProductionDock
                                 {
                                     City = city,
-                                    Dock = docks
+                                    Dock = docks,
+                                    OceanTile = ocean
                                 };
                         }
                     }

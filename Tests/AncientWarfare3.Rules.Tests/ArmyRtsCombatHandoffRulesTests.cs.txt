@@ -457,12 +457,16 @@ internal static class ArmyRtsCombatHandoffRulesTests
                transport.Contains("IsExecutingVanillaPassengerTask(",
                    StringComparison.Ordinal),
             "RTS transport must hand loading passengers to the original embark task without restarting active boat work");
-        Assert(!transport.Contains(".embarkInto(",
+        Assert(transport.Contains("if (hasEmbarkedMember)",
+                   StringComparison.Ordinal) &&
+               transport.Contains("TeleportRosterToBoat(",
+                   StringComparison.Ordinal) &&
+               transport.Contains("member.embarkInto(boat)",
                    StringComparison.Ordinal) &&
                !transport.Contains(".disembarkTo(",
                    StringComparison.Ordinal) &&
                !transport.Contains(".spawnOn(", StringComparison.Ordinal),
-            "RTS transport coordination must not perform physical embark, unload, or teleport operations");
+            "RTS transport may complete embark only after a member has boarded; it must not teleport landing or spawn actors");
         Assert(transportProduction.Contains(
                 "boatActor.setTask(\"boat_transport_go_load\"",
                 StringComparison.Ordinal),

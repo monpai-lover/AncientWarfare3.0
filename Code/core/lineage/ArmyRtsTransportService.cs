@@ -359,6 +359,7 @@ namespace AncientWarfare3.core.lineage
                 invalidMemberIds.Clear();
                 int validExpectedMembers = 0;
                 int landedExpectedMembers = 0;
+                bool anyRequestLoading = false;
                 long markerActorId = long.MaxValue;
                 int movementTileId = -1;
                 foreach (KeyValuePair<long, Actor> pair in state.Members)
@@ -394,6 +395,7 @@ namespace AncientWarfare3.core.lineage
                     {
                         requestLoading = request?.isState(
                             TaxiRequestState.Loading) == true;
+                        anyRequestLoading |= requestLoading;
                     }
                     catch { }
                     ArmyRtsPassengerTaskAction passengerAction =
@@ -451,6 +453,9 @@ namespace AncientWarfare3.core.lineage
                      memberIndex < invalidMemberIds.Count; memberIndex++)
                     state.Members.Remove(
                         invalidMemberIds[memberIndex]);
+                if (hasEmbarkedMember)
+                    TeleportRosterToBoat(state, assignedBoat);
+                ForceEmbarkRoster(state, anyRequestLoading, assignedBoat);
                 if (pDriveBoundBoats)
                     DriveBoundBoatP0(assignedBoat, pCycleElapsed);
                 bool allExpectedMembersLanded =
@@ -617,6 +622,71 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             LogNoBoatOnce(pState);
+        }
+
+        private static void ForceEmbarkRoster(TransportState pState,
+            bool pRequestLoading, Actor pAssignedBoat)
+        {
+            if (pState?.Army?.data == null || !pRequestLoading ||
+                pAssignedBoat?.data == null) return;
+            foreach (Actor member in pState.Members.Values)
+            {
+                if (!IsValidMember(member, pState.Army) ||
+                    member.is_inside_boat) continue;
+                TaxiRequest request = SafeRequest(member);
+                bool sameBoat = false;
+                try
+                {
+                    sameBoat = request?.hasAssignedBoat() == true &&
+                               ReferenceEquals(request.getBoat()?.actor,
+                                   pAssignedBoat);
+                }
+                catch { }
+                if (!sameBoat) continue;
+                string taskId = member.ai?.task?.id ?? "";
+                if (ArmyRtsTransportRules.IsProtectedVanillaPassengerTask(
+                        taskId)) continue;
+                try
+                {
+                    member.stopSleeping();
+                    member.cancelAllBeh();
+                    member.setTask(VanillaForceEmbarkTaskId,
+                        pClean: true, pCleanJob: false,
+                        pForceAction: true);
+                    ArmyMilitaryMovementPriorityIndex.Register(
+                        member.data.id,
+                        ArmyMilitaryMovementPriorityKind.RtsMember);
+                }
+                catch { }
+            }
+        }
+
+        private static void TeleportRosterToBoat(TransportState pState,
+            Actor pAssignedBoat)
+        {
+            if (pState?.Army?.data == null || pAssignedBoat?.data == null)
+                return;
+            Boat boat;
+            try { boat = pAssignedBoat.getSimpleComponent<Boat>(); }
+            catch { boat = null; }
+            if (boat == null) return;
+            foreach (Actor member in pState.Members.Values)
+            {
+                if (!IsValidMember(member, pState.Army) ||
+                    member.is_inside_boat) continue;
+                TaxiRequest request = SafeRequest(member);
+                bool sameBoat = false;
+                try
+                {
+                    sameBoat = request?.hasAssignedBoat() == true &&
+                               ReferenceEquals(request.getBoat()?.actor,
+                                   pAssignedBoat);
+                }
+                catch { }
+                if (!sameBoat) continue;
+                try { member.embarkInto(boat); }
+                catch { }
+            }
         }
 
         private static TaxiRequest FindPendingRequest(
