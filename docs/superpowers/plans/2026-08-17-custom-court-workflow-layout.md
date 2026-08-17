@@ -85,7 +85,7 @@ Change `CourtWorkflowCanvas`'s internal list, `Cards` property, `AddCard`,
 
 - [ ] **Step 4: Replace workflow rendering with vacancy cards**
 
-In `CustomCourtWorkflowWindow.RenderCards()`, create the new component under `_workspaceRect`, register it in the canvas list, and update `FindCard`, `SelectCard`, `DeleteOffice`, and edge rendering to accept `CourtWorkflowVacancyCard`. Preserve the existing `CustomCourtOffice` and edge models, position defaults, and save/import code. Set a stable card size of `236f x 118f`, matching the court actor-card aspect ratio.
+In `CustomCourtWorkflowWindow.RenderCards()`, create the new component under `_workspaceRect`, register it in the canvas list, and update `FindCard`, `SelectCard`, `DeleteOffice`, and edge rendering to accept `CourtWorkflowVacancyCard`. Preserve the existing `CustomCourtOffice` and edge models, position defaults, and save/import code. Set a stable card size of `132f x 104f`, matching `CourtActorNodeView` and the existing court screenshot.
 
 - [ ] **Step 5: Run the focused test and verify it passes**
 
