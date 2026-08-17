@@ -54,6 +54,7 @@ git commit -m "test: guard custom court card layout contracts"
 
 **Files:**
 - Create: `Code/ui/components/CourtWorkflowVacancyCard.cs`
+- Modify: `Code/ui/components/CourtWorkflowCanvas.cs`
 - Modify: `Code/ui/windows/CustomCourtWorkflowWindow.cs`
 - Test: `Tests/AncientWarfare3.Rules.Tests/CustomCourtWorkflowSourceGuardTests.cs.txt`
 
@@ -76,11 +77,17 @@ The object hierarchy must contain a dark court-style background, an avatar `Imag
 
 Track the pointer offset on `OnBeginDrag`, move only the card `RectTransform.anchoredPosition` in `OnDrag`, and invoke `dragEnded(this)` from `OnEndDrag`. The card's `Button.onClick` invokes `clicked(this)`. The delete button invokes `deleteRequested(this)` and uses the existing red close/delete visual style.
 
-- [ ] **Step 3: Replace workflow rendering with vacancy cards**
+- [ ] **Step 3: Switch canvas ownership to vacancy cards**
+
+Change `CourtWorkflowCanvas`'s internal list, `Cards` property, `AddCard`,
+`RemoveCard`, and `Clear` signatures from `CourtWorkflowOfficeCard` to
+`CourtWorkflowVacancyCard`. Do not change edge ownership or template models.
+
+- [ ] **Step 4: Replace workflow rendering with vacancy cards**
 
 In `CustomCourtWorkflowWindow.RenderCards()`, create the new component under `_workspaceRect`, register it in the canvas list, and update `FindCard`, `SelectCard`, `DeleteOffice`, and edge rendering to accept `CourtWorkflowVacancyCard`. Preserve the existing `CustomCourtOffice` and edge models, position defaults, and save/import code. Set a stable card size of `236f x 118f`, matching the court actor-card aspect ratio.
 
-- [ ] **Step 4: Run the focused test and verify it passes**
+- [ ] **Step 5: Run the focused test and verify it passes**
 
 Run:
 
@@ -90,10 +97,10 @@ dotnet run --project Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tes
 
 Expected: `Custom court multiplayer rules passed.`
 
-- [ ] **Step 5: Commit the card implementation**
+- [ ] **Step 6: Commit the card implementation**
 
 ```powershell
-git add Code\ui\components\CourtWorkflowVacancyCard.cs Code\ui\windows\CustomCourtWorkflowWindow.cs Tests\AncientWarfare3.Rules.Tests\CustomCourtWorkflowSourceGuardTests.cs.txt
+git add Code\ui\components\CourtWorkflowVacancyCard.cs Code\ui\components\CourtWorkflowCanvas.cs Code\ui\windows\CustomCourtWorkflowWindow.cs Tests\AncientWarfare3.Rules.Tests\CustomCourtWorkflowSourceGuardTests.cs.txt
 git commit -m "feat: render custom court offices as vacancy cards"
 ```
 
