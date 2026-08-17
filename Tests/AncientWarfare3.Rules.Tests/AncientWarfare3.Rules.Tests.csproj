@@ -41,6 +41,8 @@
     <Compile Include="CustomCourtMultiplayerRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\multiplayer\commands\CustomCourtMultiplayerRules.cs" Link="Production\CustomCourtMultiplayerRules.cs" />
     <Compile Include="CustomCourtWorkflowSourceGuardTests.cs.txt" />
+    <Compile Include="CustomCourtWholePresetRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtWholePresetRules.cs" Link="Production\CustomCourtWholePresetRules.cs" />
     <Compile Include="ArmyConquestReserveRulesTests.cs.txt" />
     <Compile Include="PeacetimeCitizenJobRulesTests.cs.txt" />
     <Compile Include="RtsMemberGeneralCombatRegressionTests.cs.txt" />

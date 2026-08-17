@@ -61,6 +61,14 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "ApplyOfficeName");
         Contains(window, "SaveTemplate");
         Contains(window, "AWStringDropdown _importDropdown");
+        Contains(window, "AWStringDropdown _wholePresetDropdown");
+        Contains(window, "RefreshWholePresetOptions(");
+        Contains(window, "ReplaceWithWholePreset(");
+        Contains(window, "WholePresetUnavailable(");
+        Contains(window, "CustomCourtWholePresetRules.TryReplace(");
+        Contains(window, "_edgeSource = null;");
+        Contains(window, "_edgeTarget = null;");
+        Contains(window, "SyncCourtNameFromInput()");
         Contains(window, "CustomCourtTemplatePathService.RootPath");
         Contains(window, "store.ListFileNames()");
         Contains(window, "store.TryLoadFile(option.Id");
@@ -88,11 +96,11 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "new Vector2(900f, 650f)");
         Contains(window, "CourtWorkflowVacancyCard.Create");
         Contains(window, "_toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f)");
-        Contains(window, "_toolPanel.anchoredPosition = new Vector2(-864f, -4f)");
+        Contains(window, "_toolPanel.anchoredPosition = new Vector2(-864f, 46f)");
         Contains(window, "_toolPanel.SetAsLastSibling()");
         Contains(window, "_canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f)");
         Contains(window, "_canvasRect.sizeDelta = new Vector2(contentWidth,");
-        Contains(window, "_canvasRect.anchoredPosition = new Vector2(-480f, 0f)");
+        Contains(window, "_canvasRect.anchoredPosition = new Vector2(-480f, 50f)");
         Contains(window, "CanvasCenterLayout()");
         Contains(window, "_workspaceRect.InverseTransformPoint(");
         Contains(canvas, "CourtWorkflowCanvas");
@@ -209,6 +217,19 @@ internal static class CustomCourtWorkflowSourceGuardTests
         HasLocalizationKey(localization, "aw_custom_court_import_select");
         HasLocalizationKey(localization, "aw_custom_court_import_no_files");
         HasLocalizationKey(localization, "aw_custom_court_import_invalid");
+        HasLocalizationKey(localization, "aw_custom_court_whole_preset");
+        HasLocalizationKey(localization,
+            "aw_custom_court_whole_preset_select");
+        HasLocalizationKey(localization,
+            "aw_custom_court_whole_preset_locked");
+        HasLocalizationKey(localization,
+            "aw_custom_court_whole_preset_locked_requirement");
+        HasLocalizationKey(localization,
+            "aw_custom_court_whole_preset_loaded");
+        HasLocalizationKey(localization,
+            "aw_custom_court_whole_preset_unavailable");
+        HasLocalizationKey(localization,
+            "aw_custom_court_whole_preset_empty");
         HasLocalizationKey(configLocalization,
             "aw_settings_experimental_warning");
         CsvRowsHaveFourColumns(otherLocalization, "others.csv");

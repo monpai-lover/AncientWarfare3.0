@@ -1,0 +1,241 @@
+using AncientWarfare3.core.court;
+
+internal static class CustomCourtWholePresetRulesTests
+{
+    public static void Run()
+    {
+        XiaOptionsContainAllHistoricalStages();
+        WesternOptionsContainOnlyCanonicalStages();
+        CurrentHanUnlocksOnlyZhouAndHan();
+        ReplacementPreservesTemplateIdentityAndName();
+        ReplacementDiscardsOldGraphAndCopiesDefinitions();
+        DuplicateOfficeIdsAreNormalizedDeterministically();
+        EmptyPresetDoesNotReplaceTheGraph();
+        GeneratedLayoutIsDeterministicAndCentered();
+    }
+
+    private static void XiaOptionsContainAllHistoricalStages()
+    {
+        IReadOnlyList<CustomCourtWholePresetOption> options =
+            CustomCourtWholePresetRules.Options(CourtProfileId.Xia,
+                CourtInstitutionId.Song);
+        Sequence(new[]
+        {
+            CourtInstitutionId.Zhou, CourtInstitutionId.Han,
+            CourtInstitutionId.Tang, CourtInstitutionId.Song
+        }, options.Select(option => option.InstitutionId).ToArray(),
+            "Xia whole-court preset list");
+        True(options.All(option => option.Unlocked),
+            "Song stage unlocks every Xia preset");
+    }
+
+    private static void WesternOptionsContainOnlyCanonicalStages()
+    {
+        IReadOnlyList<CustomCourtWholePresetOption> options =
+            CustomCourtWholePresetRules.Options(CourtProfileId.Western,
+                CourtInstitutionId.WesternFeudalBureaucratic);
+        Sequence(new[]
+        {
+            CourtInstitutionId.WesternBureaucratic,
+            CourtInstitutionId.WesternFeudalBureaucratic
+        }, options.Select(option => option.InstitutionId).ToArray(),
+            "Western whole-court preset list");
+    }
+
+    private static void CurrentHanUnlocksOnlyZhouAndHan()
+    {
+        IReadOnlyList<CustomCourtWholePresetOption> options =
+            CustomCourtWholePresetRules.Options(CourtProfileId.Xia,
+                CourtInstitutionId.Han);
+        True(options[0].Unlocked, "Zhou remains selectable at Han stage");
+        True(options[1].Unlocked, "Han remains selectable at Han stage");
+        False(options[2].Unlocked, "Tang stays locked at Han stage");
+        False(options[3].Unlocked, "Song stays locked at Han stage");
+    }
+
+    private static void ReplacementPreservesTemplateIdentityAndName()
+    {
+        CustomCourtTemplate source = SourceTemplate();
+        bool replaced = CustomCourtWholePresetRules.TryReplace(source,
+            ProfileWithOffices("first"), "preset", NameFor, 1000f, 700f,
+            out CustomCourtTemplate result);
+        True(replaced, "non-empty preset replaces the graph");
+        Equal("template_alpha", result.Id, "template id is preserved");
+        Equal(7, result.Revision, "template revision is preserved");
+        Equal("玩家朝廷", result.Name.Chinese, "Chinese court name is preserved");
+        Equal("Player Court", result.Name.English,
+            "English court name is preserved");
+    }
+
+    private static void ReplacementDiscardsOldGraphAndCopiesDefinitions()
+    {
+        CourtOfficeDefinition definition = new CourtOfficeDefinition(
+            "marshal", CourtOfficeLayer.Military, 20, CourtSchoolId.Military,
+            "office_marshal", true, "preset");
+        bool replaced = CustomCourtWholePresetRules.TryReplace(SourceTemplate(),
+            new TestProfile(new[] { definition }, new[] { "marshal" }),
+            "preset", NameFor, 1000f, 700f, out CustomCourtTemplate result);
+        True(replaced, "preset with a definition is accepted");
+        Equal(1, result.Offices.Count, "old offices are discarded");
+        Equal(0, result.Edges.Count, "old edges are discarded");
+        CustomCourtOffice office = result.Offices[0];
+        Equal("marshal", office.Id, "office id is copied");
+        Equal(CourtOfficeLayer.Military, office.Layer, "layer is copied");
+        Equal(20, office.Grade, "grade is copied");
+        Equal(CourtSchoolId.Military, office.PreferredSchoolId,
+            "school is copied");
+        True(office.MilitaryCapable, "military capability is copied");
+        Equal("中:office_marshal", office.Name.Chinese,
+            "localized Chinese name is copied");
+        Equal("EN:office_marshal", office.Name.English,
+            "localized English name is copied");
+    }
+
+    private static void DuplicateOfficeIdsAreNormalizedDeterministically()
+    {
+        TestProfile profile = ProfileWithOffices("beta", "alpha");
+        profile.InstitutionOfficeIds = new[]
+        {
+            "beta", "alpha", "beta", "missing", "alpha"
+        };
+        bool replaced = CustomCourtWholePresetRules.TryReplace(SourceTemplate(),
+            profile, "preset", NameFor, 1000f, 700f,
+            out CustomCourtTemplate result);
+        True(replaced, "valid definitions survive duplicate normalization");
+        Sequence(new[] { "beta", "alpha" },
+            result.Offices.Select(office => office.Id).ToArray(),
+            "first source occurrence determines deterministic order");
+    }
+
+    private static void EmptyPresetDoesNotReplaceTheGraph()
+    {
+        CustomCourtTemplate source = SourceTemplate();
+        bool replaced = CustomCourtWholePresetRules.TryReplace(source,
+            new TestProfile(Array.Empty<CourtOfficeDefinition>(),
+                Array.Empty<string>()), "empty", NameFor, 1000f, 700f,
+            out CustomCourtTemplate result);
+        False(replaced, "empty preset is rejected");
+        True(ReferenceEquals(source, result),
+            "rejected preset returns the original template");
+    }
+
+    private static void GeneratedLayoutIsDeterministicAndCentered()
+    {
+        TestProfile profile = ProfileWithOffices("alpha", "beta", "gamma");
+        CustomCourtWholePresetRules.TryReplace(SourceTemplate(), profile,
+            "preset", NameFor, 1000f, 700f, out CustomCourtTemplate first);
+        CustomCourtWholePresetRules.TryReplace(SourceTemplate(), profile,
+            "preset", NameFor, 1000f, 700f, out CustomCourtTemplate second);
+        for (int index = 0; index < first.Offices.Count; index++)
+        {
+            Equal(first.Offices[index].Layout.X,
+                second.Offices[index].Layout.X, "layout X is deterministic");
+            Equal(first.Offices[index].Layout.Y,
+                second.Offices[index].Layout.Y, "layout Y is deterministic");
+            True(Math.Abs(first.Offices[index].Layout.X - 1000f) <= 400f,
+                "generated card stays near canvas center X");
+            True(Math.Abs(first.Offices[index].Layout.Y - 700f) <= 300f,
+                "generated card stays near canvas center Y");
+        }
+    }
+
+    private static CustomCourtTemplate SourceTemplate()
+    {
+        return new CustomCourtTemplate
+        {
+            SchemaVersion = 1,
+            Id = "template_alpha",
+            Revision = 7,
+            Name = new CustomCourtLocalizedText
+            {
+                Chinese = "玩家朝廷",
+                English = "Player Court"
+            },
+            Offices = new List<CustomCourtOffice>
+            {
+                new CustomCourtOffice { Id = "old" }
+            },
+            Edges = new List<CustomCourtEdge>
+            {
+                new CustomCourtEdge
+                {
+                    FromOfficeId = "old", ToOfficeId = "old",
+                    Kind = CustomCourtEdgeKind.Management
+                }
+            }
+        };
+    }
+
+    private static TestProfile ProfileWithOffices(params string[] ids)
+    {
+        CourtOfficeDefinition[] definitions = ids.Select((id, index) =>
+            new CourtOfficeDefinition(id, CourtOfficeLayer.Central,
+                index < 2 ? 10 : 20, CourtSchoolId.Ru,
+                "office_" + id, false, "preset")).ToArray();
+        return new TestProfile(definitions, ids);
+    }
+
+    private static CustomCourtLocalizedText NameFor(
+        CourtOfficeDefinition definition)
+    {
+        return new CustomCourtLocalizedText
+        {
+            Chinese = "中:" + definition.LocalizationKey,
+            English = "EN:" + definition.LocalizationKey
+        };
+    }
+
+    private static void Sequence(IReadOnlyList<string> expected,
+        IReadOnlyList<string> actual, string message)
+    {
+        Equal(expected.Count, actual.Count, message + " count");
+        for (int index = 0; index < expected.Count; index++)
+            Equal(expected[index], actual[index], message + "[" + index + "]");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message) => True(!value,
+        message);
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
+    }
+
+    private sealed class TestProfile : ICourtProfile
+    {
+        private readonly Dictionary<string, CourtOfficeDefinition> _byId;
+
+        internal TestProfile(IReadOnlyList<CourtOfficeDefinition> definitions,
+            IReadOnlyList<string> institutionOfficeIds)
+        {
+            Offices = definitions;
+            InstitutionOfficeIds = institutionOfficeIds;
+            _byId = definitions.ToDictionary(definition => definition.Id,
+                StringComparer.Ordinal);
+        }
+
+        public CourtProfileId Id => CourtProfileId.Xia;
+        public string DefaultInstitutionId => "preset";
+        public IReadOnlyList<CourtOfficeDefinition> Offices { get; }
+        internal IReadOnlyList<string> InstitutionOfficeIds { get; set; }
+
+        public CourtOfficeDefinition FindOffice(string officeId)
+        {
+            return officeId != null && _byId.TryGetValue(officeId,
+                out CourtOfficeDefinition definition) ? definition : null;
+        }
+
+        public IReadOnlyList<string> OfficeIdsForInstitution(
+            string institutionId) => InstitutionOfficeIds;
+
+        public string ResolveInstitution(bool officeSystemUnlocked,
+            bool advancedOfficeSystemUnlocked) => "preset";
+    }
+}

@@ -48,6 +48,7 @@ if (args.Length == 1 && args[0] == "--custom-court-effect")
 if (args.Length == 1 && args[0] == "--custom-court-multiplayer")
 {
     CustomCourtMultiplayerRulesTests.Run();
+    CustomCourtWholePresetRulesTests.Run();
     CustomCourtWorkflowSourceGuardTests.Run();
     Console.WriteLine("Custom court multiplayer rules passed.");
     return;

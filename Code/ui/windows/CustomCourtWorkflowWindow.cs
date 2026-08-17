@@ -28,6 +28,7 @@ namespace AncientWarfare3.ui.windows
         private RectTransform _toolPanel;
         private InputField _courtNameInput;
         private InputField _officeNameInput;
+        private AWStringDropdown _wholePresetDropdown;
         private AWStringDropdown _importDropdown;
         private string _selectedImportFile = string.Empty;
         private Text _status;
@@ -94,6 +95,13 @@ namespace AncientWarfare3.ui.windows
             nameLabel.text = AW_L10n.Text("aw_custom_court_name",
                 "Court name");
             _courtNameInput = CreateInput(_toolPanel, "CourtNameInput");
+            _wholePresetDropdown = AWStringDropdown.Create(_toolPanel,
+                "WholeCourtPreset", 148f, 22f, ReplaceWithWholePreset,
+                WholePresetUnavailable);
+            AttachTooltip(_wholePresetDropdown.GetComponent<Button>(),
+                "aw_custom_court_whole_preset", "Whole court preset",
+                "aw_custom_court_whole_preset_select",
+                "Select a built-in whole-court preset");
             Text officeNameLabel = CreateText(_toolPanel, "OfficeNameLabel", 9,
                 TextAnchor.MiddleLeft);
             officeNameLabel.text = AW_L10n.Text("aw_custom_court_office_name",
@@ -133,17 +141,18 @@ namespace AncientWarfare3.ui.windows
             Layout(nameLabel.rectTransform, 8f, 6f, 148f, 16f);
             Layout(_courtNameInput.GetComponent<RectTransform>(), 8f, 24f,
                 148f, 20f);
-            Layout(officeNameLabel.rectTransform, 8f, 50f, 148f, 16f);
-            Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 68f,
+            Layout(_wholePresetDropdown.RectTransform, 8f, 50f, 148f, 22f);
+            Layout(officeNameLabel.rectTransform, 8f, 76f, 148f, 16f);
+            Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 94f,
                 148f, 20f);
-            Layout(add.GetComponent<RectTransform>(), 8f, 94f, 148f, 22f);
-            Layout(manage.GetComponent<RectTransform>(), 8f, 120f, 148f, 22f);
-            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 146f,
+            Layout(add.GetComponent<RectTransform>(), 8f, 120f, 148f, 22f);
+            Layout(manage.GetComponent<RectTransform>(), 8f, 146f, 148f, 22f);
+            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 172f,
                 148f, 22f);
-            Layout(save.GetComponent<RectTransform>(), 8f, 172f, 148f, 22f);
-            Layout(export.GetComponent<RectTransform>(), 8f, 198f, 148f, 22f);
-            Layout(_importDropdown.RectTransform, 8f, 224f, 148f, 22f);
-            Layout(apply.GetComponent<RectTransform>(), 8f, 250f, 148f, 22f);
+            Layout(save.GetComponent<RectTransform>(), 8f, 198f, 148f, 22f);
+            Layout(export.GetComponent<RectTransform>(), 8f, 224f, 148f, 22f);
+            Layout(_importDropdown.RectTransform, 8f, 250f, 148f, 22f);
+            Layout(apply.GetComponent<RectTransform>(), 8f, 276f, 148f, 22f);
         }
 
         private void ApplyLayout()
@@ -205,17 +214,17 @@ namespace AncientWarfare3.ui.windows
             _root.anchoredPosition = new Vector2(0f, -8f);
             _toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f);
             _toolPanel.pivot = new Vector2(1f, 1f);
-            _toolPanel.anchoredPosition = new Vector2(-864f, -4f);
+            _toolPanel.anchoredPosition = new Vector2(-864f, 46f);
             _toolPanel.sizeDelta = new Vector2(164f,
                 Mathf.Max(1f, viewportHeight - 8f));
             _toolPanel.SetAsLastSibling();
-            Layout(_status.rectTransform, 8f, 278f, 148f,
-                Mathf.Max(1f, _toolPanel.sizeDelta.y - 286f));
+            Layout(_status.rectTransform, 8f, 304f, 148f,
+                Mathf.Max(1f, _toolPanel.sizeDelta.y - 312f));
             _canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f);
             _canvasRect.pivot = new Vector2(0.5f, 0.5f);
             _canvasRect.sizeDelta = new Vector2(contentWidth,
                 viewportHeight);
-            _canvasRect.anchoredPosition = new Vector2(-480f, 0f);
+            _canvasRect.anchoredPosition = new Vector2(-480f, 50f);
             _canvasRect.GetComponent<TreeDragPanHandler>().Setup(_workspaceRect,
                 _canvasRect);
             _chrome?.RepositionResizeHandle();
@@ -230,6 +239,7 @@ namespace AncientWarfare3.ui.windows
                 _courtNameInput.text = _template.Name?.Chinese ??
                     _template.Name?.English ?? string.Empty;
             RenderCards();
+            RefreshWholePresetOptions();
             RefreshImportFiles();
             SetStatus(AW_L10n.Text("aw_custom_court_ready", "Ready"));
         }
@@ -541,6 +551,123 @@ namespace AncientWarfare3.ui.windows
                         "No JSON files")
                     : AW_L10n.Text("aw_custom_court_import_select",
                         "Import JSON"));
+        }
+
+        private void RefreshWholePresetOptions()
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            ICourtProfile profile = CourtProfileRegistry.For(kingdom);
+            if (kingdom?.data == null || profile == null)
+            {
+                _wholePresetDropdown?.SetOptions(
+                    Array.Empty<AWStringDropdownOption>(), string.Empty,
+                    AW_L10n.Text("aw_custom_court_whole_preset_unavailable",
+                        "Whole-court presets unavailable"));
+                _wholePresetDropdown?.SetInteractable(false);
+                return;
+            }
+
+            string currentInstitution =
+                CourtInstitutionService.GetInstitution(kingdom);
+            AWStringDropdownOption[] options = CustomCourtWholePresetRules
+                .Options(profile.Id, currentInstitution)
+                .Select(option =>
+                {
+                    string institutionName = CourtInstitutionService
+                        .InstitutionName(option.InstitutionId);
+                    string locked = AW_L10n.Text(
+                        "aw_custom_court_whole_preset_locked", "Locked");
+                    return new AWStringDropdownOption
+                    {
+                        Id = option.InstitutionId,
+                        Label = option.Unlocked
+                            ? institutionName
+                            : institutionName + " (" + locked + ")",
+                        Enabled = option.Unlocked,
+                        DisabledMessage = string.Format(
+                            CultureInfo.CurrentCulture,
+                            AW_L10n.Text(
+                                "aw_custom_court_whole_preset_locked_requirement",
+                                "Unlock {0} before using this preset."),
+                            institutionName)
+                    };
+                }).ToArray();
+            _wholePresetDropdown?.SetOptions(options, string.Empty,
+                AW_L10n.Text("aw_custom_court_whole_preset_select",
+                    "Select whole-court preset"));
+            _wholePresetDropdown?.SetInteractable(options.Length > 0);
+        }
+
+        private void ReplaceWithWholePreset(AWStringDropdownOption option)
+        {
+            if (option == null || string.IsNullOrEmpty(option.Id)) return;
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            ICourtProfile profile = CourtProfileRegistry.For(kingdom);
+            if (kingdom?.data == null || profile == null)
+            {
+                SetStatus(AW_L10n.Text(
+                    "aw_custom_court_whole_preset_unavailable",
+                    "Whole-court presets unavailable."));
+                return;
+            }
+
+            CustomCourtWholePresetOption preset = CustomCourtWholePresetRules
+                .Options(profile.Id, CourtInstitutionService.GetInstitution(
+                    kingdom)).FirstOrDefault(candidate => string.Equals(
+                    candidate.InstitutionId, option.Id,
+                    StringComparison.Ordinal));
+            if (string.IsNullOrEmpty(preset.InstitutionId) || !preset.Unlocked)
+            {
+                WholePresetUnavailable(option);
+                return;
+            }
+            if (!SyncCourtNameFromInput()) return;
+
+            CustomCourtOfficeLayout center = CanvasCenterLayout();
+            bool replaced = CustomCourtWholePresetRules.TryReplace(_template,
+                profile, option.Id,
+                definition => PresetOfficeName(option.Id, definition),
+                center.X, center.Y, out CustomCourtTemplate replacement);
+            if (!replaced)
+            {
+                SetStatus(AW_L10n.Text(
+                    "aw_custom_court_whole_preset_empty",
+                    "The selected whole-court preset has no offices."));
+                return;
+            }
+
+            _template = replacement;
+            _edgeSource = null;
+            _edgeTarget = null;
+            if (_officeNameInput != null)
+                _officeNameInput.text = string.Empty;
+            RenderCards();
+            SetStatus(string.Format(CultureInfo.CurrentCulture,
+                AW_L10n.Text("aw_custom_court_whole_preset_loaded",
+                    "Whole-court preset loaded: {0}"), option.Label));
+        }
+
+        private void WholePresetUnavailable(AWStringDropdownOption option)
+        {
+            SetStatus(!string.IsNullOrEmpty(option?.DisabledMessage)
+                ? option.DisabledMessage
+                : AW_L10n.Text("aw_custom_court_whole_preset_unavailable",
+                    "Whole-court presets unavailable."));
+        }
+
+        private static CustomCourtLocalizedText PresetOfficeName(
+            string institutionId, CourtOfficeDefinition definition)
+        {
+            string fallback = AW_L10n.Text(definition?.LocalizationKey,
+                definition?.Id ?? string.Empty);
+            string displayName = AW_L10n.Text(
+                CourtInstitutionRules.OfficeLocalizationKey(institutionId,
+                    definition?.Id), fallback);
+            return new CustomCourtLocalizedText
+            {
+                Chinese = displayName,
+                English = displayName
+            };
         }
 
         private void ImportTemplate(AWStringDropdownOption option)
