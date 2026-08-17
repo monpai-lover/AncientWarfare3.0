@@ -5,17 +5,17 @@ namespace AncientWarfare3.ui.components
 {
     public sealed class CourtWorkflowCanvas : MonoBehaviour
     {
-        private readonly List<CourtWorkflowOfficeCard> _cards =
-            new List<CourtWorkflowOfficeCard>();
+        private readonly List<CourtWorkflowVacancyCard> _cards =
+            new List<CourtWorkflowVacancyCard>();
 
-        public IReadOnlyList<CourtWorkflowOfficeCard> Cards => _cards;
+        public IReadOnlyList<CourtWorkflowVacancyCard> Cards => _cards;
 
-        public void AddCard(CourtWorkflowOfficeCard card)
+        public void AddCard(CourtWorkflowVacancyCard card)
         {
             if (card != null && !_cards.Contains(card)) _cards.Add(card);
         }
 
-        public void RemoveCard(CourtWorkflowOfficeCard card)
+        public void RemoveCard(CourtWorkflowVacancyCard card)
         {
             if (card != null) _cards.Remove(card);
         }

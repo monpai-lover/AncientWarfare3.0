@@ -15,9 +15,9 @@ namespace AncientWarfare3.ui.windows
         AbstractWindow<CustomCourtWorkflowWindow>
     {
         private static long _kingdomId = -1L;
-        private static readonly Vector2 DefaultSize = new Vector2(560f, 360f);
-        private static readonly Vector2 MinimumSize = new Vector2(420f, 280f);
-        private static readonly Vector2 MaximumSize = new Vector2(900f, 650f);
+        private static readonly Vector2 DefaultSize = new Vector2(920f, 620f);
+        private static readonly Vector2 MinimumSize = new Vector2(620f, 420f);
+        private static readonly Vector2 MaximumSize = new Vector2(1400f, 900f);
         private Vector2 _windowSize = DefaultSize;
         private RectTransform _root;
         private RectTransform _canvasRect;
@@ -26,8 +26,8 @@ namespace AncientWarfare3.ui.windows
         private InputField _courtNameInput;
         private Text _status;
         private CustomCourtTemplate _template;
-        private CourtWorkflowOfficeCard _edgeSource;
-        private CourtWorkflowOfficeCard _edgeTarget;
+        private CourtWorkflowVacancyCard _edgeSource;
+        private CourtWorkflowVacancyCard _edgeTarget;
         private WideWindowChrome _chrome;
 
         public static void Open(long kingdomId)
@@ -173,13 +173,10 @@ namespace AncientWarfare3.ui.windows
             if (contentRect != null)
                 contentRect.sizeDelta = new Vector2(contentWidth, viewportHeight);
             if (_root == null) return;
-            _root.anchorMin = Vector2.zero;
-            _root.anchorMax = Vector2.one;
+            _root.anchorMin = _root.anchorMax = new Vector2(0.5f, 0.5f);
             _root.pivot = new Vector2(0.5f, 0.5f);
-            _root.offsetMin = Vector2.zero;
-            _root.offsetMax = Vector2.zero;
-            _root.sizeDelta = Vector2.zero;
-            _root.anchoredPosition = Vector2.zero;
+            _root.sizeDelta = new Vector2(contentWidth, viewportHeight);
+            _root.anchoredPosition = new Vector2(0f, -8f);
             _toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f);
             _toolPanel.pivot = new Vector2(1f, 1f);
             _toolPanel.anchoredPosition = new Vector2(-4f, -4f);
@@ -236,7 +233,7 @@ namespace AncientWarfare3.ui.windows
         {
             if (_workspaceRect == null || _template?.Offices == null) return;
             foreach (Transform child in _workspaceRect)
-                if (child.GetComponent<CourtWorkflowOfficeCard>() != null ||
+                if (child.GetComponent<CourtWorkflowVacancyCard>() != null ||
                     child.GetComponent<CourtWorkflowEdgeView>() != null)
                     Destroy(child.gameObject);
             CourtWorkflowCanvas canvas = _workspaceRect.GetComponent<
@@ -244,12 +241,13 @@ namespace AncientWarfare3.ui.windows
             canvas.Clear();
             foreach (CustomCourtOffice office in _template.Offices)
             {
-                CourtWorkflowOfficeCard card = CourtWorkflowOfficeCard.Create(
+                CourtWorkflowVacancyCard card = CourtWorkflowVacancyCard.Create(
                     _workspaceRect, office, SelectCard, DeleteOffice,
                     _ => RenderEdges());
                 canvas.AddCard(card);
                 RectTransform rect = card.GetComponent<RectTransform>();
-                rect.sizeDelta = new Vector2(148f, 54f);
+                rect.sizeDelta = new Vector2(CourtWorkflowVacancyCard.Width,
+                    CourtWorkflowVacancyCard.Height);
                 if (office.Layout == null)
                     office.Layout = new CustomCourtOfficeLayout();
                 rect.anchoredPosition = new Vector2(office.Layout.X,
@@ -268,9 +266,9 @@ namespace AncientWarfare3.ui.windows
                 CourtWorkflowCanvas>();
             foreach (CustomCourtEdge edge in _template.Edges)
             {
-                CourtWorkflowOfficeCard from = FindCard(canvas,
+                CourtWorkflowVacancyCard from = FindCard(canvas,
                     edge?.FromOfficeId);
-                CourtWorkflowOfficeCard to = FindCard(canvas,
+                CourtWorkflowVacancyCard to = FindCard(canvas,
                     edge?.ToOfficeId);
                 if (from == null || to == null) continue;
                 GameObject viewObject = new GameObject("CourtWorkflowEdge",
@@ -286,16 +284,16 @@ namespace AncientWarfare3.ui.windows
             }
         }
 
-        private static CourtWorkflowOfficeCard FindCard(
+        private static CourtWorkflowVacancyCard FindCard(
             CourtWorkflowCanvas canvas, string officeId)
         {
-            foreach (CourtWorkflowOfficeCard card in canvas.Cards)
+            foreach (CourtWorkflowVacancyCard card in canvas.Cards)
                 if (card?.Office != null && string.Equals(card.Office.Id,
                     officeId, StringComparison.Ordinal)) return card;
             return null;
         }
 
-        private void SelectCard(CourtWorkflowOfficeCard card)
+        private void SelectCard(CourtWorkflowVacancyCard card)
         {
             if (_edgeSource == null) _edgeSource = card;
             else if (_edgeTarget == null && card != _edgeSource) _edgeTarget = card;
@@ -359,7 +357,7 @@ namespace AncientWarfare3.ui.windows
             RenderCards();
         }
 
-        private void DeleteOffice(CourtWorkflowOfficeCard card)
+        private void DeleteOffice(CourtWorkflowVacancyCard card)
         {
             string officeId = card?.Office?.Id;
             if (string.IsNullOrEmpty(officeId)) return;
