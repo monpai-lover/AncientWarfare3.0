@@ -116,6 +116,14 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(officeSettings, "AWStringDropdown.Create(");
         Contains(officeSettings, "CustomCourtOfficePresetRules.CanApply(");
         Contains(officeSettings, "definition.AvailableIn(institution)");
+        Contains(officeSettings,
+            "if (!TrySyncDraftFromControls(false)) return;");
+        Contains(officeSettings,
+            "if (!TrySyncDraftFromControls(true)) return;");
+        Contains(officeSettings,
+            "private bool TrySyncDraftFromControls(bool includePresetFields)");
+        Contains(officeSettings, "_selectedPresetId = string.Empty;");
+        Contains(officeSettings, "30f + row * 38f");
         Contains(officeSettings, "AddFieldHelp(_basePanel, \"Grade\"");
         Contains(officeSettings, "AddFieldHelp(_basePanel, \"MinimumRank\"");
         Contains(officeSettings, "AddFieldHelp(_basePanel, \"RequiredSchool\"");

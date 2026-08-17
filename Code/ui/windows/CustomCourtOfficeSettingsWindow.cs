@@ -114,6 +114,7 @@ namespace AncientWarfare3.ui.windows
                 CancelOfficeSettings();
                 return;
             }
+            _selectedPresetId = string.Empty;
             BindDraft();
             RefreshPresetOptions();
             ShowTab(false);
@@ -413,58 +414,7 @@ namespace AncientWarfare3.ui.windows
         private void ConfirmOfficeSettings()
         {
             if (_draft == null) return;
-            if (!TryInt(_gradeInput.text, 1, 100, out int grade) ||
-                !TryInt(_slotsInput.text, 1, 32, out int slots) ||
-                !TryInt(_minimumRankInput.text, 0, 100, out int minimumRank))
-            {
-                SetStatus(AW_L10n.Text(
-                    "aw_custom_court_settings_invalid_number",
-                    "One or more numeric values are invalid."));
-                return;
-            }
-            string name = _nameInput.text?.Trim() ?? string.Empty;
-            if (string.IsNullOrEmpty(name))
-            {
-                SetStatus(AW_L10n.Text(
-                    "aw_custom_court_settings_name_required",
-                    "Enter an office name."));
-                return;
-            }
-
-            var effects = new List<CustomCourtOfficeEffect>();
-            foreach (EffectRow row in _effectRows)
-            {
-                if (!row.Enabled) continue;
-                if (!TryFloat(row.ValueInput.text, out float value))
-                {
-                    SetStatus(AW_L10n.Text(
-                        "aw_custom_court_settings_invalid_effect_value",
-                        "An effect value is invalid."));
-                    return;
-                }
-                value = CustomCourtTemplateRules.ClampEffectValue(row.Mode,
-                    value);
-                effects.Add(new CustomCourtOfficeEffect
-                {
-                    Id = row.Id,
-                    Mode = row.Mode,
-                    Scope = row.Scope,
-                    Value = value
-                });
-            }
-
-            _draft.Name = _draft.Name ?? new CustomCourtLocalizedText();
-            _draft.Name.Chinese = name;
-            _draft.Name.English = name;
-            _draft.Grade = grade;
-            _draft.Slots = slots;
-            _draft.Requirements = _draft.Requirements ??
-                new CustomCourtOfficeRequirement();
-            _draft.Requirements.MinimumRank = minimumRank;
-            _draft.Requirements.RequiredTraitId =
-                _traitInput.text?.Trim() ?? string.Empty;
-            _draft.Effects = CustomCourtOfficeSettingsRules.NormalizeEffects(
-                effects);
+            if (!TrySyncDraftFromControls(true)) return;
 
             CustomCourtTemplateValidationError error =
                 CustomCourtOfficeSettingsRules.ValidateDraft(_draft);
@@ -481,6 +431,70 @@ namespace AncientWarfare3.ui.windows
                 CustomCourtOfficeSettingsRules.CloneOffice(_draft);
             callback?.Invoke(result);
             ReturnToEditor();
+        }
+
+        private bool TrySyncDraftFromControls(bool includePresetFields)
+        {
+            if (_draft == null) return false;
+            int grade = _draft.Grade;
+            if ((includePresetFields &&
+                 !TryInt(_gradeInput.text, 1, 100, out grade)) ||
+                !TryInt(_slotsInput.text, 1, 32, out int slots) ||
+                !TryInt(_minimumRankInput.text, 0, 100,
+                    out int minimumRank))
+            {
+                SetStatus(AW_L10n.Text(
+                    "aw_custom_court_settings_invalid_number",
+                    "One or more numeric values are invalid."));
+                return false;
+            }
+            string name = _nameInput.text?.Trim() ?? string.Empty;
+            if (includePresetFields && string.IsNullOrEmpty(name))
+            {
+                SetStatus(AW_L10n.Text(
+                    "aw_custom_court_settings_name_required",
+                    "Enter an office name."));
+                return false;
+            }
+
+            var effects = new List<CustomCourtOfficeEffect>();
+            foreach (EffectRow row in _effectRows)
+            {
+                if (!row.Enabled) continue;
+                if (!TryFloat(row.ValueInput.text, out float value))
+                {
+                    SetStatus(AW_L10n.Text(
+                        "aw_custom_court_settings_invalid_effect_value",
+                        "An effect value is invalid."));
+                    return false;
+                }
+                value = CustomCourtTemplateRules.ClampEffectValue(row.Mode,
+                    value);
+                effects.Add(new CustomCourtOfficeEffect
+                {
+                    Id = row.Id,
+                    Mode = row.Mode,
+                    Scope = row.Scope,
+                    Value = value
+                });
+            }
+
+            if (includePresetFields)
+            {
+                _draft.Name = _draft.Name ?? new CustomCourtLocalizedText();
+                _draft.Name.Chinese = name;
+                _draft.Name.English = name;
+                _draft.Grade = grade;
+            }
+            _draft.Slots = slots;
+            _draft.Requirements = _draft.Requirements ??
+                new CustomCourtOfficeRequirement();
+            _draft.Requirements.MinimumRank = minimumRank;
+            _draft.Requirements.RequiredTraitId =
+                _traitInput.text?.Trim() ?? string.Empty;
+            _draft.Effects = CustomCourtOfficeSettingsRules.NormalizeEffects(
+                effects);
+            return true;
         }
 
         private void CancelOfficeSettings()
@@ -614,6 +628,7 @@ namespace AncientWarfare3.ui.windows
                 ShowLockedPreset(option);
                 return;
             }
+            if (!TrySyncDraftFromControls(false)) return;
             string name = AW_L10n.Text(definition.LocalizationKey,
                 definition.Id);
             CustomCourtOfficePresetRules.ApplyDefinition(_draft, definition,
@@ -741,7 +756,7 @@ namespace AncientWarfare3.ui.windows
                 Transform field = panel.Find(names[column][row]);
                 if (field == null) continue;
                 SetRect(field.GetComponent<RectTransform>(), x,
-                    30f + row * 40f, width, 38f);
+                    30f + row * 38f, width, 38f);
             }
         }
 

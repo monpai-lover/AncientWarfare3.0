@@ -75,6 +75,8 @@ namespace AncientWarfare3.core.court
                 return CustomCourtTemplateValidationError.InvalidEffect;
             foreach (CustomCourtOfficeEffect effect in office.Effects)
             {
+                if (effect == null)
+                    return CustomCourtTemplateValidationError.InvalidEffect;
                 if (!IsEffectValueValid(effect.Id, effect.Mode, effect.Value) ||
                     !IsValidScope(effect.Scope))
                     return CustomCourtTemplateValidationError.InvalidEffectValue;

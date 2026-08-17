@@ -29,6 +29,15 @@ internal static class CustomCourtTemplateRulesTests
                 CustomCourtEffectId.TaxIncome,
                 CustomCourtEffectMode.AddPercent, 999),
             "effects are bounded by their preset module");
+        False(CustomCourtTemplateJsonCodec.TryImport(
+                "{\"Id\":\"court_broken\",\"Name\":{\"Chinese\":\"坏\",\"English\":\"Broken\"}," +
+                "\"Offices\":[{\"Id\":\"office_a\",\"Name\":{\"Chinese\":\"坏官\",\"English\":\"Broken Office\"}," +
+                "\"Layer\":\"central\",\"Grade\":10,\"Slots\":1,\"Effects\":[null]}],\"Edges\":[]}",
+                out _, out CustomCourtTemplateValidationError malformedError),
+            "structurally malformed effect entries are rejected");
+        Equal(CustomCourtTemplateValidationError.InvalidEffect,
+            malformedError,
+            "null effect entries report the invalid-effect category");
 
         string modRoot = Path.Combine(Path.GetTempPath(), "aw3-courtjson-" +
             Guid.NewGuid().ToString("N"));
