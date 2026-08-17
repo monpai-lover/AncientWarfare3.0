@@ -24,6 +24,11 @@ namespace AncientWarfare3.core.court
                 return Array.Empty<string>();
             string institution = CourtInstitutionService.GetInstitution(
                 pKingdom);
+            if (CustomCourtRuntime.HasInstance(pKingdom))
+                return CustomCourtRuntime.Resolver.ResolveGraph(
+                    CustomCourtRuntime.KingdomKey(pKingdom), profile,
+                    institution).Where(p => p?.Layer == pLayer)
+                    .Select(p => p.Id).ToArray();
             return profile.OfficeIdsForInstitution(institution)
                 .Where(p => profile.FindOffice(p)?.Layer == pLayer)
                 .ToArray();
@@ -32,6 +37,11 @@ namespace AncientWarfare3.core.court
         public static CourtOfficeDefinition FindOffice(Kingdom pKingdom,
             string pOfficeId)
         {
+            if (CustomCourtRuntime.HasInstance(pKingdom))
+                return CustomCourtRuntime.Resolver.Resolve(
+                    CustomCourtRuntime.KingdomKey(pKingdom), For(pKingdom),
+                    CourtInstitutionService.GetInstitution(pKingdom),
+                    pOfficeId);
             return For(pKingdom)?.FindOffice(pOfficeId);
         }
 
@@ -55,8 +65,9 @@ namespace AncientWarfare3.core.court
             if (office == null || pLayer != null &&
                 !string.Equals(office.Layer, pLayer,
                     StringComparison.Ordinal)) return false;
-            return office.AvailableIn(
-                CourtInstitutionService.GetInstitution(pKingdom));
+            return CustomCourtRuntime.HasInstance(pKingdom) ||
+                office.AvailableIn(CourtInstitutionService.GetInstitution(
+                    pKingdom));
         }
 
         public static bool IsMilitaryOfficeAcrossProfiles(string pOfficeId)

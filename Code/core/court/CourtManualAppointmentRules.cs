@@ -93,6 +93,14 @@ namespace AncientWarfare3.core.court
             return officeInCurrentTier && officeVacant && candidateEligible;
         }
 
+        public static bool CanCommit(bool officeInCurrentTier,
+            bool officeVacant, bool candidateEligible,
+            bool prerequisitesSatisfied)
+        {
+            return CanCommit(officeInCurrentTier, officeVacant,
+                candidateEligible) && prerequisitesSatisfied;
+        }
+
         public static bool CanUseManualAppointment(string pInstitution,
             bool pRoyalAppointmentsUnlocked)
         {

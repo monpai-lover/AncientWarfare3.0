@@ -24,6 +24,13 @@ if (args.Length == 1 && args[0] == "--custom-court-instance")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--custom-court-prerequisite")
+{
+    CustomCourtPrerequisiteRulesTests.Run();
+    Console.WriteLine("Custom court prerequisite rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--tributary-protection-only")
 {
     TributaryPaymentRulesTests.Run();
