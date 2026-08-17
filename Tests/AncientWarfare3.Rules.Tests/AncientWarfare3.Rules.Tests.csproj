@@ -6,12 +6,19 @@
     <Nullable>disable</Nullable>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
     <DefineConstants>$(DefineConstants);AW3_RULES_TESTS</DefineConstants>
+    <WorldBoxManaged Condition="'$(WorldBoxManaged)' == ''">D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed</WorldBoxManaged>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(WorldBoxManaged)\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Compile Include="Program.cs.txt" />
     <Compile Include="CustomCourtTemplateRulesTests.cs.txt" />
+    <Compile Include="CustomCourtTemplateCodecTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateModels.cs" Link="Production\CustomCourtTemplateModels.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateRules.cs" Link="Production\CustomCourtTemplateRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateJsonCodec.cs" Link="Production\CustomCourtTemplateJsonCodec.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateStore.cs" Link="Production\CustomCourtTemplateStore.cs" />
     <Compile Include="ArmyConquestReserveRulesTests.cs.txt" />
     <Compile Include="PeacetimeCitizenJobRulesTests.cs.txt" />
     <Compile Include="RtsMemberGeneralCombatRegressionTests.cs.txt" />
