@@ -1,0 +1,25 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CustomCourtApplicationRulesTests
+{
+    public static void Run()
+    {
+        Equal(CustomCourtOfficeMigration.KeepIncumbent,
+            CustomCourtApplicationRules.ResolveMigration(true, true, true),
+            "compatible incumbent stays on a matching office");
+        Equal(CustomCourtOfficeMigration.PreserveLegacy,
+            CustomCourtApplicationRules.ResolveMigration(true, false, false),
+            "incompatible incumbent is preserved as legacy");
+        Equal(CustomCourtOfficeMigration.Vacate,
+            CustomCourtApplicationRules.ResolveMigration(false, true, false),
+            "removed office vacates its incumbent");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

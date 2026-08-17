@@ -27,6 +27,12 @@
     <Compile Include="..\..\Code\core\court\CourtDefinitionResolver.cs" Link="Production\CourtDefinitionResolver.cs" />
     <Compile Include="CustomCourtPrerequisiteRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CustomCourtPrerequisiteRules.cs" Link="Production\CustomCourtPrerequisiteRules.cs" />
+    <Compile Include="CustomCourtApplicationRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtApplicationRules.cs" Link="Production\CustomCourtApplicationRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtApplicationService.cs" Link="Production\CustomCourtApplicationService.cs" />
+    <Compile Include="CustomCourtEffectRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtEffectRules.cs" Link="Production\CustomCourtEffectRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtEffectService.cs" Link="Production\CustomCourtEffectService.cs" />
     <Compile Include="ArmyConquestReserveRulesTests.cs.txt" />
     <Compile Include="PeacetimeCitizenJobRulesTests.cs.txt" />
     <Compile Include="RtsMemberGeneralCombatRegressionTests.cs.txt" />

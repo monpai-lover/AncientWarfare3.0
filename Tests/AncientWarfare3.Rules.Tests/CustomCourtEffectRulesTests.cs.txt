@@ -1,0 +1,39 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CustomCourtEffectRulesTests
+{
+    public static void Run()
+    {
+        Equal(15f, CustomCourtEffectRules.CombineAdditivePercent(10f, 5f),
+            "additive percentage effects stack deterministically");
+        Equal(25f, CustomCourtEffectRules.ClampValue(
+                CustomCourtEffectId.TaxIncome, 300f),
+            "tax income is clamped to its preset bound");
+        False(CustomCourtEffectRules.CanApplyToScope(
+                CustomCourtEffectId.ArmyMorale, CustomCourtEffectScope.City),
+            "army morale cannot target a city scope");
+        True(CustomCourtEffectRules.CanApplyToScope(
+                CustomCourtEffectId.ArmyMorale, CustomCourtEffectScope.Army),
+            "army morale targets armies");
+    }
+
+    private static void True(bool actual, string message)
+    {
+        if (!actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool actual, string message)
+    {
+        if (actual)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

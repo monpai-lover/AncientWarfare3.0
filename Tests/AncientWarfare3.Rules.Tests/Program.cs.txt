@@ -31,6 +31,20 @@ if (args.Length == 1 && args[0] == "--custom-court-prerequisite")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--custom-court-application")
+{
+    CustomCourtApplicationRulesTests.Run();
+    Console.WriteLine("Custom court application rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--custom-court-effect")
+{
+    CustomCourtEffectRulesTests.Run();
+    Console.WriteLine("Custom court effect rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--tributary-protection-only")
 {
     TributaryPaymentRulesTests.Run();
