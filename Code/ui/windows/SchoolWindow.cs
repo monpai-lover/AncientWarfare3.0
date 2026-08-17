@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui.items;
@@ -682,16 +683,16 @@ namespace AncientWarfare3.ui.windows
                 if (item.Record.ActorId >= 0) seenActors.Add(item.Record.ActorId);
             }
 
-            // The runtime book is normally authoritative, but a window can be
-            // refreshed during world-load before that index has been rebuilt.
-            // Read the durable active rows as a fallback so a populated school
-            // never renders as an empty lineage during that short interval.
+            // Keep closed membership rows in the lineage. They are the durable
+            // historical edges that survive actor destruction and world reload.
             var memberRecords = new Dictionary<long, SchoolMembershipRecord>();
             foreach (SchoolMembershipRecord record in
-                     HistoricalSchoolStore.LoadActiveMemberships())
+                     HistoricalSchoolStore.LoadMembershipHistory(pSchoolId))
                 if (record != null && string.Equals(record.SchoolId, pSchoolId,
                         StringComparison.Ordinal))
                     memberRecords[record.ActorId] = record;
+            // A just-created membership may still be buffered in the runtime
+            // book while its durable row is waiting for the write queue.
             foreach (long actorId in SchoolMembershipService.Members(pSchoolId))
             {
                 SchoolMembershipRecord record = SchoolMembershipService.GetActive(actorId);
@@ -699,7 +700,9 @@ namespace AncientWarfare3.ui.windows
             }
             var members = memberRecords.Values
                 .Where(p => p != null && !seenActors.Contains(p.ActorId))
-                .OrderByDescending(p => p.Reputation)
+                .OrderBy(p => p.Generation)
+                .ThenBy(p => p.StartYear)
+                .ThenByDescending(p => p.Reputation)
                 .ThenBy(p => p.ActorId)
                 .ToArray();
             foreach (SchoolMembershipRecord membership in members)
@@ -708,22 +711,26 @@ namespace AncientWarfare3.ui.windows
                 Actor teacher = membership.TeacherActorId >= 0
                     ? World.world?.units?.get(membership.TeacherActorId)
                     : null;
+                bool studentAlive = student?.data != null && student.isAlive() &&
+                                    !student.isRekt();
+                bool explicitlyDead = string.Equals(membership.EndReason, "death",
+                    StringComparison.OrdinalIgnoreCase);
                 rows.Add(new LineageDisplayRow
                 {
-                    StudentName = student?.data != null
-                        ? SafeActorName(student)
-                        : HistoricalSchoolMasterRegistry.Find(membership.SourceId)?.CanonicalName ??
-                          ("actor " + membership.ActorId),
-                    TeacherName = teacher?.data != null ? SafeActorName(teacher) : "",
+                    StudentName = ResolveLineageActorName(student,
+                        membership.ActorId, membership.SourceId),
+                    TeacherName = ResolveLineageActorName(teacher,
+                        membership.TeacherActorId, ""),
                     Generation = membership.Generation,
                     Reputation = membership.Reputation,
-                    Alive = student?.data != null && student.isAlive() && !student.isRekt(),
+                    Alive = studentAlive && !explicitlyDead,
                     ActorId = membership.ActorId,
                     SortOrder = order++
                 });
             }
 
-            LineageDisplayRow[] visibleRows = rows.Take(_lineageRows.Count).ToArray();
+            EnsureLineageRows(rows.Count);
+            LineageDisplayRow[] visibleRows = rows.ToArray();
             float cursor = pTop;
             for (int i = 0; i < _lineageRows.Count; i++)
             {
@@ -741,6 +748,17 @@ namespace AncientWarfare3.ui.windows
                 cursor += row.LayoutHeight(DetailWidth()) + 4f;
             }
             return rows.Count == 0 ? pTop : cursor;
+        }
+
+        private void EnsureLineageRows(int pRequiredCount)
+        {
+            int required = Math.Max(0, pRequiredCount);
+            while (_lineageRows.Count < required)
+            {
+                SchoolLineageRowView row = SchoolLineageRowView.Create(_detailContent);
+                row.gameObject.SetActive(false);
+                _lineageRows.Add(row);
+            }
         }
 
         private static string RecentHistory(string pSchoolId)
@@ -815,6 +833,33 @@ namespace AncientWarfare3.ui.windows
         {
             try { return pActor?.getName() ?? pActor?.data?.name ?? ""; }
             catch { return pActor?.data?.name ?? ""; }
+        }
+
+        private static string ResolveLineageActorName(Actor pActor,
+            long pActorId, string pHistoricalSourceId)
+        {
+            if (pActor?.data != null)
+            {
+                string liveName = SafeActorName(pActor);
+                if (!string.IsNullOrWhiteSpace(liveName)) return liveName;
+            }
+            if (pActorId >= 0)
+            {
+                try
+                {
+                    string archivedName = LineageArchiveReader.ReadRow(pActorId)?
+                        .display_name;
+                    if (!string.IsNullOrWhiteSpace(archivedName)) return archivedName;
+                }
+                catch { }
+            }
+            if (!string.IsNullOrWhiteSpace(pHistoricalSourceId))
+            {
+                string masterName = HistoricalSchoolMasterRegistry.
+                    Find(pHistoricalSourceId)?.CanonicalName;
+                if (!string.IsNullOrWhiteSpace(masterName)) return masterName;
+            }
+            return pActorId >= 0 ? "actor " + pActorId : "";
         }
 
         private void HideDetailRows(bool pReleaseActorReferences)

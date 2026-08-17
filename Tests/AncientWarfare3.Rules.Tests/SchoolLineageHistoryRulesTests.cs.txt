@@ -1,0 +1,32 @@
+using System;
+using System.IO;
+
+internal static class SchoolLineageHistoryRulesTests
+{
+    public static void Run()
+    {
+        string root = Environment.CurrentDirectory;
+        string store = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "schools", "HistoricalSchoolStore.cs"));
+        string window = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "SchoolWindow.cs"));
+
+        True(store.Contains("LoadMembershipHistory", StringComparison.Ordinal),
+            "school persistence exposes historical membership reads");
+        True(store.Contains("ACTIVE=1 OR ACTIVE=0", StringComparison.Ordinal),
+            "historical membership reads include closed records");
+        True(window.Contains("LoadMembershipHistory", StringComparison.Ordinal),
+            "school lineage display consumes historical memberships");
+        True(store.Contains("ValueInt(reader, 10, -1)", StringComparison.Ordinal),
+            "historical membership reads preserve end year");
+        True(window.Contains("EndReason", StringComparison.Ordinal),
+            "school lineage display preserves historical end reason");
+        True(window.Contains("EnsureLineageRows", StringComparison.Ordinal),
+            "school lineage display grows beyond the initial row pool");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+}

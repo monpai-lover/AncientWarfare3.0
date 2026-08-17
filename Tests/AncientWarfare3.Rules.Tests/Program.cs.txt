@@ -98,6 +98,13 @@ if (args.Length == 1 && args[0] == "--actor-kingdom-safety")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--school-lineage-history")
+{
+    SchoolLineageHistoryRulesTests.Run();
+    Console.WriteLine("School lineage history rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--kingdom-founder-safety")
 {
     KingdomFounderSpeciesSafetyRulesTests.Run();

@@ -39,6 +39,7 @@
     <Compile Include="MandateBorderWallRulesTests.cs.txt" />
     <Compile Include="MandateBorderDecisionRulesTests.cs.txt" />
     <Compile Include="MandateBorderWallRefreshRulesTests.cs.txt" />
+    <Compile Include="SchoolLineageHistoryRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\MandateBorderWallState.cs" Link="Production\MandateBorderWallState.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateBorderWallRefreshRules.cs" Link="Production\MandateBorderWallRefreshRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateBorderWallRules.cs" Link="Production\MandateBorderWallRules.cs" />

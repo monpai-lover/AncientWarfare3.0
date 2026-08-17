@@ -985,6 +985,49 @@ namespace AncientWarfare3.core.schools
             return result;
         }
 
+        public static List<SchoolMembershipRecord> LoadMembershipHistory(
+            string pSchoolId)
+        {
+            var result = new List<SchoolMembershipRecord>();
+            if (DB == null || string.IsNullOrWhiteSpace(pSchoolId)) return result;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT MEMBERSHIP_ID, ACTOR_ID, SCHOOL_ID, " +
+                    "SOURCE_TYPE, SOURCE_ID, TEACHER_ACTOR_ID, CITY_ID, GENERATION, " +
+                    "REPUTATION, START_YEAR, END_YEAR, ACTIVE, END_REASON, STANDING, " +
+                    "LOYALTY_UNTIL_YEAR FROM " + MembershipTable +
+                    " WHERE SCHOOL_ID=@school AND (ACTIVE=1 OR ACTIVE=0) " +
+                    "ORDER BY ACTOR_ID, START_YEAR DESC, MEMBERSHIP_ID DESC";
+                command.Parameters.AddWithValue("@school", pSchoolId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                var seenActors = new HashSet<long>();
+                while (reader.Read())
+                {
+                    long actorId = ValueLong(reader, 1, -1L);
+                    if (actorId < 0 || seenActors.Contains(actorId)) continue;
+                    if (!Enum.TryParse(ValueString(reader, 3), ignoreCase: false,
+                            out SchoolMembershipSource source)) continue;
+                    if (!Enum.TryParse(ValueString(reader, 13), ignoreCase: false,
+                            out HistoricalSchoolStanding standing)) continue;
+                    seenActors.Add(actorId);
+                    result.Add(new SchoolMembershipRecord(ValueLong(reader, 0), actorId,
+                        ValueString(reader, 2), source, ValueString(reader, 4),
+                        ValueLong(reader, 5, -1), ValueLong(reader, 6, -1),
+                        ValueInt(reader, 7), (float)ValueDouble(reader, 8),
+                        ValueInt(reader, 9), ValueInt(reader, 10, -1),
+                        ValueInt(reader, 11, 0) == 1, ValueString(reader, 12),
+                        standing, ValueInt(reader, 14, -1)));
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore load membership history failed: " +
+                                    error.Message);
+            }
+            return result;
+        }
+
         public static bool InsertMembership(SchoolMembershipRecord pRecord, double pTime)
         {
             if (DB == null || pRecord == null || !pRecord.IsValid || !pRecord.Active) return false;
