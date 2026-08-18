@@ -14,6 +14,8 @@
              Link="Production/LocalCourtOfficeRules.cs" />
     <Compile Include="../../Code/core/court/LocalOfficialTermRules.cs"
              Link="Production/LocalOfficialTermRules.cs" />
+    <Compile Include="../../Code/core/court/LocalOfficialCandidateRules.cs"
+             Link="Production/LocalOfficialCandidateRules.cs" />
     <Compile Include="../../Code/core/court/OfficialCirculationRules.cs"
              Link="Production/OfficialCirculationRules.cs" />
   </ItemGroup>

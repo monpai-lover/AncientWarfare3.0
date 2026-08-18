@@ -34,11 +34,42 @@ internal static class LocalGovernmentRulesTests
                 CourtOfficeId.Constable,
                 xiaCirculationUnlocked: false),
             "local constables also circulate");
+
+        True(LocalOfficialCandidateRules.CanEnter(
+                alive: true, adult: true, slave: false,
+                alreadyOfficial: false, king: false, heir: false,
+                examinationEnabled: true, qualification: "juren",
+                participatedAndFailedHigherStage: false),
+            "local-stage pass enters the local pool");
+        True(LocalOfficialCandidateRules.CanEnter(
+                alive: true, adult: true, slave: false,
+                alreadyOfficial: false, king: false, heir: false,
+                examinationEnabled: true, qualification: "none",
+                participatedAndFailedHigherStage: true),
+            "higher-stage non-finalist remains locally employable");
+        False(LocalOfficialCandidateRules.CanEnter(
+                alive: true, adult: true, slave: false,
+                alreadyOfficial: false, king: false, heir: true,
+                examinationEnabled: true, qualification: "jinshi",
+                participatedAndFailedHigherStage: false),
+            "an heir cannot enter a local office");
+        Equal(25, LocalOfficialCandidateRules.HometownBonus,
+            "hometown bonus is explicit");
+        True(LocalOfficialCandidateRules.Score(60, 50,
+                 sameNativeCity: true) >
+             LocalOfficialCandidateRules.Score(90, 50,
+                 sameNativeCity: false),
+            "qualified same-native-city recommendation is material");
     }
 
     private static void True(bool pValue, string pMessage)
     {
         if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        True(!pValue, pMessage);
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)
