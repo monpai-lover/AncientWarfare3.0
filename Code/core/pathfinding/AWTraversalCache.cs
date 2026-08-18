@@ -202,6 +202,13 @@ namespace AncientWarfare3.core.pathfinding
             return (_overlayGeneration ?? _current)?.Retain();
         }
 
+        public int OceanComponentOf(int pTileId)
+        {
+            AssertMainThread();
+            AWTraversalGeneration generation = _overlayGeneration ?? _current;
+            return generation?.OceanComponentOf(pTileId) ?? -1;
+        }
+
         public void MarkDirty(WorldTile pTile)
         {
             AssertMainThread();

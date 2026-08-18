@@ -2,16 +2,19 @@ namespace AncientWarfare3.core.pathfinding
 {
     internal readonly struct AWDockEndpoint
     {
-        internal AWDockEndpoint(long pId, int pTileId, int pWaterComponent)
+        internal AWDockEndpoint(long pId, int pTileId, int pWaterComponent,
+            int pLegacyWaterComponent = -1)
         {
             Id = pId;
             TileId = pTileId;
             WaterComponent = pWaterComponent;
+            LegacyWaterComponent = pLegacyWaterComponent;
         }
 
         internal long Id { get; }
         internal int TileId { get; }
         internal int WaterComponent { get; }
+        internal int LegacyWaterComponent { get; }
         internal bool IsValid => Id > 0 && TileId >= 0 && WaterComponent >= 0;
     }
 

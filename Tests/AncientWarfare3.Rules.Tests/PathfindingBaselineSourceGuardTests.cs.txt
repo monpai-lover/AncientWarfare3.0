@@ -1,0 +1,40 @@
+using System;
+using System.IO;
+
+internal static class PathfindingBaselineSourceGuardTests
+{
+    internal static void Run()
+    {
+        string finder = Read("Code", "core", "pathfinding", "AWPathFinder.cs");
+        int loop = finder.IndexOf("private void WorkerLoop()",
+            StringComparison.Ordinal);
+        int wait = finder.IndexOf("_queueSignal.Wait()", loop,
+            StringComparison.Ordinal);
+        int dequeue = finder.IndexOf("TryTakeWork(out AWScheduledPathWork work)",
+            loop, StringComparison.Ordinal);
+        Assert(loop >= 0 && wait > loop && dequeue > wait,
+            "path workers consume one semaphore wake before dequeuing, matching Cultiway master");
+        Assert(!finder.Contains("_queueSignal.Wait(50)"),
+            "path workers do not accumulate timed semaphore wake debt");
+
+        string allPathSources = string.Join("\n", Directory.GetFiles(
+            Path.Combine(Directory.GetCurrentDirectory(), "Code", "core",
+                "pathfinding"), "*.cs", SearchOption.TopDirectoryOnly)
+            .Select(File.ReadAllText));
+        Assert(!allPathSources.Contains("Cultiway.Core.Pathfinding") &&
+               !allPathSources.Contains("PortalAwarePathGenerator") &&
+               !allPathSources.Contains("TrainTransportSystem"),
+            "AW3 pathfinding keeps Cultiway portal and train content outside the migration boundary");
+    }
+
+    private static string Read(params string[] pParts)
+    {
+        return File.ReadAllText(Path.Combine(
+            new[] { Directory.GetCurrentDirectory() }.Concat(pParts).ToArray()));
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

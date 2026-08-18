@@ -302,12 +302,9 @@ namespace AncientWarfare3.core.pathfinding
             {
                 while (true)
                 {
-                    if (!TryTakeWork(out AWScheduledPathWork work))
-                    {
-                        if (Volatile.Read(ref _stopping) != 0) break;
-                        _queueSignal.Wait(50);
-                        continue;
-                    }
+                    _queueSignal.Wait();
+                    if (Volatile.Read(ref _stopping) != 0) break;
+                    if (!TryTakeWork(out AWScheduledPathWork work)) continue;
                     _diagnostics?.OnDequeued(work.Priority, work.EnqueuedAt);
 
                     PathfindingTask task = null;

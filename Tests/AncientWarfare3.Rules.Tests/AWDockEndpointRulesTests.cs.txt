@@ -1,0 +1,30 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.pathfinding;
+
+internal static class AWDockEndpointRulesTests
+{
+    internal static void Run()
+    {
+        Assert(AWDockEndpointRules.ResolveWaterComponent(7, 99) == 7,
+            "captured traversal water component takes precedence over the legacy island id");
+        Assert(AWDockEndpointRules.ResolveWaterComponent(-1, 99) == 99,
+            "dock registration can use the legacy component before traversal capture is ready");
+        Assert(AWDockEndpointRules.SameWaterComponent(4, 4, 90, 91),
+            "two docks on the same captured water component form a route");
+        Assert(!AWDockEndpointRules.SameWaterComponent(4, 5, 90, 91),
+            "different captured water components never form a route");
+        Assert(!AWDockEndpointRules.SameWaterComponent(-1, -1, -1, -1),
+            "unresolved water components never form a route");
+        string service = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWDockTransportService.cs"));
+        Assert(service.Contains("AWDockEndpointRules.ResolveWaterComponent"),
+            "dock registry resolves captured water components instead of persisting island ids");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

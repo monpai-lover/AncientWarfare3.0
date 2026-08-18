@@ -282,6 +282,13 @@ namespace AncientWarfare3.core.pathfinding
             return pTile.Exists && pTile.Id == pTileId;
         }
 
+        internal int OceanComponentOf(int pTileId)
+        {
+            return TryGet(pTileId, out AWTileTraversalSnapshot tile)
+                ? tile.OceanComponent
+                : -1;
+        }
+
         internal AWTileTraversalSnapshot[][] CopyChunkReferences()
         {
             if (_baseGeneration == null)

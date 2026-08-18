@@ -6,6 +6,7 @@ namespace AncientWarfare3.core.pathfinding
     {
         private static readonly AWDockRouteRegistry Registry =
             new AWDockRouteRegistry();
+        private static int _registeredGeneration = -1;
 
         internal static void Register(Docks pDocks)
         {
@@ -18,10 +19,15 @@ namespace AncientWarfare3.core.pathfinding
                     pDocks.recalculateOceanTiles();
                 for (int i = 0; i < pDocks.tiles_ocean.Count; i++)
                 {
-                    int component = pDocks.tiles_ocean[i]?.region?.island?.id ?? -1;
+                    WorldTile ocean = pDocks.tiles_ocean[i];
+                    int legacyComponent = ocean?.region?.island?.id ?? -1;
+                    int component = AWPathfindingBootstrap.Cache
+                        .OceanComponentOf(ocean?.data?.tile_id ?? -1);
+                    component = AWDockEndpointRules.ResolveWaterComponent(
+                        component, legacyComponent);
                     if (component < 0) continue;
                     Registry.Register(new AWDockEndpoint(building.data.id,
-                        dockTile.data.tile_id, component));
+                        dockTile.data.tile_id, component, legacyComponent));
                     return;
                 }
             }
@@ -34,13 +40,23 @@ namespace AncientWarfare3.core.pathfinding
             catch { }
         }
 
-        internal static void Clear() => Registry.Clear();
+        internal static void Clear()
+        {
+            Registry.Clear();
+            _registeredGeneration = -1;
+        }
 
         internal static bool TryResolveRoute(WorldTile pStart, WorldTile pTarget,
             out AWDockRouteCandidate pCandidate)
         {
             pCandidate = default;
             if (pStart == null || pTarget == null) return false;
+            int generation = AWPathfindingBootstrap.Cache.GenerationId;
+            if (generation >= 0 && generation != _registeredGeneration)
+            {
+                RefreshFromWorld();
+                _registeredGeneration = generation;
+            }
             AWDockEndpoint[] endpoints = Registry.Snapshot();
             if (endpoints.Length < 2)
             {
@@ -56,7 +72,10 @@ namespace AncientWarfare3.core.pathfinding
                 {
                     AWDockEndpoint exit = endpoints[second];
                     if (!exit.IsValid || entry.Id == exit.Id ||
-                        entry.WaterComponent != exit.WaterComponent) continue;
+                        !AWDockEndpointRules.SameWaterComponent(
+                            entry.WaterComponent, exit.WaterComponent,
+                            entry.LegacyWaterComponent,
+                            exit.LegacyWaterComponent)) continue;
                     if (!TryGetLiveEndpoint(exit, out WorldTile exitTile) ||
                         !pTarget.isSameIsland(exitTile)) continue;
                     pCandidate = new AWDockRouteCandidate(entry, exit);
