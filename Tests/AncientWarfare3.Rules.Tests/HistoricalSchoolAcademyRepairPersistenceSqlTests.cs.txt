@@ -1,0 +1,185 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using AncientWarfare3.core.schools;
+
+internal static class HistoricalSchoolAcademyRepairPersistenceSqlTests
+{
+    public static void Run()
+    {
+        DestructionKeepsHistoryAndCreatesOneTicket();
+        OldPendingStateRestoresMissingTicket();
+        CompletionReactivatesTheSameInstitutionOnce();
+        RepeatedDestructionRefreshesARebuildingTicket();
+        CancelUsesAnInactiveTerminalStateAndChecksInstitutionRow();
+    }
+
+    private static void CancelUsesAnInactiveTerminalStateAndChecksInstitutionRow()
+    {
+        using SQLiteConnection db = OpenSchema();
+        InsertInstitution(db, 11, 15, active: 0, "repair_pending");
+        HistoricalSchoolAcademyRepairPersistence.MarkRepairPending(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 11, 15, 101,
+            9, 10, 8, 500d);
+        True(HistoricalSchoolAcademyRepairPersistence.Cancel(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 11, 501d),
+            "cancel commits for an existing historical institution");
+        Equal("inactive", Text(db, "SELECT PHYSICAL_STATE FROM " +
+            "SchoolInstitution WHERE INSTITUTION_ID=11"),
+            "destroyed-city institution has an explicit inactive physical state");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM SchoolAcademyRepairTicket"),
+            "cancel removes the repair ticket");
+
+        Execute(db, "INSERT INTO SchoolAcademyRepairTicket VALUES " +
+            "(99,99,1,1,1,'repair_pending',1,'school_academy_repair:99:99',0)");
+        False(HistoricalSchoolAcademyRepairPersistence.Cancel(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 99, 502d),
+            "cancel rolls back when the institution row is missing");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM SchoolAcademyRepairTicket " +
+            "WHERE INSTITUTION_ID=99"),
+            "failed cancel preserves its ticket for retry");
+    }
+
+    private static void RepeatedDestructionRefreshesARebuildingTicket()
+    {
+        using SQLiteConnection db = OpenSchema();
+        InsertInstitution(db, 10, 14, active: 1, "active");
+        HistoricalSchoolAcademyRepairPersistence.MarkRepairPending(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 10, 14, 81,
+            1, 2, 7, 400d);
+        HistoricalSchoolAcademyRepairPersistence.MarkRebuilding(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 10, 91, 7, 401d);
+
+        True(HistoricalSchoolAcademyRepairPersistence.MarkRepairPending(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 10, 14, 91,
+            5, 6, 7, 402d), "second physical destruction persists");
+        Equal("repair_pending", Text(db, "SELECT STATE FROM " +
+            "SchoolAcademyRepairTicket WHERE INSTITUTION_ID=10"),
+            "rebuilding ticket returns to pending");
+        Equal(91L, Scalar(db, "SELECT BUILDING_ID FROM " +
+            "SchoolAcademyRepairTicket WHERE INSTITUTION_ID=10"),
+            "ticket follows the newly destroyed building");
+        Equal(5L, Scalar(db, "SELECT TILE_X FROM " +
+            "SchoolAcademyRepairTicket WHERE INSTITUTION_ID=10"),
+            "ticket refreshes the latest original tile");
+    }
+
+    private static void DestructionKeepsHistoryAndCreatesOneTicket()
+    {
+        using SQLiteConnection db = OpenSchema();
+        InsertInstitution(db, 7, 11, active: 1, "active");
+
+        True(HistoricalSchoolAcademyRepairPersistence.MarkRepairPending(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 7, 11, 41,
+            12, 13, 5, 100d), "first destruction persists");
+        True(HistoricalSchoolAcademyRepairPersistence.MarkRepairPending(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 7, 11, 41,
+            12, 13, 5, 101d), "replayed destruction is idempotent");
+
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM SchoolInstitution " +
+            "WHERE INSTITUTION_ID=7"), "institution history remains");
+        Equal(0L, Scalar(db, "SELECT ACTIVE FROM SchoolInstitution " +
+            "WHERE INSTITUTION_ID=7"), "physical institution becomes inactive");
+        Equal("repair_pending", Text(db, "SELECT PHYSICAL_STATE FROM " +
+            "SchoolInstitution WHERE INSTITUTION_ID=7"), "pending state stored");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM SchoolAcademyRepairTicket " +
+            "WHERE INSTITUTION_ID=7 AND CITY_ID=11"), "one ticket only");
+    }
+
+    private static void OldPendingStateRestoresMissingTicket()
+    {
+        using SQLiteConnection db = OpenSchema();
+        InsertInstitution(db, 8, 12, active: 0, "repair_pending");
+        Execute(db, "UPDATE SchoolInstitution SET BUILDING_ID=51,TILE_X=3," +
+            "TILE_Y=4 WHERE INSTITUTION_ID=8");
+
+        Equal(1, HistoricalSchoolAcademyRepairPersistence.
+            RestoreMissingTickets(db, "SchoolInstitution",
+                "SchoolAcademyRepairTicket", 200d),
+            "old save recreates its missing ticket");
+        Equal(0, HistoricalSchoolAcademyRepairPersistence.
+            RestoreMissingTickets(db, "SchoolInstitution",
+                "SchoolAcademyRepairTicket", 201d),
+            "recovery is idempotent");
+    }
+
+    private static void CompletionReactivatesTheSameInstitutionOnce()
+    {
+        using SQLiteConnection db = OpenSchema();
+        InsertInstitution(db, 9, 13, active: 0, "repair_pending");
+        HistoricalSchoolAcademyRepairPersistence.MarkRepairPending(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 9, 13, 61,
+            7, 8, 6, 300d);
+        True(HistoricalSchoolAcademyRepairPersistence.MarkRebuilding(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 9, 71, 6, 301d),
+            "repair enters rebuilding");
+        True(HistoricalSchoolAcademyRepairPersistence.Complete(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 9, 71,
+            7, 8, 302d), "first completion succeeds");
+        False(HistoricalSchoolAcademyRepairPersistence.Complete(db,
+            "SchoolInstitution", "SchoolAcademyRepairTicket", 9, 71,
+            7, 8, 303d), "completion applies once");
+        Equal(1L, Scalar(db, "SELECT ACTIVE FROM SchoolInstitution WHERE " +
+            "INSTITUTION_ID=9"), "same institution restored active");
+        Equal("active", Text(db, "SELECT PHYSICAL_STATE FROM " +
+            "SchoolInstitution WHERE INSTITUTION_ID=9"), "active state restored");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM SchoolAcademyRepairTicket"),
+            "ticket completed and removed");
+    }
+
+    private static SQLiteConnection OpenSchema()
+    {
+        var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE SchoolInstitution (INSTITUTION_ID INTEGER " +
+            "PRIMARY KEY,CITY_ID INTEGER,ACTIVE INTEGER,BUILDING_ID INTEGER," +
+            "TILE_X INTEGER,TILE_Y INTEGER,PHYSICAL_STATE TEXT,UPDATED_TIME REAL)");
+        Execute(db, "CREATE TABLE SchoolAcademyRepairTicket (INSTITUTION_ID " +
+            "INTEGER PRIMARY KEY,CITY_ID INTEGER,BUILDING_ID INTEGER,TILE_X INTEGER," +
+            "TILE_Y INTEGER,STATE TEXT,OWNER_KINGDOM_ID INTEGER,OPERATION_KEY TEXT " +
+            "UNIQUE,UPDATED_TIME REAL)");
+        return db;
+    }
+
+    private static void InsertInstitution(SQLiteConnection db, long institutionId,
+        long cityId, int active, string state)
+    {
+        Execute(db, "INSERT INTO SchoolInstitution VALUES (" + institutionId +
+            "," + cityId + "," + active + ",-1,-1,-1,'" + state + "',0)");
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static string Text(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToString(command.ExecuteScalar());
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name + ": expected false");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " + expected +
+                ", got " + actual);
+    }
+}

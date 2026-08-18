@@ -1,0 +1,164 @@
+using System;
+using System.IO;
+
+internal static class HistoricalSchoolAcademyRepairSourceGuardTests
+{
+    public static void Run()
+    {
+        DestructionHooksAreAcademyOnlyAndDeferred();
+        RuntimeCleanupReleasesEveryPhysicalClaim();
+        PersistenceUsesRealSchemaAndUniqueTickets();
+        RepairIsOriginalTileFirstAndAnnuallyBounded();
+    }
+
+    private static void DestructionHooksAreAcademyOnlyAndDeferred()
+    {
+        string patch = Read("Code", "patch", "AW_HistoricalSchoolPatch.cs");
+        Contains(patch, "nameof(Building.startDestroyBuilding)",
+            "destruction begins capture before tile cleanup");
+        Contains(patch, "nameof(Building.startMakingRuins)",
+            "ruin conversion begins capture before tile cleanup");
+        Contains(patch, "nameof(Building.removeBuildingFinal)",
+            "final removal confirms queued cleanup");
+        Contains(patch, "HistoricalSchoolAcademyLifecycleService.Capture",
+            "early hooks capture physical identity");
+        Contains(patch, "HistoricalSchoolAcademyLifecycleService.ConfirmRemoval",
+            "final hook confirms cleanup");
+        Excludes(patch, "addBuilding(",
+            "Harmony callbacks never create replacement buildings");
+
+        string lifecycle = Read("Code", "core", "schools",
+            "HistoricalSchoolAcademyLifecycleService.cs");
+        Contains(lifecycle, "ShouldCaptureDestruction",
+            "lifecycle capture applies academy-only facts");
+        Contains(lifecycle, "SchoolAcademyBuildingContent.BuildingId",
+            "lifecycle identifies exact academy content");
+    }
+
+    private static void RuntimeCleanupReleasesEveryPhysicalClaim()
+    {
+        string academy = Read("Code", "core", "schools",
+            "HistoricalSchoolAcademyService.cs");
+        Contains(academy, "isOnRemove()", "live academy rejects on-remove state");
+        Contains(academy, "isRemoved()", "live academy rejects removed state");
+        Contains(academy, "isUsable()", "live academy rejects unusable state");
+
+        string construction = Read("Code", "core", "schools",
+            "HistoricalSchoolAcademyConstructionService.cs");
+        Contains(construction, "OnAcademyRemoved",
+            "construction cache removes the destroyed academy");
+        Contains(construction, "ShouldClearConstructionBinding",
+            "city construction pointer clears only on identity match");
+        Contains(construction, "IsStartedAcademyAlive",
+            "unusable in-progress academy still blocks duplicate construction");
+
+        string venue = Read("Code", "core", "schools",
+            "HistoricalSchoolVenueService.cs");
+        Contains(venue, "ReleaseCityClaims",
+            "city destruction releases active venue operations");
+        Contains(venue, "ByOperation.Snapshot()",
+            "release scans operation claims without desynchronizing occupancy");
+
+        string lifecycle = Read("Code", "core", "schools",
+            "HistoricalSchoolAcademyLifecycleService.cs");
+        Contains(lifecycle, "HistoricalSchoolVenueService.ReleaseCityClaims",
+            "cleanup releases venue claims");
+        Contains(lifecycle, "SchoolLandmarkService.MarkDirty",
+            "cleanup invalidates landmark projection");
+        Contains(lifecycle, "CancelAcademyRepair",
+            "final cleanup cannot leave a repair ticket for a destroyed city");
+    }
+
+    private static void PersistenceUsesRealSchemaAndUniqueTickets()
+    {
+        string institution = Read("Code", "core", "db",
+            "SchoolInstitutionTableItem.cs");
+        Contains(institution, "physical_state", "institution stores physical state");
+        Contains(institution, "building_id", "institution stores building binding");
+        Contains(institution, "tile_x", "institution stores original tile x");
+        Contains(institution, "tile_y", "institution stores original tile y");
+
+        string ticket = Read("Code", "core", "db",
+            "SchoolAcademyRepairTicketTableItem.cs");
+        Contains(ticket, "[TableItemDef(pIsPrimary: true)] public long institution_id",
+            "institution is the ticket primary key");
+        Contains(ticket, "operation_key", "ticket stores deterministic operation key");
+
+        string indexes = Read("Code", "core", "db",
+            "LineageArchiveIndexRules.cs");
+        Contains(indexes, "idx_SchoolAcademyRepairTicket_operation_unique",
+            "operation key has a database unique constraint");
+        Contains(indexes, "pUnique: true", "ticket index is actually unique");
+
+        string runtime = Read("Code", "core", "schools",
+            "HistoricalSchoolRuntime.cs");
+        Contains(runtime, "HistoricalSchoolAcademyRepairService.LoadState()",
+            "load restores missing pending tickets");
+        Contains(runtime, "HistoricalSchoolAcademyRepairService.ClearRuntime()",
+            "world clear drops repair runtime state");
+    }
+
+    private static void RepairIsOriginalTileFirstAndAnnuallyBounded()
+    {
+        string repair = Read("Code", "core", "schools",
+            "HistoricalSchoolAcademyRepairService.cs");
+        Ordered(repair, "TryStartAt(city, originalTile)", "TryStart(city)",
+            "repair attempts original tile before fallback");
+        Contains(repair, "RepairBudget(tickets.Count)",
+            "each annual slice uses the fixed repair budget");
+        Contains(repair, "_repairCursor",
+            "annual slices rotate instead of starving later tickets");
+        Contains(repair, "existing.setKingdom(owner)",
+            "city transfer rebinds an in-progress academy to current ownership");
+        Contains(repair, "city.under_construction_building",
+            "annual recovery adopts construction created before a binding write failed");
+        Contains(repair, "MarkAcademyRebuilding",
+            "construction updates persisted binding");
+        Ordered(repair, "if (academy?.data == null) return;",
+            "if (!HistoricalSchoolStore.MarkAcademyRebuilding(",
+            "a newly created academy explicitly handles binding-write failure");
+        Contains(repair, "CompleteAcademy", "completion restores institution once");
+        Contains(repair, "SchoolLandmarkService.MarkDirty",
+            "rebuild invalidates landmark projection");
+
+        string scheduler = Read("Code", "core", "schools",
+            "HistoricalSchoolScheduler.cs");
+        Contains(scheduler, "HistoricalSchoolSchedulerStage.AcademyRepair",
+            "school annual authority owns repair processing");
+        Contains(scheduler, "HistoricalSchoolAcademyRepairService.ProcessYearFrame",
+            "annual stage dispatches bounded repairs outside damage stack");
+    }
+
+    private static string Read(params string[] parts)
+    {
+        string path = Directory.GetCurrentDirectory();
+        foreach (string part in parts) path = Path.Combine(path, part);
+        if (!File.Exists(path))
+            throw new InvalidOperationException("missing source file: " + path);
+        return File.ReadAllText(path);
+    }
+
+    private static void Contains(string source, string token, string name)
+    {
+        if (!source.Contains(token))
+            throw new InvalidOperationException(name + ": missing " + token);
+    }
+
+    private static void Excludes(string source, string token, string name)
+    {
+        if (source.Contains(token))
+            throw new InvalidOperationException(name + ": forbidden " + token);
+    }
+
+    private static void Ordered(string source, string first, string second, string name)
+    {
+        int firstIndex = source.IndexOf(first, StringComparison.Ordinal);
+        int secondIndex = firstIndex < 0
+            ? -1
+            : source.IndexOf(second, firstIndex + first.Length,
+                StringComparison.Ordinal);
+        if (firstIndex < 0 || secondIndex <= firstIndex)
+            throw new InvalidOperationException(name + ": expected " + first +
+                " before " + second);
+    }
+}

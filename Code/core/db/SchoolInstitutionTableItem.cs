@@ -15,6 +15,10 @@ namespace AncientWarfare3.core.db
         public long custodian_actor_id = -1;
         public double condition = 100d;
         public int active = 1;
+        [TableItemDef(pDefaultValue: "-1")] public long building_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public int tile_x = -1;
+        [TableItemDef(pDefaultValue: "-1")] public int tile_y = -1;
+        [TableItemDef(pDefaultValue: "active")] public string physical_state = "active";
         public double updated_time;
     }
 }

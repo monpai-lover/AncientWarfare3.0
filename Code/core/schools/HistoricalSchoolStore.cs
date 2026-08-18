@@ -21,6 +21,8 @@ namespace AncientWarfare3.core.schools
         private static string WorkTable => SchoolWorkTableItem.GetTableName();
         private static string DebateTable => SchoolDebateTableItem.GetTableName();
         private static string InstitutionTable => SchoolInstitutionTableItem.GetTableName();
+        private static string AcademyRepairTicketTable =>
+            SchoolAcademyRepairTicketTableItem.GetTableName();
         private static string LedgerTable => CitySchoolLedgerTableItem.GetTableName();
 
         private const double MaxLedgerValue = 1d;
@@ -706,6 +708,9 @@ namespace AncientWarfare3.core.schools
                 UpsertLedgerCommand(transaction, pCityId, pMaster.SchoolId, ledgerDelta,
                     pWorldTime);
                 transaction.Commit();
+                Building academy = HistoricalSchoolAcademyService.FindUsable(city);
+                if (academy != null)
+                    BindInstitutionAcademy(institutionId, academy, pWorldTime);
                 InvalidateLedgerCaches(pCityId);
                 return true;
             }
@@ -1412,6 +1417,169 @@ namespace AncientWarfare3.core.schools
                                     error.Message);
             }
             return result;
+        }
+
+        internal static bool TryResolveAcademyInstitution(long pCityId,
+            long pBuildingId, out long pInstitutionId)
+        {
+            pInstitutionId = -1L;
+            if (DB == null || pCityId < 0 || pBuildingId < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT INSTITUTION_ID FROM " +
+                    InstitutionTable + " WHERE CITY_ID=@city AND ACTIVE=1 " +
+                    "ORDER BY CASE WHEN BUILDING_ID=@building THEN 0 ELSE 1 END," +
+                    "LEVEL DESC,FOUNDING_YEAR,INSTITUTION_ID LIMIT 1";
+                command.Parameters.AddWithValue("@city", pCityId);
+                command.Parameters.AddWithValue("@building", pBuildingId);
+                object value = command.ExecuteScalar();
+                if (value == null || value == DBNull.Value) return false;
+                pInstitutionId = Convert.ToInt64(value);
+                return pInstitutionId >= 0;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore resolve academy institution " +
+                                    "failed: " + error.Message);
+                return false;
+            }
+        }
+
+        internal static bool QueueAcademyRepair(long pInstitutionId, long pCityId,
+            long pBuildingId, int pTileX, int pTileY, long pOwnerKingdomId,
+            double pWorldTime)
+        {
+            bool result = HistoricalSchoolAcademyRepairPersistence.MarkRepairPending(
+                DB, InstitutionTable, AcademyRepairTicketTable, pInstitutionId,
+                pCityId, pBuildingId, pTileX, pTileY, pOwnerKingdomId, pWorldTime);
+            if (result) InvalidateLedgerCaches(pCityId);
+            return result;
+        }
+
+        internal static int RestoreMissingAcademyRepairTickets(double pWorldTime)
+        {
+            try
+            {
+                return HistoricalSchoolAcademyRepairPersistence.RestoreMissingTickets(
+                    DB, InstitutionTable, AcademyRepairTicketTable, pWorldTime);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore restore academy tickets failed: " +
+                                    error.Message);
+                return 0;
+            }
+        }
+
+        internal static List<HistoricalSchoolAcademyRepairTicket>
+            LoadAcademyRepairTickets()
+        {
+            var result = new List<HistoricalSchoolAcademyRepairTicket>();
+            if (DB == null) return result;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT INSTITUTION_ID,CITY_ID,BUILDING_ID," +
+                    "TILE_X,TILE_Y,STATE,OWNER_KINGDOM_ID,OPERATION_KEY FROM " +
+                    AcademyRepairTicketTable + " ORDER BY UPDATED_TIME," +
+                    "INSTITUTION_ID";
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    result.Add(new HistoricalSchoolAcademyRepairTicket
+                    {
+                        InstitutionId = ValueLong(reader, 0, -1L),
+                        CityId = ValueLong(reader, 1, -1L),
+                        BuildingId = ValueLong(reader, 2, -1L),
+                        TileX = ValueInt(reader, 3, -1),
+                        TileY = ValueInt(reader, 4, -1),
+                        State = HistoricalSchoolAcademyRepairRules.FromStorage(
+                            ValueString(reader, 5)),
+                        OwnerKingdomId = ValueLong(reader, 6, -1L),
+                        OperationKey = ValueString(reader, 7)
+                    });
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore load academy tickets failed: " +
+                                    error.Message);
+            }
+            return result;
+        }
+
+        internal static bool MarkAcademyRebuilding(long pInstitutionId,
+            long pBuildingId, long pOwnerKingdomId, double pWorldTime)
+        {
+            return HistoricalSchoolAcademyRepairPersistence.MarkRebuilding(DB,
+                InstitutionTable, AcademyRepairTicketTable, pInstitutionId,
+                pBuildingId, pOwnerKingdomId, pWorldTime);
+        }
+
+        internal static bool CompleteAcademyRepair(long pInstitutionId,
+            long pBuildingId, int pTileX, int pTileY, double pWorldTime)
+        {
+            return HistoricalSchoolAcademyRepairPersistence.Complete(DB,
+                InstitutionTable, AcademyRepairTicketTable, pInstitutionId,
+                pBuildingId, pTileX, pTileY, pWorldTime);
+        }
+
+        internal static bool CancelAcademyRepair(long pInstitutionId,
+            double pWorldTime)
+        {
+            return HistoricalSchoolAcademyRepairPersistence.Cancel(DB,
+                InstitutionTable, AcademyRepairTicketTable, pInstitutionId,
+                pWorldTime);
+        }
+
+        internal static bool RebindAcademyRepairOwner(long pInstitutionId,
+            long pOwnerKingdomId, double pWorldTime)
+        {
+            if (DB == null || pInstitutionId < 0 || pOwnerKingdomId < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " + AcademyRepairTicketTable +
+                    " SET OWNER_KINGDOM_ID=@owner,UPDATED_TIME=@time " +
+                    "WHERE INSTITUTION_ID=@institution";
+                command.Parameters.AddWithValue("@owner", pOwnerKingdomId);
+                command.Parameters.AddWithValue("@time", FiniteNonNegative(pWorldTime));
+                command.Parameters.AddWithValue("@institution", pInstitutionId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore rebind academy owner failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        internal static void BindInstitutionAcademy(long pInstitutionId,
+            Building pAcademy, double pWorldTime)
+        {
+            if (DB == null || pInstitutionId < 0 || pAcademy?.data == null ||
+                pAcademy.current_tile == null) return;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " + InstitutionTable +
+                    " SET BUILDING_ID=@building,TILE_X=@x,TILE_Y=@y," +
+                    "PHYSICAL_STATE='active',UPDATED_TIME=@time " +
+                    "WHERE INSTITUTION_ID=@institution AND ACTIVE=1";
+                command.Parameters.AddWithValue("@building", pAcademy.data.id);
+                command.Parameters.AddWithValue("@x", pAcademy.current_tile.x);
+                command.Parameters.AddWithValue("@y", pAcademy.current_tile.y);
+                command.Parameters.AddWithValue("@time", FiniteNonNegative(pWorldTime));
+                command.Parameters.AddWithValue("@institution", pInstitutionId);
+                command.ExecuteNonQuery();
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore bind academy failed: " +
+                                    error.Message);
+            }
         }
 
         public static SchoolInstitutionReadModel LoadLeadingInstitution(long pCityId)

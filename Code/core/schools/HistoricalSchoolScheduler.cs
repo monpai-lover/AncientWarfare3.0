@@ -10,6 +10,7 @@ namespace AncientWarfare3.core.schools
     {
         None,
         Bootstrap,
+        AcademyRepair,
         Descent,
         ServiceClose,
         ServiceAppointment,
@@ -129,6 +130,9 @@ namespace AncientWarfare3.core.schools
             {
                 switch (pStage)
                 {
+                    case HistoricalSchoolSchedulerStage.AcademyRepair:
+                        return HistoricalSchoolAcademyRepairService.ProcessYearFrame(
+                            _activeYear);
                     case HistoricalSchoolSchedulerStage.Descent:
                         return ProcessDescent();
                     case HistoricalSchoolSchedulerStage.ServiceClose:
@@ -221,6 +225,8 @@ namespace AncientWarfare3.core.schools
             switch (pStage)
             {
                 case HistoricalSchoolSchedulerStage.Bootstrap: return "bootstrap";
+                case HistoricalSchoolSchedulerStage.AcademyRepair:
+                    return "academy_repair";
                 case HistoricalSchoolSchedulerStage.Descent: return "descent";
                 case HistoricalSchoolSchedulerStage.ServiceClose: return "service_close";
                 case HistoricalSchoolSchedulerStage.ServiceAppointment:

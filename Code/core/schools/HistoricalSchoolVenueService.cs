@@ -70,6 +70,20 @@ namespace AncientWarfare3.core.schools
             ReleaseOccupied(claim);
         }
 
+        public static void ReleaseCityClaims(long pCityId)
+        {
+            if (pCityId < 0) return;
+            KeyValuePair<string, HistoricalSchoolVenueClaim>[] claims =
+                ByOperation.Snapshot();
+            for (int index = 0; index < claims.Length; index++)
+            {
+                HistoricalSchoolVenueClaim claim = claims[index].Value;
+                if (claim?.CityId != pCityId) continue;
+                Release(claims[index].Key);
+            }
+            OccupiedByCity.Remove(pCityId);
+        }
+
         public static void InvalidateCity(long pCityId)
         {
             if (pCityId < 0) return;

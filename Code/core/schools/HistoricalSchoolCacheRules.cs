@@ -240,6 +240,15 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
+        public KeyValuePair<TKey, TValue>[] Snapshot()
+        {
+            var result = new KeyValuePair<TKey, TValue>[_values.Count];
+            int index = 0;
+            foreach (KeyValuePair<TKey, TValue> pair in _values)
+                result[index++] = pair;
+            return result;
+        }
+
         public void Clear()
         {
             _values.Clear();

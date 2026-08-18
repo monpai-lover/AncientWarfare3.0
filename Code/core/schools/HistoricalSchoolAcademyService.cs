@@ -47,18 +47,32 @@ namespace AncientWarfare3.core.schools
 
         public static bool IsLiveAcademyForCity(Building pAcademy, City pCity)
         {
-            if (pAcademy == null || pCity?.data == null || pCity.isRekt() ||
-                pAcademy.asset == null || !pAcademy.isAlive() ||
-                pAcademy.isRuin() || pAcademy.isAbandoned()) return false;
-            if (pAcademy.asset.id != SchoolAcademyBuildingContent.BuildingId &&
-                pAcademy.asset.type != SchoolAcademyBuildingContent.BuildingTypeId)
-                return false;
+            bool isAcademy = pAcademy?.asset != null &&
+                (pAcademy.asset.id == SchoolAcademyBuildingContent.BuildingId ||
+                 pAcademy.asset.type == SchoolAcademyBuildingContent.BuildingTypeId);
+            if (pCity?.data == null || pCity.isRekt() ||
+                !HistoricalSchoolAcademyRepairRules.IsLiveAcademy(
+                    pAcademy != null, isAcademy,
+                    pAcademy?.isAlive() == true,
+                    pAcademy?.isOnRemove() == true,
+                    pAcademy?.isRemoved() == true,
+                    pAcademy?.isRuin() == true,
+                    pAcademy?.isUsable() == true,
+                    pAcademy?.isAbandoned() == true)) return false;
             City attachedCity = null;
             try { attachedCity = pAcademy.getCity(); }
             catch { }
             if (ReferenceEquals(attachedCity, pCity)) return true;
             return attachedCity == null &&
                    ReferenceEquals(pAcademy.current_tile?.zone?.city, pCity);
+        }
+
+        public static bool IsAcademy(Building pBuilding)
+        {
+            return pBuilding?.asset != null &&
+                   (pBuilding.asset.id == SchoolAcademyBuildingContent.BuildingId ||
+                    pBuilding.asset.type ==
+                    SchoolAcademyBuildingContent.BuildingTypeId);
         }
 
         public static bool IsUsable(Building pAcademy, City pCity)
