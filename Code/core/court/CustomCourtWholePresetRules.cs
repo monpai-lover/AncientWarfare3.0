@@ -97,7 +97,11 @@ namespace AncientWarfare3.core.court
                 Revision = source.Revision,
                 Name = CloneName(source.Name),
                 Offices = offices,
-                Edges = new List<CustomCourtEdge>()
+                Edges = new List<CustomCourtEdge>(),
+                LocalTemplates = source.LocalTemplates ??
+                    new List<CustomLocalCourtTemplate>(),
+                ArchivedCrossLayerEdges = source.ArchivedCrossLayerEdges ??
+                    new List<CustomCourtEdge>()
             };
             return true;
         }

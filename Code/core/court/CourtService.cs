@@ -45,10 +45,14 @@ namespace AncientWarfare3.core.court
 
     internal sealed class CityBureauView
     {
+        public long city_id = -1L;
         public string city_name = "";
         public int office_slots;
         public string local_school = "";
         public float efficiency;
+        public string officer_actor_ids = "";
+        public string local_template_id = "";
+        public bool local_template_manual;
     }
 
     internal sealed class CourtAppointmentCandidateView
@@ -400,7 +404,9 @@ namespace AncientWarfare3.core.court
             try
             {
                 using var cmd = new SQLiteCommand(db);
-                cmd.CommandText = "SELECT CITY_NAME, OFFICE_SLOTS, LOCAL_SCHOOL, BUREAU_EFFICIENCY FROM " +
+                cmd.CommandText = "SELECT CITY_ID,CITY_NAME,OFFICE_SLOTS," +
+                    "LOCAL_SCHOOL,BUREAU_EFFICIENCY,OFFICER_ACTOR_IDS," +
+                    "LOCAL_TEMPLATE_ID,LOCAL_TEMPLATE_MANUAL FROM " +
                     CityBureauStateTableItem.GetTableName() +
                     " WHERE KINGDOM_ID = @kid ORDER BY OFFICE_SLOTS DESC, BUREAU_EFFICIENCY DESC LIMIT @lim";
                 cmd.Parameters.AddWithValue("@kid", pKingdom.id);
@@ -410,10 +416,22 @@ namespace AncientWarfare3.core.court
                 {
                     result.Add(new CityBureauView
                     {
-                        city_name = reader.IsDBNull(0) ? "" : reader.GetValue(0)?.ToString() ?? "",
-                        office_slots = reader.IsDBNull(1) ? 0 : Convert.ToInt32(reader.GetValue(1)),
-                        local_school = reader.IsDBNull(2) ? "" : reader.GetValue(2)?.ToString() ?? "",
-                        efficiency = reader.IsDBNull(3) ? 0f : (float)Convert.ToDouble(reader.GetValue(3))
+                        city_id = reader.IsDBNull(0) ? -1L :
+                            Convert.ToInt64(reader.GetValue(0)),
+                        city_name = reader.IsDBNull(1) ? "" :
+                            reader.GetValue(1)?.ToString() ?? "",
+                        office_slots = reader.IsDBNull(2) ? 0 :
+                            Convert.ToInt32(reader.GetValue(2)),
+                        local_school = reader.IsDBNull(3) ? "" :
+                            reader.GetValue(3)?.ToString() ?? "",
+                        efficiency = reader.IsDBNull(4) ? 0f :
+                            (float)Convert.ToDouble(reader.GetValue(4)),
+                        officer_actor_ids = reader.IsDBNull(5) ? "" :
+                            reader.GetValue(5)?.ToString() ?? "",
+                        local_template_id = reader.IsDBNull(6) ? "" :
+                            reader.GetValue(6)?.ToString() ?? "",
+                        local_template_manual = !reader.IsDBNull(7) &&
+                            Convert.ToInt32(reader.GetValue(7)) != 0
                     });
                 }
             }

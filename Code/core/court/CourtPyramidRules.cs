@@ -345,10 +345,27 @@ namespace AncientWarfare3.core.court
         public static List<CourtPyramidLinkSegment> BuildOrthogonalLinks(
             IEnumerable<CourtPyramidNodeModel> pNodes, float nodeHeight)
         {
+            return BuildOrthogonalLinksForRows((pNodes ??
+                    Array.Empty<CourtPyramidNodeModel>()).Where(node =>
+                    node != null && !IsLocalNode(node)), nodeHeight);
+        }
+
+        public static List<CourtPyramidLinkSegment> BuildLocalOrthogonalLinks(
+            IEnumerable<CourtPyramidNodeModel> pNodes, float nodeHeight)
+        {
+            return BuildOrthogonalLinksForRows((pNodes ??
+                Array.Empty<CourtPyramidNodeModel>()).Where(node =>
+                node != null), nodeHeight);
+        }
+
+        private static List<CourtPyramidLinkSegment>
+            BuildOrthogonalLinksForRows(
+                IEnumerable<CourtPyramidNodeModel> pNodes, float nodeHeight)
+        {
             var segments = new List<CourtPyramidLinkSegment>();
             List<IGrouping<int, CourtPyramidNodeModel>> rows =
                 (pNodes ?? Array.Empty<CourtPyramidNodeModel>())
-                .Where(p => p != null && !IsLocalNode(p))
+                .Where(p => p != null)
                 .GroupBy(p => p.Rank)
                 .OrderBy(p => p.Key)
                 .ToList();

@@ -33,7 +33,6 @@ namespace AncientWarfare3.core.court
             AddGenerals(seeds, pKingdom);
             AddMilitaryGovernorates(seeds, pKingdom);
             AddFeudatoryPrinces(seeds, pKingdom);
-            AddCityLeaders(seeds, pKingdom);
             List<CourtPyramidNodeModel> result = CourtPyramidRules.BuildLayout(
                 seeds, HorizontalSpacing, VerticalSpacing);
             AddCachedHeirRole(result, pKingdom);
@@ -41,6 +40,248 @@ namespace AncientWarfare3.core.court
                 OfficialCareerStateService.LoadKingdomStates(pKingdom.id),
                 CourtService.HasNineRankSystem(pKingdom));
             return result;
+        }
+
+        public static List<LocalCourtReadModel> BuildLocalGovernments(
+            Kingdom pKingdom)
+        {
+            var result = new List<LocalCourtReadModel>();
+            if (pKingdom?.data == null || pKingdom.isRekt()) return result;
+            IEnumerable<City> cities;
+            try
+            {
+                cities = pKingdom.getCities().Where(city =>
+                    city?.data != null && !city.isRekt() &&
+                    city.kingdom == pKingdom).OrderBy(city => city.data.id)
+                    .ToList();
+            }
+            catch
+            {
+                return result;
+            }
+            Dictionary<long, CityBureauView> bureaus = CourtService
+                .GetCityBureaus(pKingdom, 256).Where(row => row != null &&
+                    row.city_id >= 0).GroupBy(row => row.city_id)
+                .ToDictionary(group => group.Key, group => group.First());
+            List<CourtOfficerView> officers = CourtService.GetActiveOfficers(
+                    pKingdom, 512).Where(row => row != null &&
+                    row.layer == CourtOfficeLayer.City).ToList();
+            Dictionary<long, OfficialCareerStateView> careerStates =
+                OfficialCareerStateService.LoadKingdomStates(pKingdom.id);
+            foreach (City city in cities)
+            {
+                LocalCourtReadModel local = BuildLocal(pKingdom, city,
+                    bureaus, officers, careerStates);
+                if (local != null) result.Add(local);
+            }
+            return result;
+        }
+
+        public static LocalCourtReadModel BuildLocal(Kingdom pKingdom,
+            City pCity)
+        {
+            Dictionary<long, CityBureauView> bureaus = CourtService
+                .GetCityBureaus(pKingdom, 256).Where(row => row != null &&
+                    row.city_id >= 0).GroupBy(row => row.city_id)
+                .ToDictionary(group => group.Key, group => group.First());
+            List<CourtOfficerView> officers = CourtService.GetActiveOfficers(
+                    pKingdom, 512).Where(row => row != null &&
+                    row.layer == CourtOfficeLayer.City).ToList();
+            return BuildLocal(pKingdom, pCity, bureaus, officers,
+                OfficialCareerStateService.LoadKingdomStates(
+                    pKingdom?.id ?? -1L));
+        }
+
+        private static LocalCourtReadModel BuildLocal(Kingdom pKingdom,
+            City pCity, IReadOnlyDictionary<long, CityBureauView> pBureaus,
+            IReadOnlyList<CourtOfficerView> pOfficers,
+            Dictionary<long, OfficialCareerStateView> pCareerStates)
+        {
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pKingdom.isRekt() || pCity.isRekt() ||
+                pCity.kingdom != pKingdom) return null;
+
+            CityBureauView bureau = null;
+            pBureaus?.TryGetValue(pCity.data.id, out bureau);
+            var model = new LocalCourtReadModel
+            {
+                KingdomId = pKingdom.id,
+                CityId = pCity.data.id,
+                CityName = pCity.data.name ?? string.Empty,
+                ActiveSeats = 0,
+                TotalSeats = Math.Max(1, bureau?.office_slots ?? 1),
+                Efficiency = bureau?.efficiency ?? 0f,
+                LocalSchoolId = bureau?.local_school ?? string.Empty
+            };
+
+            CustomLocalCourtTemplate localTemplate;
+            if (CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
+                    out localTemplate))
+            {
+                model.TemplateId = localTemplate.Id ?? string.Empty;
+                model.TemplateName = CustomLocalCourtTemplateRules.CityTypeName(
+                    localTemplate,
+                    HistoryLocalizationRules.CurrentLanguage() == "en");
+                model.CityTypeName = model.TemplateName;
+                model.Edges = (localTemplate.Edges ??
+                    new List<CustomCourtEdge>()).Where(edge => edge != null)
+                    .ToList();
+            }
+            else
+            {
+                model.TemplateName = AW_L10n.Text("aw_local_court_builtin_type",
+                    "Local Government");
+                model.CityTypeName = model.TemplateName;
+            }
+
+            List<CourtOfficerView> officers = (pOfficers ??
+                    Array.Empty<CourtOfficerView>())
+                .Where(row => row != null &&
+                    row.layer == CourtOfficeLayer.City &&
+                    row.city_id == pCity.data.id).ToList();
+            List<string> seats = BuildLocalSeats(pKingdom, pCity,
+                localTemplate, model.TotalSeats);
+            if (seats.Count > model.TotalSeats) model.TotalSeats = seats.Count;
+            AddLocalNodes(model, pKingdom, pCity, seats, officers,
+                localTemplate, pCareerStates);
+            model.ActiveSeats = model.Nodes.Count(node =>
+                node != null && !node.IsVacancy && node.ActorId >= 0);
+            model.LeaderNode = model.Nodes.FirstOrDefault(node =>
+                node?.ActorId == pCity.leader?.data?.id) ??
+                model.Nodes.FirstOrDefault(node => node != null &&
+                    !node.IsVacancy);
+            return model;
+        }
+
+        private static List<string> BuildLocalSeats(Kingdom pKingdom,
+            City pCity, CustomLocalCourtTemplate pTemplate, int pCapacity)
+        {
+            int capacity = Math.Max(1, pCapacity);
+            var result = new List<string>();
+            if (pTemplate != null)
+            {
+                List<CustomCourtOffice> offices = (pTemplate.Offices ??
+                    new List<CustomCourtOffice>()).Where(office =>
+                    office != null && office.Layer == CourtOfficeLayer.City)
+                    .ToList();
+                IReadOnlyDictionary<string, int> ranks =
+                    CustomCourtHierarchyLayoutRules.BuildRanks(offices,
+                        pTemplate.Edges);
+                foreach (CustomCourtOffice office in offices.OrderBy(office =>
+                             ranks.TryGetValue(office.Id, out int rank)
+                                 ? rank : int.MaxValue)
+                             .ThenBy(office => office.Grade)
+                             .ThenBy(office => office.Id,
+                                 StringComparer.Ordinal))
+                    for (int slot = 0; slot < Math.Max(1, office.Slots);
+                         slot++) result.Add(office.Id);
+                return result;
+            }
+
+            string leaderOffice = CourtService.ResolveCityOffice(pKingdom,
+                pCity);
+            for (int slot = 0; slot < capacity; slot++)
+            {
+                string office = LocalCourtOfficeRules.OfficeForSlot(slot,
+                    leaderOffice);
+                if (!string.IsNullOrEmpty(office)) result.Add(office);
+            }
+            return result;
+        }
+
+        private static void AddLocalNodes(LocalCourtReadModel pModel,
+            Kingdom pKingdom, City pCity, IReadOnlyList<string> pSeats,
+            IReadOnlyList<CourtOfficerView> pOfficers,
+            CustomLocalCourtTemplate pTemplate,
+            Dictionary<long, OfficialCareerStateView> pCareerStates)
+        {
+            var remaining = (pOfficers ?? Array.Empty<CourtOfficerView>())
+                .Where(row => row != null).ToList();
+            IReadOnlyDictionary<string, int> ranks = pTemplate == null
+                ? null
+                : CustomCourtHierarchyLayoutRules.BuildRanks(
+                    pTemplate.Offices, pTemplate.Edges);
+            for (int index = 0; index < pSeats.Count; index++)
+            {
+                string officeId = pSeats[index];
+                CourtOfficerView officer = remaining.FirstOrDefault(row =>
+                    row.office_id == officeId);
+                if (officer != null) remaining.Remove(officer);
+                Actor actor = officer == null ? null :
+                    World.world?.units?.get(officer.actor_id);
+                bool valid = IsValid(actor, pKingdom);
+                int graphRank = ranks != null &&
+                    ranks.TryGetValue(officeId, out int resolvedRank)
+                    ? resolvedRank : index;
+                var node = new CourtPyramidNodeModel(valid
+                        ? actor.data.id : -1L, officeId, officeId,
+                    CourtPyramidRules.GovernorRank + graphRank * 10,
+                    index, !valid)
+                {
+                    OfficeLayer = CourtOfficeLayer.City,
+                    CityId = pCity.data.id,
+                    CityName = pCity.data.name ?? string.Empty,
+                    ActorName = valid ? SafeActorName(actor) : string.Empty,
+                    SchoolId = valid ? ActorSchool(actor, "") :
+                        CourtSchoolId.None,
+                    SchoolIconPath = valid
+                        ? RegisteredSchoolIconPath(ActorSchool(actor, ""))
+                        : string.Empty,
+                    AppointmentYear = valid
+                        ? officer.appointed_year : -1,
+                    Influence = valid ? officer.influence : 0f
+                };
+                pModel.Nodes.Add(node);
+            }
+
+            if (pSeats.Count == 0 && IsValid(pCity.leader, pKingdom))
+            {
+                string officeId = CourtService.ResolveCityOffice(pKingdom,
+                    pCity);
+                pModel.Nodes.Add(new CourtPyramidNodeModel(
+                    pCity.leader.data.id, officeId, officeId,
+                    CourtPyramidRules.GovernorRank, 0, false)
+                {
+                    OfficeLayer = CourtOfficeLayer.City,
+                    CityId = pCity.data.id,
+                    CityName = pCity.data.name ?? string.Empty,
+                    ActorName = SafeActorName(pCity.leader),
+                    SchoolId = ActorSchool(pCity.leader, ""),
+                    SchoolIconPath = RegisteredSchoolIconPath(
+                        ActorSchool(pCity.leader, "")),
+                    Influence = SafeStat(pCity.leader, "stewardship")
+                });
+            }
+
+            pModel.Nodes = pModel.Nodes.OrderBy(node => node.Rank)
+                .ThenBy(node => node.StableOrder)
+                .ThenBy(node => node.IsVacancy)
+                .ThenBy(node => node.ActorId).ToList();
+            LayoutLocalHierarchy(pModel.Nodes);
+            ApplyCareerStates(pModel.Nodes, pCareerStates,
+                CourtService.HasNineRankSystem(pKingdom));
+        }
+
+        private static void LayoutLocalHierarchy(
+            IReadOnlyList<CourtPyramidNodeModel> pNodes)
+        {
+            int rowIndex = 0;
+            foreach (IGrouping<int, CourtPyramidNodeModel> row in
+                     (pNodes ?? Array.Empty<CourtPyramidNodeModel>())
+                     .Where(node => node != null).GroupBy(node => node.Rank)
+                     .OrderBy(group => group.Key))
+            {
+                CourtPyramidNodeModel[] nodes = row.OrderBy(node =>
+                        node.StableOrder).ThenBy(node => node.ActorId)
+                    .ToArray();
+                float startX = -(nodes.Length - 1) * HorizontalSpacing * .5f;
+                for (int index = 0; index < nodes.Length; index++)
+                {
+                    nodes[index].X = startX + index * HorizontalSpacing;
+                    nodes[index].Y = -rowIndex * VerticalSpacing;
+                }
+                rowIndex++;
+            }
         }
 
         private static void AddKing(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)

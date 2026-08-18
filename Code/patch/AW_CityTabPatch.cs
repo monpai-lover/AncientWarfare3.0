@@ -13,6 +13,8 @@ namespace AncientWarfare3.patch
     public static class AW_CityTabPatch
     {
         private const string BTN_NAME = "AW_CityHistoryTabButton";
+        private const string LOCAL_COURT_BTN_NAME =
+            "AW_CityLocalCourtTabButton";
         private const int SIZE = 40;
 
         [HarmonyPostfix]
@@ -33,6 +35,20 @@ namespace AncientWarfare3.patch
 
             btn.onClick.RemoveAllListeners();
             btn.onClick.AddListener(() => AncientWarfare3.ui.windows.HistoryListWindow.OpenCity(cityId));
+
+            long kingdomId = city.kingdom?.id ?? -1L;
+            Transform existingLocal = rail.Find(LOCAL_COURT_BTN_NAME);
+            Button localCourt = existingLocal != null
+                ? existingLocal.GetComponent<Button>()
+                : BuildLocalCourtButton(rail);
+            if (existingLocal != null)
+                existingLocal.gameObject.SetActive(kingdomId >= 0);
+            localCourt.gameObject.SetActive(kingdomId >= 0);
+            localCourt.onClick.RemoveAllListeners();
+            if (kingdomId >= 0)
+                localCourt.onClick.AddListener(() =>
+                    AncientWarfare3.ui.windows.CourtWindow.OpenCity(
+                        kingdomId, cityId));
         }
 
         private static Button BuildButton(Transform pRail)
@@ -64,6 +80,50 @@ namespace AncientWarfare3.patch
             tip.hoverAction = () => Tooltip.show(obj, "normal",
                 new TooltipData { tip_name = "aw_city_history_entry", tip_description = "aw_view_city_history" });
 
+            return obj.GetComponent<Button>();
+        }
+
+        private static Button BuildLocalCourtButton(Transform pRail)
+        {
+            var obj = new GameObject(LOCAL_COURT_BTN_NAME,
+                typeof(RectTransform), typeof(Image), typeof(Button),
+                typeof(TipButton));
+            obj.transform.SetParent(pRail, false);
+            RectTransform rect = obj.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(SIZE, SIZE);
+            rect.localScale = Vector3.one;
+
+            Image background = obj.GetComponent<Image>();
+            background.sprite = SpriteTextureLoader.getSprite(
+                "ui/special/button");
+            background.type = Image.Type.Sliced;
+
+            var iconObject = new GameObject("Icon", typeof(RectTransform),
+                typeof(Image));
+            iconObject.transform.SetParent(obj.transform, false);
+            RectTransform iconRect =
+                iconObject.GetComponent<RectTransform>();
+            iconRect.anchorMin = Vector2.zero;
+            iconRect.anchorMax = Vector2.one;
+            iconRect.sizeDelta = new Vector2(-8f, -8f);
+            iconRect.anchoredPosition = Vector2.zero;
+            Image icon = iconObject.GetComponent<Image>();
+            icon.sprite = SpriteTextureLoader.getSprite(
+                              "ui/icons/iconCity") ??
+                          SpriteTextureLoader.getSprite(
+                              "ui/icons/iconVillages") ??
+                          SpriteTextureLoader.getSprite(
+                              "ui/icons/iconDocument");
+            icon.preserveAspect = true;
+
+            TipButton tip = obj.GetComponent<TipButton>();
+            tip.type = "normal";
+            tip.hoverAction = () => Tooltip.show(obj, "normal",
+                new TooltipData
+                {
+                    tip_name = "aw_city_local_court_entry",
+                    tip_description = "aw_open_city_local_court"
+                });
             return obj.GetComponent<Button>();
         }
     }

@@ -1,4 +1,25 @@
 key,cz,en,ch
+aw_city_local_court_entry,地方官署,Local Government,地方官署
+aw_open_city_local_court,打开该城市的地方官署,Open this city's local government,打开该城市的地方官署
+aw_local_court_builtin_type,地方官署,Local Government,地方官署
+aw_local_court_city_type,城市类型,City Type,城市类型
+aw_local_court_seats,官员 {0}/{1},Officials {0}/{1},官员 {0}/{1}
+aw_local_court_card_summary,官员 {0}/{1}  效率 {2},Officials {0}/{1}  Efficiency {2},官员 {0}/{1}  效率 {2}
+aw_local_court_choose_template,选择地方官署模板,Choose local government,选择地方官署模板
+aw_custom_court_context,编辑层级,Edit layer,编辑层级
+aw_custom_local_court_name,地方官署模板名,Local template name,地方官署模板名
+aw_custom_local_court_create,新建地方模板,New Local,新建地方模板
+aw_custom_local_court_duplicate,复制模板,Duplicate,复制模板
+aw_custom_local_court_delete,删除地方模板,Delete Local,删除地方模板
+aw_custom_local_court_manual,仅手动指定,Manual only,仅手动指定
+aw_custom_local_court_civil,民政默认,Civil default,民政默认
+aw_custom_local_court_military,军政默认,Military default,军政默认
+aw_custom_local_court_default_kind,默认用途,Default use,默认用途
+aw_custom_local_court_replacement,删除时替换为,Replacement when deleting,删除时替换为
+aw_custom_local_court_limit,地方官署模板已达到上限,The local template limit has been reached,地方官署模板已达到上限
+aw_custom_local_court_default_name,地方官署,Local Government,地方官署
+aw_custom_local_court_copy,副本,Copy,副本
+aw_custom_local_court_replacement_required,请先为正在使用此模板的城市选择替代模板,Choose a replacement for cities using this template,请先为正在使用此模板的城市选择替代模板
 aw_custom_court_whole_preset,整套官场预设,Whole-court preset,整套官場預設
 aw_custom_court_whole_preset_select,选择整套官场预设,Select whole-court preset,選擇整套官場預設
 aw_custom_court_whole_preset_locked,未解锁,Locked,未解鎖

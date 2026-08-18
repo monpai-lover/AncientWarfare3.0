@@ -30,11 +30,15 @@ namespace AncientWarfare3.ui.windows
         private const float CanvasLeftInset = 8f;
         private const float CanvasPadding = 24f;
         private const int PortraitsPerFrame = 8;
+        private const float CityCardGap = 12f;
 
         private static long _kingdomId = -1L;
+        private static long _cityId = -1L;
         private static Sprite _whiteSprite;
         private readonly List<CourtActorNodeView> _nodePool = new List<CourtActorNodeView>();
         private readonly List<GameObject> _linkPool = new List<GameObject>();
+        private readonly List<CourtCityGovernmentCard> _cityCardPool =
+            new List<CourtCityGovernmentCard>();
         private readonly Queue<CourtActorNodeView> _portraitRetries =
             new Queue<CourtActorNodeView>();
         private Vector2 _windowSize = new Vector2(DefaultWidth, DefaultHeight);
@@ -53,6 +57,7 @@ namespace AncientWarfare3.ui.windows
         private Text _householdText;
         private TipButton _householdTip;
         private Button _customCourtWorkflowButton;
+        private AWStringDropdown _localTemplateDropdown;
         private Text _centralSectionLabel;
         private Text _militarySectionLabel;
         private Text _localSectionLabel;
@@ -60,6 +65,7 @@ namespace AncientWarfare3.ui.windows
         private Image _localSectionDivider;
         private WideWindowChrome _windowChrome;
         private long _displayedKingdomId = -1L;
+        private long _displayedCityId = -1L;
         private Coroutine _renderCoroutine;
         private int _renderVersion;
         private bool _resetCanvasOnRefresh;
@@ -67,18 +73,24 @@ namespace AncientWarfare3.ui.windows
 
         public static void Open(long pKingdomId)
         {
-            OpenInternal(pKingdomId, pRefreshImmediately: false);
+            OpenInternal(pKingdomId, -1L, pRefreshImmediately: false);
         }
 
         public static void OpenAndRefresh(long pKingdomId)
         {
-            OpenInternal(pKingdomId, pRefreshImmediately: true);
+            OpenInternal(pKingdomId, -1L, pRefreshImmediately: true);
         }
 
-        private static void OpenInternal(long pKingdomId,
+        public static void OpenCity(long pKingdomId, long pCityId)
+        {
+            OpenInternal(pKingdomId, pCityId, pRefreshImmediately: true);
+        }
+
+        private static void OpenInternal(long pKingdomId, long pCityId,
             bool pRefreshImmediately)
         {
             _kingdomId = pKingdomId;
+            _cityId = pCityId;
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.COURT);
             if (Instance != null) Instance._resetCanvasOnRefresh = true;
             bool wasCurrent = ScrollWindow.isCurrentWindow(AW_LineageWindowIds.COURT);
@@ -223,6 +235,11 @@ namespace AncientWarfare3.ui.windows
                 "CustomCourtWorkflow",
                 AW_L10n.Text("aw_custom_court_workflow", "Court Editor"),
                 OpenCustomCourtWorkflow);
+            if (_localTemplateDropdown == null)
+                _localTemplateDropdown = AWStringDropdown.Create(
+                    summary.transform, "LocalCourtTemplate", 158f, 22f,
+                    SelectLocalTemplate);
+            _localTemplateDropdown.gameObject.SetActive(false);
 
             Transform existingSurface = ContentTransform.Find("CourtDragSurface");
             _dragSurface = existingSurface != null
@@ -278,6 +295,16 @@ namespace AncientWarfare3.ui.windows
                     Mathf.Max(44f, pContentWidth - 248f), 4f, 76f, 23f);
                 LayoutSummaryButton(_customCourtWorkflowButton,
                     Mathf.Max(44f, pContentWidth - 84f), 31f, 76f, 23f);
+                if (_localTemplateDropdown != null)
+                {
+                    RectTransform dropdown =
+                        _localTemplateDropdown.RectTransform;
+                    dropdown.anchorMin = dropdown.anchorMax =
+                        new Vector2(0f, 1f);
+                    dropdown.pivot = new Vector2(0f, 1f);
+                    dropdown.anchoredPosition = new Vector2(
+                        Mathf.Max(44f, pContentWidth - 166f), -58f);
+                }
             }
             RectTransform surface = _dragSurface?.GetComponent<RectTransform>();
             if (surface != null)
@@ -314,8 +341,12 @@ namespace AncientWarfare3.ui.windows
                 ApplyWindowLayout();
                 EnsureUi();
                 Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
-                bool switched = _displayedKingdomId != _kingdomId;
+                City city = ResolveCityContext(kingdom, _cityId);
+                if (_cityId >= 0 && city == null) _cityId = -1L;
+                bool switched = _displayedKingdomId != _kingdomId ||
+                                _displayedCityId != _cityId;
                 _displayedKingdomId = _kingdomId;
+                _displayedCityId = _cityId;
                 if (CourtPyramidRules.ShouldResetCanvas(switched, _resetCanvasOnRefresh)) ResetCanvas();
                 _resetCanvasOnRefresh = false;
                 CancelPendingRender();
@@ -330,17 +361,33 @@ namespace AncientWarfare3.ui.windows
                     return;
                 }
 
-                UpdateWindowTitle(kingdom);
+                LocalCourtReadModel local = city == null ? null :
+                    CourtReadModelService.BuildLocal(kingdom, city);
+                UpdateWindowTitle(kingdom, local);
                 CourtSnapshot snapshot = CourtService.GetSnapshot(kingdom);
-                UpdateSummary(kingdom, snapshot);
-                List<CourtPyramidNodeModel> nodes = CourtReadModelService.Build(kingdom);
+                if (local == null) UpdateSummary(kingdom, snapshot);
+                else UpdateLocalSummary(kingdom, local);
+                List<CourtPyramidNodeModel> nodes = local == null
+                    ? CourtReadModelService.Build(kingdom)
+                    : local.Nodes;
                 CourtPyramidCanvasBounds bounds = CourtPyramidRules.CalculateCanvasBounds(nodes,
                     CourtActorNodeView.Width, CourtActorNodeView.Height, CanvasPadding);
-                _canvasRect.sizeDelta = new Vector2(bounds.Width, bounds.Height);
+                List<LocalCourtReadModel> cityGovernments = local == null
+                    ? CourtReadModelService.BuildLocalGovernments(kingdom)
+                    : new List<LocalCourtReadModel>();
+                Vector2 canvasSize = CalculateCanvasSize(bounds,
+                    cityGovernments.Count);
+                _canvasRect.sizeDelta = canvasSize;
                 Vector2 nodeOffset = new Vector2(bounds.OffsetX, bounds.OffsetY);
+                IReadOnlyList<CustomCourtEdge> localEdges = local != null &&
+                    !string.IsNullOrEmpty(local.TemplateId)
+                    ? local.Edges : null;
                 BuildLinks(nodes, kingdom, KingdomColor(kingdom), nodeOffset,
-                    bounds);
+                    bounds, localEdges, local != null);
                 LayoutSectionMarkers(nodes, bounds, nodeOffset, KingdomColor(kingdom));
+                if (local == null)
+                    RenderCityGovernmentCards(cityGovernments, kingdom,
+                        bounds, canvasSize);
                 int renderVersion = _renderVersion;
                 _renderCoroutine = StartCoroutine(RenderNodesBatched(
                     nodes, kingdom, nodeOffset, renderVersion));
@@ -352,8 +399,138 @@ namespace AncientWarfare3.ui.windows
             }
         }
 
+        private static City ResolveCityContext(Kingdom pKingdom,
+            long pCityId)
+        {
+            if (pKingdom?.data == null || pCityId < 0) return null;
+            City city;
+            try { city = World.world?.cities?.get(pCityId); }
+            catch { return null; }
+            return city?.data != null && !city.isRekt() &&
+                   city.kingdom == pKingdom ? city : null;
+        }
+
+        private void UpdateLocalSummary(Kingdom pKingdom,
+            LocalCourtReadModel pLocal)
+        {
+            _summaryPrimary.color = KingdomColor(pKingdom);
+            _summaryPrimary.text = pLocal.CityName + "  |  " +
+                pLocal.CityTypeName + "  |  " +
+                string.Format(AW_L10n.Text("aw_local_court_seats",
+                        "Officials {0}/{1}"), pLocal.ActiveSeats,
+                    pLocal.TotalSeats) + "  |  " +
+                AW_L10n.Text("aw_court_efficiency", "Court Efficiency") +
+                " " + Mathf.FloorToInt(pLocal.Efficiency);
+            _summarySecondary.text =
+                AW_L10n.Text("aw_local_court_city_type", "City Type") +
+                ": " + pLocal.CityTypeName + "\n" +
+                AW_L10n.Text("aw_court_school", "School") + ": " +
+                SchoolName(pLocal.LocalSchoolId);
+            if (_civilServiceExamButton != null)
+                _civilServiceExamButton.gameObject.SetActive(false);
+            if (_householdButton != null)
+                _householdButton.gameObject.SetActive(false);
+            UpdateLocalTemplateOptions(pKingdom, pLocal);
+        }
+
+        private void UpdateLocalTemplateOptions(Kingdom pKingdom,
+            LocalCourtReadModel pLocal)
+        {
+            CustomCourtTemplate snapshot;
+            bool available = CustomCourtRuntime.TryGetSnapshot(pKingdom,
+                out snapshot) && snapshot.LocalTemplates != null &&
+                snapshot.LocalTemplates.Count > 0;
+            _localTemplateDropdown.gameObject.SetActive(available);
+            if (!available) return;
+            _localTemplateDropdown.SetOptions(snapshot.LocalTemplates
+                .Where(template => template != null)
+                .Take(CustomLocalCourtTemplateRules.MaximumTemplates)
+                .Select(template => new AWStringDropdownOption
+                {
+                    Id = template.Id,
+                    Label = CustomLocalCourtTemplateRules.CityTypeName(
+                        template,
+                        HistoryLocalizationRules.CurrentLanguage() == "en")
+                }), pLocal.TemplateId,
+                AW_L10n.Text("aw_local_court_choose_template",
+                    "Choose local government"));
+        }
+
+        private void SelectLocalTemplate(AWStringDropdownOption pOption)
+        {
+            if (pOption == null || _cityId < 0) return;
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            City city = ResolveCityContext(kingdom, _cityId);
+            if (city == null || !CustomCourtRuntime.TrySetLocalTemplate(
+                    kingdom, city, pOption.Id, pManual: true)) return;
+            _resetCanvasOnRefresh = false;
+            Refresh();
+        }
+
+        private static Vector2 CalculateCanvasSize(
+            CourtPyramidCanvasBounds pBounds, int pCityCardCount)
+        {
+            if (pCityCardCount <= 0)
+                return new Vector2(pBounds.Width, pBounds.Height);
+            int columns = Math.Min(4, Math.Max(1, pCityCardCount));
+            int rows = Mathf.CeilToInt(pCityCardCount / (float)columns);
+            float cityWidth = CanvasPadding * 2f + columns *
+                CourtCityGovernmentCard.Width + (columns - 1) * CityCardGap;
+            float cityHeight = 28f + rows * CourtCityGovernmentCard.Height +
+                               Math.Max(0, rows - 1) * CityCardGap;
+            return new Vector2(Mathf.Max(pBounds.Width, cityWidth),
+                pBounds.Height + cityHeight + CanvasPadding);
+        }
+
+        private void RenderCityGovernmentCards(
+            IReadOnlyList<LocalCourtReadModel> pCities, Kingdom pKingdom,
+            CourtPyramidCanvasBounds pBounds, Vector2 pCanvasSize)
+        {
+            if (pCities == null || pCities.Count == 0) return;
+            int columns = Math.Min(4, Math.Max(1, pCities.Count));
+            float rowWidth = columns * CourtCityGovernmentCard.Width +
+                (columns - 1) * CityCardGap;
+            float startX = (pCanvasSize.x - rowWidth) * 0.5f;
+            float startY = -pBounds.Height - 26f;
+            for (int index = 0; index < pCities.Count; index++)
+            {
+                CourtCityGovernmentCard card = GetCityCard(index);
+                int row = index / columns;
+                int column = index % columns;
+                RectTransform rect = card.GetComponent<RectTransform>();
+                rect.anchoredPosition = new Vector2(startX + column *
+                    (CourtCityGovernmentCard.Width + CityCardGap),
+                    startY - row * (CourtCityGovernmentCard.Height +
+                                    CityCardGap));
+                card.Bind(pCities[index], pKingdom,
+                    cityId => OpenCity(pKingdom.id, cityId));
+                card.gameObject.SetActive(true);
+                if (card.LeaderNode?.NeedsPortrait == true)
+                    _portraitRetries.Enqueue(card.LeaderNode);
+            }
+            if (_localSectionLabel != null)
+            {
+                _localSectionLabel.gameObject.SetActive(true);
+                _localSectionLabel.text = AW_L10n.Text(
+                    "aw_court_layer_city", "Local Bureaus");
+                _localSectionLabel.color = KingdomColor(pKingdom);
+                LayoutCanvasText(_localSectionLabel, startX,
+                    startY + 20f, rowWidth, 18f);
+                _localSectionLabel.transform.SetAsLastSibling();
+            }
+        }
+
+        private CourtCityGovernmentCard GetCityCard(int pIndex)
+        {
+            while (_cityCardPool.Count <= pIndex)
+                _cityCardPool.Add(CourtCityGovernmentCard.Create(_canvasRect));
+            return _cityCardPool[pIndex];
+        }
+
         private void UpdateSummary(Kingdom pKingdom, CourtSnapshot pSnapshot)
         {
+            if (_localTemplateDropdown != null)
+                _localTemplateDropdown.gameObject.SetActive(false);
             string bannerId = "";
             try { bannerId = pKingdom.getActorAsset()?.banner_id ?? ""; }
             catch { }
@@ -535,22 +712,28 @@ namespace AncientWarfare3.ui.windows
 
         private void BuildLinks(List<CourtPyramidNodeModel> pNodes,
             Kingdom pKingdom, Color pColor, Vector2 pOffset,
-            CourtPyramidCanvasBounds pBounds)
+            CourtPyramidCanvasBounds pBounds,
+            IReadOnlyList<CustomCourtEdge> pLocalEdges = null,
+            bool pLocalContext = false)
         {
             if (pNodes == null || pNodes.Count <= 1) return;
-            CustomCourtTemplate snapshot;
-            bool customGraph = CustomCourtRuntime.TryGetSnapshot(pKingdom,
-                out snapshot);
+            CustomCourtTemplate snapshot = null;
+            bool customGraph = pLocalEdges != null ||
+                CustomCourtRuntime.TryGetSnapshot(pKingdom, out snapshot);
             if (!customGraph)
                 foreach (CourtPyramidLinkSegment segment in
-                         CourtPyramidRules.BuildOrthogonalLinks(pNodes,
-                             CourtActorNodeView.Height))
+                         (pLocalContext
+                             ? CourtPyramidRules.BuildLocalOrthogonalLinks(
+                                 pNodes, CourtActorNodeView.Height)
+                             : CourtPyramidRules.BuildOrthogonalLinks(pNodes,
+                                 CourtActorNodeView.Height)))
                     CreateLink(segment, pOffset, pColor, pBounds);
             if (!customGraph) return;
             Color managementColor = new Color(0.22f, 0.82f, 0.94f, 1f);
             foreach (CourtPyramidLinkSegment segment in
                      CourtPyramidRules.BuildCustomManagementLinks(pNodes,
-                         snapshot.Edges, CourtActorNodeView.Height))
+                         pLocalEdges ?? snapshot.Edges,
+                         CourtActorNodeView.Height))
                 CreateLink(segment, pOffset, managementColor, pBounds, 3f,
                     0.88f);
         }
@@ -600,6 +783,8 @@ namespace AncientWarfare3.ui.windows
             _portraitRetries.Clear();
             foreach (CourtActorNodeView node in _nodePool)
                 if (node != null) node.gameObject.SetActive(false);
+            foreach (CourtCityGovernmentCard card in _cityCardPool)
+                if (card != null) card.gameObject.SetActive(false);
             foreach (GameObject link in _linkPool)
                 if (link != null) link.SetActive(false);
             if (_centralSectionLabel != null) _centralSectionLabel.gameObject.SetActive(false);
@@ -626,7 +811,8 @@ namespace AncientWarfare3.ui.windows
                 "LocalSectionDivider");
         }
 
-        private void UpdateWindowTitle(Kingdom pKingdom)
+        private void UpdateWindowTitle(Kingdom pKingdom,
+            LocalCourtReadModel pLocal)
         {
             ScrollWindow scrollWindow = GetComponent<ScrollWindow>();
             if (scrollWindow?.titleText == null) return;
@@ -635,8 +821,9 @@ namespace AncientWarfare3.ui.windows
             string fallback = western
                 ? AW_L10n.Text("aw_court_title_western", "Western Court")
                 : AW_L10n.Text("aw_court_title", "Court of the Hundred Schools");
-            scrollWindow.titleText.text = CustomCourtRuntime.DisplayName(
-                pKingdom, fallback);
+            scrollWindow.titleText.text = pLocal == null
+                ? CustomCourtRuntime.DisplayName(pKingdom, fallback)
+                : pLocal.CityName + " - " + pLocal.CityTypeName;
         }
 
         private static Image EnsureSectionDivider(Transform pCanvas,
