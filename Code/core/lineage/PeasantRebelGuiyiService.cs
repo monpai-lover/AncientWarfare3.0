@@ -119,7 +119,7 @@ namespace AncientWarfare3.core.lineage
             long originalCityId = pCity.getID();
             if (!PeasantRebelBanditStrongholdService.TryCreateDirect(
                     pCity, out Kingdom guiYi, out City stronghold,
-                    out _)) return false;
+                    out _, out _, pAllowClaimRedirect: false)) return false;
             if (!PeasantRebelBanditStateStore.TryRead(guiYi,
                     out PeasantRebelBanditStrongholdState state))
                 return false;

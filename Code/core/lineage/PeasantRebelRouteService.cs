@@ -64,6 +64,28 @@ namespace AncientWarfare3.core.lineage
         internal static bool InitializeAndEnter(Kingdom pRebel,
             Kingdom pOrigin, City pFoundingCity, Actor pFounder)
         {
+            return InitializeAndEnter(pRebel, pOrigin, pFoundingCity,
+                pFounder, out _, out _);
+        }
+
+        internal static bool InitializeAndEnter(Kingdom pRebel,
+            Kingdom pOrigin, City pFoundingCity, Actor pFounder,
+            out Kingdom pEffectiveRebel, out bool restorationRedirected)
+        {
+            pEffectiveRebel = pRebel;
+            restorationRedirected = false;
+            RestorationRebellionStartOutcome earlyRedirect =
+                RestorationRebellionRedirectService.TryRedirectBanditFounder(
+                    pFounder, pFoundingCity, out Kingdom earlyRestored,
+                    out _);
+            if (RestorationRebellionRedirectRules
+                .ShouldSuppressVanilla(earlyRedirect))
+            {
+                restorationRedirected = true;
+                pEffectiveRebel = earlyRestored ?? pFoundingCity?.kingdom ??
+                    pRebel;
+                return true;
+            }
             if (!TryInitializeRouteMetadata(pRebel, pOrigin,
                     pFoundingCity, pFounder)) return false;
 

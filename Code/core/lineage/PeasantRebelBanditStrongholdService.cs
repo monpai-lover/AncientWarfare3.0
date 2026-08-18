@@ -331,8 +331,18 @@ namespace AncientWarfare3.core.lineage
             out Kingdom pBandit, out City pStronghold,
             out string pFailureKey)
         {
+            return TryCreateDirect(pMother, out pBandit, out pStronghold,
+                out pFailureKey, out _, pAllowClaimRedirect: true);
+        }
+
+        internal static bool TryCreateDirect(City pMother,
+            out Kingdom pBandit, out City pStronghold,
+            out string pFailureKey, out bool restorationRedirected,
+            bool pAllowClaimRedirect = true)
+        {
             pBandit = null;
             pStronghold = null;
+            restorationRedirected = false;
             pFailureKey = "aw_bandit_stronghold_invalid_city";
             if (!CanMutate() || pMother?.data == null ||
                 pMother.isRekt() || pMother.kingdom?.data == null ||
@@ -347,6 +357,28 @@ namespace AncientWarfare3.core.lineage
             {
                 pFailureKey = "aw_bandit_stronghold_population_failed";
                 return false;
+            }
+            if (pAllowClaimRedirect)
+            {
+                RestorationRebellionStartOutcome redirect =
+                    RestorationRebellionRedirectService
+                        .TryRedirectBanditFounder(
+                            ruler, pMother, out Kingdom restored,
+                            out string redirectError);
+                if (RestorationRebellionRedirectRules
+                    .ShouldSuppressVanilla(redirect))
+                {
+                    restorationRedirected = true;
+                    pBandit = restored;
+                    pStronghold = restored?.capital ?? pMother;
+                    pFailureKey = redirect ==
+                        RestorationRebellionStartOutcome.Started
+                        ? ""
+                        : (string.IsNullOrEmpty(redirectError)
+                            ? "restoration_initialization_pending"
+                            : redirectError);
+                    return true;
+                }
             }
             if (!TryPlan(pMother, origin, origin, ruler,
                     out PeasantRebelBanditStrongholdPlan plan,

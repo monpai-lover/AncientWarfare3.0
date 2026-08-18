@@ -172,10 +172,15 @@ namespace AncientWarfare3.core.lineage
 
             if (rebel?.data == null) return null;
             MarkRebelKingdom(rebel, pFounder, pOriginKingdom);
+            bool restorationRedirected;
+            Kingdom effectiveRebel;
             if (!PeasantRebelRouteService.InitializeAndEnter(rebel,
-                    pOriginKingdom, pCity, pFounder))
+                    pOriginKingdom, pCity, pFounder,
+                    out effectiveRebel, out restorationRedirected))
                 PeasantRebelRouteService.EnterFoundingFallback(rebel,
                     pOriginKingdom, pCity);
+            else if (restorationRedirected && effectiveRebel?.data != null)
+                rebel = effectiveRebel;
 
             HistoryWriter.RecordKingdom(rebel, KingdomEvent.MANDATE_REBELLION,
                 HistoryText.Kingdom(rebel) +
