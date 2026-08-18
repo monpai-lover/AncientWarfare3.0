@@ -70,6 +70,15 @@ Forbid-Contains $hasOwnership '.Poll(' `
 Forbid-Contains $hasOwnership 'OpenReadyCursor(' `
     'HasOwnership must not open a path result cursor.'
 
+$describeRuntimeState = Get-MethodBlock $pathBridge `
+    'internal static string DescribeRuntimeState(Actor pActor)'
+Forbid-Contains $describeRuntimeState '.Poll(' `
+    'DescribeRuntimeState must not consume path results.'
+Forbid-Contains $describeRuntimeState 'OpenReadyCursor(' `
+    'DescribeRuntimeState must not open a path result cursor.'
+Require-Contains $describeRuntimeState 'finder.ReadState(actorId)' `
+    'DescribeRuntimeState must use a read-only finder snapshot.'
+
 Require-Contains $workerPool 'AWSimulationWorkerDispatchGate' `
     'Persistent workers must retain generation-gated dispatch.'
 Require-Contains $workerPool '_dispatchGate.Assign(' `

@@ -49,6 +49,50 @@ namespace AncientWarfare3.core.pathfinding
         internal int AmbientActive { get; }
     }
 
+    internal readonly struct AWPathSessionState
+    {
+        internal AWPathSessionState(bool pHasRequest, bool pHasQueued,
+            bool pHasRunning, bool pIsLatestQueued,
+            bool pIsLatestRunning, AWPathRequestState pRequestState,
+            AWPathFailureReason pFailureReason, bool pHasPendingSteps)
+        {
+            HasRequest = pHasRequest;
+            HasQueued = pHasQueued;
+            HasRunning = pHasRunning;
+            IsLatestQueued = pIsLatestQueued;
+            IsLatestRunning = pIsLatestRunning;
+            RequestState = pRequestState;
+            FailureReason = pFailureReason;
+            HasPendingSteps = pHasPendingSteps;
+        }
+
+        internal static AWPathSessionState None => default;
+        internal bool HasRequest { get; }
+        internal bool HasQueued { get; }
+        internal bool HasRunning { get; }
+        internal bool IsLatestQueued { get; }
+        internal bool IsLatestRunning { get; }
+        internal AWPathRequestState RequestState { get; }
+        internal AWPathFailureReason FailureReason { get; }
+        internal bool HasPendingSteps { get; }
+
+        internal AWPathPollKind DiagnosticPollKind
+        {
+            get
+            {
+                if (!HasRequest) return AWPathPollKind.NoRequest;
+                if (HasPendingSteps) return AWPathPollKind.StepReady;
+                return RequestState switch
+                {
+                    AWPathRequestState.Succeeded => AWPathPollKind.Completed,
+                    AWPathRequestState.Failed => AWPathPollKind.Failed,
+                    AWPathRequestState.Cancelled => AWPathPollKind.Cancelled,
+                    _ => AWPathPollKind.Waiting
+                };
+            }
+        }
+    }
+
     public sealed class AWPathFinder : IDisposable
     {
         private const int SegmentStepBudget = 16;
@@ -205,6 +249,29 @@ namespace AncientWarfare3.core.pathfinding
             return _sessions.TryGetValue(pActorId, out PathSessionRecord record) &&
                    record.Running != null && ReferenceEquals(record.Latest,
                        record.Running);
+        }
+
+        internal AWPathSessionState ReadState(long pActorId)
+        {
+            lock (_requestGate)
+            {
+                if (!_sessions.TryGetValue(pActorId,
+                        out PathSessionRecord record) ||
+                    record.Latest?.Request?.Stream == null)
+                    return AWPathSessionState.None;
+
+                PathfindingTask latest = record.Latest;
+                AWPathStream stream = latest.Request.Stream;
+                return new AWPathSessionState(
+                    pHasRequest: true,
+                    pHasQueued: record.Queued != null,
+                    pHasRunning: record.Running != null,
+                    pIsLatestQueued: ReferenceEquals(latest, record.Queued),
+                    pIsLatestRunning: ReferenceEquals(latest, record.Running),
+                    pRequestState: stream.State,
+                    pFailureReason: stream.FailureReason,
+                    pHasPendingSteps: stream.HasPendingSteps);
+            }
         }
 
         public AWPathPollResult Poll(long pActorId)

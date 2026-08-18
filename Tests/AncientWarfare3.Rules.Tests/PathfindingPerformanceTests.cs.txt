@@ -11,6 +11,7 @@ internal static class PathfindingPerformanceTests
         ActorTimerWorkUsesBoundedRanges();
         ActorPostEnemyCacheKeepsPreparationAndCommitBoundaries();
         SpatialMembershipKeepsRepairAndVanillaFallbacks();
+        PathRuntimeDiagnosticsAreReadOnly();
         WorkClassesPreserveOperationalCapacityWithFairness();
         RuntimeSubmittersClassifyPathWorkExplicitly();
         RequestKeysMatchWithoutAllocating();
@@ -196,6 +197,47 @@ internal static class PathfindingPerformanceTests
         Assert(patch.Contains(
                 "catch (System.Exception error)", StringComparison.Ordinal),
             "spatial Harmony prefixes catch optimization-only invariant faults");
+    }
+
+    private static void PathRuntimeDiagnosticsAreReadOnly()
+    {
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(finder.Contains(
+                "internal AWPathSessionState ReadState(long pActorId)",
+                StringComparison.Ordinal),
+            "path finder exposes a non-consuming session snapshot");
+
+        string bridge = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs"));
+        int start = bridge.IndexOf(
+            "internal static string DescribeRuntimeState(Actor pActor)",
+            StringComparison.Ordinal);
+        int end = bridge.IndexOf(
+            "internal static bool ShouldPollNow(Actor pActor)", start,
+            StringComparison.Ordinal);
+        string body = start >= 0 && end > start
+            ? bridge.Substring(start, end - start)
+            : string.Empty;
+        Assert(body.Contains("finder.ReadState(actorId)",
+                StringComparison.Ordinal),
+            "runtime path diagnostics use the read-only session snapshot");
+        Assert(!body.Contains(".Poll(", StringComparison.Ordinal) &&
+               !body.Contains("OpenReadyCursor(", StringComparison.Ordinal),
+            "runtime path diagnostics never consume or open path results");
+
+        string deferred = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWDeferredPathRequestBatch.cs"));
+        Assert(deferred.Contains("PendingSlots.TryGetValue(actorId",
+                StringComparison.Ordinal) &&
+               deferred.Contains("Pending[slot] = item;",
+                   StringComparison.Ordinal) &&
+               deferred.Contains("internal static void Clear()",
+                   StringComparison.Ordinal),
+            "deferred path requests keep latest-per-actor order and teardown clearing");
     }
 
     private static void RuntimeSubmittersClassifyPathWorkExplicitly()

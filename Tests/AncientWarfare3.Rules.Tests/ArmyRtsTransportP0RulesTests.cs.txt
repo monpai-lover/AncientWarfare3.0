@@ -197,21 +197,27 @@ internal static class ArmyRtsTransportP0RulesTests
             ? movementBridge.Substring(runtimeStateStart,
                 runtimeStateEnd - runtimeStateStart)
             : string.Empty;
-        Assert(runtimeStateBody.Contains("last_failure=",
+        Assert(runtimeStateBody.Contains("poll=",
                    StringComparison.Ordinal) &&
-               runtimeStateBody.Contains("retry_attempt=",
+               runtimeStateBody.Contains("failure=",
                    StringComparison.Ordinal) &&
-               runtimeStateBody.Contains("now=",
+               runtimeStateBody.Contains("session=",
                    StringComparison.Ordinal) &&
-               runtimeStateBody.Contains("retry_due=",
+               runtimeStateBody.Contains("retry_pending=",
                    StringComparison.Ordinal) &&
                runtimeStateBody.Contains("retry_remaining=",
                    StringComparison.Ordinal) &&
                runtimeStateBody.Contains("worker_waiting=",
                    StringComparison.Ordinal) &&
                runtimeStateBody.Contains("worker_running=",
+                   StringComparison.Ordinal) &&
+               runtimeStateBody.Contains("finder.ReadState(actorId)",
+                   StringComparison.Ordinal) &&
+               !runtimeStateBody.Contains(".Poll(",
+                   StringComparison.Ordinal) &&
+               !runtimeStateBody.Contains("OpenReadyCursor(",
                    StringComparison.Ordinal),
-            "transport path diagnostics preserve the consumed failure and expose retry and worker state");
+            "transport path diagnostics expose retry and worker state without consuming path results");
 
         int lockedSubmitStart = transport.IndexOf(
             "private static void SubmitLockedPathIfNeeded(",

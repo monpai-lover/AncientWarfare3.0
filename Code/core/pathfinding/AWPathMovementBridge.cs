@@ -423,9 +423,9 @@ namespace AncientWarfare3.core.pathfinding
             {
                 long actorId = pActor.data.id;
                 AWPathFinder finder = AWPathfindingBootstrap.Finder;
-                AWPathPollResult poll = finder == null
-                    ? new AWPathPollResult(AWPathPollKind.NoRequest)
-                    : finder.Poll(actorId);
+                AWPathSessionState session = finder == null
+                    ? AWPathSessionState.None
+                    : finder.ReadState(actorId);
                 bool hasRetry = RetryContexts.TryGetValue(actorId,
                     out RetryContext retry);
                 double retryDue = hasRetry && retry.Pending
@@ -433,15 +433,14 @@ namespace AncientWarfare3.core.pathfinding
                 double remaining = retryDue > 0d
                     ? Math.Max(0d, retryDue - Time.realtimeSinceStartupAsDouble)
                     : 0d;
-                return "poll=" + poll.Kind +
-                    ",failure=" + poll.FailureReason +
+                return "poll=" + session.DiagnosticPollKind +
+                    ",failure=" + session.FailureReason +
+                    ",session=" + session.RequestState +
                     ",retry=" + hasRetry +
                     ",retry_pending=" + (hasRetry && retry.Pending) +
                     ",retry_remaining=" + remaining.ToString("0.###") +
-                    ",worker_waiting=" + (finder != null &&
-                        finder.IsWaitingForWorker(actorId)) +
-                    ",worker_running=" + (finder != null &&
-                        finder.IsWorkerRunning(actorId)) +
+                    ",worker_waiting=" + session.IsLatestQueued +
+                    ",worker_running=" + session.IsLatestRunning +
                     ",owned=" + HasOwnedPathState(actorId) +
                     ",current=" + (pActor.current_tile?.data?.tile_id ?? -1) +
                     ",target=" + (pActor.tile_target?.data?.tile_id ?? -1) +
@@ -672,9 +671,12 @@ namespace AncientWarfare3.core.pathfinding
             bool batchExists = pActor.batch != null;
             bool queueExists = batchExists &&
                                pActor.batch.c_update_movement != null;
+            bool p0TransportBoat = pActor.data != null && actorAlive &&
+                pActor.asset.is_boat &&
+                ArmyRtsTransportService.OwnsTransportBoat(pActor);
             if (!AWPathLifecycleRules.HasUsableMovementBatch(
                     pActor.data != null, actorAlive, batchExists,
-                    queueExists))
+                    queueExists) && !p0TransportBoat)
             {
                 Cancel(pActor, AWPathFailureReason.CancelledByNewRequest);
                 return;
@@ -772,6 +774,8 @@ namespace AncientWarfare3.core.pathfinding
 
             bool adjacentStep = (pStep.Hazards & AWHazardFlags.Direct) == 0;
             bool plannedFire = (pStep.Hazards & AWHazardFlags.Fire) != 0;
+            bool p0TransportBoat = pActor.asset.is_boat &&
+                ArmyRtsTransportService.OwnsTransportBoat(pActor);
             SlowMoveReason slowMoveReason = pActor.asset.is_boat
                 ? SlowMoveReason.Boat
                 : SlowMoveReason.None;
@@ -787,7 +791,7 @@ namespace AncientWarfare3.core.pathfinding
                 }
             }
 
-            if (useFastMove)
+            if (useFastMove || p0TransportBoat)
             {
                 if (!FastMoveTo(pActor, tile, adjacentStep)) return false;
                 AWPathfindingBootstrap.PathDiagnostics.OnFastStep();
@@ -866,18 +870,23 @@ namespace AncientWarfare3.core.pathfinding
             bool batchExists = pActor?.batch != null;
             bool movementQueueExists = batchExists &&
                                        pActor.batch.c_update_movement != null;
-            if (!AWPathLifecycleRules.HasUsableMovementBatch(actorExists,
-                    actorAlive, batchExists, movementQueueExists) ||
+            bool p0TransportBoat = actorExists && actorAlive &&
+                pActor.asset?.is_boat == true &&
+                ArmyRtsTransportService.OwnsTransportBoat(pActor);
+            if ((!AWPathLifecycleRules.HasUsableMovementBatch(actorExists,
+                    actorAlive, batchExists, movementQueueExists) &&
+                 !p0TransportBoat) ||
                 pTile?.data == null || pActor.current_tile?.data == null)
                 return false;
             if (!pActor._is_moving)
             {
                 pActor._is_moving = true;
-                pActor.batch.c_update_movement.Add(pActor);
+                if (movementQueueExists)
+                    pActor.batch.c_update_movement.Add(pActor);
             }
 
             pActor._next_step_tile = pTile;
-            if (pAdjacentStep)
+            if (p0TransportBoat || pAdjacentStep)
                 pActor.current_tile = pTile;
             else if (Toolbox.SquaredDistTile(pActor.current_tile, pTile) > 4f)
                 pActor.dirty_current_tile = true;
