@@ -43,9 +43,7 @@ namespace AncientWarfare3.core.court
         public static bool IsRotatingCityOffice(string pOfficeId,
             bool xiaCirculationUnlocked)
         {
-            if (pOfficeId == CourtOfficeId.WestMayor) return true;
-            return pOfficeId == CourtOfficeId.Governor &&
-                   xiaCirculationUnlocked;
+            return LocalCourtOfficeRules.IsLocalOffice(pOfficeId);
         }
 
         public static bool CanServeCity(long pNativeCityId,
