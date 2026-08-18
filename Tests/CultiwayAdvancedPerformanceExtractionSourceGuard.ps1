@@ -59,6 +59,12 @@ $pathBridge = Read-Source `
     'Code\core\pathfinding\AWPathMovementBridge.cs'
 $workerPool = Read-Source `
     'Code\core\performance\AWSimulationWorkerPool.cs'
+$actorPost = Read-Source `
+    'Code\core\performance\AWCooperativeActorPostRunner.cs'
+$frameSchedulerPatch = Read-Source `
+    'Code\patch\AW_FramePrioritySchedulerPatch.cs'
+$armySchedulerPatch = Read-Source `
+    'Code\patch\AW_ArmyRtsSchedulerPatch.cs'
 
 Require-Contains $runner 'Aw3RtsLogicalPulse' `
     'Cultiway extraction must retain the AW3 RTS logical pulse.'
@@ -98,6 +104,65 @@ $workerLoop = Get-MethodBlock $workerPool `
     'private void WorkerLoop(object pState)'
 Require-Contains $workerLoop '_dispatchGate.Consume(workerIndex)' `
     'A signaled worker must consume a generation before executing work.'
+
+Forbid-Contains $actorPost 'tileActionWorkItemAction' `
+    'Tile-action classification must not retain a worker delegate.'
+Forbid-Contains $actorPost 'tileActionTicket' `
+    'Tile-action classification must not retain a worker ticket.'
+Forbid-Contains $actorPost 'PostStage.ScheduleTileAction' `
+    'Tile-action work must proceed directly to bounded main-thread commits.'
+Forbid-Contains $actorPost 'PostStage.AwaitTileAction' `
+    'Tile-action work must not await a worker that reads live actors.'
+
+$tileCommit = Get-MethodBlock $actorPost `
+    'private void CommitTileActionWorkItem(int index)'
+Require-Contains $tileCommit 'CanSkipSafeGroundTileAction(' `
+    'Tile-action classification must occur in the main-thread commit.'
+
+$tileSafety = Get-MethodBlock $actorPost `
+    'private static bool CanSkipSafeGroundTileAction('
+Require-Contains $tileSafety 'actor == null' `
+    'Tile-action classification must reject a missing actor.'
+Require-Contains $tileSafety 'actor.current_tile' `
+    'Tile-action classification must validate the current tile.'
+Require-Contains $tileSafety 'actor.asset' `
+    'Tile-action classification must validate the actor asset.'
+Require-Contains $tileSafety 'tile.tile_id < fires.Length' `
+    'Tile-action classification must bounds-check the fire array.'
+
+foreach ($message in @(
+    'AW MapBox.Update failed; scheduler stopped and game paused:',
+    'AW native authority cycle failed; game paused:',
+    'AW background simulation/presentation boundary failed;')) {
+    $messageIndex = $frameSchedulerPatch.IndexOf(
+        $message, [StringComparison]::Ordinal)
+    if ($messageIndex -lt 0) {
+        $failures.Add("Missing forced-pause scheduler message: $message")
+        continue
+    }
+    $prefixStart = [Math]::Max(0, $messageIndex - 160)
+    $prefix = $frameSchedulerPatch.Substring(
+        $prefixStart, $messageIndex - $prefixStart)
+    if (-not $prefix.Contains('ModClass.LogError(')) {
+        $failures.Add("Forced-pause scheduler fault is not LogError: $message")
+    }
+}
+
+$rtsMessage = 'AW native Army RTS scheduling failed; game paused:'
+$rtsIndex = $armySchedulerPatch.IndexOf(
+    $rtsMessage, [StringComparison]::Ordinal)
+if ($rtsIndex -lt 0) {
+    $failures.Add('Missing forced-pause native RTS scheduling message.')
+}
+else {
+    $rtsPrefixStart = [Math]::Max(0, $rtsIndex - 160)
+    $rtsPrefix = $armySchedulerPatch.Substring(
+        $rtsPrefixStart, $rtsIndex - $rtsPrefixStart)
+    if (-not $rtsPrefix.Contains('ModClass.LogError(')) {
+        $failures.Add(
+            'Forced-pause native RTS scheduling fault must use LogError.')
+    }
+}
 
 $chunkMembership = Read-Source `
     'Code\core\performance\AWIncrementalChunkActorMembership.cs'
