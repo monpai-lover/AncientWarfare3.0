@@ -155,20 +155,35 @@ local-government window, read model, or portrait/navigation implementation.
 
 ### Custom Local Office Structure
 
-Each kingdom keeps one custom court template. Central and local offices remain
-in that same persisted template and are distinguished by the existing office
-`Layer`; local offices use `CourtOfficeLayer.City`. The custom-court workflow
-window exposes a segmented `Central Court` / `Local Government` switch that
-filters the shared canvas and editing controls by layer. Adding an office uses
-the active layer, and switching views never discards unsaved edits.
+Each kingdom keeps one custom-court package containing one central template
+and multiple named local-government templates. The custom-court workflow
+window exposes a segmented `Central Court` / `Local Government` switch. Local
+mode adds a template selector plus create, duplicate, rename, and delete
+commands, while reusing the same canvas, office cards, settings controls,
+validation, import/export, and application transaction.
 
-The local structure is a kingdom-wide template shared by every city, while
-incumbents, terms, histories, capacity, and vacancies remain independent per
-city. Saving, importing, exporting, validating, and applying continue to use
-the existing single-template transaction. Cross-layer management or
-appointment-prerequisite edges are not created by the filtered editor; legacy
-cross-layer edges remain persisted but are not rendered as editable links in
-either filtered view.
+Every local template contains only `CourtOfficeLayer.City` offices and its own
+management and appointment-prerequisite edges. A city persists the stable ID
+of one local template. Its user-visible local `city type` is exactly the
+current localized template name, so renaming a template changes the displayed
+type without breaking city bindings. Incumbents, terms, histories, capacity,
+and vacancies remain independent per city even when multiple cities use the
+same template.
+
+A local template can be marked `CivilDefault`, `MilitaryDefault`, or
+`ManualOnly`. Automatic assignment chooses the military default for a city
+whose existing realm/city facts classify it as military, otherwise the civil
+default. If a preferred default is absent, it uses the first valid local
+template in stable ID order. A player selection writes a per-city manual
+override; automatic reconciliation never replaces that override. Deleting an
+in-use template requires selecting a replacement and atomically rebinds its
+cities before removal.
+
+Legacy custom-court snapshots migrate existing city-layer offices and their
+internal edges into one generated default local template. Central offices stay
+in the central template. Cross-layer legacy edges remain archived in the
+imported package for round-trip safety but are not used by local hierarchy or
+appointment resolution.
 
 ### Office Structure
 
@@ -297,8 +312,9 @@ and dismissals naturally break up local concentrations.
    scans live actors.
 5. The city detail entry and the national city card both call the same city
    context entry point.
-6. The custom-court workflow filters one template by office layer; it does not
-   create a separate local-template store or runtime.
+6. The custom-court workflow edits one package with a central template and a
+   bounded collection of local templates; city binding resolves one local
+   template before the shared read model is built.
 
 ## Failure Handling
 
@@ -358,10 +374,15 @@ and dismissals naturally break up local concentrations.
   links, portraits, or state.
 - A stale city card exits safely.
 - The city detail entry opens the same `CourtWindow` city context.
-- Switching the custom workflow between central and local layers preserves
-  both sets of offices and saves them in one template.
-- New offices inherit the active workflow layer and cross-layer edges cannot
-  be accidentally created through a filtered selection.
+- Switching the custom workflow between central and local modes preserves the
+  central template and every local template in one saved package.
+- Players can create multiple local templates, and each city displays its
+  bound template name as its local city type.
+- Automatic civil/military assignment respects defaults, while a manual city
+  override remains stable across annual reconciliation and save/load.
+- Deleting an in-use template cannot leave a dangling city binding.
+- New local offices always use the city layer and cross-template edges cannot
+  be created.
 
 ### Integration and Save Tests
 
