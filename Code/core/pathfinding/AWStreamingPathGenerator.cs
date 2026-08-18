@@ -60,7 +60,9 @@ namespace AncientWarfare3.core.pathfinding
                     !_isRequestCurrent(pRequest))
                     return AWPathGenerationResult.Failure(
                         AWPathFailureReason.StaleTraversal);
+                long traversalRevision = pRequest.Generation.Revision;
                 if (pRequest.TryTakeCachedSegment(pMaximumSteps,
+                        traversalRevision,
                         out AWPathStep[] cachedSteps, out bool cachedComplete))
                 {
                     int cachedEnd = cachedSteps.Length > 0
@@ -100,7 +102,8 @@ namespace AncientWarfare3.core.pathfinding
                     var directOutput = new AWPathStep[output];
                     Array.Copy(directSteps, directOutput, output);
                     if (output < directSteps.Length)
-                        pRequest.CacheRoute(directSteps, output, true);
+                        pRequest.CacheRoute(directSteps, output, true,
+                            traversalRevision);
                     int end = output > 0 ? directOutput[output - 1].TileId :
                         pRequest.StartTileId;
                     return AWPathGenerationResult.Success(end,
@@ -182,7 +185,7 @@ namespace AncientWarfare3.core.pathfinding
                     AWDockTransportRules.ShouldPreferTransport(
                         workspace.PathLength(result.NodeIndex),
                         pRequest.PhysicalTransportRouteTiles))
-                    return TransportResult(target.Id);
+                    return TransportResult(pRequest);
 
                 if (!result.Success)
                 {
@@ -194,7 +197,7 @@ namespace AncientWarfare3.core.pathfinding
                                 pRequest.Profile.IsMilitary,
                                 pRequest.Options.BoundedMilitaryWater))
                     {
-                        return TransportResult(target.Id);
+                        return TransportResult(pRequest);
                     }
                     return AWPathGenerationResult.Failure(result.HitNodeLimit
                         ? AWPathFailureReason.SearchLimitExceeded
@@ -216,7 +219,8 @@ namespace AncientWarfare3.core.pathfinding
                 bool objectiveIsFinalTarget = objective.Id == target.Id;
                 if (outputCount < stepCount)
                     pRequest.CacheRoute(fullRoute, outputCount,
-                        result.ReachedTarget && objectiveIsFinalTarget);
+                        result.ReachedTarget && objectiveIsFinalTarget,
+                        traversalRevision);
                 int endTileId = outputCount > 0
                     ? steps[outputCount - 1].TileId
                     : pRequest.StartTileId;
@@ -284,21 +288,35 @@ namespace AncientWarfare3.core.pathfinding
                     estimate.StaminaCost, estimate.HealthCost, estimate.RiskCost,
                     estimate.Hazards | AWHazardFlags.Direct);
                 result.Add(new AWPathStep(nextId,
-                    next.Liquid || next.Ocean ? AWMovementMethod.Swim : AWMovementMethod.Walk,
-                    estimate));
+                    pRequest.Profile.IsBoat
+                        ? AWMovementMethod.Sail
+                        : next.Liquid || next.Ocean
+                            ? AWMovementMethod.Swim
+                            : AWMovementMethod.Walk,
+                    estimate,
+                    pPlannedTileFlags:
+                        AWPathTileFlagsExtensions.FromSnapshot(next)));
                 currentId = nextId;
             }
             pSteps = result.ToArray();
             return true;
         }
 
-        private static AWPathGenerationResult TransportResult(int pTargetTileId)
+        private static AWPathGenerationResult TransportResult(
+            AWPathRequest pRequest)
         {
             var estimate = new AWTraversalEstimate(0f, 0f, 0f, 0f,
                 AWHazardFlags.Transport);
-            return AWPathGenerationResult.Success(pTargetTileId, true,
-                new[] { new AWPathStep(pTargetTileId,
-                    AWMovementMethod.Transport, estimate) });
+            return AWPathGenerationResult.Success(pRequest.TargetTileId,
+                true, new[] { new AWPathStep(pRequest.TargetTileId,
+                    AWMovementMethod.Transport, estimate,
+                    pEntryPortalId: pRequest.EntryPortalId,
+                    pExitPortalId: pRequest.ExitPortalId,
+                    pEntryLandTileId: pRequest.EntryLandTileId,
+                    pPickupSeaTileId: pRequest.PickupSeaTileId,
+                    pDestinationSeaTileId:
+                        pRequest.DestinationSeaTileId,
+                    pLandingLandTileId: pRequest.LandingLandTileId) });
         }
 
         private static int TraversalClass(AWPathRequest pRequest)
@@ -426,7 +444,8 @@ namespace AncientWarfare3.core.pathfinding
                         time, stamina, health, risk, g, h,
                         AWNarrowWaterRecoveryRules.NextWaterRun(
                             current.WaterRun, enteringWater),
-                        regionTransitions);
+                        regionTransitions,
+                        AWPathTileFlagsExtensions.FromSnapshot(neighbor));
                     if (!pWorkspace.TryAddLabel(node,
                             pRequest.Options.LimitPathfindingRegions > 0,
                             out int nodeIndex))
@@ -513,7 +532,8 @@ namespace AncientWarfare3.core.pathfinding
             public SearchNode(int pTileId, int pParentIndex, AWMovementMethod pMethod,
                 AWTraversalEstimate pEstimate, float pTime, float pStaminaCost,
                 float pHealthCost, float pRisk, float pG, float pH,
-                int pWaterRun, int pRegionTransitions)
+                int pWaterRun, int pRegionTransitions,
+                AWPathTileFlags pPlannedTileFlags)
             {
                 TileId = pTileId;
                 ParentIndex = pParentIndex;
@@ -527,6 +547,7 @@ namespace AncientWarfare3.core.pathfinding
                 H = pH;
                 WaterRun = Math.Max(0, pWaterRun);
                 RegionTransitions = Math.Max(0, pRegionTransitions);
+                PlannedTileFlags = pPlannedTileFlags;
             }
 
             public int TileId { get; }
@@ -541,13 +562,15 @@ namespace AncientWarfare3.core.pathfinding
             public float H { get; }
             public int WaterRun { get; }
             public int RegionTransitions { get; }
+            public AWPathTileFlags PlannedTileFlags { get; }
             public float F => G + H;
 
             public static SearchNode Start(int pTileId, float pH,
                 int pWaterRun)
             {
                 return new SearchNode(pTileId, -1, AWMovementMethod.Walk, default,
-                    0f, 0f, 0f, 0f, 0f, pH, pWaterRun, 0);
+                    0f, 0f, 0f, 0f, 0f, pH, pWaterRun, 0,
+                    AWPathTileFlags.None);
             }
         }
 
@@ -719,7 +742,8 @@ namespace AncientWarfare3.core.pathfinding
                 while (node.ParentIndex >= 0)
                 {
                     _path[--write] = new AWPathStep(node.TileId,
-                        node.Method, node.Estimate);
+                        node.Method, node.Estimate,
+                        pPlannedTileFlags: node.PlannedTileFlags);
                     node = _nodes[node.ParentIndex];
                 }
                 return count;

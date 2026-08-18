@@ -12,7 +12,7 @@ namespace AncientWarfare3.core.pathfinding
 
         internal bool Register(AWDockEndpoint pDock)
         {
-            if (!pDock.IsValid) return false;
+            if (!pDock.IsDockPortal) return false;
             _docks[pDock.Key] = pDock;
             return true;
         }
@@ -46,7 +46,7 @@ namespace AncientWarfare3.core.pathfinding
 
         internal bool Remove(AWDockEndpoint pDock)
         {
-            return pDock.IsValid && _docks.TryRemove(pDock.Key, out _);
+            return pDock.IsDockPortal && _docks.TryRemove(pDock.Key, out _);
         }
 
         internal AWDockEndpoint[] Snapshot()

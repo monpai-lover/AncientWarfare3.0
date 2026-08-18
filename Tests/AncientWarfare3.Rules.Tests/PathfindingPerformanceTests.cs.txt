@@ -22,8 +22,10 @@ internal static class PathfindingPerformanceTests
         BoundedMilitaryWaterCrossingIsEnforced();
         RegionLimitedPathReturnsABoundedSegment();
         LongPathEmitsOneCompletePlan();
+        BoatAStarStepsPreservePlannedTerrainFlags();
         RegionWaypointDoesNotCompleteFinalTarget();
         RegionWaypointCacheKeepsContinuation();
+        CachedContinuationIsInvalidatedByTraversalRevision();
         RegionWaypointSkipsAnUnwalkableRegionRepresentative();
         RegionCorridorRetriesAfterUnreachableGuidance();
         TraversalRevisionMustMatchBeforeConsumption();
@@ -47,6 +49,7 @@ internal static class PathfindingPerformanceTests
         LargeSchedulerPathProgressRules();
         UnboundedPathsDoNotRepeatFullSearchForEachSegment();
         ShortSafePathUsesDirectFastPath();
+        ShortBoatPathPreservesDirectOceanPlan();
         ReusedPathSubmissionPreservesActorMovement();
         ActorPathConsumptionDoesNotTakeTheGlobalRequestGate();
         ActorPathLifecycleDoesNotTakeAGlobalSessionMapGate();
@@ -1445,6 +1448,46 @@ internal static class PathfindingPerformanceTests
         request.Dispose();
     }
 
+    private static void ShortBoatPathPreservesDirectOceanPlan()
+    {
+        const int length = 4;
+        var tiles = new AWTileTraversalSnapshot[length];
+        for (int i = 0; i < length; i++)
+        {
+            var neighbors = new List<int>(2);
+            if (i > 0) neighbors.Add(i - 1);
+            if (i + 1 < length) neighbors.Add(i + 1);
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                liquid: true, ocean: true, goodForBoat: true,
+                pNeighbors: neighbors.ToArray());
+        }
+        using var generation = AWTraversalGeneration.FromTiles(137,
+            length, 1, tiles);
+        var profile = new AWActorTraversalProfile(false, true, false,
+            false, false, false, false, false, true, true,
+            100f, 100f, 100f, 100f, 5f, 0f, 0f);
+        using var request = new AWPathRequest(137, 0, length - 1,
+            new AWPathRequestOptions(true, false, false, 0), profile,
+            generation, 0d);
+
+        AWPathGenerationResult result = new AWStreamingPathGenerator(
+                new AWPathfindingConfig
+                {
+                    ShortRangeTiles = 24,
+                    SegmentTargetSteps = 24
+                })
+            .GenerateSegment(request, CancellationToken.None, 16);
+
+        AWPathTileFlags required = AWPathTileFlags.HasType |
+                                   AWPathTileFlags.Ocean |
+                                   AWPathTileFlags.Liquid;
+        Assert(result.Succeeded && result.Steps.Count == length - 1 &&
+               (result.Steps[0].Hazards & AWHazardFlags.Direct) != 0 &&
+               result.Steps[0].Method == AWMovementMethod.Sail &&
+               (result.Steps[0].PlannedTileFlags & required) == required,
+            "direct boat steps retain their sailing method and planned ocean flags");
+    }
+
     private static void ReusedPathSubmissionPreservesActorMovement()
     {
         Assert(!AWPathLifecycleRules.ShouldClearPreviousPathAfterSubmission(
@@ -1551,6 +1594,78 @@ internal static class PathfindingPerformanceTests
         Assert(first.Succeeded && !first.ReachedTarget &&
                cached.Succeeded && !cached.ReachedTarget,
             "draining a cached waypoint route still requires the final-target continuation");
+    }
+
+    private static void CachedContinuationIsInvalidatedByTraversalRevision()
+    {
+        using var generation = LinearLandGeneration(8);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 1,
+            MaxNodesLong = 256
+        };
+        using var request = new AWPathRequest(193, 0, 7,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        var generator = new AWStreamingPathGenerator(config);
+
+        AWPathGenerationResult first = generator.GenerateSegment(request,
+            CancellationToken.None, 2);
+        Assert(first.Succeeded && first.EndTileId == 2 &&
+               !first.ReachedTarget,
+            "the first segment leaves a cached continuation");
+        request.AdvanceStartTile(first.EndTileId);
+
+        generation.ApplyTileSnapshots(new[]
+        {
+            new AWTileTraversalSnapshot(3, 3, 0, ground: true,
+                block: true, pNeighbors: new[] { 2, 4 })
+        });
+
+        AWPathGenerationResult changed = generator.GenerateSegment(request,
+            CancellationToken.None, 16);
+        Assert(!changed.Succeeded,
+            "a traversal revision invalidates the old continuation instead of walking through a newly blocked tile");
+    }
+
+    private static void BoatAStarStepsPreservePlannedTerrainFlags()
+    {
+        const int length = 8;
+        var tiles = new AWTileTraversalSnapshot[length];
+        for (int i = 0; i < length; i++)
+        {
+            var neighbors = new List<int>(2);
+            if (i > 0) neighbors.Add(i - 1);
+            if (i + 1 < length) neighbors.Add(i + 1);
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                liquid: true, ocean: true, goodForBoat: true,
+                pNeighbors: neighbors.ToArray());
+        }
+        using var generation = AWTraversalGeneration.FromTiles(136,
+            length, 1, tiles);
+        var profile = new AWActorTraversalProfile(false, true, false,
+            false, false, false, false, false, true, true,
+            100f, 100f, 100f, 100f, 5f, 0f, 0f);
+        var options = new AWPathRequestOptions(true, false, false, 0);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 1,
+            MaxNodesLong = 256
+        };
+        using var request = new AWPathRequest(136, 0, length - 1,
+            options, profile, generation, 0d);
+
+        AWPathGenerationResult result = new AWStreamingPathGenerator(config)
+            .GenerateSegment(request, CancellationToken.None, 16);
+
+        AWPathTileFlags required = AWPathTileFlags.HasType |
+                                   AWPathTileFlags.Ocean |
+                                   AWPathTileFlags.Liquid;
+        Assert(result.Succeeded && result.Steps.Count > 0 &&
+               result.Steps[0].Method == AWMovementMethod.Sail &&
+               (result.Steps[0].PlannedTileFlags & required) == required,
+            "A* boat steps retain planned ocean flags for runtime safety validation");
     }
 
     private static void MilitaryP0UsesBoundedCooperativeChunks()

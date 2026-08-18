@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
 using life.taxi;
@@ -54,6 +55,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(TaxiRequest), nameof(TaxiRequest.cancel))]
         private static void Cancel_Prefix(TaxiRequest __instance)
         {
+            AWDockTaxiRouteService.Remove(__instance);
             ArmyRtsTransportProductionService.Cancel(__instance);
         }
 
@@ -61,6 +63,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(TaxiRequest), nameof(TaxiRequest.finish))]
         private static void Finish_Prefix(TaxiRequest __instance)
         {
+            AWDockTaxiRouteService.Remove(__instance);
             ArmyRtsTransportProductionService.Cancel(__instance);
         }
 
@@ -68,7 +71,15 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(TaxiRequest), nameof(TaxiRequest.clear))]
         private static void Clear_Prefix(TaxiRequest __instance)
         {
+            AWDockTaxiRouteService.Remove(__instance);
             ArmyRtsTransportProductionService.Cancel(__instance);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TaxiManager), nameof(TaxiManager.clear))]
+        private static void TaxiManagerClear_Prefix()
+        {
+            AWDockTaxiRouteService.Clear();
         }
     }
 }

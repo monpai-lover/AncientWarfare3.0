@@ -31,6 +31,7 @@ namespace AncientWarfare3.core.pathfinding
 
         public int GenerationId => _current?.Id ?? -1;
         public long SourceRevision => _sourceRevision;
+        internal long TopologySourceRevision => _topologySourceRevision;
         public int DirtyTileCount => _dirtyTiles.Count;
         public int DirtyChunkCount => DirtyTileCount;
         public int PendingOverlayChunkCount => 0;

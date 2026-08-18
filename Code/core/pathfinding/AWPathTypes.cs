@@ -129,13 +129,22 @@ namespace AncientWarfare3.core.pathfinding
     {
         public AWPathStep(int pTileId, AWMovementMethod pMethod,
             AWTraversalEstimate pEstimate = default, long pTransportRequestId = -1L,
-            AWPathTileFlags pPlannedTileFlags = AWPathTileFlags.None)
+            AWPathTileFlags pPlannedTileFlags = AWPathTileFlags.None,
+            long pEntryPortalId = -1L, long pExitPortalId = -1L,
+            int pEntryLandTileId = -1, int pPickupSeaTileId = -1,
+            int pDestinationSeaTileId = -1, int pLandingLandTileId = -1)
         {
             TileId = pTileId;
             Method = pMethod;
             Estimate = pEstimate;
             TransportRequestId = pTransportRequestId;
             PlannedTileFlags = pPlannedTileFlags;
+            EntryPortalId = pEntryPortalId;
+            ExitPortalId = pExitPortalId;
+            EntryLandTileId = pEntryLandTileId;
+            PickupSeaTileId = pPickupSeaTileId;
+            DestinationSeaTileId = pDestinationSeaTileId;
+            LandingLandTileId = pLandingLandTileId;
         }
 
         public int TileId { get; }
@@ -144,6 +153,12 @@ namespace AncientWarfare3.core.pathfinding
         public AWHazardFlags Hazards => Estimate.Hazards;
         public long TransportRequestId { get; }
         public AWPathTileFlags PlannedTileFlags { get; }
+        public long EntryPortalId { get; }
+        public long ExitPortalId { get; }
+        public int EntryLandTileId { get; }
+        public int PickupSeaTileId { get; }
+        public int DestinationSeaTileId { get; }
+        public int LandingLandTileId { get; }
     }
 
     public readonly struct AWPathPollResult

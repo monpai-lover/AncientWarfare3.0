@@ -1,28 +1,333 @@
 using System;
 using System.IO;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.pathfinding;
 
 internal static class ArmyRtsTransportP0RulesTests
 {
     internal static void Run()
     {
+        Assert(ArmyRtsTransportRules.ResolveP0Stage(true, false, false,
+                false, false, false) ==
+               ArmyRtsTransportP0Stage.AssembleAtEntry,
+            "a selected route first assembles the captain");
+        Assert(ArmyRtsTransportRules.ResolveP0Stage(true, true, false,
+                false, false, false) ==
+               ArmyRtsTransportP0Stage.BoatToPickup,
+            "the boat must reach the selected pickup sea tile");
+        Assert(ArmyRtsTransportRules.ResolveP0Stage(true, true, true,
+                false, false, false) ==
+               ArmyRtsTransportP0Stage.Boarding,
+            "P0 boards the manifest when captain and boat are ready");
+        Assert(ArmyRtsTransportRules.ResolveP0Stage(true, true, true,
+                true, false, false) ==
+               ArmyRtsTransportP0Stage.Sailing,
+            "a fully embarked roster begins sailing");
+        Assert(ArmyRtsTransportRules.ResolveP0Stage(true, true, true,
+                true, true, false) ==
+               ArmyRtsTransportP0Stage.Landing,
+            "arrival begins landing");
+        Assert(ArmyRtsTransportRules.ResolveP0Stage(true, true, true,
+                true, true, true) ==
+               ArmyRtsTransportP0Stage.Complete,
+            "all landed members complete the voyage");
+        Assert(ArmyRtsTransportRules.ShouldActivateStrategicTransport(
+                authoritative: true, strategicMovementReady: true,
+                captainTileValid: true, targetTileValid: true,
+                sameIsland: false, physicalRouteAvailable: true,
+                voyageAlreadyActive: false),
+            "a confirmed cross-island strategic route immediately starts P0 transport");
+        Assert(!ArmyRtsTransportRules.ShouldActivateStrategicTransport(
+                authoritative: true, strategicMovementReady: true,
+                captainTileValid: true, targetTileValid: true,
+                sameIsland: true, physicalRouteAvailable: true,
+                voyageAlreadyActive: false),
+            "a connected land objective remains under the land march path");
+        Assert(ArmyRtsTransportRules.ShouldAdmitMemberP0(
+                pValidMember: true, pInsideBoat: false),
+            "a valid unembarked member remains P0 work");
+        Assert(ArmyRtsTransportRules.ShouldAdmitMemberP0(
+                pValidMember: true, pInsideBoat: true),
+            "an embarked passenger remains in P0 so vanilla AI cannot steal transport ownership");
+        Assert(!ArmyRtsTransportRules.ShouldAdmitMemberP0(
+                pValidMember: false, pInsideBoat: false),
+            "an invalid member is never admitted to P0");
+        Assert(ArmyRtsTransportRules.SelectEmergencyLanding(
+                   entryValid: true, entryDistanceSquared: 25f,
+                   exitValid: true, exitDistanceSquared: 9f) ==
+               ArmyRtsEmergencyLandingChoice.Exit,
+            "transport cancellation lands at the nearest live coast");
+        Assert(ArmyRtsTransportRules.SelectEmergencyLanding(
+                   entryValid: true, entryDistanceSquared: 25f,
+                   exitValid: false, exitDistanceSquared: 0f) ==
+               ArmyRtsEmergencyLandingChoice.Entry,
+            "transport cancellation falls back to the live entry coast");
+
         string root = Directory.GetCurrentDirectory();
         string transport = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsTransportService.cs"));
+        string production = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsTransportProductionService.cs"));
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"));
+        string movementBridge = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "pathfinding", "AWPathMovementBridge.cs"));
+        string dockTransport = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "pathfinding", "AWDockTransportService.cs"));
         string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
             "performance", "AWCooperativeActorPostRunner.cs"));
+        string boatLifecycle = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ActorBoatLifecyclePatch.cs"));
+
+        int boatOwnershipStart = transport.IndexOf(
+            "public static bool OwnsTransportBoat(",
+            StringComparison.Ordinal);
+        int boatOwnershipEnd = transport.IndexOf(
+            "internal static bool IsExecutingVanillaPassengerTask(",
+            boatOwnershipStart, StringComparison.Ordinal);
+        string boatOwnershipBody = boatOwnershipStart >= 0 &&
+            boatOwnershipEnd > boatOwnershipStart
+            ? transport.Substring(boatOwnershipStart,
+                boatOwnershipEnd - boatOwnershipStart)
+            : string.Empty;
+        Assert(boatOwnershipBody.Contains(
+                   "OwnedTransportBoats.TryGetValue",
+                   StringComparison.Ordinal) &&
+               !boatOwnershipBody.Contains(
+                   "foreach (TransportState state in States.Values)",
+                   StringComparison.Ordinal),
+            "temporary transport ownership lookup is constant time");
+
+        int dockLookupStart = dockTransport.IndexOf(
+            "private static Building FindDockBuilding(",
+            StringComparison.Ordinal);
+        int dockLookupEnd = dockTransport.IndexOf(
+            "private static bool TryResolveWaterComponent(",
+            dockLookupStart, StringComparison.Ordinal);
+        string dockLookupBody = dockLookupStart >= 0 &&
+            dockLookupEnd > dockLookupStart
+            ? dockTransport.Substring(dockLookupStart,
+                dockLookupEnd - dockLookupStart)
+            : string.Empty;
+        Assert(dockLookupBody.Contains("DockBuildings.TryGetValue",
+                   StringComparison.Ordinal) &&
+               !dockLookupBody.Contains("foreach (City city",
+                   StringComparison.Ordinal),
+            "live dock lookup is constant time after topology rebuild");
+
+        int voyageFrameStart = transport.IndexOf(
+            "private static void ProcessVoyageFrame(",
+            StringComparison.Ordinal);
+        int voyageFrameEnd = transport.IndexOf(
+            "private static bool TryResolveLiveRoute(", voyageFrameStart,
+            StringComparison.Ordinal);
+        string voyageFrameBody = voyageFrameStart >= 0 &&
+            voyageFrameEnd > voyageFrameStart
+            ? transport.Substring(voyageFrameStart,
+                voyageFrameEnd - voyageFrameStart)
+            : string.Empty;
+        Assert(voyageFrameBody.Contains(
+                   "RefreshRosterAndBuildCensus(",
+                   StringComparison.Ordinal) &&
+               !transport.Contains(
+                   "private static bool AllMembersEmbarked(",
+                   StringComparison.Ordinal) &&
+               !transport.Contains(
+                   "private static bool AllMembersLanded(",
+                   StringComparison.Ordinal) &&
+               !transport.Contains(
+                   "private static bool HasAnyEmbarkedMember(",
+                   StringComparison.Ordinal),
+            "one roster census replaces repeated voyage member scans");
+
+        int censusStart = transport.IndexOf(
+            "private static RosterCensus RefreshRosterAndBuildCensus(",
+            StringComparison.Ordinal);
+        int censusEnd = transport.IndexOf(
+            "private static void CompleteVoyage(", censusStart,
+            StringComparison.Ordinal);
+        string censusBody = censusStart >= 0 && censusEnd > censusStart
+            ? transport.Substring(censusStart, censusEnd - censusStart)
+            : string.Empty;
+        Assert(censusBody.Contains("pState.Army.units",
+                   StringComparison.Ordinal) &&
+               censusBody.Contains(
+                   "pState.Members[member.data.id] = member",
+                   StringComparison.Ordinal),
+            "every voyage census absorbs the complete live army roster");
+
+        int p0DriveStart = transport.IndexOf(
+            "private static void DriveOwnedPathP0(",
+            StringComparison.Ordinal);
+        int p0DriveEnd = transport.IndexOf(
+            "private static TransportState Begin(", p0DriveStart,
+            StringComparison.Ordinal);
+        string p0DriveBody = p0DriveStart >= 0 &&
+            p0DriveEnd > p0DriveStart
+            ? transport.Substring(p0DriveStart,
+                p0DriveEnd - p0DriveStart)
+            : string.Empty;
+        Assert(p0DriveBody.Contains("AWPathMovementBridge.Update(pActor)",
+                   StringComparison.Ordinal) &&
+               !p0DriveBody.Contains("pActor.b5_checkPathMovement(",
+                   StringComparison.Ordinal),
+            "transport P0 advances its owned path without native batch gating");
+        Assert(p0DriveBody.Contains(
+                   "AWPathMovementBridge.HasOwnership(pActor) &&\n                    !pActor.is_moving",
+                   StringComparison.Ordinal),
+            "transport P0 cannot consume a second path step before smooth movement reaches the current step");
+        Assert(p0DriveBody.Contains("CaptureTransportPathDiagnostic(",
+                   StringComparison.Ordinal) &&
+               p0DriveBody.Contains("phase=boat_path_state",
+                   StringComparison.Ordinal) &&
+               p0DriveBody.Contains("pre=", StringComparison.Ordinal) &&
+               p0DriveBody.Contains("post_update=",
+                   StringComparison.Ordinal) &&
+               p0DriveBody.Contains("post_smooth=",
+                   StringComparison.Ordinal),
+            "transport P0 exposes one throttled diagnostic across submit, path update, and smooth movement");
+        int runtimeStateStart = movementBridge.IndexOf(
+            "internal static string DescribeRuntimeState(Actor pActor)",
+            StringComparison.Ordinal);
+        int runtimeStateEnd = movementBridge.IndexOf(
+            "internal static bool ShouldPollNow(Actor pActor)",
+            runtimeStateStart, StringComparison.Ordinal);
+        string runtimeStateBody = runtimeStateStart >= 0 &&
+            runtimeStateEnd > runtimeStateStart
+            ? movementBridge.Substring(runtimeStateStart,
+                runtimeStateEnd - runtimeStateStart)
+            : string.Empty;
+        Assert(runtimeStateBody.Contains("last_failure=",
+                   StringComparison.Ordinal) &&
+               runtimeStateBody.Contains("retry_attempt=",
+                   StringComparison.Ordinal) &&
+               runtimeStateBody.Contains("now=",
+                   StringComparison.Ordinal) &&
+               runtimeStateBody.Contains("retry_due=",
+                   StringComparison.Ordinal) &&
+               runtimeStateBody.Contains("retry_remaining=",
+                   StringComparison.Ordinal) &&
+               runtimeStateBody.Contains("worker_waiting=",
+                   StringComparison.Ordinal) &&
+               runtimeStateBody.Contains("worker_running=",
+                   StringComparison.Ordinal),
+            "transport path diagnostics preserve the consumed failure and expose retry and worker state");
+
+        int lockedSubmitStart = transport.IndexOf(
+            "private static void SubmitLockedPathIfNeeded(",
+            StringComparison.Ordinal);
+        int lockedSubmitEnd = transport.IndexOf(
+            "private static void DriveOwnedPathP0(", lockedSubmitStart,
+            StringComparison.Ordinal);
+        string lockedSubmitBody = lockedSubmitStart >= 0 &&
+            lockedSubmitEnd > lockedSubmitStart
+            ? transport.Substring(lockedSubmitStart,
+                lockedSubmitEnd - lockedSubmitStart)
+            : string.Empty;
+        Assert(lockedSubmitBody.Contains("pActor.goTo(pTarget",
+                   StringComparison.Ordinal) &&
+               !lockedSubmitBody.Contains("AWPathMovementBridge.Submit(",
+                   StringComparison.Ordinal),
+            "transport actors submit routes through the same Actor.goTo entry point as RTS generals");
+
+        int validMemberStart = transport.IndexOf(
+            "private static bool IsValidMember(",
+            StringComparison.Ordinal);
+        int validMemberEnd = transport.IndexOf(
+            "private static bool IsCaptain(", validMemberStart,
+            StringComparison.Ordinal);
+        string validMemberBody = validMemberStart >= 0 &&
+            validMemberEnd > validMemberStart
+            ? transport.Substring(validMemberStart,
+                validMemberEnd - validMemberStart)
+            : string.Empty;
+        Assert(!validMemberBody.Contains("is_profession_warrior",
+                   StringComparison.Ordinal) &&
+               validMemberBody.Contains("pActor.army == pArmy",
+                   StringComparison.Ordinal),
+            "army membership, not a lagging profession flag, owns embarkation");
+
+        int advanceRouteStart = controller.IndexOf(
+            "private static void AdvanceRoute(", StringComparison.Ordinal);
+        int advanceRouteEnd = controller.IndexOf(
+            "private static void LogStrategicRouteFailure(",
+            advanceRouteStart, StringComparison.Ordinal);
+        string advanceRouteBody = advanceRouteStart >= 0 &&
+            advanceRouteEnd > advanceRouteStart
+            ? controller.Substring(advanceRouteStart,
+                advanceRouteEnd - advanceRouteStart)
+            : string.Empty;
+        Assert(advanceRouteBody.Contains(
+                   "TryActivateStrategicTransport(",
+                   StringComparison.Ordinal),
+            "strategic route publication activates a selected portal voyage before actor movement");
+        Assert(advanceRouteBody.IndexOf(
+                   "TryActivateStrategicTransport(",
+                   StringComparison.Ordinal) <
+               advanceRouteBody.IndexOf(
+                   "TryIssueVanillaCityAttackOrder(",
+                   StringComparison.Ordinal),
+            "cross-island transport ownership is decided before any vanilla land attack order");
+
+        Assert(transport.Contains("AWDockTransportService.TryResolveRoute(",
+                StringComparison.Ordinal),
+            "a voyage resolves one physical portal route when it begins");
+        Assert(transport.Contains("ArmyRtsTransportP0Stage.AssembleAtEntry",
+                StringComparison.Ordinal) &&
+               transport.Contains("ArmyRtsTransportP0Stage.BoatToPickup",
+                   StringComparison.Ordinal) &&
+               transport.Contains("ArmyRtsTransportP0Stage.Boarding",
+                   StringComparison.Ordinal) &&
+               transport.Contains("ArmyRtsTransportP0Stage.Sailing",
+                   StringComparison.Ordinal) &&
+               transport.Contains("ArmyRtsTransportP0Stage.Landing",
+                   StringComparison.Ordinal),
+            "the voyage is executed as an explicit military P0 state machine");
+        Assert(production.Contains("TryProvisionAtRoute(",
+                StringComparison.Ordinal),
+            "temporary transport production accepts the locked physical route");
+        Assert(transport.Contains("DriveActorToTileP0(",
+                StringComparison.Ordinal),
+            "P0 drives the captain to the selected entry land tile");
+        Assert(transport.Contains("DriveBoatToTileP0(",
+                StringComparison.Ordinal),
+            "P0 drives the temporary boat to pickup and destination sea tiles");
+        Assert(transport.Contains(
+                   "member.data.transportID = boat.actor.data.id",
+                   StringComparison.Ordinal) &&
+               transport.Contains("member.is_inside_boat = true",
+                   StringComparison.Ordinal) &&
+               transport.Contains("member.inside_boat = boat",
+                   StringComparison.Ordinal) &&
+               transport.Contains("boat.addPassenger(member)",
+                   StringComparison.Ordinal),
+            "P0 directly attaches every valid army member to the boat");
+        Assert(transport.Contains("member.disembarkTo(boat, landingTile)",
+                StringComparison.Ordinal),
+            "P0 directly lands every valid army member on the selected coast");
+
+        Assert(!transport.Contains("TaxiManager.newRequest(",
+                   StringComparison.Ordinal) &&
+               !transport.Contains("TaxiRequestState.Loading",
+                   StringComparison.Ordinal) &&
+               !transport.Contains("VanillaForceEmbarkTaskId",
+                   StringComparison.Ordinal) &&
+               !transport.Contains("boat_transport_go_load",
+                   StringComparison.Ordinal) &&
+               !transport.Contains("boat_transport_go_unload",
+                   StringComparison.Ordinal),
+            "RTS P0 voyages cannot wait for vanilla taxi or boat task state");
 
         Assert(transport.Contains("ProcessMilitaryP0(",
                 StringComparison.Ordinal),
             "active RTS voyages expose a dedicated military P0 driver");
         Assert(transport.Contains("RefreshMilitaryP0Priority(",
                 StringComparison.Ordinal),
-            "every active voyage re-admits every expected passenger to P0");
+            "every active voyage re-admits its roster to military P0");
         Assert(!controller.Contains(
                 "ArmyRtsTransportService.ProcessFrame();",
                 StringComparison.Ordinal),
-            "the ordinary RTS controller cannot advance a voyage in large-step mode");
+            "the ordinary RTS controller cannot advance a large-step voyage");
 
         int p0Stage = runner.IndexOf("case PostStage.MilitaryP0:",
             StringComparison.Ordinal);
@@ -34,54 +339,97 @@ internal static class ArmyRtsTransportP0RulesTests
         Assert(p0Stage >= 0 && transportP0 > p0Stage &&
                transportP0 < p0Chunk,
             "transport state and boat movement run before passenger P0 work");
-
-        Assert(transport.Contains("DriveBoundBoatP0(",
+        Assert(runner.Contains(
+                "ArmyRtsTransportService.TryDriveMemberP0(",
                 StringComparison.Ordinal),
-            "the transport-owned boat is driven in the same P0 transaction");
-        Assert(transport.Contains("SuppressCombatForVoyage(",
-                StringComparison.Ordinal),
-            "transport ownership suppresses combat until the whole roster lands");
-        Assert(transport.Contains("landedExpectedMembers >= validExpectedMembers",
-                StringComparison.Ordinal),
-            "voyage completion waits for every valid expected member to land");
-        Assert(transport.Contains("ForceEmbarkRoster(",
-                StringComparison.Ordinal),
-            "a loading transport explicitly transfers the full RTS roster " +
-            "to the native embark task");
-        Assert(transport.Contains("TeleportRosterToBoat(",
-                StringComparison.Ordinal),
-            "a bound RTS transport has a deterministic full-roster embark " +
-            "fallback");
-        Assert(transport.Contains("if (hasEmbarkedMember)",
-                StringComparison.Ordinal),
-            "the full-roster fallback waits until the captain has boarded");
-        Assert(transport.Contains("member.embarkInto(boat)",
-                StringComparison.Ordinal),
-            "the fallback places every valid member into the assigned boat");
-        Assert(transport.Contains("TeleportRosterFromBoat(",
-                StringComparison.Ordinal) &&
-               transport.Contains("if (captainLanded)",
+            "the actor runner lets transport advance captain assembly before suppression");
+        Assert(transport.Contains("AWDockTransportService.TryResolveDestination(",
                    StringComparison.Ordinal) &&
-               transport.Contains("member.disembarkTo(boat, pLandingTile)",
+               transport.Contains("census.HasAnyEmbarked",
                    StringComparison.Ordinal),
-            "after the captain reaches stable land, any residual passengers " +
-            "are moved to the same landing tile");
-        string production = File.ReadAllText(Path.Combine(root, "Code",
-            "core", "lineage", "ArmyRtsTransportProductionService.cs"));
-        Assert(production.Contains("OceanTile", StringComparison.Ordinal),
-            "temporary transport production retains the validated route " +
-            "ocean tile");
-        Assert(production.Contains("routeDock.OceanTile",
-                StringComparison.Ordinal),
-            "temporary transport spawning uses the validated route ocean");
-        Assert(transport.Contains("ForceEmbarkRoster(state, anyRequestLoading, assignedBoat)",
-                StringComparison.Ordinal),
-            "the embark handoff is driven by a live assigned boat after " +
-            "the native request enters Loading");
-        Assert(transport.Contains("ClearMovementForTransport(",
-                StringComparison.Ordinal),
-            "switching from a failed land route clears stale RTS movement " +
-            "before the voyage can take ownership");
+            "an embarked voyage reselects only its destination portal when the exit changes");
+        Assert(transport.Contains(
+                   "ArmyRtsTransportP0Stage.BoatToPickup",
+                   StringComparison.Ordinal) &&
+               transport.Contains("if (!IsLiveBoat(state.Boat))",
+                   StringComparison.Ordinal),
+            "a destroyed temporary boat returns the voyage to pickup provisioning");
+        Assert(production.Contains("if (boat?.hasPassengers() == true)",
+                   StringComparison.Ordinal) &&
+               production.Contains("PendingTemporaryBoatRemovalIds.Add(",
+                   StringComparison.Ordinal),
+            "temporary boats remain alive until every live passenger has landed");
+        Assert(transport.Contains("ProcessVoyageFrame(Time.deltaTime,",
+                   StringComparison.Ordinal),
+            "ordinary simulation advances direct transport movement with a real elapsed time");
+        Assert(transport.Contains("reason=route_unavailable",
+                   StringComparison.Ordinal) &&
+               transport.Contains("reason=boat_provision_failed",
+                   StringComparison.Ordinal) &&
+               transport.Contains("reason=boarding_incomplete",
+                   StringComparison.Ordinal) &&
+               transport.Contains("reason=sailing_path_pending",
+                   StringComparison.Ordinal) &&
+               transport.Contains("reason=landing_incomplete",
+                   StringComparison.Ordinal),
+            "every P0 voyage boundary emits a stable failure or pending reason");
+        int tryMoveStart = movementBridge.IndexOf(
+            "private static bool TryMove(Actor pActor, AWPathStep pStep)",
+            StringComparison.Ordinal);
+        int tryMoveEnd = movementBridge.IndexOf(
+            "private static SlowMoveReason GetFastMoveBlockReason(",
+            tryMoveStart, StringComparison.Ordinal);
+        string tryMoveBody = tryMoveStart >= 0 && tryMoveEnd > tryMoveStart
+            ? movementBridge.Substring(tryMoveStart,
+                tryMoveEnd - tryMoveStart)
+            : string.Empty;
+        Assert(tryMoveBody.Contains(
+                   "if (useFastMove || p0TransportBoat)",
+                   StringComparison.Ordinal),
+            "a newly spawned P0 transport boat must not call native moveTo before its actor batch exists");
+        int setStepStart = movementBridge.IndexOf(
+            "private static bool SetMoveStepTile(",
+            StringComparison.Ordinal);
+        int setStepEnd = movementBridge.IndexOf(
+            "private static bool HasPathRelevantTerrainChanged(",
+            setStepStart, StringComparison.Ordinal);
+        string setStepBody = setStepStart >= 0 && setStepEnd > setStepStart
+            ? movementBridge.Substring(setStepStart,
+                setStepEnd - setStepStart)
+            : string.Empty;
+        Assert(!setStepBody.Contains("setCurrentTilePosition(pTile)",
+                   StringComparison.Ordinal),
+            "P0 boat path steps retain smooth visible sailing instead of teleporting to each tile");
+        int boardStart = transport.IndexOf(
+            "private static bool BoardRoster(",
+            StringComparison.Ordinal);
+        int boardEnd = transport.IndexOf(
+            "private static bool LandRoster(", boardStart,
+            StringComparison.Ordinal);
+        string boardBody = boardStart >= 0 && boardEnd > boardStart
+            ? transport.Substring(boardStart, boardEnd - boardStart)
+            : string.Empty;
+        Assert(!boardBody.Contains("member.is_inside_boat) continue",
+                   StringComparison.Ordinal),
+            "replacement boats can take passengers still attached to a dead prior boat");
+        Assert(boardBody.Contains("member.data.transportID = boat.actor.data.id",
+                   StringComparison.Ordinal) &&
+               boardBody.Contains("member.inside_boat = boat",
+                   StringComparison.Ordinal) &&
+               boardBody.Contains("boat.addPassenger(member)",
+                   StringComparison.Ordinal),
+            "boarding must use the batch-independent Cultiway passenger handoff");
+        int landStart = transport.IndexOf(
+            "private static bool LandRoster(", StringComparison.Ordinal);
+        int landEnd = transport.IndexOf(
+            "private static void CompleteVoyage(", landStart,
+            StringComparison.Ordinal);
+        string landBody = landStart >= 0 && landEnd > landStart
+            ? transport.Substring(landStart, landEnd - landStart)
+            : string.Empty;
+        Assert(landBody.Contains("boat.unloadPassengers(landingTile, false)",
+                   StringComparison.Ordinal),
+            "landing must clear the boat passenger set through the native unload path");
 
         int captainRouteStart = controller.IndexOf(
             "private static void TrySubmitCaptainObjectiveRoute(",
@@ -96,8 +444,7 @@ internal static class ArmyRtsTransportP0RulesTests
             : string.Empty;
         Assert(captainRouteBody.Contains("HasActiveVoyage(army)",
                 StringComparison.Ordinal),
-            "the captain cannot resubmit a land route while transport owns " +
-            "the army");
+            "the captain cannot resubmit a land route while transport owns the army");
 
         int followerRouteStart = controller.IndexOf(
             "private static void TrySubmitMemberObjectiveRoute(",
@@ -112,26 +459,68 @@ internal static class ArmyRtsTransportP0RulesTests
             : string.Empty;
         Assert(followerRouteBody.Contains("HasActiveVoyage(pActor?.army)",
                 StringComparison.Ordinal),
-            "followers cannot resubmit formation paths while transport owns " +
-            "the army");
+            "followers cannot resubmit formation paths while transport owns the army");
 
-        int transportP0Start = transport.IndexOf(
-            "internal static void ProcessMilitaryP0(float pCycleElapsed)",
+        int nativePathStart = controller.IndexOf(
+            "internal static bool ShouldUseNativeMilitaryPath(Actor pActor)",
             StringComparison.Ordinal);
-        int transportP0End = transport.IndexOf(
-            "internal static bool SuppressCombatForVoyage", transportP0Start,
-            StringComparison.Ordinal);
-        string transportP0Body = transportP0Start >= 0 &&
-            transportP0End > transportP0Start
-            ? transport.Substring(transportP0Start,
-                transportP0End - transportP0Start)
+        int nativePathEnd = controller.IndexOf(
+            "internal static bool ShouldBlockLiquidMilitaryMovement(",
+            nativePathStart, StringComparison.Ordinal);
+        string nativePathBody = nativePathStart >= 0 &&
+            nativePathEnd > nativePathStart
+            ? controller.Substring(nativePathStart,
+                nativePathEnd - nativePathStart)
             : string.Empty;
-        int disposal = transportP0Body.IndexOf(
-            "ProcessTemporaryBoatDisposals();", StringComparison.Ordinal);
-        int voyageGate = transportP0Body.IndexOf(
-            "ShouldProcessInMilitaryP0(", StringComparison.Ordinal);
-        Assert(disposal >= 0 && voyageGate > disposal,
-            "P0 drains temporary-boat disposals even after the final voyage completed");
+        Assert(nativePathBody.Contains(
+                   "ArmyRtsTransportService.OwnsActorTask(pActor)",
+                   StringComparison.Ordinal) &&
+               nativePathBody.Contains("return false;",
+                   StringComparison.Ordinal),
+            "an active voyage keeps its captain on the AW path pipeline used by military P0");
+
+        int releaseStart = transport.IndexOf(
+            "public static void ReleaseArmy(Army pArmy)",
+            StringComparison.Ordinal);
+        int releaseEnd = transport.IndexOf(
+            "public static void Clear()", releaseStart,
+            StringComparison.Ordinal);
+        string releaseBody = releaseStart >= 0 && releaseEnd > releaseStart
+            ? transport.Substring(releaseStart, releaseEnd - releaseStart)
+            : string.Empty;
+        Assert(releaseBody.Contains("DisembarkRosterForRelease(state);",
+                   StringComparison.Ordinal) &&
+               releaseBody.IndexOf("DisembarkRosterForRelease(state);",
+                   StringComparison.Ordinal) <
+               releaseBody.IndexOf("States.Remove(pArmy.id);",
+                   StringComparison.Ordinal),
+            "ending a war disembarks the army before releasing voyage ownership");
+        Assert(transport.Contains(
+                   "boat.unloadPassengers(releaseTile, false)",
+                   StringComparison.Ordinal) &&
+               transport.Contains(
+                   "member.disembarkTo(boat, releaseTile)",
+                   StringComparison.Ordinal),
+            "voyage cancellation clears both the boat passenger set and every actor boat flag");
+
+        Assert(boatLifecycle.Contains(
+                   "HarmonyPatch(typeof(BehBoatTransportDoLoading)",
+                   StringComparison.Ordinal) &&
+               boatLifecycle.Contains("LoadCommonPassengers(",
+                   StringComparison.Ordinal) &&
+               boatLifecycle.Contains("request.getActors()",
+                   StringComparison.Ordinal) &&
+               boatLifecycle.Contains("passenger.data.transportID =",
+                   StringComparison.Ordinal) &&
+               boatLifecycle.Contains("boat.addPassenger(passenger)",
+                   StringComparison.Ordinal) &&
+               boatLifecycle.Contains("AWInsideBoatActorIndex.Notify(",
+                   StringComparison.Ordinal),
+            "the Cultiway boat-side loading handoff is preserved for ordinary vanilla Taxi requests");
+        Assert(!boatLifecycle.Contains(
+                   "passenger.setTask(\"force_into_a_boat\")",
+                   StringComparison.Ordinal),
+            "boat-side loading cannot re-enter the passenger goTo chain that cancels its Taxi request");
     }
 
     private static void Assert(bool condition, string message)

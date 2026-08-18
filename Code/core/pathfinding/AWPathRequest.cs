@@ -81,6 +81,7 @@ namespace AncientWarfare3.core.pathfinding
         private AWPathStep[] _cachedRoute;
         private int _cachedRouteOffset;
         private bool _cachedRouteReachesTarget;
+        private long _cachedRouteRevision;
 
         public AWPathRequest(long pActorId, int pStartTileId, int pTargetTileId,
             AWPathRequestOptions pOptions, AWActorTraversalProfile pProfile,
@@ -88,13 +89,19 @@ namespace AncientWarfare3.core.pathfinding
             bool pHighPriority, long pTerrainRevision = 0L,
             long pWorldGeneration = 0L, bool pInsideBoat = false,
             bool pPhysicalTransportAvailable = false,
-            float pPhysicalTransportRouteTiles = float.PositiveInfinity)
+            float pPhysicalTransportRouteTiles = float.PositiveInfinity,
+            long pEntryPortalId = -1L, long pExitPortalId = -1L,
+            int pEntryLandTileId = -1, int pPickupSeaTileId = -1,
+            int pDestinationSeaTileId = -1,
+            int pLandingLandTileId = -1)
             : this(pActorId, pStartTileId, pTargetTileId, pOptions, pProfile,
                 pGeneration, pCreatedTime, pHighPriority
                     ? AWPathWorkClass.Operational
                     : AWPathWorkClass.Ambient, pTerrainRevision,
                 pWorldGeneration, pInsideBoat, pPhysicalTransportAvailable,
-                pPhysicalTransportRouteTiles)
+                pPhysicalTransportRouteTiles, pEntryPortalId,
+                pExitPortalId, pEntryLandTileId, pPickupSeaTileId,
+                pDestinationSeaTileId, pLandingLandTileId)
         {
         }
 
@@ -104,7 +111,11 @@ namespace AncientWarfare3.core.pathfinding
             AWPathWorkClass pWorkClass = AWPathWorkClass.Ambient,
             long pTerrainRevision = 0L, long pWorldGeneration = 0L,
             bool pInsideBoat = false, bool pPhysicalTransportAvailable = false,
-            float pPhysicalTransportRouteTiles = float.PositiveInfinity)
+            float pPhysicalTransportRouteTiles = float.PositiveInfinity,
+            long pEntryPortalId = -1L, long pExitPortalId = -1L,
+            int pEntryLandTileId = -1, int pPickupSeaTileId = -1,
+            int pDestinationSeaTileId = -1,
+            int pLandingLandTileId = -1)
         {
             ActorId = pActorId;
             _startTileId = pStartTileId;
@@ -124,6 +135,12 @@ namespace AncientWarfare3.core.pathfinding
             WorkClass = pWorkClass;
             PhysicalTransportAvailable = pPhysicalTransportAvailable;
             PhysicalTransportRouteTiles = pPhysicalTransportRouteTiles;
+            EntryPortalId = pEntryPortalId;
+            ExitPortalId = pExitPortalId;
+            EntryLandTileId = pEntryLandTileId;
+            PickupSeaTileId = pPickupSeaTileId;
+            DestinationSeaTileId = pDestinationSeaTileId;
+            LandingLandTileId = pLandingLandTileId;
             Cancellation = new CancellationTokenSource();
             Stream = new AWPathStream();
         }
@@ -144,6 +161,12 @@ namespace AncientWarfare3.core.pathfinding
         public bool HighPriority => WorkClass == AWPathWorkClass.Operational;
         public bool PhysicalTransportAvailable { get; }
         public float PhysicalTransportRouteTiles { get; }
+        public long EntryPortalId { get; }
+        public long ExitPortalId { get; }
+        public int EntryLandTileId { get; }
+        public int PickupSeaTileId { get; }
+        public int DestinationSeaTileId { get; }
+        public int LandingLandTileId { get; }
         public CancellationTokenSource Cancellation { get; }
         public AWPathStream Stream { get; }
 
@@ -153,10 +176,20 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         internal bool TryTakeCachedSegment(int pMaximumSteps,
+            long pTraversalRevision,
             out AWPathStep[] pSteps, out bool pReachedTarget)
         {
             AWPathStep[] route = _cachedRoute;
             int offset = _cachedRouteOffset;
+            if (route != null && _cachedRouteRevision !=
+                    pTraversalRevision)
+            {
+                _cachedRoute = null;
+                _cachedRouteOffset = 0;
+                _cachedRouteReachesTarget = false;
+                route = null;
+                offset = 0;
+            }
             if (route == null || offset >= route.Length)
             {
                 pSteps = Array.Empty<AWPathStep>();
@@ -178,12 +211,13 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         internal void CacheRoute(AWPathStep[] pRoute, int pConsumed,
-            bool pReachesTarget)
+            bool pReachesTarget, long pTraversalRevision)
         {
             _cachedRoute = pRoute;
             _cachedRouteOffset = Math.Max(0, Math.Min(pConsumed,
                 pRoute?.Length ?? 0));
             _cachedRouteReachesTarget = pReachesTarget;
+            _cachedRouteRevision = pTraversalRevision;
             if (_cachedRouteOffset >= (pRoute?.Length ?? 0))
             {
                 _cachedRoute = null;

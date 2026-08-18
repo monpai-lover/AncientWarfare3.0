@@ -27,6 +27,16 @@ namespace AncientWarfare3.core.pathfinding
             return !pSameIsland;
         }
 
+        internal static bool ShouldRebuildTopology(bool topologyDirty,
+            long previousSourceRevision, long currentSourceRevision,
+            int dirtyTileCount, int lastRebuildFrame, int currentFrame)
+        {
+            if (dirtyTileCount > 0 || lastRebuildFrame == currentFrame)
+                return false;
+            return topologyDirty || previousSourceRevision !=
+                   currentSourceRevision;
+        }
+
         internal static bool ShouldPreferTransport(float landRouteTiles,
             float transportRouteTiles)
         {
@@ -43,6 +53,21 @@ namespace AncientWarfare3.core.pathfinding
             return Distance(startX, startY, entryX, entryY) +
                    Distance(entryX, entryY, exitX, exitY) +
                    Distance(exitX, exitY, targetX, targetY);
+        }
+
+        internal static float EstimateRouteTiles(int startX, int startY,
+            int entryLandX, int entryLandY, int pickupSeaX,
+            int pickupSeaY, int destinationSeaX, int destinationSeaY,
+            int exitLandX, int exitLandY, int targetX, int targetY)
+        {
+            return Distance(startX, startY, entryLandX, entryLandY) +
+                   Distance(entryLandX, entryLandY, pickupSeaX,
+                       pickupSeaY) +
+                   Distance(pickupSeaX, pickupSeaY, destinationSeaX,
+                       destinationSeaY) +
+                   Distance(destinationSeaX, destinationSeaY, exitLandX,
+                       exitLandY) +
+                   Distance(exitLandX, exitLandY, targetX, targetY);
         }
 
         internal static bool CanCreatePhysicalRoute(int startTileId,

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using AncientWarfare3.core.pathfinding;
 
@@ -7,15 +8,53 @@ internal static class AWDockRouteRegistryTests
     internal static void Run()
     {
         var registry = new AWDockRouteRegistry();
-        Assert(registry.Register(new AWDockEndpoint(7L, 12, 101)),
+        Assert(registry.Register(new AWDockEndpoint(7L, 12, 13, 101)),
             "the first dock-water endpoint is accepted");
-        Assert(registry.Register(new AWDockEndpoint(7L, 12, 202)),
+        Assert(registry.Register(new AWDockEndpoint(7L, 12, 14, 202)),
             "a dock may expose a second water component");
         AWDockEndpoint[] endpoints = registry.Snapshot();
         Assert(endpoints.Length == 2 &&
                endpoints.Any(endpoint => endpoint.WaterComponent == 101) &&
                endpoints.Any(endpoint => endpoint.WaterComponent == 202),
             "registering one dock on two water bodies retains both physical endpoints");
+
+        var entry = new AWDockEndpoint(7L, 12, 13, 101);
+        var exit = new AWDockEndpoint(9L, 42, 43, 101);
+        var dockRoute = new AWDockRouteCandidate(
+            AWTransportRouteSource.DockPortal, entry, exit, 80f);
+        Assert(dockRoute.IsValid,
+            "connected dock portals form a physical route");
+        Assert(dockRoute.Entry.LandTileId == 12 &&
+               dockRoute.Entry.OceanTileId == 13,
+            "the source portal retains separate assembly and pickup tiles");
+        Assert(dockRoute.Exit.LandTileId == 42 &&
+               dockRoute.Exit.OceanTileId == 43,
+            "the destination portal retains separate arrival and landing tiles");
+        Assert(!new AWDockRouteCandidate(
+                AWTransportRouteSource.DockPortal, entry,
+                new AWDockEndpoint(10L, 52, 53, 202), 80f).IsValid,
+            "different ocean components cannot form a transport edge");
+
+        var fallbackRoute = new AWDockRouteCandidate(
+            AWTransportRouteSource.ShoreFallback,
+            new AWDockEndpoint(0L, 62, 63, 303),
+            new AWDockEndpoint(0L, 72, 73, 303), 96f);
+        Assert(fallbackRoute.IsValid,
+            "stable shoreline endpoints form a virtual portal pair");
+
+        var transportStep = new AWPathStep(99,
+            AWMovementMethod.Transport,
+            pEntryPortalId: 7L, pExitPortalId: 9L,
+            pEntryLandTileId: 12, pPickupSeaTileId: 13,
+            pDestinationSeaTileId: 43, pLandingLandTileId: 42);
+        Assert(transportStep.EntryPortalId == 7L &&
+               transportStep.ExitPortalId == 9L,
+            "the path step retains the selected portal pair");
+        Assert(transportStep.EntryLandTileId == 12 &&
+               transportStep.PickupSeaTileId == 13 &&
+               transportStep.DestinationSeaTileId == 43 &&
+               transportStep.LandingLandTileId == 42,
+            "the path step retains assembly, pickup, arrival, and landing tiles");
 
         Assert(registry.Remove(7L), "removing the dock reports a mutation");
         Assert(registry.Snapshot().Length == 0,
@@ -37,6 +76,123 @@ internal static class AWDockRouteRegistryTests
             "same-island civilian routes skip the dock endpoint scan");
         Assert(AWDockTransportRules.ShouldAttemptDockLookup(false),
             "cross-island routes retain the physical dock lookup");
+        Assert(!AWDockTransportRules.ShouldRebuildTopology(
+                topologyDirty: true, previousSourceRevision: 7L,
+                currentSourceRevision: 8L, dirtyTileCount: 4,
+                lastRebuildFrame: 10, currentFrame: 11),
+            "dirty traversal work settles before a full dock graph rebuild");
+        Assert(!AWDockTransportRules.ShouldRebuildTopology(
+                topologyDirty: true, previousSourceRevision: 7L,
+                currentSourceRevision: 8L, dirtyTileCount: 0,
+                lastRebuildFrame: 11, currentFrame: 11),
+            "dock topology rebuilds at most once per render frame");
+        Assert(AWDockTransportRules.ShouldRebuildTopology(
+                topologyDirty: false, previousSourceRevision: 7L,
+                currentSourceRevision: 8L, dirtyTileCount: 0,
+                lastRebuildFrame: 10, currentFrame: 11),
+            "terrain topology revision invalidates the dock water graph");
+        Assert(!AWDockTransportRules.ShouldRebuildTopology(
+                topologyDirty: false, previousSourceRevision: 8L,
+                currentSourceRevision: 8L, dirtyTileCount: 0,
+                lastRebuildFrame: 10, currentFrame: 11),
+            "an unchanged topology revision reuses the published graph");
+
+        string root = Directory.GetCurrentDirectory();
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "pathfinding", "AWDockTransportService.cs"));
+        string generator = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "pathfinding", "AWStreamingPathGenerator.cs"));
+        string movementBridge = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "pathfinding", "AWPathMovementBridge.cs"));
+        Assert(!service.Contains("ocean.region?.island?.id",
+                StringComparison.Ordinal) &&
+               !service.Contains("ocean.region.island.id",
+                   StringComparison.Ordinal),
+            "dock connectivity is derived from ocean topology rather than " +
+            "an adjacent land-island id");
+        Assert(generator.Contains("TransportResult(pRequest)",
+                StringComparison.Ordinal) &&
+               !generator.Contains("TransportResult(target.Id)",
+                   StringComparison.Ordinal),
+            "the worker emits the physical route selected on the main thread");
+        Assert(movementBridge.Contains("StartTransport(pActor, pStep)",
+                   StringComparison.Ordinal) &&
+               movementBridge.Contains(
+                   "StartTransport(Actor pActor, AWPathStep pStep)",
+                   StringComparison.Ordinal) &&
+               !movementBridge.Contains("StartTransport(pActor, tile)",
+                   StringComparison.Ordinal),
+            "transport execution consumes the retained path step instead of " +
+            "resolving a second route from the final target");
+        Assert(movementBridge.Contains("!pActor.asset.is_boat &&",
+                   StringComparison.Ordinal),
+            "a transport boat follows its water path and cannot recursively " +
+            "request another transport portal");
+        string taxiRouteService = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "pathfinding", "AWDockTaxiRouteService.cs"));
+        Assert(taxiRouteService.Contains(
+                   "TryCreateOrJoinRequest(", StringComparison.Ordinal) &&
+               taxiRouteService.Contains("EntryLandTileId",
+                   StringComparison.Ordinal) &&
+               taxiRouteService.Contains("PickupSeaTileId",
+                   StringComparison.Ordinal) &&
+               taxiRouteService.Contains("DestinationSeaTileId",
+                   StringComparison.Ordinal) &&
+               taxiRouteService.Contains("LandingLandTileId",
+                   StringComparison.Ordinal),
+            "ordinary Taxi requests retain the selected portal endpoints");
+        Assert(taxiRouteService.Contains("HasLiveAssignedBoat(",
+                   StringComparison.Ordinal) &&
+               taxiRouteService.Contains("Remove(TaxiRequest",
+                   StringComparison.Ordinal),
+            "request recovery can detect a dead driver and clean route ownership");
+        Assert(movementBridge.Contains(
+                   "AWDockTaxiRouteService.TryCreateOrJoinRequest(",
+                   StringComparison.Ordinal) &&
+               !movementBridge.Contains("TaxiManager.newRequest(pActor, pTarget)",
+                   StringComparison.Ordinal),
+            "path execution does not discard the selected route and resolve only the final target");
+        string boatLifecycle = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ActorBoatLifecyclePatch.cs"));
+        Assert(boatLifecycle.Contains("BehBoatFindRequest",
+                   StringComparison.Ordinal) &&
+               boatLifecycle.Contains("BehBoatTransportFindTilePickUp",
+                   StringComparison.Ordinal) &&
+               boatLifecycle.Contains("BehBoatTransportFindTileUnload",
+                   StringComparison.Ordinal) &&
+               boatLifecycle.Contains("BehBoatTransportUnloadUnits",
+                   StringComparison.Ordinal),
+            "native boat tasks consume the route binding at assignment, pickup, and unload");
+        string productionPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ArmyRtsTransportProductionPatch.cs"));
+        Assert(productionPatch.Contains("AWDockTaxiRouteService.Remove(",
+                   StringComparison.Ordinal) &&
+               productionPatch.Contains("AWDockTaxiRouteService.Clear(",
+                   StringComparison.Ordinal),
+            "every Taxi terminal path releases the selected route binding");
+        int shoreStart = service.IndexOf(
+            "private static void BuildShoreEndpoints(",
+            StringComparison.Ordinal);
+        int shoreEnd = service.IndexOf(
+            "private static bool TryGetLiveDockEndpoint(", shoreStart,
+            StringComparison.Ordinal);
+        string shoreBody = shoreStart >= 0 && shoreEnd > shoreStart
+            ? service.Substring(shoreStart, shoreEnd - shoreStart)
+            : string.Empty;
+        Assert(!shoreBody.Contains("break;", StringComparison.Ordinal),
+            "one shoreline tile retains an endpoint for every adjacent water component");
+        Assert(service.Contains("TopologySourceRevision",
+                StringComparison.Ordinal),
+            "dock topology observes traversal topology invalidation");
+        string dockPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_DockPathTransportPatch.cs"));
+        Assert(dockPatch.Contains("MapChunkManager",
+                StringComparison.Ordinal) &&
+               dockPatch.Contains("updateDirty",
+                   StringComparison.Ordinal) &&
+               dockPatch.Contains("MarkTopologyDirty",
+                   StringComparison.Ordinal),
+            "terrain dirty chunks invalidate dock transport topology");
     }
 
     private static void Assert(bool pCondition, string pMessage)

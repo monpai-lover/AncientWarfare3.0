@@ -26,5 +26,28 @@ namespace AncientWarfare3.patch
         {
             AWDockTransportService.Remove(__instance);
         }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MapChunkManager), nameof(MapChunkManager.updateDirty))]
+        private static void UpdateDirty_Prefix(MapChunkManager __instance,
+            ref bool __state)
+        {
+            __state = false;
+            try
+            {
+                var dirtyLinks = __instance?._dirty_chunks_links;
+                var dirtyRegions = __instance?._dirty_chunks_regions;
+                __state = (dirtyLinks?.Count ?? 0) > 0 ||
+                          (dirtyRegions?.Count ?? 0) > 0;
+            }
+            catch { }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MapChunkManager), nameof(MapChunkManager.updateDirty))]
+        private static void UpdateDirty_Postfix(bool __state)
+        {
+            if (__state) AWDockTransportService.MarkTopologyDirty();
+        }
     }
 }

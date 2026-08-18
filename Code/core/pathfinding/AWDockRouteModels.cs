@@ -1,5 +1,11 @@
 namespace AncientWarfare3.core.pathfinding
 {
+    internal enum AWTransportRouteSource
+    {
+        DockPortal = 0,
+        ShoreFallback = 1
+    }
+
     internal readonly struct AWDockEndpointKey :
         System.IEquatable<AWDockEndpointKey>
     {
@@ -34,36 +40,49 @@ namespace AncientWarfare3.core.pathfinding
 
     internal readonly struct AWDockEndpoint
     {
-        internal AWDockEndpoint(long pId, int pTileId, int pWaterComponent)
+        internal AWDockEndpoint(long pId, int pLandTileId,
+            int pOceanTileId, int pWaterComponent)
         {
             Id = pId;
-            TileId = pTileId;
+            LandTileId = pLandTileId;
+            OceanTileId = pOceanTileId;
             WaterComponent = pWaterComponent;
         }
 
         internal long Id { get; }
-        internal int TileId { get; }
+        internal int LandTileId { get; }
+        internal int OceanTileId { get; }
         internal int WaterComponent { get; }
-        internal bool IsValid => Id > 0 && TileId >= 0 && WaterComponent >= 0;
+        internal bool HasPhysicalTiles => LandTileId >= 0 &&
+                                          OceanTileId >= 0 &&
+                                          WaterComponent >= 0;
+        internal bool IsDockPortal => Id > 0 && HasPhysicalTiles;
         internal AWDockEndpointKey Key => new AWDockEndpointKey(Id,
             WaterComponent);
     }
 
     internal readonly struct AWDockRouteCandidate
     {
-        internal AWDockRouteCandidate(AWDockEndpoint pEntry,
-            AWDockEndpoint pExit, float pEstimatedRouteTiles)
+        internal AWDockRouteCandidate(AWTransportRouteSource pSource,
+            AWDockEndpoint pEntry, AWDockEndpoint pExit,
+            float pEstimatedRouteTiles)
         {
+            Source = pSource;
             Entry = pEntry;
             Exit = pExit;
             EstimatedRouteTiles = pEstimatedRouteTiles;
         }
 
+        internal AWTransportRouteSource Source { get; }
         internal AWDockEndpoint Entry { get; }
         internal AWDockEndpoint Exit { get; }
         internal float EstimatedRouteTiles { get; }
-        internal bool IsValid => Entry.IsValid && Exit.IsValid &&
-                                 Entry.Id != Exit.Id &&
+        internal bool IsValid => Entry.HasPhysicalTiles &&
+                                 Exit.HasPhysicalTiles &&
+                                 (Source == AWTransportRouteSource.
+                                      ShoreFallback ||
+                                  Entry.Id > 0 && Exit.Id > 0 &&
+                                  Entry.Id != Exit.Id) &&
                                  Entry.WaterComponent == Exit.WaterComponent &&
                                  !float.IsNaN(EstimatedRouteTiles) &&
                                  !float.IsInfinity(EstimatedRouteTiles) &&

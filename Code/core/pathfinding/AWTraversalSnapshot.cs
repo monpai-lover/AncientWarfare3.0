@@ -236,6 +236,7 @@ namespace AncientWarfare3.core.pathfinding
             AWTileTraversalSnapshot[]> _overlayChunks;
         private AWRegionTopologySnapshot _regionTopology;
         private int _topologyRevision;
+        private long _revision = 1L;
         private readonly long _identity;
         private AWTraversalGeneration _baseGeneration;
         private int _references = 1;
@@ -316,6 +317,7 @@ namespace AncientWarfare3.core.pathfinding
         public int TileCount => Width * Height;
         public int ReferenceCount => Math.Max(0, Volatile.Read(ref _references));
         internal long Identity => _identity;
+        internal long Revision => Volatile.Read(ref _revision);
         internal AWRegionTopologySnapshot RegionTopology =>
             Volatile.Read(ref _regionTopology);
 
@@ -445,6 +447,7 @@ namespace AncientWarfare3.core.pathfinding
                     continue;
                 WriteTileSnapshot(tile);
             }
+            Interlocked.Increment(ref _revision);
         }
 
         private void LoadChunks(AWTileTraversalSnapshot[][] pChunks)
@@ -508,6 +511,7 @@ namespace AncientWarfare3.core.pathfinding
             int revision = Interlocked.Increment(ref _topologyRevision);
             AWRegionTopologySnapshot topology = pTopology.WithRevision(revision);
             Volatile.Write(ref _regionTopology, topology);
+            Interlocked.Increment(ref _revision);
         }
 
         internal static AWTraversalGeneration FromOverlay(int pId,
