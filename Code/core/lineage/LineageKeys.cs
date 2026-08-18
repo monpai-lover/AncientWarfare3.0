@@ -192,6 +192,8 @@ namespace AncientWarfare3.core.lineage
         public const string RESTORATION_LAST_YEAR = "aw_restoration_last_year";
         public const string RESTORATION_PROTECTION_UNTIL_YEAR =
             "aw_restoration_protection_until_year";
+        public const string RESTORATION_INITIALIZATION_PENDING =
+            "aw_restoration_initialization_pending";
         public const string KINGDOM_EXTINCTION_CAUSE =
             "aw_kingdom_extinction_cause";
         public const string KINGDOM_EARLIEST_AUTONOMOUS_YEAR =

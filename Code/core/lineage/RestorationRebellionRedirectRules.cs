@@ -62,6 +62,14 @@ namespace AncientWarfare3.core.lineage
                 : pLeftCityId.CompareTo(pRightCityId);
         }
 
+        public static bool ShouldRetryCommittedInitialization(
+            RestorationRebellionSeedMode pMode,
+            bool identityCommitted, bool contextValid)
+        {
+            return pMode == RestorationRebellionSeedMode.ExternalBandit &&
+                   identityCommitted && contextValid;
+        }
+
         public static bool IsPeacefulHostCity(bool ownerIsClaimantHost,
             bool rebellionTriggered)
         {

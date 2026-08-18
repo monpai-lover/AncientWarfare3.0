@@ -1,12 +1,9 @@
 using System;
-using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class RestorationRebellionRedirectService
     {
-        private const int MaxClaimsInspected = 8;
-
         public static RestorationRebellionStartOutcome TryRedirect(
             Actor pActor, City pCity, out string pError)
         {
@@ -19,19 +16,16 @@ namespace AncientWarfare3.core.lineage
                 return RestorationRebellionStartOutcome.NotStarted;
             try
             {
-                List<RoyalClaimService.ClaimRow> claims =
-                    RoyalClaimService.GetDormantClaimsForActor(
-                        pActor.data.id, MaxClaimsInspected);
-                foreach (RoyalClaimService.ClaimRow claim in claims)
-                {
-                    RestorationRebellionStartOutcome outcome =
-                        AutonomousRestorationService
-                            .TryStartSelfRestorationFromRebellion(
-                                claim.claimId, pActor, pCity, out pError);
-                    if (RestorationRebellionRedirectRules
-                        .ShouldSuppressVanilla(outcome))
-                        return outcome;
-                }
+                long claimId = RoyalClaimService
+                    .FindBestDormantClaimIdForActor(pActor.data.id);
+                if (claimId < 0) return RestorationRebellionStartOutcome.NotStarted;
+                RestorationRebellionStartOutcome outcome =
+                    AutonomousRestorationService
+                        .TryStartSelfRestorationFromRebellion(
+                            claimId, pActor, pCity, out pError);
+                if (RestorationRebellionRedirectRules
+                    .ShouldSuppressVanilla(outcome))
+                    return outcome;
             }
             catch (Exception e)
             {
@@ -40,6 +34,39 @@ namespace AncientWarfare3.core.lineage
                 pError = "restoration_rebellion_redirect_error";
             }
             return RestorationRebellionStartOutcome.NotStarted;
+        }
+
+        internal static RestorationRebellionStartOutcome
+            TryRedirectBanditFounder(Actor pActor, City pCity,
+                out Kingdom pRestored, out string pError)
+        {
+            pRestored = null;
+            pError = "";
+            if (!RestorationRebellionRedirectRules.ShouldInspectBanditFounder(
+                    pAllowRedirect: !KingdomIdentityContinuityService
+                        .IsCreatingRestoration,
+                    pActorValid: pActor?.data != null && pActor.isAlive() &&
+                        !pActor.isRekt(),
+                    pCityValid: pCity?.data != null && !pCity.isRekt()))
+                return RestorationRebellionStartOutcome.NotStarted;
+            try
+            {
+                long claimId = RoyalClaimService
+                    .FindBestDormantClaimIdForActor(pActor.data.id);
+                if (claimId < 0)
+                    return RestorationRebellionStartOutcome.NotStarted;
+                return AutonomousRestorationService
+                    .TryStartSelfRestorationFromExternalBandit(
+                        claimId, pActor, pCity, out pRestored, out pError);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Bandit claimant restoration redirect failed: " +
+                    e.Message);
+                pError = "restoration_bandit_redirect_error";
+                return RestorationRebellionStartOutcome.NotStarted;
+            }
         }
     }
 }

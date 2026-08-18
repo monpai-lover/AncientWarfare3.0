@@ -32,6 +32,19 @@ Equal(-1, RestorationRebellionRedirectRules.CompareCoreTargets(
 Equal(0, RestorationRebellionRedirectRules.CompareCoreTargets(
     25, 2, 25, 2));
 
+Equal(true, RestorationRebellionRedirectRules.
+    ShouldRetryCommittedInitialization(
+        RestorationRebellionSeedMode.ExternalBandit,
+        identityCommitted: true, contextValid: true));
+Equal(false, RestorationRebellionRedirectRules.
+    ShouldRetryCommittedInitialization(
+        RestorationRebellionSeedMode.Core,
+        identityCommitted: true, contextValid: true));
+Equal(false, RestorationRebellionRedirectRules.
+    ShouldRetryCommittedInitialization(
+        RestorationRebellionSeedMode.ExternalBandit,
+        identityCommitted: true, contextValid: false));
+
 Console.WriteLine("Restoration bandit redirect rules passed.");
 
 static void Equal<T>(T expected, T actual)
