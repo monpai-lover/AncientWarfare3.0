@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.schools
 {
@@ -404,6 +405,9 @@ namespace AncientWarfare3.core.schools
 
         public static void RepairEnginePointers(Actor pActor)
         {
+            if (!ActorKingdomSafetyRules.ShouldRepairActor(
+                    pActor?.data != null, pActor?.isAlive() == true,
+                    pActor == null || pActor.isRekt())) return;
             HistoricalSchoolAffiliationSnapshot state = Get(pActor?.data?.id ?? -1L);
             if (state == null) return;
             Kingdom home = FindKingdom(state.HomeKingdomId);

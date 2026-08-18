@@ -11,6 +11,16 @@ internal static class ActorKingdomSafetyRulesTests
 
     public static void Run()
     {
+        Equal(false, ActorKingdomSafetyRules.ShouldRepairActor(
+                actorExists: true, actorAlive: false, actorWrecked: false),
+            "a loaded corpse must never be attached to a kingdom again");
+        Equal(false, ActorKingdomSafetyRules.ShouldRepairActor(
+                actorExists: true, actorAlive: true, actorWrecked: true),
+            "a wrecked actor must never be attached to a kingdom again");
+        Equal(true, ActorKingdomSafetyRules.ShouldRepairActor(
+                actorExists: true, actorAlive: true, actorWrecked: false),
+            "a living actor remains eligible for kingdom pointer repair");
+
         Equal(false, ActorKingdomSafetyRules.IsCityKingdomRepairable(
                 cityKingdomAssetExists: true,
                 cityKingdomIsRekt: true),

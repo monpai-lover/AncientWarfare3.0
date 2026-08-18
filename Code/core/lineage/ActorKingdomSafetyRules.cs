@@ -9,6 +9,12 @@ namespace AncientWarfare3.core.lineage
 
     public static class ActorKingdomSafetyRules
     {
+        public static bool ShouldRepairActor(bool actorExists,
+            bool actorAlive, bool actorWrecked)
+        {
+            return actorExists && actorAlive && !actorWrecked;
+        }
+
         public static bool CanRunEnemyCheck(bool actorExists,
             bool actorAssetExists, bool kingdomDataExists,
             bool kingdomAssetExists)

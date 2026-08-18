@@ -177,6 +177,7 @@
     <Compile Include="CivilServiceCenturySimulationSqlTests.cs.txt" />
     <Compile Include="HistoricalSchoolEliteEnrollmentRulesTests.cs.txt" />
     <Compile Include="HistoricalSchoolSavePreparationTests.cs.txt" />
+    <Compile Include="HistoricalSchoolDeathRuntimeRulesTests.cs.txt" />
     <Compile Include="HistoricalSchoolAcademyRepairRulesTests.cs.txt" />
     <Compile Include="HistoricalSchoolAcademyRepairPersistenceSqlTests.cs.txt" />
     <Compile Include="HistoricalSchoolAcademyRepairSourceGuardTests.cs.txt" />
@@ -184,6 +185,7 @@
     <Compile Include="..\..\Code\core\court\CivilServiceExamCandidatePoolQuery.cs" Link="Production\CivilServiceExamCandidatePoolQuery.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolEliteEnrollmentRules.cs" Link="Production\HistoricalSchoolEliteEnrollmentRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolSavePreparation.cs" Link="Production\HistoricalSchoolSavePreparation.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolDeathRuntimeRules.cs" Link="Production\HistoricalSchoolDeathRuntimeRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolAcademyRepairRules.cs" Link="Production\HistoricalSchoolAcademyRepairRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolAcademyRepairPersistence.cs" Link="Production\HistoricalSchoolAcademyRepairPersistence.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolEducationCandidateQuery.cs" Link="Production\HistoricalSchoolEducationCandidateQuery.cs" />

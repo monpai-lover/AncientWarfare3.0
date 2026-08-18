@@ -418,8 +418,29 @@ namespace AncientWarfare3.core.schools
             SchoolDeathOutcome outcome = PersistPendingDeath(pending,
                 pReconcileUnknown: false);
             if (outcome != SchoolDeathOutcome.Committed)
+            {
+                QuarantineDeadMembership(pActor, current, year);
                 QueueDeathRetry(pending, pDestroy);
+            }
             return outcome;
+        }
+
+        private static void QuarantineDeadMembership(Actor pActor,
+            SchoolMembershipRecord pMembership, int pYear)
+        {
+            if (pMembership == null) return;
+            RequestLeaderElection(pMembership);
+            if (Memberships.CloseExpected(pMembership.ActorId,
+                    pMembership.MembershipId, pYear, "death_pending", out _))
+                HistoricalSchoolRevisionService.ApplyMembershipChange(
+                    pMembership, null);
+            HistoricalSchoolRuntimeIndex.Instance.Remove(pMembership.ActorId);
+            try { Project(pActor, CourtSchoolId.None); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Pending school death projection failed: " +
+                                    error.Message);
+            }
         }
 
         private static SchoolDeathOutcome PersistPendingDeath(PendingSchoolDeath pending,
