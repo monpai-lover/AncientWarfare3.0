@@ -827,13 +827,15 @@ namespace AncientWarfare3.core.court
                    SafeStat(pActor, "intelligence");
         }
 
-        internal static void ClearOfficeForReignTransition(Actor pActor, string pReason)
+        internal static void ClearOfficeForReignTransition(Actor pActor,
+            string pReason, bool pPersistCareer = true)
         {
             if (pActor?.data == null) return;
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             if (courtKingdomId < 0 && string.IsNullOrEmpty(office)) return;
-            ClearOfficer(pActor, pReason ?? "reign_transition");
+            ClearOfficer(pActor, pReason ?? "reign_transition",
+                pPersistCareer: pPersistCareer);
         }
 
         private static void FillCentralOffice(Kingdom pKingdom, List<Actor> pRoster,
@@ -1498,9 +1500,12 @@ namespace AncientWarfare3.core.court
             bool frozenProjectionStillLive = runtimeKingdomId == pHostKingdomId &&
                 runtimeLayer == CourtOfficeLayer.Central &&
                 runtimeOffice == (pOfficeId ?? "");
+            bool runtimeAlreadyCleared = runtimeKingdomId < 0 &&
+                                         string.IsNullOrEmpty(runtimeOffice);
             if (frozenProjectionStillLive)
                 ClearOfficer(pActor, pReason ?? "guest_term", pPersistCareer: false);
-            else if (!OfficialCareerStateService.ClearCurrentOffice(pActor,
+            else if (!runtimeAlreadyCleared &&
+                     !OfficialCareerStateService.ClearCurrentOffice(pActor,
                          pHostKingdomId, pOfficeId))
                 return false;
             try { pActor.finishStatusEffect(HistoricalSchoolContent.GuestStatusId); }
@@ -1968,8 +1973,11 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_CITY_ID, -1L);
 
             if (pPersistCareer)
+            {
                 OfficialCareerService.End(pActor, layer, office, pReason ?? "");
-            OfficialCareerStateService.ClearCurrentOffice(pActor, courtKingdomId, office);
+                OfficialCareerStateService.ClearCurrentOffice(pActor,
+                    courtKingdomId, office);
+            }
             if (pRecordHistory && courtKingdom != null && !string.IsNullOrEmpty(office))
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, courtKingdom, office, pReason ?? "");
             if (alive && pArchive) LineageService.ArchiveActor(pActor, pAlive: true);

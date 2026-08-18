@@ -16,6 +16,10 @@ namespace AncientWarfare3.core.schools
         IHistoricalSchoolBackgroundWrite DetachBackgroundWrite();
     }
 
+    internal interface IHistoricalSchoolBackgroundOnlyWriteOperation
+    {
+    }
+
     internal sealed class HistoricalSchoolAsyncEnvelope :
         HistoricalWriteEnvelope, IHistoricalCustomWriteEnvelope
     {

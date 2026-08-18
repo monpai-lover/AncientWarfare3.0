@@ -44,6 +44,7 @@ namespace AncientWarfare3.core.performance
             DynasticMaleLineContinuityService.Reset();
             EnclosedUnownedZoneRepairService.Reset();
             EmptyCityResettlementService.Reset();
+            KingdomExtinctionQueue.ClearRuntime();
             WarScoreService.ClearPendingCityOccupations();
             CivilServiceExamService.ClearRuntime();
             WesternCourtElectionService.Reset();

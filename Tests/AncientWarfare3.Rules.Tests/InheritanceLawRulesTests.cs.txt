@@ -468,8 +468,11 @@ internal static class InheritanceLawRulesTests
                 "PrepareClaimantAccessionMode"),
             "a victorious claimant carries the recorded faction mode into accession");
         Equal(true, disputeServiceIntegration.Contains(
-                "HeirService.ClearHeir(pKingdom);"),
-            "a victorious claimant clears the displaced court's stale heir flag first");
+                "HeirService.StoreSelectedHeir(pKingdom, pClaimant,"),
+            "a victorious claimant uses formal designation to clear the displaced heir and prepare identity");
+        Equal(false, disputeServiceIntegration.Contains(
+                "pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID,"),
+            "a victorious claimant cannot bypass formal heir designation");
         Equal(true, disputeServiceIntegration.Contains(
                 "original.king != successor") &&
                     disputeServiceIntegration.Contains(

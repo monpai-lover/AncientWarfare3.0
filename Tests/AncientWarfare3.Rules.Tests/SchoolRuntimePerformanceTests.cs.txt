@@ -6,6 +6,13 @@ internal static class SchoolRuntimePerformanceTests
     public static void Run()
     {
         AcademyRecoveryUsesVanillaConstructionPath();
+        True(GuestOfficePendingRules.ShouldRetrySuccessionEndCleanFailure(
+                pAttempt: 0, pMaximumAttempts: 4),
+            "a succession guest end may retry a transient first clean failure");
+        Equal(false,
+            GuestOfficePendingRules.ShouldRetrySuccessionEndCleanFailure(
+                pAttempt: 4, pMaximumAttempts: 4),
+            "a deterministic succession guest-end conflict cannot retry forever");
         HistoricalSchoolDiagnostics.ClearRuntime();
         HistoricalSchoolDiagnostics.RecordYearEnqueue(7);
         HistoricalSchoolDiagnostics.RecordSchedulerFrame(11, 13, true);

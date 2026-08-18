@@ -77,6 +77,13 @@
 /Tests/AW3WorldLoadCoordinator.Isolated.Tests/*
 !/Tests/AW3WorldLoadCoordinator.Isolated.Tests/Program.cs
 !/Tests/AW3WorldLoadCoordinator.Isolated.Tests/AW3WorldLoadCoordinator.Isolated.Tests.csproj
+!/Tests/ActorManualNameInputFieldSourceGuard.ps1
+!/Tests/ActorManualNameInputSynchronizer.Isolated.Tests/
+/Tests/ActorManualNameInputSynchronizer.Isolated.Tests/*
+!/Tests/ActorManualNameInputSynchronizer.Isolated.Tests/Program.cs
+!/Tests/ActorManualNameInputSynchronizer.Isolated.Tests/ActorManualNameInputSynchronizer.Isolated.Tests.csproj
+!/Tests/DragOrderCanvasCompatibilitySourceGuard.ps1
+!/Tests/WarDisposedKingdomSafetySourceGuard.ps1
 !/Tests/WarPeaceParticipantPersistenceSourceGuard.ps1
 !/Tests/WarPeacePersistenceRoundTripTests.csproj
 !/Tests/WarPeacePersistenceRoundTripTests.cs
