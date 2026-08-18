@@ -16,11 +16,17 @@ internal static class RuntimeRegressionSourceGuardTests
             "HistoricalSchoolContent.cs");
         string schoolRuntime = Read("Code", "core", "schools",
             "HistoricalSchoolRuntime.cs");
+        string schoolDescent = Read("Code", "core", "schools",
+            "HistoricalSchoolDescentService.cs");
         string chronicle = Read("Code", "core", "lineage",
             "ChronicleEvents.cs");
         string diplomacy = Read("Code", "content", "DiplomacyContent.cs");
         string warIcons = Read("Code", "core", "lineage",
             "WarIconPathRules.cs");
+        string historicalReadService = Read("Code", "core", "uiquery",
+            "AWHistoricalReadService.cs");
+        string deferredRuntimePatch = Read("Code", "patch",
+            "AW_DeferredRuntimeWorkPatch.cs");
 
         Assert(bootstrap.Contains("TraversalCache.DirtyTileCount") &&
                bootstrap.Contains("DirtyTileBudgetForFrame"),
@@ -38,6 +44,16 @@ internal static class RuntimeRegressionSourceGuardTests
         Assert(schoolRuntime.Contains(
                 "AWAsyncRuntime.State != AWAsyncLifecycleState.Running"),
             "school frame processing must wait for runtime restore completion");
+        int persistedSlotRestore = schoolDescent.IndexOf(
+            "if (row.Dead || row.ActorId < 0) continue;",
+            StringComparison.Ordinal);
+        int actorLookup = schoolDescent.IndexOf(
+            "World.world?.units?.get(row.ActorId)",
+            StringComparison.Ordinal);
+        Assert(persistedSlotRestore >= 0 && actorLookup > persistedSlotRestore &&
+               schoolDescent.IndexOf("TryRestoreActive(master.SchoolId, master.Id,\n" +
+                   "                        row.ActorId)", StringComparison.Ordinal) >= 0,
+            "persisted living masters must occupy their school before actor lookup is ready");
         Assert(chronicle.Contains("HeirDesignationHistoryRules.ProjectionKey") &&
                chronicle.Contains("HistoryWriter.TryRecordKingdom") &&
                chronicle.Contains("HistoryWriter.TryRecordPerson"),
@@ -50,6 +66,13 @@ internal static class RuntimeRegressionSourceGuardTests
                 "GameResources", "ui", "wars",
                 "war_bandit_suppression.png")),
             "bandit suppression icon PNG must exist");
+        Assert(historicalReadService.Contains(
+                   "PendingDrainCount => Worker.PendingCount +") &&
+               historicalReadService.Contains("Worker.PendingCompletionCount"),
+            "historical reads must expose completed callbacks as drainable work");
+        Assert(deferredRuntimePatch.Contains(
+                "AWHistoricalReadService.PendingDrainCount"),
+            "the frame drain must run when only historical read callbacks remain");
     }
 
     private static string Read(params string[] pParts)

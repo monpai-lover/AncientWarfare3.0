@@ -17,6 +17,8 @@ namespace AncientWarfare3.core.uiquery
         }
 
         public static int PendingCount => Worker.PendingCount;
+        public static int PendingDrainCount => Worker.PendingCount +
+                                               Worker.PendingCompletionCount;
         public static bool WorkerAlive => Worker.WorkerAlive;
         public static bool ConnectionOpen => Worker.ConnectionOpen;
 

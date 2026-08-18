@@ -78,23 +78,22 @@ namespace AncientWarfare3.core.schools
                     HistoricalSchoolMasterRegistry.Find(row.MasterId);
                 if (master == null || !row.Spawned) continue;
                 _ledger.MarkSpawned(master, row.SpawnYear);
+                if (row.Dead || row.ActorId < 0) continue;
+                if (!ActiveMasterSlots.TryRestoreActive(master.SchoolId, master.Id,
+                        row.ActorId))
+                {
+                    ModClass.LogError("Duplicate living historical master blocked: " +
+                                      master.SchoolId + " / " + master.Id);
+                    continue;
+                }
+                MasterByActor[row.ActorId] = master.Id;
+                if (row.HomeKingdomId >= 0)
+                    HomeCounts[row.HomeKingdomId] = HomeCount(row.HomeKingdomId) + 1;
                 try
                 {
-                    Actor actor = row.ActorId >= 0
-                        ? World.world?.units?.get(row.ActorId)
-                        : null;
+                    Actor actor = World.world?.units?.get(row.ActorId);
                     if (actor?.data == null || !actor.isAlive() || actor.isRekt())
                         continue;
-                    if (!ActiveMasterSlots.TryRestoreActive(master.SchoolId, master.Id,
-                            actor.data.id))
-                    {
-                        ModClass.LogWarning("Duplicate living historical master blocked: " +
-                                            master.SchoolId + " / " + master.Id);
-                        continue;
-                    }
-                    MasterByActor[actor.data.id] = master.Id;
-                    if (row.HomeKingdomId >= 0)
-                        HomeCounts[row.HomeKingdomId] = HomeCount(row.HomeKingdomId) + 1;
                     if (
                         row.LineageId < 0 || row.ShiId < 0 || row.CreatedTime < 0d)
                         continue;
@@ -105,13 +104,13 @@ namespace AncientWarfare3.core.schools
                         row.HomeKingdomId, row.HometownCityId, row.CreatedTime);
                     identity.FreezeIds(row.LineageId, row.ShiId);
                     if (!HistoricalMasterIdentityProjection.TryApply(actor, master, identity))
-                        ModClass.LogWarning("Historical school master identity repair pending: " +
-                                            master.Id);
+                        ModClass.LogError("Historical school master identity repair pending: " +
+                                          master.Id);
                 }
                 catch (Exception error)
                 {
-                    ModClass.LogWarning("Historical school master identity repair failed: " +
-                                        master.Id + " - " + error.Message);
+                    ModClass.LogError("Historical school master identity repair failed: " +
+                                      master.Id + " - " + error.Message);
                 }
             }
         }
