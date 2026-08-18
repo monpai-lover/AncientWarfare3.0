@@ -10,6 +10,7 @@ internal static class PathfindingPerformanceTests
         SchedulerStageDiagnosticsAccumulateStableSnapshots();
         ActorTimerWorkUsesBoundedRanges();
         ActorPostEnemyCacheKeepsPreparationAndCommitBoundaries();
+        SpatialMembershipKeepsRepairAndVanillaFallbacks();
         WorkClassesPreserveOperationalCapacityWithFairness();
         RuntimeSubmittersClassifyPathWorkExplicitly();
         RequestKeysMatchWithoutAllocating();
@@ -139,6 +140,62 @@ internal static class PathfindingPerformanceTests
                    "AWEnemyPresenceCache.GetDiagnostics()",
                    StringComparison.Ordinal),
             "runtime diagnostics expose enemy-presence cache effectiveness");
+    }
+
+    private static void SpatialMembershipKeepsRepairAndVanillaFallbacks()
+    {
+        string chunkMembership = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWIncrementalChunkActorMembership.cs"));
+        Assert(chunkMembership.Contains(
+                "totalUnits = container.units_all.Count;",
+                StringComparison.Ordinal),
+            "chunk unit totals follow the canonical units_all count");
+        Assert(chunkMembership.Contains(
+                "foreach (KeyValuePair<long, List<Actor>> pair in",
+                StringComparison.Ordinal) &&
+               chunkMembership.Contains(
+                   "RemoveActorReferences", StringComparison.Ordinal),
+            "chunk removal repairs stale references in every kingdom list");
+        Assert(chunkMembership.Contains(
+                "internal static void ChangeKingdom(",
+                StringComparison.Ordinal) &&
+               chunkMembership.Contains(
+                   "RepairUnexpectedKingdomProjection(",
+                   StringComparison.Ordinal),
+            "kingdom transfer detects and repairs stale projections");
+        Assert(chunkMembership.Contains(
+                "internal static void Validate(", StringComparison.Ordinal),
+            "incremental chunk membership retains an exact validator");
+
+        string incremental = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWIncrementalSimObjectZoneUnits.cs"));
+        Assert(incremental.Contains(
+                "internal static void Invalidate()",
+                StringComparison.Ordinal) &&
+               incremental.Contains(
+                   "AWIncrementalChunkActorMembership",
+                   StringComparison.Ordinal) &&
+               incremental.Contains(
+                   ".Validate(", StringComparison.Ordinal),
+            "incremental zone membership keeps invalidation and exact validation");
+
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_SimObjectsZonesPatch.cs"));
+        Assert(patch.Contains(
+                "FallBackToVanilla(", StringComparison.Ordinal) &&
+               patch.Contains(
+                   "AWIncrementalSimObjectZoneUnits.Invalidate();",
+                   StringComparison.Ordinal) &&
+               patch.Contains(
+                   "AWParallelSimObjectZoneUnits.Invalidate();",
+                   StringComparison.Ordinal),
+            "spatial optimization faults invalidate indexes before vanilla fallback");
+        Assert(patch.Contains(
+                "catch (System.Exception error)", StringComparison.Ordinal),
+            "spatial Harmony prefixes catch optimization-only invariant faults");
     }
 
     private static void RuntimeSubmittersClassifyPathWorkExplicitly()

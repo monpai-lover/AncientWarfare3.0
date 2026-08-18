@@ -7,6 +7,8 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_SimObjectsZonesPatch
     {
+        private static int _fallbackFaults;
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SimObjectsZones), "recalc")]
         private static bool Recalculate_Prefix(
@@ -14,34 +16,67 @@ namespace AncientWarfare3.patch
             HashSet<MapChunk> ____dirty_building_chunks,
             List<WorldTile> ____to_clear_tiles)
         {
-            bool handled = AWIncrementalSimObjectZoneUnits.TryRecalculate(
-                ____buildings_dirty, ____dirty_building_chunks,
-                ____to_clear_tiles);
-            if (handled) ____buildings_dirty = false;
-            return !handled;
+            try
+            {
+                bool handled = AWIncrementalSimObjectZoneUnits.TryRecalculate(
+                    ____buildings_dirty, ____dirty_building_chunks,
+                    ____to_clear_tiles);
+                if (handled) ____buildings_dirty = false;
+                return !handled;
+            }
+            catch (System.Exception error)
+            {
+                FallBackToVanilla(error, "recalc");
+                return true;
+            }
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SimObjectsZones), "clearTileUnits")]
         private static bool ClearTileUnits_Prefix(List<WorldTile> ____to_clear_tiles)
         {
-            return !AWParallelSimObjectZoneUnits.TryClearTileUnits(
-                ____to_clear_tiles);
+            try
+            {
+                return !AWParallelSimObjectZoneUnits.TryClearTileUnits(
+                    ____to_clear_tiles);
+            }
+            catch (System.Exception error)
+            {
+                FallBackToVanilla(error, "clear_tile_units");
+                return true;
+            }
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SimObjectsZones), "clearChunkObjects")]
         private static bool ClearChunkObjects_Prefix(bool pForceClearBuildings)
         {
-            return !AWParallelSimObjectZoneUnits.TryClearChunkObjects(
-                pForceClearBuildings);
+            try
+            {
+                return !AWParallelSimObjectZoneUnits.TryClearChunkObjects(
+                    pForceClearBuildings);
+            }
+            catch (System.Exception error)
+            {
+                FallBackToVanilla(error, "clear_chunk_objects");
+                return true;
+            }
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(IslandsCalculator), "recalcActors")]
         private static bool RecalculateIslands_Prefix(IslandsCalculator __instance)
         {
-            return !AWParallelSimObjectZoneUnits.TryDeferIslandRebuild(__instance);
+            try
+            {
+                return !AWParallelSimObjectZoneUnits.TryDeferIslandRebuild(
+                    __instance);
+            }
+            catch (System.Exception error)
+            {
+                FallBackToVanilla(error, "recalc_islands");
+                return true;
+            }
         }
 
         [HarmonyPrefix]
@@ -49,15 +84,26 @@ namespace AncientWarfare3.patch
         private static bool CheckUnits_Prefix(List<WorldTile> ____to_clear_tiles,
             out bool __state)
         {
-            if (AWParallelSimObjectZoneUnits.TrySkipRedundantCheckUnits() &&
-                !AWActorZoneMembershipDirtyIndex.HasPending())
+            try
             {
-                __state = true;
-                return false;
-            }
+                if (AWParallelSimObjectZoneUnits
+                        .TrySkipRedundantCheckUnits() &&
+                    !AWActorZoneMembershipDirtyIndex.HasPending())
+                {
+                    __state = true;
+                    return false;
+                }
 
-            __state = AWParallelSimObjectZoneUnits.TryRebuild(____to_clear_tiles);
-            return !__state;
+                __state = AWParallelSimObjectZoneUnits.TryRebuild(
+                    ____to_clear_tiles);
+                return !__state;
+            }
+            catch (System.Exception error)
+            {
+                FallBackToVanilla(error, "check_units");
+                __state = false;
+                return true;
+            }
         }
 
         [HarmonyPostfix]
@@ -74,6 +120,21 @@ namespace AncientWarfare3.patch
         {
             AWIncrementalSimObjectZoneUnits.Invalidate();
             AWParallelSimObjectZoneUnits.Invalidate();
+        }
+
+        private static void FallBackToVanilla(System.Exception pError,
+            string pStage)
+        {
+            AWIncrementalSimObjectZoneUnits.Invalidate();
+            AWParallelSimObjectZoneUnits.Invalidate();
+            int failures = System.Threading.Interlocked.Increment(
+                ref _fallbackFaults);
+            if (failures == 1 || failures % 100 == 0)
+            {
+                ModClass.LogWarning(
+                    "AW spatial optimization fell back to vanilla at " +
+                    pStage + " (count=" + failures + "): " + pError);
+            }
         }
     }
 }

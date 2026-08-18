@@ -90,6 +90,24 @@ $workerLoop = Get-MethodBlock $workerPool `
 Require-Contains $workerLoop '_dispatchGate.Consume(workerIndex)' `
     'A signaled worker must consume a generation before executing work.'
 
+$chunkMembership = Read-Source `
+    'Code\core\performance\AWIncrementalChunkActorMembership.cs'
+Require-Contains $chunkMembership 'internal static void Validate(' `
+    'Incremental chunk membership must retain exact validation.'
+Require-Contains $chunkMembership `
+    'totalUnits = container.units_all.Count;' `
+    'Chunk totals must be repaired from the canonical units list.'
+
+$zonePatch = Read-Source 'Code\patch\AW_SimObjectsZonesPatch.cs'
+Require-Contains $zonePatch 'FallBackToVanilla(' `
+    'Spatial optimization faults must preserve a vanilla rebuild fallback.'
+Require-Contains $zonePatch `
+    'AWIncrementalSimObjectZoneUnits.Invalidate();' `
+    'Spatial fallback must invalidate incremental membership.'
+Require-Contains $zonePatch `
+    'AWParallelSimObjectZoneUnits.Invalidate();' `
+    'Spatial fallback must invalidate parallel rebuild state.'
+
 if ($failures.Count -gt 0) {
     Write-Output "Cultiway advanced extraction guard failures: $($failures.Count)"
     foreach ($failure in $failures) {
