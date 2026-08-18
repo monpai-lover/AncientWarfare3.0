@@ -1,0 +1,47 @@
+using System.IO;
+
+internal static class RestorationAtomicLaunchSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string autonomous = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "AutonomousRestorationService.cs"));
+        string mobilization = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "RestorationUprisingMobilizationService.cs"));
+
+        string launch = Slice(autonomous,
+            "Kingdom restored = KingdomIdentityContinuityService.RestoreFromCity(",
+            "HistoryText uprising =");
+        True(launch.Contains("postCreationSupporterIds"),
+            "launch stores a post-creation supporter list");
+        True(launch.Contains("RevalidateInitialSupporterIds("),
+            "launch revalidates supporters after accession");
+        True(launch.Contains("supporters: postCreationSupporterIds.Count"),
+            "post-creation seed validation uses the revalidated count");
+        True(launch.Contains("postCreationSupporterIds,"),
+            "initial cohort receives the revalidated IDs");
+
+        string collection = Slice(mobilization,
+            "internal static List<long> CollectInitialSupporterIds(",
+            "internal static List<long> RevalidateInitialSupporterIds(");
+        True(collection.Contains("ShouldCountInitialSupporter("),
+            "preflight collection explicitly excludes the claimant");
+    }
+
+    private static string Slice(string source, string start, string end)
+    {
+        int from = source.IndexOf(start, StringComparison.Ordinal);
+        int to = source.IndexOf(end, from < 0 ? 0 : from,
+            StringComparison.Ordinal);
+        if (from < 0 || to <= from)
+            throw new InvalidOperationException(
+                "Could not extract source section: " + start);
+        return source.Substring(from, to - from);
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+}

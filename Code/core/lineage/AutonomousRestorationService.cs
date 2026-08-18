@@ -368,6 +368,10 @@ namespace AncientWarfare3.core.lineage
             int requiredSupporters =
                 RoyalRestorationRules.MinimumRequiredSupporters(
                     postCreationDefenders);
+            List<long> postCreationSupporterIds =
+                RestorationUprisingMobilizationService
+                    .RevalidateInitialSupporterIds(seed, restored,
+                        seedSelection.SupporterIds, claimant.data.id);
             bool postCreationSeedValid = RoyalRestorationRules.CanUseSeedCity(
                 cityValid: seed?.data != null && !seed.isRekt(),
                 oldCore: true,
@@ -375,11 +379,11 @@ namespace AncientWarfare3.core.lineage
                 ownerValid: IsLiveKingdom(restored) && seed?.kingdom == restored,
                 activeOrFrozenCapture: HasActiveOrFrozenCapture(seed),
                 population: ReadSeedPopulation(seed),
-                supporters: seedSelection.SupporterIds?.Count ?? 0,
+                supporters: postCreationSupporterIds.Count,
                 defenders: postCreationDefenders);
             if (!postCreationSeedValid ||
                 !RestorationUprisingMobilizationService.TryStartWithInitialCohort(
-                    restored, seed, campaignId, seedSelection.SupporterIds,
+                    restored, seed, campaignId, postCreationSupporterIds,
                     requiredSupporters))
             {
                 bool rollbackCompleted = RollbackProvisionalRestoration(
@@ -810,12 +814,13 @@ namespace AncientWarfare3.core.lineage
                 if (!valid || !ownerValid || peacefulHostCity ||
                     activeOrFrozenCapture ||
                     population < RoyalRestorationRules.MinimumSeedPopulation ||
-                    RoyalRestorationRules.MinimumRequiredSupporters(defenders) >
+                    RoyalRestorationRules.MinimumPreflightSupporters(defenders) >
                     remainingResidentInspections) continue;
                 List<long> supporters =
                     RestorationUprisingMobilizationService
                         .CollectInitialSupporterIds(city,
                             remainingResidentInspections,
+                            pClaimant?.data?.id ?? -1L,
                             out int inspectedResidents);
                 remainingResidentInspections = RoyalRestorationRules
                     .RemainingSeedResidentInspectionBudget(
@@ -825,7 +830,7 @@ namespace AncientWarfare3.core.lineage
                         activeOrFrozenCapture,
                         population, supporters: supporters.Count,
                         defenders) ||
-                    !RoyalRestorationRules.HasRequiredSupporters(
+                    !RoyalRestorationRules.HasRequiredPreflightSupporters(
                         supporters.Count, defenders)) continue;
                 RestorationSeedScore score = ScoreSeedCity(
                     pClaimant, city, pOriginalCapitalCityId);
@@ -872,14 +877,15 @@ namespace AncientWarfare3.core.lineage
                 CountSeedDefenders(pSelection.City));
             List<long> supporters = RestorationUprisingMobilizationService
                 .RevalidateInitialSupporterIds(pSelection.City,
-                    pSelection.Owner, pSelection.SupporterIds);
+                    pSelection.Owner, pSelection.SupporterIds,
+                    pClaimant?.data?.id ?? -1L);
             if (!RoyalRestorationRules.CanUseSeedCity(
                     cityValid: !pSelection.City.isRekt(), oldCore: true,
                     peacefulHostCity, ownerValid: true,
                     activeOrFrozenCapture:
                     HasActiveOrFrozenCapture(pSelection.City),
                     population, supporters.Count, defenders) ||
-                !RoyalRestorationRules.HasRequiredSupporters(
+                !RoyalRestorationRules.HasRequiredPreflightSupporters(
                     supporters.Count, defenders)) return false;
             pSelection.SupporterIds = supporters;
             pSelection.Defenders = defenders;

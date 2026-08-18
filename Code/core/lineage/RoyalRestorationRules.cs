@@ -133,9 +133,20 @@ namespace AncientWarfare3.core.lineage
             return Math.Max(6, Math.Max(0, defenders) + 2);
         }
 
+        public static int MinimumPreflightSupporters(int defenders)
+        {
+            return MinimumRequiredSupporters(defenders) + 1;
+        }
+
         public static bool HasRequiredSupporters(int supporters, int defenders)
         {
             return supporters >= MinimumRequiredSupporters(defenders);
+        }
+
+        public static bool HasRequiredPreflightSupporters(int supporters,
+            int defenders)
+        {
+            return supporters >= MinimumPreflightSupporters(defenders);
         }
 
         public static int SeedResidentsToInspect(int remainingBudget,

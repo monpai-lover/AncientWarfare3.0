@@ -76,6 +76,28 @@ if (args.Length == 1 && args[0] == "--restoration-protection")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--restoration-atomic-launch")
+{
+    Equal(7, RoyalRestorationRules.MinimumPreflightSupporters(
+            defenders: 0),
+        "preflight reserves one candidate beyond the six-person minimum");
+    Equal(false, RoyalRestorationRules.HasRequiredPreflightSupporters(
+            supporters: 6, defenders: 0),
+        "an exact normal cohort lacks the future-heir reserve");
+    True(RoyalRestorationRules.HasRequiredPreflightSupporters(
+            supporters: 7, defenders: 0),
+        "one reserved candidate makes preflight safe");
+    Equal(false, RestorationUprisingRules.ShouldCountInitialSupporter(
+            candidateActorId: 42, claimantActorId: 42),
+        "the restoration claimant is never counted as a levy candidate");
+    True(RestorationUprisingRules.ShouldCountInitialSupporter(
+            candidateActorId: 43, claimantActorId: 42),
+        "an unrelated eligible resident remains countable");
+    RestorationAtomicLaunchSourceGuardTests.Run();
+    Console.WriteLine("Restoration atomic launch rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--runtime-stability")
 {
     SimulationWorkerPoolTests.Run();

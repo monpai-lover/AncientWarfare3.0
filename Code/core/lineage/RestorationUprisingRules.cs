@@ -49,6 +49,13 @@ namespace AncientWarfare3.core.lineage
                    age < MaximumEnlistmentAge && !alreadyWarrior;
         }
 
+        public static bool ShouldCountInitialSupporter(long candidateActorId,
+            long claimantActorId)
+        {
+            return candidateActorId >= 0 &&
+                   candidateActorId != claimantActorId;
+        }
+
         public static int CompareSeeds(RestorationSeedScore left,
             RestorationSeedScore right)
         {

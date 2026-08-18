@@ -56,7 +56,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         internal static List<long> CollectInitialSupporterIds(City pSeed,
-            int pMaximumInspected, out int pInspected)
+            int pMaximumInspected, long pClaimantActorId,
+            out int pInspected)
         {
             pInspected = 0;
             var result = new List<long>();
@@ -70,14 +71,17 @@ namespace AncientWarfare3.core.lineage
             for (int i = 0; i < inspect; i++)
             {
                 Actor actor = pSeed.units[i];
-                if (CanPreflightSupporter(owner, pSeed, actor))
+                if (CanPreflightSupporter(owner, pSeed, actor) &&
+                    RestorationUprisingRules.ShouldCountInitialSupporter(
+                        actor.data.id, pClaimantActorId))
                     result.Add(actor.data.id);
             }
             return result;
         }
 
         internal static List<long> RevalidateInitialSupporterIds(City pSeed,
-            Kingdom pExpectedOwner, IReadOnlyList<long> pCandidateIds)
+            Kingdom pExpectedOwner, IReadOnlyList<long> pCandidateIds,
+            long pClaimantActorId)
         {
             var result = new List<long>();
             if (pSeed?.data == null || pSeed.isRekt() ||
@@ -88,7 +92,9 @@ namespace AncientWarfare3.core.lineage
             for (int i = 0; i < limit; i++)
             {
                 Actor actor = ResolveActor(pCandidateIds[i]);
-                if (CanPreflightSupporter(pExpectedOwner, pSeed, actor))
+                if (CanPreflightSupporter(pExpectedOwner, pSeed, actor) &&
+                    RestorationUprisingRules.ShouldCountInitialSupporter(
+                        actor.data.id, pClaimantActorId))
                     result.Add(actor.data.id);
             }
             return result;
