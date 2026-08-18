@@ -428,3 +428,25 @@ git commit -m "perf: enable validated Cultiway advanced pipeline"
 - [ ] **Step 6: Request final review and push**
 
 Request spec-compliance and code-quality reviews, rerun the full verification commands on the reviewed HEAD, then push `master`. Delete `origin/fix/cultiway-perf-large-scheduler-completion` only after confirming every reference behavior is either ported, superseded by a stronger current implementation, or intentionally excluded in the committed audit.
+
+## Implementation Record
+
+Implemented on `master` from `995b0765` through `f8aa8419`.
+
+- Added scheduler stage buckets, coordinator totals, and bounded 128-actor timer ranges without changing simulation stage order.
+- Retained the generation-gated persistent worker pool and added alternating 1/4096 item adversarial coverage.
+- Audited actor-post and enemy-search stages against `06844204`; current RTS P0, task ownership, ordered commit, and path preparation behavior supersede the reference implementation. Added enemy-presence cache diagnostics.
+- Audited chunk, zone, and nearby-target indexes against `07a2858e`, `5d3ea7d6`, `813369e0`, and `3acdf3cb`; current deterministic membership repair supersedes them. Added optimization-fault invalidation and vanilla rebuild fallback.
+- Replaced consuming path diagnostics with `AWPathFinder.ReadState()`. `HasOwnership()` and `DescribeRuntimeState()` are now read-only, while formal movement update helpers remain the only result consumers.
+- Restored the P0 temporary transport-boat no-batch movement boundary that was lost in `55f3252a`.
+- Captured the scheduler mode at cooperative cycle admission and passed it through the RTS logical pulse.
+
+Automated verification on 2026-08-18:
+
+- Production `net48` build: passed with zero warnings and zero errors.
+- Rules `net9.0` build and full executable: passed.
+- Cultiway completion, non-regression, and advanced extraction source guards: passed.
+- RTS war lifecycle, member combat, transport P0, and peacetime ownership release slices: passed.
+- RTS adversarial simulation: 10 continuity scenarios passed; 80 large-mode armies advanced; no duplicate assignments.
+
+The advanced scheduler remains opt-in (`AW3_ENABLE_FRAME_PRIORITY_SCHEDULER=false`) until the interactive WorldBox smoke matrix is completed. Native/full-rebuild and immediate path submission fallbacks remain available. The reference remote branch is retained until that smoke matrix confirms final cleanup is safe.
