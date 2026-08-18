@@ -22,9 +22,9 @@ internal static class RulerHouseholdRulesTests
         Equal(15, (int)DiplomacyProposalType.HouseholdOffering,
             "household offering keeps its stable proposal identifier");
 
-        Equal(8, RulerHouseholdRules.ConsortCapacity(
+        Equal(9, RulerHouseholdRules.ConsortCapacity(
                 RulerHouseholdRealmTier.Empire),
-            "an empire may maintain eight active consorts");
+            "an empire may maintain nine active consorts");
         Equal(4, RulerHouseholdRules.ConsortCapacity(
                 RulerHouseholdRealmTier.Kingdom),
             "a kingdom may maintain four active consorts");

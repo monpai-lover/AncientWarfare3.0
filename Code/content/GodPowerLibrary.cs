@@ -969,11 +969,18 @@ namespace AncientWarfare3.content
             }
             if (!PeasantRebelBanditStrongholdService.TryCreateDirect(city,
                     out Kingdom bandit, out City stronghold,
-                    out string failureKey))
+                    out string failureKey,
+                    out bool restorationRedirected))
             {
                 Tip(AW_L10n.Text(failureKey,
                     "Bandit stronghold creation failed"));
                 return false;
+            }
+            if (restorationRedirected)
+            {
+                Tip(AW_L10n.Text("aw_restoration_started",
+                    "Restoration begun"));
+                return true;
             }
             Tip(AW_L10n.Text("aw_bandit_stronghold_success",
                 "Bandit stronghold created") + ": " + stronghold.name);

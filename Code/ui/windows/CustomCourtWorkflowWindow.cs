@@ -18,8 +18,8 @@ namespace AncientWarfare3.ui.windows
         AbstractWindow<CustomCourtWorkflowWindow>
     {
         private static long _kingdomId = -1L;
-        private static readonly Vector2 DefaultSize = new Vector2(560f, 360f);
-        private static readonly Vector2 MinimumSize = new Vector2(420f, 280f);
+        private static readonly Vector2 DefaultSize = new Vector2(560f, 560f);
+        private static readonly Vector2 MinimumSize = new Vector2(420f, 400f);
         private static readonly Vector2 MaximumSize = new Vector2(900f, 650f);
         private Vector2 _windowSize = DefaultSize;
         private RectTransform _root;
@@ -30,12 +30,33 @@ namespace AncientWarfare3.ui.windows
         private InputField _officeNameInput;
         private AWStringDropdown _wholePresetDropdown;
         private AWStringDropdown _importDropdown;
+        private AWStringDropdown _contextDropdown;
+        private AWStringDropdown _localTemplateDropdown;
+        private AWStringDropdown _localDefaultDropdown;
+        private AWStringDropdown _replacementDropdown;
+        private Text _nameLabel;
+        private Button _createLocalTemplateButton;
+        private Button _duplicateLocalTemplateButton;
+        private Button _deleteLocalTemplateButton;
         private string _selectedImportFile = string.Empty;
+        private string _selectedLocalTemplateId = string.Empty;
+        private string _replacementTemplateId = string.Empty;
+        private bool _editingLocal;
+        private long _loadedKingdomId = -1L;
+        private readonly Dictionary<string, string> _pendingReplacements =
+            new Dictionary<string, string>(StringComparer.Ordinal);
         private Text _status;
         private CustomCourtTemplate _template;
         private CourtWorkflowVacancyCard _edgeSource;
         private CourtWorkflowVacancyCard _edgeTarget;
         private WideWindowChrome _chrome;
+
+        private sealed class CityTemplateBindingChange
+        {
+            internal City City;
+            internal string PreviousId = string.Empty;
+            internal bool PreviousManual;
+        }
 
         public static void Open(long kingdomId)
         {
@@ -90,9 +111,17 @@ namespace AncientWarfare3.ui.windows
             _toolPanel.SetParent(_root, false);
             _toolPanel.GetComponent<Image>().color =
                 new Color(0.12f, 0.09f, 0.06f, 0.98f);
-            Text nameLabel = CreateText(_toolPanel, "CourtNameLabel", 9,
+            _contextDropdown = AWStringDropdown.Create(_toolPanel,
+                "CourtContext", 148f, 22f, SelectEditorContext);
+            _localTemplateDropdown = AWStringDropdown.Create(_toolPanel,
+                "LocalTemplate", 148f, 22f, SelectLocalTemplate);
+            _localDefaultDropdown = AWStringDropdown.Create(_toolPanel,
+                "LocalDefaultKind", 148f, 22f, SelectLocalDefaultKind);
+            _replacementDropdown = AWStringDropdown.Create(_toolPanel,
+                "LocalReplacement", 148f, 22f, SelectReplacementTemplate);
+            _nameLabel = CreateText(_toolPanel, "CourtNameLabel", 9,
                 TextAnchor.MiddleLeft);
-            nameLabel.text = AW_L10n.Text("aw_custom_court_name",
+            _nameLabel.text = AW_L10n.Text("aw_custom_court_name",
                 "Court name");
             _courtNameInput = CreateInput(_toolPanel, "CourtNameInput");
             _wholePresetDropdown = AWStringDropdown.Create(_toolPanel,
@@ -128,6 +157,15 @@ namespace AncientWarfare3.ui.windows
                 "aw_custom_court_prerequisite_edge", "Prerequisite",
                 "aw_custom_court_prerequisite_edge_desc",
                 "The first office must be held before appointment to the second office.");
+            _createLocalTemplateButton = CreateButton(_toolPanel,
+                "CreateLocalTemplate", "aw_custom_local_court_create",
+                "New Local", CreateLocalTemplate);
+            _duplicateLocalTemplateButton = CreateButton(_toolPanel,
+                "DuplicateLocalTemplate", "aw_custom_local_court_duplicate",
+                "Duplicate", DuplicateLocalTemplate);
+            _deleteLocalTemplateButton = CreateButton(_toolPanel,
+                "DeleteLocalTemplate", "aw_custom_local_court_delete",
+                "Delete Local", DeleteLocalTemplate);
             Button save = CreateButton(_toolPanel, "Save",
                 "aw_custom_court_save", "Save", SaveTemplate);
             Button export = CreateButton(_toolPanel, "Export",
@@ -138,21 +176,31 @@ namespace AncientWarfare3.ui.windows
                 "aw_custom_court_apply", "Apply", ApplyCustomCourtTemplate);
             _status = CreateText(_toolPanel, "Status", 9,
                 TextAnchor.UpperLeft);
-            Layout(nameLabel.rectTransform, 8f, 6f, 148f, 16f);
-            Layout(_courtNameInput.GetComponent<RectTransform>(), 8f, 24f,
+            Layout(_contextDropdown.RectTransform, 8f, 6f, 148f, 22f);
+            Layout(_localTemplateDropdown.RectTransform, 8f, 32f, 148f, 22f);
+            Layout(_localDefaultDropdown.RectTransform, 8f, 58f, 148f, 22f);
+            Layout(_replacementDropdown.RectTransform, 8f, 84f, 148f, 22f);
+            Layout(_nameLabel.rectTransform, 8f, 110f, 148f, 16f);
+            Layout(_courtNameInput.GetComponent<RectTransform>(), 8f, 128f,
                 148f, 20f);
-            Layout(_wholePresetDropdown.RectTransform, 8f, 50f, 148f, 22f);
-            Layout(officeNameLabel.rectTransform, 8f, 76f, 148f, 16f);
-            Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 94f,
+            Layout(_wholePresetDropdown.RectTransform, 8f, 154f, 148f, 22f);
+            Layout(officeNameLabel.rectTransform, 8f, 180f, 148f, 16f);
+            Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 198f,
                 148f, 20f);
-            Layout(add.GetComponent<RectTransform>(), 8f, 120f, 148f, 22f);
-            Layout(manage.GetComponent<RectTransform>(), 8f, 146f, 148f, 22f);
-            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 172f,
+            Layout(add.GetComponent<RectTransform>(), 8f, 224f, 148f, 22f);
+            Layout(manage.GetComponent<RectTransform>(), 8f, 250f, 148f, 22f);
+            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 276f,
                 148f, 22f);
-            Layout(save.GetComponent<RectTransform>(), 8f, 198f, 148f, 22f);
-            Layout(export.GetComponent<RectTransform>(), 8f, 224f, 148f, 22f);
-            Layout(_importDropdown.RectTransform, 8f, 250f, 148f, 22f);
-            Layout(apply.GetComponent<RectTransform>(), 8f, 276f, 148f, 22f);
+            Layout(_createLocalTemplateButton.GetComponent<RectTransform>(),
+                8f, 302f, 72f, 22f);
+            Layout(_duplicateLocalTemplateButton.GetComponent<RectTransform>(),
+                84f, 302f, 72f, 22f);
+            Layout(_deleteLocalTemplateButton.GetComponent<RectTransform>(),
+                8f, 328f, 148f, 22f);
+            Layout(save.GetComponent<RectTransform>(), 8f, 354f, 148f, 22f);
+            Layout(export.GetComponent<RectTransform>(), 8f, 380f, 148f, 22f);
+            Layout(_importDropdown.RectTransform, 8f, 406f, 148f, 22f);
+            Layout(apply.GetComponent<RectTransform>(), 8f, 432f, 148f, 22f);
         }
 
         private void ApplyLayout()
@@ -218,8 +266,8 @@ namespace AncientWarfare3.ui.windows
             _toolPanel.sizeDelta = new Vector2(164f,
                 Mathf.Max(1f, viewportHeight - 8f));
             _toolPanel.SetAsLastSibling();
-            Layout(_status.rectTransform, 8f, 304f, 148f,
-                Mathf.Max(1f, _toolPanel.sizeDelta.y - 312f));
+            Layout(_status.rectTransform, 8f, 460f, 148f,
+                Mathf.Max(1f, _toolPanel.sizeDelta.y - 468f));
             _canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f);
             _canvasRect.pivot = new Vector2(0.5f, 0.5f);
             _canvasRect.sizeDelta = new Vector2(contentWidth,
@@ -235,10 +283,19 @@ namespace AncientWarfare3.ui.windows
         {
             EnsureUi();
             ApplyLayout();
-            if (_template == null) _template = NewTemplate();
-            if (_courtNameInput != null)
-                _courtNameInput.text = _template.Name?.Chinese ??
-                    _template.Name?.English ?? string.Empty;
+            if (_template == null || _loadedKingdomId != _kingdomId)
+            {
+                Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+                _template = CustomCourtRuntime.TryGetSnapshot(kingdom,
+                    out CustomCourtTemplate applied)
+                    ? CustomCourtTemplateJsonCodec.Normalize(applied)
+                    : NewTemplate();
+                _loadedKingdomId = _kingdomId;
+                _pendingReplacements.Clear();
+            }
+            EnsureTemplateShape();
+            RefreshContextControls();
+            SyncNameInputFromContext();
             RenderCards();
             RefreshWholePresetOptions();
             RefreshImportFiles();
@@ -266,12 +323,331 @@ namespace AncientWarfare3.ui.windows
                 Slots = 1,
                 Layout = CanvasCenterLayout()
             });
+            template.LocalTemplates.Add(NewLocalTemplate("minzhou",
+                "民州", CustomLocalCourtDefaultKind.CivilDefault));
+            template.LocalTemplates.Add(NewLocalTemplate("junfu",
+                "军府", CustomLocalCourtDefaultKind.MilitaryDefault));
             return template;
+        }
+
+        private List<CustomCourtOffice> ActiveOffices => _editingLocal
+            ? ActiveLocalTemplate?.Offices
+            : _template?.Offices;
+
+        private List<CustomCourtEdge> ActiveEdges => _editingLocal
+            ? ActiveLocalTemplate?.Edges
+            : _template?.Edges;
+
+        private CustomLocalCourtTemplate ActiveLocalTemplate =>
+            _template?.LocalTemplates?.FirstOrDefault(template =>
+                template != null && string.Equals(template.Id,
+                    _selectedLocalTemplateId, StringComparison.Ordinal));
+
+        private void EnsureTemplateShape()
+        {
+            _template.Offices = _template.Offices ??
+                new List<CustomCourtOffice>();
+            _template.Edges = _template.Edges ??
+                new List<CustomCourtEdge>();
+            _template.LocalTemplates = _template.LocalTemplates ??
+                new List<CustomLocalCourtTemplate>();
+            if (_template.LocalTemplates.Count == 0)
+                _template.LocalTemplates.Add(NewLocalTemplate("minzhou",
+                    "民州", CustomLocalCourtDefaultKind.CivilDefault));
+            if (ActiveLocalTemplate == null)
+                _selectedLocalTemplateId = _template.LocalTemplates
+                    .FirstOrDefault()?.Id ?? string.Empty;
+            foreach (CustomLocalCourtTemplate local in
+                     _template.LocalTemplates.Where(local => local != null))
+            {
+                local.Offices = local.Offices ??
+                    new List<CustomCourtOffice>();
+                local.Edges = local.Edges ?? new List<CustomCourtEdge>();
+            }
+        }
+
+        private CustomLocalCourtTemplate NewLocalTemplate(string pId,
+            string pName, CustomLocalCourtDefaultKind pDefaultKind)
+        {
+            var local = new CustomLocalCourtTemplate
+            {
+                Id = pId,
+                Name = new CustomCourtLocalizedText
+                {
+                    Chinese = pName,
+                    English = pName
+                },
+                DefaultKind = pDefaultKind
+            };
+            local.Offices.Add(new CustomCourtOffice
+            {
+                Id = pId + "_governor",
+                Name = new CustomCourtLocalizedText
+                {
+                    Chinese = AW_L10n.Text("aw_court_governor", "Governor"),
+                    English = AW_L10n.Text("aw_court_governor", "Governor")
+                },
+                Layer = CourtOfficeLayer.City,
+                Grade = 10,
+                Slots = 1,
+                Layout = CanvasCenterLayout()
+            });
+            return local;
+        }
+
+        private void RefreshContextControls()
+        {
+            _contextDropdown?.SetOptions(new[]
+            {
+                new AWStringDropdownOption
+                {
+                    Id = "central",
+                    Label = AW_L10n.Text("aw_court_layer_central",
+                        "Central Court")
+                },
+                new AWStringDropdownOption
+                {
+                    Id = "local",
+                    Label = AW_L10n.Text("aw_court_layer_city",
+                        "Local Bureaus")
+                }
+            }, _editingLocal ? "local" : "central",
+                AW_L10n.Text("aw_custom_court_context", "Edit layer"));
+
+            bool localMode = _editingLocal;
+            _localTemplateDropdown?.gameObject.SetActive(localMode);
+            _localDefaultDropdown?.gameObject.SetActive(localMode);
+            _replacementDropdown?.gameObject.SetActive(localMode);
+            _createLocalTemplateButton?.gameObject.SetActive(localMode);
+            _duplicateLocalTemplateButton?.gameObject.SetActive(localMode);
+            _deleteLocalTemplateButton?.gameObject.SetActive(localMode);
+            _wholePresetDropdown?.gameObject.SetActive(!localMode);
+            if (_nameLabel != null)
+                _nameLabel.text = localMode
+                    ? AW_L10n.Text("aw_custom_local_court_name",
+                        "Local template name")
+                    : AW_L10n.Text("aw_custom_court_name", "Court name");
+            if (!localMode) return;
+
+            AWStringDropdownOption[] templates = _template.LocalTemplates
+                .Where(template => template != null)
+                .Take(CustomLocalCourtTemplateRules.MaximumTemplates)
+                .Select(template => new AWStringDropdownOption
+                {
+                    Id = template.Id,
+                    Label = CustomLocalCourtTemplateRules.CityTypeName(
+                        template,
+                        HistoryLocalizationRules.CurrentLanguage() == "en")
+                }).ToArray();
+            _localTemplateDropdown?.SetOptions(templates,
+                _selectedLocalTemplateId,
+                AW_L10n.Text("aw_local_court_choose_template",
+                    "Choose local government"));
+            CustomLocalCourtTemplate selected = ActiveLocalTemplate;
+            _localDefaultDropdown?.SetOptions(new[]
+            {
+                LocalDefaultOption(CustomLocalCourtDefaultKind.ManualOnly,
+                    "aw_custom_local_court_manual", "Manual only"),
+                LocalDefaultOption(CustomLocalCourtDefaultKind.CivilDefault,
+                    "aw_custom_local_court_civil", "Civil default"),
+                LocalDefaultOption(CustomLocalCourtDefaultKind.MilitaryDefault,
+                    "aw_custom_local_court_military", "Military default")
+            }, ((int)(selected?.DefaultKind ??
+                CustomLocalCourtDefaultKind.ManualOnly)).ToString(
+                    CultureInfo.InvariantCulture),
+                AW_L10n.Text("aw_custom_local_court_default_kind",
+                    "Default use"));
+            AWStringDropdownOption[] replacements = templates.Where(option =>
+                option.Id != _selectedLocalTemplateId).ToArray();
+            if (!replacements.Any(option => option.Id ==
+                    _replacementTemplateId))
+                _replacementTemplateId = string.Empty;
+            _replacementDropdown?.SetOptions(replacements,
+                _replacementTemplateId,
+                AW_L10n.Text("aw_custom_local_court_replacement",
+                    "Replacement when deleting"));
+        }
+
+        private static AWStringDropdownOption LocalDefaultOption(
+            CustomLocalCourtDefaultKind pKind, string pKey,
+            string pFallback)
+        {
+            return new AWStringDropdownOption
+            {
+                Id = ((int)pKind).ToString(CultureInfo.InvariantCulture),
+                Label = AW_L10n.Text(pKey, pFallback)
+            };
+        }
+
+        private void SyncNameInputFromContext()
+        {
+            CustomCourtLocalizedText name = _editingLocal
+                ? ActiveLocalTemplate?.Name
+                : _template?.Name;
+            if (_courtNameInput != null)
+                _courtNameInput.text = name?.Chinese ?? name?.English ??
+                    string.Empty;
+        }
+
+        private void SelectEditorContext(AWStringDropdownOption pOption)
+        {
+            bool local = pOption?.Id == "local";
+            if (_editingLocal == local) return;
+            _editingLocal = local;
+            _edgeSource = _edgeTarget = null;
+            if (_officeNameInput != null)
+                _officeNameInput.text = string.Empty;
+            EnsureTemplateShape();
+            RefreshContextControls();
+            SyncNameInputFromContext();
+            RenderCards();
+        }
+
+        private void SelectLocalTemplate(AWStringDropdownOption pOption)
+        {
+            if (pOption == null || string.IsNullOrEmpty(pOption.Id)) return;
+            _selectedLocalTemplateId = pOption.Id;
+            _replacementTemplateId = string.Empty;
+            _edgeSource = _edgeTarget = null;
+            RefreshContextControls();
+            SyncNameInputFromContext();
+            RenderCards();
+        }
+
+        private void SelectLocalDefaultKind(AWStringDropdownOption pOption)
+        {
+            CustomLocalCourtTemplate local = ActiveLocalTemplate;
+            if (local == null || !int.TryParse(pOption?.Id,
+                    NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out int raw) || !Enum.IsDefined(
+                    typeof(CustomLocalCourtDefaultKind), raw)) return;
+            var kind = (CustomLocalCourtDefaultKind)raw;
+            if (kind != CustomLocalCourtDefaultKind.ManualOnly)
+                foreach (CustomLocalCourtTemplate other in
+                         _template.LocalTemplates.Where(other =>
+                             other != null && other != local &&
+                             other.DefaultKind == kind))
+                    other.DefaultKind = CustomLocalCourtDefaultKind.ManualOnly;
+            local.DefaultKind = kind;
+            RefreshContextControls();
+        }
+
+        private void SelectReplacementTemplate(
+            AWStringDropdownOption pOption)
+        {
+            _replacementTemplateId = pOption?.Id ?? string.Empty;
+        }
+
+        private void CreateLocalTemplate()
+        {
+            EnsureTemplateShape();
+            if (_template.LocalTemplates.Count >=
+                CustomLocalCourtTemplateRules.MaximumTemplates)
+            {
+                SetStatus(AW_L10n.Text("aw_custom_local_court_limit",
+                    "The local template limit has been reached."));
+                return;
+            }
+            int number = 1;
+            string id;
+            do { id = "local_" + number++; }
+            while (_template.LocalTemplates.Any(template => template != null &&
+                       template.Id == id) ||
+                   _pendingReplacements.ContainsKey(id));
+            string name = AW_L10n.Text("aw_custom_local_court_default_name",
+                "Local Government") + " " + (number - 1);
+            _template.LocalTemplates.Add(NewLocalTemplate(id, name,
+                CustomLocalCourtDefaultKind.ManualOnly));
+            _selectedLocalTemplateId = id;
+            _replacementTemplateId = string.Empty;
+            RefreshContextControls();
+            SyncNameInputFromContext();
+            RenderCards();
+        }
+
+        private void DuplicateLocalTemplate()
+        {
+            CustomLocalCourtTemplate source = ActiveLocalTemplate;
+            if (source == null || _template.LocalTemplates.Count >=
+                CustomLocalCourtTemplateRules.MaximumTemplates) return;
+            CustomCourtTemplate clonePackage =
+                CustomCourtTemplateJsonCodec.Normalize(_template);
+            CustomLocalCourtTemplate clone = clonePackage.LocalTemplates
+                .First(template => template.Id == source.Id);
+            int number = 1;
+            string id;
+            do { id = source.Id + "_copy_" + number++; }
+            while (_template.LocalTemplates.Any(template => template != null &&
+                       template.Id == id));
+            clone.Id = id;
+            clone.DefaultKind = CustomLocalCourtDefaultKind.ManualOnly;
+            string suffix = AW_L10n.Text("aw_custom_local_court_copy",
+                "Copy");
+            clone.Name.Chinese = (clone.Name.Chinese ?? source.Id) + " " +
+                                 suffix;
+            clone.Name.English = (clone.Name.English ?? source.Id) + " " +
+                                 suffix;
+            _template.LocalTemplates.Add(clone);
+            _selectedLocalTemplateId = id;
+            _replacementTemplateId = string.Empty;
+            RefreshContextControls();
+            SyncNameInputFromContext();
+            RenderCards();
+        }
+
+        private void DeleteLocalTemplate()
+        {
+            CustomLocalCourtTemplate local = ActiveLocalTemplate;
+            if (local == null || _template.LocalTemplates.Count <= 1) return;
+            int inUse = CountCitiesUsing(local.Id);
+            if (!CustomLocalCourtTemplateRules.CanDeleteTemplate(local.Id,
+                    _replacementTemplateId, inUse))
+            {
+                SetStatus(AW_L10n.Text(
+                    "aw_custom_local_court_replacement_required",
+                    "Choose a replacement for cities using this template."));
+                return;
+            }
+            if (inUse > 0)
+                _pendingReplacements[local.Id] = _replacementTemplateId;
+            foreach (string pendingId in _pendingReplacements.Where(pair =>
+                         pair.Value == local.Id).Select(pair => pair.Key)
+                     .ToArray())
+                _pendingReplacements[pendingId] = _replacementTemplateId;
+            _template.LocalTemplates.Remove(local);
+            _selectedLocalTemplateId = _replacementTemplateId;
+            if (string.IsNullOrEmpty(_selectedLocalTemplateId))
+                _selectedLocalTemplateId = _template.LocalTemplates[0].Id;
+            _replacementTemplateId = string.Empty;
+            _edgeSource = _edgeTarget = null;
+            RefreshContextControls();
+            SyncNameInputFromContext();
+            RenderCards();
+        }
+
+        private int CountCitiesUsing(string pTemplateId)
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            if (kingdom?.data == null) return 0;
+            int count = 0;
+            try
+            {
+                foreach (City city in kingdom.getCities())
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    city.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
+                        out string id, string.Empty);
+                    if (id == pTemplateId) count++;
+                }
+            }
+            catch { return count; }
+            return count + _pendingReplacements.Count(pair =>
+                pair.Value == pTemplateId);
         }
 
         private void RenderCards()
         {
-            if (_workspaceRect == null || _template?.Offices == null) return;
+            if (_workspaceRect == null || ActiveOffices == null) return;
             foreach (Transform child in _workspaceRect)
                 if (child.GetComponent<CourtWorkflowVacancyCard>() != null ||
                     child.GetComponent<CourtWorkflowEdgeView>() != null)
@@ -279,7 +655,7 @@ namespace AncientWarfare3.ui.windows
             CourtWorkflowCanvas canvas = _workspaceRect.GetComponent<
                 CourtWorkflowCanvas>();
             canvas.Clear();
-            foreach (CustomCourtOffice office in _template.Offices)
+            foreach (CustomCourtOffice office in ActiveOffices)
             {
                 CourtWorkflowVacancyCard card = CourtWorkflowVacancyCard.Create(
                     _workspaceRect, office, SelectCard, OpenOfficeSettings,
@@ -300,13 +676,13 @@ namespace AncientWarfare3.ui.windows
 
         private void RenderEdges()
         {
-            if (_workspaceRect == null || _template?.Edges == null) return;
+            if (_workspaceRect == null || ActiveEdges == null) return;
             foreach (Transform child in _workspaceRect)
                 if (child.GetComponent<CourtWorkflowEdgeView>() != null)
                     Destroy(child.gameObject);
             CourtWorkflowCanvas canvas = _workspaceRect.GetComponent<
                 CourtWorkflowCanvas>();
-            foreach (CustomCourtEdge edge in _template.Edges)
+            foreach (CustomCourtEdge edge in ActiveEdges)
             {
                 CourtWorkflowVacancyCard from = FindCard(canvas,
                     edge?.FromOfficeId);
@@ -385,11 +761,11 @@ namespace AncientWarfare3.ui.windows
                 ToOfficeId = _edgeTarget.Office.Id,
                 Kind = kind
             };
-            _template.Edges.Add(edge);
+            ActiveEdges.Add(edge);
             if (CustomCourtTemplateRules.Validate(_template) ==
                 CustomCourtTemplateValidationError.Cycle)
             {
-                _template.Edges.RemoveAt(_template.Edges.Count - 1);
+                ActiveEdges.RemoveAt(ActiveEdges.Count - 1);
                 SetStatus(AW_L10n.Text("aw_custom_court_cycle",
                     "That connection would create a cycle."));
                 return;
@@ -402,20 +778,27 @@ namespace AncientWarfare3.ui.windows
 
         private void AddOffice()
         {
-            int number = _template.Offices.Count + 1;
+            List<CustomCourtOffice> offices = ActiveOffices;
+            if (offices == null) return;
+            int number = offices.Count + 1;
             string name = _officeNameInput?.text?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(name))
                 name = AW_L10n.Text("aw_custom_court_office_default",
                     "Office") + " " + number;
-            _template.Offices.Add(new CustomCourtOffice
+            string idPrefix = _editingLocal ? "local_office_" :
+                "custom_office_";
+            while (offices.Any(office => office != null &&
+                       office.Id == idPrefix + number)) number++;
+            offices.Add(new CustomCourtOffice
             {
-                Id = "custom_office_" + number,
+                Id = idPrefix + number,
                 Name = new CustomCourtLocalizedText
                 {
                     Chinese = name,
                     English = name
                 },
-                Layer = CourtOfficeLayer.Central,
+                Layer = _editingLocal ? CourtOfficeLayer.City :
+                    CourtOfficeLayer.Central,
                 Grade = 10,
                 Slots = 1,
                 Layout = CanvasCenterLayout()
@@ -469,9 +852,9 @@ namespace AncientWarfare3.ui.windows
         {
             string officeId = card?.Office?.Id;
             if (string.IsNullOrEmpty(officeId)) return;
-            _template.Offices.RemoveAll(office => office != null &&
+            ActiveOffices?.RemoveAll(office => office != null &&
                 string.Equals(office.Id, officeId, StringComparison.Ordinal));
-            _template.Edges.RemoveAll(edge => edge == null ||
+            ActiveEdges?.RemoveAll(edge => edge == null ||
                 string.Equals(edge.FromOfficeId, officeId,
                     StringComparison.Ordinal) ||
                 string.Equals(edge.ToOfficeId, officeId,
@@ -510,7 +893,7 @@ namespace AncientWarfare3.ui.windows
 
         private void ExportTemplate()
         {
-            if (!SyncCourtNameFromInput()) return;
+            if (!SyncContextNameFromInput()) return;
             var store = new CustomCourtTemplateStore(TemplateRoot());
             CustomCourtTemplateValidationError error;
             if (store.TrySave(_template, out error, out string savedPath))
@@ -527,7 +910,7 @@ namespace AncientWarfare3.ui.windows
 
         private void SaveTemplate()
         {
-            if (!SyncCourtNameFromInput()) return;
+            if (!SyncContextNameFromInput()) return;
             _template.Revision = Math.Max(1, _template.Revision + 1);
             var store = new CustomCourtTemplateStore(TemplateRoot());
             CustomCourtTemplateValidationError error;
@@ -622,7 +1005,7 @@ namespace AncientWarfare3.ui.windows
                 WholePresetUnavailable(option);
                 return;
             }
-            if (!SyncCourtNameFromInput()) return;
+            if (!SyncContextNameFromInput()) return;
 
             CustomCourtOfficeLayout center = CanvasCenterLayout();
             bool replaced = CustomCourtWholePresetRules.TryReplace(_template,
@@ -638,6 +1021,7 @@ namespace AncientWarfare3.ui.windows
             }
 
             _template = replacement;
+            EnsureTemplateShape();
             _edgeSource = null;
             _edgeTarget = null;
             if (_officeNameInput != null)
@@ -680,10 +1064,15 @@ namespace AncientWarfare3.ui.windows
             if (store.TryLoadFile(option.Id, out imported, out error))
             {
                 _template = imported;
+                _loadedKingdomId = _kingdomId;
+                _pendingReplacements.Clear();
+                EnsureTemplateShape();
+                if (ActiveLocalTemplate == null)
+                    _selectedLocalTemplateId = _template.LocalTemplates
+                        .FirstOrDefault()?.Id ?? string.Empty;
                 _selectedImportFile = option.Id;
-                if (_courtNameInput != null)
-                    _courtNameInput.text = _template.Name?.Chinese ??
-                        _template.Name?.English ?? string.Empty;
+                RefreshContextControls();
+                SyncNameInputFromContext();
                 RenderCards();
                 RefreshImportFiles();
                 SetStatus(AW_L10n.Text("aw_custom_court_imported",
@@ -695,29 +1084,112 @@ namespace AncientWarfare3.ui.windows
 
         public void ApplyCustomCourtTemplate()
         {
-            if (!SyncCourtNameFromInput()) return;
+            if (!SyncContextNameFromInput()) return;
             Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            if (!TryStageDeletedTemplateRebindings(kingdom,
+                    out List<CityTemplateBindingChange> staged))
+            {
+                SetStatus(AW_L10n.Text("aw_custom_court_invalid",
+                    "Template is invalid."));
+                return;
+            }
             bool applied = CustomCourtRuntime.TryApply(kingdom, _template,
                 new Dictionary<string, long>());
+            if (!applied) RollbackTemplateRebindings(staged);
+            else _pendingReplacements.Clear();
             SetStatus(applied
                 ? AW_L10n.Text("aw_custom_court_applied", "Template applied.")
                 : AW_L10n.Text("aw_custom_court_invalid", "Template is invalid."));
             if (applied) StartCoroutine(ReturnToCourtAfterApply());
         }
 
-        private bool SyncCourtNameFromInput()
+        private bool SyncContextNameFromInput()
         {
             string name = _courtNameInput?.text?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(name))
             {
                 SetStatus(AW_L10n.Text("aw_custom_court_name_required",
-                    "Enter a court name before saving."));
+                    "Enter a name before saving."));
                 return false;
             }
-            _template.Name = _template.Name ?? new CustomCourtLocalizedText();
-            _template.Name.Chinese = name;
-            _template.Name.English = name;
+            if (_editingLocal)
+            {
+                CustomLocalCourtTemplate local = ActiveLocalTemplate;
+                if (local == null) return false;
+                local.Name = local.Name ?? new CustomCourtLocalizedText();
+                local.Name.Chinese = name;
+                local.Name.English = name;
+                RefreshContextControls();
+            }
+            else
+            {
+                _template.Name = _template.Name ??
+                    new CustomCourtLocalizedText();
+                _template.Name.Chinese = name;
+                _template.Name.English = name;
+            }
             return true;
+        }
+
+        private bool TryStageDeletedTemplateRebindings(Kingdom pKingdom,
+            out List<CityTemplateBindingChange> pChanges)
+        {
+            pChanges = new List<CityTemplateBindingChange>();
+            if (pKingdom?.data == null || _pendingReplacements.Count == 0)
+                return pKingdom?.data != null;
+            try
+            {
+                foreach (City city in pKingdom.getCities())
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    city.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
+                        out string currentId, string.Empty);
+                    if (!_pendingReplacements.TryGetValue(currentId,
+                            out string replacementId)) continue;
+                    if (!_template.LocalTemplates.Any(template =>
+                            template != null && template.Id == replacementId))
+                    {
+                        RollbackTemplateRebindings(pChanges);
+                        return false;
+                    }
+                    city.data.get(
+                        LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
+                        out bool previousManual, false);
+                    pChanges.Add(new CityTemplateBindingChange
+                    {
+                        City = city,
+                        PreviousId = currentId,
+                        PreviousManual = previousManual
+                    });
+                    city.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
+                        replacementId);
+                }
+                return true;
+            }
+            catch (Exception exception)
+            {
+                RollbackTemplateRebindings(pChanges);
+                ModClass.LogWarning("Local court template rebind failed: " +
+                                    exception.Message);
+                return false;
+            }
+        }
+
+        private static void RollbackTemplateRebindings(
+            IEnumerable<CityTemplateBindingChange> pChanges)
+        {
+            foreach (CityTemplateBindingChange change in
+                     (pChanges ?? Array.Empty<CityTemplateBindingChange>())
+                     .Reverse())
+            {
+                if (change?.City?.data == null) continue;
+                change.City.data.set(
+                    LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
+                    change.PreviousId);
+                change.City.data.set(
+                    LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
+                    change.PreviousManual);
+            }
         }
 
         private IEnumerator ReturnToCourtAfterApply()

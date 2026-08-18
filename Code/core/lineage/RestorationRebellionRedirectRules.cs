@@ -1,5 +1,11 @@
 namespace AncientWarfare3.core.lineage
 {
+    public enum RestorationRebellionSeedMode
+    {
+        Core = 0,
+        ExternalBandit = 1
+    }
+
     public enum RestorationRebellionStartOutcome
     {
         NotStarted = 0,
@@ -18,8 +24,50 @@ namespace AncientWarfare3.core.lineage
         public static bool IsMatchingClaimCity(bool originalKingdomDead,
             bool isOriginalCapital, bool isPersistedCore)
         {
-            return originalKingdomDead &&
-                   (isOriginalCapital || isPersistedCore);
+            return CanUseRequiredSeed(RestorationRebellionSeedMode.Core,
+                originalKingdomDead, isOriginalCapital, isPersistedCore);
+        }
+
+        public static bool CanUseRequiredSeed(
+            RestorationRebellionSeedMode pMode,
+            bool pOriginalKingdomDead, bool pIsOriginalCapital,
+            bool pIsPersistedCore)
+        {
+            return pOriginalKingdomDead &&
+                   (pMode == RestorationRebellionSeedMode.ExternalBandit ||
+                    pIsOriginalCapital || pIsPersistedCore);
+        }
+
+        public static bool ShouldCountSeedAsCore(
+            RestorationRebellionSeedMode pMode, bool pIsPersistedCore)
+        {
+            return pMode == RestorationRebellionSeedMode.Core &&
+                   pIsPersistedCore;
+        }
+
+        public static bool ShouldInspectBanditFounder(bool pAllowRedirect,
+            bool pActorValid, bool pCityValid)
+        {
+            return pAllowRedirect && pActorValid && pCityValid;
+        }
+
+        public static int CompareCoreTargets(int pLeftDistanceSquared,
+            long pLeftCityId, int pRightDistanceSquared,
+            long pRightCityId)
+        {
+            int distance = pLeftDistanceSquared.CompareTo(
+                pRightDistanceSquared);
+            return distance != 0
+                ? distance
+                : pLeftCityId.CompareTo(pRightCityId);
+        }
+
+        public static bool ShouldRetryCommittedInitialization(
+            RestorationRebellionSeedMode pMode,
+            bool identityCommitted, bool contextValid)
+        {
+            return pMode == RestorationRebellionSeedMode.ExternalBandit &&
+                   identityCommitted && contextValid;
         }
 
         public static bool IsPeacefulHostCity(bool ownerIsClaimantHost,

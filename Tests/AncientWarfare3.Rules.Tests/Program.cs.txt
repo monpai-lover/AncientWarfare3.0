@@ -485,6 +485,13 @@ if (args.Length == 1 && args[0] == "--ruler-household")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--office-history")
+{
+    OfficialCareerHistorySqlTests.Run();
+    Console.WriteLine("Office history SQL tests passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--visible-surname-rename")
 {
     VisibleSurnameRenameRulesTests.Run();

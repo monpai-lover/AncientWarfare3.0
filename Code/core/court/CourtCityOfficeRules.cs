@@ -19,9 +19,7 @@ namespace AncientWarfare3.core.court
 
         public static bool IsCityLeaderOffice(string pOfficeId)
         {
-            return pOfficeId == CourtOfficeId.Governor ||
-                   pOfficeId == CourtOfficeId.WestMayor ||
-                   pOfficeId == CourtOfficeId.WestCount;
+            return LocalCourtOfficeRules.IsLocalLeaderOffice(pOfficeId);
         }
     }
 }

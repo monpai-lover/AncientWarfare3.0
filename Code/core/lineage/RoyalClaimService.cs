@@ -853,6 +853,74 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        internal static bool MarkSelfCampaignInitializationPending(
+            long pCampaignId, long pOriginalKingdomId,
+            long pSeedOwnerId, long pPreviousClaimantKingdomId,
+            long pPreviousClaimantCityId, int pYear)
+        {
+            if (!Ready || pCampaignId < 0 || pOriginalKingdomId < 0)
+                return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText =
+                    $"UPDATE {RestorationCampaignTableItem.GetTableName()} SET " +
+                    "RESULT='initialization_pending', " +
+                    "ROLLBACK_SEED_OWNER_ID=@owner, " +
+                    "ROLLBACK_PREVIOUS_CLAIMANT_KINGDOM_ID=@host, " +
+                    "ROLLBACK_PREVIOUS_CLAIMANT_CITY_ID=@city, " +
+                    "LAST_ATTEMPT_YEAR=@year " +
+                    "WHERE CAMPAIGN_ID=@id AND ORIGINAL_KINGDOM_ID=@kingdom " +
+                    "AND STATE='uprising'";
+                command.Parameters.AddWithValue("@owner", pSeedOwnerId);
+                command.Parameters.AddWithValue("@host",
+                    pPreviousClaimantKingdomId);
+                command.Parameters.AddWithValue("@city",
+                    pPreviousClaimantCityId);
+                command.Parameters.AddWithValue("@year", pYear);
+                command.Parameters.AddWithValue("@id", pCampaignId);
+                command.Parameters.AddWithValue("@kingdom",
+                    pOriginalKingdomId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Self restoration initialization pending persistence failed: " +
+                    e.Message);
+                return false;
+            }
+        }
+
+        internal static bool ClearSelfCampaignInitializationPending(
+            long pCampaignId, long pOriginalKingdomId)
+        {
+            if (!Ready || pCampaignId < 0 || pOriginalKingdomId < 0)
+                return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText =
+                    $"UPDATE {RestorationCampaignTableItem.GetTableName()} SET " +
+                    "RESULT='', ROLLBACK_SEED_OWNER_ID=-1, " +
+                    "ROLLBACK_PREVIOUS_CLAIMANT_KINGDOM_ID=-1, " +
+                    "ROLLBACK_PREVIOUS_CLAIMANT_CITY_ID=-1 " +
+                    "WHERE CAMPAIGN_ID=@id AND ORIGINAL_KINGDOM_ID=@kingdom " +
+                    "AND STATE='uprising'";
+                command.Parameters.AddWithValue("@id", pCampaignId);
+                command.Parameters.AddWithValue("@kingdom",
+                    pOriginalKingdomId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Self restoration initialization pending clear failed: " +
+                    e.Message);
+                return false;
+            }
+        }
+
         internal static bool CompleteSelfCampaign(long pCampaignId,
             long pOriginalKingdomId, string pReason)
         {

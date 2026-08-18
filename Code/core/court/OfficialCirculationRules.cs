@@ -43,9 +43,7 @@ namespace AncientWarfare3.core.court
         public static bool IsRotatingCityOffice(string pOfficeId,
             bool xiaCirculationUnlocked)
         {
-            if (pOfficeId == CourtOfficeId.WestMayor) return true;
-            return pOfficeId == CourtOfficeId.Governor &&
-                   xiaCirculationUnlocked;
+            return LocalCourtOfficeRules.IsLocalOffice(pOfficeId);
         }
 
         public static bool CanServeCity(long pNativeCityId,
@@ -62,6 +60,12 @@ namespace AncientWarfare3.core.court
             bool pTermDue, int pRealmCityCount)
         {
             return pGovernor && pTermDue && pRealmCityCount > 1;
+        }
+
+        public static bool ShouldRotateLocalLeader(bool cityLayer,
+            bool cityLeader, bool termDue, int liveCityCount)
+        {
+            return cityLayer && cityLeader && termDue && liveCityCount > 1;
         }
 
         public static bool TryBuildRotationPlan(

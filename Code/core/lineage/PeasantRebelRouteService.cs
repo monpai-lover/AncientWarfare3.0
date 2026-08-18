@@ -64,6 +64,28 @@ namespace AncientWarfare3.core.lineage
         internal static bool InitializeAndEnter(Kingdom pRebel,
             Kingdom pOrigin, City pFoundingCity, Actor pFounder)
         {
+            return InitializeAndEnter(pRebel, pOrigin, pFoundingCity,
+                pFounder, out _, out _);
+        }
+
+        internal static bool InitializeAndEnter(Kingdom pRebel,
+            Kingdom pOrigin, City pFoundingCity, Actor pFounder,
+            out Kingdom pEffectiveRebel, out bool restorationRedirected)
+        {
+            pEffectiveRebel = pRebel;
+            restorationRedirected = false;
+            RestorationRebellionStartOutcome earlyRedirect =
+                RestorationRebellionRedirectService.TryRedirectBanditFounder(
+                    pFounder, pFoundingCity, out Kingdom earlyRestored,
+                    out _);
+            if (RestorationRebellionRedirectRules
+                .ShouldSuppressVanilla(earlyRedirect))
+            {
+                restorationRedirected = true;
+                pEffectiveRebel = earlyRestored ?? pFoundingCity?.kingdom ??
+                    pRebel;
+                return true;
+            }
             if (!TryInitializeRouteMetadata(pRebel, pOrigin,
                     pFoundingCity, pFounder)) return false;
 
@@ -100,6 +122,28 @@ namespace AncientWarfare3.core.lineage
             RuntimeByKingdom[pRebel.getID()] = route.Id;
             PeasantRebelAppearanceService.OnProjectionChanged(pRebel);
             return true;
+        }
+
+        internal static void DisposeRedirectedShell(Kingdom pShell,
+            Kingdom pEffectiveRebel)
+        {
+            if (pShell?.data == null || pEffectiveRebel?.data == null ||
+                pShell == pEffectiveRebel || pShell.isRekt()) return;
+            try
+            {
+                foreach (City city in pShell.getCities())
+                    if (city?.data != null && !city.isRekt() &&
+                        city.kingdom == pShell)
+                        return;
+                if (World.world?.kingdoms?.get(pShell.getID()) == pShell)
+                    World.world.kingdoms.removeObject(pShell);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Restoration provisional rebel shell cleanup failed: " +
+                    e.Message);
+            }
         }
 
         internal static bool InitializeManualFoundingGovernment(

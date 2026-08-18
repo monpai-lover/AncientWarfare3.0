@@ -39,6 +39,13 @@ namespace AncientWarfare3.core.court
         Error = 1
     }
 
+    public enum CustomLocalCourtDefaultKind
+    {
+        ManualOnly = 0,
+        CivilDefault = 1,
+        MilitaryDefault = 2
+    }
+
     public enum CustomCourtTemplateValidationError
     {
         None = 0,
@@ -117,9 +124,22 @@ namespace AncientWarfare3.core.court
         public CustomCourtEdgeKind Kind { get; set; }
     }
 
+    public sealed class CustomLocalCourtTemplate
+    {
+        public string Id { get; set; } = string.Empty;
+        public CustomCourtLocalizedText Name { get; set; } =
+            new CustomCourtLocalizedText();
+        public CustomLocalCourtDefaultKind DefaultKind { get; set; } =
+            CustomLocalCourtDefaultKind.ManualOnly;
+        public List<CustomCourtOffice> Offices { get; set; } =
+            new List<CustomCourtOffice>();
+        public List<CustomCourtEdge> Edges { get; set; } =
+            new List<CustomCourtEdge>();
+    }
+
     public sealed class CustomCourtTemplate
     {
-        public int SchemaVersion { get; set; } = 1;
+        public int SchemaVersion { get; set; } = 2;
         public string Id { get; set; } = string.Empty;
         public int Revision { get; set; } = 1;
         public CustomCourtLocalizedText Name { get; set; } =
@@ -127,6 +147,10 @@ namespace AncientWarfare3.core.court
         public List<CustomCourtOffice> Offices { get; set; } =
             new List<CustomCourtOffice>();
         public List<CustomCourtEdge> Edges { get; set; } =
+            new List<CustomCourtEdge>();
+        public List<CustomLocalCourtTemplate> LocalTemplates { get; set; } =
+            new List<CustomLocalCourtTemplate>();
+        public List<CustomCourtEdge> ArchivedCrossLayerEdges { get; set; } =
             new List<CustomCourtEdge>();
     }
 

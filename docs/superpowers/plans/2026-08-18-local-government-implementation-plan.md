@@ -25,6 +25,11 @@
 - Modify: `Code/core/court/CivilServiceQualificationService.cs` and `Code/core/court/OfficialCareerService.cs` to permit the explicit local lower-stage appointment path without weakening central appointment gates.
 - Modify: `Code/core/court/CourtReadModelService.cs`, `Code/core/court/CourtPyramidRules.cs`, and `Code/ui/windows/CourtWindow.cs` for national city cards and city context.
 - Modify: `Code/ui/items/CourtActorNodeView.cs` only where shared appointment/history actions need city context.
+- Modify: `Code/patch/AW_CityTabPatch.cs` to add a direct city-detail entry that calls the shared city context.
+- Modify: `Code/core/court/CustomCourtTemplateModels.cs`, codec, validation, instance, and runtime files to persist one central template plus multiple local templates.
+- Modify: `Code/ui/windows/CustomCourtWorkflowWindow.cs` to switch the existing editor between the central template and selected local templates.
+- Create: `Code/core/court/CustomLocalCourtTemplateRules.cs` for template validation, legacy migration, automatic assignment, manual override, and replacement rules.
+- Modify: `Code/core/lineage/LineageKeys.cs` and `Code/core/db/CityBureauStateTableItem.cs` for stable city-template binding and override persistence.
 - Create: `Tests/LocalGovernmentRules.Isolated.Tests/LocalGovernmentRules.Isolated.Tests.csproj`, `Program.cs`, and pure rule tests.
 - Create: `Tests/LocalGovernmentSqlSourceGuard.ps1` and `Tests/LocalGovernmentUiSourceGuard.ps1`.
 
@@ -208,6 +213,7 @@ git commit -m "feat: rotate all local officials on finite terms"
 - Modify: `Code/ui/items/CourtActorNodeView.cs`
 - Modify: `Locales/aw3_court.csv`
 - Create: `Tests/LocalGovernmentUiSourceGuard.ps1`
+- Modify: `Tests/LocalGovernmentRules.Isolated.Tests/LocalGovernmentRulesTests.cs`
 
 - [ ] **Step 1: Write a source/UI guard before implementation.** Require `CourtWindow.OpenCity(`, `LocalCourtReadModel`, `CourtCityGovernmentCard`, shared `CourtActorNodeView`, and `CourtOfficeHistoryWindow`; reject a second window class with independent layout constants or a second portrait/navigation path.
 
@@ -230,14 +236,30 @@ The same `CourtWindow` instance renders `LocalCourtReadModel` nodes when `_cityI
 
 - [ ] **Step 5: Add local office definitions to the existing profile resolver.** Local nodes use `CourtOfficeLayer.City`, existing grade/school/effect parameters, and the same node card. Do not create a local-only UI styling system.
 
-- [ ] **Step 6: Run UI guard and build.**
+- [ ] **Step 6: Add a direct entry to the original city window.** Extend `AW_CityTabPatch` with a second stable button on `Tabs Right`. Resolve the current city and kingdom IDs when binding the click listener, then call only `CourtWindow.OpenCity(kingdomId, cityId)`. Reuse the existing button construction style and localize its tooltip as `aw_city_local_court_entry` / `aw_open_city_local_court`.
+
+- [ ] **Step 7: Write failing local-template rules tests.** Assert legacy city-layer offices migrate into one generated local template; a package can retain multiple distinct local templates; civil and military automatic assignment select their marked defaults; stable-ID fallback is deterministic; a manual city override wins; deleting an in-use template requires and returns a replacement binding; and the displayed city type equals the selected template name.
+
+- [ ] **Step 8: Add the multi-template package model and migration.** Extend `CustomCourtTemplate` with a bounded `LocalTemplates` collection of `CustomLocalCourtTemplate` values containing stable ID, localized name, default kind, city-layer offices, and internal edges. Bump the schema with backward-compatible import: move legacy city-layer offices and their internal edges into a generated `local_default` template while retaining central offices and archiving cross-layer edges. Validation rejects duplicate template IDs/names, non-city offices inside local templates, cross-template edges, missing offices, and more than 16 local templates.
+
+- [ ] **Step 9: Persist and resolve city template bindings.** Add `CITY_LOCAL_COURT_TEMPLATE_ID` and `CITY_LOCAL_COURT_TEMPLATE_MANUAL` runtime keys plus `LOCAL_TEMPLATE_ID` and `LOCAL_TEMPLATE_MANUAL` columns on `CityBureauState`. `CustomCourtRuntime.TryGetLocalTemplate(kingdom, city, out template)` resolves a valid manual binding first, then a military/civil default, then stable-ID fallback. The local appointment and read-model services use only this resolver. The local city-type label is `template.Name`, never a separate classification string.
+
+- [ ] **Step 10: Add the shared workflow switch and local-template controls.** In `CustomCourtWorkflowWindow`, add the central/local segmented control. Local mode adds a bounded template dropdown and create, duplicate, rename, default-kind, and delete actions while reusing the existing canvas and office settings. Selection changes clear stale edge endpoints. Save/import/export/apply operate on the complete package transaction.
+
+- [ ] **Step 11: Add city assignment controls.** In shared `CourtWindow` city context, add a local-template dropdown using existing dropdown/button styles. Player selection persists a manual override and refreshes the same city read model. Deleting an in-use template requires a replacement and rebinds affected city rows before package save commits.
+
+- [ ] **Step 12: Extend the UI source guard.** Require the city patch to call `CourtWindow.OpenCity(`, the custom workflow and city context to use `CustomLocalCourtTemplateRules`, and runtime/read models to call `TryGetLocalTemplate`; reject a second local court window, independent local UI style, or unbounded template list.
+
+- [ ] **Step 13: Run UI guard, isolated rules tests, and build.**
 
 Run: `powershell -ExecutionPolicy Bypass -File Tests/LocalGovernmentUiSourceGuard.ps1`
+
+Run: `dotnet run --project Tests/LocalGovernmentRules.Isolated.Tests/LocalGovernmentRules.Isolated.Tests.csproj`
 
 Run: `dotnet build AncientWarfare3.csproj`
 
 ```powershell
-git add -- Code/core/court/LocalCourtReadModel.cs Code/ui/components/CourtCityGovernmentCard.cs Code/core/court/CourtReadModelService.cs Code/core/court/CourtPyramidRules.cs Code/ui/windows/CourtWindow.cs Code/ui/items/CourtActorNodeView.cs Locales/aw3_court.csv Tests/LocalGovernmentUiSourceGuard.ps1
+git add -- Code/core/court/LocalCourtReadModel.cs Code/core/court/CustomLocalCourtTemplateRules.cs Code/core/court/CustomCourtTemplateModels.cs Code/core/court/CustomCourtTemplateJsonCodec.cs Code/core/court/CustomCourtTemplateRules.cs Code/core/court/CustomCourtInstanceModels.cs Code/core/court/CustomCourtInstanceCodec.cs Code/core/court/CustomCourtRuntime.cs Code/ui/components/CourtCityGovernmentCard.cs Code/core/court/CourtReadModelService.cs Code/core/court/CourtPyramidRules.cs Code/ui/windows/CourtWindow.cs Code/ui/windows/CustomCourtWorkflowWindow.cs Code/ui/items/CourtActorNodeView.cs Code/patch/AW_CityTabPatch.cs Code/core/lineage/LineageKeys.cs Code/core/db/CityBureauStateTableItem.cs Locales/aw3_court.csv Tests/LocalGovernmentRules.Isolated.Tests/LocalGovernmentRulesTests.cs Tests/LocalGovernmentUiSourceGuard.ps1
 git commit -m "feat: show city governments in the shared court window"
 ```
 

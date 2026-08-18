@@ -28,6 +28,8 @@ namespace AncientWarfare3.core.lineage
             Actor ruler = pKingdom.king;
             RulerHouseholdRealmTier tier =
                 RulerHouseholdService.ResolveRealmTier(pKingdom);
+            if (tier == RulerHouseholdRealmTier.Empire)
+                RulerHouseholdService.NormalizeImperialRanks(pKingdom);
             int capacity = RulerHouseholdRules.ConsortCapacity(tier);
             IReadOnlyList<RulerHouseholdRecord> records =
                 new RulerHouseholdQuery(db).ReadActiveByRuler(
@@ -118,8 +120,9 @@ namespace AncientWarfare3.core.lineage
                 RelationshipId = pRecord?.RelationshipId ?? -1L,
                 ActorId = actorId,
                 ActorName = name ?? "",
-                TitleKey = RulerHouseholdRules.TitleKey(pTier, pKind,
+                TitleKey = ResolveTitleKey(pRecord, pTier, pKind,
                     pRulerIsFemale),
+                RankCode = pRecord?.RankCode ?? "",
                 OriginRealmName = ReadRealmName(pDb, originId),
                 LineageLabel = lineage,
                 Age = SafeAge(pActor),
@@ -129,6 +132,20 @@ namespace AncientWarfare3.core.lineage
                         !pActor.isRekt(),
                 Kind = pKind
             };
+        }
+
+        private static string ResolveTitleKey(
+            RulerHouseholdRecord pRecord, RulerHouseholdRealmTier pTier,
+            RulerHouseholdKind pKind, bool pRulerIsFemale)
+        {
+            if (!pRulerIsFemale && pTier == RulerHouseholdRealmTier.Empire)
+            {
+                string fixedTitle = RulerHouseholdRankRules.TitleKey(
+                    pRecord?.RankCode);
+                if (!string.IsNullOrEmpty(fixedTitle)) return fixedTitle;
+            }
+            return RulerHouseholdRules.TitleKey(pTier, pKind,
+                pRulerIsFemale);
         }
 
         private static string BuildLineageLabel(ActorArchiveTableItem pRow)

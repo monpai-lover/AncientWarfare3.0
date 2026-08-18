@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Code/core/court/OfficialCareerHistoryModels.cs"
+             Link="Production/OfficialCareerHistoryModels.cs" />
+    <Compile Include="../../Code/core/court/OfficialCareerHistoryRules.cs"
+             Link="Production/OfficialCareerHistoryRules.cs" />
+    <Compile Include="../../Code/core/court/OfficialCareerHistoryQuery.cs"
+             Link="Production/OfficialCareerHistoryQuery.cs" />
+    <Compile Include="../../Code/core/db/CourtOfficerTableItem.cs"
+             Link="Production/CourtOfficerTableItem.cs" />
+    <Compile Include="../../Code/core/db/AbstractTableItem.cs"
+             Link="Production/AbstractTableItem.cs" />
+    <Compile Include="../../Code/attributes/TableDefAttribute.cs"
+             Link="Production/TableDefAttribute.cs" />
+    <Compile Include="../../Code/attributes/TableItemDefAttribute.cs"
+             Link="Production/TableItemDefAttribute.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Data.SQLite">
+      <HintPath>../../Assemblies/System.Data.SQLite.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

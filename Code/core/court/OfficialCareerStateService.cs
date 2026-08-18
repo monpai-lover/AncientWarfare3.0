@@ -208,6 +208,10 @@ namespace AncientWarfare3.core.court
                              existing.OfficeId != (pOfficeId ?? "");
             int termEndYear = pActing
                 ? pYearAfter(currentYear)
+                : freshTerm && pLayer == CourtOfficeLayer.City
+                    ? currentYear + LocalOfficialTermRules.TermLength(
+                        MainAttribute(pActor), (int)Math.Max(0f, merit), age,
+                        pActor.data.id, currentYear)
                 : pOfficeId == CourtOfficeId.WestMayor
                     ? ResolveWesternMayorTermEndYear(pKingdom, currentYear)
                 : freshTerm
@@ -507,7 +511,6 @@ namespace AncientWarfare3.core.court
             var orderedStates = new List<OfficialCareerStateView>(states.Values);
             orderedStates.Sort((left, right) => left.ActorId.CompareTo(right.ActorId));
             int realmCityCount = CountLiveCities(pKingdom);
-            bool circulatingOfficials = CourtService.HasNineRankSystem(pKingdom);
             bool nineRankSystem = CourtService.HasNineRankSystem(pKingdom);
             CourtTermLaw termLaw = CourtAuxiliaryLawService.GetTermLaw(pKingdom);
             int lifetimeMigrations = 0;
@@ -516,8 +519,12 @@ namespace AncientWarfare3.core.court
             {
                 Actor actor = World.world?.units?.get(state.ActorId);
                 if (actor?.data == null || actor.isRekt() || !actor.isAlive()) continue;
-                bool cityLeaderOffice = CourtCityOfficeRules.IsCityLeaderOffice(
-                    state.OfficeId);
+                actor.data.get(LineageKeys.COURT_LAYER,
+                    out string runtimeLayer, "");
+                bool localOffice = runtimeLayer == CourtOfficeLayer.City ||
+                    LocalCourtOfficeRules.IsLocalOffice(state.OfficeId);
+                bool cityLeaderOffice = localOffice && actor.isCityLeader() ||
+                    CourtCityOfficeRules.IsCityLeaderOffice(state.OfficeId);
                 if (!cityLeaderOffice &&
                     state.WaitingSinceYear >= 0 &&
                     state.TermEndYear <= year &&
@@ -593,7 +600,17 @@ namespace AncientWarfare3.core.court
                         mutation.LocalGrade, SafeAge(actor));
                 }
 
-                bool migratedLifetime = !westernElectiveCentral &&
+                bool migratedLocalTerm = localOffice &&
+                    (state.TermEndYear < 0 ||
+                     state.TermEndYear == int.MaxValue);
+                if (migratedLocalTerm)
+                    mutation.TermEndYear = year +
+                        LocalOfficialTermRules.TermLength(
+                            MainAttribute(actor), (int)Math.Max(0f, merit),
+                            SafeAge(actor), state.ActorId, year);
+
+                bool migratedLifetime = !localOffice &&
+                    !westernElectiveCentral &&
                     state.OfficeId != CourtOfficeId.WestMayor &&
                     termLaw != CourtTermLaw.Lifetime &&
                     state.TermEndYear == int.MaxValue &&
@@ -608,11 +625,15 @@ namespace AncientWarfare3.core.court
                     lifetimeMigrations++;
                 }
 
-                bool termDue = !migratedLifetime &&
+                bool termDue = !migratedLocalTerm && !migratedLifetime &&
                                mutation.TermEndYear <= year;
                 bool westernMayorDue = termDue &&
                                        state.OfficeId == CourtOfficeId.WestMayor;
-                if (westernMayorDue && realmCityCount <= 1)
+                if (termDue && localOffice)
+                {
+                    // Leader rotation or city-slice subordinate refill owns it.
+                }
+                else if (westernMayorDue && realmCityCount <= 1)
                     mutation.TermEndYear =
                         WesternMayorTermRules.RetryTermEndYear(year);
                 else if (westernMayorDue)
@@ -631,9 +652,9 @@ namespace AncientWarfare3.core.court
                     mutation.LocalGradeReviewYear = year;
                 }
                 mutation.RotationDue =
-                    OfficialCirculationRules.IsRotatingCityOffice(
-                        state.OfficeId, circulatingOfficials) &&
-                    termDue && realmCityCount > 1;
+                    OfficialCirculationRules.ShouldRotateLocalLeader(
+                        localOffice, cityLeaderOffice, termDue,
+                        realmCityCount);
                 mutations.Add(mutation);
             }
 

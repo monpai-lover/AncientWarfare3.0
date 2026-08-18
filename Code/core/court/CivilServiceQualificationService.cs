@@ -78,11 +78,15 @@ namespace AncientWarfare3.core.court
             Kingdom pKingdom, string pLayer, string pOfficeId,
             bool pAllowVacancyPromotion = false,
             CivilServiceQualificationRecord pQualification = null,
-            bool pQualificationsCaptured = false)
+            bool pQualificationsCaptured = false,
+            bool pAllowLocalLowerQualification = false)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
             if (!HasExaminationSystem(pKingdom)) return true;
             if (IsAppointmentExempt(pActor, pKingdom, pLayer, pOfficeId))
+                return true;
+            if (pAllowLocalLowerQualification &&
+                pLayer == CourtOfficeLayer.City && pActor.isCityLeader())
                 return true;
             if (!HistoricalSchoolEducationService.CanAppoint(pActor,
                     pKingdom, pLayer, pOfficeId)) return false;
@@ -90,9 +94,12 @@ namespace AncientWarfare3.core.court
                 pQualificationsCaptured
                     ? pQualification
                     : LoadOrRepair(pActor, pKingdom);
-            bool hasFormalQualification = qualification != null &&
-                CivilServiceExamRules.IsFormalAppointmentQualification(
-                    ParseQualification(qualification.Qualification));
+            bool higherStageFailure = pAllowLocalLowerQualification &&
+                HasFailedHigherStage(pActor, pKingdom);
+            bool hasFormalQualification =
+                LocalOfficialCandidateRules.AcceptsAppointmentQualification(
+                    qualification?.Qualification ?? "none",
+                    higherStageFailure, pAllowLocalLowerQualification);
             bool hasLegacyCredential = CivilServiceLegacyTransitionService.
                 HasUsableCredential(pActor, pKingdom, pLayer, pOfficeId);
             if (!hasFormalQualification && !hasLegacyCredential)
@@ -233,6 +240,33 @@ namespace AncientWarfare3.core.court
             return currentKingdomId == pKingdom?.id &&
                    currentLayer == (pLayer ?? "") &&
                    currentOffice == (pOfficeId ?? "");
+        }
+
+        private static bool HasFailedHigherStage(Actor pActor,
+            Kingdom pKingdom)
+        {
+            if (DB == null || pActor?.data == null ||
+                pKingdom?.data == null) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText =
+                    "SELECT 1 FROM " +
+                    CivilServiceExamCandidateTableItem.GetTableName() +
+                    " C JOIN " +
+                    CivilServiceExamSessionTableItem.GetTableName() +
+                    " S ON S.ID=C.SESSION_ID WHERE C.ACTOR_ID=@actor " +
+                    "AND C.KINGDOM_ID=@kingdom AND S.KINGDOM_ID=@kingdom " +
+                    "AND S.STATUS='completed' AND (" +
+                    "C.METROPOLITAN_RESULT='failed' OR " +
+                    "C.PALACE_RESULT='failed' OR " +
+                    "C.NATIONAL_RESULT='failed') " +
+                    "ORDER BY S.CYCLE_YEAR DESC,C.ID DESC LIMIT 1";
+                command.Parameters.AddWithValue("@actor", pActor.data.id);
+                command.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                return command.ExecuteScalar() != null;
+            }
+            catch { return false; }
         }
 
         private static void Project(Actor pActor,

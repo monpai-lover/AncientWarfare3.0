@@ -86,7 +86,8 @@ namespace AncientWarfare3.core.lineage
         {
             return pTier switch
             {
-                RulerHouseholdRealmTier.Empire => 8,
+                RulerHouseholdRealmTier.Empire =>
+                    RulerHouseholdRankRules.ImperialSeatCodes.Length - 1,
                 RulerHouseholdRealmTier.Kingdom => 4,
                 _ => 2
             };
@@ -178,6 +179,8 @@ namespace AncientWarfare3.core.lineage
             RulerHouseholdKind pKind, bool allowSlaveConsort)
         {
             return pCandidateClass == RulerHouseholdCandidateClass.Noble ||
+                   pCandidateClass == RulerHouseholdCandidateClass.Commoner &&
+                   pKind == RulerHouseholdKind.Consort ||
                    allowSlaveConsort &&
                    pCandidateClass == RulerHouseholdCandidateClass.Slave &&
                    pKind == RulerHouseholdKind.Consort;

@@ -41,6 +41,13 @@ namespace AncientWarfare3.core.lineage
             public int Defenders;
         }
 
+        private enum PendingInitializationResult
+        {
+            StillPending = 0,
+            Completed = 1,
+            RolledBack = 2
+        }
+
         private static readonly Dictionary<long, HashSet<long>> CoreIdsByCampaign =
             new Dictionary<long, HashSet<long>>();
 
@@ -96,7 +103,8 @@ namespace AncientWarfare3.core.lineage
                 return TryStartSelfRestorationCore(
                     pClaimId, pPlayerRequested,
                     pRebellionTriggered: false, pRequiredSeed: null,
-                    out _, out pError);
+                    RestorationRebellionSeedMode.Core,
+                    out _, out _, out pError);
             }
             catch (Exception e)
             {
@@ -110,7 +118,30 @@ namespace AncientWarfare3.core.lineage
             TryStartSelfRestorationFromRebellion(long pClaimId,
                 Actor pClaimant, City pRequiredSeed, out string pError)
         {
+            return TryStartSelfRestorationFromRequiredSeed(pClaimId,
+                pClaimant, pRequiredSeed,
+                RestorationRebellionSeedMode.Core, out _, out pError);
+        }
+
+        internal static RestorationRebellionStartOutcome
+            TryStartSelfRestorationFromExternalBandit(long pClaimId,
+                Actor pClaimant, City pExternalSeed,
+                out Kingdom pRestored, out string pError)
+        {
+            return TryStartSelfRestorationFromRequiredSeed(pClaimId,
+                pClaimant, pExternalSeed,
+                RestorationRebellionSeedMode.ExternalBandit,
+                out pRestored, out pError);
+        }
+
+        private static RestorationRebellionStartOutcome
+            TryStartSelfRestorationFromRequiredSeed(long pClaimId,
+                Actor pClaimant, City pRequiredSeed,
+                RestorationRebellionSeedMode pSeedMode,
+                out Kingdom pRestored, out string pError)
+        {
             bool committed = false;
+            pRestored = null;
             try
             {
                 if (pClaimant?.data == null || pRequiredSeed?.data == null ||
@@ -122,7 +153,7 @@ namespace AncientWarfare3.core.lineage
                 bool started = TryStartSelfRestorationCore(
                     pClaimId, pPlayerRequested: false,
                     pRebellionTriggered: true, pRequiredSeed,
-                    out committed, out pError);
+                    pSeedMode, out committed, out pRestored, out pError);
                 return RestorationRebellionRedirectRules.ResolveOutcome(
                     started, committed);
             }
@@ -180,10 +211,12 @@ namespace AncientWarfare3.core.lineage
 
         private static bool TryStartSelfRestorationCore(long pClaimId,
             bool pPlayerRequested, bool pRebellionTriggered,
-            City pRequiredSeed, out bool pIdentityCreationCommitted,
+            City pRequiredSeed, RestorationRebellionSeedMode pSeedMode,
+            out bool pIdentityCreationCommitted, out Kingdom pRestored,
             out string pError)
         {
             pIdentityCreationCommitted = false;
+            pRestored = null;
             pError = "";
             if (!Ready || World.world == null)
             {
@@ -249,14 +282,15 @@ namespace AncientWarfare3.core.lineage
                 ? null
                 : ReadOldCoreIds(claim,
                     RestorationCampaignRules.MaxPersistedCoreIds);
+            bool seedIsPersistedCore = pRequiredSeed != null &&
+                allCoreIds.Contains(pRequiredSeed.id);
             if (pRequiredSeed != null &&
-                !RestorationRebellionRedirectRules.IsMatchingClaimCity(
-                    originalKingdomDead: oldKingdomDead,
-                    isOriginalCapital:
+                !RestorationRebellionRedirectRules.CanUseRequiredSeed(
+                    pSeedMode, oldKingdomDead,
                     pRequiredSeed.id == claim.originalCapitalCityId,
-                    isPersistedCore: allCoreIds.Contains(pRequiredSeed.id)))
+                    seedIsPersistedCore))
             {
-                pError = "restoration_rebellion_city_not_core";
+                pError = "restoration_rebellion_seed_not_allowed";
                 return false;
             }
 
@@ -266,7 +300,8 @@ namespace AncientWarfare3.core.lineage
                 : new List<long> { pRequiredSeed.id };
             SeedSelection seedSelection = FindSeedSelection(
                 claimant, seedCandidateIds,
-                claim.originalCapitalCityId, pRebellionTriggered);
+                claim.originalCapitalCityId, pRebellionTriggered,
+                pSeedAllowed: true);
             if (pRequiredSeed != null &&
                 seedSelection?.City != pRequiredSeed)
             {
@@ -294,8 +329,12 @@ namespace AncientWarfare3.core.lineage
 
             allCoreIds ??= ReadOldCoreIds(
                 claim, RestorationCampaignRules.MaxPersistedCoreIds);
+            seedIsPersistedCore = allCoreIds.Contains(seed.data.id);
             allCoreIds = FilterLivingCoreIds(allCoreIds);
-            if (!allCoreIds.Contains(seed.data.id)) allCoreIds.Add(seed.data.id);
+            if (pSeedMode == RestorationRebellionSeedMode.ExternalBandit)
+                SortCoreIdsByDistance(allCoreIds, seed);
+            else if (!allCoreIds.Contains(seed.data.id))
+                allCoreIds.Add(seed.data.id);
             string encodedCoreIds = RestorationCampaignRules.EncodeCoreIds(allCoreIds);
             allCoreIds = RestorationCampaignRules.DecodeCoreIds(encodedCoreIds);
             if (allCoreIds.Count == 0)
@@ -308,7 +347,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (!RevalidateSeedSelection(seedSelection, claimant,
-                    pRebellionTriggered))
+                    pRebellionTriggered, pSeedAllowed: true))
             {
                 if (!pPlayerRequested && !pRebellionTriggered)
                     RoyalClaimService.MarkAutonomousAttempt(claim.claimId,
@@ -318,9 +357,13 @@ namespace AncientWarfare3.core.lineage
             }
             Kingdom seedOwner = seedSelection.Owner;
 
+            int controlledCoreCount =
+                RestorationRebellionRedirectRules.ShouldCountSeedAsCore(
+                    pSeedMode, seedIsPersistedCore) ? 1 : 0;
             long campaignId = RoyalClaimService.BeginSelfCampaign(
                 claim, claimant, seed, encodedCoreIds,
-                pControlled: 1, pTotal: allCoreIds.Count, pYear: year);
+                pControlled: controlledCoreCount,
+                pTotal: allCoreIds.Count, pYear: year);
             if (campaignId < 0)
             {
                 pError = "restoration_campaign_conflict";
@@ -346,6 +389,7 @@ namespace AncientWarfare3.core.lineage
             City previousClaimantCity = claimant.city;
             Kingdom restored = KingdomIdentityContinuityService.RestoreFromCity(
                 seed, claimant, request, out string restoreError);
+            pRestored = restored;
             if (!IsLiveKingdom(restored))
             {
                 pIdentityCreationCommitted =
@@ -381,11 +425,34 @@ namespace AncientWarfare3.core.lineage
                 population: ReadSeedPopulation(seed),
                 supporters: postCreationSupporterIds.Count,
                 defenders: postCreationDefenders);
-            if (!postCreationSeedValid ||
-                !RestorationUprisingMobilizationService.TryStartWithInitialCohort(
-                    restored, seed, campaignId, postCreationSupporterIds,
-                    requiredSupporters))
+            bool postCreationContextValid =
+                claimant?.data != null && claimant.isAlive() &&
+                !claimant.isRekt() && IsLiveKingdom(restored) &&
+                seed?.data != null && !seed.isRekt() &&
+                seed.kingdom == restored;
+            bool cohortStarted = postCreationSeedValid &&
+                RestorationUprisingMobilizationService
+                    .TryStartWithInitialCohort(
+                        restored, seed, campaignId,
+                        postCreationSupporterIds, requiredSupporters);
+            if (!cohortStarted)
             {
+                if (RestorationRebellionRedirectRules
+                    .ShouldRetryCommittedInitialization(
+                        pSeedMode, pIdentityCreationCommitted,
+                        postCreationContextValid))
+                {
+                    restored.data.set(
+                        LineageKeys.RESTORATION_INITIALIZATION_PENDING,
+                        true);
+                    RoyalClaimService.MarkSelfCampaignInitializationPending(
+                        campaignId, claim.originalKingdomId,
+                        seedOwner?.id ?? -1L,
+                        previousClaimantKingdom?.id ?? -1L,
+                        previousClaimantCity?.id ?? -1L, year);
+                    pError = "restoration_initialization_pending";
+                    return false;
+                }
                 bool rollbackCompleted = RollbackProvisionalRestoration(
                     restored, seed,
                     seedSelection.Owner, campaignId, claim.originalKingdomId,
@@ -396,29 +463,39 @@ namespace AncientWarfare3.core.lineage
                     : "restoration_rollback_pending";
                 return false;
             }
-            HistoryText uprising = HistoryText.Actor(claimant, claim.claimantName) +
-                                   H("aw_hist_restoration_uprising_at") +
-                                   HistoryText.City(seed, restored) +
-                                   H("aw_hist_restoration_uprising_suffix");
-            HistoryWriter.RecordKingdom(restored, KingdomEvent.RESTORATION_UPRISING,
-                uprising, HistoryTarget.Actor(claimant));
-            HistoryWriter.RecordPerson(claimant.data.id, restored, claimant.getName(),
-                PersonEvent.RESTORATION_UPRISING, uprising, ChronicleCategory.HONOR,
-                HistoryTarget.Kingdom(restored));
-
-            CampaignRow started = ReadActiveCampaignById(campaignId);
-            if (started.campaignId >= 0)
-            {
-                bool coreWarStarted = false;
-                if (!RoyalRestorationRules.HasRecoveredCoreThreshold(
-                        started.controlledCoreCount, started.totalCoreCount))
-                    coreWarStarted = TryStartNextCoreWar(
-                        started, restored, year, seedOwner?.id ?? -1L);
-                if (!coreWarStarted)
-                    TryStartFormerOwnerWar(
-                        started, restored, seedOwner, seed, year);
-            }
+            CompleteLaunchInitialization(campaignId, restored, seed,
+                claimant, seedOwner, year);
             return true;
+        }
+
+        private static void CompleteLaunchInitialization(long pCampaignId,
+            Kingdom pRestored, City pSeed, Actor pClaimant,
+            Kingdom pSeedOwner, int pYear)
+        {
+            if (pRestored?.data == null || pClaimant?.data == null) return;
+            HistoryText uprising = HistoryText.Actor(pClaimant,
+                pClaimant.getName()) + H("aw_hist_restoration_uprising_at") +
+                HistoryText.City(pSeed, pRestored) +
+                H("aw_hist_restoration_uprising_suffix");
+            HistoryWriter.RecordKingdom(pRestored,
+                KingdomEvent.RESTORATION_UPRISING, uprising,
+                HistoryTarget.Actor(pClaimant));
+            HistoryWriter.RecordPerson(pClaimant.data.id, pRestored,
+                pClaimant.getName(), PersonEvent.RESTORATION_UPRISING,
+                uprising, ChronicleCategory.HONOR,
+                HistoryTarget.Kingdom(pRestored));
+
+            CampaignRow started = ReadActiveCampaignById(pCampaignId);
+            if (started.campaignId < 0) return;
+            bool coreWarStarted = false;
+            if (!RoyalRestorationRules.HasRecoveredCoreThreshold(
+                    started.controlledCoreCount, started.totalCoreCount))
+                coreWarStarted = TryStartNextCoreWar(
+                    started, pRestored, pYear,
+                    pSeedOwner?.id ?? -1L);
+            if (!coreWarStarted)
+                TryStartFormerOwnerWar(started, pRestored, pSeedOwner,
+                    pSeed, pYear);
         }
 
         public static void OnCityTransferred(City pCity,
@@ -549,6 +626,23 @@ namespace AncientWarfare3.core.lineage
             Kingdom restored = FindKingdom(pCampaign.originalKingdomId);
             if (IsLiveKingdom(restored))
             {
+                restored.data.get(
+                    LineageKeys.RESTORATION_INITIALIZATION_PENDING,
+                    out bool initializationPending, false);
+                if (initializationPending)
+                {
+                    PendingInitializationResult pendingResult =
+                        TryResumePendingInitialization(
+                            pCampaign, restored, pYear);
+                    if (pendingResult ==
+                        PendingInitializationResult.Completed)
+                        CompleteLaunchInitialization(
+                            pCampaign.campaignId, restored,
+                            FindCity(pCampaign.seedCityId),
+                            FindActor(pCampaign.claimantActorId), null,
+                            pYear);
+                    return;
+                }
                 EnsureCampaignRuntime(restored, pCampaign, pYear);
                 RestorationUprisingMobilizationService.OnCampaignYear(
                     restored, pCampaign.campaignId);
@@ -583,6 +677,59 @@ namespace AncientWarfare3.core.lineage
             if (HasActiveWar(restored) || pCampaign.lastAttemptYear >= pYear) return;
 
             TryStartNextCoreWar(pCampaign, restored, pYear, -1L);
+        }
+
+        private static PendingInitializationResult
+            TryResumePendingInitialization(CampaignRow pCampaign,
+                Kingdom pRestored, int pYear)
+        {
+            City seed = FindCity(pCampaign.seedCityId);
+            Actor claimant = FindActor(pCampaign.claimantActorId);
+            if (!IsLiveKingdom(pRestored) || claimant?.data == null ||
+                !claimant.isAlive() || claimant.isRekt() ||
+                seed?.data == null || seed.isRekt() ||
+                seed.kingdom != pRestored)
+            {
+                bool rolledBack = RollbackProvisionalRestoration(
+                    pRestored, seed,
+                    FindKingdom(pCampaign.rollbackSeedOwnerId),
+                    pCampaign.campaignId, pCampaign.originalKingdomId,
+                    pYear, claimant,
+                    FindKingdom(pCampaign.rollbackPreviousClaimantKingdomId),
+                    FindCity(pCampaign.rollbackPreviousClaimantCityId));
+                return rolledBack
+                    ? PendingInitializationResult.RolledBack
+                    : PendingInitializationResult.StillPending;
+            }
+
+            int defenders = CountSeedDefenders(seed);
+            List<long> candidates =
+                RestorationUprisingMobilizationService.CollectInitialSupporterIds(
+                    seed, RoyalRestorationRules.MaxSeedResidentsInspected,
+                    claimant.data.id, out _);
+            List<long> supporters =
+                RestorationUprisingMobilizationService.RevalidateInitialSupporterIds(
+                    seed, pRestored, candidates, claimant.data.id);
+            bool seedValid = RoyalRestorationRules.CanUseSeedCity(
+                cityValid: true, oldCore: true,
+                peacefulHostCity: false, ownerValid: true,
+                activeOrFrozenCapture: HasActiveOrFrozenCapture(seed),
+                population: ReadSeedPopulation(seed),
+                supporters: supporters.Count, defenders: defenders);
+            int required = RoyalRestorationRules.MinimumRequiredSupporters(
+                defenders);
+            if (!seedValid ||
+                !RestorationUprisingMobilizationService
+                    .TryStartWithInitialCohort(
+                        pRestored, seed, pCampaign.campaignId,
+                        supporters, required))
+                return PendingInitializationResult.StillPending;
+
+            pRestored.data.set(
+                LineageKeys.RESTORATION_INITIALIZATION_PENDING, false);
+            RoyalClaimService.ClearSelfCampaignInitializationPending(
+                pCampaign.campaignId, pCampaign.originalKingdomId);
+            return PendingInitializationResult.Completed;
         }
 
         private static void MaintainRollbackPendingCampaign(
@@ -703,6 +850,8 @@ namespace AncientWarfare3.core.lineage
             pRestored.data.set(LineageKeys.RESTORATION_CAMPAIGN_ACTIVE, false);
             pRestored.data.set(LineageKeys.RESTORATION_CAMPAIGN_ID, -1L);
             pRestored.data.set(LineageKeys.RESTORATION_CLAIM_ID, -1L);
+            pRestored.data.set(
+                LineageKeys.RESTORATION_INITIALIZATION_PENDING, false);
             pRestored.data.set(LineageKeys.RESTORATION_MODE, "self_restoration");
             pRestored.data.set(LineageKeys.RESTORATION_COMPLETED, true);
             pRestored.data.set(LineageKeys.RESTORATION_ORIGINAL_MANDATE_PERIOD_ID,
@@ -774,6 +923,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.RESTORATION_CAMPAIGN_ACTIVE, false);
             pKingdom.data.set(LineageKeys.RESTORATION_CAMPAIGN_ID, -1L);
             pKingdom.data.set(LineageKeys.RESTORATION_CLAIM_ID, -1L);
+            pKingdom.data.set(
+                LineageKeys.RESTORATION_INITIALIZATION_PENDING, false);
         }
 
         private static City FindSeedCity(Actor pClaimant, List<long> pCoreIds,
@@ -785,7 +936,7 @@ namespace AncientWarfare3.core.lineage
 
         private static SeedSelection FindSeedSelection(Actor pClaimant,
             List<long> pCoreIds, long pOriginalCapitalCityId,
-            bool pRebellionTriggered = false)
+            bool pRebellionTriggered = false, bool pSeedAllowed = true)
         {
             if (pCoreIds == null) return null;
             Kingdom peacefulHost = pClaimant?.kingdom;
@@ -826,7 +977,7 @@ namespace AncientWarfare3.core.lineage
                     .RemainingSeedResidentInspectionBudget(
                         remainingResidentInspections, inspectedResidents);
                 if (!RoyalRestorationRules.CanUseSeedCity(valid,
-                        oldCore: true, peacefulHostCity, ownerValid,
+                        oldCore: pSeedAllowed, peacefulHostCity, ownerValid,
                         activeOrFrozenCapture,
                         population, supporters: supporters.Count,
                         defenders) ||
@@ -857,7 +1008,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool RevalidateSeedSelection(SeedSelection pSelection,
-            Actor pClaimant, bool pRebellionTriggered = false)
+            Actor pClaimant, bool pRebellionTriggered = false,
+            bool pSeedAllowed = true)
         {
             bool peacefulHostCity =
                 RestorationRebellionRedirectRules.IsPeacefulHostCity(
@@ -880,7 +1032,8 @@ namespace AncientWarfare3.core.lineage
                     pSelection.Owner, pSelection.SupporterIds,
                     pClaimant?.data?.id ?? -1L);
             if (!RoyalRestorationRules.CanUseSeedCity(
-                    cityValid: !pSelection.City.isRekt(), oldCore: true,
+                    cityValid: !pSelection.City.isRekt(),
+                    oldCore: pSeedAllowed,
                     peacefulHostCity, ownerValid: true,
                     activeOrFrozenCapture:
                     HasActiveOrFrozenCapture(pSelection.City),
@@ -1104,6 +1257,33 @@ namespace AncientWarfare3.core.lineage
                 result.Add(cityId);
             }
             return result;
+        }
+
+        private static void SortCoreIdsByDistance(List<long> pCoreIds,
+            City pSeed)
+        {
+            if (pCoreIds == null || pCoreIds.Count < 2 ||
+                pSeed?.getTile() == null) return;
+            WorldTile seedTile = pSeed.getTile();
+            var distanceByCity = new Dictionary<long, int>();
+            foreach (long cityId in pCoreIds)
+            {
+                int distance = int.MaxValue;
+                City city = FindCity(cityId);
+                try
+                {
+                    WorldTile targetTile = city?.getTile();
+                    if (targetTile != null)
+                        distance = Toolbox.SquaredDistTile(seedTile,
+                            targetTile);
+                }
+                catch { }
+                distanceByCity[cityId] = distance;
+            }
+            pCoreIds.Sort((left, right) =>
+                RestorationRebellionRedirectRules.CompareCoreTargets(
+                    distanceByCity[left], left,
+                    distanceByCity[right], right));
         }
 
         private static List<long> ReadOldCoreIds(RoyalClaimService.ClaimRow pClaim,

@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Code/core/court/CourtIds.cs"
+             Link="Production/CourtIds.cs" />
+    <Compile Include="../../Code/core/court/CourtProfileId.cs"
+             Link="Production/CourtProfileId.cs" />
+    <Compile Include="../../Code/core/court/LocalCourtOfficeRules.cs"
+             Link="Production/LocalCourtOfficeRules.cs" />
+    <Compile Include="../../Code/core/court/LocalOfficialTermRules.cs"
+             Link="Production/LocalOfficialTermRules.cs" />
+    <Compile Include="../../Code/core/court/LocalOfficialCandidateRules.cs"
+             Link="Production/LocalOfficialCandidateRules.cs" />
+    <Compile Include="../../Code/core/court/OfficialCirculationRules.cs"
+             Link="Production/OfficialCirculationRules.cs" />
+    <Compile Include="../../Code/core/court/CivilServiceExamRules.cs"
+             Link="Production/CivilServiceExamRules.cs" />
+    <Compile Include="../../Code/core/court/CivilServiceWaitingPoolQuery.cs"
+             Link="Production/CivilServiceWaitingPoolQuery.cs" />
+    <Compile Include="../../Code/core/court/CustomCourtTemplateModels.cs"
+             Link="Production/CustomCourtTemplateModels.cs" />
+    <Compile Include="../../Code/core/court/CustomLocalCourtTemplateRules.cs"
+             Link="Production/CustomLocalCourtTemplateRules.cs" />
+    <Compile Include="../../Code/core/court/CustomCourtTemplateRules.cs"
+             Link="Production/CustomCourtTemplateRules.cs" />
+    <Compile Include="../../Code/core/court/CustomCourtTemplateJsonCodec.cs"
+             Link="Production/CustomCourtTemplateJsonCodec.cs" />
+    <Compile Include="../../Code/core/court/CustomCourtInstanceModels.cs"
+             Link="Production/CustomCourtInstanceModels.cs" />
+    <Compile Include="../../Code/core/court/CustomCourtInstanceRules.cs"
+             Link="Production/CustomCourtInstanceRules.cs" />
+    <Compile Include="../../Code/core/court/CustomCourtInstanceCodec.cs"
+             Link="Production/CustomCourtInstanceCodec.cs" />
+    <Compile Include="../../Code/core/lineage/LineageKeys.cs"
+             Link="Production/LineageKeys.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Data.SQLite">
+      <HintPath>../../Assemblies/System.Data.SQLite.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>D:/SteamLibrary/steamapps/common/worldbox/worldbox_Data/Managed/Newtonsoft.Json.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
