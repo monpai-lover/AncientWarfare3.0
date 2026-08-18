@@ -148,6 +148,28 @@ hierarchy links, pan/zoom behavior, portraits, appointment actions, tooltips,
 and history entry. Reuse must be structural: the same components and layout
 parameter types are bound to a different read model.
 
+The original `CityWindow` also exposes a local-government entry. It resolves
+the displayed city's current kingdom and calls the same
+`CourtWindow.OpenCity(kingdomId, cityId)` path. It must not create a second
+local-government window, read model, or portrait/navigation implementation.
+
+### Custom Local Office Structure
+
+Each kingdom keeps one custom court template. Central and local offices remain
+in that same persisted template and are distinguished by the existing office
+`Layer`; local offices use `CourtOfficeLayer.City`. The custom-court workflow
+window exposes a segmented `Central Court` / `Local Government` switch that
+filters the shared canvas and editing controls by layer. Adding an office uses
+the active layer, and switching views never discards unsaved edits.
+
+The local structure is a kingdom-wide template shared by every city, while
+incumbents, terms, histories, capacity, and vacancies remain independent per
+city. Saving, importing, exporting, validating, and applying continue to use
+the existing single-template transaction. Cross-layer management or
+appointment-prerequisite edges are not created by the filtered editor; legacy
+cross-layer edges remain persisted but are not rendered as editable links in
+either filtered view.
+
 ### Office Structure
 
 - The city leader is the root of the local hierarchy.
@@ -273,6 +295,10 @@ and dismissals naturally break up local concentrations.
    model.
 4. Opening office history performs a bounded indexed history query; it never
    scans live actors.
+5. The city detail entry and the national city card both call the same city
+   context entry point.
+6. The custom-court workflow filters one template by office layer; it does not
+   create a separate local-template store or runtime.
 
 ## Failure Handling
 
@@ -331,6 +357,11 @@ and dismissals naturally break up local concentrations.
 - Switching between national and city contexts does not leak pooled nodes,
   links, portraits, or state.
 - A stale city card exits safely.
+- The city detail entry opens the same `CourtWindow` city context.
+- Switching the custom workflow between central and local layers preserves
+  both sets of offices and saves them in one template.
+- New offices inherit the active workflow layer and cross-layer edges cannot
+  be accidentally created through a filtered selection.
 
 ### Integration and Save Tests
 
