@@ -69,6 +69,13 @@ if (args.Length == 1 && args[0] == "--tributary-protection-only")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--restoration-protection")
+{
+    RestorationProtectionRulesTests.Run();
+    Console.WriteLine("Restoration protection rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--runtime-stability")
 {
     SimulationWorkerPoolTests.Run();

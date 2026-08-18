@@ -1,0 +1,65 @@
+using AncientWarfare3.core.lineage;
+
+internal static class RestorationProtectionRulesTests
+{
+    public static void Run()
+    {
+        Equal(110, RestorationProtectionRules.ProtectionUntil(
+            restorationYear: 100, durationYears: 10),
+            "a ten-year protection expires at the start of year ten");
+        Equal(true, RestorationProtectionRules.IsActive(
+            currentYear: 100, protectionUntilYear: 110),
+            "protection is active in the restoration year");
+        Equal(true, RestorationProtectionRules.IsActive(109, 110),
+            "protection remains active in year nine");
+        Equal(false, RestorationProtectionRules.IsActive(110, 110),
+            "protection expires exactly in year ten");
+        Equal(false, RestorationProtectionRules.IsActive(100, -1),
+            "old saves without a deadline are not protected");
+
+        Equal(true, RestorationProtectionRules.ShouldBlockIncoming(
+            protectionActive: true, protectedDefender: true,
+            internalWar: false, protectedKingdomIsAttacker: false),
+            "an external incoming declaration is blocked");
+        Equal(false, RestorationProtectionRules.ShouldBlockIncoming(
+            protectionActive: true, protectedDefender: true,
+            internalWar: false, protectedKingdomIsAttacker: true),
+            "the restored kingdom may declare its own wars");
+        Equal(false, RestorationProtectionRules.ShouldBlockIncoming(
+            protectionActive: true, protectedDefender: true,
+            internalWar: true, protectedKingdomIsAttacker: false),
+            "internal wars bypass restoration protection");
+        Equal(false, RestorationProtectionRules.ShouldBlockIncoming(
+            protectionActive: false, protectedDefender: true,
+            internalWar: false, protectedKingdomIsAttacker: false),
+            "expired protection does not block war");
+
+        string[] internalTypes =
+        {
+            "independence_war",
+            "general_rebellion_war",
+            "fief_independence_war",
+            "succession_dispute_war",
+            "jingnan_war",
+            "coup_restoration_war",
+            "tianmingrebel"
+        };
+        foreach (string warType in internalTypes)
+            Equal(true, RestorationProtectionRules.IsInternalWarType(warType),
+                warType + " remains an internal conflict");
+
+        Equal(false, RestorationProtectionRules.IsInternalWarType(
+            "restoration_war"),
+            "an externally directed restoration war is not globally exempt");
+        Equal(false, RestorationProtectionRules.IsInternalWarType(
+            "aw_normal_war"),
+            "ordinary external war is not internal");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

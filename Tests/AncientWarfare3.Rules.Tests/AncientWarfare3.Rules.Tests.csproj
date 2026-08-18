@@ -513,6 +513,8 @@
     <Compile Include="TributarySettlementSourceGuardTests.cs.txt" />
     <Compile Include="TributaryProtectionRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\TributaryProtectionRules.cs" Link="Production\TributaryProtectionRules.cs" />
+    <Compile Include="RestorationProtectionRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\RestorationProtectionRules.cs" Link="Production\RestorationProtectionRules.cs" />
     <Compile Include="TributaryProtectionSourceGuardTests.cs.txt" />
     <Compile Include="RoyalHouseholdRecipientRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\RoyalHouseholdRecipientRules.cs" Link="Production\RoyalHouseholdRecipientRules.cs" />
