@@ -166,6 +166,19 @@ namespace AncientWarfare3.core.schools
                     asset.type == SchoolAcademyBuildingContent.BuildingTypeId);
         }
 
+        private static bool IsStartedAcademyAlive(Building pBuilding, City pCity)
+        {
+            if (!HistoricalSchoolAcademyService.IsAcademy(pBuilding) ||
+                pBuilding?.data == null || !pBuilding.isAlive() ||
+                pBuilding.isOnRemove() || pBuilding.isRemoved() ||
+                pBuilding.isRuin()) return false;
+            City attached = null;
+            try { attached = pBuilding.getCity(); }
+            catch { }
+            return ReferenceEquals(attached, pCity) || attached == null &&
+                   ReferenceEquals(pBuilding.current_tile?.zone?.city, pCity);
+        }
+
         private static WorldTile FindPlacement(City pCity, BuildingAsset pAsset, int pAttempt)
         {
             WorldTile cityCenter = pCity.getTile();
