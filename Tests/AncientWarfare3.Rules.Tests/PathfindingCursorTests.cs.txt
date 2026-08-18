@@ -6,10 +6,14 @@ internal static class PathfindingCursorTests
     {
         ActiveRequestReuseAvoidsNewWork();
         SubmissionDispositionExplainsPendingReplacement();
+        RetargetedQueuedWorkNeverExecutesStaleRequest();
         PriorityRequestsRunAheadOfQueuedCivilianWork();
         QueuedRequestExposesWorkerWaitState();
-        StreamingStepWakesActorBeforeWorkerCompletes();
+        FinderCancelCleansQueuedAndRunningRequests();
+        PathGenerationRunsOffSubmitterThread();
         BoundedRegionalPathsContinueUntilFinalTarget();
+        SegmentedSessionContinuesAtLowWatermark();
+        RetargetedRunningWorkUsesLatestRequest();
 
         var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
             pNeighbors: Array.Empty<int>());
@@ -90,7 +94,108 @@ internal static class PathfindingCursorTests
             "an unrestricted path never creates artificial continuation work");
         Assert(!AWPathLifecycleRules.ShouldContinueBoundedSegment(
                 regionLimit: 6, currentTileId: 900, targetTileId: 900),
-            "a bounded regional path stops after reaching its final target");
+               "a bounded regional path stops after reaching its final target");
+    }
+
+    private static void SegmentedSessionContinuesAtLowWatermark()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(11, 1, 1,
+            new[] { tile });
+        var generator = new SegmentedGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+        var request = new AWPathRequest(88, 0, 11,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        Assert(finder.Request(request, out bool reused) && !reused,
+            "segmented request is accepted");
+        Assert(SpinUntil(() => request.Stream.Count == 10),
+            "the first segment is published without waiting for the full route");
+        Assert(generator.StartCount == 1,
+            "the session does not enqueue continuation while its stream is full");
+
+        Assert(finder.Consume(88) && finder.Consume(88),
+            "consuming steps advances the stream toward its low watermark");
+        Assert(SpinUntil(() => generator.StartCount == 2),
+            "the low watermark schedules exactly one continuation segment, starts=" +
+            generator.StartCount + ", stream=" + request.Stream.State +
+            ", count=" + request.Stream.Count);
+        Assert(SpinUntil(() => request.Stream.State ==
+                AWPathRequestState.Succeeded && request.Stream.Count == 9),
+            "the continuation appends steps and reaches the terminal target");
+        finder.StopAndDrain();
+    }
+
+    private static void RetargetedQueuedWorkNeverExecutesStaleRequest()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(8, 1, 1,
+            new[] { tile });
+        var generator = new TargetRecordingGateGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+
+        AWPathRequest Request(long actorId, int targetTileId) =>
+            new AWPathRequest(actorId, 0, targetTileId,
+                AWPathRequestOptions.Default,
+                AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+                generation, 0d);
+
+        Assert(finder.Request(Request(1, 1), out bool _) &&
+               generator.Started.Wait(TimeSpan.FromSeconds(3)),
+            "the blocking request occupies the only worker");
+        Assert(finder.Request(Request(2, 2), out bool _),
+            "the initial queued target is accepted");
+        Assert(finder.Request(Request(2, 3),
+                out AWPathSubmissionDisposition disposition) &&
+               disposition == AWPathSubmissionDisposition.ReplacedPending,
+            "retargeting a queued owner replaces its session request");
+
+        generator.Release.Set();
+        Assert(SpinUntil(() => generator.Targets.Count >= 2),
+            "the replacement eventually reaches the worker");
+        Assert(generator.Targets.ToArray().SequenceEqual(new[] { 1, 3 }),
+            "a stale queued target is rejected before path generation");
+        finder.StopAndDrain();
+    }
+
+    private static void RetargetedRunningWorkUsesLatestRequest()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(8, 1, 1,
+            new[] { tile });
+        var generator = new TargetRecordingGateGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+
+        AWPathRequest Request(int targetTileId) =>
+            new AWPathRequest(1, 0, targetTileId,
+                AWPathRequestOptions.Default,
+                AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+                generation, 0d);
+
+        Assert(finder.Request(Request(1),
+                out AWPathSubmissionDisposition initial) &&
+               initial == AWPathSubmissionDisposition.Submitted &&
+               generator.Started.Wait(TimeSpan.FromSeconds(3)),
+            "the initial request reaches the active worker before retargeting");
+        Assert(finder.Request(Request(2),
+                out AWPathSubmissionDisposition replacement) &&
+               replacement == AWPathSubmissionDisposition.ReplacedRunning,
+            "retargeting an active owner stores the latest pending request");
+
+        generator.Release.Set();
+        Assert(SpinUntil(() => generator.Targets.Count >= 2),
+            "the latest running replacement eventually reaches the worker");
+        Assert(generator.Targets.ToArray().SequenceEqual(new[] { 1, 2 }),
+            "a running replacement never requeues the cancelled request");
+        finder.StopAndDrain();
     }
 
     private static void ActiveRequestReuseAvoidsNewWork()
@@ -187,38 +292,63 @@ internal static class PathfindingCursorTests
         finder.StopAndDrain();
     }
 
-    private static void StreamingStepWakesActorBeforeWorkerCompletes()
+    private static void FinderCancelCleansQueuedAndRunningRequests()
     {
         var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
             pNeighbors: Array.Empty<int>());
         using var generation = AWTraversalGeneration.FromTiles(5, 1, 1,
             new[] { tile });
-        var generator = new StreamingGateGenerator();
+        var generator = new OrderedGateGenerator();
         using var finder = new AWPathFinder(generator);
         finder.Start(1);
 
-        var request = new AWPathRequest(91, 0, 0,
+        AWPathRequest Request(long actorId) => new AWPathRequest(
+            actorId, 0, 0, AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        AWPathRequest running = Request(1);
+        AWPathRequest queued = Request(2);
+        Assert(finder.Request(running, out bool _) &&
+               generator.Started.Wait(TimeSpan.FromSeconds(3)),
+            "the cancellation test starts a running request");
+        Assert(finder.Request(queued, out bool _),
+            "the cancellation test queues a second request");
+
+        finder.Cancel(2, AWPathFailureReason.WorldCleared);
+        Assert(queued.Stream.State == AWPathRequestState.Cancelled &&
+               finder.ActiveCount == 1,
+            "cancelling a queued owner removes only that queued session");
+
+        finder.Cancel(1, AWPathFailureReason.WorldCleared);
+        Assert(running.Stream.State == AWPathRequestState.Cancelled &&
+               running.Cancellation.IsCancellationRequested &&
+               finder.ActiveCount == 0,
+            "cancelling a running owner signals its worker and removes the session");
+        finder.StopAndDrain();
+    }
+
+    private static void PathGenerationRunsOffSubmitterThread()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(7, 1, 1,
+            new[] { tile });
+        var generator = new ThreadCaptureGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+        int submitterThread = Thread.CurrentThread.ManagedThreadId;
+        var request = new AWPathRequest(31, 0, 0,
             AWPathRequestOptions.Default,
             AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
             generation, 0d);
-        Assert(finder.Request(request, out bool reused) && !reused &&
+
+        Assert(finder.Request(request, out bool _) &&
                generator.Started.Wait(TimeSpan.FromSeconds(3)),
-            "the streaming request reaches the worker");
-        Assert(finder.OpenReadyCursor(91, out _).Kind ==
-               AWPathPollKind.Waiting,
-            "the actor first observes the running worker as waiting");
-
-        generator.Publish.Set();
-        Assert(generator.StepPublished.Wait(TimeSpan.FromSeconds(3)),
-            "the worker publishes a path step before completing");
-        AWPathPollResult streamed = finder.OpenReadyCursor(91,
-            out var cursor);
-        Assert(streamed.Kind == AWPathPollKind.StepReady &&
-               streamed.Step.TileId == 12 && cursor.IsValid,
-            "a streamed path step wakes the actor while the worker is still running");
-
-        cursor.Consume();
-        generator.Release.Set();
+            "the worker starts submitted path generation");
+        Assert(generator.ThreadId != 0 &&
+               generator.ThreadId != submitterThread,
+            "path generation never runs on the submitting simulation thread");
         finder.StopAndDrain();
     }
 
@@ -251,6 +381,21 @@ internal static class PathfindingCursorTests
         }
     }
 
+    private sealed class ThreadCaptureGenerator : IAWPathGenerator
+    {
+        public readonly ManualResetEventSlim Started = new(false);
+        public int ThreadId { get; private set; }
+
+        public void Generate(AWPathRequest request,
+            CancellationToken cancellation)
+        {
+            ThreadId = Thread.CurrentThread.ManagedThreadId;
+            Started.Set();
+            cancellation.ThrowIfCancellationRequested();
+            request.Stream.Complete();
+        }
+    }
+
     private sealed class OrderedGateGenerator : IAWPathGenerator
     {
         public readonly ManualResetEventSlim Started = new(false);
@@ -272,23 +417,65 @@ internal static class PathfindingCursorTests
         }
     }
 
-    private sealed class StreamingGateGenerator : IAWPathGenerator
+    private sealed class TargetRecordingGateGenerator : IAWPathGenerator
     {
         public readonly ManualResetEventSlim Started = new(false);
-        public readonly ManualResetEventSlim Publish = new(false);
-        public readonly ManualResetEventSlim StepPublished = new(false);
         public readonly ManualResetEventSlim Release = new(false);
+        public readonly System.Collections.Concurrent.ConcurrentQueue<int>
+            Targets = new();
 
         public void Generate(AWPathRequest request,
             CancellationToken cancellation)
         {
-            Started.Set();
-            Publish.Wait(cancellation);
-            request.Stream.AddStep(new AWPathStep(12,
-                AWMovementMethod.Walk, AWTraversalEstimate.Direct));
-            StepPublished.Set();
-            Release.Wait(cancellation);
+            Targets.Enqueue(request.TargetTileId);
+            if (request.ActorId == 1)
+            {
+                Started.Set();
+                Release.Wait(cancellation);
+            }
+            cancellation.ThrowIfCancellationRequested();
             request.Stream.Complete();
+        }
+    }
+
+    private sealed class SegmentedGenerator : IAWPathSegmentGenerator
+    {
+        private int _startCount;
+
+        public int StartCount => Volatile.Read(ref _startCount);
+
+        public void Generate(AWPathRequest request,
+            CancellationToken cancellation)
+        {
+            AWPathGenerationResult result = GenerateSegment(request,
+                cancellation, int.MaxValue);
+            if (!result.Succeeded)
+            {
+                request.Stream.Fail(result.FailureReason, result.Error);
+                return;
+            }
+            for (int index = 0; index < result.Steps.Count; index++)
+                request.Stream.AddStep(result.Steps[index]);
+            request.Stream.Complete();
+        }
+
+        public AWPathGenerationResult GenerateSegment(AWPathRequest request,
+            CancellationToken cancellation, int maximumSteps)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            int call = Interlocked.Increment(ref _startCount);
+            if (call == 1)
+            {
+                var steps = new AWPathStep[10];
+                for (int index = 0; index < steps.Length; index++)
+                    steps[index] = new AWPathStep(index + 1,
+                        AWMovementMethod.Walk, AWTraversalEstimate.Direct);
+                return AWPathGenerationResult.Success(10, false, steps);
+            }
+
+            return AWPathGenerationResult.Success(11, true,
+                new[] { new AWPathStep(11, AWMovementMethod.Walk,
+                    AWTraversalEstimate.Direct) });
         }
     }
 }

@@ -1538,6 +1538,7 @@ namespace AncientWarfare3.core.lineage
             if (_correctionsThisBucket >= ArmyMarchRules.MaxFollowerCorrectionsPerTick)
                 return false;
             _correctionsThisBucket++;
+            AWPathfindingBootstrap.PathDiagnostics.OnMemberCorrection();
             return true;
         }
 

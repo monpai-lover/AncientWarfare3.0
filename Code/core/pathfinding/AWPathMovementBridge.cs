@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using AncientWarfare3.content;
 using AncientWarfare3.content.schools;
@@ -17,28 +16,20 @@ namespace AncientWarfare3.core.pathfinding
     {
         private const float DiagonalTileDistance = 1.41421356237f;
         private const double TransportWaitTimeoutSeconds = 120d;
-        private static readonly ConcurrentDictionary<long, RetryContext> RetryContexts =
-            new ConcurrentDictionary<long, RetryContext>();
-        private static readonly ConcurrentDictionary<long, FailureDiagnostic>
-            FailureDiagnostics =
-                new ConcurrentDictionary<long, FailureDiagnostic>();
-        private static readonly ConcurrentDictionary<long, AWPathPollResult> TerminalPolls =
-            new ConcurrentDictionary<long, AWPathPollResult>();
-        private static readonly ConcurrentDictionary<long, TransportContext> TransportContexts =
-            new ConcurrentDictionary<long, TransportContext>();
+        private static readonly Dictionary<long, RetryContext> RetryContexts =
+            new Dictionary<long, RetryContext>();
+        private static readonly Dictionary<long, AWPathPollResult> TerminalPolls =
+            new Dictionary<long, AWPathPollResult>();
+        private static readonly Dictionary<long, TransportContext> TransportContexts =
+            new Dictionary<long, TransportContext>();
         private static readonly AWPathOwnershipIndex OwnedActors =
             new AWPathOwnershipIndex();
-
-        internal static int ActorGateCount => 0;
 
         public static ExecuteEvent Submit(Actor pActor, WorldTile pTarget, bool pPathOnWater,
             bool pWalkOnBlocks, bool pWalkOnLava, int pLimitPathfindingRegions)
         {
-            if (pActor?.data == null) return ExecuteEvent.False;
-            return SubmitCore(pActor, pTarget,
-                new AWPathRequestOptions(pPathOnWater, pWalkOnBlocks,
-                    pWalkOnLava, pLimitPathfindingRegions),
-                pIsRecovery: false);
+            return SubmitCore(pActor, pTarget, new AWPathRequestOptions(pPathOnWater,
+                pWalkOnBlocks, pWalkOnLava, pLimitPathfindingRegions), pIsRecovery: false);
         }
 
         private static ExecuteEvent SubmitCore(Actor pActor, WorldTile pTarget,
@@ -69,7 +60,6 @@ namespace AncientWarfare3.core.pathfinding
             int targetTileId = pTarget.data.tile_id;
             AWPathWorkClass workClass = pRetainedWorkClass ??
                 ClassifyWork(pActor, actorId);
-            bool wasMoving = pActor.is_moving;
             long terrainRevision = AWPathfindingBootstrap.Cache.SourceRevision;
             long worldGeneration = AWAsyncRuntime.WorldGeneration;
             bool insideBoat = pActor.is_inside_boat;
@@ -118,25 +108,13 @@ namespace AncientWarfare3.core.pathfinding
                         RuntimePerformanceDiagnostic.EndDetail(
                             "path_submit_profile", diagnostic);
                     }
-                    AWDockRouteCandidate dockRoute = default;
-                    bool physicalTransportAvailable =
-                        !pActor.asset.is_boat &&
-                        AWDockTransportService.TryResolveRoute(
-                            pActor.current_tile, pTarget,
-                            out dockRoute);
                     var request = new AWPathRequest(actorId,
                         pActor.current_tile.data.tile_id, targetTileId,
                         pOptions, profile, generation, now,
                         workClass, terrainRevision, worldGeneration,
-                        insideBoat, physicalTransportAvailable,
-                        dockRoute.EstimatedRouteTiles,
-                        pEntryPortalId: dockRoute.Entry.Id,
-                        pExitPortalId: dockRoute.Exit.Id,
-                        pEntryLandTileId: dockRoute.Entry.LandTileId,
-                        pPickupSeaTileId: dockRoute.Entry.OceanTileId,
-                        pDestinationSeaTileId:
-                            dockRoute.Exit.OceanTileId,
-                        pLandingLandTileId: dockRoute.Exit.LandTileId);
+                        insideBoat,
+                        AWDockTransportService.TryResolveRoute(
+                            pActor.current_tile, pTarget, out _));
                     diagnostic = RuntimePerformanceDiagnostic.BeginScope();
                     bool accepted;
                     try
@@ -187,16 +165,10 @@ namespace AncientWarfare3.core.pathfinding
             diagnostic = RuntimePerformanceDiagnostic.BeginScope();
             try
             {
-                if (AWPathLifecycleRules.ShouldClearPreviousPathAfterSubmission(
-                        accepted: true, reused))
-                    pActor.clearOldPath();
+                pActor.clearOldPath();
                 pActor.setTileTarget(pTarget);
-                if (AWPathLifecycleRules.ShouldResetActorAfterPathSubmission(
-                        accepted: true, reused, wasMoving))
-                {
-                    pActor.next_step_position = pActor.current_tile.posV3;
-                    TrySetNotMoving(pActor);
-                }
+                pActor.next_step_position = pActor.current_tile.posV3;
+                TrySetNotMoving(pActor);
             }
             finally
             {
@@ -213,8 +185,8 @@ namespace AncientWarfare3.core.pathfinding
             CancelTransport(pActor);
             pFinder?.Cancel(actorId,
                 AWPathFailureReason.CancelledByNewRequest);
-            RetryContexts.TryRemove(actorId, out _);
-            TerminalPolls.TryRemove(actorId, out _);
+            RetryContexts.Remove(actorId);
+            TerminalPolls.Remove(actorId);
             OwnedActors.Remove(actorId);
             AWPathfindingBootstrap.RecoveryManager.Clear(actorId);
             pActor.clearOldPath();
@@ -227,12 +199,6 @@ namespace AncientWarfare3.core.pathfinding
 
         public static void Update(Actor pActor)
         {
-            if (pActor?.data == null) return;
-            UpdateCore(pActor);
-        }
-
-        private static void UpdateCore(Actor pActor)
-        {
             AWPathFinder finder = AWPathfindingBootstrap.Finder;
             if (finder == null || pActor?.data == null) return;
             if (!HasOwnedPathState(pActor.data.id)) return;
@@ -243,7 +209,9 @@ namespace AncientWarfare3.core.pathfinding
             }
             AWPathFinder.ReadyPathCursor cursor = default;
             AWPathPollResult poll;
-            if (!TerminalPolls.TryRemove(pActor.data.id, out poll))
+            if (TerminalPolls.TryGetValue(pActor.data.id, out poll))
+                TerminalPolls.Remove(pActor.data.id);
+            else
                 poll = finder.OpenReadyCursor(pActor.data.id, out cursor);
             HandlePoll(pActor, poll, ref cursor, pHandleNoRequest: true);
         }
@@ -281,9 +249,9 @@ namespace AncientWarfare3.core.pathfinding
                     AWArmyMarchService.OnPathEnded(pActor);
                     finder.Cancel(pActor.data.id, AWPathFailureReason.CancelledByNewRequest);
                     pCursor = default;
-                    RetryContexts.TryRemove(pActor.data.id, out _);
+                    RetryContexts.Remove(pActor.data.id);
                     OwnedActors.Remove(pActor.data.id);
-                    StopMovementSafely(pActor);
+                    pActor.stopMovement();
                     AWPathfindingBootstrap.RecoveryManager.OnProgress(pActor.data.id);
                 }
                 return true;
@@ -315,7 +283,7 @@ namespace AncientWarfare3.core.pathfinding
                     if (TryContinueBoundedSegment(pActor)) return true;
                     AWArmyMarchService.OnPathEnded(pActor);
                     TrySetNotMoving(pActor);
-                    RetryContexts.TryRemove(pActor.data.id, out _);
+                    RetryContexts.Remove(pActor.data.id);
                     OwnedActors.Remove(pActor.data.id);
                     AWPathfindingBootstrap.RecoveryManager.OnProgress(pActor.data.id);
                     return true;
@@ -327,7 +295,7 @@ namespace AncientWarfare3.core.pathfinding
                 case AWPathPollKind.Cancelled:
                     AWArmyMarchService.OnPathEnded(pActor);
                     TrySetNotMoving(pActor);
-                    RetryContexts.TryRemove(pActor.data.id, out _);
+                    RetryContexts.Remove(pActor.data.id);
                     OwnedActors.Remove(pActor.data.id);
                     AWPathfindingBootstrap.RecoveryManager.Clear(pActor.data.id);
                     return true;
@@ -416,11 +384,6 @@ namespace AncientWarfare3.core.pathfinding
 
         public static bool IsUsing(Actor pActor)
         {
-            return pActor?.data != null && IsUsingCore(pActor);
-        }
-
-        private static bool IsUsingCore(Actor pActor)
-        {
             if (pActor?.data == null || AWPathfindingBootstrap.Finder == null) return false;
             long actorId = pActor.data.id;
             if (!HasOwnedPathState(actorId)) return false;
@@ -451,75 +414,9 @@ namespace AncientWarfare3.core.pathfinding
             return pActor?.data != null && HasOwnedPathState(pActor.data.id);
         }
 
-        internal static string DescribeRuntimeState(Actor pActor)
-        {
-            if (pActor?.data == null) return "actor_invalid";
-            try
-            {
-                long actorId = pActor.data.id;
-                AWPathFinder finder = AWPathfindingBootstrap.Finder;
-                AWPathPollResult poll = finder == null
-                    ? new AWPathPollResult(AWPathPollKind.NoRequest)
-                    : finder.Poll(actorId);
-                bool hasRetry = RetryContexts.TryGetValue(actorId,
-                    out RetryContext retry);
-                bool hasFailure = FailureDiagnostics.TryGetValue(actorId,
-                    out FailureDiagnostic failure);
-                double now = Time.realtimeSinceStartupAsDouble;
-                double retryDue = hasRetry && retry.Pending
-                    ? retry.DueTime
-                    : hasFailure ? failure.DueTime : 0d;
-                double retryRemaining = retryDue > 0d
-                    ? Math.Max(0d, retryDue - now)
-                    : 0d;
-                bool batchExists = pActor.batch != null;
-                bool queueExists = batchExists &&
-                    pActor.batch.c_update_movement != null;
-                return "poll=" + poll.Kind +
-                    ",failure=" + poll.FailureReason +
-                    ",last_failure=" + (hasFailure
-                        ? failure.Reason.ToString()
-                        : AWPathFailureReason.None.ToString()) +
-                    ",retry_attempt=" + (hasFailure
-                        ? failure.Attempt
-                        : 0) +
-                    ",now=" + now.ToString("0.###") +
-                    ",retry_due=" + retryDue.ToString("0.###") +
-                    ",retry_remaining=" + retryRemaining.ToString("0.###") +
-                    ",worker_waiting=" + (finder != null &&
-                        finder.IsWaitingForWorker(actorId)) +
-                    ",worker_running=" + (finder != null &&
-                        finder.IsWorkerRunning(actorId)) +
-                    ",owned=" + HasOwnedPathState(actorId) +
-                    ",retry=" + hasRetry +
-                    ",retry_pending=" + (hasRetry && retry.Pending) +
-                    ",current=" + (pActor.current_tile?.data?.tile_id ?? -1) +
-                    ",target=" + (pActor.tile_target?.data?.tile_id ?? -1) +
-                    ",step=" + (pActor._next_step_tile?.data?.tile_id ?? -1) +
-                    ",moving=" + pActor.is_moving +
-                    ",speed=" + pActor._current_combined_movement_speed.
-                        ToString("0.###") +
-                    ",batch=" + batchExists +
-                    ",queue=" + queueExists +
-                    ",pos=" + pActor.current_position.x.ToString("0.###") +
-                    ":" + pActor.current_position.y.ToString("0.###") +
-                    ",next=" + pActor.next_step_position.x.ToString("0.###") +
-                    ":" + pActor.next_step_position.y.ToString("0.###");
-            }
-            catch (Exception error)
-            {
-                return "diagnostic_error=" + error.GetType().Name;
-            }
-        }
-
         internal static bool ShouldPollNow(Actor pActor)
         {
             if (pActor?.data == null) return true;
-            return ShouldPollNowCore(pActor);
-        }
-
-        private static bool ShouldPollNowCore(Actor pActor)
-        {
             long actorId = pActor.data.id;
             if (AWPathLifecycleRules.ShouldPollEverySimulationPass(
                     schedulerActive: AWPerformanceSettings.Mode ==
@@ -550,376 +447,6 @@ namespace AncientWarfare3.core.pathfinding
             return OwnedActors.Contains(pActorId);
         }
 
-        internal enum AWParallelPathMovementResult
-        {
-            NoPath,
-            Handled,
-            RequiresSerial
-        }
-
-        internal enum AWParallelSmoothMovementResult
-        {
-            Handled,
-            RequiresSerial
-        }
-
-        internal enum AWPreparedSmoothMovementKind : byte
-        {
-            None,
-            Calibration,
-            VanillaPath,
-            CustomPath,
-            StopMovement
-        }
-
-        internal readonly struct AWPreparedPathMovement
-        {
-            internal AWPreparedPathMovement(Actor pActor, bool pVanilla)
-            {
-                Vanilla = pVanilla;
-                Poll = default;
-                Cursor = default;
-                ActorId = pActor?.data?.id ?? -1L;
-                CurrentTileId = pActor?.current_tile?.data?.tile_id ?? -1;
-                TargetTileId = pActor?.tile_target?.data?.tile_id ?? -1;
-                LocalPathIndex = pActor?.current_path_index ?? -1;
-                HadGlobalPath = pActor?.current_path_global != null;
-            }
-
-            internal AWPreparedPathMovement(AWPathPollResult pPoll,
-                AWPathFinder.ReadyPathCursor pCursor)
-            {
-                Vanilla = false;
-                Poll = pPoll;
-                Cursor = pCursor;
-                ActorId = -1L;
-                CurrentTileId = -1;
-                TargetTileId = -1;
-                LocalPathIndex = -1;
-                HadGlobalPath = false;
-            }
-
-            internal bool Vanilla { get; }
-            internal AWPathPollResult Poll { get; }
-            internal AWPathFinder.ReadyPathCursor Cursor { get; }
-            internal long ActorId { get; }
-            internal int CurrentTileId { get; }
-            internal int TargetTileId { get; }
-            internal int LocalPathIndex { get; }
-            internal bool HadGlobalPath { get; }
-        }
-
-        internal readonly struct AWPreparedSmoothMovement
-        {
-            internal AWPreparedSmoothMovement(
-                AWPreparedSmoothMovementKind pKind,
-                float pWalkedDistance = 0f,
-                AWPathPollResult pPoll = default,
-                AWPathFinder.ReadyPathCursor pCursor = default)
-            {
-                Kind = pKind;
-                WalkedDistance = pWalkedDistance;
-                Poll = pPoll;
-                Cursor = pCursor;
-            }
-
-            internal AWPreparedSmoothMovementKind Kind { get; }
-            internal float WalkedDistance { get; }
-            internal AWPathPollResult Poll { get; }
-            internal AWPathFinder.ReadyPathCursor Cursor { get; }
-        }
-
-        internal static AWParallelPathMovementResult
-            TryRunParallelSafePathMovement(Actor pActor,
-                out AWPreparedPathMovement pPrepared)
-        {
-            pPrepared = default;
-            if (pActor == null || pActor.data == null)
-                return AWParallelPathMovementResult.NoPath;
-            // AW3 army marching updates a shared, non-thread-safe formation
-            // ledger from OnLeaderPathStep. Keep military actors on the
-            // ordered simulation commit path; civilians retain Cultiway's
-            // parallel-safe movement path.
-            if (HasArmyMarchState(pActor))
-            {
-                pPrepared = new AWPreparedPathMovement(pActor,
-                    pVanilla: true);
-                return AWParallelPathMovementResult.RequiresSerial;
-            }
-            if (pActor.isFollowingLocalPath() ||
-                pActor.current_path_global != null)
-            {
-                pPrepared = new AWPreparedPathMovement(pActor,
-                    pVanilla: true);
-                return AWParallelPathMovementResult.RequiresSerial;
-            }
-
-            AWPathFinder finder = AWPathfindingBootstrap.Finder;
-            if (finder == null)
-                return AWParallelPathMovementResult.NoPath;
-            AWPathPollResult poll = finder.OpenReadyCursor(
-                pActor.data.id,
-                out AWPathFinder.ReadyPathCursor cursor);
-            if (poll.Kind != AWPathPollKind.StepReady &&
-                poll.Kind != AWPathPollKind.Waiting)
-                return AWParallelPathMovementResult.NoPath;
-
-            if (poll.Kind == AWPathPollKind.StepReady &&
-                !CanRunPathStepInParallel(pActor, poll.Step))
-            {
-                pPrepared = new AWPreparedPathMovement(poll, cursor);
-                return AWParallelPathMovementResult.RequiresSerial;
-            }
-
-            HandlePoll(pActor, poll, ref cursor,
-                pHandleNoRequest: true);
-            return AWParallelPathMovementResult.Handled;
-        }
-
-        internal static PreparedNativePathCommitDecision
-            CommitPreparedPathMovement(Actor pActor,
-            AWPreparedPathMovement pPrepared)
-        {
-            if (pActor == null || pActor.data == null)
-                return PreparedNativePathCommitDecision.Drop;
-            if (pPrepared.Vanilla)
-            {
-                bool actorAlive = false;
-                try
-                {
-                    actorAlive = !pActor.isRekt() && pActor.isAlive();
-                }
-                catch { }
-                WorldTile currentTile = pActor.current_tile;
-                WorldTile targetTile = pActor.tile_target;
-                var facts = new PreparedNativePathFacts(
-                    actorExists: pActor.data != null,
-                    actorAlive: actorAlive,
-                    actorIdMatches: pActor.data != null &&
-                        pActor.data.id == pPrepared.ActorId,
-                    batchExists: pActor.batch != null,
-                    currentTileValid: currentTile?.data != null,
-                    targetTileValid: targetTile?.data != null,
-                    currentRegionValid: currentTile?.region != null,
-                    targetRegionValid: targetTile?.region != null,
-                    currentTileId: currentTile?.data?.tile_id ?? -1,
-                    preparedCurrentTileId: pPrepared.CurrentTileId,
-                    currentTargetTileId: targetTile?.data?.tile_id ?? -1,
-                    preparedTargetTileId: pPrepared.TargetTileId,
-                    currentPathIndex: pActor.current_path_index,
-                    preparedPathIndex: pPrepared.LocalPathIndex,
-                    currentHasGlobalPath:
-                        pActor.current_path_global != null,
-                    preparedHadGlobalPath: pPrepared.HadGlobalPath);
-                PreparedNativePathCommitDecision decision =
-                    PreparedNativePathCommitRules.Decide(facts);
-                if (decision == PreparedNativePathCommitDecision.Drop)
-                {
-                    DropPreparedNativePath(pActor);
-                    return decision;
-                }
-                if (decision == PreparedNativePathCommitDecision.RetryLater)
-                    return decision;
-                pActor.updatePathMovement();
-                return PreparedNativePathCommitDecision.Commit;
-            }
-
-            AWPathFinder.ReadyPathCursor cursor = pPrepared.Cursor;
-            HandlePoll(pActor, pPrepared.Poll, ref cursor,
-                pHandleNoRequest: true);
-            return PreparedNativePathCommitDecision.Commit;
-        }
-
-        private static void DropPreparedNativePath(Actor pActor)
-        {
-            if (pActor == null) return;
-            try { pActor.clearOldPath(); }
-            catch { }
-            try { pActor.clearTileTarget(); }
-            catch { }
-            try { pActor.beh_tile_target = null; }
-            catch { }
-            TrySetNotMoving(pActor);
-        }
-
-        internal static AWParallelSmoothMovementResult
-            TryRunParallelSafeSmoothMovement(Actor pActor, float pElapsed,
-                out AWPreparedSmoothMovement pPrepared)
-        {
-            pPrepared = default;
-            if (pActor == null || pActor.data == null ||
-                pActor._update_done || pActor.is_immovable)
-                return AWParallelSmoothMovementResult.Handled;
-            if (HasArmyMarchState(pActor))
-            {
-                pPrepared = new AWPreparedSmoothMovement(
-                    AWPreparedSmoothMovementKind.VanillaPath);
-                return AWParallelSmoothMovementResult.RequiresSerial;
-            }
-
-            float movementBudget =
-                pActor._current_combined_movement_speed * pElapsed;
-            bool canFlip = pActor.asset.can_flip && pActor.checkFlip();
-            float walkedDistance = 0f;
-            AWPathFinder.ReadyPathCursor cursor = default;
-            for (int i = 0; i < AWPathLifecycleRules.MaximumSmoothPathStepsPerUpdate; i++)
-            {
-                Vector2 current = pActor.current_position;
-                Vector2 target = pActor.next_step_position;
-                if (canFlip)
-                    pActor.setFlip(current.x < target.x);
-                float delta = Math.Max(0f, movementBudget - walkedDistance);
-                float dx = target.x - current.x;
-                float dy = target.y - current.y;
-                float distanceSquared = dx * dx + dy * dy;
-                if (distanceSquared >= delta * delta)
-                {
-                    if (delta > 0f && distanceSquared > 0f)
-                    {
-                        float scale = delta / Mathf.Sqrt(distanceSquared);
-                        pActor.current_position = new Vector2(
-                            current.x + dx * scale, current.y + dy * scale);
-                    }
-                    return AWParallelSmoothMovementResult.Handled;
-                }
-
-                pActor.current_position = target;
-                walkedDistance += BoundaryDistance(distanceSquared);
-                if (!TryContinueSmoothMovementInParallel(
-                        pActor, ref cursor, walkedDistance, out pPrepared))
-                    return AWParallelSmoothMovementResult.RequiresSerial;
-                if (!pActor.is_moving)
-                    return AWParallelSmoothMovementResult.Handled;
-            }
-
-            return AWParallelSmoothMovementResult.Handled;
-        }
-
-        internal static void CommitPreparedSmoothMovement(Actor pActor,
-            float pElapsed, AWPreparedSmoothMovement pPrepared)
-        {
-            if (pActor == null || pActor.data == null) return;
-            switch (pPrepared.Kind)
-            {
-                case AWPreparedSmoothMovementKind.VanillaPath:
-                    pActor.updatePathMovement();
-                    break;
-                case AWPreparedSmoothMovementKind.CustomPath:
-                    {
-                        AWPathFinder.ReadyPathCursor cursor = pPrepared.Cursor;
-                        if (!HandlePoll(pActor, pPrepared.Poll, ref cursor,
-                                pHandleNoRequest: false))
-                            pActor.stopMovement();
-                        break;
-                    }
-                case AWPreparedSmoothMovementKind.StopMovement:
-                    pActor.stopMovement();
-                    return;
-                case AWPreparedSmoothMovementKind.None:
-                    return;
-            }
-
-            if (pActor.is_moving)
-                UpdateSmoothMovementCore(pActor, pElapsed,
-                    pPrepared.WalkedDistance);
-        }
-
-        private static bool TryContinueSmoothMovementInParallel(Actor pActor,
-            ref AWPathFinder.ReadyPathCursor pCursor, float pWalkedDistance,
-            out AWPreparedSmoothMovement pPrepared)
-        {
-            if (pActor.isFollowingLocalPath() ||
-                pActor.current_path_global != null)
-            {
-                pPrepared = new AWPreparedSmoothMovement(
-                    AWPreparedSmoothMovementKind.VanillaPath,
-                    pWalkedDistance);
-                return false;
-            }
-            if (pActor.tile_target == null)
-            {
-                pPrepared = new AWPreparedSmoothMovement(
-                    AWPreparedSmoothMovementKind.StopMovement,
-                    pWalkedDistance);
-                return false;
-            }
-
-            AWPathFinder finder = AWPathfindingBootstrap.Finder;
-            AWPathPollResult poll;
-            if (pCursor.IsValid)
-            {
-                poll = pCursor.Poll();
-            }
-            else if (finder != null)
-            {
-                poll = finder.OpenReadyCursor(
-                    pActor.data.id, out pCursor);
-            }
-            else
-            {
-                pPrepared = new AWPreparedSmoothMovement(
-                    AWPreparedSmoothMovementKind.StopMovement,
-                    pWalkedDistance);
-                return false;
-            }
-            if (poll.Kind == AWPathPollKind.StepReady)
-            {
-                if (!CanRunPathStepInParallel(pActor, poll.Step))
-                {
-                    pPrepared = new AWPreparedSmoothMovement(
-                        AWPreparedSmoothMovementKind.CustomPath,
-                        pWalkedDistance, poll, pCursor);
-                    return false;
-                }
-                HandlePoll(pActor, poll, ref pCursor,
-                    pHandleNoRequest: false);
-                pPrepared = default;
-                return true;
-            }
-            if (poll.Kind == AWPathPollKind.Waiting)
-            {
-                HandlePoll(pActor, poll, ref pCursor,
-                    pHandleNoRequest: false);
-                pPrepared = default;
-                return true;
-            }
-
-            pPrepared = new AWPreparedSmoothMovement(
-                AWPreparedSmoothMovementKind.CustomPath,
-                pWalkedDistance, poll, pCursor);
-            return false;
-        }
-
-        private static bool CanRunPathStepInParallel(Actor pActor,
-            AWPathStep pStep)
-        {
-            if (pActor?.data == null || pActor.asset == null ||
-                pActor.current_tile == null || pActor.asset.is_boat ||
-                (pStep.Method != AWMovementMethod.Walk &&
-                 pStep.Method != AWMovementMethod.Swim))
-                return false;
-            WorldTile tile = World.world?.tiles_list == null ||
-                pStep.TileId < 0 ||
-                pStep.TileId >= World.world.tiles_list.Length
-                ? null : World.world.tiles_list[pStep.TileId];
-            if (tile?.Type == null || tile.Type.damaged_when_walked)
-                return false;
-            return (pStep.Hazards & AWHazardFlags.Fire) != 0 ||
-                   GetFastMoveBlockReason(tile) == SlowMoveReason.None;
-        }
-
-        private static bool HasArmyMarchState(Actor pActor)
-        {
-            try
-            {
-                return AWArmyMarchService.HasSerialMarchState(pActor);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
         public static bool ShouldUseCustomSmoothMovement(Actor pActor)
         {
             if (pActor?.data == null) return false;
@@ -933,18 +460,12 @@ namespace AncientWarfare3.core.pathfinding
         public static void Cancel(Actor pActor, AWPathFailureReason pReason)
         {
             if (pActor?.data == null) return;
-            CancelCore(pActor, pReason);
-        }
-
-        private static void CancelCore(Actor pActor,
-            AWPathFailureReason pReason)
-        {
             AWArmyMarchService.OnPathEnded(pActor);
             CancelTransport(pActor);
             AWPathfindingBootstrap.Finder?.Cancel(pActor.data.id, pReason);
             AWPathfindingBootstrap.RecoveryManager.Clear(pActor.data.id);
-            RetryContexts.TryRemove(pActor.data.id, out _);
-            TerminalPolls.TryRemove(pActor.data.id, out _);
+            RetryContexts.Remove(pActor.data.id);
+            TerminalPolls.Remove(pActor.data.id);
             OwnedActors.Remove(pActor.data.id);
         }
 
@@ -958,7 +479,6 @@ namespace AncientWarfare3.core.pathfinding
             }
             TransportContexts.Clear();
             RetryContexts.Clear();
-            FailureDiagnostics.Clear();
             TerminalPolls.Clear();
             OwnedActors.Clear();
             AWArmyMarchService.ClearLegacy();
@@ -967,13 +487,6 @@ namespace AncientWarfare3.core.pathfinding
         public static void UpdateSmoothMovement(Actor pActor, float pElapsed,
             float pWalkedDistance = 0f)
         {
-            if (pActor?.data == null) return;
-            UpdateSmoothMovementCore(pActor, pElapsed, pWalkedDistance);
-        }
-
-        private static void UpdateSmoothMovementCore(Actor pActor,
-            float pElapsed, float pWalkedDistance)
-        {
             if (pActor?.asset == null) return;
             bool actorAlive = false;
             try { actorAlive = pActor.data != null && pActor.isAlive(); }
@@ -981,32 +494,11 @@ namespace AncientWarfare3.core.pathfinding
             bool batchExists = pActor.batch != null;
             bool queueExists = batchExists &&
                                pActor.batch.c_update_movement != null;
-            bool p0TransportBoat = pActor.data != null && actorAlive &&
-                pActor.asset.is_boat &&
-                ArmyRtsTransportService.OwnsTransportBoat(pActor);
             if (!AWPathLifecycleRules.HasUsableMovementBatch(
                     pActor.data != null, actorAlive, batchExists,
-                    queueExists) && !p0TransportBoat)
+                    queueExists))
             {
                 Cancel(pActor, AWPathFailureReason.CancelledByNewRequest);
-                return;
-            }
-            Vector2 initialNextStep = pActor.next_step_position;
-            bool nextStepValid = !float.IsNaN(initialNextStep.x) &&
-                                 !float.IsNaN(initialNextStep.y) &&
-                                 !float.IsInfinity(initialNextStep.x) &&
-                                 !float.IsInfinity(initialNextStep.y) &&
-                                 initialNextStep.x > -99999f &&
-                                 initialNextStep.y > -9999f;
-            if (!AWPathLifecycleRules.ShouldAdvanceSmoothMovement(
-                    pActor.is_moving, nextStepValid))
-            {
-                if (pActor.is_moving)
-                {
-                    Cancel(pActor,
-                        AWPathFailureReason.CancelledByNewRequest);
-                    StopMovementSafely(pActor);
-                }
                 return;
             }
             pElapsed = AWPathLifecycleRules.NormalizeMovementElapsed(
@@ -1073,7 +565,7 @@ namespace AncientWarfare3.core.pathfinding
                         pHandleNoRequest: false)) return;
             }
 
-            StopMovementSafely(pActor);
+            pActor.stopMovement();
         }
 
         private static bool TryMove(Actor pActor, AWPathStep pStep)
@@ -1083,9 +575,7 @@ namespace AncientWarfare3.core.pathfinding
             WorldTile tile = tiles[pStep.TileId];
             if (tile?.Type == null || pActor.current_tile == null) return false;
             if (pStep.Method == AWMovementMethod.Transport)
-                return StartTransport(pActor, pStep);
-            if ((pStep.Hazards & AWHazardFlags.Direct) == 0 &&
-                HasPathRelevantTerrainChanged(pStep, tile)) return false;
+                return StartTransport(pActor, tile);
             if ((pStep.Hazards & AWHazardFlags.Direct) == 0 &&
                 Toolbox.SquaredDistTile(pActor.current_tile, tile) > 2) return false;
             if (pActor.asset.is_boat && !tile.isGoodForBoat()) return false;
@@ -1104,8 +594,6 @@ namespace AncientWarfare3.core.pathfinding
 
             bool adjacentStep = (pStep.Hazards & AWHazardFlags.Direct) == 0;
             bool plannedFire = (pStep.Hazards & AWHazardFlags.Fire) != 0;
-            bool p0TransportBoat = pActor.asset.is_boat &&
-                ArmyRtsTransportService.OwnsTransportBoat(pActor);
             SlowMoveReason slowMoveReason = pActor.asset.is_boat
                 ? SlowMoveReason.Boat
                 : SlowMoveReason.None;
@@ -1121,7 +609,7 @@ namespace AncientWarfare3.core.pathfinding
                 }
             }
 
-            if (useFastMove || p0TransportBoat)
+            if (useFastMove)
             {
                 if (!FastMoveTo(pActor, tile, adjacentStep)) return false;
                 AWPathfindingBootstrap.PathDiagnostics.OnFastStep();
@@ -1200,98 +688,24 @@ namespace AncientWarfare3.core.pathfinding
             bool batchExists = pActor?.batch != null;
             bool movementQueueExists = batchExists &&
                                        pActor.batch.c_update_movement != null;
-            bool p0TransportBoat = actorExists && actorAlive &&
-                pActor.asset?.is_boat == true &&
-                ArmyRtsTransportService.OwnsTransportBoat(pActor);
-            if ((!AWPathLifecycleRules.HasUsableMovementBatch(actorExists,
-                    actorAlive, batchExists, movementQueueExists) &&
-                 !p0TransportBoat) ||
+            if (!AWPathLifecycleRules.HasUsableMovementBatch(actorExists,
+                    actorAlive, batchExists, movementQueueExists) ||
                 pTile?.data == null || pActor.current_tile?.data == null)
                 return false;
             if (!pActor._is_moving)
             {
                 pActor._is_moving = true;
-                if (movementQueueExists)
-                    pActor.batch.c_update_movement.Add(pActor);
+                pActor.batch.c_update_movement.Add(pActor);
             }
 
             pActor._next_step_tile = pTile;
-            if (p0TransportBoat || pAdjacentStep)
-                SetCurrentTile(pActor, pTile);
+            if (pAdjacentStep)
+                pActor.current_tile = pTile;
             else if (Toolbox.SquaredDistTile(pActor.current_tile, pTile) > 4f)
                 pActor.dirty_current_tile = true;
             else
-                SetCurrentTile(pActor, pTile);
-
+                pActor.current_tile = pTile;
             return true;
-        }
-
-        private static bool HasPathRelevantTerrainChanged(AWPathStep pStep,
-            WorldTile pTile)
-        {
-            AWPathTileFlags current = CaptureRuntimeTileFlags(pTile) &
-                                      AWPathTileFlagsExtensions.RuntimeRelevant;
-            AWPathTileFlags planned = pStep.PlannedTileFlags &
-                                      AWPathTileFlagsExtensions.RuntimeRelevant;
-            return current != planned;
-        }
-
-        private static AWPathTileFlags CaptureRuntimeTileFlags(WorldTile pTile)
-        {
-            if (pTile?.data == null) return AWPathTileFlags.None;
-            AWPathTileFlags flags = AWPathTileFlags.Exists;
-            TileTypeBase type = pTile.Type;
-            if (type != null)
-            {
-                flags |= AWPathTileFlags.HasType;
-                if (type.block) flags |= AWPathTileFlags.Block;
-                if (type.lava) flags |= AWPathTileFlags.Lava;
-                if (type.ocean) flags |= AWPathTileFlags.Ocean;
-                if (type.liquid) flags |= AWPathTileFlags.Liquid;
-                if (type.damage_units) flags |= AWPathTileFlags.DamageUnits;
-            }
-            try
-            {
-                if (pTile.isOnFire()) flags |= AWPathTileFlags.Fire;
-            }
-            catch
-            {
-                // World teardown may make the live fire collection unavailable.
-            }
-            return flags;
-        }
-
-        private static void SetCurrentTile(
-            Actor pActor,
-            WorldTile pTile)
-        {
-            WorldTile previousTile = pActor.current_tile;
-            if (ReferenceEquals(previousTile, pTile))
-            {
-                return;
-            }
-
-            pActor.current_tile = pTile;
-            AWActorZoneMembershipDirtyIndex.Mark(
-                pActor,
-                AWActorZoneDirtyKind.Spatial);
-        }
-
-        private static void StopMovementSafely(Actor pActor)
-        {
-            if (pActor?.batch != null &&
-                pActor.batch.c_update_movement != null)
-            {
-                pActor.stopMovement();
-                return;
-            }
-
-            pActor._is_moving = false;
-            pActor._next_step_tile = null;
-            pActor.clearOldPath();
-            pActor.clearTileTarget();
-            pActor.next_step_position = pActor.current_position;
-            pActor.dirty_current_tile = true;
         }
 
         private static void ApplyStepActionForCurrentTile(Actor pActor)
@@ -1342,42 +756,28 @@ namespace AncientWarfare3.core.pathfinding
                    pReason == SlowMoveReason.PlantLaw;
         }
 
-        private static bool StartTransport(Actor pActor, AWPathStep pStep)
+        private static bool StartTransport(Actor pActor, WorldTile pTarget)
         {
-            WorldTile[] tiles = World.world?.tiles_list;
-            if (tiles == null || pStep.TileId < 0 ||
-                pStep.TileId >= tiles.Length) return false;
-            WorldTile pTarget = tiles[pStep.TileId];
-            bool dockPortal = pStep.EntryPortalId > 0L &&
-                              pStep.ExitPortalId > 0L;
-            bool shorePortal = pStep.EntryPortalId == 0L &&
-                               pStep.ExitPortalId == 0L;
             if (pActor?.current_tile?.data == null || pTarget?.data == null ||
-                pStep.EntryLandTileId < 0 || pStep.PickupSeaTileId < 0 ||
-                pStep.DestinationSeaTileId < 0 ||
-                pStep.LandingLandTileId < 0 ||
-                (!dockPortal && !shorePortal) ||
-                (dockPortal &&
-                 (!AWDockTransportService.IsEndpointLive(
-                      pStep.EntryPortalId) ||
-                  !AWDockTransportService.IsEndpointLive(
-                      pStep.ExitPortalId))) ||
                 !AWDockTransportRules.CanCreatePhysicalRoute(
                     pActor.current_tile.data.tile_id, pTarget.data.tile_id,
                     pActor.current_tile.isSameIsland(pTarget),
-                    pActor.is_inside_boat)) return false;
+                    pActor.is_inside_boat) ||
+                !AWDockTransportService.TryResolveRoute(pActor.current_tile,
+                    pTarget, out _)) return false;
             if (!RetryContexts.TryGetValue(pActor.data.id, out RetryContext retry)) return false;
-            if (!AWDockTaxiRouteService.TryCreateOrJoinRequest(
-                    pActor, pStep, out TaxiRequest routeRequest) ||
-                routeRequest == null) return false;
+            TaxiManager.newRequest(pActor, pTarget);
+            if (TaxiManager.getRequestForActor(pActor) == null) return false;
             AWPathfindingBootstrap.PathDiagnostics.OnDockRequest();
 
             double now = Time.realtimeSinceStartupAsDouble;
             long actorId = pActor.data.id;
+            AWDockTransportService.TryResolveRoute(pActor.current_tile, pTarget,
+                out AWDockRouteCandidate route);
             TransportContexts[actorId] = new TransportContext(pActor, pTarget.data.tile_id,
                 retry.Options, now, pObservedInsideBoat: false,
-                pNextPollAt: now, pEntryDockId: pStep.EntryPortalId,
-                pExitDockId: pStep.ExitPortalId);
+                pNextPollAt: now, pEntryDockId: route.Entry.Id,
+                pExitDockId: route.Exit.Id);
             TrySetNotMoving(pActor);
             pActor.next_step_position = pActor.current_tile.posV3;
             return true;
@@ -1390,7 +790,6 @@ namespace AncientWarfare3.core.pathfinding
                 return;
             if (pActor.isRekt())
             {
-                CancelTaxiForActor(pActor);
                 RemoveTransportContext(pActor.data.id);
                 return;
             }
@@ -1402,35 +801,14 @@ namespace AncientWarfare3.core.pathfinding
                 FailTransport(pActor, AWPathFailureReason.TransportFailed, pCancelTaxi: true);
                 return;
             }
-            bool entryEndpointInvalid = context.EntryDockId > 0L &&
-                !AWDockTransportService.IsEndpointLive(
-                    context.EntryDockId);
-            bool exitEndpointInvalid = context.ExitDockId > 0L &&
-                !AWDockTransportService.IsEndpointLive(
-                    context.ExitDockId);
-            if (!pActor.is_inside_boat &&
-                (entryEndpointInvalid || exitEndpointInvalid))
+            if (!AWDockTransportService.IsEndpointLive(context.EntryDockId) ||
+                !AWDockTransportService.IsEndpointLive(context.ExitDockId))
             {
                 FailTransport(pActor, AWPathFailureReason.TransportFailed,
                     pCancelTaxi: true);
                 return;
             }
             TaxiRequest request = TaxiManager.getRequestForActor(pActor);
-            if (pActor.is_inside_boat &&
-                (request == null ||
-                 !AWDockTaxiRouteService.HasLiveAssignedBoat(request)))
-            {
-                try
-                {
-                    pActor.is_inside_boat = false;
-                    pActor.inside_boat = null;
-                    AWInsideBoatActorIndex.Notify(pActor, false);
-                }
-                catch { }
-                FailTransport(pActor, AWPathFailureReason.TransportFailed,
-                    pCancelTaxi: true);
-                return;
-            }
             double now = Time.realtimeSinceStartupAsDouble;
             bool reachedDestination = pActor.current_tile != null &&
                                       pActor.current_tile.isSameIsland(target);
@@ -1468,7 +846,7 @@ namespace AncientWarfare3.core.pathfinding
             if (pActor.current_tile != null && pActor.current_tile.isSameIsland(target))
             {
                 RemoveTransportContext(pActor.data.id);
-                TerminalPolls.TryRemove(pActor.data.id, out _);
+                TerminalPolls.Remove(pActor.data.id);
                 AWPathfindingBootstrap.RecoveryManager.OnProgress(pActor.data.id);
                 AWPathWorkClass workClass = RetryContexts.TryGetValue(
                     pActor.data.id, out RetryContext retry)
@@ -1488,7 +866,7 @@ namespace AncientWarfare3.core.pathfinding
         private static void FailTransport(Actor pActor, AWPathFailureReason pReason,
             bool pCancelTaxi)
         {
-            if (pCancelTaxi)
+            if (pCancelTaxi && !pActor.is_inside_boat)
                 CancelTaxiForActor(pActor);
             RemoveTransportContext(pActor.data.id);
             AWPathfindingBootstrap.Finder?.Cancel(pActor.data.id, pReason);
@@ -1498,7 +876,7 @@ namespace AncientWarfare3.core.pathfinding
         private static void CancelTransport(Actor pActor)
         {
             if (pActor?.data == null || !TransportContexts.ContainsKey(pActor.data.id)) return;
-            CancelTaxiForActor(pActor);
+            if (!pActor.is_inside_boat) CancelTaxiForActor(pActor);
             RemoveTransportContext(pActor.data.id);
         }
 
@@ -1514,7 +892,7 @@ namespace AncientWarfare3.core.pathfinding
 
         private static void RemoveTransportContext(long pActorId)
         {
-            TransportContexts.TryRemove(pActorId, out _);
+            TransportContexts.Remove(pActorId);
         }
 
         private static void HandleFailure(Actor pActor, AWPathFailureReason pReason)
@@ -1524,8 +902,6 @@ namespace AncientWarfare3.core.pathfinding
             double now = Time.realtimeSinceStartupAsDouble;
             AWPathRetryDecision retry = AWPathfindingBootstrap.RecoveryManager.OnFailure(
                 pActor.data.id, pReason, now);
-            FailureDiagnostics[pActor.data.id] = new FailureDiagnostic(
-                pReason, retry.Attempt, retry.DueTime);
             if (retry.ShouldRetry)
             {
                 AWPathfindingBootstrap.PathDiagnostics.OnBoatRetry();
@@ -1586,8 +962,8 @@ namespace AncientWarfare3.core.pathfinding
             bool continueBehaviour =
                 AWPathLifecycleRules.ShouldContinueBehaviourAfterTerminalFailure(
                     pActor.ai?.task?.id);
-            RetryContexts.TryRemove(pActor.data.id, out _);
-            TerminalPolls.TryRemove(pActor.data.id, out _);
+            RetryContexts.Remove(pActor.data.id);
+            TerminalPolls.Remove(pActor.data.id);
             OwnedActors.Remove(pActor.data.id);
             AWPathfindingBootstrap.RecoveryManager.Clear(pActor.data.id);
             pActor.clearOldPath();
@@ -1640,8 +1016,8 @@ namespace AncientWarfare3.core.pathfinding
         {
             if (pActor?.data == null) return;
             long actorId = pActor.data.id;
-            RetryContexts.TryRemove(actorId, out _);
-            TerminalPolls.TryRemove(actorId, out _);
+            RetryContexts.Remove(actorId);
+            TerminalPolls.Remove(actorId);
             OwnedActors.Remove(actorId);
             AWPathfindingBootstrap.RecoveryManager.Clear(actorId);
             pActor.clearOldPath();
@@ -1704,8 +1080,7 @@ namespace AncientWarfare3.core.pathfinding
                 pActor.hasStatus("burning"), pActor.isInLiquid(), pActor.isInWater(),
                 pActor.getHealth(), pActor.getMaxHealth(), pActor.getStamina(),
                 pActor.getMaxStamina(), pActor.stats?["speed"] ?? 5f,
-                pActor.getWaterDamage() * 3.333f, staminaRegen, military,
-                pHasFastSwimming: pActor.hasTag("fast_swimming"));
+                pActor.getWaterDamage() * 3.333f, staminaRegen, military);
         }
 
         private static AWPathWorkClass ClassifyWork(Actor pActor,
@@ -1769,21 +1144,6 @@ namespace AncientWarfare3.core.pathfinding
             public double AcceptedNoProgressAt { get; }
             public AWPathWorkClass WorkClass { get; }
             public double NextPollAt { get; }
-        }
-
-        private readonly struct FailureDiagnostic
-        {
-            public FailureDiagnostic(AWPathFailureReason pReason,
-                int pAttempt, double pDueTime)
-            {
-                Reason = pReason;
-                Attempt = pAttempt;
-                DueTime = pDueTime;
-            }
-
-            public AWPathFailureReason Reason { get; }
-            public int Attempt { get; }
-            public double DueTime { get; }
         }
 
         private readonly struct TransportContext

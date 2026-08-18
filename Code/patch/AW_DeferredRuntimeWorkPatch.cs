@@ -1,4 +1,5 @@
 using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.naming;
 using AncientWarfare3.core.performance;
@@ -24,7 +25,7 @@ namespace AncientWarfare3.patch
             }
 
             MeasureOutside(RecentFeatureBenchmarkRules.AsyncCommitIndex,
-                "historical_read_completion", DrainPresentationCompletions);
+                "async_completion_drain", DrainPresentationCompletions);
             MeasureOutside(
                 RecentFeatureBenchmarkRules.LocalizedNameRefreshIndex,
                 "localized_name_refresh",
@@ -36,7 +37,39 @@ namespace AncientWarfare3.patch
 
         private static void DrainPresentationCompletions()
         {
-            AWHistoricalReadService.DrainMainThread(0.5, 16);
+            long deadline = System.Diagnostics.Stopwatch.GetTimestamp() +
+                (long)(System.Diagnostics.Stopwatch.Frequency *
+                    AWAsyncCompletionDrainRules.FrameBudgetMilliseconds /
+                    1000d);
+
+            int pending = AWAsyncRuntime.SnapshotDiagnostics().Completions;
+            int itemLimit = AWAsyncCompletionDrainRules.ResolveItemLimit(
+                pending);
+            if (itemLimit > 0)
+                AWAsyncRuntime.DrainMainThread(
+                    AWAsyncCompletionDrainRules.RemainingMilliseconds(
+                        deadline), itemLimit);
+
+            if (AWAsyncCompletionDrainRules.HasTime(deadline))
+                AWAsyncShadowRuntime.DrainMainThread(2);
+
+            int historicalReadPending = AWHistoricalReadService.PendingCount;
+            int readLimit = AWAsyncCompletionDrainRules.ResolveItemLimit(
+                historicalReadPending);
+            if (readLimit > 0 &&
+                AWAsyncCompletionDrainRules.HasTime(deadline))
+                AWHistoricalReadService.DrainMainThread(
+                    AWAsyncCompletionDrainRules.RemainingMilliseconds(
+                        deadline), readLimit);
+
+            int historicalWritePending = HistoricalWriteService.PendingCount;
+            int writeLimit = AWAsyncCompletionDrainRules.ResolveBatchLimit(
+                historicalWritePending);
+            if (writeLimit > 0 &&
+                AWAsyncCompletionDrainRules.HasTime(deadline))
+                HistoricalWriteService.DrainCompletions(
+                    AWAsyncCompletionDrainRules.RemainingMilliseconds(
+                        deadline), writeLimit);
         }
 
         private static void DrainFamilyTreeCleanup()

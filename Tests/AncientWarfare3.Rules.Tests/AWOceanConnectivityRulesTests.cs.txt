@@ -1,0 +1,42 @@
+using System;
+using AncientWarfare3.core.pathfinding;
+
+internal static class AWOceanConnectivityRulesTests
+{
+    internal static void Run()
+    {
+        var tiles = new AWTileTraversalSnapshot[5];
+        tiles[0] = new AWTileTraversalSnapshot(0, 0, 0,
+            ocean: true, pNeighbors: new[] { 1 });
+        tiles[1] = new AWTileTraversalSnapshot(1, 1, 0,
+            ocean: true, pNeighbors: new[] { 0, 2 });
+        tiles[2] = new AWTileTraversalSnapshot(2, 2, 0,
+            ocean: true, pNeighbors: new[] { 1 });
+        tiles[3] = new AWTileTraversalSnapshot(3, 3, 0,
+            liquid: true, pNeighbors: new[] { 4 });
+        tiles[4] = new AWTileTraversalSnapshot(4, 4, 0,
+            liquid: true, pNeighbors: new[] { 3 });
+        int[] components = AWOceanConnectivityRules.Compute(5, 1, tiles);
+        Assert(AWOceanConnectivityRules.SameWaterBody(0, 2, components),
+            "connected ocean tiles share a component");
+        Assert(!AWOceanConnectivityRules.SameWaterBody(0, 3, components),
+            "separate water bodies do not share a component");
+        Assert(!AWOceanConnectivityRules.SameWaterBody(0, 5, components),
+            "out of range docks never form a route");
+
+        var chunks = new[] { new AWTileTraversalSnapshot[25] };
+        Array.Copy(tiles, chunks[0], tiles.Length);
+        var input = new AWTraversalBuildInput(1L, 1, 1L, 5, 1, 5,
+            chunks, Array.Empty<AWTraversalChunkCapture>());
+        AWTraversalBuildResult result = AWTraversalBuildRules.Build(input);
+        Assert(result.Chunks[0][0].OceanComponent >= 0 &&
+               result.Chunks[0][0].OceanComponent ==
+               result.Chunks[0][2].OceanComponent,
+            "background traversal publication annotates physical water bodies");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

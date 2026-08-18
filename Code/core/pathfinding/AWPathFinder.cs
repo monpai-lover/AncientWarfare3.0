@@ -57,7 +57,7 @@ namespace AncientWarfare3.core.pathfinding
         private readonly AWPathDiagnostics _diagnostics;
         private readonly ConcurrentDictionary<long, PathSessionRecord> _sessions =
             new ConcurrentDictionary<long, PathSessionRecord>();
-        private readonly object _lifecycleGate = new object();
+        private readonly object _requestGate = new object();
         private readonly ConcurrentQueue<AWScheduledPathWork> _starvedQueue =
             new ConcurrentQueue<AWScheduledPathWork>();
         private readonly ConcurrentQueue<AWScheduledPathWork> _initialQueue =
@@ -65,17 +65,10 @@ namespace AncientWarfare3.core.pathfinding
         private readonly ConcurrentQueue<AWScheduledPathWork> _continuationQueue =
             new ConcurrentQueue<AWScheduledPathWork>();
         private readonly SemaphoreSlim _queueSignal = new SemaphoreSlim(0);
-        private readonly ManualResetEventSlim _drained =
-            new ManualResetEventSlim(false);
         private Thread[] _workers = Array.Empty<Thread>();
         private int _started;
         private int _stopping;
-        private int _disposed;
-        private int _requestAdmissions;
         private int _queueDepth;
-        private int _operationalQueued;
-        private int _essentialQueued;
-        private int _ambientQueued;
         private int _consecutiveStarvedWork;
         private long _staleWorkCount;
 
@@ -98,46 +91,23 @@ namespace AncientWarfare3.core.pathfinding
 
         internal AWPathQueueSnapshot SnapshotQueues()
         {
-            int operationalActive = 0;
-            int essentialActive = 0;
-            int ambientActive = 0;
-            foreach (PathSessionRecord record in _sessions.Values)
-            {
-                lock (record.Gate)
-                {
-                    CountWork(record.Latest?.Request?.WorkClass, active: true,
-                        ref operationalActive, ref essentialActive,
-                        ref ambientActive);
-                }
-            }
-            return new AWPathQueueSnapshot(
-                Math.Max(0, Volatile.Read(ref _operationalQueued)),
-                Math.Max(0, Volatile.Read(ref _essentialQueued)),
-                Math.Max(0, Volatile.Read(ref _ambientQueued)),
-                operationalActive, essentialActive, ambientActive);
+            lock (_requestGate) return SnapshotQueuesLocked();
         }
 
         public void Start(int pWorkers)
         {
-            lock (_lifecycleGate)
+            if (Interlocked.CompareExchange(ref _started, 1, 0) != 0) return;
+            int count = Math.Max(1, Math.Min(8, pWorkers));
+            _workers = new Thread[count];
+            for (int i = 0; i < count; i++)
             {
-                if (Volatile.Read(ref _stopping) != 0 ||
-                    Interlocked.CompareExchange(ref _started, 1, 0) != 0)
-                    return;
-                int count = Math.Max(1, Math.Min(
-                    AWPathfindingConfig.MaximumWorkerCount, pWorkers));
-                _workers = new Thread[count];
-                for (int i = 0; i < count; i++)
+                var thread = new Thread(WorkerLoop)
                 {
-                    var thread = new Thread(WorkerLoop)
-                    {
-                        IsBackground = true,
-                        Name = "AW3 Path Worker " + (i + 1),
-                        Priority = ThreadPriority.Normal
-                    };
-                    _workers[i] = thread;
-                    thread.Start();
-                }
+                    IsBackground = true,
+                    Name = "AW3 Path Worker " + (i + 1)
+                };
+                _workers[i] = thread;
+                thread.Start();
             }
         }
 
@@ -153,35 +123,6 @@ namespace AncientWarfare3.core.pathfinding
             out AWPathSubmissionDisposition pDisposition)
         {
             pDisposition = AWPathSubmissionDisposition.Rejected;
-            if (!TryEnterRequestAdmission())
-            {
-                Reject(pRequest, pDisposition);
-                return false;
-            }
-
-            try
-            {
-                return RequestLocked(pRequest, out pDisposition);
-            }
-            finally
-            {
-                Interlocked.Decrement(ref _requestAdmissions);
-            }
-        }
-
-        private bool TryEnterRequestAdmission()
-        {
-            if (Volatile.Read(ref _stopping) != 0) return false;
-            Interlocked.Increment(ref _requestAdmissions);
-            if (Volatile.Read(ref _stopping) == 0) return true;
-            Interlocked.Decrement(ref _requestAdmissions);
-            return false;
-        }
-
-        private bool RequestLocked(AWPathRequest pRequest,
-            out AWPathSubmissionDisposition pDisposition)
-        {
-            pDisposition = AWPathSubmissionDisposition.Rejected;
             if (pRequest == null || Volatile.Read(ref _started) == 0 ||
                 Volatile.Read(ref _stopping) != 0)
             {
@@ -189,60 +130,51 @@ namespace AncientWarfare3.core.pathfinding
                 return false;
             }
 
-            while (true)
+            lock (_requestGate)
             {
                 if (_sessions.TryGetValue(pRequest.ActorId,
                         out PathSessionRecord existing))
                 {
-                    lock (existing.Gate)
+                    PathfindingTask latest = existing.Latest;
+                    if (CanReuse(latest, pRequest.ReuseKey))
                     {
-                        if (!_sessions.TryGetValue(pRequest.ActorId,
-                                out PathSessionRecord current) ||
-                            !ReferenceEquals(current, existing) ||
-                            existing.Latest == null)
-                            continue;
-                        PathfindingTask latest = existing.Latest;
-                        if (CanReuse(latest, pRequest.ReuseKey))
-                        {
-                            pRequest.Dispose();
-                            pDisposition = AWPathSubmissionDisposition.Reused;
-                            if (existing.Running != null)
-                                _diagnostics?.OnReusedRunning();
-                            _diagnostics?.OnSubmission(
-                                latest.Request.WorkClass, pDisposition);
-                            return true;
-                        }
-
-                        pDisposition = existing.Running != null
-                            ? AWPathSubmissionDisposition.ReplacedRunning
-                            : AWPathSubmissionDisposition.ReplacedPending;
-                        ReplaceLocked(existing, pRequest);
-                        _diagnostics?.OnSubmission(pRequest.WorkClass,
+                        pRequest.Dispose();
+                        pDisposition = AWPathSubmissionDisposition.Reused;
+                        if (existing.Running != null)
+                            _diagnostics?.OnReusedRunning();
+                        _diagnostics?.OnSubmission(latest.Request.WorkClass,
                             pDisposition);
                         return true;
                     }
+
+                    pDisposition = existing.Running != null
+                        ? AWPathSubmissionDisposition.ReplacedRunning
+                        : AWPathSubmissionDisposition.ReplacedPending;
+                    ReplaceLocked(existing, pRequest);
+                    _diagnostics?.OnSubmission(pRequest.WorkClass,
+                        pDisposition);
+                    return true;
                 }
 
-                var record = new PathSessionRecord(pRequest.ActorId);
-                lock (record.Gate)
+                var task = new PathfindingTask(pRequest);
+                var record = new PathSessionRecord(pRequest.ActorId, task);
+                if (!_sessions.TryAdd(pRequest.ActorId, record))
                 {
-                    if (!_sessions.TryAdd(pRequest.ActorId, record)) continue;
-                    var task = new PathfindingTask(pRequest);
-                    record.Latest = task;
-                    record.Queued = task;
-                    if (!ScheduleLocked(record,
-                            PriorityFor(pRequest.WorkClass)))
-                    {
-                        ((ICollection<KeyValuePair<long, PathSessionRecord>>)_sessions)
-                            .Remove(new KeyValuePair<long, PathSessionRecord>(
-                                pRequest.ActorId, record));
-                        task.Cancel(
-                            AWPathFailureReason.CancelledByNewRequest);
-                        task.ReleaseOwner();
-                        task.ReleaseWorker();
-                        Reject(null, pDisposition);
-                        return false;
-                    }
+                    task.Cancel(AWPathFailureReason.CancelledByNewRequest);
+                    task.ReleaseOwner();
+                    task.ReleaseWorkerIfNotStarted();
+                    Reject(null, pDisposition);
+                    return false;
+                }
+                record.Queued = task;
+                if (!ScheduleLocked(record, PriorityFor(pRequest.WorkClass)))
+                {
+                    _sessions.TryRemove(pRequest.ActorId, out _);
+                    task.Cancel(AWPathFailureReason.CancelledByNewRequest);
+                    task.ReleaseOwner();
+                    task.ReleaseWorkerIfNotStarted();
+                    Reject(null, pDisposition);
+                    return false;
                 }
                 pDisposition = AWPathSubmissionDisposition.Submitted;
                 _diagnostics?.OnSubmission(pRequest.WorkClass, pDisposition);
@@ -253,42 +185,33 @@ namespace AncientWarfare3.core.pathfinding
         public bool TryReuse(AWPathReuseKey pReuseKey)
         {
             if (!_sessions.TryGetValue(pReuseKey.ActorId,
-                    out PathSessionRecord record)) return false;
-            lock (record.Gate)
-            {
-                if (!CanReuse(record.Latest, pReuseKey)) return false;
-                if (record.Running != null) _diagnostics?.OnReusedRunning();
-                _diagnostics?.OnSubmission(record.Latest.Request.WorkClass,
-                    AWPathSubmissionDisposition.Reused);
-                return true;
-            }
+                    out PathSessionRecord record) ||
+                !CanReuse(record.Latest, pReuseKey)) return false;
+            if (record.Running != null) _diagnostics?.OnReusedRunning();
+            _diagnostics?.OnSubmission(record.Latest.Request.WorkClass,
+                AWPathSubmissionDisposition.Reused);
+            return true;
         }
 
         public bool IsWaitingForWorker(long pActorId)
         {
-            if (!_sessions.TryGetValue(pActorId,
-                    out PathSessionRecord record)) return false;
-            lock (record.Gate)
-                return record.Queued != null &&
-                       ReferenceEquals(record.Latest, record.Queued);
+            return _sessions.TryGetValue(pActorId, out PathSessionRecord record) &&
+                   record.Queued != null && ReferenceEquals(record.Latest,
+                       record.Queued);
         }
 
         public bool IsWorkerRunning(long pActorId)
         {
-            if (!_sessions.TryGetValue(pActorId,
-                    out PathSessionRecord record)) return false;
-            lock (record.Gate)
-                return record.Running != null &&
-                       ReferenceEquals(record.Latest, record.Running);
+            return _sessions.TryGetValue(pActorId, out PathSessionRecord record) &&
+                   record.Running != null && ReferenceEquals(record.Latest,
+                       record.Running);
         }
 
         public AWPathPollResult Poll(long pActorId)
         {
             if (!_sessions.TryGetValue(pActorId, out PathSessionRecord record))
                 return new AWPathPollResult(AWPathPollKind.NoRequest);
-            PathfindingTask task;
-            lock (record.Gate) task = record.Latest;
-            return PollOwned(pActorId, task);
+            return PollOwned(pActorId, record.Latest);
         }
 
         public AWPathPollResult OpenReadyCursor(long pActorId,
@@ -297,12 +220,10 @@ namespace AncientWarfare3.core.pathfinding
             pCursor = default;
             if (!_sessions.TryGetValue(pActorId, out PathSessionRecord record))
                 return new AWPathPollResult(AWPathPollKind.NoRequest);
-            PathfindingTask task;
-            lock (record.Gate) task = record.Latest;
-            if (task == null)
-                return new AWPathPollResult(AWPathPollKind.NoRequest);
+            PathfindingTask task = record.Latest;
             AWPathPollResult result = PollOwned(pActorId, task);
-            pCursor = new ReadyPathCursor(this, pActorId, task);
+            if (result.Kind == AWPathPollKind.StepReady)
+                pCursor = new ReadyPathCursor(this, pActorId, task);
             return result;
         }
 
@@ -313,18 +234,14 @@ namespace AncientWarfare3.core.pathfinding
 
         private bool Consume(long pActorId, PathfindingTask pExpectedTask)
         {
-            if (!_sessions.TryGetValue(pActorId,
-                    out PathSessionRecord record)) return false;
-            bool shouldCleanup = false;
-            bool consumed = false;
-            PathfindingTask task;
-            lock (record.Gate)
+            lock (_requestGate)
             {
-                task = record.Latest;
+                if (!_sessions.TryGetValue(pActorId,
+                        out PathSessionRecord record)) return false;
+                PathfindingTask task = record.Latest;
                 if (pExpectedTask != null &&
                     !ReferenceEquals(task, pExpectedTask)) return false;
                 if (!task.Request.Stream.TryTake(out _)) return false;
-                consumed = true;
                 if (task.Request.Stream.Count <= SegmentLowWatermark)
                 {
                     if (ScheduleLocked(record,
@@ -334,139 +251,52 @@ namespace AncientWarfare3.core.pathfinding
                         // burst of consumers cannot enqueue duplicates.
                     }
                 }
-                shouldCleanup = task.Request.Stream.Count == 0 &&
-                    IsTerminal(task.Request.Stream.State);
+                CleanupConsumedTerminal(pActorId, task);
+                return true;
             }
-            if (shouldCleanup) CleanupOwned(pActorId, task);
-            return consumed;
         }
 
         public void Cancel(long pActorId, AWPathFailureReason pReason)
         {
-            while (_sessions.TryGetValue(pActorId,
-                       out PathSessionRecord record))
+            lock (_requestGate)
             {
-                lock (record.Gate)
-                {
-                    if (!((ICollection<KeyValuePair<long,
-                            PathSessionRecord>>)_sessions).Remove(
-                            new KeyValuePair<long, PathSessionRecord>(
-                                pActorId, record)))
-                        continue;
+                if (_sessions.TryRemove(pActorId, out PathSessionRecord record))
                     CancelRecordLocked(record, pReason);
-                    return;
-                }
             }
         }
 
         public void Clear(AWPathFailureReason pReason)
         {
-            lock (_lifecycleGate) ClearLocked(pReason);
-        }
-
-        private void ClearLocked(AWPathFailureReason pReason)
-        {
-            foreach (KeyValuePair<long, PathSessionRecord> pair in _sessions)
+            lock (_requestGate)
             {
-                PathSessionRecord record = pair.Value;
-                lock (record.Gate)
+                foreach (KeyValuePair<long, PathSessionRecord> pair in _sessions)
                 {
-                    if (!((ICollection<KeyValuePair<long,
-                            PathSessionRecord>>)_sessions).Remove(
-                            new KeyValuePair<long, PathSessionRecord>(
-                                pair.Key, record)))
-                        continue;
-                    CancelRecordLocked(record, pReason);
+                    if (_sessions.TryRemove(pair.Key, out PathSessionRecord record))
+                        CancelRecordLocked(record, pReason);
                 }
             }
         }
 
         public void StopAndDrain()
         {
-            bool ownsDrain;
-            lock (_lifecycleGate)
-            {
-                ownsDrain = Interlocked.CompareExchange(
-                    ref _stopping, 1, 0) == 0;
-            }
-            if (!ownsDrain)
-            {
-                _drained.Wait();
-                return;
-            }
-
-            WaitForRequestAdmissions();
-            Thread[] workers;
-            lock (_lifecycleGate)
-            {
-                ClearLocked(AWPathFailureReason.WorldCleared);
-                workers = _workers;
-                for (int i = 0; i < workers.Length; i++)
-                    _queueSignal.Release();
-            }
-            foreach (Thread worker in workers)
+            if (Interlocked.Exchange(ref _stopping, 1) != 0) return;
+            Clear(AWPathFailureReason.WorldCleared);
+            for (int i = 0; i < _workers.Length; i++) _queueSignal.Release();
+            foreach (Thread worker in _workers)
             {
                 if (worker == null || worker == Thread.CurrentThread) continue;
-                worker.Join();
+                worker.Join(5000);
             }
-            lock (_lifecycleGate)
-            {
-                _workers = Array.Empty<Thread>();
-                Volatile.Write(ref _stopping, 2);
-            }
-            _drained.Set();
+            _workers = Array.Empty<Thread>();
         }
 
         public void Dispose()
         {
             StopAndDrain();
-            if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                _queueSignal.Dispose();
+            _queueSignal.Dispose();
         }
 
-        private void WaitForRequestAdmissions()
-        {
-            SpinWait wait = new SpinWait();
-            while (Volatile.Read(ref _requestAdmissions) != 0)
-                wait.SpinOnce();
-        }
-
-        // Raw background thread entry point. An escaping exception is not
-        // routed through any Unity handler, so the CLR tears the process down
-        // with no dialog and no log: players see an unexplained silent crash.
-        // The inner guard below only covers path generation, leaving the
-        // session bookkeeping and the finally block able to kill the process.
-        // Supervise the loop instead, with a bounded restart budget so a
-        // persistently failing worker retires rather than spinning.
         private void WorkerLoop()
-        {
-            const int MaximumRestarts = 8;
-            for (int restart = 0; ; restart++)
-            {
-                try
-                {
-                    RunWorkerLoop();
-                    return;
-                }
-                catch (Exception error)
-                {
-                    try
-                    {
-                        AncientWarfare3.ModClass.LogWarning(
-                            "[AW3 path worker] unhandled worker fault " +
-                            "(restart " + restart + " of " +
-                            MaximumRestarts + "): " + error);
-                    }
-                    catch
-                    {
-                    }
-                    if (Volatile.Read(ref _stopping) != 0) return;
-                    if (restart >= MaximumRestarts) return;
-                }
-            }
-        }
-
-        private void RunWorkerLoop()
         {
             try
             {
@@ -479,16 +309,9 @@ namespace AncientWarfare3.core.pathfinding
 
                     PathfindingTask task = null;
                     PathSessionRecord record = null;
-                    if (!_sessions.TryGetValue(work.OwnerId, out record))
+                    lock (_requestGate)
                     {
-                        Interlocked.Increment(ref _staleWorkCount);
-                        continue;
-                    }
-                    lock (record.Gate)
-                    {
-                        if (!_sessions.TryGetValue(work.OwnerId,
-                                out PathSessionRecord current) ||
-                            !ReferenceEquals(current, record) ||
+                        if (!_sessions.TryGetValue(work.OwnerId, out record) ||
                             !record.Session.TryBeginWork(work.QueueVersion) ||
                             record.Queued == null)
                         {
@@ -498,6 +321,7 @@ namespace AncientWarfare3.core.pathfinding
                         task = record.Queued;
                         record.Queued = null;
                         record.Running = task;
+                        task.MarkWorkerStarted();
                     }
 
                     IAWPathSegmentGenerator segmentGenerator = _generator as
@@ -551,8 +375,9 @@ namespace AncientWarfare3.core.pathfinding
                                     task.Request.Stream.FailureReason,
                                     error.GetType().Name + ": " + error.Message));
                         }
-                        bool releaseWorker = true;
-                        lock (record.Gate)
+                        task.ReleaseWorker();
+
+                        lock (_requestGate)
                         {
                             if (_sessions.TryGetValue(work.OwnerId,
                                     out PathSessionRecord current) &&
@@ -572,13 +397,10 @@ namespace AncientWarfare3.core.pathfinding
                                 {
                                     if (record.Queued == null)
                                         record.Queued = record.Latest;
-                                    EnqueueLocked(record, replacement);
+                                    EnqueueLocked(replacement);
                                 }
-                                releaseWorker = !hasMoreSegments ||
-                                    !ReferenceEquals(record.Latest, task);
                             }
                         }
-                        if (releaseWorker) task.ReleaseWorker();
                     }
                 }
             }
@@ -625,7 +447,7 @@ namespace AncientWarfare3.core.pathfinding
                 replacedQueued = ReferenceEquals(pRecord.Queued, replaced);
                 pRecord.Queued.Cancel(AWPathFailureReason.CancelledByNewRequest);
                 pRecord.Queued.ReleaseOwner();
-                pRecord.Queued.ReleaseWorker();
+                pRecord.Queued.ReleaseWorkerIfNotStarted();
                 pRecord.Queued = null;
             }
             if (ReferenceEquals(replaced, pRecord.Running))
@@ -637,7 +459,7 @@ namespace AncientWarfare3.core.pathfinding
             {
                 replaced.Cancel(AWPathFailureReason.CancelledByNewRequest);
                 replaced.ReleaseOwner();
-                replaced.ReleaseWorker();
+                replaced.ReleaseWorkerIfNotStarted();
             }
 
             var latest = new PathfindingTask(pRequest);
@@ -654,52 +476,49 @@ namespace AncientWarfare3.core.pathfinding
                     out AWScheduledPathWork work)) return false;
             if (pRecord.Queued == null)
                 pRecord.Queued = pRecord.Latest;
-            EnqueueLocked(pRecord, work);
+            EnqueueLocked(work);
             return true;
         }
 
-        private void EnqueueLocked(PathSessionRecord pRecord,
-            AWScheduledPathWork pWork)
+        private void EnqueueLocked(AWScheduledPathWork pWork)
         {
-            AWPathWorkClass workClass = pRecord.Latest?.Request?.WorkClass ??
-                                        AWPathWorkClass.Ambient;
-            pWork = pWork.WithWorkClass(workClass);
             QueueFor(pWork.Priority).Enqueue(pWork);
             Interlocked.Increment(ref _queueDepth);
-            IncrementQueued(workClass);
-            ObserveQueuedCounters();
+            ObserveQueuesLocked();
             _queueSignal.Release();
         }
 
         private bool TryTakeWork(out AWScheduledPathWork pWork)
         {
-            AWPathWorkPriority priority = AWPathQueueFairnessRules.Select(
-                !_starvedQueue.IsEmpty, !_initialQueue.IsEmpty,
-                !_continuationQueue.IsEmpty,
-                Volatile.Read(ref _consecutiveStarvedWork));
-            bool dequeued = TryDequeue(priority, out pWork);
-            if (!dequeued)
+            lock (_requestGate)
             {
-                // A producer may have changed a queue between the snapshot
-                // and dequeue. Fall back to the remaining queues without
-                // relaxing the bounded-streak counter.
-                dequeued = _starvedQueue.TryDequeue(out pWork) ||
-                    _initialQueue.TryDequeue(out pWork) ||
-                    _continuationQueue.TryDequeue(out pWork);
-            }
-            if (!dequeued)
-            {
-                pWork = default;
-                return false;
-            }
+                AWPathWorkPriority priority = AWPathQueueFairnessRules.Select(
+                    !_starvedQueue.IsEmpty, !_initialQueue.IsEmpty,
+                    !_continuationQueue.IsEmpty,
+                    Volatile.Read(ref _consecutiveStarvedWork));
+                bool dequeued = TryDequeue(priority, out pWork);
+                if (!dequeued)
+                {
+                    // A producer may have changed a queue between the snapshot
+                    // and dequeue. Fall back to the remaining queues without
+                    // relaxing the bounded-streak counter.
+                    dequeued = _starvedQueue.TryDequeue(out pWork) ||
+                        _initialQueue.TryDequeue(out pWork) ||
+                        _continuationQueue.TryDequeue(out pWork);
+                }
+                if (!dequeued)
+                {
+                    pWork = default;
+                    return false;
+                }
 
-            if (pWork.Priority == AWPathWorkPriority.Starved)
-                Interlocked.Increment(ref _consecutiveStarvedWork);
-            else
-                Volatile.Write(ref _consecutiveStarvedWork, 0);
-            Interlocked.Decrement(ref _queueDepth);
-            DecrementQueued(pWork.WorkClass);
-            return true;
+                if (pWork.Priority == AWPathWorkPriority.Starved)
+                    Interlocked.Increment(ref _consecutiveStarvedWork);
+                else
+                    Volatile.Write(ref _consecutiveStarvedWork, 0);
+                Interlocked.Decrement(ref _queueDepth);
+                return true;
+            }
         }
 
         private bool TryDequeue(AWPathWorkPriority pPriority,
@@ -741,12 +560,13 @@ namespace AncientWarfare3.core.pathfinding
             PathfindingTask latest = pRecord.Latest;
             latest.Cancel(pReason);
             latest.ReleaseOwner();
-            if (!ReferenceEquals(pRecord.Running, latest))
-                latest.ReleaseWorker();
+            if (ReferenceEquals(pRecord.Queued, latest))
+                latest.ReleaseWorkerIfNotStarted();
             if (pRecord.Running != null && !ReferenceEquals(pRecord.Running,
                     latest))
                 pRecord.Running.Cancel(pReason);
             _diagnostics?.OnCancelled();
+            ObserveQueuesLocked();
         }
 
         private static bool CanReuse(PathfindingTask pTask,
@@ -778,18 +598,31 @@ namespace AncientWarfare3.core.pathfinding
 
         private void CleanupOwned(long pActorId, PathfindingTask pTask)
         {
-            if (!_sessions.TryGetValue(pActorId,
-                    out PathSessionRecord record)) return;
-            lock (record.Gate)
+            lock (_requestGate)
             {
-                if (!ReferenceEquals(record.Latest, pTask)) return;
-                if (!((ICollection<KeyValuePair<long,
-                        PathSessionRecord>>)_sessions).Remove(
-                        new KeyValuePair<long, PathSessionRecord>(
-                            pActorId, record))) return;
+                if (!_sessions.TryGetValue(pActorId,
+                        out PathSessionRecord record) ||
+                    !ReferenceEquals(record.Latest, pTask)) return;
+                _sessions.TryRemove(pActorId, out _);
                 record.Session.Cancel();
                 pTask.ReleaseOwner();
             }
+        }
+
+        private AWPathQueueSnapshot SnapshotQueuesLocked()
+        {
+            int operationalQueued = 0, essentialQueued = 0, ambientQueued = 0;
+            int operationalActive = 0, essentialActive = 0, ambientActive = 0;
+            foreach (PathSessionRecord record in _sessions.Values)
+            {
+                CountWork(record.Latest?.Request?.WorkClass, active: true,
+                    ref operationalActive, ref essentialActive, ref ambientActive);
+                if (record.Queued != null)
+                    CountWork(record.Queued.Request.WorkClass, active: false,
+                        ref operationalQueued, ref essentialQueued, ref ambientQueued);
+            }
+            return new AWPathQueueSnapshot(operationalQueued, essentialQueued,
+                ambientQueued, operationalActive, essentialActive, ambientActive);
         }
 
         private static void CountWork(AWPathWorkClass? pWorkClass, bool active,
@@ -803,44 +636,9 @@ namespace AncientWarfare3.core.pathfinding
             }
         }
 
-        private void IncrementQueued(AWPathWorkClass pWorkClass)
+        private void ObserveQueuesLocked()
         {
-            switch (pWorkClass)
-            {
-                case AWPathWorkClass.Operational:
-                    Interlocked.Increment(ref _operationalQueued);
-                    break;
-                case AWPathWorkClass.EssentialTravel:
-                    Interlocked.Increment(ref _essentialQueued);
-                    break;
-                default:
-                    Interlocked.Increment(ref _ambientQueued);
-                    break;
-            }
-        }
-
-        private void DecrementQueued(AWPathWorkClass pWorkClass)
-        {
-            switch (pWorkClass)
-            {
-                case AWPathWorkClass.Operational:
-                    Interlocked.Decrement(ref _operationalQueued);
-                    break;
-                case AWPathWorkClass.EssentialTravel:
-                    Interlocked.Decrement(ref _essentialQueued);
-                    break;
-                default:
-                    Interlocked.Decrement(ref _ambientQueued);
-                    break;
-            }
-        }
-
-        private void ObserveQueuedCounters()
-        {
-            _diagnostics?.ObserveQueue(new AWPathQueueSnapshot(
-                Math.Max(0, Volatile.Read(ref _operationalQueued)),
-                Math.Max(0, Volatile.Read(ref _essentialQueued)),
-                Math.Max(0, Volatile.Read(ref _ambientQueued)), 0, 0, 0));
+            _diagnostics?.ObserveQueue(SnapshotQueuesLocked());
         }
 
         private void Reject(AWPathRequest pRequest,
@@ -894,14 +692,21 @@ namespace AncientWarfare3.core.pathfinding
         internal sealed class PathfindingTask
         {
             private int _references = 2;
+            private int _workerStarted;
             private int _workerReleased;
 
             internal PathfindingTask(AWPathRequest pRequest) { Request = pRequest; }
             internal AWPathRequest Request { get; }
+            internal bool WorkerStarted => Volatile.Read(ref _workerStarted) != 0;
+            internal void MarkWorkerStarted() => Volatile.Write(ref _workerStarted, 1);
             internal void ReleaseOwner() => Release();
             internal void ReleaseWorker()
             {
                 if (Interlocked.Exchange(ref _workerReleased, 1) == 0) Release();
+            }
+            internal void ReleaseWorkerIfNotStarted()
+            {
+                if (!WorkerStarted) ReleaseWorker();
             }
             internal void Cancel(AWPathFailureReason pReason)
             {
@@ -917,12 +722,12 @@ namespace AncientWarfare3.core.pathfinding
 
         private sealed class PathSessionRecord
         {
-            internal PathSessionRecord(long pOwnerId)
+            internal PathSessionRecord(long pOwnerId, PathfindingTask pLatest)
             {
                 Session = new AWPathSession(pOwnerId);
+                Latest = pLatest;
             }
 
-            internal readonly object Gate = new object();
             internal readonly AWPathSession Session;
             internal PathfindingTask Latest;
             internal PathfindingTask Queued;

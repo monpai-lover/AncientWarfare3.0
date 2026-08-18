@@ -1,5 +1,3 @@
-using System;
-
 namespace AncientWarfare3.core.pathfinding
 {
     internal enum AWDockPassengerState
@@ -14,62 +12,6 @@ namespace AncientWarfare3.core.pathfinding
 
     internal static class AWDockTransportRules
     {
-        private const float MinimumTransportGainTiles = 8f;
-
-        internal static bool ShouldRefreshWorldRegistry(bool pWorldScanCompleted,
-            int pEndpointCount)
-        {
-            return !pWorldScanCompleted && pEndpointCount < 2;
-        }
-
-        internal static bool ShouldAttemptDockLookup(bool pSameIsland)
-        {
-            return !pSameIsland;
-        }
-
-        internal static bool ShouldRebuildTopology(bool topologyDirty,
-            long previousSourceRevision, long currentSourceRevision,
-            int dirtyTileCount, int lastRebuildFrame, int currentFrame)
-        {
-            if (dirtyTileCount > 0 || lastRebuildFrame == currentFrame)
-                return false;
-            return topologyDirty || previousSourceRevision !=
-                   currentSourceRevision;
-        }
-
-        internal static bool ShouldPreferTransport(float landRouteTiles,
-            float transportRouteTiles)
-        {
-            return IsFiniteNonNegative(landRouteTiles) &&
-                   IsFiniteNonNegative(transportRouteTiles) &&
-                   transportRouteTiles + Math.Max(MinimumTransportGainTiles,
-                       landRouteTiles * 0.1f) < landRouteTiles;
-        }
-
-        internal static float EstimateRouteTiles(int startX, int startY,
-            int entryX, int entryY, int exitX, int exitY, int targetX,
-            int targetY)
-        {
-            return Distance(startX, startY, entryX, entryY) +
-                   Distance(entryX, entryY, exitX, exitY) +
-                   Distance(exitX, exitY, targetX, targetY);
-        }
-
-        internal static float EstimateRouteTiles(int startX, int startY,
-            int entryLandX, int entryLandY, int pickupSeaX,
-            int pickupSeaY, int destinationSeaX, int destinationSeaY,
-            int exitLandX, int exitLandY, int targetX, int targetY)
-        {
-            return Distance(startX, startY, entryLandX, entryLandY) +
-                   Distance(entryLandX, entryLandY, pickupSeaX,
-                       pickupSeaY) +
-                   Distance(pickupSeaX, pickupSeaY, destinationSeaX,
-                       destinationSeaY) +
-                   Distance(destinationSeaX, destinationSeaY, exitLandX,
-                       exitLandY) +
-                   Distance(exitLandX, exitLandY, targetX, targetY);
-        }
-
         internal static bool CanCreatePhysicalRoute(int startTileId,
             int endTileId, bool sameIsland, bool actorAlreadyEmbarked)
         {
@@ -93,20 +35,6 @@ namespace AncientWarfare3.core.pathfinding
             return requestExists
                 ? AWDockPassengerState.WaitingBoat
                 : AWDockPassengerState.Failed;
-        }
-
-        private static bool IsFiniteNonNegative(float pValue)
-        {
-            return !float.IsNaN(pValue) && !float.IsInfinity(pValue) &&
-                   pValue >= 0f;
-        }
-
-        private static float Distance(int pLeftX, int pLeftY, int pRightX,
-            int pRightY)
-        {
-            float dx = pLeftX - pRightX;
-            float dy = pLeftY - pRightY;
-            return (float)Math.Sqrt(dx * dx + dy * dy);
         }
     }
 }

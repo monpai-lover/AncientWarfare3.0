@@ -1,91 +1,36 @@
 namespace AncientWarfare3.core.pathfinding
 {
-    internal enum AWTransportRouteSource
-    {
-        DockPortal = 0,
-        ShoreFallback = 1
-    }
-
-    internal readonly struct AWDockEndpointKey :
-        System.IEquatable<AWDockEndpointKey>
-    {
-        internal AWDockEndpointKey(long pDockId, int pWaterComponent)
-        {
-            DockId = pDockId;
-            WaterComponent = pWaterComponent;
-        }
-
-        internal long DockId { get; }
-        internal int WaterComponent { get; }
-
-        public bool Equals(AWDockEndpointKey pOther)
-        {
-            return DockId == pOther.DockId &&
-                   WaterComponent == pOther.WaterComponent;
-        }
-
-        public override bool Equals(object pObject)
-        {
-            return pObject is AWDockEndpointKey other && Equals(other);
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                return DockId.GetHashCode() * 397 ^ WaterComponent;
-            }
-        }
-    }
-
     internal readonly struct AWDockEndpoint
     {
-        internal AWDockEndpoint(long pId, int pLandTileId,
-            int pOceanTileId, int pWaterComponent)
+        internal AWDockEndpoint(long pId, int pTileId, int pWaterComponent,
+            int pLegacyWaterComponent = -1)
         {
             Id = pId;
-            LandTileId = pLandTileId;
-            OceanTileId = pOceanTileId;
+            TileId = pTileId;
             WaterComponent = pWaterComponent;
+            LegacyWaterComponent = pLegacyWaterComponent;
         }
 
         internal long Id { get; }
-        internal int LandTileId { get; }
-        internal int OceanTileId { get; }
+        internal int TileId { get; }
         internal int WaterComponent { get; }
-        internal bool HasPhysicalTiles => LandTileId >= 0 &&
-                                          OceanTileId >= 0 &&
-                                          WaterComponent >= 0;
-        internal bool IsDockPortal => Id > 0 && HasPhysicalTiles;
-        internal AWDockEndpointKey Key => new AWDockEndpointKey(Id,
-            WaterComponent);
+        internal int LegacyWaterComponent { get; }
+        internal bool IsValid => Id > 0 && TileId >= 0 && WaterComponent >= 0;
     }
 
     internal readonly struct AWDockRouteCandidate
     {
-        internal AWDockRouteCandidate(AWTransportRouteSource pSource,
-            AWDockEndpoint pEntry, AWDockEndpoint pExit,
-            float pEstimatedRouteTiles)
+        internal AWDockRouteCandidate(AWDockEndpoint pEntry,
+            AWDockEndpoint pExit)
         {
-            Source = pSource;
             Entry = pEntry;
             Exit = pExit;
-            EstimatedRouteTiles = pEstimatedRouteTiles;
         }
 
-        internal AWTransportRouteSource Source { get; }
         internal AWDockEndpoint Entry { get; }
         internal AWDockEndpoint Exit { get; }
-        internal float EstimatedRouteTiles { get; }
-        internal bool IsValid => Entry.HasPhysicalTiles &&
-                                 Exit.HasPhysicalTiles &&
-                                 (Source == AWTransportRouteSource.
-                                      ShoreFallback ||
-                                  Entry.Id > 0 && Exit.Id > 0 &&
-                                  Entry.Id != Exit.Id) &&
-                                 Entry.WaterComponent == Exit.WaterComponent &&
-                                 !float.IsNaN(EstimatedRouteTiles) &&
-                                 !float.IsInfinity(EstimatedRouteTiles) &&
-                                 EstimatedRouteTiles >= 0f;
+        internal bool IsValid => Entry.IsValid && Exit.IsValid &&
+                                 Entry.Id != Exit.Id &&
+                                 Entry.WaterComponent == Exit.WaterComponent;
     }
 }

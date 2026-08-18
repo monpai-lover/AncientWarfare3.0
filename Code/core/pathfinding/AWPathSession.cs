@@ -30,28 +30,18 @@ namespace AncientWarfare3.core.pathfinding
     internal readonly struct AWScheduledPathWork
     {
         internal AWScheduledPathWork(long pOwnerId, int pQueueVersion,
-            AWPathWorkPriority pPriority,
-            AWPathWorkClass pWorkClass = AWPathWorkClass.Ambient)
+            AWPathWorkPriority pPriority)
         {
             OwnerId = pOwnerId;
             QueueVersion = pQueueVersion;
             Priority = pPriority;
-            WorkClass = pWorkClass;
             EnqueuedAt = Stopwatch.GetTimestamp();
         }
 
         internal long OwnerId { get; }
         internal int QueueVersion { get; }
         internal AWPathWorkPriority Priority { get; }
-        internal AWPathWorkClass WorkClass { get; }
         internal long EnqueuedAt { get; }
-
-        internal AWScheduledPathWork WithWorkClass(
-            AWPathWorkClass pWorkClass)
-        {
-            return new AWScheduledPathWork(OwnerId, QueueVersion, Priority,
-                pWorkClass);
-        }
     }
 
     internal sealed class AWPathSession

@@ -113,37 +113,6 @@ namespace AncientWarfare3.core.pathfinding
 
     internal static class AWTraversalBuildRules
     {
-        internal static bool ShouldRebuildWaterConnectivity(
-            int baseGenerationId, bool topologyDirty)
-        {
-            return baseGenerationId <= 0 || topologyDirty;
-        }
-
-        internal static bool ShouldReuseRegionTopology(
-            int baseGenerationId, bool topologyDirty)
-        {
-            return baseGenerationId > 0 && !topologyDirty;
-        }
-
-        internal static bool ShouldScheduleInitialAsync(
-            bool asyncTraversalEnabled, bool buildScheduled,
-            bool tileCaptureComplete, int pendingDirtyChunkCount)
-        {
-            // The initial snapshot is a baseline. Live terrain changes are
-            // captured into the dirty queue and published as an overlay
-            // after the baseline; they must not prevent the first worker
-            // build from ever being scheduled.
-            _ = pendingDirtyChunkCount;
-            return asyncTraversalEnabled && !buildScheduled &&
-                   tileCaptureComplete;
-        }
-
-        internal static bool ShouldPublishInitialSynchronously(
-            bool asyncTraversalEnabled, bool buildScheduled)
-        {
-            return !asyncTraversalEnabled && !buildScheduled;
-        }
-
         public static AWTraversalBuildResult Build(
             AWTraversalBuildInput pInput)
         {
@@ -158,29 +127,11 @@ namespace AncientWarfare3.core.pathfinding
                     capture.SourceRevision > pInput.SourceRevision) continue;
                 chunks[capture.ChunkId] = capture.Tiles;
             }
-            // Cultiway updates dirty tile storage in place. Rebuilding water
-            // connectivity for every terrain/fire delta turns one local edit
-            // into a full-map BFS and allocates every tile again. Keep the
-            // baseline pass for world initialization; topology changes are
-            // explicitly handled by the caller and may opt back in.
-            bool rebuildConnectivity = ShouldRebuildWaterConnectivity(
-                pInput.BaseGenerationId, pInput.RebuildWaterConnectivity);
-            if (rebuildConnectivity)
-                chunks = AWOceanConnectivityRules.Apply(pInput.Width,
-                    pInput.Height, pInput.ChunkSize, chunks);
-            AWRegionTopologySnapshot topology = rebuildConnectivity
-                ? AWRegionTopologySnapshot.Build(chunks, pInput.Width,
-                    pInput.Height, pInput.ChunkSize)
-                : null;
-            AWTraversalGeneration prepared = pInput.ResultGenerationId > 0
-                ? new AWTraversalGeneration(pInput.ResultGenerationId,
-                    pInput.Width, pInput.Height, pInput.ChunkSize, chunks,
-                    topology)
-                : null;
+            chunks = AWOceanConnectivityRules.Apply(pInput.Width,
+                pInput.Height, pInput.ChunkSize, chunks);
             return new AWTraversalBuildResult(pInput.WorldGeneration,
                 pInput.BaseGenerationId, pInput.SourceRevision,
-                pInput.Width, pInput.Height, pInput.ChunkSize, chunks,
-                topology, prepared);
+                pInput.Width, pInput.Height, pInput.ChunkSize, chunks);
         }
 
         public static bool CanPublish(AWTraversalBuildResult pResult,
@@ -348,55 +299,6 @@ namespace AncientWarfare3.core.pathfinding
         {
             pToken.ThrowIfCancellationRequested();
             return AWTraversalBuildRules.Build(_input);
-        }
-    }
-
-    internal sealed class AWTraversalTopologyBuildExecution : IDisposable
-    {
-        private AWTraversalGeneration _generation;
-        private readonly long _worldGeneration;
-        private readonly int _baseGenerationId;
-        private readonly long _sourceRevision;
-
-        public AWTraversalTopologyBuildExecution(
-            AWTraversalGeneration pGeneration, long pWorldGeneration,
-            int pBaseGenerationId, long pSourceRevision)
-        {
-            _generation = pGeneration?.Retain() ??
-                throw new ArgumentNullException(nameof(pGeneration));
-            _worldGeneration = pWorldGeneration;
-            _baseGenerationId = pBaseGenerationId;
-            _sourceRevision = pSourceRevision;
-        }
-
-        public object Execute(CancellationToken pToken)
-        {
-            AWTraversalGeneration generation = Interlocked.Exchange(
-                ref _generation, null);
-            if (generation == null)
-                throw new ObjectDisposedException(
-                    nameof(AWTraversalTopologyBuildExecution));
-            try
-            {
-                pToken.ThrowIfCancellationRequested();
-                AWRegionTopologySnapshot topology =
-                    AWRegionTopologySnapshot.Build(generation);
-                return new AWTraversalBuildResult(_worldGeneration,
-                    _baseGenerationId, _sourceRevision, generation.Width,
-                    generation.Height, generation.ChunkSize,
-                    Array.Empty<AWTileTraversalSnapshot[]>(), topology);
-            }
-            finally
-            {
-                generation.Dispose();
-            }
-        }
-
-        public void Dispose()
-        {
-            AWTraversalGeneration generation = Interlocked.Exchange(
-                ref _generation, null);
-            generation?.Dispose();
         }
     }
 }

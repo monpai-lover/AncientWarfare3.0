@@ -22,9 +22,6 @@ namespace AncientWarfare3.core.lineage
             ArmyRtsWarLifecycleRecord> _records =
                 new Dictionary<(long WarId, long ArmyId),
                     ArmyRtsWarLifecycleRecord>();
-        private IReadOnlyList<ArmyRtsWarLifecycleRecord> _snapshot =
-            Array.Empty<ArmyRtsWarLifecycleRecord>();
-        private bool _snapshotDirty;
 
         public int Count => _records.Count;
 
@@ -44,7 +41,6 @@ namespace AncientWarfare3.core.lineage
                 Phase = phase
             };
             _records[key] = created;
-            _snapshotDirty = true;
             return created;
         }
 
@@ -65,19 +61,16 @@ namespace AncientWarfare3.core.lineage
 
         public IReadOnlyList<ArmyRtsWarLifecycleRecord> Snapshot()
         {
-            if (!_snapshotDirty) return _snapshot;
-            var snapshot = new ArmyRtsWarLifecycleRecord[_records.Count];
-            _records.Values.CopyTo(snapshot, 0);
-            Array.Sort(snapshot, (left, right) =>
+            var snapshot = new List<ArmyRtsWarLifecycleRecord>(
+                _records.Values);
+            snapshot.Sort((left, right) =>
             {
                 int war = left.WarId.CompareTo(right.WarId);
                 return war != 0
                     ? war
                     : left.ArmyId.CompareTo(right.ArmyId);
             });
-            _snapshot = snapshot;
-            _snapshotDirty = false;
-            return _snapshot;
+            return snapshot;
         }
 
         public int RemoveArmy(long armyId)
@@ -88,7 +81,6 @@ namespace AncientWarfare3.core.lineage
                 if (pair.Key.ArmyId == armyId) remove.Add(pair.Key);
             for (int i = 0; i < remove.Count; i++)
                 _records.Remove(remove[i]);
-            if (remove.Count > 0) _snapshotDirty = true;
             return remove.Count;
         }
 
@@ -100,139 +92,38 @@ namespace AncientWarfare3.core.lineage
                 if (pair.Key.WarId == warId) remove.Add(pair.Key);
             for (int i = 0; i < remove.Count; i++)
                 _records.Remove(remove[i]);
-            if (remove.Count > 0) _snapshotDirty = true;
             return remove.Count;
         }
 
         public void Clear()
         {
             _records.Clear();
-            _snapshot = Array.Empty<ArmyRtsWarLifecycleRecord>();
-            _snapshotDirty = false;
         }
     }
 
 #if !AW3_RULES_TESTS
     internal static class ArmyRtsWarLifecycleService
     {
-        private sealed class DiscoveryWork
-        {
-            internal long WarId;
-            internal long KingdomId;
-            internal ArmyStrategicIdCursor Cursor;
-        }
-
-        private const int MaximumDiscoveryArmiesPerCycle = 8;
         private static readonly ArmyRtsWarLifecycleStateStore Store =
             new ArmyRtsWarLifecycleStateStore();
-        private static readonly Dictionary<(long WarId, long KingdomId),
-            DiscoveryWork> DiscoveryByParticipant =
-                new Dictionary<(long WarId, long KingdomId), DiscoveryWork>();
-        private static readonly Queue<(long WarId, long KingdomId)>
-            DiscoveryQueue = new Queue<(long WarId, long KingdomId)>();
-        private static readonly HashSet<(long WarId, long KingdomId)>
-            QueuedDiscovery = new HashSet<(long WarId, long KingdomId)>();
 
         public static void OnWarStarted(War pWar)
         {
-            if (pWar?.data == null) return;
-            try
+            if (pWar?.data == null || World.world?.armies == null) return;
+            foreach (Army army in World.world.armies)
             {
-                foreach (Kingdom kingdom in pWar.getAttackers())
-                    EnqueueDiscovery(pWar, kingdom);
-                foreach (Kingdom kingdom in pWar.getDefenders())
-                    EnqueueDiscovery(pWar, kingdom);
-            }
-            catch { }
-            EnqueueDiscovery(pWar, SafeMainAttacker(pWar));
-            EnqueueDiscovery(pWar, SafeMainDefender(pWar));
-        }
-
-        public static void OnWarParticipantChanged(War pWar,
-            Kingdom pKingdom)
-        {
-            if (pWar?.data == null || pKingdom?.data == null) return;
-            bool participant;
-            try
-            {
-                participant = !pWar.hasEnded() && pWar.hasKingdom(pKingdom);
-            }
-            catch { participant = false; }
-            if (participant) EnqueueDiscovery(pWar, pKingdom);
-        }
-
-        public static void ProcessAuthorityCycle()
-        {
-            ProcessAuthorityCycle(MaximumDiscoveryArmiesPerCycle);
-        }
-
-        public static int PendingDiscoveryArmyCount
-        {
-            get
-            {
-                long pending = DiscoveryQueue.Count;
-                List<DiscoveryWork> snapshot;
-                lock (DiscoveryByParticipant)
+                Kingdom kingdom = AWArmyService.GetIntendedKingdom(army);
+                bool participant;
+                try
                 {
-                    try
-                    {
-                        snapshot = new List<DiscoveryWork>(
-                            DiscoveryByParticipant.Values);
-                    }
-                    catch { return (int)Math.Max(0L, pending); }
+                    participant = army?.data != null &&
+                                  kingdom?.data != null &&
+                                  pWar.hasKingdom(kingdom);
                 }
-                foreach (DiscoveryWork work in snapshot)
-                {
-                    if (work.Cursor == null)
-                    {
-                        Kingdom kingdom = FindKingdom(work.KingdomId);
-                        work.Cursor = ArmyStrategicIndexService.
-                            CreateSnapshotCursor(kingdom);
-                    }
-                    pending += work.Cursor?.Remaining ?? 0;
-                    if (pending >= int.MaxValue) return int.MaxValue;
-                }
-                return (int)Math.Max(0L, pending);
-            }
-        }
-
-        public static void ProcessAuthorityCycle(int pMaximumArmies)
-        {
-            int remainingBudget = Math.Max(0, pMaximumArmies);
-            int participantVisits = DiscoveryQueue.Count;
-            while (DiscoveryQueue.Count > 0 &&
-                   participantVisits-- > 0 && remainingBudget > 0)
-            {
-                var key = DiscoveryQueue.Dequeue();
-                QueuedDiscovery.Remove(key);
-                if (!DiscoveryByParticipant.TryGetValue(key,
-                        out DiscoveryWork work)) continue;
-                War war = FindWar(work.WarId);
-                Kingdom kingdom = FindKingdom(work.KingdomId);
-                if (!IsActiveParticipant(war, kingdom))
-                {
-                    DiscoveryByParticipant.Remove(key);
-                    continue;
-                }
-                if (work.Cursor == null)
-                    work.Cursor = ArmyStrategicIndexService.CreateSnapshotCursor(
-                        kingdom);
-                IReadOnlyList<long> ids = work.Cursor.Take(
-                    remainingBudget);
-                for (int i = 0; i < ids.Count; i++)
-                {
-                    Army army = ArmyStrategicIndexService.
-                        ResolveIndexedArmy(ids[i], kingdom.id);
-                    if (!ArmyNativeNameService.IsOrdinaryArmy(army))
-                        continue;
-                    EnsureForArmy(war.data.id, army,
-                        ArmyRtsWarPhase.StrategicMovement);
-                }
-                remainingBudget -= ids.Count;
-                if (work.Cursor.IsComplete)
-                    DiscoveryByParticipant.Remove(key);
-                else
-                    QueueDiscovery(key);
+                catch { participant = false; }
+                if (!participant) continue;
+                EnsureForArmy(pWar.data.id, army,
+                    ArmyRtsWarPhase.StrategicMovement);
             }
         }
 
@@ -324,111 +215,20 @@ namespace AncientWarfare3.core.lineage
         {
             long warId = pWar?.data?.id ?? -1L;
             if (warId < 0L) return;
-            IReadOnlyList<ArmyRtsWarLifecycleRecord> records =
-                Store.Snapshot();
-            for (int i = 0; i < records.Count; i++)
-            {
-                ArmyRtsWarLifecycleRecord record = records[i];
-                if (record?.WarId == warId)
-                {
-                    Army army = FindArmy(record.ArmyId);
-                    ClearPersisted(army);
-                    bool returnActive =
-                        WarArmyReturnService.IsActive(army);
-                    bool hasValidMission =
-                        ArmyRtsControllerService.HasValidMission(army);
-                    if (!returnActive && !hasValidMission)
-                        WarArmyReturnService.TryBegin(army);
-                    returnActive = WarArmyReturnService.IsActive(army);
-                    if (!hasValidMission)
-                        ClearWarCombatState(army);
-                    ModClass.LogInfo(
-                        "[AW3 RTS return] trigger=lifecycle_war_ended" +
-                        " war=" + warId +
-                        " army=" + record.ArmyId +
-                        " active=" + returnActive);
-                }
-            }
             Store.ClearWar(warId);
-            RemoveDiscoveryWar(warId);
-        }
-
-        private static void ClearWarCombatState(Army pArmy)
-        {
-            if (pArmy?.units == null) return;
-            int count;
-            try { count = pArmy.units.Count; }
-            catch { return; }
-            for (int i = 0; i < count; i++)
+            if (World.world?.armies == null) return;
+            foreach (Army army in World.world.armies)
             {
-                Actor actor;
-                try { actor = pArmy.units[i]; }
-                catch { continue; }
-                if (actor?.data == null) continue;
-                try
-                {
-                    actor.cancelAllBeh();
-                    if (actor.has_attack_target)
-                        actor.clearAttackTarget();
-                    StandingArmyPeacetimeService.RefreshJob(actor);
-                }
-                catch { }
+                if (army?.data == null) continue;
+                army.data.get(LineageKeys.AW_RTS_LIFECYCLE_WAR_ID,
+                    out long persistedWarId, -1L);
+                if (persistedWarId == warId) ClearPersisted(army);
             }
         }
 
         public static void ClearRuntime()
         {
             Store.Clear();
-            DiscoveryByParticipant.Clear();
-            DiscoveryQueue.Clear();
-            QueuedDiscovery.Clear();
-        }
-
-        public static void RebuildDiscovery()
-        {
-            DiscoveryByParticipant.Clear();
-            DiscoveryQueue.Clear();
-            QueuedDiscovery.Clear();
-            if (World.world?.wars == null) return;
-            foreach (War war in World.world.wars)
-            {
-                if (IsActiveWar(war)) OnWarStarted(war);
-            }
-        }
-
-        private static void EnqueueDiscovery(War pWar, Kingdom pKingdom)
-        {
-            if (pWar?.data == null || pKingdom?.data == null) return;
-            var key = (pWar.data.id, pKingdom.id);
-            lock (DiscoveryByParticipant)
-            {
-                if (!DiscoveryByParticipant.ContainsKey(key))
-                    DiscoveryByParticipant[key] = new DiscoveryWork
-                    {
-                        WarId = pWar.data.id,
-                        KingdomId = pKingdom.id
-                    };
-            }
-            QueueDiscovery(key);
-        }
-
-        private static void QueueDiscovery(
-            (long WarId, long KingdomId) pKey)
-        {
-            if (!QueuedDiscovery.Add(pKey)) return;
-            DiscoveryQueue.Enqueue(pKey);
-        }
-
-        private static void RemoveDiscoveryWar(long pWarId)
-        {
-            var remove = new List<(long WarId, long KingdomId)>();
-            foreach (var pair in DiscoveryByParticipant)
-                if (pair.Key.WarId == pWarId) remove.Add(pair.Key);
-            for (int i = 0; i < remove.Count; i++)
-            {
-                DiscoveryByParticipant.Remove(remove[i]);
-                QueuedDiscovery.Remove(remove[i]);
-            }
         }
 
         private static ArmyRtsWarLifecycleRecord EnsureForArmy(long pWarId,
@@ -634,49 +434,6 @@ namespace AncientWarfare3.core.lineage
                 try { return pArmy?.getKingdom(); }
                 catch { return null; }
             }
-        }
-
-        private static bool IsActiveWar(War pWar)
-        {
-            if (pWar?.data == null) return false;
-            try { return !pWar.hasEnded(); }
-            catch { return false; }
-        }
-
-        private static bool IsActiveParticipant(War pWar,
-            Kingdom pKingdom)
-        {
-            if (pWar?.data == null || pKingdom?.data == null) return false;
-            try
-            {
-                return !pWar.hasEnded() && pWar.hasKingdom(pKingdom) &&
-                       !pKingdom.isRekt() && pKingdom.isAlive();
-            }
-            catch { return false; }
-        }
-
-        private static Kingdom SafeMainAttacker(War pWar)
-        {
-            try { return pWar?.getMainAttacker(); }
-            catch { return null; }
-        }
-
-        private static Kingdom SafeMainDefender(War pWar)
-        {
-            try { return pWar?.getMainDefender(); }
-            catch { return null; }
-        }
-
-        private static Kingdom FindKingdom(long pKingdomId)
-        {
-            try { return World.world?.kingdoms?.get(pKingdomId); }
-            catch { return null; }
-        }
-
-        private static War FindWar(long pWarId)
-        {
-            try { return World.world?.wars?.get(pWarId); }
-            catch { return null; }
         }
 
         private static Army FindArmy(long pArmyId)

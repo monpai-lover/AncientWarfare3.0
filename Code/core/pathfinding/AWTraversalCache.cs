@@ -9,14 +9,16 @@ namespace AncientWarfare3.core.pathfinding
 {
     internal sealed class AWTraversalCache
     {
-        private readonly HashSet<int> _dirtyTiles = new HashSet<int>();
-        private readonly Queue<int> _dirtyTileQueue = new Queue<int>();
+        private readonly Queue<int> _dirtyChunks = new Queue<int>();
+        private readonly HashSet<int> _queuedChunks = new HashSet<int>();
+        private readonly Dictionary<int, AWTraversalOverlayEntry> _overlay =
+            new Dictionary<int, AWTraversalOverlayEntry>();
         private readonly AWPathDiagnostics _diagnostics;
         private AWTraversalGeneration _current;
+        private AWTraversalGeneration _overlayGeneration;
         private WorldTile[] _initialCaptureTiles;
         private AWTileTraversalSnapshot[][] _initialChunks;
         private bool _initializing;
-        private bool _initialBuildScheduled;
         private int _initialCaptureCursor;
         private int _generationId;
         private int _mainThreadId;
@@ -25,20 +27,16 @@ namespace AncientWarfare3.core.pathfinding
         private int _height;
         private int _chunksWide;
         private long _sourceRevision;
-        private long _topologySourceRevision;
-        private bool _topologyBuildScheduled;
-        private bool _topologyDirty;
+        private bool _overlayBuildScheduled;
 
-        public int GenerationId => _current?.Id ?? -1;
+        public int GenerationId => (_overlayGeneration ?? _current)?.Id ?? -1;
         public long SourceRevision => _sourceRevision;
-        internal long TopologySourceRevision => _topologySourceRevision;
-        public int DirtyTileCount => _dirtyTiles.Count;
-        public int DirtyChunkCount => DirtyTileCount;
-        public int PendingOverlayChunkCount => 0;
+        public int DirtyChunkCount => _dirtyChunks.Count;
+        public int PendingOverlayChunkCount => _overlay.Count;
 
         public int StartRegion(int pTileId)
         {
-            AWTraversalGeneration generation = _current;
+            AWTraversalGeneration generation = _overlayGeneration ?? _current;
             if (generation == null || pTileId < 0 ||
                 pTileId >= generation.TileCount) return -1;
             int x = pTileId % generation.Width;
@@ -140,54 +138,51 @@ namespace AncientWarfare3.core.pathfinding
             bool tileCaptureComplete =
                 _initialCaptureCursor >= _initialCaptureTiles.Length;
             if (!tileCaptureComplete) return;
-            if (_initialBuildScheduled) return;
             int capturedThisFrame = _initialCaptureCursor - batch.Start;
-            int dirtyTileBudget = Math.Min(
-                AWTraversalCacheBudgetRules.DirtyTileBudget,
-                Math.Max(0, AWTraversalCaptureRules.InitialCaptureTileBudget -
-                            capturedThisFrame));
-            CaptureInitialDirtyFrame(started, budgetTicks, dirtyTileBudget);
+            int dirtyChunkBudget = Math.Min(
+                AWTraversalCacheBudgetRules.DirtyChunkBudget,
+                AWTraversalCaptureRules.InitialDirtyChunkBudget(
+                    capturedThisFrame,
+                    AWTraversalCaptureRules.InitialCaptureTileBudget,
+                    AWTraversalGeneration.DefaultChunkSize));
+            CaptureInitialDirtyFrame(started, budgetTicks, dirtyChunkBudget);
             if (!AWTraversalRules.CanPublishInitialGeneration(
-                tileCaptureComplete,
-                    pendingDirtyChunkCount: _dirtyTiles.Count)) return;
-            if (AWTraversalBuildRules.ShouldScheduleInitialAsync(
-                AWAsyncRuntime.TraversalEnabled, _initialBuildScheduled,
-                    tileCaptureComplete, _dirtyTiles.Count))
-            {
-                ScheduleInitialBuild();
-                return;
-            }
-            if (AWTraversalBuildRules.ShouldPublishInitialSynchronously(
-                    AWAsyncRuntime.TraversalEnabled, _initialBuildScheduled))
-                PublishInitialBuild(BuildInitialSnapshot());
+                    tileCaptureComplete,
+                    pendingDirtyChunkCount: _dirtyChunks.Count)) return;
+
+            // The first published snapshot must carry the same connected-water
+            // labels as later overlay generations; dock route snapshots depend on it.
+            _initialChunks = AWOceanConnectivityRules.Apply(_width, _height,
+                AWTraversalGeneration.DefaultChunkSize, _initialChunks);
+            _current = new AWTraversalGeneration(++_generationId,
+                _width, _height, AWTraversalGeneration.DefaultChunkSize,
+                _initialChunks);
+            _initialCaptureTiles = null;
+            _initialChunks = null;
+            _initialCaptureCursor = 0;
+            _initializing = false;
+            _sweepCursor = 0;
         }
 
         private bool CaptureInitialDirtyFrame(long pStarted,
             long pBudgetTicks, int pChunkBudget)
         {
             int processed = 0;
+            int chunkCount = _initialChunks?.Length ?? 0;
             var neighbors = new int[8];
-            while (_dirtyTiles.Count > 0 &&
+            while (_dirtyChunks.Count > 0 &&
                    processed < Math.Max(0, pChunkBudget))
             {
                 if (Stopwatch.GetTimestamp() - pStarted >= pBudgetTicks)
                     return false;
-                int tileId = TakeDirtyTile();
-                if (tileId < 0 || tileId >= _initialCaptureTiles.Length)
-                    continue;
-                AWTileTraversalSnapshot snapshot = Capture(
-                    _initialCaptureTiles[tileId], neighbors);
-                AWTraversalChunkPlacement placement =
-                    AWTraversalCaptureRules.PlacementForCoordinates(
-                        snapshot.X, snapshot.Y, _width, _height,
-                        AWTraversalGeneration.DefaultChunkSize);
-                EnsureInitialChunk(placement);
-                if (placement.Valid)
-                    _initialChunks[placement.ChunkId][placement.LocalIndex] =
-                        snapshot;
+                int chunkId = _dirtyChunks.Dequeue();
+                _queuedChunks.Remove(chunkId);
+                if (chunkId < 0 || chunkId >= chunkCount) continue;
+                _initialChunks[chunkId] = CaptureChunk(chunkId,
+                    _initialCaptureTiles, neighbors);
                 processed++;
             }
-            return _dirtyTiles.Count == 0;
+            return _dirtyChunks.Count == 0;
         }
 
         private void EnsureInitialChunk(AWTraversalChunkPlacement pPlacement)
@@ -204,16 +199,29 @@ namespace AncientWarfare3.core.pathfinding
         public AWTraversalGeneration Pin()
         {
             AssertMainThread();
-            return _current?.Retain();
+            return (_overlayGeneration ?? _current)?.Retain();
+        }
+
+        public int OceanComponentOf(int pTileId)
+        {
+            AssertMainThread();
+            AWTraversalGeneration generation = _overlayGeneration ?? _current;
+            return generation?.OceanComponentOf(pTileId) ?? -1;
         }
 
         public void MarkDirty(WorldTile pTile)
         {
             AssertMainThread();
             if (pTile?.data == null || _width <= 0) return;
-            if (_initializing) IncrementSourceRevision();
-            int tileId = pTile.data.tile_id;
-            if (_dirtyTiles.Add(tileId)) _dirtyTileQueue.Enqueue(tileId);
+            if (_initializing)
+            {
+                IncrementSourceRevision();
+                EnqueueDirtyChunk(pTile);
+                return;
+            }
+            if (_current == null) return;
+            IncrementSourceRevision();
+            EnqueueDirtyChunk(pTile);
         }
 
         private void IncrementSourceRevision()
@@ -223,100 +231,79 @@ namespace AncientWarfare3.core.pathfinding
                 : _sourceRevision + 1L;
         }
 
-        private void IncrementTopologySourceRevision()
+        private void EnqueueDirtyChunk(WorldTile pTile)
         {
-            _topologySourceRevision = _topologySourceRevision == long.MaxValue
-                ? 1L
-                : _topologySourceRevision + 1L;
+            int chunkId = ChunkId(pTile.x, pTile.y);
+            if (chunkId < 0 || !_queuedChunks.Add(chunkId)) return;
+            _dirtyChunks.Enqueue(chunkId);
         }
 
         public int ProcessDirty(int pChunkBudget)
         {
             AssertMainThread();
             if (_current == null || pChunkBudget <= 0) return 0;
-            if (_dirtyTiles.Count == 0) return 0;
-            return ProcessDirtyTiles(pChunkBudget);
+            if (AWAsyncRuntime.TraversalEnabled)
+            {
+                // Shadow is a comparison mode, not permission to rebuild the
+                // complete traversal generation on the simulation thread.
+                // Capture the small live-tile delta here and let the worker
+                // assemble the generation and water components.
+                if (_overlay.Count > 0 && !_overlayBuildScheduled)
+                    ScheduleOverlayBuild();
+                if (_dirtyChunks.Count == 0) return 0;
+                return CaptureDirtyForAsyncBuild(pChunkBudget);
+            }
+            if (_dirtyChunks.Count == 0) return 0;
+            return ProcessDirtySynchronously(pChunkBudget,
+                pCompareShadow: AWAsyncRuntime.ShadowEnabled);
         }
 
         public void ProcessPendingBuild()
         {
             AssertMainThread();
-            if (!_topologyDirty || _topologyBuildScheduled ||
-                _dirtyTiles.Count > 0) return;
-            ScheduleTopologyBuild();
+            if (!AWAsyncRuntime.TraversalEnabled ||
+                _overlay.Count == 0 || _overlayBuildScheduled) return;
+            ScheduleOverlayBuild();
         }
 
-        private int ProcessDirtyTiles(int pTileBudget)
+        private int ProcessDirtySynchronously(int pChunkBudget,
+            bool pCompareShadow)
         {
             WorldTile[] worldTiles = World.world?.tiles_list;
-            if (worldTiles == null || worldTiles.Length != _current.TileCount)
-                return 0;
-            bool compareShadow = AWAsyncRuntime.ShadowEnabled;
-            int chunkCount = compareShadow
-                ? AWTraversalCaptureRules.ChunkCount(_width, _height,
-                    AWTraversalGeneration.DefaultChunkSize)
-                : 0;
-            AWTileTraversalSnapshot[][] beforeChunks = compareShadow
-                ? new AWTileTraversalSnapshot[chunkCount][]
-                : null;
-            var changed = new List<AWTileTraversalSnapshot>(
-                Math.Min(pTileBudget, _dirtyTiles.Count));
-            var changedChunkIds = compareShadow
-                ? new HashSet<int>()
-                : null;
-            var neighbors = new int[8];
-            int processed = 0;
-            while (processed < pTileBudget && _dirtyTiles.Count > 0)
-            {
-                int tileId = TakeDirtyTile();
-                processed++;
-                if (tileId < 0 || tileId >= worldTiles.Length) continue;
-                AWTileTraversalSnapshot captured = Capture(
-                    worldTiles[tileId], neighbors);
-                if (!_current.TryGet(tileId,
-                        out AWTileTraversalSnapshot cached) ||
-                    Equivalent(cached, captured)) continue;
-                bool topologyChanged = TopologyRelevantChanged(cached,
-                    captured);
-                if (topologyChanged)
-                {
-                    _topologyDirty = true;
-                    IncrementTopologySourceRevision();
-                }
-                else
-                    captured = captured.WithOceanComponent(
-                        cached.OceanComponent);
-                changed.Add(captured);
-                if (compareShadow)
-                {
-                    int chunkId = ChunkId(captured.X, captured.Y);
-                    if (chunkId >= 0 && chunkId < beforeChunks.Length &&
-                        changedChunkIds.Add(chunkId))
-                        beforeChunks[chunkId] =
-                            _current.CopyChunkSnapshot(chunkId);
-                }
-            }
-            if (changed.Count == 0) return processed;
+            if (worldTiles == null || worldTiles.Length != _current.TileCount) return 0;
 
-            IncrementSourceRevision();
-            _current.ApplyTileSnapshots(changed);
-            _diagnostics?.AddTraversalChunksCaptured(changed.Count);
-            if (compareShadow)
+            AWTileTraversalSnapshot[][] baseChunks =
+                _current.CopyChunkReferences();
+            AWTileTraversalSnapshot[][] chunks =
+                (AWTileTraversalSnapshot[][])baseChunks.Clone();
+            List<AWTraversalChunkCapture> captures = pCompareShadow
+                ? new List<AWTraversalChunkCapture>()
+                : null;
+            int baseGenerationId = _current.Id;
+            long revision = _sourceRevision;
+            int processed = 0;
+            var neighbors = new int[8];
+            while (processed < pChunkBudget && _dirtyChunks.Count > 0)
             {
-                var afterChunks = new AWTileTraversalSnapshot[chunkCount][];
-                var captures = new List<AWTraversalChunkCapture>(
-                    changedChunkIds.Count);
-                foreach (int chunkId in changedChunkIds)
-                    if (chunkId >= 0 && chunkId < afterChunks.Length)
-                    {
-                        afterChunks[chunkId] =
-                            _current.CopyChunkSnapshot(chunkId);
-                        captures.Add(new AWTraversalChunkCapture(chunkId,
-                            _sourceRevision, afterChunks[chunkId]));
-                    }
-                ScheduleShadowBuild(_current.Id, _sourceRevision,
-                    beforeChunks, captures, afterChunks);
+                int chunkId = _dirtyChunks.Dequeue();
+                _queuedChunks.Remove(chunkId);
+                if (chunkId < 0 || chunkId >= chunks.Length) continue;
+                AWTileTraversalSnapshot[] captured = CaptureChunk(chunkId,
+                    worldTiles, neighbors);
+                chunks[chunkId] = captured;
+                captures?.Add(new AWTraversalChunkCapture(chunkId,
+                    revision, captured));
+                processed++;
             }
+
+            if (processed <= 0) return 0;
+            AWTraversalGeneration previous = _current;
+            _current = new AWTraversalGeneration(++_generationId, _width, _height,
+                AWTraversalGeneration.DefaultChunkSize, chunks);
+            if (pCompareShadow)
+                ScheduleShadowBuild(baseGenerationId, revision, baseChunks,
+                    captures, chunks);
+            previous.Dispose();
             return processed;
         }
 
@@ -356,6 +343,40 @@ namespace AncientWarfare3.core.pathfinding
             AWAsyncRuntime.TrySchedule(request);
         }
 
+        private int CaptureDirtyForAsyncBuild(int pChunkBudget)
+        {
+            WorldTile[] worldTiles = World.world?.tiles_list;
+            if (worldTiles == null || worldTiles.Length != _current.TileCount)
+                return 0;
+            long started = Stopwatch.GetTimestamp();
+            long budgetTicks = Math.Max(1L,
+                (long)(Stopwatch.Frequency * 0.75d / 1000d));
+            int chunkSize = AWTraversalGeneration.DefaultChunkSize;
+            int chunksHigh = Math.Max(1,
+                (_height + chunkSize - 1) / chunkSize);
+            int chunkCount = _chunksWide * chunksHigh;
+            int processed = 0;
+            var neighbors = new int[8];
+            while (processed < pChunkBudget && _dirtyChunks.Count > 0)
+            {
+                if (processed > 0 && Stopwatch.GetTimestamp() - started >=
+                    budgetTicks) break;
+                int chunkId = _dirtyChunks.Dequeue();
+                _queuedChunks.Remove(chunkId);
+                if (chunkId < 0 || chunkId >= chunkCount) continue;
+                AWTileTraversalSnapshot[] captured = CaptureChunk(chunkId,
+                    worldTiles, neighbors);
+                _overlay[chunkId] = new AWTraversalOverlayEntry(chunkId,
+                    _sourceRevision, captured);
+                processed++;
+            }
+            if (processed <= 0) return 0;
+            _diagnostics?.AddTraversalChunksCaptured(processed);
+            RefreshOverlayGeneration();
+            ScheduleOverlayBuild();
+            return processed;
+        }
+
         public int ConsistencySweep(int pTileBudget)
         {
             AssertMainThread();
@@ -370,8 +391,8 @@ namespace AncientWarfare3.core.pathfinding
                 if (_sweepCursor >= tiles.Length) _sweepCursor = 0;
                 WorldTile live = tiles[_sweepCursor++];
                 AWTileTraversalSnapshot captured = Capture(live, neighbors);
-                if (!_current.TryGet(captured.Id,
-                        out AWTileTraversalSnapshot cached) ||
+                AWTraversalGeneration effective = _overlayGeneration ?? _current;
+                if (!effective.TryGet(captured.Id, out AWTileTraversalSnapshot cached) ||
                     !Equivalent(cached, captured))
                     MarkDirty(live);
                 checkedTiles++;
@@ -382,14 +403,16 @@ namespace AncientWarfare3.core.pathfinding
         public void Clear()
         {
             AssertMainThread(pCaptureIfUnset: true);
-            _dirtyTiles.Clear();
-            _dirtyTileQueue.Clear();
+            _dirtyChunks.Clear();
+            _queuedChunks.Clear();
+            _overlay.Clear();
+            _overlayGeneration?.Dispose();
+            _overlayGeneration = null;
             _current?.Dispose();
             _current = null;
             _initialCaptureTiles = null;
             _initialChunks = null;
             _initializing = false;
-            _initialBuildScheduled = false;
             _initialCaptureCursor = 0;
             _generationId = 0;
             _sweepCursor = 0;
@@ -397,199 +420,121 @@ namespace AncientWarfare3.core.pathfinding
             _height = 0;
             _chunksWide = 0;
             _sourceRevision = 0L;
-            _topologySourceRevision = 0L;
-            _topologyBuildScheduled = false;
-            _topologyDirty = false;
+            _overlayBuildScheduled = false;
         }
 
-        private AWTraversalBuildResult BuildInitialSnapshot()
+        private void ScheduleOverlayBuild()
         {
-            var input = new AWTraversalBuildInput(AWAsyncRuntime.WorldGeneration,
-                baseGenerationId: 0, sourceRevision: _sourceRevision,
-                width: _width, height: _height,
-                chunkSize: AWTraversalGeneration.DefaultChunkSize,
-                baseChunks: (AWTileTraversalSnapshot[][])_initialChunks.Clone(),
-                captures: Array.Empty<AWTraversalChunkCapture>(),
-                resultGenerationId: _generationId + 1);
-            return AWTraversalBuildRules.Build(input);
-        }
-
-        private void ScheduleInitialBuild()
-        {
-            if (!_initializing || _initialBuildScheduled ||
-                _initialChunks == null) return;
-            long worldGeneration = AWAsyncRuntime.WorldGeneration;
-            var input = new AWTraversalBuildInput(worldGeneration,
-                baseGenerationId: 0, sourceRevision: _sourceRevision,
-                width: _width, height: _height,
-                chunkSize: AWTraversalGeneration.DefaultChunkSize,
-                baseChunks: (AWTileTraversalSnapshot[][])_initialChunks.Clone(),
-                captures: Array.Empty<AWTraversalChunkCapture>(),
-                resultGenerationId: _generationId + 1);
+            if (_current == null || _overlay.Count == 0) return;
+            long revision = _sourceRevision;
+            AWTraversalChunkCapture[] captures = _overlay.Values
+                .OrderBy(pEntry => pEntry.ChunkId)
+                .Select(pEntry => new AWTraversalChunkCapture(
+                    pEntry.ChunkId, pEntry.SourceRevision, pEntry.Tiles))
+                .ToArray();
+            var input = new AWTraversalBuildInput(
+                AWAsyncRuntime.WorldGeneration, _current.Id, revision,
+                _width, _height, AWTraversalGeneration.DefaultChunkSize,
+                _current.CopyChunkReferences(), captures);
             var execution = new AWTraversalBuildExecution(input);
-            var request = new AWAsyncWorkRequest("traversal-initial-cache",
+            var commit = new AWTraversalBuildCommit(this);
+            var request = new AWAsyncWorkRequest("traversal-cache",
                 AWAsyncLane.Traversal,
-                new AWAsyncStamp(worldGeneration, UnityEngine.Time.frameCount,
-                    input.SourceRevision),
-                execution.Execute, new AWInitialTraversalBuildCommit(this).Commit,
-                HandleInitialBuildFault);
-            _initialBuildScheduled = AWAsyncRuntime.TrySchedule(request);
-        }
-
-        private void HandleInitialBuildFault(Exception pError)
-        {
-            AssertMainThread();
-            _initialBuildScheduled = false;
-            _diagnostics?.OnTraversalBuildStale();
-        }
-
-        private void PublishInitialBuild(AWTraversalBuildResult pResult)
-        {
-            AssertMainThread();
-            _initialBuildScheduled = false;
-            AWTraversalGeneration prepared = pResult == null
-                ? null
-                : pResult.PreparedGeneration;
-            if (!_initializing || _current != null || pResult == null ||
-                pResult.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
-                pResult.BaseGenerationId != 0 ||
-                pResult.SourceRevision > _sourceRevision ||
-                pResult.Width != _width || pResult.Height != _height ||
-                pResult.ChunkSize != AWTraversalGeneration.DefaultChunkSize ||
-                prepared == null || prepared.Id != _generationId + 1 ||
-                prepared.Width != _width || prepared.Height != _height ||
-                pResult.Chunks.Length != AWTraversalCaptureRules.ChunkCount(
-                    _width, _height, AWTraversalGeneration.DefaultChunkSize))
-            {
-                prepared?.Dispose();
-                _diagnostics?.OnTraversalBuildStale();
-                return;
-            }
-            _current = prepared;
-            _generationId = prepared.Id;
-            _initialCaptureTiles = null;
-            _initialChunks = null;
-            _initialCaptureCursor = 0;
-            _initializing = false;
-            _sweepCursor = 0;
-            _topologyDirty = false;
-            _diagnostics?.OnTraversalBuildPublished();
-        }
-
-        private void ScheduleTopologyBuild()
-        {
-            if (_current == null || !_topologyDirty ||
-                _topologyBuildScheduled) return;
-            long revision = _topologySourceRevision;
-            long worldGeneration = AWAsyncRuntime.WorldGeneration;
-            var execution = new AWTraversalTopologyBuildExecution(_current,
-                worldGeneration, _current.Id, revision);
-            var commit = new AWTraversalTopologyCommit(this);
-            var request = new AWAsyncWorkRequest("traversal-topology-cache",
-                AWAsyncLane.Traversal,
-                new AWAsyncStamp(worldGeneration,
-                    UnityEngine.Time.frameCount, revision),
+                new AWAsyncStamp(input.WorldGeneration,
+                    UnityEngine.Time.frameCount, input.SourceRevision),
                 execution.Execute, commit.Commit,
-                HandleTopologyBuildFault);
+                error => HandleBuildFault(error));
             if (AWAsyncRuntime.TrySchedule(request))
             {
-                _topologyBuildScheduled = true;
+                _overlayBuildScheduled = true;
                 return;
             }
-            execution.Dispose();
             if (!AWAsyncRuntime.TraversalEnabled)
             {
                 _diagnostics?.OnTraversalSyncFallback();
-                var synchronous = new AWTraversalTopologyBuildExecution(
-                    _current, worldGeneration, _current.Id, revision);
-                PublishTopologyBuild((AWTraversalBuildResult)
-                    synchronous.Execute(CancellationToken.None));
+                PublishBuild((AWTraversalBuildResult)execution.Execute(
+                    CancellationToken.None));
             }
         }
 
-        private void HandleTopologyBuildFault(Exception pError)
+        private void HandleBuildFault(Exception pError)
         {
             AssertMainThread();
-            _topologyBuildScheduled = false;
+            _overlayBuildScheduled = false;
             _diagnostics?.OnTraversalBuildStale();
+            if (_current != null && _overlay.Count > 0)
+                ScheduleOverlayBuild();
         }
 
-        private void PublishTopologyBuild(AWTraversalBuildResult pResult)
+        private void PublishBuild(AWTraversalBuildResult pResult)
         {
             AssertMainThread();
-            bool current = pResult != null && _current != null &&
-                           pResult.WorldGeneration ==
-                           AWAsyncRuntime.WorldGeneration &&
-                           pResult.BaseGenerationId == _current.Id &&
-                           pResult.SourceRevision ==
-                           _topologySourceRevision &&
-                           pResult.Width == _width &&
-                           pResult.Height == _height &&
-                           pResult.ChunkSize ==
-                           AWTraversalGeneration.DefaultChunkSize &&
-                           pResult.RegionTopology != null;
-            _topologyBuildScheduled = false;
-            if (!current)
+            int currentChunkCount = AWTraversalCaptureRules.ChunkCount(
+                _width, _height, AWTraversalGeneration.DefaultChunkSize);
+            if (!AWTraversalBuildRules.CanPublish(pResult,
+                    AWAsyncRuntime.WorldGeneration, _current?.Id ?? -1,
+                    _sourceRevision, currentWidth: _width,
+                    currentHeight: _height,
+                    currentChunkSize:
+                    AWTraversalGeneration.DefaultChunkSize,
+                    currentChunkCount: currentChunkCount))
             {
+                _overlayBuildScheduled = false;
                 _diagnostics?.OnTraversalBuildStale();
+                if (_dirtyChunks.Count == 0 && _overlay.Count > 0)
+                    ScheduleOverlayBuild();
                 return;
             }
-            _current.ReplaceTopologySnapshot(pResult.RegionTopology);
-            _topologyDirty = false;
+            var next = new AWTraversalGeneration(++_generationId,
+                pResult.Width, pResult.Height, pResult.ChunkSize,
+                pResult.Chunks);
+            AWTraversalGeneration previous = _current;
+            _overlayBuildScheduled = false;
+            _current = next;
+            previous?.Dispose();
             _diagnostics?.OnTraversalBuildPublished();
+
+            IReadOnlyList<AWTraversalOverlayEntry> remaining =
+                AWTraversalBuildRules.RemoveCommittedOverlay(
+                    _overlay.Values, pResult.SourceRevision);
+            _overlay.Clear();
+            foreach (AWTraversalOverlayEntry entry in remaining)
+                _overlay[entry.ChunkId] = entry;
+            _overlayGeneration?.Dispose();
+            _overlayGeneration = null;
+            if (_overlay.Count > 0)
+            {
+                RefreshOverlayGeneration();
+                ScheduleOverlayBuild();
+            }
         }
 
-        private sealed class AWTraversalTopologyCommit
+        private void RefreshOverlayGeneration()
+        {
+            _overlayGeneration?.Dispose();
+            _overlayGeneration = null;
+            if (_current == null || _overlay.Count == 0) return;
+            var chunks = new Dictionary<int, AWTileTraversalSnapshot[]>(
+                _overlay.Count);
+            foreach (AWTraversalOverlayEntry entry in _overlay.Values)
+                if (entry.ChunkId >= 0)
+                    chunks[entry.ChunkId] = entry.Tiles;
+            _overlayGeneration = AWTraversalGeneration.FromOverlay(
+                ++_generationId, _current, chunks);
+        }
+
+        private sealed class AWTraversalBuildCommit
         {
             private readonly AWTraversalCache _owner;
 
-            public AWTraversalTopologyCommit(AWTraversalCache pOwner)
+            public AWTraversalBuildCommit(AWTraversalCache pOwner)
             {
                 _owner = pOwner;
             }
 
             public void Commit(object pResult)
             {
-                _owner.PublishTopologyBuild(
-                    pResult as AWTraversalBuildResult);
-            }
-        }
-
-        private static bool TopologyRelevantChanged(
-            AWTileTraversalSnapshot pCached,
-            AWTileTraversalSnapshot pCaptured)
-        {
-            if (pCached.RegionId != pCaptured.RegionId ||
-                pCached.NeighborCount != pCaptured.NeighborCount)
-                return true;
-            for (int index = 0; index < pCached.NeighborCount; index++)
-                if (pCached.GetNeighbor(index) !=
-                    pCaptured.GetNeighbor(index)) return true;
-            return false;
-        }
-
-        private int TakeDirtyTile()
-        {
-            while (_dirtyTileQueue.Count > 0)
-            {
-                int tileId = _dirtyTileQueue.Dequeue();
-                if (_dirtyTiles.Remove(tileId)) return tileId;
-            }
-            return -1;
-        }
-
-        private sealed class AWInitialTraversalBuildCommit
-        {
-            private readonly AWTraversalCache _owner;
-
-            public AWInitialTraversalBuildCommit(AWTraversalCache pOwner)
-            {
-                _owner = pOwner;
-            }
-
-            public void Commit(object pResult)
-            {
-                _owner.PublishInitialBuild(pResult as AWTraversalBuildResult);
+                _owner.PublishBuild(pResult as AWTraversalBuildResult);
             }
         }
 
@@ -670,8 +615,7 @@ namespace AncientWarfare3.core.pathfinding
                 oceanComponent: -1,
                 regionId: pTile.region?.id ?? -1,
                 islandId: pTile.region?.island?.id ?? -1,
-                pNeighbors: pNeighbors,
-                hasType: type != null);
+                pNeighbors: pNeighbors);
         }
 
         private int ChunkId(int pX, int pY)
@@ -684,8 +628,7 @@ namespace AncientWarfare3.core.pathfinding
         private static bool Equivalent(AWTileTraversalSnapshot pLeft,
             AWTileTraversalSnapshot pRight)
         {
-            if (pLeft.Id != pRight.Id || pLeft.HasType != pRight.HasType ||
-                pLeft.Ground != pRight.Ground ||
+            if (pLeft.Id != pRight.Id || pLeft.Ground != pRight.Ground ||
                 pLeft.Block != pRight.Block || pLeft.Liquid != pRight.Liquid ||
                 pLeft.Ocean != pRight.Ocean || pLeft.Lava != pRight.Lava ||
                 pLeft.Fire != pRight.Fire || pLeft.DamageUnits != pRight.DamageUnits ||

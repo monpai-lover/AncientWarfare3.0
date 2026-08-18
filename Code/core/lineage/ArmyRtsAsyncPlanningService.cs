@@ -72,6 +72,7 @@ namespace AncientWarfare3.core.lineage
 
         private static readonly Dictionary<PrefetchKey, PrefetchedRank>
             PrefetchByKey = new Dictionary<PrefetchKey, PrefetchedRank>();
+        private static readonly object PrefetchGate = new object();
         private static long _snapshots;
         private static long _scheduled;
         private static long _completed;
@@ -94,7 +95,7 @@ namespace AncientWarfare3.core.lineage
                     runtimeStamp)) return;
             var request = new AWAsyncWorkRequest(key, AWAsyncLane.Ai,
                 runtimeStamp, token => Plan(token, pStamp, candidates),
-                Commit);
+                Commit, pCommitMode: AWAsyncCommitMode.Background);
             if (AWAsyncRuntime.TrySchedule(request))
                 Interlocked.Increment(ref _scheduled);
         }
@@ -104,17 +105,23 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyList<FrontTargetFacts> pTargets)
         {
             if (pTargets == null || pTargets.Count < 2) return pTargets;
-            var key = new PrefetchKey(pCurrent.KingdomId, pCurrent.WarId);
-            if (!PrefetchByKey.TryGetValue(key, out PrefetchedRank prefetch))
-                return pTargets;
-            if (!ArmyRtsAsyncPlanningRules.Accept(prefetch.Stamp,
-                    pCurrent.WorldGeneration, pCurrent.KingdomId,
-                    pCurrent.DirectorGeneration, pCurrent.WarId,
-                    pCurrent.CityFactsRevision))
+            long[] rankedCityIds;
+            lock (PrefetchGate)
             {
-                PrefetchByKey.Remove(key);
-                Interlocked.Increment(ref _rejectedStale);
-                return pTargets;
+                var key = new PrefetchKey(pCurrent.KingdomId, pCurrent.WarId);
+                if (!PrefetchByKey.TryGetValue(key,
+                        out PrefetchedRank prefetch))
+                    return pTargets;
+                if (!ArmyRtsAsyncPlanningRules.Accept(prefetch.Stamp,
+                        pCurrent.WorldGeneration, pCurrent.KingdomId,
+                        pCurrent.DirectorGeneration, pCurrent.WarId,
+                        pCurrent.CityFactsRevision))
+                {
+                    PrefetchByKey.Remove(key);
+                    Interlocked.Increment(ref _rejectedStale);
+                    return pTargets;
+                }
+                rankedCityIds = prefetch.CityIds;
             }
 
             var byCityId = new Dictionary<long, FrontTargetFacts>(
@@ -126,9 +133,9 @@ namespace AncientWarfare3.core.lineage
                     byCityId[target.CityId] = target;
             }
             var ordered = new List<FrontTargetFacts>(pTargets.Count);
-            for (int index = 0; index < prefetch.CityIds.Length; index++)
+            for (int index = 0; index < rankedCityIds.Length; index++)
             {
-                long cityId = prefetch.CityIds[index];
+                long cityId = rankedCityIds[index];
                 if (!byCityId.TryGetValue(cityId,
                         out FrontTargetFacts target)) continue;
                 ordered.Add(target);
@@ -137,7 +144,8 @@ namespace AncientWarfare3.core.lineage
             for (int index = 0; index < pTargets.Count; index++)
             {
                 FrontTargetFacts target = pTargets[index];
-                if (target?.CityId >= 0L && byCityId.Remove(target.CityId))
+                if (target?.CityId >= 0L &&
+                    byCityId.Remove(target.CityId))
                     ordered.Add(target);
             }
             if (ordered.Count != pTargets.Count) return pTargets;
@@ -148,38 +156,43 @@ namespace AncientWarfare3.core.lineage
         internal static void InvalidateKingdom(long pKingdomId)
         {
             if (pKingdomId < 0L) return;
-            RemoveWhere(key => key.KingdomId == pKingdomId);
+            lock (PrefetchGate)
+                RemoveWhere(key => key.KingdomId == pKingdomId);
         }
 
         internal static void InvalidateWar(long pWarId)
         {
             if (pWarId < 0L) return;
-            RemoveWhere(key => key.WarId == pWarId);
+            lock (PrefetchGate)
+                RemoveWhere(key => key.WarId == pWarId);
         }
 
         internal static void InvalidateCity(long pCityId)
         {
             if (pCityId < 0L) return;
-            var stale = new List<PrefetchKey>();
-            foreach (KeyValuePair<PrefetchKey, PrefetchedRank> item in
-                     PrefetchByKey)
+            lock (PrefetchGate)
             {
-                long[] cityIds = item.Value?.CityIds;
-                if (cityIds == null) continue;
-                for (int index = 0; index < cityIds.Length; index++)
-                    if (cityIds[index] == pCityId)
-                    {
-                        stale.Add(item.Key);
-                        break;
-                    }
+                var stale = new List<PrefetchKey>();
+                foreach (KeyValuePair<PrefetchKey, PrefetchedRank> item in
+                         PrefetchByKey)
+                {
+                    long[] cityIds = item.Value?.CityIds;
+                    if (cityIds == null) continue;
+                    for (int index = 0; index < cityIds.Length; index++)
+                        if (cityIds[index] == pCityId)
+                        {
+                            stale.Add(item.Key);
+                            break;
+                        }
+                }
+                for (int index = 0; index < stale.Count; index++)
+                    PrefetchByKey.Remove(stale[index]);
             }
-            for (int index = 0; index < stale.Count; index++)
-                PrefetchByKey.Remove(stale[index]);
         }
 
         internal static void ClearRuntime()
         {
-            PrefetchByKey.Clear();
+            lock (PrefetchGate) PrefetchByKey.Clear();
             Interlocked.Exchange(ref _snapshots, 0L);
             Interlocked.Exchange(ref _scheduled, 0L);
             Interlocked.Exchange(ref _completed, 0L);
@@ -209,8 +222,9 @@ namespace AncientWarfare3.core.lineage
         private static void Commit(object pResult)
         {
             if (!(pResult is PrefetchedRank result)) return;
-            PrefetchByKey[new PrefetchKey(result.Stamp.KingdomId,
-                result.Stamp.WarId)] = result;
+            lock (PrefetchGate)
+                PrefetchByKey[new PrefetchKey(result.Stamp.KingdomId,
+                    result.Stamp.WarId)] = result;
             Interlocked.Increment(ref _completed);
         }
 

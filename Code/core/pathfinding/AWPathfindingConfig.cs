@@ -5,20 +5,13 @@ namespace AncientWarfare3.core.pathfinding
 {
     public sealed class AWPathfindingConfig
     {
-        // Keep a bounded pool so large wars can drain path work without
-        // allowing background threads to consume the simulation's reserve.
-        public const int MaximumWorkerCount = 12;
         public static AWPathfindingConfig Default { get; } = new AWPathfindingConfig();
 
         public int ShortRangeTiles { get; set; } = 24;
         public int LongRangeTiles { get; set; } = 96;
-        public int SegmentTargetSteps { get; set; } = 16;
         public int MaxNodesShort { get; set; } = 3000;
         public int MaxNodesLong { get; set; } = 12000;
         public int MaxNodesLongFallback { get; set; } = 60000;
-        public int RegionRouteCacheSize { get; set; } = 256;
-        public int RegionCorridorLookaheadTiles { get; set; } = 64;
-        public float LongRangeHeuristicWeight { get; set; } = 1.15f;
         public int FallbackCorridorMinDetour { get; set; } = 32;
         public float FallbackCorridorDetourScale { get; set; } = 0.75f;
         public int TransportCandidates { get; set; } = 2;
@@ -53,9 +46,6 @@ namespace AncientWarfare3.core.pathfinding
                 MaxNodesLong = 60000,
                 MaxNodesLongFallback = Math.Max(120000,
                     Math.Min(1000000, tiles + 4096)),
-                RegionRouteCacheSize = 512,
-                RegionCorridorLookaheadTiles = 96,
-                LongRangeHeuristicWeight = 1.2f,
                 FallbackCorridorMinDetour = Math.Max(128,
                     (int)Math.Ceiling(Math.Sqrt(tiles) * 2d)),
                 FallbackCorridorDetourScale = 1.5f,
@@ -63,11 +53,9 @@ namespace AncientWarfare3.core.pathfinding
             };
         }
 
-        public static int WorkerCount(int pParallelBudget)
+        public static int WorkerCount(int pProcessorCount)
         {
-            int budget = Math.Max(1, pParallelBudget);
-            return Math.Min(MaximumWorkerCount,
-                Math.Max(1, (budget + 2) / 3));
+            return Math.Max(1, Math.Min(8, pProcessorCount - 1));
         }
     }
 }

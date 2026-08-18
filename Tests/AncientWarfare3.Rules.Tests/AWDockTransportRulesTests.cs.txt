@@ -1,0 +1,47 @@
+using System;
+using AncientWarfare3.core.pathfinding;
+
+internal static class AWDockTransportRulesTests
+{
+    internal static void Run()
+    {
+        Assert(AWDockTransportRules.CanCreatePhysicalRoute(
+                startTileId: 10, endTileId: 20, sameIsland: false,
+                actorAlreadyEmbarked: false),
+            "a cross-island route is eligible for a physical boat request");
+        Assert(!AWDockTransportRules.CanCreatePhysicalRoute(
+                startTileId: 10, endTileId: 10, sameIsland: false,
+                actorAlreadyEmbarked: false),
+            "transport never creates a zero-distance teleport edge");
+        Assert(!AWDockTransportRules.CanCreatePhysicalRoute(
+                startTileId: 10, endTileId: 20, sameIsland: true,
+                actorAlreadyEmbarked: false),
+            "a same-island route remains ordinary land pathing");
+
+        Assert(AWDockTransportRules.NextState(AWDockPassengerState.WaitingBoat,
+                alive: true, targetValid: true, insideBoat: false,
+                requestExists: true, reachedDestination: false,
+                timedOut: false) == AWDockPassengerState.WaitingBoat,
+            "a live passenger waits without spin state changes");
+        Assert(AWDockTransportRules.NextState(AWDockPassengerState.WaitingBoat,
+                alive: true, targetValid: true, insideBoat: true,
+                requestExists: true, reachedDestination: false,
+                timedOut: false) == AWDockPassengerState.Sailing,
+            "boarding transitions into sailing");
+        Assert(AWDockTransportRules.NextState(AWDockPassengerState.Sailing,
+                alive: true, targetValid: true, insideBoat: false,
+                requestExists: false, reachedDestination: true,
+                timedOut: false) == AWDockPassengerState.Completed,
+            "disembarking on the destination completes the voyage");
+        Assert(AWDockTransportRules.NextState(AWDockPassengerState.Sailing,
+                alive: true, targetValid: false, insideBoat: false,
+                requestExists: false, reachedDestination: false,
+                timedOut: false) == AWDockPassengerState.Failed,
+            "lost targets fail instead of leaving a passenger stuck");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

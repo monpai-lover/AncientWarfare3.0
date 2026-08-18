@@ -82,31 +82,8 @@ namespace AncientWarfare3.core.asyncwork
         }
     }
 
-    internal readonly struct AWAsyncCommitTimingSnapshot
-    {
-        internal AWAsyncCommitTimingSnapshot(string pSlowestKey,
-            AWAsyncLane pSlowestLane, long pSlowestTicks,
-            long pTotalTicks, int pCalls)
-        {
-            SlowestKey = string.IsNullOrEmpty(pSlowestKey)
-                ? "none"
-                : pSlowestKey;
-            SlowestLane = pSlowestLane;
-            SlowestTicks = Math.Max(0L, pSlowestTicks);
-            TotalTicks = Math.Max(0L, pTotalTicks);
-            Calls = Math.Max(0, pCalls);
-        }
-
-        internal string SlowestKey { get; }
-        internal AWAsyncLane SlowestLane { get; }
-        internal long SlowestTicks { get; }
-        internal long TotalTicks { get; }
-        internal int Calls { get; }
-    }
-
     internal sealed class AWAsyncDiagnostics
     {
-        private readonly object _commitTimingGate = new object();
         private long _scheduled;
         private long _merged;
         private long _stale;
@@ -115,11 +92,6 @@ namespace AncientWarfare3.core.asyncwork
         private long _cancelled;
         private long _rejected;
         private long _backgroundCommitted;
-        private string _slowestMainThreadCommitKey = "none";
-        private AWAsyncLane _slowestMainThreadCommitLane;
-        private long _slowestMainThreadCommitTicks;
-        private long _mainThreadCommitTicks;
-        private int _mainThreadCommitCalls;
 
         public void RecordScheduled() => Interlocked.Increment(ref _scheduled);
         public void RecordMerged() => Interlocked.Increment(ref _merged);
@@ -130,42 +102,6 @@ namespace AncientWarfare3.core.asyncwork
         public void RecordRejected() => Interlocked.Increment(ref _rejected);
         public void RecordBackgroundCommitted() =>
             Interlocked.Increment(ref _backgroundCommitted);
-
-        public void RecordMainThreadCommit(string pKey, AWAsyncLane pLane,
-            long pElapsedTicks)
-        {
-            long elapsed = Math.Max(0L, pElapsedTicks);
-            lock (_commitTimingGate)
-            {
-                _mainThreadCommitTicks += elapsed;
-                _mainThreadCommitCalls++;
-                if (elapsed <= _slowestMainThreadCommitTicks) return;
-                _slowestMainThreadCommitTicks = elapsed;
-                _slowestMainThreadCommitKey = string.IsNullOrEmpty(pKey)
-                    ? "none"
-                    : pKey;
-                _slowestMainThreadCommitLane = pLane;
-            }
-        }
-
-        public AWAsyncCommitTimingSnapshot TakeMainThreadCommitTiming()
-        {
-            lock (_commitTimingGate)
-            {
-                var snapshot = new AWAsyncCommitTimingSnapshot(
-                    _slowestMainThreadCommitKey,
-                    _slowestMainThreadCommitLane,
-                    _slowestMainThreadCommitTicks,
-                    _mainThreadCommitTicks,
-                    _mainThreadCommitCalls);
-                _slowestMainThreadCommitKey = "none";
-                _slowestMainThreadCommitLane = default;
-                _slowestMainThreadCommitTicks = 0L;
-                _mainThreadCommitTicks = 0L;
-                _mainThreadCommitCalls = 0;
-                return snapshot;
-            }
-        }
 
         public AWAsyncDiagnosticsSnapshot Snapshot()
         {
