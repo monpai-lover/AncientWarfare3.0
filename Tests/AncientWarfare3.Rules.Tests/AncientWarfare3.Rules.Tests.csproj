@@ -171,6 +171,8 @@
     <Compile Include="..\..\Code\core\db\KingdomPolicyStateTableItem.cs" Link="Production\KingdomPolicyStateTableItem.cs" />
     <Compile Include="..\..\Code\core\db\KingdomCourtStateTableItem.cs" Link="Production\KingdomCourtStateTableItem.cs" />
     <Compile Include="..\..\Code\utils\SQLiteHelper.cs" Link="Production\SQLiteHelper.cs" />
+    <Compile Include="TableIdAllocatorSqlTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\TableIdAllocator.cs" Link="Production\TableIdAllocator.cs" />
     <Compile Include="TitleAtomicSqlTests.cs.txt" />
     <Compile Include="DiplomacyTreatyPersistenceTests.cs.txt" />
     <Compile Include="ConferredPosthumousTitleRulesTests.cs.txt" />
@@ -452,6 +454,8 @@
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalLabelSourceCursor.cs" Link="Production\HierarchicalVassalLabelSourceCursor.cs" />
     <Compile Include="..\..\Code\core\court\CityGovernorPlacementRules.cs" Link="Production\CityGovernorPlacementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\KingdomExtinctionRules.cs" Link="Production\KingdomExtinctionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomCheckCacheGuard.cs" Link="Production\KingdomCheckCacheGuard.cs" />
+    <Compile Include="BulkEraseKingdomDisposalRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\NobleCaptureRules.cs" Link="Production\NobleCaptureRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyCreationSafetyRules.cs" Link="Production\ArmyCreationSafetyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\AllianceConversationRules.cs" Link="Production\AllianceConversationRules.cs" />

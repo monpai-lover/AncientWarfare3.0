@@ -1,0 +1,198 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using AncientWarfare3.core.lineage;
+
+/// <summary>
+///     取号器的两个回归点：调用方普遍在 BeginTransaction 之前取号，因此
+///     MAX(col)+1 本身不足以避免重复发号；底数查询失败时也不能退回 1。
+/// </summary>
+internal static class TableIdAllocatorSqlTests
+{
+    internal static void Run()
+    {
+        RepeatedAllocationsWithoutInsertsNeverRepeat();
+        ReservedRangeIsNotHandedOutAgain();
+        ConcurrentAllocationsAreUnique();
+        UncommittedRowsDoNotCollide();
+        SeparateConnectionsRestartIndependently();
+    }
+
+    private static void RepeatedAllocationsWithoutInsertsNeverRepeat()
+    {
+        using Fixture fixture = Fixture.Create();
+        // 未插入任何行时连续取号：MAX 不动，只有水位线能区分它们。
+        var seen = new HashSet<long>();
+        for (var index = 0; index < 64; index++)
+        {
+            long id = TableIdAllocator.Next(fixture.Connection, Fixture.Table,
+                Fixture.Column);
+            True(id > 0L, "allocator never hands out a non-positive id");
+            True(seen.Add(id),
+                "allocator never repeats an id when no rows were inserted");
+        }
+    }
+
+    private static void ReservedRangeIsNotHandedOutAgain()
+    {
+        using Fixture fixture = Fixture.Create();
+        long first = TableIdAllocator.Next(fixture.Connection, null,
+            Fixture.Table, Fixture.Column, 2);
+        long following = TableIdAllocator.Next(fixture.Connection,
+            Fixture.Table, Fixture.Column);
+        True(first > 0L, "reserved range starts at a positive id");
+        Equal(first + 2L, following,
+            "a reserved range is skipped by the next allocation");
+    }
+
+    private static void ConcurrentAllocationsAreUnique()
+    {
+        using Fixture fixture = Fixture.Create();
+        const int threads = 8;
+        const int perThread = 40;
+        var results = new long[threads][];
+        using (var start = new ManualResetEventSlim(false))
+        {
+            var workers = new Task[threads];
+            for (var t = 0; t < threads; t++)
+            {
+                int index = t;
+                results[index] = new long[perThread];
+                workers[index] = Task.Run(() =>
+                {
+                    start.Wait();
+                    for (var i = 0; i < perThread; i++)
+                        results[index][i] = TableIdAllocator.Next(
+                            fixture.Connection, Fixture.Table, Fixture.Column);
+                });
+            }
+
+            start.Set();
+            Task.WaitAll(workers);
+        }
+
+        var unique = new HashSet<long>();
+        foreach (long[] batch in results)
+        foreach (long id in batch)
+            True(unique.Add(id),
+                "concurrent allocations never hand out the same id twice");
+        Equal(threads * perThread, unique.Count,
+            "every concurrent allocation produced a distinct id");
+    }
+
+    private static void UncommittedRowsDoNotCollide()
+    {
+        using Fixture fixture = Fixture.Create();
+        // 事务内取号并插入但尚未提交时，事务外的取号看不到该行。
+        using SQLiteTransaction transaction =
+            fixture.Connection.BeginTransaction();
+        long inTransaction = TableIdAllocator.Next(fixture.Connection,
+            transaction, Fixture.Table, Fixture.Column);
+        fixture.Insert(transaction, inTransaction);
+        long outside = TableIdAllocator.Next(fixture.Connection,
+            Fixture.Table, Fixture.Column);
+        True(outside != inTransaction,
+            "an uncommitted row's id is not handed out again");
+        transaction.Rollback();
+    }
+
+    private static void SeparateConnectionsRestartIndependently()
+    {
+        long firstDatabaseId;
+        using (Fixture first = Fixture.Create())
+        {
+            firstDatabaseId = TableIdAllocator.Next(first.Connection,
+                Fixture.Table, Fixture.Column);
+            for (var index = 0; index < 10; index++)
+                TableIdAllocator.Next(first.Connection, Fixture.Table,
+                    Fixture.Column);
+        }
+
+        using Fixture second = Fixture.Create();
+        long secondDatabaseId = TableIdAllocator.Next(second.Connection,
+            Fixture.Table, Fixture.Column);
+        Equal(firstDatabaseId, secondDatabaseId,
+            "a new connection restarts numbering from the database maximum");
+    }
+
+    private static void True(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal(long expected, long actual, string message)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(
+                message + $" (expected {expected}, actual {actual})");
+    }
+
+    private sealed class Fixture : IDisposable
+    {
+        internal const string Table = "AllocatorProbe";
+        internal const string Column = "PROBE_ID";
+
+        private readonly string _path;
+
+        private Fixture(string pPath, SQLiteConnection pConnection)
+        {
+            _path = pPath;
+            Connection = pConnection;
+        }
+
+        internal SQLiteConnection Connection { get; }
+
+        internal static Fixture Create()
+        {
+            string path = Path.Combine(Path.GetTempPath(),
+                "aw3-allocator-" + Guid.NewGuid().ToString("N") + ".db");
+            var connection = new SQLiteConnection("data source=" + path);
+            connection.Open();
+            using (var command = new SQLiteCommand(connection))
+            {
+                command.CommandText = "CREATE TABLE " + Table + " (" +
+                                      Column + " INTEGER PRIMARY KEY)";
+                command.ExecuteNonQuery();
+            }
+
+            return new Fixture(path, connection);
+        }
+
+        internal void Insert(SQLiteTransaction pTransaction, long pId)
+        {
+            using var command = new SQLiteCommand(Connection)
+            {
+                Transaction = pTransaction
+            };
+            command.CommandText = "INSERT INTO " + Table + " (" + Column +
+                                  ") VALUES (@id)";
+            command.Parameters.AddWithValue("@id", pId);
+            command.ExecuteNonQuery();
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                Connection.Close();
+                Connection.Dispose();
+            }
+            catch
+            {
+                // 清理失败不影响断言结果。
+            }
+
+            try
+            {
+                if (File.Exists(_path)) File.Delete(_path);
+            }
+            catch
+            {
+                // 临时文件残留不影响断言结果。
+            }
+        }
+    }
+}

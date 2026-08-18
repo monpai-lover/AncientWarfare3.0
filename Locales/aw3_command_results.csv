@@ -1,0 +1,37 @@
+key,cz,en,ch
+aw3_command_accepted,操作已接受,Command accepted,操作已接受
+aw3_command_dispatcher_missing,找不到命令处理器,Command dispatcher unavailable,找不到命令處理器
+aw3_command_execution_failed,命令执行失败,Command execution failed,命令執行失敗
+aw3_command_illegal_target,目标不合法,Illegal target,目標不合法
+aw3_command_invalid_request,请求无效,Invalid request,請求無效
+aw3_command_not_found,找不到该命令,Command not found,找不到該命令
+aw3_command_target_not_found,找不到目标,Target not found,找不到目標
+aw3_command_unauthorized,无权执行该操作,Not authorized for this action,無權執行該操作
+aw3_court_appointment_ok,已任命官员,Officer appointed,已任命官員
+aw3_court_appointment_rejected,任命被驳回,Appointment rejected,任命被駁回
+aw3_court_disposition_accepted,宫廷处置已生效,Court disposition applied,宮廷處置已生效
+aw3_court_disposition_rejected,宫廷处置被驳回,Court disposition rejected,宮廷處置被駁回
+aw3_court_disposition_invalid_ruler,当前君主无法下达处置,This ruler cannot issue a disposition,當前君主無法下達處置
+aw3_court_auxiliary_law_ok,官制辅助法已更改,Court auxiliary law changed,官制輔助法已更改
+aw3_court_auxiliary_law_rejected,官制辅助法更改被驳回,Court auxiliary law change rejected,官制輔助法更改被駁回
+aw3_inheritance_law_ok,继承法已更改,Inheritance law changed,繼承法已更改
+aw3_inheritance_law_rejected,继承法更改被驳回,Inheritance law change rejected,繼承法更改被駁回
+aw3_feudatory_abolished,已废除藩国,Feudatory abolished,已廢除藩國
+aw3_feudatory_abolish_rejected,废除藩国被驳回,Abolishing the feudatory was rejected,廢除藩國被駁回
+aw3_feudatory_relocated,已移封藩国,Feudatory relocated,已移封藩國
+aw3_feudatory_relocate_rejected,移封藩国被驳回,Relocating the feudatory was rejected,移封藩國被駁回
+aw3_feudatory_city_reclaimed,已收回藩城,Feudatory city reclaimed,已收回藩城
+aw3_feudatory_reclaim_rejected,收回藩城被驳回,Reclaiming the feudatory city was rejected,收回藩城被駁回
+aw3_era_change_rejected,改元被驳回,Era name change rejected,改元被駁回
+aw3_conferred_commit_rejected,赠谥被驳回,Posthumous conferment rejected,贈諡被駁回
+aw3_rename_visible_clan_none,没有可更新的氏族,No clans updated,沒有可更新的氏族
+aw3_diplomacy_proposal_created,提案已发出,Proposal sent,提案已發出
+aw3_diplomacy_response_recorded,已记录答复,Response recorded,已記錄答覆
+aw3_war_declaration_issued,已宣战,War declared,已宣戰
+aw3_spy_network_started,已开始建立间谍网,Spy network started,已開始建立間諜網
+aw3_forgery_started,已开始伪造文书,Document forgery started,已開始偽造文書
+aw3_targeted_decision_started,决议已发起,Decision started,決議已發起
+aw3_targeted_decision_rejected,决议无法发起,Decision cannot be started,決議無法發起
+aw3_army_posture_set,已设置军队姿态,Army posture set,已設置軍隊姿態
+aw3_army_rally_point_set,已设置集结点,Rally point set,已設置集結點
+aw3_army_order_cancelled,已取消军令,Army order cancelled,已取消軍令

@@ -1,11 +1,11 @@
-key,cz,en
-default,原始公平,Original Fairness
-default_desc,原始公平是指人们在进入社会之前，处于一个公平的状态，没有任何人能够掌握比其他人更多的资源，也没有任何人能够掌握比其他人更多的权力。,Original fairness refers to the state of fairness before people enter society， where no one can control more resources than others， and no one can control more power than others.
-slaveowner,奴隶制,Slavery
-slaveowner_desc,奴隶制,Slavery
-halfaristocrat,半奴隶制半封建制,Half Slavery half aristocrat
-halfaristocrat_desc,这是一个从奴隶制过渡到封建制的过度时期,Half Slavery half aristocrat
-aristocrat,封建贵族,Aristocrat
-landlord,地主,Landlord
-capitalist,资本主义,Capitalist
-proletarian,无产阶级,Proletarian
+key,cz,en,ch
+default,原始公平,Original Fairness,原始公平
+default_desc,原始公平是指人们在进入社会之前，处于一个公平的状态，没有任何人能够掌握比其他人更多的资源，也没有任何人能够掌握比其他人更多的权力。,Original fairness refers to the state of fairness before people enter society， where no one can control more resources than others， and no one can control more power than others.,原始公平是指人們在進入社會之前，處於一個公平的狀態，沒有任何人能夠掌握比其他人更多的資源，也沒有任何人能夠掌握比其他人更多的權力。
+slaveowner,奴隶制,Slavery,奴隸制
+slaveowner_desc,奴隶制,Slavery,奴隸制
+halfaristocrat,半奴隶制半封建制,Half Slavery half aristocrat,半奴隸制半封建制
+halfaristocrat_desc,这是一个从奴隶制过渡到封建制的过度时期,Half Slavery half aristocrat,這是一個從奴隸制過渡到封建制的過渡時期
+aristocrat,封建贵族,Aristocrat,封建貴族
+landlord,地主,Landlord,地主
+capitalist,资本主义,Capitalist,資本主義
+proletarian,无产阶级,Proletarian,無產階級

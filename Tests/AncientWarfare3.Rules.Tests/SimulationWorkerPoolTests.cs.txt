@@ -8,6 +8,45 @@ internal static class SimulationWorkerPoolTests
         WaitingThreadCanAssistAsynchronousWork();
         RejectsConcurrentOperations();
         PropagatesWorkerExceptionsAndRemainsReusable();
+        BackToBackGenerationsNeverDropScheduledWork();
+    }
+
+    /// <summary>
+    ///     连续多代小批量操作，并让等待线程同时抢工：这是跨代信号泄漏最容易
+    ///     暴露的形状。任何参与者记账赤字都会让收尾提前发生并丢下尾部下标，
+    ///     在 Complete 里表现为 ExecutedItems != ScheduledItems。
+    /// </summary>
+    private static void BackToBackGenerationsNeverDropScheduledWork()
+    {
+        for (int generation = 0; generation < 600; generation++)
+        {
+            int count = 1 + generation % 7;
+            int[] visits = new int[count];
+            if (generation % 2 == 0)
+            {
+                AWSimulationWorkerPool.WorkResult synchronous =
+                    AWSimulationWorkerPool.Instance.RunIndexed(0, count,
+                        index => Interlocked.Increment(ref visits[index]));
+                Equal(count, synchronous.ExecutedItems,
+                    "synchronous generation executes every scheduled index");
+            }
+            else
+            {
+                AWSimulationWorkerPool.WorkTicket ticket =
+                    AWSimulationWorkerPool.Instance.BeginIndexed(0, count,
+                        index => Interlocked.Increment(ref visits[index]));
+                AWSimulationWorkerPool.Instance.TryAssistActiveOperation();
+                AWSimulationWorkerPool.Instance.Wait(ticket);
+                AWSimulationWorkerPool.WorkResult asynchronous =
+                    AWSimulationWorkerPool.Instance.Complete(ticket);
+                Equal(count, asynchronous.ExecutedItems,
+                    "asynchronous generation executes every scheduled index");
+            }
+
+            for (int index = 0; index < visits.Length; index++)
+                Equal(1, visits[index],
+                    "back-to-back generations execute each index exactly once");
+        }
     }
 
     private static void ExecutesEveryIndexExactlyOnce()

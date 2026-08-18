@@ -1145,8 +1145,9 @@ internal static class ScenarioFactory
                 state.Result.FirstMarchTick = state.ActiveTicks;
                 state.Result.RalliedMembersAtFirstMarch = rallied;
             }
-            if (army.State == ArmyRtsState.Replenish &&
-                next != ArmyRtsState.Replenish &&
+            // 补员请求在缺额补齐时归零。原先绑在「离开 Replenish 态」上，
+            // 但补员已不再经由该状态，那个条件永不成立。
+            if (army.ReplenishmentRequested &&
                 army.Living >= army.TargetStrength)
                 army.ReplenishmentRequested = false;
             SetState(army, next);
@@ -1207,13 +1208,16 @@ internal static class ScenarioFactory
         {
             if (!army.MissionValid || army.Living <= 0) continue;
             army.StateTicks++;
+            // 补员是独立操作，不依赖 RTS 状态机进入 Replenish：生产端
+            // ArmyReplenishmentOperationService.TryGetLiveShortage 在没有
+            // wartimeRecovery 时也会按城市目标补员。若绑在 Replenish 上，
+            // ShouldEnterReplenishment 的 wartimeRecovery 闸门会让补员
+            // 永远不发生（战损永不恢复）。
+            AdvanceRallyRecruitmentReplenishment(state, army);
             switch (army.State)
             {
                 case ArmyRtsState.Rally:
                     AdvanceRallyRecruitmentRally(state, army);
-                    break;
-                case ArmyRtsState.Replenish:
-                    AdvanceRallyRecruitmentReplenishment(state, army);
                     break;
                 case ArmyRtsState.March:
                     AdvanceRallyRecruitmentMarch(state, army);
@@ -1258,7 +1262,11 @@ internal static class ScenarioFactory
             Id = actorId,
             ArmyId = army.Id,
             KingdomId = army.KingdomId,
-            Position = 0,
+            // 生产端补员走 TryTeleportReinforcementMember /
+            // TrackReplenishmentArrival，即把援兵送到军队所在处；从 0 位
+            // 生成会让援兵永远追不上行军中的队伍，Deploy 的护卫法定数
+            // 因此永远凑不齐。
+            Position = army.Position,
             Task = SimTaskClass.RtsFormation
         };
     }

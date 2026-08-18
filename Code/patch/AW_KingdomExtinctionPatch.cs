@@ -47,10 +47,37 @@ namespace AncientWarfare3.patch
                 try { liveCityCount = __instance.countCities(); }
                 catch { liveCityCount = __instance.hasCities() ? 1 : 0; }
                 if (liveCityCount > 0) return true;
+                // 零城已确认,但尸体/单位/建筑/弹道还指着本王国时不能抢跑:
+                // Dispose 会把 asset 置 null,而尸体仍在 visible_units 里渲染。
+                if (!KingdomExtinctionRules.ShouldForceImmediateRemoval(
+                        __instance.isCiv(), cityIndexStable, liveCityCount,
+                        VanillaLiveReferencesCleared(__instance)))
+                    return true;
                 __result = true;
                 return false;
             }
             return true;
+        }
+
+        /// <summary>
+        ///     读原版那几个活引用闸门。读不到就当作「未放开」,交回原版判定。
+        /// </summary>
+        private static bool VanillaLiveReferencesCleared(Kingdom pKingdom)
+        {
+            try
+            {
+                return KingdomExtinctionRules.
+                    AreVanillaLiveReferencesCleared(
+                        pKingdom._force_preserve_alive,
+                        pKingdom.units.Count,
+                        pKingdom.buildings.Count,
+                        World.world.projectiles.hasActiveProjectiles(
+                            pKingdom));
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         [HarmonyPrefix]

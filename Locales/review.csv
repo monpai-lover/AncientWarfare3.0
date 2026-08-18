@@ -1,16 +1,16 @@
-key,cz,en
-review_item,{0}\t{1},{0}\t{1}
-review_rule_start,{0}即位,{0} ascended
-review_rule_end,{0}退位，在位{1}年,{0} abdicated after {1} years
-review_change_yearname,改元:{0},Changed era to {0}
-review_start_moh,建立{0}朝,Founded the {0} dynasty
-review_end_moh,{0}朝灭亡,The {0} dynasty fell
-review_start_usurpation,{0}篡位，建立{1},{0} usurped the throne and founded {1}
-review_start_integration,来自{1}的{0}继承{2}的爵位,{0} from {1} inherited the title of {2}
-review_capitalchange,自 {1} 迁都到 {0} ,Moved capital from {1} to {0}
-review_setvassal, {0} 成为 {1} 的附庸 ,{0} became a vassal of {1}
-review_removevassal, {0} 脱离 {1} 独立 ,{0} broke from {1} and became independent
-review_getvassal, {1} 附庸了 {0}  ,{1} made {0} a vassal
-review_losevassal, {1} 失去了附庸 {0}  ,{1} lost vassal {0}
-review_absorbvassal, {1} 吞并了附庸 {0}  ,{1} annexed vassal {0}
-review_absorbedvassal, {0} 被 {1} 吞并 ,{0} was annexed by {1}
+key,cz,en,ch
+review_item,{0}\t{1},{0}\t{1},{0}\t{1}
+review_rule_start,{0}即位,{0} ascended,{0}即位
+review_rule_end,{0}退位，在位{1}年,{0} abdicated after {1} years,{0}退位，在位{1}年
+review_change_yearname,改元:{0},Changed era to {0},改元:{0}
+review_start_moh,建立{0}朝,Founded the {0} dynasty,建立{0}朝
+review_end_moh,{0}朝灭亡,The {0} dynasty fell,{0}朝滅亡
+review_start_usurpation,{0}篡位，建立{1},{0} usurped the throne and founded {1},{0}篡位，建立{1}
+review_start_integration,来自{1}的{0}继承{2}的爵位,{0} from {1} inherited the title of {2},來自{1}的{0}繼承{2}的爵位
+review_capitalchange,自 {1} 迁都到 {0} ,Moved capital from {1} to {0},自 {1} 遷都到 {0}
+review_setvassal, {0} 成为 {1} 的附庸 ,{0} became a vassal of {1}, {0} 成為 {1} 的附庸
+review_removevassal, {0} 脱离 {1} 独立 ,{0} broke from {1} and became independent, {0} 脫離 {1} 獨立
+review_getvassal, {1} 附庸了 {0}  ,{1} made {0} a vassal, {1} 附庸了 {0}
+review_losevassal, {1} 失去了附庸 {0}  ,{1} lost vassal {0}, {1} 失去了附庸 {0}
+review_absorbvassal, {1} 吞并了附庸 {0}  ,{1} annexed vassal {0}, {1} 吞併了附庸 {0}
+review_absorbedvassal, {0} 被 {1} 吞并 ,{0} was annexed by {1}, {0} 被 {1} 吞併

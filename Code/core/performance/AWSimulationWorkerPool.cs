@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.performance
         private readonly object _operationLock = new object();
         private readonly Thread[] _workers;
         private readonly AutoResetEvent[] _workerSignals;
+        private readonly int[] _workerGenerations;
 
         private Action<int> _operationAction;
         private ExceptionDispatchInfo _operationException;
@@ -53,6 +54,7 @@ namespace AncientWarfare3.core.performance
                 AWPerformanceSettings.ForegroundParallelism - 1);
             _workers = new Thread[workerCount];
             _workerSignals = new AutoResetEvent[workerCount];
+            _workerGenerations = new int[workerCount];
             for (int i = 0; i < workerCount; i++)
             {
                 _workerSignals[i] = new AutoResetEvent(false);
@@ -373,6 +375,12 @@ namespace AncientWarfare3.core.performance
                 _operationStartedAt = Stopwatch.GetTimestamp();
                 _operationCompletedAt = 0L;
                 _operationCompleted.Reset();
+                // 参与本代的 worker 在锁内领到自己的 generation，唤醒后
+                // 不再去读全局值：上一代遗留的信号会被合并，若 worker 自己
+                // 读全局就可能替新一代记一次减计数，使收尾提前发生。
+                for (int i = 0; i < pBackgroundWorkers; i++)
+                    Volatile.Write(ref _workerGenerations[i],
+                        _activeGeneration);
                 ticket = new WorkTicket(_activeGeneration);
             }
 
@@ -388,7 +396,8 @@ namespace AncientWarfare3.core.performance
             while (true)
             {
                 signal.WaitOne();
-                int generation = Volatile.Read(ref _activeGeneration);
+                int generation = Interlocked.Exchange(
+                    ref _workerGenerations[workerIndex], 0);
                 if (generation == 0) continue;
                 ExecuteItems(generation);
                 SignalParticipantCompleted(generation);
@@ -439,9 +448,27 @@ namespace AncientWarfare3.core.performance
 
         private void SignalParticipantCompleted(int pGeneration)
         {
-            if (pGeneration == Volatile.Read(ref _activeGeneration) &&
-                Interlocked.Decrement(ref _remainingParticipants) == 0)
-                MarkOperationCompleted(pGeneration);
+            if (pGeneration != Volatile.Read(ref _activeGeneration)) return;
+
+            while (Interlocked.Decrement(ref _remainingParticipants) == 0)
+            {
+                // 归零只说明记账上没有参与者了，不代表队列排空。参与者记账
+                // 一旦出现赤字，尾部下标就会被丢下并在 Complete 里表现为
+                // ExecutedItems != ScheduledItems。收尾前由最后退出者补跑。
+                if (Volatile.Read(ref _stopRequested) != 0 ||
+                    Volatile.Read(ref _nextIndex) >=
+                    Volatile.Read(ref _endIndex) - 1 ||
+                    pGeneration != Volatile.Read(ref _activeGeneration))
+                {
+                    MarkOperationCompleted(pGeneration);
+                    return;
+                }
+
+                // 计数为 0 时无人能加入（TryAssist* 见到 0 会退出），因此这里
+                // 独占地重新入账并排空剩余下标，然后再走一次收尾判定。
+                Interlocked.Increment(ref _remainingParticipants);
+                ExecuteItems(pGeneration);
+            }
         }
 
         private void RecordCompletedOperation(WorkResult pResult)

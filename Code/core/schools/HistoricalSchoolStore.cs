@@ -514,8 +514,10 @@ namespace AncientWarfare3.core.schools
 
             // IDs are allocated before opening the transaction.  Ledger rows use
             // city+school keys and therefore do not consume an allocator id.
+            // 两个事件 ID 必须一次预留，否则第二个号会被后续调用重新发出。
             long debateId = TableIdAllocator.Next(DB, DebateTable, "DEBATE_ID");
-            long firstEventId = TableIdAllocator.Next(DB, EventTable, "EVENT_ID");
+            long firstEventId = TableIdAllocator.Next(DB, null, EventTable,
+                "EVENT_ID", 2);
             if (debateId < 0 || firstEventId < 0 || firstEventId >= long.MaxValue - 1L)
                 return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
             long secondEventId = firstEventId + 1L;
@@ -607,7 +609,8 @@ namespace AncientWarfare3.core.schools
             if (exists) return existing;
 
             long debateId = NextIdInTransaction(pTransaction, DebateTable, "DEBATE_ID");
-            long firstEventId = NextIdInTransaction(pTransaction, EventTable, "EVENT_ID");
+            long firstEventId = NextIdInTransaction(pTransaction, EventTable,
+                "EVENT_ID", 2);
             if (debateId < 0 || firstEventId < 0 || firstEventId >= long.MaxValue - 1L)
                 return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
             long secondEventId = firstEventId + 1L;
@@ -3175,13 +3178,12 @@ namespace AncientWarfare3.core.schools
         }
 
         private static long NextIdInTransaction(SQLiteTransaction pTransaction,
-            string pTable, string pColumn)
+            string pTable, string pColumn, int pCount = 1)
         {
-            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
-            command.CommandText = "SELECT IFNULL(MAX(" + pColumn + "),0)+1 FROM " +
-                                  pTable;
-            return Convert.ToInt64(command.ExecuteScalar(),
-                System.Globalization.CultureInfo.InvariantCulture);
+            // 必须与事务外取号共用同一个水位线，否则会发出已被预留、
+            // 但尚未提交因而不在 MAX 里的 ID。
+            return TableIdAllocator.Next(pTransaction.Connection, pTransaction,
+                pTable, pColumn, pCount);
         }
 
         private static void InvalidateLedgerCaches(long pCityId)
