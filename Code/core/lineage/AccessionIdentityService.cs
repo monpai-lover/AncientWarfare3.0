@@ -60,6 +60,28 @@ namespace AncientWarfare3.core.lineage
             if (kingdomId >= 0) DeferredInstallations.Remove(kingdomId);
         }
 
+        internal static bool RefreshInstalledKingHome(Kingdom pKingdom)
+        {
+            Actor king = pKingdom?.king;
+            if (pKingdom?.data == null || king?.data == null ||
+                king.isRekt() || king.kingdom != pKingdom ||
+                !TryGetValidCapital(pKingdom, out City capital))
+                return false;
+            if (king.city == capital) return true;
+            try
+            {
+                using (FormalAffiliationTransferScope.Open(
+                           king.data.id, pKingdom.id, capital.data.id))
+                    king.joinCity(capital);
+            }
+            catch { return false; }
+            if (king.city != capital) return false;
+            LineageService.ArchiveActor(king, pAlive: true);
+            CitySchoolSnapshotService.MarkActorDirty(king);
+            try { king.clearGraphicsFully(); } catch { }
+            return true;
+        }
+
         internal static void ProcessDeferredInstallations()
         {
             if (DeferredInstallations.Count == 0 ||
@@ -125,6 +147,7 @@ namespace AncientWarfare3.core.lineage
         private static void CompleteDeferredInstallation(
             Kingdom pKingdom, Actor pActor)
         {
+            EnsureRoyalClanAfterNativeAccession(pKingdom, pActor);
             FormerHeirService.ClearSnapshot(pActor);
             FormerKingService.ClearSnapshot(pActor);
             HeirService.ClearHeir(pKingdom);
@@ -173,6 +196,7 @@ namespace AncientWarfare3.core.lineage
 
             if (!Prepare(pKingdom, king) || !Commit(pKingdom, king))
                 return false;
+            EnsureRoyalClanAfterNativeAccession(pKingdom, king);
             RepublicGovernmentService.MarkMonarchyEstablished(pKingdom);
             FormerHeirService.ClearSnapshot(king);
             FormerKingService.ClearSnapshot(king);
@@ -193,6 +217,69 @@ namespace AncientWarfare3.core.lineage
                 LastPrepareFailureReason = "invalid_actor_or_kingdom";
                 return false;
             }
+            City home = ResolveAccessionHome(pKingdom, pActor);
+            Kingdom previousKingdom = pActor.kingdom;
+            City previousCity = pActor.city;
+
+            try
+            {
+                pActor.cancelAllBeh();
+                if (pActor.kingdom != pKingdom &&
+                    pActor.kingdom?.asset == null)
+                    pActor.kingdom = null;
+                using (FormalAffiliationTransferScope.Open(
+                           pActor.data.id, pKingdom.id,
+                           home?.data?.id ?? -1L))
+                {
+                    if (home == null && pActor.city?.kingdom != pKingdom)
+                        pActor.setCity(null);
+                    if (pActor.kingdom != pKingdom)
+                        pActor.joinKingdom(pKingdom);
+                    if (home != null && pActor.city != home)
+                        pActor.joinCity(home);
+                }
+            }
+            catch
+            {
+                if (!IsAffiliationCommitted(pActor, pKingdom, home))
+                {
+                    RestoreAffiliation(
+                        pActor,
+                        previousKingdom,
+                        previousCity);
+                    LastPrepareFailureReason =
+                        "native_affiliation_transfer";
+                    return false;
+                }
+            }
+
+            if (!IsAffiliationCommitted(pActor, pKingdom, home))
+            {
+                try
+                {
+                    using (FormalAffiliationTransferScope.Open(
+                               pActor.data.id, pKingdom.id,
+                               home?.data?.id ?? -1L))
+                    {
+                        if (pActor.kingdom != pKingdom)
+                        {
+                            if (pActor.kingdom?.asset == null)
+                                pActor.kingdom = null;
+                            pActor.joinKingdom(pKingdom);
+                        }
+                        if (home != null && pActor.city != home)
+                            pActor.joinCity(home);
+                    }
+                }
+                catch { }
+            }
+            if (!IsAffiliationCommitted(pActor, pKingdom, home))
+            {
+                RestoreAffiliation(pActor, previousKingdom, previousCity);
+                LastPrepareFailureReason = "affiliation_not_committed";
+                return false;
+            }
+
             bool registeredHeir = HeirService.IsCurrentHeir(pKingdom,
                 pActor);
             bool guardIdentity = RoyalGuardService.IsRoyalGuard(pActor);
@@ -203,23 +290,19 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             if (!RoyalGuardOfficeRules.CanReplaceLifetimeGuardIdentity(
-                RoyalGuardService.IsRoyalGuard(pActor)))
+                    RoyalGuardService.IsRoyalGuard(pActor)))
             {
                 LastPrepareFailureReason = "royal_guard_identity";
                 return false;
             }
-            if (!TryRepairCapital(pKingdom, out City capital))
-            {
-                LastPrepareFailureReason = "invalid_capital";
-                return false;
-            }
-            if (!CloseGuestOffice(pActor))
+            if (!CloseGuestOffice(pActor, "became_king"))
             {
                 LastPrepareFailureReason = "guest_office_close";
                 return false;
             }
 
-            CourtService.ClearOfficeForReignTransition(pActor, "became_king");
+            CourtService.ClearOfficeForReignTransition(pActor, "became_king",
+                pPersistCareer: false);
             GeneralService.RetireForSuccession(pActor);
             RoyalGuardService.DismissGuard(pActor, "became_king");
             TemporaryLevyService.OnActorInvalidated(pActor);
@@ -241,64 +324,84 @@ namespace AncientWarfare3.core.lineage
 
             pActor.data.set(LineageKeys.CAPTIVE_NOBLE_TITLE, "");
             pActor.data.set(LineageKeys.CAPTIVE_NOBLE_COLOR, "");
-
-            City previousCity = pActor.city;
             if (previousCity?.leader == pActor)
             {
                 try { previousCity.removeLeader(); }
-                catch { return false; }
-            }
-
-            try
-            {
-                pActor.cancelAllBeh();
-                if (pActor.kingdom != pKingdom)
-                    pActor.kingdom = null;
-                using (FormalAffiliationTransferScope.Open(
-                           pActor.data.id, pKingdom.id, capital.data.id))
-                {
-                    if (pActor.kingdom != pKingdom)
-                        pActor.joinKingdom(pKingdom);
-                    if (pActor.city != capital)
-                        pActor.joinCity(capital);
-                }
-            }
-            catch
-            {
-                LastPrepareFailureReason = "native_affiliation_transfer";
-                return false;
-            }
-
-            if (pActor.kingdom != pKingdom || pActor.city != capital)
-            {
-                try
-                {
-                    if (pActor.kingdom != pKingdom)
-                    {
-                        pActor.kingdom = null;
-                        pActor.joinKingdom(pKingdom);
-                    }
-                    if (pActor.city != capital)
-                        pActor.joinCity(capital);
-                }
                 catch { }
             }
-            if (pActor.kingdom != pKingdom || pActor.city != capital)
+            return true;
+        }
+
+        internal static void RestoreAffiliation(Actor pActor,
+            Kingdom pPreviousKingdom, City pPreviousCity)
+        {
+            if (pActor?.data == null) return;
+            try
             {
-                LastPrepareFailureReason = "affiliation_not_committed";
+                using (FormalAffiliationTransferScope.Open(
+                           pActor.data.id,
+                           pPreviousKingdom?.data?.id ?? -1L,
+                           pPreviousCity?.data?.id ?? -1L))
+                {
+                    if (pPreviousCity?.data != null &&
+                        !pPreviousCity.isRekt())
+                    {
+                        if (pActor.city != pPreviousCity)
+                            pActor.joinCity(pPreviousCity);
+                    }
+                    else if (pActor.city != null)
+                    {
+                        pActor.setCity(null);
+                    }
+
+                    if (pPreviousKingdom?.data != null)
+                    {
+                        if (pActor.kingdom != pPreviousKingdom)
+                            pActor.joinKingdom(pPreviousKingdom);
+                    }
+                    else
+                    {
+                        pActor.kingdom = pPreviousKingdom;
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Succession affiliation rollback failed for " +
+                                    pActor.data.id + ": " + exception.Message);
+            }
+        }
+
+        internal static bool IsAffiliationCommitted(
+            Actor pActor,
+            Kingdom pKingdom,
+            City pHome)
+        {
+            if (pActor?.data == null || pKingdom?.data == null ||
+                pActor.kingdom != pKingdom)
+            {
                 return false;
             }
-            return true;
+
+            return pHome != null
+                ? pActor.city == pHome
+                : pActor.city == null ||
+                  pActor.city.kingdom == pKingdom;
         }
 
         public static bool Commit(Kingdom pKingdom, Actor pActor)
         {
             if (pKingdom?.data == null || pActor?.data == null ||
                 pKingdom.king != pActor || pActor.kingdom != pKingdom ||
-                pActor.isRekt() || !TryGetValidCapital(pKingdom,
-                    out City capital) || pActor.city != capital)
+                pActor.isRekt())
             {
                 LastPrepareFailureReason = "commit_state_mismatch";
+                return false;
+            }
+            City home = ResolveAccessionHome(pKingdom, pActor);
+            if (home != null && pActor.city != home)
+            {
+                LastPrepareFailureReason = "commit_home_mismatch";
                 return false;
             }
             LineageService.ArchiveActor(pActor, pAlive: true);
@@ -315,39 +418,85 @@ namespace AncientWarfare3.core.lineage
                    pCapital.kingdom == pKingdom;
         }
 
-        private static bool TryRepairCapital(Kingdom pKingdom,
-            out City pCapital)
+        private static City ResolveAccessionHome(Kingdom pKingdom,
+            Actor pActor)
         {
-            if (TryGetValidCapital(pKingdom, out pCapital)) return true;
-            pCapital = null;
-            if (pKingdom?.data == null || pKingdom.isRekt()) return false;
+            if (TryGetValidCapital(pKingdom, out City capital)) return capital;
+            if (IsValidRealmCity(pActor?.city, pKingdom)) return pActor.city;
+            if (pKingdom?.data == null || pKingdom.isRekt()) return null;
             try
             {
-                City best = null;
-                int bestScore = int.MinValue;
                 foreach (City city in pKingdom.getCities())
                 {
-                    if (city?.data == null || city.isRekt() ||
-                        city.kingdom != pKingdom || !city.isAlive()) continue;
-                    int score = 0;
-                    try { score += city.getPopulationPeople() * 4; } catch { }
-                    try { score += city.zones.Count; } catch { }
-                    if (best == null || score > bestScore)
-                    {
-                        best = city;
-                        bestScore = score;
-                    }
+                    if (IsValidRealmCity(city, pKingdom)) return city;
                 }
-                if (best == null) return false;
-                _capitalRepairInProgress = true;
-                try { pKingdom.setCapital(best); }
-                finally { _capitalRepairInProgress = false; }
-                return TryGetValidCapital(pKingdom, out pCapital);
             }
-            catch { return false; }
+            catch { }
+            return null;
         }
 
-        private static bool CloseGuestOffice(Actor pActor)
+        private static bool IsValidRealmCity(City pCity, Kingdom pKingdom)
+        {
+            return pCity?.data != null && !pCity.isRekt() &&
+                   pCity.isAlive() && pCity.kingdom == pKingdom;
+        }
+
+        internal static void SanitizeRoyalClanBeforeNativeAccession(
+            Kingdom pKingdom, Actor pActor)
+        {
+            if (pKingdom?.data == null || pActor?.data == null) return;
+            Clan clan = pActor.clan;
+            bool invalidClan = clan != null && clan.data == null;
+            if (!invalidClan && clan != null)
+            {
+                try { invalidClan = clan.isRekt(); }
+                catch { invalidClan = true; }
+            }
+            if (invalidClan) pActor.clan = null;
+
+            if (!pKingdom.data.royal_clan_id.hasValue()) return;
+            Clan royalClan = null;
+            try
+            {
+                royalClan = World.world?.clans?.get(
+                    pKingdom.data.royal_clan_id);
+            }
+            catch { }
+            bool invalidRoyalClan = royalClan?.data == null;
+            if (!invalidRoyalClan)
+            {
+                try { invalidRoyalClan = royalClan.isRekt(); }
+                catch { invalidRoyalClan = true; }
+            }
+            if (invalidRoyalClan) pKingdom.data.royal_clan_id = -1L;
+        }
+
+        internal static void EnsureRoyalClanAfterNativeAccession(
+            Kingdom pKingdom, Actor pActor)
+        {
+            if (pKingdom?.data == null || pActor?.data == null ||
+                pKingdom.king != pActor) return;
+            try
+            {
+                if (pActor.clan?.data == null)
+                    World.world?.clans?.newClan(pActor,
+                        pAddDefaultTraits: true);
+                pKingdom.trySetRoyalClan();
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Native royal house repair failed for actor " +
+                                    pActor.data.id + " in kingdom " +
+                                    pKingdom.id + ": " + exception.Message);
+            }
+        }
+
+        internal static bool CloseGuestOfficeForDesignation(Actor pActor)
+        {
+            return CloseGuestOffice(pActor, "became_heir");
+        }
+
+        private static bool CloseGuestOffice(Actor pActor, string pReason)
         {
             HistoricalSchoolAffiliationSnapshot affiliation =
                 HistoricalAffiliationService.Get(pActor.data.id);
@@ -361,29 +510,10 @@ namespace AncientWarfare3.core.lineage
 
             Kingdom host = HistoricalAffiliationService.ServiceKingdom(pActor);
             int year = Date.getCurrentYear();
-            if (host?.data == null || host.isRekt())
-            {
-                if (HistoricalAffiliationService.EndService(pActor, year))
-                {
-                    ClearGuestStatus(pActor);
-                    return true;
-                }
-            }
-            GuestOfficeEndRequest request = GuestOfficeEndPersistence.PrepareEnd(
-                affiliation, "became_king", year, LineageService.CurTime());
-            if (request == null)
-                return HistoricalAffiliationService.EndService(pActor, year);
-            GuestOfficeEndResult result = GuestOfficeEndPersistence.End(request);
-            if (result == null || !result.Persistence.IsCommitted ||
-                result.Affiliation == null)
-                return HistoricalAffiliationService.EndService(pActor, year);
-            if (!HistoricalAffiliationService.AdoptCommittedServiceEnd(
-                result.Affiliation))
-                return HistoricalAffiliationService.EndService(pActor, year);
-            bool applied = CourtService.ApplyCommittedGuestOfficerEnd(pActor,
-                host, request.HostKingdomId, request.OfficeId, "became_king");
-            if (applied) ClearGuestStatus(pActor);
-            return applied;
+            if (!SchoolGuestOfficeService.QueueGuestOfficerEnd(pActor, host,
+                    pReason, year)) return false;
+            ClearGuestStatus(pActor);
+            return true;
         }
 
         private static void ClearGuestStatus(Actor pActor)

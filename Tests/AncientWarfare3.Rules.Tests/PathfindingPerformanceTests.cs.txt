@@ -52,6 +52,7 @@ internal static class PathfindingPerformanceTests
         ActorRunnerSupportsSpecializedPostAndParallelStages();
         ActorParallelJobsUseOneWorkerLayer();
         IncrementalZoneInsertionRepairsStaleTileMembers();
+        IncrementalChunkInsertionRepairsStaleMembers();
         ActorPostPipelineKeepsEnemySearchOrdered();
         EnemySearchUsesVanillaChunkLocalCacheOnly();
         EmptyEnemySearchUsesCultiwayBackoff();
@@ -275,6 +276,75 @@ internal static class PathfindingPerformanceTests
             "Tile repair coalesces duplicate actor references");
         Assert(!source.Contains("ActorRanks[target[middle]]"),
             "Rank insertion cannot throw on a stale projection member");
+    }
+
+    private static void IncrementalChunkInsertionRepairsStaleMembers()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWIncrementalChunkActorMembership.cs"));
+        Assert(source.Contains("RepairActorMembers(container, actorRanks);") &&
+               source.Contains("RebuildKingdomActorMembers(container, unitsAll);"),
+            "Incremental chunk writes repair stale global and kingdom members");
+        int addStart = source.IndexOf("internal static void Add(",
+            StringComparison.Ordinal);
+        int addEnd = source.IndexOf("internal static void RemoveLegacy(",
+            addStart, StringComparison.Ordinal);
+        int changeStart = source.IndexOf("internal static void ChangeKingdom(",
+            StringComparison.Ordinal);
+        int changeEnd = source.IndexOf(
+            "private static void RepairUnexpectedKingdomProjection(",
+            changeStart, StringComparison.Ordinal);
+        Assert(addStart >= 0 && addEnd > addStart &&
+               changeStart >= 0 && changeEnd > changeStart &&
+               !source.Substring(addStart, addEnd - addStart)
+                   .Contains("RepairActorMembers") &&
+               !source.Substring(changeStart, changeEnd - changeStart)
+                   .Contains("RepairActorMembers"),
+            "Normal incremental entry points do not scan the whole chunk");
+        Assert(source.Contains("ReferenceEquals(member, null)") &&
+               source.Contains("member.data == null") &&
+               source.Contains("!member.isAlive()"),
+            "Chunk repair rejects CLR-null, disposed, and dead actors");
+        Assert(!source.Contains("!kingdom.isRekt()"),
+            "Chunk repair retains live actors during a rekt-kingdom transfer transition");
+        Assert(source.Contains("actorRanks.TryGetValue(member, out rank)") &&
+               !source.Contains("actorRanks[target[middle]]"),
+            "Chunk repair cannot index a member missing from World rank ownership");
+        Assert(source.Contains("WorldTile tile = member.current_tile;") &&
+               source.Contains("ReferenceEquals(tile.chunk?.objects, container)") &&
+               source.Contains("tile.region?.island == null"),
+            "Chunk repair rejects wrong tile, chunk, and island projections");
+        Assert(source.Contains("RepairSeenMembers.Add(member)"),
+            "Chunk repair coalesces duplicate Actor references");
+        Assert(source.Contains("ContainsActorReference(target, actor)"),
+            "A repair-triggered kingdom rebuild cannot insert the actor twice");
+        Assert(source.Contains("totalUnits = container.units_all.Count;"),
+            "Chunk removal restores total count from actual membership");
+        Assert(source.Contains("RemoveActorAtRank(") &&
+               source.Contains("actorRank,") &&
+               source.Contains("actorRanks)"),
+            "Chunk removal clears cross-kingdom duplicate projections by ranked lookup");
+
+        string add = source.Substring(addStart, addEnd - addStart);
+        Assert(!add.Contains("Remove(container, actor, kingdomId)"),
+            "Normal chunk insertion never performs a full removal scan first");
+        Assert(source.Contains("ConditionalWeakTable<") &&
+               source.Contains("ValidateNextMember("),
+            "Chunk integrity checks are amortized across mutations without retaining dead containers");
+        Assert(source.Contains("middleRank == actorRank") &&
+               source.Contains("ReferenceEquals(member, actor)"),
+            "Rank insertion recognizes an existing actor without a linear pre-scan");
+
+        string change = source.Substring(changeStart,
+            changeEnd - changeStart);
+        Assert(change.Contains("oldKingdomId") &&
+               change.Contains("RemoveActorReferences(") &&
+               !change.Contains("unitsByKingdom.Values"),
+            "Normal kingdom migration only removes from the expected old projection");
+        Assert(source.Contains("if (removed != 1)") &&
+               source.Contains("RepairActorMembers(container, actorRanks);"),
+            "Unexpected migration cardinality escalates to a full projection repair");
     }
 
     private static void ActorRunnerSupportsSpecializedPostAndParallelStages()

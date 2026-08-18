@@ -136,6 +136,8 @@ namespace AncientWarfare3.core.lineage
         private static void CompleteLoyalistAccession(Kingdom pKingdom,
             Actor pRuler)
         {
+            AccessionIdentityService.EnsureRoyalClanAfterNativeAccession(
+                pKingdom, pRuler);
             FormerHeirService.ClearSnapshot(pRuler);
             FormerKingService.ClearSnapshot(pRuler);
             RepublicGovernmentService.MarkMonarchyEstablished(pKingdom);

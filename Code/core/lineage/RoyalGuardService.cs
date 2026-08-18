@@ -379,6 +379,12 @@ namespace AncientWarfare3.core.lineage
             return !HasGuardResidue(pKingdom, pActor);
         }
 
+        internal static bool HasGuardResidueForHeir(Kingdom pKingdom,
+            Actor pActor)
+        {
+            return HasGuardResidue(pKingdom, pActor);
+        }
+
         public static bool ReleaseForAccession(Kingdom pKingdom,
             Actor pActor)
         {

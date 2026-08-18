@@ -803,7 +803,9 @@ internal static class AWIncrementalSimObjectZoneUnits
                     .objects,
                 actor,
                 committedKingdomIds[
-                    actorRank]);
+                    actorRank],
+                actorRank,
+                ActorRanks);
         if (!actorsByChunk[
                 chunkIndex]
             .Remove(actor))
@@ -1396,7 +1398,9 @@ internal static class AWIncrementalSimObjectZoneUnits
                                     oldChunkIndex]
                                 .objects,
                             actor,
-                            oldKingdomId);
+                            oldKingdomId,
+                            actorRank,
+                            ActorRanks);
                     actorsByChunk[
                             oldChunkIndex]
                         .Remove(actor);

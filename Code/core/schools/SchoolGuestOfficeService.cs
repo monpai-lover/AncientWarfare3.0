@@ -25,9 +25,11 @@ namespace AncientWarfare3.core.schools
         private const int MaxPendingGuestDrainPerFrame = 8;
         private const int MaxPendingGuestScanPerFrame = 32;
         private const int MaxPendingGuestRetryBackoffFrames = 3600;
+        private const int MaxSuccessionEndCleanFailureAttempts = 4;
         private static int _lastProcessYear = -1;
         private static int _serviceSweepOffset;
         private static int _pendingFrame;
+        private static bool _flushingForSave;
         private static readonly Dictionary<long, PendingGuestOffice> Pending =
             new Dictionary<long, PendingGuestOffice>();
         private static readonly Queue<PendingGuestOffice> PendingOrder =
@@ -115,6 +117,30 @@ namespace AncientWarfare3.core.schools
                     SchedulePendingRetry(pending);
                     PendingOrder.Enqueue(pending);
                 }
+            }
+        }
+
+        internal static bool FlushPendingForSave()
+        {
+            bool previousFlushState = _flushingForSave;
+            _flushingForSave = true;
+            try
+            {
+                foreach (PendingGuestOffice pending in Pending.Values)
+                    pending.ReadyFrame = 0;
+                int passLimit = Math.Max(16, Pending.Count * 4 + 16);
+                for (int pass = 0; pass < passLimit; pass++)
+                {
+                    ProcessPendingFrame();
+                    if (!HistoricalSchoolWriteBufferService.FlushForSave())
+                        return false;
+                    if (Pending.Count == 0) return true;
+                }
+                return Pending.Count == 0;
+            }
+            finally
+            {
+                _flushingForSave = previousFlushState;
             }
         }
 
@@ -337,6 +363,19 @@ namespace AncientWarfare3.core.schools
             return EndGuestOfficer(pActor?.data?.id ?? -1L, pActor, pHost, pReason, pYear);
         }
 
+        internal static bool QueueGuestOfficerEnd(Actor pActor, Kingdom pHost,
+            string pReason, int pYear)
+        {
+            HistoricalSchoolAffiliationSnapshot state =
+                HistoricalAffiliationService.Get(pActor?.data?.id ?? -1L);
+            if (state?.LifecycleState != HistoricalSchoolLifecycleState.Serving ||
+                state.ServiceKingdomId < 0) return true;
+            if (TryGetPendingEnd(state.ActorId, out _)) return true;
+            PendingGuestOffice pending = PendingGuestOffice.ForEnd(state, pActor,
+                pReason ?? "reign_transition", pYear, LineageService.CurTime());
+            return RegisterPendingEnd(pending);
+        }
+
         internal static bool EndGuestOfficer(long pActorId, Kingdom pHost, string pReason,
             int pYear)
         {
@@ -444,10 +483,23 @@ namespace AncientWarfare3.core.schools
                 pState.LifecycleState != HistoricalSchoolLifecycleState.Serving) return false;
             if (Pending.ContainsKey(pState.ActorId)) return true;
             if (Pending.Count >= MaxPendingGuestOperations) return false;
+            Actor actor = FindActor(pState.ActorId);
+            if (IsSuccessionProtectedActor(actor))
+                return RegisterPendingEnd(PendingGuestOffice.ForEnd(pState,
+                    actor, "succession_identity_recovery",
+                    Date.getCurrentYear(), LineageService.CurTime()));
             PendingGuestOffice pending = PendingGuestOffice.ForRecovery(pState);
             Pending.Add(pending.ActorId, pending);
             PendingOrder.Enqueue(pending);
             return true;
+        }
+
+        private static bool IsSuccessionProtectedActor(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            if (pActor.kingdom?.king == pActor) return true;
+            pActor.data.get(LineageKeys.IS_HEIR, out bool heir, false);
+            return heir;
         }
 
         private static bool RegisterPendingEndRecovery(
@@ -697,16 +749,6 @@ namespace AncientWarfare3.core.schools
                 pPending.OfficeId = recovery.OfficeId;
                 pPending.EndReason = recovery.EndReason;
             }
-            else if (pPending.EndRequest == null)
-            {
-                pPending.EndRequest = GuestOfficeEndPersistence.PrepareEnd(
-                    pPending.EndExpectedAffiliation, pPending.EndReason,
-                    pPending.EndedYear, pPending.EndedTime, pPending.OfficeId,
-                    pPending.SchoolId);
-                if (pPending.EndRequest == null) return false;
-                pPending.OfficeId = pPending.EndRequest.OfficeId;
-                pPending.SchoolId = pPending.EndRequest.SchoolId;
-            }
             if (!pPending.RecoverCommittedEnd)
             {
                 if (pPending.CommittedEndResult == null)
@@ -766,6 +808,17 @@ namespace AncientWarfare3.core.schools
                 return;
             }
             pPending.Attempts++;
+            pPending.ReadyFrame = _pendingFrame +
+                GuestOfficePendingRules.RetryDelayFrames(pPending.Attempts,
+                    MaxPendingGuestRetryBackoffFrames);
+        }
+
+        private static void ScheduleSuccessionEndRetry(
+            PendingGuestOffice pPending)
+        {
+            if (pPending == null) return;
+            pPending.PersistenceQueued = false;
+            if (pPending.Attempts < int.MaxValue) pPending.Attempts++;
             pPending.ReadyFrame = _pendingFrame +
                 GuestOfficePendingRules.RetryDelayFrames(pPending.Attempts,
                     MaxPendingGuestRetryBackoffFrames);
@@ -837,41 +890,134 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        private sealed class GuestEndWriteOperation : IHistoricalSchoolWriteOperation
+        private sealed class GuestEndWriteOperation :
+            IHistoricalSchoolWriteOperation,
+            IHistoricalSchoolAsyncWriteOperation,
+            IHistoricalSchoolBackgroundOnlyWriteOperation
         {
             private readonly PendingGuestOffice _pending;
-            private GuestOfficeEndResult _result;
+            private readonly GuestEndBackgroundWrite _background;
+            private readonly string _operationKey;
 
             public GuestEndWriteOperation(PendingGuestOffice pPending)
             {
                 _pending = pPending;
+                _operationKey = "guest-end:v1|actor=" + pPending.ActorId +
+                    "|host=" + pPending.HostKingdomId + "|office=" +
+                    pPending.OfficeId + "|year=" + pPending.EndedYear +
+                    "|reason=" + pPending.EndReason;
+                _background = new GuestEndBackgroundWrite(
+                    pPending.EndExpectedAffiliation, pPending.EndRequest,
+                    pPending.ActorId, pPending.HostKingdomId,
+                    pPending.OfficeId, pPending.SchoolId,
+                    pPending.EndReason, pPending.EndedYear,
+                    pPending.EndedTime);
             }
 
-            public string OperationKey => "guest-end:v1|actor=" + _pending.ActorId +
-                "|host=" + _pending.HostKingdomId + "|office=" + _pending.OfficeId +
-                "|year=" + _pending.EndedYear + "|reason=" + _pending.EndReason;
+            public string OperationKey => _operationKey;
 
             public HistoricalSchoolTeachingPersistenceOutcome Execute(
                 System.Data.SQLite.SQLiteConnection pDb,
                 System.Data.SQLite.SQLiteTransaction pTransaction)
             {
-                _result = GuestOfficeEndPersistence.EndInTransaction(pDb, pTransaction,
-                    _pending.EndRequest);
-                return WriteOutcome(_result?.Persistence.Outcome ??
-                    GuestOfficePersistenceOutcome.Unknown,
-                    _result?.RecoveredExisting ?? false);
+                return _background.Execute(pDb, pTransaction);
+            }
+
+            public IHistoricalSchoolBackgroundWrite DetachBackgroundWrite()
+            {
+                return _background;
             }
 
             public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
             {
-                _pending.CommittedEndResult = _result;
+                _pending.EndRequest = _background.Request;
+                _pending.OfficeId = _background.Request?.OfficeId ??
+                                    _pending.OfficeId;
+                _pending.SchoolId = _background.Request?.SchoolId ??
+                                    _pending.SchoolId;
+                _pending.CommittedEndResult = _background.Result;
+                OfficialCareerStateService.PublishClearedCurrentOffice(
+                    FindActor(_pending.ActorId), _background.CareerState);
                 ReleasePendingWrite(_pending);
             }
 
             public void OnCleanFailure()
             {
+                if (_pending.SuccessionIdentityEnd)
+                {
+                    if (!_flushingForSave &&
+                        GuestOfficePendingRules.
+                            ShouldRetrySuccessionEndCleanFailure(
+                                _pending.Attempts,
+                                MaxSuccessionEndCleanFailureAttempts))
+                    {
+                        ScheduleSuccessionEndRetry(_pending);
+                        return;
+                    }
+
+                    ModClass.LogWarning(
+                        "Succession guest-office close reached a durable conflict for actor " +
+                        _pending.ActorId + "; deferring reconciliation to load recovery.");
+                }
                 _pending.PersistenceCleanFailure = true;
                 ReleasePendingWrite(_pending);
+            }
+        }
+
+        private sealed class GuestEndBackgroundWrite :
+            IHistoricalSchoolBackgroundWrite
+        {
+            private readonly HistoricalSchoolAffiliationSnapshot _affiliation;
+            private readonly long _actorId;
+            private readonly long _hostKingdomId;
+            private readonly string _officeId;
+            private readonly string _schoolId;
+            private readonly string _reason;
+            private readonly int _endedYear;
+            private readonly double _endedTime;
+
+            internal GuestEndBackgroundWrite(
+                HistoricalSchoolAffiliationSnapshot pAffiliation,
+                GuestOfficeEndRequest pRequest, long pActorId,
+                long pHostKingdomId, string pOfficeId, string pSchoolId,
+                string pReason, int pEndedYear, double pEndedTime)
+            {
+                _affiliation = pAffiliation;
+                Request = pRequest;
+                _actorId = pActorId;
+                _hostKingdomId = pHostKingdomId;
+                _officeId = pOfficeId ?? "";
+                _schoolId = pSchoolId ?? "";
+                _reason = pReason ?? "guest_term";
+                _endedYear = pEndedYear;
+                _endedTime = pEndedTime;
+            }
+
+            internal GuestOfficeEndRequest Request { get; private set; }
+            internal GuestOfficeEndResult Result { get; private set; }
+            internal OfficialCareerStateView CareerState { get; private set; }
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                Request ??= GuestOfficeEndPersistence.PrepareEndInTransaction(
+                    pDb, pTransaction, _affiliation, _reason, _endedYear,
+                    _endedTime, _officeId, _schoolId);
+                if (Request == null)
+                    return HistoricalSchoolTeachingPersistenceOutcome.
+                        CleanFailure;
+                Result = GuestOfficeEndPersistence.EndInTransaction(pDb,
+                    pTransaction, Request);
+                if (Result?.Persistence.Outcome ==
+                    GuestOfficePersistenceOutcome.Committed)
+                    CareerState = OfficialCareerStateService.
+                        StageClearCurrentOffice(pDb, pTransaction, _actorId,
+                            _hostKingdomId, Request.OfficeId, _endedYear,
+                            _endedTime);
+                return WriteOutcome(Result?.Persistence.Outcome ??
+                    GuestOfficePersistenceOutcome.Unknown,
+                    Result?.RecoveredExisting ?? false);
             }
         }
 
@@ -1282,6 +1428,7 @@ namespace AncientWarfare3.core.schools
             public bool StatusApplied { get; set; }
             public bool PersistenceQueued { get; set; }
             public bool PersistenceCleanFailure { get; set; }
+            public bool SuccessionIdentityEnd { get; private set; }
             public int Attempts { get; set; }
             public int ReadyFrame { get; set; }
 
@@ -1372,6 +1519,14 @@ namespace AncientWarfare3.core.schools
                     OfficeId = runtimeOffice,
                     SchoolId = runtimeSchool,
                     EndReason = pReason ?? "guest_term",
+                    SuccessionIdentityEnd =
+                        string.Equals(pReason, "became_heir",
+                            StringComparison.Ordinal) ||
+                        string.Equals(pReason, "became_king",
+                            StringComparison.Ordinal) ||
+                        string.Equals(pReason,
+                            "succession_identity_recovery",
+                            StringComparison.Ordinal),
                     EndedYear = pEndedYear,
                     EndedTime = pEndedTime
                 };

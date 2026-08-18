@@ -203,11 +203,23 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPrefix]
+        [HarmonyPatch(typeof(War), nameof(War.update))]
+        private static bool Update_Prefix(War __instance)
+        {
+            return WarRosterIntegrityService.PrepareForUpdate(__instance);
+        }
+
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(War), "removeFromWar")]
         private static bool RemoveFromWar_Prefix(War __instance,
             Kingdom pKingdom, out bool __state)
         {
             __state = false;
+            if (pKingdom?.data == null)
+            {
+                WarRosterIntegrityService.RepairActiveWarRoster(__instance);
+                return false;
+            }
             try
             {
                 __state = __instance?.data != null &&

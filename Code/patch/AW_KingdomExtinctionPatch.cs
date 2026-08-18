@@ -17,6 +17,12 @@ namespace AncientWarfare3.patch
             try { liveCityCount = __instance.countCities(); }
             catch { liveCityCount = __instance.hasCities() ? 1 : 0; }
             bool cityIndexStable = !manager.hasDirtyCities();
+            if (KingdomExtinctionQueue.IsVerifiedForVanillaRemoval(
+                    __instance,
+                    liveCityCount))
+            {
+                return true;
+            }
             if (KingdomExtinctionRules.ShouldQueueVerification(
                     __instance.isCiv(), cityIndexStable, liveCityCount))
                 KingdomExtinctionQueue.Schedule(__instance);

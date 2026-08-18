@@ -2,6 +2,7 @@
 using ai;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -272,20 +273,21 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return null;
             Actor knownKing = pKingdom.king;
             Actor storedHeir = PeekStoredHeirForMinimap(pKingdom);
-            if (storedHeir?.data != null &&
-                !RoyalGuardService.ReleaseForRegisteredHeir(pKingdom,
-                    storedHeir, "became_heir"))
-            {
-                ClearHeir(pKingdom);
-                return null;
-            }
             EnsureLegitimateLine(pKingdom, knownKing);
             InheritanceLawService.RestorePrimogenitureForDirectSon(pKingdom,
                 PickEldestLivingSon(knownKing)?.data != null);
             long referenceKingId = ResolveReferenceKingId(pKingdom, knownKing);
             bool pending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
             if (!SuccessionTransitionRules.ShouldOverwriteCachedHeir(pending, referenceKingId >= 0))
+            {
+                if (storedHeir?.data != null &&
+                    !PrepareForDesignation(pKingdom, storedHeir))
+                {
+                    ClearHeir(pKingdom);
+                    return null;
+                }
                 return PeekRegisteredHeir(pKingdom);
+            }
 
             HeirSelection selection = SelectByEffectiveLaw(pKingdom,
                 knownKing, referenceKingId,
@@ -423,10 +425,15 @@ namespace AncientWarfare3.core.lineage
             HeirMinimapMarkerIndex.Refresh(pKingdom);
         }
 
-        public static void StoreSelectedHeir(Kingdom pKingdom, Actor pHeir, string pMode)
+        public static bool StoreSelectedHeir(Kingdom pKingdom, Actor pHeir,
+            string pMode)
         {
-            if (pKingdom?.data == null) return;
-            StoreHeirSelection(pKingdom, new HeirSelection(pHeir, pMode));
+            if (pKingdom?.data == null) return false;
+            Actor stored = StoreHeirSelection(pKingdom,
+                new HeirSelection(pHeir, pMode));
+            return pHeir?.data == null
+                ? stored == null
+                : ReferenceEquals(stored, pHeir);
         }
 
         public static string ResolveSuccessionModeForCandidate(
@@ -546,23 +553,22 @@ namespace AncientWarfare3.core.lineage
                 out bool successionDirty, false);
             bool currentActorAvailable = previousHeirId < 0L ||
                 previousHeir?.data != null && previousHeir.isAlive();
-            if (currentActorAvailable && signedHeirId == previousHeirId &&
+            bool unchanged = currentActorAvailable &&
+                signedHeirId == previousHeirId &&
                 HeirSelectionSignatureRules.IsUnchanged(previousHeirId,
                     previousMode, signedKingId, successionDirty, heirId,
-                    mode, referenceKingId))
+                    mode, referenceKingId);
+            if (unchanged && IsDesignationPrepared(pKingdom, heir))
                 return previousHeir;
-
-            ClearOldHeirFlag(pKingdom);
-            FormerHeirService.ClearSnapshot(heir);
-            RoyalAsylumService.RecallForSuccession(heir, pKingdom);
-            RecallForeignSelectedHeir(pKingdom, heir);
             if (heir?.data != null &&
-                !RoyalGuardService.ReleaseForRegisteredHeir(pKingdom,
-                    heir, "became_heir"))
+                !PrepareForDesignation(pKingdom, heir))
             {
                 heir = null;
                 pSelection = new HeirSelection(null, SuccessionMode.NONE);
             }
+
+            ClearOldHeirFlag(pKingdom);
+            FormerHeirService.ClearSnapshot(heir);
             if (heir?.data != null)
                 LineageService.EnsureRoyalHeirLineage(pKingdom, heir);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, heir?.data?.id ?? -1L);
@@ -673,19 +679,155 @@ namespace AncientWarfare3.core.lineage
                 InheritanceLawService.ModeForLaw(fallback));
         }
 
-        private static void RecallForeignSelectedHeir(Kingdom pKingdom, Actor pHeir)
+        private static bool IsDesignationPrepared(Kingdom pKingdom,
+            Actor pHeir)
         {
-            if (pKingdom?.data == null || pHeir?.data == null) return;
-            City capital = pKingdom.capital;
-            if (!HeirRecallRules.ShouldRecallForeignSelectedHeir(
-                    pHasHeir: true,
-                    pSameKingdom: pHeir.kingdom == pKingdom,
-                    pHasCapital: capital?.data != null))
-                return;
+            if (pKingdom?.data == null || pHeir?.data == null ||
+                pHeir.isRekt() || !pHeir.isAlive() ||
+                pHeir.kingdom != pKingdom ||
+                RoyalAsylumService.IsActive(pHeir) ||
+                RoyalGuardService.HasGuardResidueForHeir(pKingdom, pHeir) ||
+                IsCityLeaderOfAnyCity(pKingdom, pHeir) ||
+                GeneralService.IsGeneral(pHeir) ||
+                FiefService.GetFiefCityId(pHeir) >= 0L ||
+                SlaveService.IsSlave(pHeir)) return false;
+            try { if (pHeir.hasArmy()) return false; }
+            catch { return false; }
 
-            try { if (pHeir.hasArmy()) pHeir.removeFromArmy(); } catch { }
-            try { pHeir.joinCity(capital); } catch { }
+            pHeir.data.get(LineageKeys.COURT_KINGDOM_ID,
+                out long courtKingdomId, -1L);
+            pHeir.data.get(LineageKeys.COURT_OFFICE_ID,
+                out string courtOffice, "");
+            if (courtKingdomId >= 0L || !string.IsNullOrEmpty(courtOffice))
+                return false;
+            HistoricalSchoolAffiliationSnapshot affiliation =
+                HistoricalAffiliationService.Get(pHeir.data.id);
+            if (affiliation?.LifecycleState ==
+                HistoricalSchoolLifecycleState.Serving) return false;
+            pHeir.data.get(LineageKeys.CAPTIVE_NOBLE_TITLE,
+                out string captiveTitle, "");
+            pHeir.data.get(LineageKeys.CAPTIVE_NOBLE_COLOR,
+                out string captiveColor, "");
+            if (!string.IsNullOrEmpty(captiveTitle) ||
+                !string.IsNullOrEmpty(captiveColor)) return false;
+
+            City destination = ResolveDesignationCity(pKingdom, pHeir);
+            return destination == null
+                ? pHeir.city == null || pHeir.city.kingdom == pKingdom
+                : pHeir.city == destination;
+        }
+
+        private static bool PrepareForDesignation(Kingdom pKingdom,
+            Actor pHeir)
+        {
+            if (pKingdom?.data == null || pHeir?.data == null ||
+                pHeir.isRekt() || !pHeir.isAlive()) return false;
+            Kingdom previousKingdom = pHeir.kingdom;
+            City previousCity = pHeir.city;
+            City destination = ResolveDesignationCity(pKingdom, pHeir);
+            if (!RoyalAsylumService.RecallForSuccession(pHeir, pKingdom))
+                return false;
+            try
+            {
+                if (pHeir.kingdom != pKingdom &&
+                    pHeir.kingdom?.asset == null)
+                    pHeir.kingdom = null;
+                using (FormalAffiliationTransferScope.Open(
+                           pHeir.data.id, pKingdom.id,
+                           destination?.data?.id ?? -1L))
+                {
+                    if (destination == null && pHeir.city?.kingdom != pKingdom)
+                        pHeir.setCity(null);
+                    if (pHeir.kingdom != pKingdom)
+                        pHeir.joinKingdom(pKingdom);
+                    if (destination != null && pHeir.city != destination)
+                        pHeir.joinCity(destination);
+                }
+            }
+            catch
+            {
+                if (!AccessionIdentityService.IsAffiliationCommitted(
+                        pHeir,
+                        pKingdom,
+                        destination))
+                {
+                    AccessionIdentityService.RestoreAffiliation(
+                        pHeir,
+                        previousKingdom,
+                        previousCity);
+                    return false;
+                }
+            }
+
+            if (!AccessionIdentityService.IsAffiliationCommitted(
+                    pHeir,
+                    pKingdom,
+                    destination))
+            {
+                AccessionIdentityService.RestoreAffiliation(pHeir,
+                    previousKingdom, previousCity);
+                return false;
+            }
+
+            if (!AccessionIdentityService.CloseGuestOfficeForDesignation(
+                    pHeir)) return false;
+            Kingdom guardKingdom = previousKingdom?.data == null
+                ? pKingdom
+                : previousKingdom;
+            if (!RoyalGuardService.ReleaseForRegisteredHeir(guardKingdom,
+                    pHeir, "became_heir")) return false;
+
+            try
+            {
+                if (previousCity?.leader == pHeir)
+                    previousCity.removeLeader();
+            }
+            catch { }
+            CourtService.ClearOfficeForReignTransition(pHeir,
+                "became_heir", pPersistCareer: false);
+            RemoveCityLeaderOffice(pKingdom, pHeir);
+            GeneralService.RetireForSuccession(pHeir);
+            TemporaryLevyService.OnActorInvalidated(pHeir);
+            WartimeGarrisonService.OnActorInvalidated(pHeir);
+
+            Army previousArmy = pHeir.army;
+            if (previousArmy != null)
+            {
+                try { pHeir.removeFromArmy(); }
+                catch { pHeir.setArmy(null); }
+                AWArmyService.TryRemoveEmptyArmy(previousArmy);
+            }
+
+            if (SlaveService.IsSlave(pHeir))
+                SlaveService.FreeSlave(pHeir, "became_heir");
+            pHeir.data.set(LineageKeys.CAPTIVE_NOBLE_TITLE, "");
+            pHeir.data.set(LineageKeys.CAPTIVE_NOBLE_COLOR, "");
+            try { pHeir.cancelAllBeh(); } catch { }
+
             try { pHeir.clearGraphicsFully(); } catch { }
+            return true;
+        }
+
+        private static City ResolveDesignationCity(Kingdom pKingdom,
+            Actor pHeir)
+        {
+            City capital = pKingdom?.capital;
+            if (IsValidDesignationCity(capital, pKingdom)) return capital;
+            City current = pHeir?.city;
+            if (IsValidDesignationCity(current, pKingdom)) return current;
+            if (pKingdom?.data == null) return null;
+            foreach (City city in pKingdom.getCities())
+            {
+                if (IsValidDesignationCity(city, pKingdom)) return city;
+            }
+            return null;
+        }
+
+        private static bool IsValidDesignationCity(City pCity,
+            Kingdom pKingdom)
+        {
+            return pCity?.data != null && !pCity.isRekt() &&
+                   pCity.isAlive() && pCity.kingdom == pKingdom;
         }
 
         private static bool IsCityLeaderOfAnyCity(Kingdom pKingdom, Actor pActor)

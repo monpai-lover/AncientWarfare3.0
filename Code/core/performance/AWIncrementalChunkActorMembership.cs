@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 
 namespace AncientWarfare3.core.performance;
@@ -47,6 +48,19 @@ internal static class AWIncrementalChunkActorMembership
 
     private static readonly Dictionary<long, int>
         ValidationCursors = new();
+    private static readonly HashSet<Actor>
+        RepairSeenMembers = new();
+    private static readonly ConditionalWeakTable<
+            ChunkObjectContainer,
+            ValidationState>
+        ValidationStates = new();
+
+    private sealed class ValidationState
+    {
+        internal int UnitCursor;
+        internal int KingdomCursor;
+        internal int KingdomMemberCursor;
+    }
 
     // Full SimObjectsZones rebuilds are performed by vanilla's live container
     // mutation. This entry point validates that the resulting container still
@@ -62,49 +76,52 @@ internal static class AWIncrementalChunkActorMembership
     internal static void Remove(
         ChunkObjectContainer container,
         Actor actor,
-        long kingdomId)
+        long kingdomId,
+        int actorRank,
+        Dictionary<Actor, int> actorRanks)
     {
-        bool removedFromAll =
-            RemoveActorReferences(container.units_all, actor) > 0;
+        int removedFromAll =
+            RemoveActorReferences(
+                container.units_all,
+                actor);
 
         Dictionary<long, List<Actor>>
             unitsByKingdom =
                 UnitsByKingdomField(container);
-        int removedFromKingdom = 0;
-        List<Actor> kingdomUnits = null;
+        int removedFromExpected = 0;
         if (unitsByKingdom.TryGetValue(
                 kingdomId,
-                out kingdomUnits))
+                out List<Actor> expectedUnits))
         {
-            removedFromKingdom =
-                RemoveActorReferences(kingdomUnits, actor);
+            removedFromExpected =
+                RemoveActorAtRank(
+                    expectedUnits,
+                    actor,
+                    actorRank,
+                    actorRanks);
         }
 
-        // Vanilla may have already moved the actor before this dirty record
-        // is committed. Repair a stale projection instead of aborting the
-        // simulation pass on an ordering mismatch.
-        if (removedFromKingdom == 0)
+        foreach (KeyValuePair<long, List<Actor>> pair in
+                 unitsByKingdom)
         {
-            foreach (List<Actor> units in
-                     unitsByKingdom.Values)
+            if (pair.Key == kingdomId)
             {
-                if (ReferenceEquals(units, kingdomUnits))
-                {
-                    continue;
-                }
-
-                RemoveActorReferences(units, actor);
+                continue;
             }
+
+            RemoveActorAtRank(
+                pair.Value,
+                actor,
+                actorRank,
+                actorRanks);
         }
 
-        if (removedFromAll)
+        ref int totalUnits =
+            ref TotalUnitsField(container);
+        totalUnits = container.units_all.Count;
+        if (removedFromAll != removedFromExpected)
         {
-            ref int totalUnits =
-                ref TotalUnitsField(container);
-            if (totalUnits > 0)
-            {
-                totalUnits--;
-            }
+            ValidateNextMember(container, actorRanks);
         }
     }
 
@@ -168,18 +185,25 @@ internal static class AWIncrementalChunkActorMembership
                 container,
                 kingdomId);
         InsertActorAtRank(
+            container,
             container.units_all,
             actor,
             actorRank,
-            actorRanks);
+            actorRanks,
+            null);
         InsertActorAtRank(
+            container,
             kingdomUnits,
             actor,
             actorRank,
-            actorRanks);
+            actorRanks,
+            kingdomId);
         ref int totalUnits =
             ref TotalUnitsField(container);
-        totalUnits++;
+        totalUnits = container.units_all.Count;
+        ValidateNextMember(
+            container,
+            actorRanks);
     }
 
     internal static void ChangeKingdom(
@@ -193,55 +217,313 @@ internal static class AWIncrementalChunkActorMembership
         Dictionary<long, List<Actor>>
             unitsByKingdom =
                 UnitsByKingdomField(container);
-        // Vanilla can update the kingdom projection before an incremental
-        // dirty record is committed. Treat migration as an idempotent repair:
-        // remove stale/duplicate references, then insert the actor once.
-        RemoveActorFromKingdomLists(
-            unitsByKingdom,
-            oldKingdomId,
-            actor);
-
         List<Actor> newUnits =
             EnsureKingdom(
                 container,
                 newKingdomId);
-        InsertActorAtRank(
-            newUnits,
-            actor,
-            actorRank,
-            actorRanks);
-    }
-
-    private static int RemoveActorFromKingdomLists(
-        Dictionary<long, List<Actor>> unitsByKingdom,
-        long oldKingdomId,
-        Actor actor)
-    {
+        int removed = 0;
         if (unitsByKingdom.TryGetValue(
                 oldKingdomId,
                 out List<Actor> oldUnits))
         {
-            int removedFromOld =
-                RemoveActorReferences(
-                    oldUnits,
-                    actor);
-            if (removedFromOld > 0)
-            {
-                return removedFromOld;
-            }
-        }
-
-        // The old projection can already be gone after a native mutation;
-        // only that recovery path needs the more expensive global scan.
-        int removed = 0;
-        foreach (List<Actor> units in unitsByKingdom.Values)
-        {
-            removed += RemoveActorReferences(
-                units,
+            removed = RemoveActorReferences(
+                oldUnits,
                 actor);
         }
 
-        return removed;
+        if (removed != 1)
+        {
+            bool vanillaAlreadyCommitted =
+                removed == 0 &&
+                ContainsActorAtRank(
+                    container.units_all,
+                    actor,
+                    actorRank,
+                    actorRanks) &&
+                ContainsActorAtRank(
+                    newUnits,
+                    actor,
+                    actorRank,
+                    actorRanks);
+            if (!vanillaAlreadyCommitted)
+            {
+                RepairUnexpectedKingdomProjection(
+                    container,
+                    actorRanks);
+                return;
+            }
+        }
+
+        InsertActorAtRank(
+            container,
+            newUnits,
+            actor,
+            actorRank,
+            actorRanks,
+            newKingdomId);
+        ValidateNextMember(
+            container,
+            actorRanks);
+    }
+
+    private static void RepairUnexpectedKingdomProjection(
+        ChunkObjectContainer container,
+        Dictionary<Actor, int> actorRanks)
+    {
+        RepairActorMembers(container, actorRanks);
+        ValidateNextMember(container, actorRanks);
+    }
+
+    private static void RepairActorMembers(
+        ChunkObjectContainer container,
+        Dictionary<Actor, int> actorRanks)
+    {
+        List<Actor> unitsAll = container.units_all;
+        RepairSeenMembers.Clear();
+        int writeIndex = 0;
+        for (int i = 0; i < unitsAll.Count; i++)
+        {
+            Actor member = unitsAll[i];
+            if (!TryGetOwnedActorRank(
+                    container,
+                    member,
+                    actorRanks,
+                    out _) ||
+                !RepairSeenMembers.Add(member))
+            {
+                continue;
+            }
+
+            unitsAll[writeIndex++] = member;
+        }
+
+        if (writeIndex < unitsAll.Count)
+        {
+            unitsAll.RemoveRange(
+                writeIndex,
+                unitsAll.Count - writeIndex);
+        }
+
+        unitsAll.Sort(
+            (left, right) =>
+                actorRanks[left].CompareTo(
+                    actorRanks[right]));
+        RepairSeenMembers.Clear();
+        RebuildKingdomActorMembers(container, unitsAll);
+
+        ref int totalUnits =
+            ref TotalUnitsField(container);
+        totalUnits = unitsAll.Count;
+
+        ValidationState state =
+            ValidationStates.GetOrCreateValue(
+                container);
+        state.UnitCursor = 0;
+        state.KingdomCursor = 0;
+        state.KingdomMemberCursor = 0;
+    }
+
+    private static void ValidateNextMember(
+        ChunkObjectContainer container,
+        Dictionary<Actor, int> actorRanks)
+    {
+        List<Actor> unitsAll = container.units_all;
+        if (TotalUnitsField(container) != unitsAll.Count)
+        {
+            RepairActorMembers(container, actorRanks);
+            return;
+        }
+
+        ValidationState state =
+            ValidationStates.GetOrCreateValue(
+                container);
+        if (unitsAll.Count > 0)
+        {
+            int unitIndex =
+                NormalizeCursor(
+                    state.UnitCursor++,
+                    unitsAll.Count);
+            Actor member = unitsAll[unitIndex];
+            if (!IsValidOrderedMember(
+                    container,
+                    unitsAll,
+                    unitIndex,
+                    member,
+                    actorRanks) ||
+                !UnitsByKingdomField(container)
+                    .TryGetValue(
+                        member.kingdom.id,
+                        out List<Actor> kingdomUnits) ||
+                !ContainsActorAtRank(
+                    kingdomUnits,
+                    member,
+                    actorRanks[member],
+                    actorRanks))
+            {
+                RepairActorMembers(container, actorRanks);
+                return;
+            }
+        }
+
+        var kingdoms = container.kingdoms;
+        if (kingdoms.Count == 0)
+        {
+            state.KingdomCursor = 0;
+            state.KingdomMemberCursor = 0;
+            return;
+        }
+
+        int kingdomIndex = NormalizeCursor(
+            state.KingdomCursor,
+            kingdoms.Count);
+        long kingdomId = kingdoms[kingdomIndex];
+        Dictionary<long, List<Actor>> unitsByKingdom =
+            UnitsByKingdomField(container);
+        if (!unitsByKingdom.TryGetValue(
+                kingdomId,
+                out List<Actor> members) ||
+            members == null)
+        {
+            RepairActorMembers(container, actorRanks);
+            return;
+        }
+
+        if (members.Count == 0)
+        {
+            state.KingdomCursor = kingdomIndex + 1;
+            state.KingdomMemberCursor = 0;
+            return;
+        }
+
+        int memberIndex = NormalizeCursor(
+            state.KingdomMemberCursor++,
+            members.Count);
+        Actor kingdomMember = members[memberIndex];
+        if (!IsValidOrderedMember(
+                container,
+                members,
+                memberIndex,
+                kingdomMember,
+                actorRanks) ||
+            kingdomMember.kingdom.id != kingdomId ||
+            !ContainsActorAtRank(
+                unitsAll,
+                kingdomMember,
+                actorRanks[kingdomMember],
+                actorRanks))
+        {
+            RepairActorMembers(container, actorRanks);
+            return;
+        }
+
+        if (memberIndex + 1 >= members.Count)
+        {
+            state.KingdomCursor = kingdomIndex + 1;
+            state.KingdomMemberCursor = 0;
+        }
+    }
+
+    private static bool IsValidOrderedMember(
+        ChunkObjectContainer container,
+        List<Actor> members,
+        int index,
+        Actor member,
+        Dictionary<Actor, int> actorRanks)
+    {
+        if (!TryGetOwnedActorRank(
+                container,
+                member,
+                actorRanks,
+                out int rank))
+        {
+            return false;
+        }
+
+        if (index > 0 &&
+            (!TryGetMemberRank(
+                 members[index - 1],
+                 actorRanks,
+                 out int previousRank) ||
+             previousRank >= rank))
+        {
+            return false;
+        }
+
+        return index + 1 >= members.Count ||
+               TryGetMemberRank(
+                   members[index + 1],
+                   actorRanks,
+                   out int nextRank) &&
+               nextRank > rank;
+    }
+
+    private static bool TryGetMemberRank(
+        Actor member,
+        Dictionary<Actor, int> actorRanks,
+        out int rank)
+    {
+        rank = -1;
+        return !ReferenceEquals(member, null) &&
+               actorRanks.TryGetValue(member, out rank);
+    }
+
+    private static int NormalizeCursor(
+        int cursor,
+        int count)
+    {
+        int normalized = cursor % count;
+        return normalized >= 0
+            ? normalized
+            : 0;
+    }
+
+    private static bool TryGetOwnedActorRank(
+        ChunkObjectContainer container,
+        Actor member,
+        Dictionary<Actor, int> actorRanks,
+        out int rank)
+    {
+        rank = -1;
+        if (ReferenceEquals(member, null) ||
+            member.data == null ||
+            member.isRekt() ||
+            !member.isAlive() ||
+            !actorRanks.TryGetValue(member, out rank))
+        {
+            return false;
+        }
+
+        WorldTile tile = member.current_tile;
+        if (tile == null ||
+            !ReferenceEquals(tile.chunk?.objects, container) ||
+            tile.region?.island == null)
+        {
+            return false;
+        }
+
+        Kingdom kingdom = member.kingdom;
+        return kingdom?.data != null;
+    }
+
+    private static void RebuildKingdomActorMembers(
+        ChunkObjectContainer container,
+        List<Actor> unitsAll)
+    {
+        Dictionary<long, List<Actor>> unitsByKingdom =
+            UnitsByKingdomField(container);
+        foreach (List<Actor> units in unitsByKingdom.Values)
+        {
+            units?.Clear();
+        }
+
+        for (int i = 0; i < unitsAll.Count; i++)
+        {
+            Actor member = unitsAll[i];
+            EnsureKingdom(
+                    container,
+                    member.kingdom.id)
+                .Add(member);
+        }
     }
 
     private static int RemoveActorReferences(
@@ -263,6 +545,61 @@ internal static class AWIncrementalChunkActorMembership
 
             units.RemoveAt(i);
             removed++;
+        }
+
+        return removed;
+    }
+
+    private static int RemoveActorAtRank(
+        List<Actor> units,
+        Actor actor,
+        int actorRank,
+        Dictionary<Actor, int> actorRanks)
+    {
+        if (units == null || units.Count == 0)
+        {
+            return 0;
+        }
+
+        int low = 0;
+        int high = units.Count;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (!TryGetMemberRank(
+                    units[middle],
+                    actorRanks,
+                    out int middleRank))
+            {
+                return RemoveActorReferences(units, actor);
+            }
+
+            if (middleRank < actorRank)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+
+        int removed = 0;
+        while (low < units.Count &&
+               TryGetMemberRank(
+                   units[low],
+                   actorRanks,
+                   out int rank) &&
+               rank == actorRank)
+        {
+            if (ReferenceEquals(units[low], actor))
+            {
+                units.RemoveAt(low);
+                removed++;
+                continue;
+            }
+
+            low++;
         }
 
         return removed;
@@ -380,10 +717,12 @@ internal static class AWIncrementalChunkActorMembership
     }
 
     private static void InsertActorAtRank(
+        ChunkObjectContainer container,
         List<Actor> target,
         Actor actor,
         int actorRank,
-        Dictionary<Actor, int> actorRanks)
+        Dictionary<Actor, int> actorRanks,
+        long? targetKingdomId)
     {
         int low = 0;
         int high = target.Count;
@@ -391,10 +730,49 @@ internal static class AWIncrementalChunkActorMembership
         {
             int middle =
                 low + (high - low) / 2;
-            if (actorRanks[target[middle]] <
-                actorRank)
+            Actor member = target[middle];
+            if (!TryGetOwnedActorRank(
+                    container,
+                    member,
+                    actorRanks,
+                    out int middleRank) ||
+                targetKingdomId.HasValue &&
+                member.kingdom.id != targetKingdomId.Value ||
+                middle > 0 &&
+                ReferenceEquals(target[middle - 1], member) ||
+                middle + 1 < target.Count &&
+                ReferenceEquals(target[middle + 1], member))
+            {
+                RepairActorMembers(container, actorRanks);
+                if (ContainsActorReference(target, actor))
+                {
+                    return;
+                }
+
+                low = 0;
+                high = target.Count;
+                continue;
+            }
+
+            if (middleRank < actorRank)
             {
                 low = middle + 1;
+            }
+            else if (middleRank == actorRank)
+            {
+                if (ReferenceEquals(member, actor))
+                {
+                    return;
+                }
+
+                RepairActorMembers(container, actorRanks);
+                if (ContainsActorReference(target, actor))
+                {
+                    return;
+                }
+
+                low = 0;
+                high = target.Count;
             }
             else
             {
@@ -403,5 +781,57 @@ internal static class AWIncrementalChunkActorMembership
         }
 
         target.Insert(low, actor);
+    }
+
+    private static bool ContainsActorAtRank(
+        List<Actor> target,
+        Actor actor,
+        int actorRank,
+        Dictionary<Actor, int> actorRanks)
+    {
+        int low = 0;
+        int high = target.Count - 1;
+        while (low <= high)
+        {
+            int middle = low + (high - low) / 2;
+            Actor member = target[middle];
+            if (!TryGetMemberRank(
+                    member,
+                    actorRanks,
+                    out int middleRank))
+            {
+                return false;
+            }
+
+            if (middleRank < actorRank)
+            {
+                low = middle + 1;
+            }
+            else if (middleRank > actorRank)
+            {
+                high = middle - 1;
+            }
+            else
+            {
+                return ReferenceEquals(member, actor);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsActorReference(
+        List<Actor> target,
+        Actor actor)
+    {
+        for (int i = 0; i < target.Count; i++)
+        {
+            if (ReferenceEquals(target[i], actor))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

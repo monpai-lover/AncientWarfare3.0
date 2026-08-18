@@ -16,15 +16,12 @@ function Get-Slice([string] $start, [string] $end) {
 
 $refresh = Get-Slice 'private static Actor RefreshHeirAndReturn' `
     'private static long ResolveReferenceKingId'
-$prepare = Get-Slice `
-    'public static void PrepareSuccessionBeforeKingDeath' `
-    'public static bool HasSuccessionCandidate'
-$manual = Get-Slice 'public static void StoreSelectedHeir' `
+$manual = Get-Slice 'public static bool StoreSelectedHeir' `
     'public static string ResolveSuccessionModeForCandidate'
 $store = Get-Slice 'private static Actor StoreHeirSelection' `
     'private static HeirSelection SelectByEffectiveLaw'
 
-foreach ($caller in @($refresh, $prepare, $manual)) {
+foreach ($caller in @($refresh, $manual)) {
     if ($caller.Contains('ClearOldHeirFlag')) {
         throw 'Heir callers must not scan registrations before the no-op gate.'
     }

@@ -22,13 +22,26 @@ namespace AncientWarfare3.core.schools
         {
             IHistoricalSchoolAsyncWriteOperation asyncOperation = pOperation as
                 IHistoricalSchoolAsyncWriteOperation;
+            bool backgroundOnly = pOperation is
+                IHistoricalSchoolBackgroundOnlyWriteOperation;
             bool syncDependency = pDurableReady && pOperation != null &&
                                   asyncOperation == null;
-            if (pDurableReady && asyncOperation != null &&
-                HistoricalWriteService.Ready &&
-                !string.IsNullOrWhiteSpace(pOperation.OperationKey) &&
-                !PendingAsync.ContainsKey(pOperation.OperationKey))
+            if (pDurableReady && asyncOperation != null)
             {
+                string operationKey = pOperation.OperationKey;
+                if (string.IsNullOrWhiteSpace(operationKey))
+                    return backgroundOnly
+                        ? false
+                        : Buffer.TryEnqueue(pOperation, true);
+                if (PendingAsync.ContainsKey(operationKey)) return true;
+                if (!HistoricalWriteService.Ready && backgroundOnly &&
+                    !HistoricalWriteService.EnsureRequiredWorker(out _))
+                    return false;
+                if (!HistoricalWriteService.Ready)
+                    return backgroundOnly
+                        ? false
+                        : Buffer.TryEnqueue(pOperation, true);
+
                 IHistoricalSchoolBackgroundWrite background = null;
                 try { background = asyncOperation.DetachBackgroundWrite(); }
                 catch (Exception error)
@@ -38,7 +51,6 @@ namespace AncientWarfare3.core.schools
                 }
                 if (background != null)
                 {
-                    string operationKey = pOperation.OperationKey;
                     PendingAsync.Add(operationKey, pOperation);
                     if (HistoricalWriteService.TryEnqueueCustom(operationKey,
                             (sequence, stamp) =>
@@ -49,10 +61,8 @@ namespace AncientWarfare3.core.schools
                         return true;
                     PendingAsync.Remove(operationKey);
                 }
-                else
-                {
-                    syncDependency = true;
-                }
+                if (backgroundOnly) return false;
+                syncDependency = true;
             }
             if (syncDependency)
                 HistoricalSchoolDiagnostics.RecordDbSyncDependency();

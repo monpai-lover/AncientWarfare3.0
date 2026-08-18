@@ -138,6 +138,15 @@ namespace AncientWarfare3.core.schools
             return delay < pMaximumFrames ? (int)delay : pMaximumFrames;
         }
 
+        public static bool ShouldRetrySuccessionEndCleanFailure(
+            int pAttempt,
+            int pMaximumAttempts)
+        {
+            return pMaximumAttempts > 0 &&
+                   pAttempt >= 0 &&
+                   pAttempt < pMaximumAttempts;
+        }
+
         public static bool ShouldRecordHistory(bool pRecoveredExisting)
         {
             return !pRecoveredExisting;

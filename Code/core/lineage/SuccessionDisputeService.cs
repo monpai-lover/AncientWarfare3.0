@@ -993,9 +993,8 @@ namespace AncientWarfare3.core.lineage
             if (pClaimantWins)
             {
                 Actor claimant = FindActor(pRow.ClaimantActorId);
-                if (PrepareAccession(claimant, original))
+                if (PrepareClaimantAccessionMode(pRow, original, claimant))
                 {
-                    PrepareClaimantAccessionMode(pRow, original, claimant);
                     try
                     {
                         if (original.king?.data != null &&
@@ -1021,20 +1020,16 @@ namespace AncientWarfare3.core.lineage
             RemoveIfEmpty(rival);
         }
 
-        private static void PrepareClaimantAccessionMode(
+        private static bool PrepareClaimantAccessionMode(
             SuccessionDisputeSnapshot pRow, Kingdom pKingdom,
             Actor pClaimant)
         {
             if (pRow == null || pKingdom?.data == null ||
-                pClaimant?.data == null) return;
-            HeirService.ClearHeir(pKingdom);
-            pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID,
-                pClaimant.data.id);
-            pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
+                pClaimant?.data == null) return false;
+            return HeirService.StoreSelectedHeir(pKingdom, pClaimant,
                 string.IsNullOrEmpty(pRow.ClaimantMode)
                     ? SuccessionMode.COLLATERAL_RESTORE
                     : pRow.ClaimantMode);
-            HeirMinimapMarkerIndex.Refresh(pKingdom);
         }
 
         private static void SettleReunification(
@@ -1064,7 +1059,7 @@ namespace AncientWarfare3.core.lineage
                 : GetDisplayName(rival);
             ReturnCities(original, rival);
             if (pWinnerKingdomId == pRow.RivalKingdomId &&
-                PrepareAccession(winningRuler, original))
+                PrepareClaimantAccessionMode(pRow, original, winningRuler))
             {
                 try
                 {
@@ -1603,27 +1598,6 @@ namespace AncientWarfare3.core.lineage
                 FeudatoryService.EndIntentionalJingnanTransfer();
             }
             return returned && CountLiveCities(pRival) == 0;
-        }
-
-        private static bool PrepareAccession(Actor pClaimant,
-            Kingdom pOriginal)
-        {
-            City capital = pOriginal?.capital;
-            if (pClaimant?.data == null || pClaimant.isRekt() ||
-                capital?.data == null) return false;
-            CourtService.ClearOfficeForReignTransition(pClaimant,
-                "succession_dispute_accession");
-            try { if (pClaimant.hasArmy()) pClaimant.removeFromArmy(); }
-            catch { }
-            try { pClaimant.stopBeingWarrior(); } catch { }
-            try
-            {
-                using (FormalAffiliationTransferScope.Open(
-                           pClaimant.data.id, pOriginal.id, capital.data.id))
-                    pClaimant.joinCity(capital);
-            }
-            catch { return false; }
-            return pClaimant.kingdom == pOriginal;
         }
 
         private static void RemoveIfEmpty(Kingdom pKingdom)

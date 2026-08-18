@@ -286,40 +286,11 @@ namespace AncientWarfare3.core.court
             try
             {
                 transaction = DB.BeginTransaction();
-                OfficialCareerStateView state = ReadState(pActor.data.id, transaction);
-                if (state == null || state.KingdomId != pKingdomId ||
-                    (!string.IsNullOrEmpty(pOfficeId) && state.OfficeId != pOfficeId))
-                {
-                    transaction.Rollback();
-                    return true;
-                }
-
-                float merit = state.Merit;
-                using var command = new SQLiteCommand(DB) { Transaction = transaction };
-                bool cityLeader = CourtCityOfficeRules.IsCityLeaderOffice(
-                    state.OfficeId);
-                long previousCityId = cityLeader && state.CityId >= 0
-                    ? state.CityId
-                    : state.PreviousCityId;
-                int waitingSinceYear = cityLeader ? Date.getCurrentYear() : -1;
-                command.CommandText = "UPDATE " + OfficialCareerStateTableItem.GetTableName() +
-                    " SET KINGDOM_ID=-1,CITY_ID=-1,OFFICE_ID='',MERIT=@merit," +
-                    "MERIT_CAP=1,TERM_END_YEAR=-1,PREVIOUS_CITY_ID=@previous," +
-                    "WAITING_SINCE_YEAR=@waiting,UPDATED_TIME=@time WHERE ACTOR_ID=@actor";
-                command.Parameters.AddWithValue("@merit", merit);
-                command.Parameters.AddWithValue("@previous", previousCityId);
-                command.Parameters.AddWithValue("@waiting", waitingSinceYear);
-                command.Parameters.AddWithValue("@time", LineageService.CurTime());
-                command.Parameters.AddWithValue("@actor", pActor.data.id);
-                if (command.ExecuteNonQuery() != 1)
-                    throw new InvalidOperationException("official state clear did not affect one row");
+                OfficialCareerStateView state = StageClearCurrentOffice(DB,
+                    transaction, pActor.data.id, pKingdomId, pOfficeId,
+                    Date.getCurrentYear(), LineageService.CurTime());
                 transaction.Commit();
-                ProjectHotState(pActor, state.Rank, state.Track, merit, 1,
-                    -1, state.LastEvaluation,
-                    state.EvaluationModifierUntil, state.Seniority,
-                    state.LastPopulationSnapshot, state.NativeCityId,
-                    previousCityId, waitingSinceYear, state.LocalGrade,
-                    state.LocalGradeReviewYear);
+                PublishClearedCurrentOffice(pActor, state);
                 return true;
             }
             catch (Exception e)
@@ -332,6 +303,66 @@ namespace AncientWarfare3.core.court
             {
                 try { transaction?.Dispose(); } catch { }
             }
+        }
+
+        internal static OfficialCareerStateView StageClearCurrentOffice(
+            SQLiteConnection pDb, SQLiteTransaction pTransaction,
+            long pActorId, long pKingdomId, string pOfficeId,
+            int pCurrentYear, double pUpdatedTime)
+        {
+            if (pDb == null || pTransaction == null || pActorId < 0L)
+                return null;
+            OfficialCareerStateView state = ReadState(pDb, pActorId,
+                pTransaction);
+            if (state == null || state.KingdomId != pKingdomId ||
+                !string.IsNullOrEmpty(pOfficeId) && state.OfficeId != pOfficeId)
+                return null;
+
+            bool cityLeader = CourtCityOfficeRules.IsCityLeaderOffice(
+                state.OfficeId);
+            long previousCityId = cityLeader && state.CityId >= 0L
+                ? state.CityId
+                : state.PreviousCityId;
+            int waitingSinceYear = cityLeader ? pCurrentYear : -1;
+            using var command = new SQLiteCommand(pDb)
+            {
+                Transaction = pTransaction
+            };
+            command.CommandText = "UPDATE " +
+                OfficialCareerStateTableItem.GetTableName() +
+                " SET KINGDOM_ID=-1,CITY_ID=-1,OFFICE_ID='',MERIT=@merit," +
+                "MERIT_CAP=1,TERM_END_YEAR=-1,PREVIOUS_CITY_ID=@previous," +
+                "WAITING_SINCE_YEAR=@waiting,UPDATED_TIME=@time " +
+                "WHERE ACTOR_ID=@actor";
+            command.Parameters.AddWithValue("@merit", state.Merit);
+            command.Parameters.AddWithValue("@previous", previousCityId);
+            command.Parameters.AddWithValue("@waiting", waitingSinceYear);
+            command.Parameters.AddWithValue("@time", pUpdatedTime);
+            command.Parameters.AddWithValue("@actor", pActorId);
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException(
+                    "official state clear did not affect one row");
+            state.KingdomId = -1L;
+            state.CityId = -1L;
+            state.OfficeId = "";
+            state.MeritCap = 1;
+            state.TermEndYear = -1;
+            state.PreviousCityId = previousCityId;
+            state.WaitingSinceYear = waitingSinceYear;
+            return state;
+        }
+
+        internal static void PublishClearedCurrentOffice(Actor pActor,
+            OfficialCareerStateView pState)
+        {
+            if (pActor?.data == null || pState == null ||
+                pActor.data.id != pState.ActorId) return;
+            ProjectHotState(pActor, pState.Rank, pState.Track, pState.Merit,
+                pState.MeritCap, pState.TermEndYear, pState.LastEvaluation,
+                pState.EvaluationModifierUntil, pState.Seniority,
+                pState.LastPopulationSnapshot, pState.NativeCityId,
+                pState.PreviousCityId, pState.WaitingSinceYear,
+                pState.LocalGrade, pState.LocalGradeReviewYear);
         }
 
         public static Dictionary<long, OfficialCareerStateView> LoadKingdomStates(

@@ -208,8 +208,9 @@ namespace AncientWarfare3.api.multiplayer
                         ? AW3SuccessionInstallResult.NoLegalSuccessor()
                         : AW3SuccessionInstallResult.SuccessorUnavailable();
 
-                HeirService.StoreSelectedHeir(pKingdom, successor,
-                    selected.SuccessionMode);
+                if (!HeirService.StoreSelectedHeir(pKingdom, successor,
+                        selected.SuccessionMode))
+                    return AW3SuccessionInstallResult.Failed();
                 if (!SuccessionPreparationService.
                         TryOverridePublishedCandidate(pKingdom, former,
                             successor, selected.SuccessionMode))

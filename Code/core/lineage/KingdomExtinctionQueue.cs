@@ -2,6 +2,27 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class KingdomExtinctionQueue
     {
+        private static readonly System.Collections.Generic.HashSet<long>
+            VerifiedForVanillaRemoval = new();
+
+        internal static void ClearRuntime()
+        {
+            VerifiedForVanillaRemoval.Clear();
+        }
+
+        internal static bool IsVerifiedForVanillaRemoval(
+            Kingdom pKingdom,
+            int pLiveCityCount)
+        {
+            if (pKingdom?.data == null) return false;
+            if (pLiveCityCount > 0)
+            {
+                VerifiedForVanillaRemoval.Remove(pKingdom.id);
+                return false;
+            }
+            return VerifiedForVanillaRemoval.Contains(pKingdom.id);
+        }
+
         public static void Schedule(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
@@ -40,7 +61,18 @@ namespace AncientWarfare3.core.lineage
                 if (kingdom.countCities() > 0) return;
             }
             catch { }
-            try { manager.removeObject(kingdom); } catch { }
+            if (!WarRosterIntegrityService.TryDetachFromActiveWars(kingdom))
+            {
+                Schedule(kingdom);
+                return;
+            }
+            MarkVerifiedForVanillaRemoval(kingdom);
+        }
+
+        private static void MarkVerifiedForVanillaRemoval(Kingdom pKingdom)
+        {
+            if (pKingdom?.data != null)
+                VerifiedForVanillaRemoval.Add(pKingdom.id);
         }
     }
 }

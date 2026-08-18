@@ -60,6 +60,8 @@ namespace AncientWarfare3.core.court
             new Queue<long>();
         private static readonly HashSet<long> RulerDeathRetrySet =
             new HashSet<long>();
+        private static readonly HashSet<string> InFlightRulerDeathWrites =
+            new HashSet<string>(StringComparer.Ordinal);
         // Runtime creation and rebuild both populate DueSessions. Keep one
         // recovery lookup for legacy saves, never poll SQLite while idle.
         private static bool _dueSessionRecoveryPending = true;
@@ -70,6 +72,20 @@ namespace AncientWarfare3.core.court
 
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
+
+        internal static bool HasPendingRulerDeathPersistence =>
+            PendingRulerDeathWrites.Count > 0;
+
+        internal static bool PreparePendingRulerDeathPersistenceForSave()
+        {
+            if (PendingRulerDeathWrites.Count == 0) return true;
+            var pending = new List<PendingRulerDeathWrite>(
+                PendingRulerDeathWrites.Values);
+            bool accepted = true;
+            for (int i = 0; i < pending.Count; i++)
+                accepted &= TryEnqueueRulerDeathWrite(pending[i]);
+            return accepted;
+        }
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
@@ -312,6 +328,7 @@ namespace AncientWarfare3.core.court
             PendingRulerDeathWrites.Clear();
             RulerDeathRetryQueue.Clear();
             RulerDeathRetrySet.Clear();
+            InFlightRulerDeathWrites.Clear();
             _dueSessionRecoveryPending = true;
             CivilServiceQualificationService.ClearRuntime();
             CivilServiceLegacyTransitionService.ClearRuntime();
@@ -1086,7 +1103,8 @@ namespace AncientWarfare3.core.court
             string operationKey = "civil-service-ruler-death:v1:" +
                 pPending.WorldGeneration + ":" + pPending.KingdomId + ":" +
                 pPending.SessionId + ":" + pPending.DueWorldDay;
-            return HistoricalWriteService.TryEnqueueCustom(operationKey,
+            if (!InFlightRulerDeathWrites.Add(operationKey)) return true;
+            bool accepted = HistoricalWriteService.TryEnqueueCustom(operationKey,
                 (sequence, stamp) =>
                     new CivilServiceRulerDeathWriteEnvelope(sequence,
                         operationKey, stamp, facts),
@@ -1094,11 +1112,16 @@ namespace AncientWarfare3.core.court
                     pPending, outcome),
                 (sequence, error) => OnRulerDeathWriteFailed(pPending),
                 out _, out _);
+            if (!accepted) InFlightRulerDeathWrites.Remove(operationKey);
+            return accepted;
         }
 
         private static void OnRulerDeathWriteCommitted(
             PendingRulerDeathWrite pPending, object pOutcome)
         {
+            if (pPending != null)
+                InFlightRulerDeathWrites.Remove(
+                    RulerDeathOperationKey(pPending));
             if (pPending == null ||
                 pPending.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
                 !PendingRulerDeathWrites.TryGetValue(pPending.SessionId,
@@ -1118,12 +1141,23 @@ namespace AncientWarfare3.core.court
         private static void OnRulerDeathWriteFailed(
             PendingRulerDeathWrite pPending)
         {
+            if (pPending != null)
+                InFlightRulerDeathWrites.Remove(
+                    RulerDeathOperationKey(pPending));
             if (pPending == null ||
                 pPending.WorldGeneration != AWAsyncRuntime.WorldGeneration ||
                 !PendingRulerDeathWrites.TryGetValue(pPending.SessionId,
                     out PendingRulerDeathWrite current) ||
                 !ReferenceEquals(current, pPending)) return;
             QueueRulerDeathRetry(pPending.SessionId);
+        }
+
+        private static string RulerDeathOperationKey(
+            PendingRulerDeathWrite pPending)
+        {
+            return "civil-service-ruler-death:v1:" +
+                   pPending.WorldGeneration + ":" + pPending.KingdomId + ":" +
+                   pPending.SessionId + ":" + pPending.DueWorldDay;
         }
 
         private static void QueueRulerDeathRetry(long pSessionId)

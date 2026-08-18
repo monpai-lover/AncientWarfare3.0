@@ -87,6 +87,13 @@ namespace AncientWarfare3.patch.naming
             Actor actor = pWindow?.actor;
             RectTransform first = pFirst.GetComponent<RectTransform>();
             if (actor?.data == null || first == null) return;
+            if (!ActorManualNameInputSynchronizer.CanRewrite(
+                    pFirst.inputField))
+            {
+                pState.Trigger?.ScheduleRetry(() =>
+                    ShowDisplay(pWindow, pFirst, pState));
+                return;
+            }
 
             pState.Suppress = true;
             try
@@ -97,7 +104,8 @@ namespace AncientWarfare3.patch.naming
                 first.sizeDelta = pState.OriginalSize;
                 first.anchoredPosition = pState.OriginalPosition;
                 pFirst.can_be_empty = false;
-                pFirst.setText(actor.getName().Trim());
+                ActorManualNameInputSynchronizer.TryRewrite(
+                    pFirst.inputField, actor.getName().Trim());
                 SetLabelVisible(pFirst, false);
                 SetLabelVisible(pState.Second, false);
                 pState.Second.gameObject.SetActive(false);
@@ -120,6 +128,15 @@ namespace AncientWarfare3.patch.naming
                     ActorManualNameEditorEvent.NameSelected,
                     anyEditorFieldFocused: true);
             if (pState.State == next) return;
+            if (!ActorManualNameInputSynchronizer.CanRewrite(
+                    pFirst.inputField) ||
+                !ActorManualNameInputSynchronizer.CanRewrite(
+                    pState.Second?.inputField))
+            {
+                pState.Trigger?.ScheduleRetry(() =>
+                    EnterEditing(pWindow, pFirst, pState));
+                return;
+            }
             pState.State = next;
             Layout(pFirst, pState);
             PopulateEditing(pWindow, actor, pFirst, pState);
@@ -167,10 +184,12 @@ namespace AncientWarfare3.patch.naming
                     .Capture(pActor);
                 pFirst.can_be_empty = xiaMode;
                 pState.Second.can_be_empty = !xiaMode;
-                pFirst.setText(xiaMode
+                ActorManualNameInputSynchronizer.TryRewrite(
+                    pFirst.inputField, xiaMode
                     ? draft.FamilyOrClanName
                     : draft.GivenName);
-                pState.Second.setText(xiaMode
+                ActorManualNameInputSynchronizer.TryRewrite(
+                    pState.Second.inputField, xiaMode
                     ? draft.GivenName
                     : draft.FamilyOrClanName);
                 SetFieldLabel(pFirst, xiaMode
@@ -318,6 +337,7 @@ namespace AncientWarfare3.patch.naming
         internal Action FocusLost;
         internal Action Disabled;
         private bool _focusCheckPending;
+        private Action _retry;
 
         public void OnPointerClick(PointerEventData pEventData)
         {
@@ -329,8 +349,16 @@ namespace AncientWarfare3.patch.naming
             _focusCheckPending = true;
         }
 
+        internal void ScheduleRetry(Action pRetry)
+        {
+            _retry = pRetry;
+        }
+
         private void LateUpdate()
         {
+            Action retry = _retry;
+            _retry = null;
+            retry?.Invoke();
             if (!_focusCheckPending) return;
             _focusCheckPending = false;
             bool isFocused = IsAnyEditorFieldFocused?.Invoke() ?? false;
@@ -340,6 +368,7 @@ namespace AncientWarfare3.patch.naming
         private void OnDisable()
         {
             _focusCheckPending = false;
+            _retry = null;
             Disabled?.Invoke();
         }
     }

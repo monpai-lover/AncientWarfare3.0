@@ -35,12 +35,21 @@ namespace AncientWarfare3.patch
             if (RepublicGovernmentService.IsRepublic(pKingdom))
                 __result = RepublicGovernmentService.ResolveRulerForVacancy(
                     pKingdom);
-            else if (SuccessionPreparationService.TryGetPublishedCandidate(
-                         pKingdom, out Actor published) && published == null &&
-                     HeirService.ShouldUseOrdinaryFallbackSuccession(pKingdom))
-                __result = HeirService.GetLeaderSuccessionCandidate(pKingdom);
             else
-                __result = null;
+            {
+                if (SuccessionPreparationService.TryGetPublishedCandidate(
+                        pKingdom, out Actor published))
+                {
+                    __result = published;
+                    if (__result == null &&
+                        HeirService.ShouldUseOrdinaryFallbackSuccession(
+                            pKingdom))
+                        __result = HeirService.GetLeaderSuccessionCandidate(
+                            pKingdom);
+                }
+                else
+                    __result = null;
+            }
             return false;
         }
 
@@ -67,6 +76,8 @@ namespace AncientWarfare3.patch
             __state.WasRegisteredHeir = heirFlag || heirId == pActor.data.id;
             bool managedSuccession = UsesManagedSuccession(__instance);
             if (!managedSuccession) return true;
+            AccessionIdentityService.SanitizeRoyalClanBeforeNativeAccession(
+                __instance, pActor);
             if (AccessionIdentityRules.ShouldDeferForInitialKingdomCreation(
                     managedSuccession,
                     pHasCurrentKing: __instance.king?.data != null,
@@ -123,6 +134,8 @@ namespace AncientWarfare3.patch
             LineageService.OnKingFoundBranch(__instance, king, __state.PreviousKing,
                 __state.WasRegisteredHeir, __state.PreNobleDistance,
                 __state.SuccessionSourceMode);
+            AccessionIdentityService.EnsureRoyalClanAfterNativeAccession(
+                __instance, king);
             HeirService.RecallForSuccession(__instance, king, __state.WasRegisteredHeir);
             InheritanceLawService.EstablishHereditaryBranchAfterAccession(
                 __instance, king, __state.SuccessionSourceMode);
@@ -145,6 +158,7 @@ namespace AncientWarfare3.patch
             Kingdom __instance)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
+            AccessionIdentityService.RefreshInstalledKingHome(__instance);
             AccessionIdentityService.FinalizeDeferredFounding(__instance);
         }
 

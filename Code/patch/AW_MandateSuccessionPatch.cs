@@ -24,9 +24,33 @@ namespace AncientWarfare3.patch
                 return false;
             }
             if (!AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king))
+            {
+                NormalizeRoyalClanForNativeSuccession(pKingdom);
                 return true;
+            }
             __result = BehResult.Continue;
             return false;
+        }
+
+        private static void NormalizeRoyalClanForNativeSuccession(
+            Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null ||
+                pKingdom.data.royal_clan_id < 0L) return;
+            Clan clan = null;
+            try
+            {
+                clan = World.world?.clans?.get(
+                    pKingdom.data.royal_clan_id);
+            }
+            catch { }
+            bool invalid = clan?.data == null;
+            if (!invalid)
+            {
+                try { invalid = clan.isRekt(); }
+                catch { invalid = true; }
+            }
+            if (invalid) pKingdom.data.royal_clan_id = -1L;
         }
 
         private static bool UsesManagedLineage(Kingdom pKingdom)
