@@ -109,6 +109,20 @@ if (args.Length == 1 && args[0] == "--runtime-stability")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--runtime-regression")
+{
+    RuntimeRegressionSourceGuardTests.Run();
+    Console.WriteLine("PASS: runtime regression source guards");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--heir-history-idempotency")
+{
+    HeirDesignationHistoryRulesTests.Run();
+    Console.WriteLine("PASS: heir history idempotency rules");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--simulation-worker")
 {
     SimulationWorkerPoolTests.Run();
@@ -8625,6 +8639,8 @@ RuntimePerformanceDiagnosticRulesTests.Run();
 PathfindingCursorTests.Run();
 PathfindingMigrationRulesTests.Run();
 PathfindingBaselineSourceGuardTests.Run();
+RuntimeRegressionSourceGuardTests.Run();
+HeirDesignationHistoryRulesTests.Run();
 AWPathSessionTests.Run();
 AWDockTransportRulesTests.Run();
 AWDockRouteRegistryTests.Run();

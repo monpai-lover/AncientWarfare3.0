@@ -1,0 +1,42 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class HeirDesignationHistoryRulesTests
+{
+    internal static void Run()
+    {
+        string stable = HeirDesignationHistoryRules.ProjectionKey(
+            2L, 31L, 69L, "direct_son");
+        Equal(stable, HeirDesignationHistoryRules.ProjectionKey(
+            2L, 31L, 69L, "direct_son"),
+            "same reign and selection remains idempotent");
+        NotEqual(stable, HeirDesignationHistoryRules.ProjectionKey(
+            2L, 32L, 69L, "direct_son"),
+            "a new ruler may designate the same heir again");
+        NotEqual(stable, HeirDesignationHistoryRules.ProjectionKey(
+            2L, 31L, 70L, "direct_son"),
+            "a real heir change records a new event");
+        NotEqual(stable, HeirDesignationHistoryRules.ProjectionKey(
+            2L, 31L, 69L, "leader_fallback"),
+            "a succession-mode change records a new event");
+        Equal("heir_designated:2:31:69:none",
+            HeirDesignationHistoryRules.ProjectionKey(2L, 31L, 69L, null),
+            "missing mode has a stable normalized value");
+        Equal(stable + ":person",
+            HeirDesignationHistoryRules.PersonProjectionKey(stable),
+            "person and kingdom projections use distinct stable keys");
+    }
+
+    private static void Equal(string pExpected, string pActual, string pName)
+    {
+        if (!string.Equals(pExpected, pActual, StringComparison.Ordinal))
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+
+    private static void NotEqual(string pLeft, string pRight, string pName)
+    {
+        if (string.Equals(pLeft, pRight, StringComparison.Ordinal))
+            throw new InvalidOperationException(pName + ": keys matched");
+    }
+}

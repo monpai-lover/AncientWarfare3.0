@@ -210,7 +210,8 @@ namespace AncientWarfare3.core.pathfinding
             AWTileTraversalSnapshot[]> _overlayChunks;
         private static long _nextIdentity;
         private readonly long _identity;
-        private readonly AWRegionTopologySnapshot _regionTopology;
+        private AWRegionTopologySnapshot _regionTopology;
+        private int _topologyRevision;
         private AWTraversalGeneration _baseGeneration;
         private int _references = 1;
 
@@ -265,7 +266,8 @@ namespace AncientWarfare3.core.pathfinding
         public int TileCount => Width * Height;
         public int ReferenceCount => Math.Max(0, Volatile.Read(ref _references));
         internal long Identity => _identity;
-        internal AWRegionTopologySnapshot RegionTopology => _regionTopology;
+        internal AWRegionTopologySnapshot RegionTopology =>
+            Volatile.Read(ref _regionTopology);
 
         public AWTraversalGeneration Retain()
         {
@@ -324,6 +326,90 @@ namespace AncientWarfare3.core.pathfinding
                     if (entry.Key >= 0 && entry.Key < chunks.Length)
                         chunks[entry.Key] = entry.Value;
             return chunks;
+        }
+
+        internal AWTileTraversalSnapshot[] CopyChunkSnapshot(int pChunkId)
+        {
+            if (pChunkId < 0) return Array.Empty<AWTileTraversalSnapshot>();
+            if (_baseGeneration != null)
+            {
+                if (_overlayChunks != null && _overlayChunks.TryGetValue(
+                        pChunkId, out AWTileTraversalSnapshot[] overlay))
+                    return (AWTileTraversalSnapshot[])overlay.Clone();
+                return _baseGeneration.CopyChunkSnapshot(pChunkId);
+            }
+            if (pChunkId >= _chunks.Length || _chunks[pChunkId] == null)
+                return Array.Empty<AWTileTraversalSnapshot>();
+            return (AWTileTraversalSnapshot[])_chunks[pChunkId].Clone();
+        }
+
+        internal void ApplyTileSnapshots(
+            IReadOnlyList<AWTileTraversalSnapshot> pTiles)
+        {
+            if (_baseGeneration != null || pTiles == null ||
+                pTiles.Count == 0) return;
+            var changedChunks = new Dictionary<int,
+                AWTileTraversalSnapshot[]>();
+            for (int index = 0; index < pTiles.Count; index++)
+            {
+                AWTileTraversalSnapshot tile = pTiles[index];
+                if (!tile.Exists || tile.Id < 0 || tile.Id >= TileCount)
+                    continue;
+                int chunkId = tile.X / ChunkSize +
+                              tile.Y / ChunkSize * ChunksWide;
+                if (chunkId < 0 || chunkId >= _chunks.Length) continue;
+                if (!changedChunks.TryGetValue(chunkId,
+                        out AWTileTraversalSnapshot[] chunk))
+                {
+                    AWTileTraversalSnapshot[] source = _chunks[chunkId];
+                    chunk = source == null
+                        ? new AWTileTraversalSnapshot[ChunkSize * ChunkSize]
+                        : (AWTileTraversalSnapshot[])source.Clone();
+                    changedChunks.Add(chunkId, chunk);
+                }
+                int local = tile.X % ChunkSize +
+                            tile.Y % ChunkSize * ChunkSize;
+                if (local >= 0 && local < chunk.Length) chunk[local] = tile;
+            }
+            foreach (KeyValuePair<int, AWTileTraversalSnapshot[]> entry in
+                     changedChunks)
+                _chunks[entry.Key] = entry.Value;
+        }
+
+        internal void ReplaceTopologySnapshot(
+            AWRegionTopologySnapshot pTopology,
+            AWTileTraversalSnapshot[][] pTopologyChunks)
+        {
+            if (_baseGeneration != null || pTopology == null) return;
+            if (pTopologyChunks != null)
+            {
+                int count = Math.Min(_chunks.Length,
+                    pTopologyChunks.Length);
+                for (int chunkId = 0; chunkId < count; chunkId++)
+                {
+                    AWTileTraversalSnapshot[] source = _chunks[chunkId];
+                    AWTileTraversalSnapshot[] topology =
+                        pTopologyChunks[chunkId];
+                    if (source == null || topology == null) continue;
+                    AWTileTraversalSnapshot[] updated = null;
+                    int tileCount = Math.Min(source.Length,
+                        topology.Length);
+                    for (int local = 0; local < tileCount; local++)
+                    {
+                        if (!source[local].Exists ||
+                            source[local].OceanComponent ==
+                            topology[local].OceanComponent) continue;
+                        if (updated == null)
+                            updated = (AWTileTraversalSnapshot[])source.Clone();
+                        updated[local] = source[local].WithOceanComponent(
+                            topology[local].OceanComponent);
+                    }
+                    if (updated != null) _chunks[chunkId] = updated;
+                }
+            }
+            int revision = Interlocked.Increment(ref _topologyRevision);
+            Volatile.Write(ref _regionTopology,
+                pTopology.WithRevision(revision));
         }
 
         internal static AWTraversalGeneration FromOverlay(int pId,

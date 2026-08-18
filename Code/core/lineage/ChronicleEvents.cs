@@ -944,6 +944,9 @@ namespace AncientWarfare3.core.lineage
             Actor pHeir, string pMode)
         {
             if (pKingdom?.data == null || pHeir?.data == null) return;
+            long rulerId = pRuler?.data?.id ?? pKingdom.king?.data?.id ?? -1L;
+            string projectionKey = HeirDesignationHistoryRules.ProjectionKey(
+                pKingdom.id, rulerId, pHeir.data.id, pMode);
             string title = T(HeirTitleRules.TitleKey(pKingdom, pMode));
             HistoryText ruler = pRuler?.data != null
                 ? HistoryText.Actor(pRuler)
@@ -952,15 +955,18 @@ namespace AncientWarfare3.core.lineage
                                HistoryText.Actor(pHeir) +
                                H("aw_hist_heir_designated_as") +
                                HistoryText.PlainText(title);
-            HistoryWriter.RecordKingdom(pKingdom,
+            bool recorded = HistoryWriter.TryRecordKingdom(pKingdom,
                 KingdomEvent.HEIR_DESIGNATED, text,
-                HistoryTarget.Actor(pHeir));
-            HistoryWriter.RecordPerson(pHeir.data.id, pKingdom,
+                HistoryTarget.Actor(pHeir), projectionKey);
+            if (!recorded) return;
+            HistoryWriter.TryRecordPerson(pHeir.data.id, pKingdom,
                 pHeir.getName(), PersonEvent.HEIR_DESIGNATED, text,
                 ChronicleCategory.HONOR,
                 pRuler?.data != null
                     ? HistoryTarget.Actor(pRuler)
-                    : HistoryTarget.Kingdom(pKingdom));
+                    : HistoryTarget.Kingdom(pKingdom),
+                HeirDesignationHistoryRules.PersonProjectionKey(
+                    projectionKey));
         }
 
         public static void OnSuccessionDisputeResolved(Kingdom pOriginal,

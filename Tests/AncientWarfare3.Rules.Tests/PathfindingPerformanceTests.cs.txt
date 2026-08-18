@@ -264,17 +264,14 @@ internal static class PathfindingPerformanceTests
         string traversalCache = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
             "AWTraversalCache.cs"));
-        int traversalBranch = traversalCache.IndexOf(
-            "if (AWAsyncRuntime.TraversalEnabled)",
-            StringComparison.Ordinal);
-        int shadowBranch = traversalCache.IndexOf(
-            "pCompareShadow: AWAsyncRuntime.ShadowEnabled",
-            StringComparison.Ordinal);
-        Assert(traversalBranch >= 0 && shadowBranch > traversalBranch,
-            "shadow mode cannot force synchronous traversal rebuilds when async traversal is enabled");
+        Assert(traversalCache.Contains("ProcessDirtyTiles(") &&
+               traversalCache.Contains("_current.ApplyTileSnapshots(changed)") &&
+               traversalCache.Contains("ScheduleShadowBuild(") &&
+               !traversalCache.Contains("ScheduleOverlayBuild("),
+            "dirty traversal work applies tile deltas while shadow comparison remains diagnostic-only");
         Assert(traversalCache.Contains(
                 "if (!AWAsyncRuntime.TraversalEnabled)"),
-            "traversal falls back synchronously only when async traversal is disabled");
+            "topology rebuild falls back synchronously only when async traversal is disabled");
 
         string diagnostics = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "policy",

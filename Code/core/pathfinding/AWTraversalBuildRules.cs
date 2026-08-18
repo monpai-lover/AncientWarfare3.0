@@ -113,6 +113,33 @@ namespace AncientWarfare3.core.pathfinding
 
     internal static class AWTraversalBuildRules
     {
+        internal static bool ShouldRebuildWaterConnectivity(
+            int pBaseGenerationId, bool pTopologyDirty)
+        {
+            return pBaseGenerationId <= 0 || pTopologyDirty;
+        }
+
+        internal static bool ShouldReuseRegionTopology(
+            int pBaseGenerationId, bool pTopologyDirty)
+        {
+            return pBaseGenerationId > 0 && !pTopologyDirty;
+        }
+
+        internal static bool ShouldScheduleInitialAsync(
+            bool pAsyncTraversalEnabled, bool pBuildScheduled,
+            bool pTileCaptureComplete, int pPendingDirtyTileCount)
+        {
+            _ = pPendingDirtyTileCount;
+            return pAsyncTraversalEnabled && !pBuildScheduled &&
+                   pTileCaptureComplete;
+        }
+
+        internal static bool ShouldPublishInitialSynchronously(
+            bool pAsyncTraversalEnabled, bool pBuildScheduled)
+        {
+            return !pAsyncTraversalEnabled && !pBuildScheduled;
+        }
+
         public static AWTraversalBuildResult Build(
             AWTraversalBuildInput pInput)
         {
@@ -127,11 +154,24 @@ namespace AncientWarfare3.core.pathfinding
                     capture.SourceRevision > pInput.SourceRevision) continue;
                 chunks[capture.ChunkId] = capture.Tiles;
             }
-            chunks = AWOceanConnectivityRules.Apply(pInput.Width,
-                pInput.Height, pInput.ChunkSize, chunks);
+            bool rebuildConnectivity = ShouldRebuildWaterConnectivity(
+                pInput.BaseGenerationId, pInput.RebuildWaterConnectivity);
+            if (rebuildConnectivity)
+                chunks = AWOceanConnectivityRules.Apply(pInput.Width,
+                    pInput.Height, pInput.ChunkSize, chunks);
+            AWRegionTopologySnapshot topology = rebuildConnectivity
+                ? AWRegionTopologySnapshot.Build(chunks, pInput.Width,
+                    pInput.Height, pInput.ChunkSize)
+                : null;
+            AWTraversalGeneration prepared = pInput.ResultGenerationId > 0
+                ? new AWTraversalGeneration(pInput.ResultGenerationId,
+                    pInput.Width, pInput.Height, pInput.ChunkSize, chunks,
+                    topology)
+                : null;
             return new AWTraversalBuildResult(pInput.WorldGeneration,
                 pInput.BaseGenerationId, pInput.SourceRevision,
-                pInput.Width, pInput.Height, pInput.ChunkSize, chunks);
+                pInput.Width, pInput.Height, pInput.ChunkSize, chunks,
+                topology, prepared);
         }
 
         public static bool CanPublish(AWTraversalBuildResult pResult,
@@ -299,6 +339,59 @@ namespace AncientWarfare3.core.pathfinding
         {
             pToken.ThrowIfCancellationRequested();
             return AWTraversalBuildRules.Build(_input);
+        }
+    }
+
+    internal sealed class AWTraversalTopologyBuildExecution : IDisposable
+    {
+        private AWTileTraversalSnapshot[][] _chunks;
+        private readonly long _worldGeneration;
+        private readonly int _baseGenerationId;
+        private readonly long _sourceRevision;
+        private readonly int _width;
+        private readonly int _height;
+        private readonly int _chunkSize;
+
+        public AWTraversalTopologyBuildExecution(
+            AWTraversalGeneration pGeneration, long pWorldGeneration,
+            int pBaseGenerationId, long pSourceRevision)
+        {
+            if (pGeneration == null)
+                throw new ArgumentNullException(nameof(pGeneration));
+            _width = pGeneration.Width;
+            _height = pGeneration.Height;
+            _chunkSize = pGeneration.ChunkSize;
+            int chunkCount = AWTraversalCaptureRules.ChunkCount(_width,
+                _height, _chunkSize);
+            _chunks = new AWTileTraversalSnapshot[chunkCount][];
+            for (int chunkId = 0; chunkId < chunkCount; chunkId++)
+                _chunks[chunkId] = pGeneration.CopyChunkSnapshot(chunkId);
+            _worldGeneration = pWorldGeneration;
+            _baseGenerationId = pBaseGenerationId;
+            _sourceRevision = pSourceRevision;
+        }
+
+        public object Execute(CancellationToken pToken)
+        {
+            AWTileTraversalSnapshot[][] chunks = Interlocked.Exchange(
+                ref _chunks, null);
+            if (chunks == null)
+                throw new ObjectDisposedException(
+                    nameof(AWTraversalTopologyBuildExecution));
+            pToken.ThrowIfCancellationRequested();
+            chunks = AWOceanConnectivityRules.Apply(_width, _height,
+                _chunkSize, chunks);
+            AWRegionTopologySnapshot topology =
+                AWRegionTopologySnapshot.Build(chunks, _width, _height,
+                    _chunkSize);
+            return new AWTraversalBuildResult(_worldGeneration,
+                _baseGenerationId, _sourceRevision, _width, _height,
+                _chunkSize, chunks, topology);
+        }
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _chunks, null);
         }
     }
 }

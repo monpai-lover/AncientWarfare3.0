@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
@@ -75,9 +76,10 @@ namespace AncientWarfare3.core.schools
         public static void ProcessFrame()
         {
             if (World.world == null) return;
+            if (AWAsyncRuntime.State != AWAsyncLifecycleState.Running) return;
+            if (!_loaded) return;
             HistoricalSchoolAcademyConstructionService.ProcessPendingRebuilds();
             HistoricalSchoolScheduler.ProcessFrame();
-            if (!_loaded) return;
             HistoricalSchoolEducationJourneyService.
                 ProcessLoadRecoveryFrame();
             long diagnostic = RuntimePerformanceDiagnostic.BeginScope();

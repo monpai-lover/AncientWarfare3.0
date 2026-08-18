@@ -1,0 +1,65 @@
+using System;
+using System.IO;
+using System.Linq;
+
+internal static class RuntimeRegressionSourceGuardTests
+{
+    internal static void Run()
+    {
+        string bootstrap = Read("Code", "core", "pathfinding",
+            "AWPathfindingBootstrap.cs");
+        string traversal = Read("Code", "core", "pathfinding",
+            "AWTraversalCache.cs");
+        string strategic = Read("Code", "core", "lineage",
+            "ArmyStrategicSnapshotService.cs");
+        string schoolContent = Read("Code", "content", "schools",
+            "HistoricalSchoolContent.cs");
+        string schoolRuntime = Read("Code", "core", "schools",
+            "HistoricalSchoolRuntime.cs");
+        string chronicle = Read("Code", "core", "lineage",
+            "ChronicleEvents.cs");
+        string diplomacy = Read("Code", "content", "DiplomacyContent.cs");
+        string warIcons = Read("Code", "core", "lineage",
+            "WarIconPathRules.cs");
+
+        Assert(bootstrap.Contains("TraversalCache.DirtyTileCount") &&
+               bootstrap.Contains("DirtyTileBudgetForFrame"),
+            "path maintenance must budget dirty tiles rather than rebuild dirty chunks");
+        Assert(traversal.Contains("_dirtyTileQueue") &&
+               traversal.Contains("ProcessDirtyTiles") &&
+               !traversal.Contains("ScheduleOverlayBuild"),
+            "traversal cache must apply tile deltas without ordinary overlay generation rebuilds");
+        Assert(strategic.Contains("SafeLegacyTargetCityId") &&
+               strategic.Contains("pCity?.data == null") &&
+               !strategic.Contains("legacyTarget?.id"),
+            "war director must not read IDs from disposed City wrappers");
+        Assert(!schoolContent.Contains("HistoricalSchoolRuntime.LoadState()"),
+            "school content registration must not load save state");
+        Assert(schoolRuntime.Contains(
+                "AWAsyncRuntime.State != AWAsyncLifecycleState.Running"),
+            "school frame processing must wait for runtime restore completion");
+        Assert(chronicle.Contains("HeirDesignationHistoryRules.ProjectionKey") &&
+               chronicle.Contains("HistoryWriter.TryRecordKingdom") &&
+               chronicle.Contains("HistoryWriter.TryRecordPerson"),
+            "heir designation must use durable projection-key idempotency");
+        Assert(diplomacy.Contains("ui/wars/war_bandit_suppression") &&
+               warIcons.Contains(
+                   "case \"bandit_suppression\": return \"ui/wars/war_bandit_suppression\""),
+            "bandit suppression must use its dedicated war icon");
+        Assert(File.Exists(Path.Combine(Directory.GetCurrentDirectory(),
+                "GameResources", "ui", "wars",
+                "war_bandit_suppression.png")),
+            "bandit suppression icon PNG must exist");
+    }
+
+    private static string Read(params string[] pParts)
+    {
+        return File.ReadAllText(Path.Combine(
+            new[] { Directory.GetCurrentDirectory() }.Concat(pParts).ToArray()));
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

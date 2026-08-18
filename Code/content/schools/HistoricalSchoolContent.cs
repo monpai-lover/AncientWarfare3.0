@@ -48,7 +48,6 @@ namespace AncientWarfare3.content.schools
             RegisterTasks();
             RegisterWorldLogs();
             HistoricalSchoolAcademyService.Init();
-            HistoricalSchoolRuntime.LoadState();
         }
 
         public static void AnnounceDescent(Actor pActor, City pCity, string pSchoolId)

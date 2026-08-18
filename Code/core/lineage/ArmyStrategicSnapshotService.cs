@@ -106,9 +106,28 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRtsStrategicProjection projection) &&
                 projection.TargetCityId >= 0L)
                 return projection.TargetCityId;
-            City legacyTarget = pAnchor?.target_attack_city ??
-                                pAnchor?.target_attack_zone?.city;
-            return legacyTarget?.id ?? -1L;
+            return SafeLegacyTargetCityId(pAnchor);
+        }
+
+        private static long SafeLegacyTargetCityId(City pAnchor)
+        {
+            if (pAnchor?.data == null) return -1L;
+            City target = null;
+            try { target = pAnchor.target_attack_city; }
+            catch { }
+            if (target?.data == null)
+            {
+                try { target = pAnchor.target_attack_zone?.city; }
+                catch { target = null; }
+            }
+            return SafeCityId(target);
+        }
+
+        private static long SafeCityId(City pCity)
+        {
+            if (pCity?.data == null) return -1L;
+            try { return pCity.data.id; }
+            catch { return -1L; }
         }
 
         private static Actor SafeCaptain(Army pArmy)

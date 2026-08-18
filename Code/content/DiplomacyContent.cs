@@ -49,7 +49,7 @@ namespace AncientWarfare3.content
             AddWarType(WarDecisionService.WAR_BANDIT_SUPPRESSION,
                 "war_bandit_suppression",
                 "war_type_bandit_suppression_war",
-                "ui/wars/war_rebellion", pAllianceJoin: false,
+                "ui/wars/war_bandit_suppression", pAllianceJoin: false,
                 pRebellion: false, pTotalWar: false);
         }
 

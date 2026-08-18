@@ -27,12 +27,20 @@ internal static class AWOceanConnectivityRulesTests
         var chunks = new[] { new AWTileTraversalSnapshot[25] };
         Array.Copy(tiles, chunks[0], tiles.Length);
         var input = new AWTraversalBuildInput(1L, 1, 1L, 5, 1, 5,
-            chunks, Array.Empty<AWTraversalChunkCapture>());
+            chunks, Array.Empty<AWTraversalChunkCapture>(),
+            rebuildWaterConnectivity: true);
         AWTraversalBuildResult result = AWTraversalBuildRules.Build(input);
         Assert(result.Chunks[0][0].OceanComponent >= 0 &&
                result.Chunks[0][0].OceanComponent ==
                result.Chunks[0][2].OceanComponent,
             "background traversal publication annotates physical water bodies");
+
+        var deltaInput = new AWTraversalBuildInput(1L, 1, 2L, 5, 1, 5,
+            chunks, Array.Empty<AWTraversalChunkCapture>(),
+            rebuildWaterConnectivity: false);
+        AWTraversalBuildResult delta = AWTraversalBuildRules.Build(deltaInput);
+        Assert(delta.Chunks[0][0].OceanComponent < 0,
+            "ordinary tile deltas do not trigger a full-map water rebuild");
     }
 
     private static void Assert(bool pCondition, string pMessage)

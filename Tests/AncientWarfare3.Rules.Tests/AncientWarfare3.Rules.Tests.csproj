@@ -138,6 +138,7 @@
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingBaselineSourceGuardTests.cs.txt" />
+    <Compile Include="RuntimeRegressionSourceGuardTests.cs.txt" />
     <Compile Include="AWDockTransportRulesTests.cs.txt" />
     <Compile Include="AWDockEndpointRulesTests.cs.txt" />
     <Compile Include="AWOceanConnectivityRulesTests.cs.txt" />
@@ -291,6 +292,8 @@
     <Compile Include="KingSuccessionPreparationRulesTests.cs.txt" />
     <Compile Include="SuccessionRelationshipIndexRulesTests.cs.txt" />
     <Compile Include="HeirFullBrotherRulesTests.cs.txt" />
+    <Compile Include="HeirDesignationHistoryRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\HeirDesignationHistoryRules.cs" Link="Production\HeirDesignationHistoryRules.cs" />
     <Compile Include="SuccessionDisputeRulesTests.cs.txt" />
     <Compile Include="SuccessionDisputeSqlTests.cs.txt" />
     <Compile Include="SuccessionDisputePersistenceSqlTests.cs.txt" />
