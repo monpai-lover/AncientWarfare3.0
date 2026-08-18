@@ -44,6 +44,8 @@ Require-Before $route 'TryRedirectBanditFounder' 'TryEnterBandit' `
     'Route redirect must precede bandit government entry.'
 Require-Contains $mandate 'effectiveRebel' `
     'Mandate rebellion does not carry the effective restored kingdom.'
+Require-Contains $route 'DisposeRedirectedShell' `
+    'Provisional rebel shell cleanup is missing.'
 Require-Contains $power 'restorationRedirected' `
     'Bandit divine power does not report restoration redirects.'
 

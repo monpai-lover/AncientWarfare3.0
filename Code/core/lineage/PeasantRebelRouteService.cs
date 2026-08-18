@@ -124,6 +124,28 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        internal static void DisposeRedirectedShell(Kingdom pShell,
+            Kingdom pEffectiveRebel)
+        {
+            if (pShell?.data == null || pEffectiveRebel?.data == null ||
+                pShell == pEffectiveRebel || pShell.isRekt()) return;
+            try
+            {
+                foreach (City city in pShell.getCities())
+                    if (city?.data != null && !city.isRekt() &&
+                        city.kingdom == pShell)
+                        return;
+                if (World.world?.kingdoms?.get(pShell.getID()) == pShell)
+                    World.world.kingdoms.removeObject(pShell);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Restoration provisional rebel shell cleanup failed: " +
+                    e.Message);
+            }
+        }
+
         internal static bool InitializeManualFoundingGovernment(
             Kingdom pRebel, Kingdom pOrigin, City pFoundingCity,
             Actor pFounder)
