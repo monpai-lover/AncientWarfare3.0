@@ -51,7 +51,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         Bench.bench_enabled || AWSimulationTickBenchmark.IsCapturing;
 
     private readonly Action<int> actorGateWorkItemAction;
-    private readonly Action<int> tileActionWorkItemAction;
     private readonly Action<int> updateEligibilityWorkItemAction;
     private readonly Action<int> enemyPrepareWorkItemAction;
     private readonly Action<int> taskVerifierWorkItemAction;
@@ -66,8 +65,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         MilitaryP0,
         BeforeDeadCheck,
         BeforeTileAction,
-        ScheduleTileAction,
-        AwaitTileAction,
         CommitTileAction,
         BeforeFrozenCheck,
         BeforeUpdateEligibility,
@@ -139,14 +136,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private int workGroupSize;
     private bool splitPostJobs;
     private bool taskVerifierStageCompleted;
-    private AWSimulationWorkerPool.WorkTicket tileActionTicket;
     private AWSimulationWorkerPool.WorkTicket searchTicket;
     private AWSimulationWorkerPool.WorkTicket pathMovementTicket;
     private AWSimulationWorkerPool.WorkTicket smoothMovementTicket;
     private long searchScheduleStartedAt;
     private long searchScheduleCompletedAt;
-    private long tileActionScheduleStartedAt;
-    private long tileActionScheduleCompletedAt;
     private long pathMovementScheduleStartedAt;
     private long pathMovementScheduleCompletedAt;
     private long smoothMovementScheduleStartedAt;
@@ -156,8 +150,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     {
         actorGateWorkItemAction =
             RunActorGateWorkItemAt;
-        tileActionWorkItemAction =
-            RunTileActionWorkItemAt;
         updateEligibilityWorkItemAction =
             RunUpdateEligibilityWorkItemAt;
         enemyPrepareWorkItemAction =
@@ -234,14 +226,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         splitPostJobs =
             AWSimulationTickBenchmark.ShouldSplitActorPostJobs;
         taskVerifierStageCompleted = false;
-        tileActionTicket = default;
         searchTicket = default;
         pathMovementTicket = default;
         smoothMovementTicket = default;
         searchScheduleStartedAt = 0L;
         searchScheduleCompletedAt = 0L;
-        tileActionScheduleStartedAt = 0L;
-        tileActionScheduleCompletedAt = 0L;
         pathMovementScheduleStartedAt = 0L;
         pathMovementScheduleCompletedAt = 0L;
         smoothMovementScheduleStartedAt = 0L;
@@ -833,8 +822,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     }
 
     public bool WaitingForBackgroundWork =>
-        (stage == PostStage.AwaitTileAction &&
-         tileActionTicket.IsValid) ||
         (stage == PostStage.AwaitEnemySearch &&
          searchTicket.IsValid) ||
         (stage == PostStage.AwaitPathMovement &&
@@ -845,9 +832,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     public bool IsBackgroundWorkCompleted =>
         stage switch
         {
-            PostStage.AwaitTileAction when tileActionTicket.IsValid =>
-                AWSimulationWorkerPool.Instance.IsCompleted(
-                    tileActionTicket),
             PostStage.AwaitEnemySearch when searchTicket.IsValid =>
                 AWSimulationWorkerPool.Instance.IsCompleted(searchTicket),
             PostStage.AwaitPathMovement when pathMovementTicket.IsValid =>
@@ -861,10 +845,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     {
         return stage switch
         {
-            PostStage.AwaitTileAction when tileActionTicket.IsValid =>
-                AWSimulationWorkerPool.Instance.TryWait(
-                    tileActionTicket,
-                    maximumMilliseconds),
             PostStage.AwaitEnemySearch when searchTicket.IsValid =>
                 AWSimulationWorkerPool.Instance.TryWait(
                     searchTicket,
@@ -883,13 +863,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     public void WaitForBackgroundWork()
     {
-        if (stage == PostStage.AwaitTileAction &&
-            tileActionTicket.IsValid)
-        {
-            AWSimulationWorkerPool.Instance.Wait(
-                tileActionTicket);
-        }
-        else if (stage == PostStage.AwaitEnemySearch &&
+        if (stage == PostStage.AwaitEnemySearch &&
             searchTicket.IsValid)
         {
             AWSimulationWorkerPool.Instance.Wait(searchTicket);
@@ -1032,12 +1006,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     deadCheckJobIndex + 1,
                     tileActionJobIndex,
                     "before_u5"),
-            PostStage.ScheduleTileAction =>
-                phasePrefix + ".post.u5.schedule",
-            PostStage.AwaitTileAction =>
-                IsBackgroundWorkCompleted
-                    ? phasePrefix + ".post.u5.complete"
-                    : phasePrefix + ".post.u5.await",
             PostStage.CommitTileAction =>
                 phasePrefix + ".post.u5.commit.batch." +
                 tileActionCommitIndex,
@@ -1157,50 +1125,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     }
 
                     PrepareTileActionWorkItems();
-                    stage = PostStage.ScheduleTileAction;
-                    continue;
-                case PostStage.ScheduleTileAction:
-                    tileActionScheduleStartedAt =
-                        StartBenchmarkMeasurement();
-                    try
-                    {
-                        tileActionTicket =
-                            AWSimulationWorkerPool.Instance
-                                .BeginIndexed(
-                                    0,
-                                    batches.Count,
-                                    tileActionWorkItemAction);
-                    }
-                    finally
-                    {
-                        if (tileActionScheduleStartedAt != 0L)
-                        {
-                            tileActionScheduleCompletedAt =
-                                Stopwatch.GetTimestamp();
-                        }
-                    }
-
-                    stage = PostStage.AwaitTileAction;
-                    return false;
-                case PostStage.AwaitTileAction:
-                    AWSimulationWorkerPool.Instance.Wait(
-                        tileActionTicket);
-                    AWSimulationWorkerPool.WorkResult tileResult;
-                    try
-                    {
-                        tileResult =
-                            AWSimulationWorkerPool.Instance
-                                .Complete(tileActionTicket);
-                    }
-                    finally
-                    {
-                        tileActionTicket = default;
-                    }
-
-                    RecordTileActionBenchmark(tileResult);
                     tileActionCommitIndex = 0;
                     stage = PostStage.CommitTileAction;
-                    return false;
+                    continue;
                 case PostStage.CommitTileAction:
                     if (tileActionCommitIndex < batches.Count)
                     {
@@ -1543,13 +1470,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     public void Abort()
     {
         AWDeferredPathRequestBatch.AbortCycle();
-        if (tileActionTicket.IsValid)
-        {
-            AWSimulationWorkerPool.Instance.WaitAndDiscard(
-                tileActionTicket);
-            tileActionTicket = default;
-        }
-
         if (searchTicket.IsValid)
         {
             AWSimulationWorkerPool.Instance.WaitAndDiscard(searchTicket);
@@ -2665,12 +2585,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         }
     }
 
-    private void RunTileActionWorkItemAt(int index)
-    {
-        tileActionWorkItems[index]
-            .RunParallel();
-    }
-
     private void CommitTileActionWorkItem(int index)
     {
         TileActionBatchWork work =
@@ -2683,14 +2597,15 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         Job<Actor> job = work.Job;
         long startedAt = StartBenchmarkMeasurement();
-        Actor[] serialActors =
-            work.SerialActors;
-        for (int i = 0;
-             i < work.SerialCount;
-             i++)
+        Actor[] actors = work.Actors;
+        int actorsChecked = 0;
+        for (int i = 0; i < work.Count; i++)
         {
-            serialActors[i]
-                .u5_curTileAction();
+            Actor actor = actors?[i];
+            actorsChecked++;
+            if (CanSkipSafeGroundTileAction(actor, work.Fires))
+                continue;
+            actor.u5_curTileAction();
         }
 
         if (job.random_tick_skips > 0)
@@ -2705,7 +2620,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             job.time_benchmark +=
                 (Stopwatch.GetTimestamp() - startedAt) /
                 (double)Stopwatch.Frequency;
-            job.counter += work.Checked;
+            job.counter += actorsChecked;
         }
 
         work.Reset();
@@ -2748,19 +2663,33 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         Actor actor,
         bool[] fires)
     {
-        if (actor._update_done)
+        if (actor == null || actor._update_done)
         {
             return true;
         }
 
         WorldTile tile = actor.current_tile;
-        TileTypeBase type = tile.Type;
         ActorAsset asset = actor.asset;
+        TileTypeBase type = tile?.Type;
+        if (tile == null || type == null || asset == null)
+        {
+            return true;
+        }
+
         Building building = tile.building;
+        if (building != null && building.asset == null)
+        {
+            return true;
+        }
+
+        bool tileOnFire = fires != null &&
+                          tile.tile_id >= 0 &&
+                          tile.tile_id < fires.Length &&
+                          fires[tile.tile_id];
         if (type.ground &&
             !type.block &&
             !type.damage_units &&
-            !fires[tile.tile_id] &&
+            !tileOnFire &&
             !asset.is_boat &&
             (building == null ||
              !building.asset.has_step_action))
@@ -3676,12 +3605,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         postJobIndex = 0;
         batches = null;
         splitPostJobs = false;
-        tileActionTicket = default;
         searchTicket = default;
         pathMovementTicket = default;
         smoothMovementTicket = default;
-        tileActionScheduleStartedAt = 0L;
-        tileActionScheduleCompletedAt = 0L;
         searchScheduleStartedAt = 0L;
         searchScheduleCompletedAt = 0L;
         pathMovementScheduleStartedAt = 0L;
@@ -3731,45 +3657,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         double seconds = (Stopwatch.GetTimestamp() - startedAt) / (double)Stopwatch.Frequency;
         AWSimulationTickBenchmark.RecordActorJobMetric(id, seconds, counter);
-    }
-
-    private void RecordTileActionBenchmark(
-        AWSimulationWorkerPool.WorkResult result)
-    {
-        if (!AWSimulationTickBenchmark.IsCapturing)
-        {
-            return;
-        }
-
-        int actorsHandled = 0;
-        for (int i = 0; i < batches.Count; i++)
-        {
-            TileActionBatchWork work =
-                tileActionWorkItems[i];
-            actorsHandled +=
-                work.Checked -
-                work.SerialCount;
-        }
-
-        long mainThreadOverlap =
-            CalculateOverlap(
-                result.StartedAt,
-                result.CompletedAt,
-                tileActionScheduleStartedAt,
-                tileActionScheduleCompletedAt) +
-            Math.Min(
-                result.WallTicks,
-                result.MainWaitTicks);
-        double backgroundSeconds = Math.Max(
-            0L,
-            result.WallTicks - mainThreadOverlap) /
-            (double)Stopwatch.Frequency;
-        AWSimulationTickBenchmark.RecordActorBackgroundMetric(
-            "u5_curTileAction.classify_parallel",
-            "vanilla.actors.post.u5.background",
-            result.WallSeconds,
-            backgroundSeconds,
-            actorsHandled);
     }
 
     private void RecordUpdateEligibilityBenchmark(
@@ -4436,12 +4323,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         internal Job<Actor> Job { get; private set; }
         internal Actor[] Actors { get; private set; }
         internal int Count { get; private set; }
-        internal int Checked { get; private set; }
-        internal int SerialCount { get; private set; }
         internal bool Skipped { get; private set; }
         internal bool[] Fires { get; private set; }
-        internal Actor[] SerialActors { get; private set; } =
-            Array.Empty<Actor>();
 
         internal void Configure(
             BatchActors batch,
@@ -4454,18 +4337,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Job = job;
             Actors = actors;
             Count = count;
-            Checked = 0;
-            SerialCount = 0;
             Skipped = false;
             Fires = fires;
-            if (SerialActors.Length < count)
-            {
-                SerialActors =
-                    new Actor[
-                        Math.Max(
-                            AWPerformanceSettings.SimulationBatchSize,
-                            count)];
-            }
         }
 
         internal void ConfigureSkipped(
@@ -4476,56 +4349,16 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             Job = job;
             Actors = null;
             Count = 0;
-            Checked = 0;
-            SerialCount = 0;
             Skipped = true;
             Fires = null;
         }
 
-        internal void RunParallel()
-        {
-            if (Skipped ||
-                Count == 0)
-            {
-                return;
-            }
-
-            int serialCount = 0;
-            Actor[] serialActors =
-                SerialActors;
-            for (int i = 0; i < Count; i++)
-            {
-                Actor actor = Actors[i];
-                if (Fires == null ||
-                    !CanSkipSafeGroundTileAction(
-                        actor,
-                        Fires))
-                {
-                    serialActors[serialCount++] =
-                        actor;
-                }
-            }
-
-            Checked = Count;
-            SerialCount = serialCount;
-        }
-
         internal void Reset()
         {
-            if (SerialCount > 0)
-            {
-                Array.Clear(
-                    SerialActors,
-                    0,
-                    SerialCount);
-            }
-
             Batch = null;
             Job = null;
             Actors = null;
             Count = 0;
-            Checked = 0;
-            SerialCount = 0;
             Skipped = false;
             Fires = null;
         }
