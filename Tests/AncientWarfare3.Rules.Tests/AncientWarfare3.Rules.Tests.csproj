@@ -516,6 +516,7 @@
     <Compile Include="RestorationProtectionRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\RestorationProtectionRules.cs" Link="Production\RestorationProtectionRules.cs" />
     <Compile Include="RestorationAtomicLaunchSourceGuardTests.cs.txt" />
+    <Compile Include="RestorationProtectionSourceGuardTests.cs.txt" />
     <Compile Include="TributaryProtectionSourceGuardTests.cs.txt" />
     <Compile Include="RoyalHouseholdRecipientRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\RoyalHouseholdRecipientRules.cs" Link="Production\RoyalHouseholdRecipientRules.cs" />

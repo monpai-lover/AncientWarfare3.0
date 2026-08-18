@@ -72,6 +72,7 @@ if (args.Length == 1 && args[0] == "--tributary-protection-only")
 if (args.Length == 1 && args[0] == "--restoration-protection")
 {
     RestorationProtectionRulesTests.Run();
+    RestorationProtectionSourceGuardTests.Run();
     Console.WriteLine("Restoration protection rules passed.");
     return;
 }

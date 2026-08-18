@@ -1,0 +1,54 @@
+using System.IO;
+
+internal static class RestorationProtectionSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string keys = Read(root, "Code", "core", "lineage",
+            "LineageKeys.cs");
+        string continuity = Read(root, "Code", "core", "lineage",
+            "KingdomIdentityContinuityService.cs");
+        string autonomous = Read(root, "Code", "core", "lineage",
+            "AutonomousRestorationService.cs");
+        string hosted = Read(root, "Code", "core", "lineage",
+            "RoyalClaimService.cs");
+        string guiyi = Read(root, "Code", "core", "lineage",
+            "PeasantRebelGuiyiService.cs");
+        string servicePath = Path.Combine(root, "Code", "core", "lineage",
+            "RestorationProtectionService.cs");
+
+        True(keys.Contains("RESTORATION_PROTECTION_UNTIL_YEAR"),
+            "lineage data exposes the restoration protection deadline");
+        True(continuity.Contains(
+                "RestorationProtectionService.StartProtection(restored"),
+            "shared restoration success starts protection");
+        True(autonomous.Contains(
+                "KingdomIdentityContinuityService.RestoreFromCity("),
+            "autonomous restoration uses the shared protected path");
+        True(hosted.Contains(
+                "KingdomIdentityContinuityService.RestoreFromCity("),
+            "hosted restoration uses the shared protected path");
+        True(guiyi.Contains(
+                "KingdomIdentityContinuityService.\n                    RestoreFromCity("),
+            "Guiyi restoration uses the shared protected path");
+        True(File.Exists(servicePath),
+            "runtime restoration protection service exists");
+        string service = File.ReadAllText(servicePath);
+        True(service.Contains("ProtectionUntil("),
+            "runtime deadline uses the pure year rule");
+        True(service.Contains("out int protectionUntilYear, -1"),
+            "missing old-save deadline defaults to inactive");
+    }
+
+    private static string Read(string root, params string[] parts)
+    {
+        return File.ReadAllText(Path.Combine(
+            new[] { root }.Concat(parts).ToArray()));
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+}

@@ -287,6 +287,8 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("Restored kingdom identity recovery failed: " + e);
                 pError = "identity_recovery_partial:" + e.Message;
             }
+            RestorationProtectionService.StartProtection(restored,
+                Date.getCurrentYear());
             return restored;
         }
 
