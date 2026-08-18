@@ -417,6 +417,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 "kind=" + kind);
             ArmyRtsAbstractSupplyService.
                 TryConsumeHomeRationScheduled(actor);
+            if (ArmyRtsTransportService.TryDriveMemberP0(actor,
+                    cycleElapsed)) return;
             if (ArmyRtsTransportService.SuppressCombatForVoyage(actor))
             {
                 if (TryRunVanillaPassengerTransportP0(actor, actorId, kind,
