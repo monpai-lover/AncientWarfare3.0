@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.performance;
 using life.taxi;
 using UnityEngine;
@@ -222,9 +223,124 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        internal static bool TryProvisionAtRoute(Kingdom pKingdom,
+            AWDockRouteCandidate pRoute, out Actor pBoatActor)
+        {
+            pBoatActor = null;
+            if (pKingdom?.data == null || !pRoute.IsValid ||
+                !AWDockTransportService.TryResolveRouteTiles(pRoute,
+                    out WorldTile entryLand, out WorldTile pickupSea,
+                    out _, out _)) return false;
+
+            City ownerCity = FindRouteOwnerCity(pKingdom, entryLand,
+                pRoute.Entry.Id);
+            if (ownerCity?.data == null) return false;
+
+            Actor boatActor = null;
+            try
+            {
+                if (pRoute.Source == AWTransportRouteSource.DockPortal)
+                {
+                    Building dockBuilding = FindDockBuilding(
+                        ownerCity, pRoute.Entry.Id);
+                    Docks dock = dockBuilding?.component_docks;
+                    if (dock != null)
+                    {
+                        TemporaryBoatBuildCityIds.Add(ownerCity.id);
+                        TemporaryBoatBuildOceanTilesByCity[ownerCity.id] =
+                            pickupSea;
+                        try
+                        {
+                            boatActor = dock.buildBoatFromHere(ownerCity);
+                        }
+                        finally
+                        {
+                            TemporaryBoatBuildCityIds.Remove(ownerCity.id);
+                            TemporaryBoatBuildOceanTilesByCity.Remove(
+                                ownerCity.id);
+                        }
+                    }
+                }
+                if (boatActor?.data == null)
+                {
+                    string transportId = ownerCity.getActorAsset()?
+                        .architecture_asset?.actor_asset_id_transport;
+                    if (string.IsNullOrEmpty(transportId)) return false;
+                    ActorAsset transport = AssetManager.actor_library.get(
+                        transportId);
+                    if (transport == null) return false;
+                    boatActor = World.world?.units?.createNewUnit(
+                        transport.id, pickupSea);
+                }
+
+                if (boatActor?.data == null) return false;
+                boatActor.joinKingdom(pKingdom);
+                boatActor.joinCity(ownerCity);
+                Boat boat = boatActor.getSimpleComponent<Boat>();
+                if (boat == null)
+                {
+                    ActionLibrary.removeUnit(boatActor);
+                    return false;
+                }
+                boat.taxi_request = null;
+                TemporaryBoatIds[boatActor.data.id] = boatActor;
+                pBoatActor = boatActor;
+                return true;
+            }
+            catch
+            {
+                if (boatActor?.data != null)
+                {
+                    try { ActionLibrary.removeUnit(boatActor); }
+                    catch { }
+                }
+                return false;
+            }
+        }
+
         internal static bool IsTemporaryTransportBoat(long pBoatId)
         {
             return pBoatId >= 0L && TemporaryBoatIds.ContainsKey(pBoatId);
+        }
+
+        private static City FindRouteOwnerCity(Kingdom pKingdom,
+            WorldTile pEntryLand, long pDockId)
+        {
+            City best = null;
+            float bestDistance = float.PositiveInfinity;
+            foreach (City city in World.world?.cities)
+            {
+                if (city?.data == null || city.kingdom != pKingdom)
+                    continue;
+                if (pDockId > 0L &&
+                    FindDockBuilding(city, pDockId) != null)
+                    return city;
+                WorldTile center = city.getTile();
+                if (center?.data == null || pEntryLand?.data == null)
+                    continue;
+                float dx = center.x - pEntryLand.x;
+                float dy = center.y - pEntryLand.y;
+                float distance = dx * dx + dy * dy;
+                if (distance >= bestDistance) continue;
+                best = city;
+                bestDistance = distance;
+            }
+            return best ?? pKingdom.capital;
+        }
+
+        private static Building FindDockBuilding(City pCity,
+            long pDockId)
+        {
+            List<Building> buildings = pCity?.buildings;
+            int count = buildings?.Count ?? 0;
+            for (int i = 0; i < count; i++)
+            {
+                Building building = buildings[i];
+                if (building?.data?.id == pDockId &&
+                    building.component_docks != null)
+                    return building;
+            }
+            return null;
         }
 
         internal static void DestroyTemporaryTransportBoat(long pBoatId)

@@ -9,6 +9,25 @@ namespace AncientWarfare3.core.lineage
         Landing = 4
     }
 
+    public enum ArmyRtsTransportP0Stage
+    {
+        RoutePending = 0,
+        AssembleAtEntry = 1,
+        BoatToPickup = 2,
+        Boarding = 3,
+        Sailing = 4,
+        Landing = 5,
+        Complete = 6,
+        Failed = 7
+    }
+
+    public enum ArmyRtsEmergencyLandingChoice
+    {
+        None = 0,
+        Entry = 1,
+        Exit = 2
+    }
+
     public enum ArmyRtsTransportExpectedMemberAction
     {
         RemoveInvalid = 0,
@@ -105,6 +124,23 @@ namespace AncientWarfare3.core.lineage
         public const double AssignedTimeoutSeconds = 240d;
         public const int MaximumPreEmbarkTimeouts = 3;
 
+        public static ArmyRtsTransportP0Stage ResolveP0Stage(
+            bool routeValid, bool captainAtEntry, bool boatAtPickup,
+            bool allEmbarked, bool boatAtDestination, bool allLanded)
+        {
+            if (!routeValid) return ArmyRtsTransportP0Stage.RoutePending;
+            if (allLanded) return ArmyRtsTransportP0Stage.Complete;
+            if (!captainAtEntry)
+                return ArmyRtsTransportP0Stage.AssembleAtEntry;
+            if (!boatAtPickup)
+                return ArmyRtsTransportP0Stage.BoatToPickup;
+            if (!allEmbarked)
+                return ArmyRtsTransportP0Stage.Boarding;
+            return boatAtDestination
+                ? ArmyRtsTransportP0Stage.Landing
+                : ArmyRtsTransportP0Stage.Sailing;
+        }
+
         public static int BoatTransportPriority(bool isBoat,
             bool isDedicatedTransport, bool skipsFightLogic)
         {
@@ -165,6 +201,16 @@ namespace AncientWarfare3.core.lineage
         {
             return routeRequiresTransport && !voyageAlreadyActive &&
                    captainCanBeginTransport;
+        }
+
+        public static bool ShouldActivateStrategicTransport(
+            bool authoritative, bool strategicMovementReady,
+            bool captainTileValid, bool targetTileValid, bool sameIsland,
+            bool physicalRouteAvailable, bool voyageAlreadyActive)
+        {
+            return authoritative && strategicMovementReady &&
+                   captainTileValid && targetTileValid && !sameIsland &&
+                   (physicalRouteAvailable || voyageAlreadyActive);
         }
 
         public static bool CanCreateVoyageState(bool actorInsideBoat,
@@ -229,6 +275,27 @@ namespace AncientWarfare3.core.lineage
             int activeVoyageCount)
         {
             return largeStepMode && activeVoyageCount > 0;
+        }
+
+        public static bool ShouldAdmitMemberP0(bool pValidMember,
+            bool pInsideBoat)
+        {
+            return pValidMember;
+        }
+
+        public static ArmyRtsEmergencyLandingChoice SelectEmergencyLanding(
+            bool entryValid, float entryDistanceSquared,
+            bool exitValid, float exitDistanceSquared)
+        {
+            if (!entryValid)
+                return exitValid
+                    ? ArmyRtsEmergencyLandingChoice.Exit
+                    : ArmyRtsEmergencyLandingChoice.None;
+            if (!exitValid)
+                return ArmyRtsEmergencyLandingChoice.Entry;
+            return exitDistanceSquared < entryDistanceSquared
+                ? ArmyRtsEmergencyLandingChoice.Exit
+                : ArmyRtsEmergencyLandingChoice.Entry;
         }
 
         public static bool ShouldSuppressCombatForVoyage(

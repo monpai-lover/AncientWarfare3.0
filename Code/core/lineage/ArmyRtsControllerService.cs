@@ -1654,9 +1654,9 @@ namespace AncientWarfare3.core.lineage
             Actor captain = SafeCaptain(pArmy);
             Kingdom kingdom = SafeKingdom(pArmy);
             if (kingdom?.data == null || pSourceCity.kingdom != kingdom ||
-                captain?.current_tile?.data == null) return false;
-            return !ArmyRtsTransportService.HasActiveVoyage(pArmy) &&
-                   !HasMilitaryTransportOwnership(captain);
+                captain?.current_tile?.data == null ||
+                captain.is_inside_boat) return false;
+            return true;
         }
 
         private static void ClearIneligibleReplenishmentState(Army pArmy,
@@ -2513,6 +2513,7 @@ namespace AncientWarfare3.core.lineage
         internal static bool ShouldUseNativeMilitaryPath(Actor pActor)
         {
             if (pActor?.data == null) return false;
+            if (ArmyRtsTransportService.OwnsActorTask(pActor)) return false;
             if (RoyalGuardService.IsRoyalGuard(pActor)) return true;
             if (WarArmyReturnService.IsActive(pActor.army)) return true;
             Army army = pActor.army;
@@ -2545,10 +2546,11 @@ namespace AncientWarfare3.core.lineage
             bool insideBoat = actor?.is_inside_boat == true;
             bool vanillaTaxi = ArmyMilitaryMovementPriorityIndex.HasVanillaTaxiOwnership(
                 actor?.data?.id ?? -1L);
-            // Native mission execution belongs to the original army/taxi
-            // tasks. A stale AW voyage membership must not freeze the actor.
-            bool customTransport = !ShouldUseNativeMilitaryPath(actor) &&
-                                   ArmyRtsTransportService.OwnsActorTask(actor);
+            // An active voyage must preserve force_into_a_boat until the
+            // native taxi task actually embarks the actor. The voyage state
+            // itself proves that this is not stale task ownership.
+            bool customTransport =
+                ArmyRtsTransportService.OwnsActorTask(actor);
             return ArmyMilitaryMovementPriorityRules.ShouldYieldToTransport(
                 insideBoat, customTransport, vanillaTaxi);
         }
@@ -5247,6 +5249,31 @@ namespace AncientWarfare3.core.lineage
                 return;
             if (!ArmyRouteProviderService.CanSubmit) return;
             InvalidateNativeRoute(pRuntime, captain, "strategic_route_advanced");
+            WorldTile strategicTarget = ResolveStableStrategicEndpoint(
+                pArmy, targetCity, pRuntime);
+            if (TryActivateStrategicTransport(pArmy, captain,
+                    strategicTarget, pRuntime))
+            {
+                ArmyRouteProviderService.Cancel(pArmy.id,
+                    ArmyRouteCancelReason.TargetReplaced);
+                AWArmyMarchService.ClearArmy(pArmy.id);
+                pRuntime.RouteSubmitted = true;
+                pRuntime.RouteArrived = false;
+                pRuntime.AnchorTileId = -1;
+                pRuntime.AlternateTargetTileId = -1;
+                return;
+            }
+            if (!SafeSameIsland(captain.current_tile, strategicTarget))
+            {
+                pRuntime.RouteSubmitted = false;
+                pRuntime.RouteArrived = false;
+                pRuntime.TransportRouteConfirmed = false;
+                pRuntime.ForceTransportRoute = false;
+                LogStrategicRouteFailure(pArmy, pMission, pRuntime,
+                    captain, strategicTarget, ArmyRoutePollKind.Failed,
+                    "transport_route_unavailable");
+                return;
+            }
             if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
                 TryIssueVanillaCityAttackOrder(pArmy, pMission,
                     targetCity);
@@ -5260,6 +5287,34 @@ namespace AncientWarfare3.core.lineage
             pRuntime.AlternateTargetTileId = -1;
             pRuntime.TransportRouteConfirmed = false;
             pRuntime.ForceTransportRoute = false;
+        }
+
+        private static bool TryActivateStrategicTransport(Army pArmy,
+            Actor pCaptain, WorldTile pTarget, RuntimeState pRuntime)
+        {
+            if (pArmy?.data == null || pCaptain?.current_tile?.data == null ||
+                pTarget?.data == null || pRuntime == null) return false;
+            bool activeVoyage = ArmyRtsTransportService.HasActiveVoyage(
+                pArmy);
+            bool routeAvailable = activeVoyage ||
+                AWDockTransportService.TryResolveRoute(
+                    pCaptain.current_tile, pTarget, out _);
+            bool shouldActivate = ArmyRtsTransportRules.
+                ShouldActivateStrategicTransport(
+                    ArmyRtsRuntimeMode.ShouldCommit,
+                    strategicMovementReady: true,
+                    captainTileValid: true, targetTileValid: true,
+                    sameIsland: SafeSameIsland(pCaptain.current_tile,
+                        pTarget),
+                    physicalRouteAvailable: routeAvailable,
+                    voyageAlreadyActive: activeVoyage);
+            if (!shouldActivate) return false;
+            bool started = activeVoyage || ArmyRtsTransportService.
+                TryHandleActor(pCaptain, pTarget, pMayBegin: true,
+                    pForceTransport: true);
+            pRuntime.TransportRouteConfirmed = started;
+            pRuntime.ForceTransportRoute = started;
+            return started;
         }
 
         private static void LogStrategicRouteFailure(Army pArmy,

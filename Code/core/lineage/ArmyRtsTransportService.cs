@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.performance;
-using life.taxi;
+using ai;
 using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
@@ -27,29 +27,21 @@ namespace AncientWarfare3.core.lineage
 
     internal static class ArmyRtsTransportService
     {
-        private const double BoatWakeIntervalSeconds = 1d;
         private const float ProductionQueueCost = 48f;
         private const float BoatTravelCostPerTile = 0.6f;
-        private const string VanillaForceEmbarkTaskId =
-            "force_into_a_boat";
-        private const string VanillaLandingTaskId = "short_move";
+        private const double BoatPathDiagnosticIntervalSeconds = 1d;
 
         private sealed class TransportState
         {
             internal Army Army;
             internal int TargetTileId;
-            internal double LastProgressRealtime;
-            internal bool HadAssignedBoat;
-            internal bool HadEmbarkedMember;
-            internal bool HadLandedMember;
-            internal int PreEmbarkTimeouts;
-            internal bool LoggedBoatWake;
-            internal bool LoggedNoBoat;
-            internal bool LoggedNoRequest;
+            internal AWDockRouteCandidate Route;
+            internal int RouteTopologyRevision;
+            internal ArmyRtsTransportP0Stage Stage;
+            internal Actor Boat;
             internal bool LoggedDirectorOmissionPreserved;
-            internal bool HasMovementMarker;
-            internal int LastMovementTileId = -1;
-            internal double NextBoatWakeRealtime;
+            internal string LastPendingDiagnostic = string.Empty;
+            internal double NextBoatPathDiagnosticAt;
             internal readonly HashSet<long> TemporaryBoatIds =
                 new HashSet<long>();
             internal readonly Dictionary<long, Actor> Members =
@@ -58,8 +50,32 @@ namespace AncientWarfare3.core.lineage
                 new List<long>();
         }
 
+        private readonly struct RosterCensus
+        {
+            internal RosterCensus(int pValidCount, int pEmbarkedCount,
+                int pAboardCurrentBoatCount, int pLandedCount)
+            {
+                ValidCount = pValidCount;
+                EmbarkedCount = pEmbarkedCount;
+                AboardCurrentBoatCount = pAboardCurrentBoatCount;
+                LandedCount = pLandedCount;
+            }
+
+            internal int ValidCount { get; }
+            internal int EmbarkedCount { get; }
+            internal int AboardCurrentBoatCount { get; }
+            internal int LandedCount { get; }
+            internal bool HasAnyEmbarked => EmbarkedCount > 0;
+            internal bool AllEmbarked => ValidCount > 0 &&
+                                         AboardCurrentBoatCount == ValidCount;
+            internal bool AllLanded => ValidCount > 0 &&
+                                       LandedCount == ValidCount;
+        }
+
         private static readonly Dictionary<long, TransportState> States =
             new Dictionary<long, TransportState>();
+        private static readonly Dictionary<long, Actor> OwnedTransportBoats =
+            new Dictionary<long, Actor>();
         private static readonly List<long> TransportStateIds =
             new List<long>();
         private static readonly ArmyRtsTransportActiveClock ActiveClock =
@@ -99,81 +115,80 @@ namespace AncientWarfare3.core.lineage
 
         public static bool HasActiveVoyage(Army pArmy)
         {
-            if (pArmy?.data == null ||
-                !States.TryGetValue(pArmy.id, out TransportState state) ||
-                state.Members.Count == 0) return false;
-            return FindTile(state.TargetTileId)?.data != null;
+            return pArmy?.data != null &&
+                   States.TryGetValue(pArmy.id, out TransportState state) &&
+                   state.Members.Count > 0 &&
+                   FindTile(state.TargetTileId)?.data != null;
         }
 
         internal static ArmyRtsTransportPhase GetPhase(Army pArmy)
         {
             if (pArmy?.data == null ||
-                !States.TryGetValue(pArmy.id, out TransportState state) ||
-                state.Members.Count == 0)
+                !States.TryGetValue(pArmy.id, out TransportState state))
                 return ArmyRtsTransportPhase.None;
-            bool anyEmbarked = false;
-            foreach (Actor member in state.Members.Values)
+            switch (state.Stage)
             {
-                try
-                {
-                    if (IsValidMember(member, pArmy) &&
-                        member.is_inside_boat)
-                    {
-                        anyEmbarked = true;
-                        break;
-                    }
-                }
-                catch { }
+                case ArmyRtsTransportP0Stage.Boarding:
+                    return ArmyRtsTransportPhase.Embarking;
+                case ArmyRtsTransportP0Stage.Sailing:
+                    return ArmyRtsTransportPhase.Sailing;
+                case ArmyRtsTransportP0Stage.Landing:
+                case ArmyRtsTransportP0Stage.Complete:
+                    return ArmyRtsTransportPhase.Landing;
+                default:
+                    return ArmyRtsTransportPhase.AwaitingPickup;
             }
-            return ArmyRtsTransportRules.ResolvePhase(
-                voyageActive: FindTile(state.TargetTileId)?.data != null,
-                hasAssignedBoat: state.HadAssignedBoat,
-                anyEmbarked: anyEmbarked,
-                anyLanded: state.HadLandedMember);
         }
 
         internal static bool TryGetRouteEstimate(Army pArmy,
             WorldTile pTarget, out ArmyRtsTransportEstimate pEstimate)
         {
             pEstimate = default;
-            Actor captain = null;
-            Kingdom kingdom = null;
-            try
-            {
-                captain = pArmy?.getCaptain();
-                kingdom = pArmy?.getKingdom();
-            }
-            catch { }
-            WorldTile pickup = captain?.current_tile;
-            if (pArmy?.data == null || kingdom?.data == null ||
-                pickup?.data == null || pTarget?.data == null) return false;
-            float seaCost = Math.Max(1f, TileDistance(pickup, pTarget)) *
-                            BoatTravelCostPerTile;
-            if (!ArmyRtsTransportProductionService.CanProvisionRoute(
-                    kingdom, pickup, pTarget)) return false;
+            Actor captain = SafeCaptain(pArmy);
+            WorldTile start = captain?.current_tile;
+            if (pArmy?.data == null || start?.data == null ||
+                pTarget?.data == null ||
+                !AWDockTransportService.TryResolveRoute(start, pTarget,
+                    out AWDockRouteCandidate route)) return false;
             pEstimate = new ArmyRtsTransportEstimate(
                 pPickupCost: 0f, pQueueCost: ProductionQueueCost,
-                pSeaCost: seaCost, pLandingCost: 0f);
+                pSeaCost: Math.Max(1f, route.EstimatedRouteTiles) *
+                          BoatTravelCostPerTile,
+                pLandingCost: 0f);
             return true;
         }
 
         public static bool OwnsActorTask(Actor pActor)
         {
             Army army = pActor?.army;
-            if (pActor?.data == null || army?.data == null ||
-                !States.TryGetValue(army.id, out TransportState state))
-                return false;
-            return state.Members.TryGetValue(pActor.data.id,
+            return pActor?.data != null && army?.data != null &&
+                   States.TryGetValue(army.id, out TransportState state) &&
+                   state.Members.TryGetValue(pActor.data.id,
                        out Actor member) &&
                    ReferenceEquals(member, pActor);
         }
 
+        /// <summary>
+        /// P0 transport boats may be spawned after the current BatchActors
+        /// pass. They remain owned by the voyage and must advance before the
+        /// next native batch rebuild admits them.
+        /// </summary>
+        public static bool OwnsTransportBoat(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.asset?.is_boat != true)
+                return false;
+            long boatId = pActor.data.id;
+            if (!OwnedTransportBoats.TryGetValue(boatId,
+                    out Actor owned) || !ReferenceEquals(owned, pActor))
+                return false;
+            if (IsLiveBoat(pActor)) return true;
+            OwnedTransportBoats.Remove(boatId);
+            return false;
+        }
+
         internal static bool IsExecutingVanillaPassengerTask(Actor pActor)
         {
-            string taskId = pActor?.ai?.task?.id ?? "";
-            return ArmyRtsTransportRules.IsProtectedVanillaPassengerTask(
-                       taskId) ||
-                   taskId == VanillaLandingTaskId;
+            return false;
         }
 
         public static void LogDirectorOmissionPreserved(Army pArmy)
@@ -197,73 +212,44 @@ namespace AncientWarfare3.core.lineage
 
             if (!States.TryGetValue(army.id, out TransportState state))
             {
-                bool physicalRouteAvailable = pActor.is_inside_boat ||
-                    TryGetRouteEstimate(army, pTarget, out _);
-                if (!ArmyRtsTransportRules.CanCreateVoyageState(
-                        pActor.is_inside_boat, physicalRouteAvailable))
-                {
-                    LogRejectedVoyage(army, pActor, pTarget,
-                        "physical_route_unavailable");
-                    return false;
-                }
                 bool owns = ArmyRtsTransportRules.ShouldOwnActor(
                     authoritative, actorValid, targetValid,
                     pActor.is_inside_boat,
                     SameIsland(pActor.current_tile, pTarget),
                     forceTransport: pForceTransport);
-                if (!pMayBegin || !owns) return false;
-                state = Begin(army, pTarget, pForceTransport);
-                OpenRequests(state, pTarget);
+                if (!pMayBegin || !owns ||
+                    !AWDockTransportService.TryResolveRoute(
+                        pActor.current_tile, pTarget,
+                        out AWDockRouteCandidate route)) return false;
+                state = Begin(army, pTarget, route);
+                if (state == null) return false;
             }
             else
             {
                 WorldTile activeTarget = FindTile(state.TargetTileId);
-                bool activeTargetLive = activeTarget?.data != null;
                 bool activeTargetMatches = SameTile(activeTarget, pTarget);
-                bool callerIsCaptain = IsCaptain(pActor, army);
-                bool hasEmbarkedMembers = HasEmbarkedMembers(army);
                 if (ArmyRtsTransportRules.ShouldReplaceActiveVoyageTarget(
-                        activeTargetMatches, pMayBegin, callerIsCaptain,
-                        pForceTransport, hasEmbarkedMembers))
+                        activeTargetMatches, pMayBegin,
+                        IsCaptain(pActor, army), pForceTransport,
+                        HasEmbarkedMembers(army)))
                 {
+                    if (!AWDockTransportService.TryResolveRoute(
+                            pActor.current_tile, pTarget,
+                            out AWDockRouteCandidate route)) return false;
                     ReleaseArmy(army);
-                    state = Begin(army, pTarget, pForceTransport);
-                    OpenRequests(state, pTarget);
+                    state = Begin(army, pTarget, route);
+                    if (state == null) return false;
                 }
-                else if (activeTargetLive)
+                else if (activeTarget?.data != null)
                 {
-                    // A returning member can request a personal boat while
-                    // its army has an active voyage. It must not retarget it.
-                    if (!activeTargetMatches && pMayBegin)
-                        return false;
+                    if (!activeTargetMatches && pMayBegin) return false;
                     pTarget = activeTarget;
                 }
             }
 
-            bool sameActiveIsland = SameIsland(pActor.current_tile,
-                pTarget);
-            bool expectedMember = state.Members.ContainsKey(
-                pActor.data.id);
-            if (!expectedMember && sameActiveIsland) return false;
             state.Members[pActor.data.id] = pActor;
-            ArmyRtsTransportExpectedMemberAction memberAction =
-                ArmyRtsTransportRules.ResolveExpectedMemberAction(
-                    memberValid: true,
-                    landedOnTargetIsland:
-                        ArmyRtsTransportRules.ShouldCountAsLanded(
-                            sameTargetIsland: sameActiveIsland,
-                            actorOnStableLand:
-                                IsStableLandingTile(pActor.current_tile),
-                            targetOnStableLand:
-                                IsStableLandingTile(pTarget)) &&
-                        !pActor.is_inside_boat);
-            if (memberAction ==
-                ArmyRtsTransportExpectedMemberAction.HoldLanded)
-            {
-                HoldLandedMember(pActor);
-                return true;
-            }
-            EnsureRequest(pActor, pTarget);
+            ArmyMilitaryMovementPriorityIndex.Register(pActor.data.id,
+                ArmyMilitaryMovementPriorityKind.RtsMember);
             return true;
         }
 
@@ -271,11 +257,12 @@ namespace AncientWarfare3.core.lineage
         {
             if (!ArmyRtsRuntimeMode.ShouldCommit ||
                 AW3MultiplayerReplicaScope.IsReplicaSession ||
-                World.world == null || World.world.isPaused()) return;
-            if (AWPerformanceSettings.Mode == AWSimulationMode.Large) return;
+                World.world == null || World.world.isPaused() ||
+                AWPerformanceSettings.Mode == AWSimulationMode.Large)
+                return;
             ArmyRtsTransportProductionService.
                 ProcessTemporaryBoatDisposals();
-            ProcessVoyageFrame(0f, pDriveBoundBoats: false);
+            ProcessVoyageFrame(Time.deltaTime, pDriveMembers: true);
         }
 
         internal static void RefreshMilitaryP0Priority()
@@ -286,7 +273,12 @@ namespace AncientWarfare3.core.lineage
                 if (state?.Army?.data == null) continue;
                 foreach (Actor member in state.Members.Values)
                 {
-                    if (!IsValidMember(member, state.Army)) continue;
+                    bool insideBoat;
+                    try { insideBoat = member?.is_inside_boat == true; }
+                    catch { insideBoat = false; }
+                    if (!ArmyRtsTransportRules.ShouldAdmitMemberP0(
+                            IsValidMember(member, state.Army), insideBoat))
+                        continue;
                     ArmyMilitaryMovementPriorityIndex.Register(member.data.id,
                         ArmyMilitaryMovementPriorityKind.RtsMember);
                 }
@@ -305,19 +297,36 @@ namespace AncientWarfare3.core.lineage
             if (!ArmyRtsTransportRules.ShouldProcessInMilitaryP0(
                     largeStepMode: true,
                     activeVoyageCount: States.Count)) return;
-            ProcessVoyageFrame(pCycleElapsed, pDriveBoundBoats: true);
+            ProcessVoyageFrame(pCycleElapsed, pDriveMembers: false);
+        }
+
+        internal static bool TryDriveMemberP0(Actor pActor,
+            float pCycleElapsed)
+        {
+            Army army = pActor?.army;
+            if (pActor?.data == null || army?.data == null ||
+                !States.TryGetValue(army.id, out TransportState state) ||
+                !state.Members.ContainsKey(pActor.data.id)) return false;
+
+            if (state.Stage == ArmyRtsTransportP0Stage.AssembleAtEntry &&
+                IsCaptain(pActor, army))
+            {
+                WorldTile entryLand = FindTile(
+                    state.Route.Entry.LandTileId);
+                DriveActorToTileP0(pActor, entryLand, pCycleElapsed);
+            }
+            else
+            {
+                HoldTransportMember(pActor);
+            }
+            pActor.skipBehaviour();
+            ArmyMilitaryMovementPriorityIndex.MarkProcessed(pActor.data.id);
+            return true;
         }
 
         internal static bool SuppressCombatForVoyage(Actor pActor)
         {
-            Army army = pActor?.army;
-            bool expectedPassenger = pActor?.data != null &&
-                army?.data != null && States.TryGetValue(army.id,
-                    out TransportState state) &&
-                state.Members.ContainsKey(pActor.data.id);
-            bool suppress = ArmyRtsTransportRules.ShouldSuppressCombatForVoyage(
-                expectedPassenger, voyageComplete: false);
-            if (!suppress) return false;
+            if (!OwnsActorTask(pActor)) return false;
             try { pActor.clearAttackTarget(); }
             catch { }
             try { pActor.beh_actor_target = null; }
@@ -326,514 +335,423 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static void ProcessVoyageFrame(float pCycleElapsed,
-            bool pDriveBoundBoats)
+            bool pDriveMembers)
         {
             if (!ArmyRtsTransportRules.ShouldProcessFrame(States.Count))
                 return;
-            double now = CurrentRealtime();
             TransportStateIds.Clear();
             foreach (long armyId in States.Keys)
                 TransportStateIds.Add(armyId);
+
             for (int i = 0; i < TransportStateIds.Count; i++)
             {
                 long armyId = TransportStateIds[i];
                 if (!States.TryGetValue(armyId,
                         out TransportState state)) continue;
                 Army army = state.Army;
+                WorldTile target = FindTile(state.TargetTileId);
                 if (army?.data == null)
                 {
                     States.Remove(armyId);
-                    AWArmyMarchService.OnTransportCancelled(army);
+                    DestroyTemporaryTransportBoats(state);
                     continue;
                 }
-                WorldTile target = FindTile(state.TargetTileId);
                 if (target?.data == null)
                 {
                     ReleaseArmy(army);
                     continue;
                 }
-                bool hasAssignedBoat = false;
-                bool hasEmbarkedMember = false;
-                long assignedBoatId = -1L;
-                Actor assignedBoat = null;
-                List<long> invalidMemberIds = state.InvalidMemberIds;
-                invalidMemberIds.Clear();
-                int validExpectedMembers = 0;
-                int landedExpectedMembers = 0;
-                bool anyRequestLoading = false;
-                Actor captain = null;
-                try { captain = army.getCaptain(); }
-                catch { }
-                bool captainLanded = false;
-                WorldTile captainLandingTile = null;
-                long markerActorId = long.MaxValue;
-                int movementTileId = -1;
-                foreach (KeyValuePair<long, Actor> pair in state.Members)
-                {
-                    Actor member = pair.Value;
-                    bool validMember = IsValidMember(member, army);
-                    if (!validMember)
-                    {
-                        ReleaseRequest(member);
-                        invalidMemberIds.Add(pair.Key);
-                        continue;
-                    }
-                    validExpectedMembers++;
 
-                    bool insideBoat = member.is_inside_boat;
-                    TaxiRequest request = insideBoat
-                        ? null
-                        : SafeRequest(member);
-                    string taskId = member.ai?.task?.id ?? "";
-                    bool protectedBoatTask = ArmyRtsTransportRules.
-                        IsProtectedVanillaPassengerTask(taskId);
-                    bool landingTask = taskId == VanillaLandingTaskId;
-                    bool stableTargetLand = !insideBoat &&
-                        ArmyRtsTransportRules.ShouldCountAsLanded(
-                            sameTargetIsland: SameIsland(
-                                member.current_tile, target),
-                            actorOnStableLand: IsStableLandingTile(
-                                member.current_tile),
-                            targetOnStableLand:
-                                IsStableLandingTile(target));
-                    if (ReferenceEquals(member, captain) &&
-                        stableTargetLand)
-                    {
-                        captainLanded = true;
-                        captainLandingTile = member.current_tile;
-                    }
-                    bool requestLoading = false;
-                    try
-                    {
-                        requestLoading = request?.isState(
-                            TaxiRequestState.Loading) == true;
-                        anyRequestLoading |= requestLoading;
-                    }
-                    catch { }
-                    ArmyRtsPassengerTaskAction passengerAction =
-                        ArmyRtsTransportRules.ResolvePassengerTaskAction(
-                            transportOwned: true,
-                            insideBoat: insideBoat,
-                            requestLoading: requestLoading,
-                            protectedBoatTask: protectedBoatTask,
-                            landingTask: landingTask,
-                            stableTargetLand: stableTargetLand);
-                    if (passengerAction ==
-                        ArmyRtsPassengerTaskAction.ResumeRts)
-                    {
-                        landedExpectedMembers++;
-                        state.HadLandedMember = true;
-                        HoldLandedMember(member);
-                        continue;
-                    }
-                    if (passengerAction ==
-                        ArmyRtsPassengerTaskAction.StartVanillaEmbark)
-                    {
-                        member.setTask(VanillaForceEmbarkTaskId,
-                            pClean: true, pCleanJob: false,
-                            pForceAction: true);
-                    }
-                    if (insideBoat)
-                    {
-                        hasAssignedBoat = true;
-                        hasEmbarkedMember = true;
-                        assignedBoatId = SafeInsideBoatId(member);
-                        if (assignedBoat == null)
-                            assignedBoat = SafeInsideBoatActor(member);
-                        CaptureMovementMarker(member,
-                            SafeInsideBoatTileId(member),
-                            ref markerActorId, ref movementTileId);
-                        continue;
-                    }
-                    try
-                    {
-                        if (request?.hasAssignedBoat() == true)
-                        {
-                            hasAssignedBoat = true;
-                            if (assignedBoatId < 0)
-                                assignedBoatId = SafeAssignedBoatId(request);
-                            if (assignedBoat == null)
-                                assignedBoat = SafeAssignedBoatActor(request);
-                            CaptureMovementMarker(member,
-                                SafeAssignedBoatTileId(request),
-                                ref markerActorId, ref movementTileId);
-                        }
-                    }
-                    catch { }
-                }
-                for (int memberIndex = 0;
-                     memberIndex < invalidMemberIds.Count; memberIndex++)
-                    state.Members.Remove(
-                        invalidMemberIds[memberIndex]);
-                if (hasEmbarkedMember)
+                Actor captain = SafeCaptain(army);
+                if (!IsValidMember(captain, army))
                 {
-                    if (captainLanded)
-                        TeleportRosterFromBoat(state, assignedBoat,
-                            captainLandingTile);
-                    else if (!state.HadLandedMember)
-                        TeleportRosterToBoat(state, assignedBoat);
-                }
-                ForceEmbarkRoster(state, anyRequestLoading, assignedBoat);
-                if (pDriveBoundBoats)
-                    DriveBoundBoatP0(assignedBoat, pCycleElapsed);
-                bool allExpectedMembersLanded =
-                    landedExpectedMembers >= validExpectedMembers;
-                ArmyRtsTransportVoyageAction voyageAction =
-                    allExpectedMembersLanded
-                        ? ArmyRtsTransportVoyageAction.Complete
-                        : ArmyRtsTransportRules.ResolveVoyageAction(
-                            validExpectedMembers, landedExpectedMembers,
-                            timedOut: false);
-                if (voyageAction ==
-                    ArmyRtsTransportVoyageAction.Complete)
-                {
-                    CompleteVoyage(armyId, state);
+                    ReleaseArmy(army);
                     continue;
                 }
-                if (hasAssignedBoat && !state.HadAssignedBoat)
+                state.Members[captain.data.id] = captain;
+                RosterCensus census =
+                    RefreshRosterAndBuildCensus(state, target);
+
+                if (!TryResolveLiveRoute(state, captain, target,
+                        census.HasAnyEmbarked,
+                        out WorldTile entryLand, out WorldTile pickupSea,
+                        out WorldTile destinationSea,
+                        out WorldTile landingTile))
                 {
-                    state.HadAssignedBoat = true;
-                    state.LastProgressRealtime = now;
-                    LogPhase(state, "assigned",
-                        " boat=" + assignedBoatId);
-                }
-                if (assignedBoatId >= 0L &&
-                    ArmyRtsTransportProductionService.
-                        IsTemporaryTransportBoat(assignedBoatId))
-                    state.TemporaryBoatIds.Add(assignedBoatId);
-                if (hasEmbarkedMember && !state.HadEmbarkedMember)
-                {
-                    state.HadEmbarkedMember = true;
-                    LogPhase(state, "embarked");
-                }
-                if (movementTileId >= 0)
-                {
-                    if (!state.HasMovementMarker ||
-                        state.LastMovementTileId != movementTileId)
-                    {
-                        state.HasMovementMarker = true;
-                        state.LastMovementTileId = movementTileId;
-                        state.LastProgressRealtime = now;
-                    }
-                }
-                bool timedOut = ArmyRtsTransportRules.
-                    TransportWaitTimedOut(state.LastProgressRealtime, now,
-                        hasAssignedBoat);
-                voyageAction = allExpectedMembersLanded
-                    ? ArmyRtsTransportVoyageAction.Complete
-                    : ArmyRtsTransportRules.ResolveVoyageAction(
-                        validExpectedMembers, landedExpectedMembers,
-                        timedOut);
-                if (voyageAction == ArmyRtsTransportVoyageAction.Retry)
-                {
-                    LogPhase(state, "timeout",
-                        " assigned=" + hasAssignedBoat);
-                    if (state.PreEmbarkTimeouts < int.MaxValue)
-                        state.PreEmbarkTimeouts++;
-                    bool voyageHasProgressed =
-                        state.HadEmbarkedMember ||
-                        state.HadLandedMember || hasEmbarkedMember;
-                    if (ArmyRtsTransportRules.
-                            ShouldEscalatePreEmbarkTimeout(
-                                state.PreEmbarkTimeouts,
-                                voyageHasProgressed))
-                    {
-                        LogPhase(state, "pre_embark_timeout_exhausted",
-                            " attempts=" + state.PreEmbarkTimeouts);
-                        ReleaseArmy(army);
-                        ArmyStallWatchdogService.OnRouteFailed(army.id,
-                            pAllowTransportEscalation: false);
-                        continue;
-                    }
-                    RetryVoyage(state, target, now);
-                    TryWakeTransportBoat(state, now);
+                    state.Stage = ArmyRtsTransportP0Stage.RoutePending;
+                    LogPending(state, "reason=route_unavailable");
                     continue;
                 }
-                TryWakeTransportBoat(state, now);
+
+                if (!IsLiveBoat(state.Boat))
+                {
+                    UnregisterOwnedTransportBoat(state.Boat);
+                    state.Boat = null;
+                    if (state.Stage >=
+                        ArmyRtsTransportP0Stage.Boarding)
+                        state.Stage =
+                            ArmyRtsTransportP0Stage.BoatToPickup;
+                }
+
+                bool captainAtEntry =
+                    state.Stage >= ArmyRtsTransportP0Stage.BoatToPickup ||
+                    IsAtTile(captain, entryLand);
+                bool boatAtPickup =
+                    state.Stage >= ArmyRtsTransportP0Stage.Boarding ||
+                    IsAtTile(state.Boat, pickupSea);
+                bool boatAtDestination =
+                    state.Stage >= ArmyRtsTransportP0Stage.Landing ||
+                    IsAtTile(state.Boat, destinationSea);
+                ArmyRtsTransportP0Stage nextStage =
+                    ArmyRtsTransportRules.ResolveP0Stage(
+                        routeValid: true,
+                        captainAtEntry: captainAtEntry,
+                        boatAtPickup: boatAtPickup,
+                        allEmbarked: census.AllEmbarked,
+                        boatAtDestination: boatAtDestination,
+                        allLanded: census.AllLanded);
+                SetStage(state, nextStage);
+
+                switch (state.Stage)
+                {
+                    case ArmyRtsTransportP0Stage.AssembleAtEntry:
+                        if (pDriveMembers && !DriveActorToTileP0(captain,
+                                entryLand, pCycleElapsed))
+                            LogPending(state,
+                                "reason=assembly_path_pending");
+                        break;
+                    case ArmyRtsTransportP0Stage.BoatToPickup:
+                        if (!EnsureTemporaryBoat(state))
+                            LogPending(state,
+                                "reason=boat_provision_failed");
+                        else if (!DriveBoatToTileP0(state, pickupSea,
+                                     pCycleElapsed))
+                            LogPending(state,
+                                "reason=boat_pickup_path_pending");
+                        break;
+                    case ArmyRtsTransportP0Stage.Boarding:
+                        if (!BoardRoster(state))
+                            LogPending(state,
+                                "reason=boarding_incomplete");
+                        break;
+                    case ArmyRtsTransportP0Stage.Sailing:
+                        if (!DriveBoatToTileP0(state,
+                                destinationSea, pCycleElapsed))
+                            LogPending(state,
+                                "reason=sailing_path_pending");
+                        break;
+                    case ArmyRtsTransportP0Stage.Landing:
+                        if (LandRoster(state, landingTile, target))
+                            CompleteVoyage(armyId, state);
+                        else
+                            LogPending(state,
+                                "reason=landing_incomplete");
+                        break;
+                    case ArmyRtsTransportP0Stage.Complete:
+                        CompleteVoyage(armyId, state);
+                        break;
+                }
             }
         }
 
-        private static void RetryVoyage(TransportState pState,
-            WorldTile pTarget, double pNow)
+        private static bool TryResolveLiveRoute(TransportState pState,
+            Actor pCaptain, WorldTile pTarget, bool pHasAnyEmbarked,
+            out WorldTile pEntryLand,
+            out WorldTile pPickupSea, out WorldTile pDestinationSea,
+            out WorldTile pLandingLand)
         {
-            if (pState == null || pTarget?.data == null) return;
-            var waitingMembers = new List<Actor>();
-            foreach (Actor member in pState.Members.Values)
+            bool embarked = pHasAnyEmbarked;
+            if (!embarked &&
+                AWDockTransportService.IsRouteLive(pState.Route) &&
+                AWDockTransportService.TryResolveRouteTiles(pState.Route,
+                    out pEntryLand, out pPickupSea,
+                    out pDestinationSea, out pLandingLand)) return true;
+            if (embarked &&
+                AWDockTransportService.TryResolveDestinationTiles(
+                    pState.Route, out pDestinationSea,
+                    out pLandingLand))
             {
-                bool validMember = IsValidMember(member, pState.Army);
-                bool landed = validMember && !member.is_inside_boat &&
-                              ArmyRtsTransportRules.ShouldCountAsLanded(
-                                  sameTargetIsland: SameIsland(
-                                      member.current_tile, pTarget),
-                                  actorOnStableLand:
-                                      IsStableLandingTile(
-                                          member.current_tile),
-                                  targetOnStableLand:
-                                      IsStableLandingTile(pTarget));
-                if (ArmyRtsTransportRules.ResolveExpectedMemberAction(
-                        validMember, landed) ==
-                    ArmyRtsTransportExpectedMemberAction.AwaitTransport &&
-                    member?.is_inside_boat == false)
-                    waitingMembers.Add(member);
+                pEntryLand = FindTile(pState.Route.Entry.LandTileId);
+                pPickupSea = FindTile(pState.Route.Entry.OceanTileId);
+                return true;
             }
-            for (int i = 0; i < waitingMembers.Count; i++)
+
+            pEntryLand = null;
+            pPickupSea = null;
+            pDestinationSea = null;
+            pLandingLand = null;
+            if (embarked)
             {
-                Actor member = waitingMembers[i];
-                ReleaseRequest(member);
+                if (!AWDockTransportService.TryResolveDestination(
+                        pState.Route, pTarget,
+                        out AWDockRouteCandidate destination))
+                    return false;
+                pState.Route = destination;
+                pState.RouteTopologyRevision =
+                    AWDockTransportService.TopologyRevision;
+                if (pState.Stage < ArmyRtsTransportP0Stage.Sailing)
+                    SetStage(pState, ArmyRtsTransportP0Stage.Sailing);
+                pEntryLand = FindTile(pState.Route.Entry.LandTileId);
+                pPickupSea = FindTile(pState.Route.Entry.OceanTileId);
+                return AWDockTransportService.TryResolveDestinationTiles(
+                    pState.Route, out pDestinationSea,
+                    out pLandingLand);
             }
-            for (int i = 0; i < waitingMembers.Count; i++)
-            {
-                Actor member = waitingMembers[i];
-                EnsureRequest(member, pTarget);
-            }
-            pState.LastProgressRealtime = pNow;
-            pState.HadAssignedBoat = false;
-            pState.HasMovementMarker = false;
-            pState.LastMovementTileId = -1;
-            pState.NextBoatWakeRealtime = pNow;
-            pState.LoggedBoatWake = false;
-            pState.LoggedNoBoat = false;
-            pState.LoggedNoRequest = false;
+            if (pCaptain?.current_tile?.data == null ||
+                !AWDockTransportService.TryResolveRoute(
+                    pCaptain.current_tile, pTarget,
+                    out AWDockRouteCandidate replacement)) return false;
+            pState.Route = replacement;
+            pState.RouteTopologyRevision =
+                AWDockTransportService.TopologyRevision;
+            SetStage(pState, ArmyRtsTransportP0Stage.AssembleAtEntry);
+            return AWDockTransportService.TryResolveRouteTiles(
+                pState.Route, out pEntryLand, out pPickupSea,
+                out pDestinationSea, out pLandingLand);
         }
 
-        private static void CompleteVoyage(long pArmyId,
-            TransportState pState)
+        private static bool EnsureTemporaryBoat(TransportState pState)
         {
-            if (pState == null ||
-                !States.TryGetValue(pArmyId, out TransportState current) ||
-                !ReferenceEquals(current, pState)) return;
-            if (pState.HadLandedMember) LogPhase(pState, "landed");
-            if (!States.Remove(pArmyId)) return;
-            DestroyTemporaryTransportBoats(pState);
-            AWArmyMarchService.OnTransportCompleted(pState.Army);
-            ArmyRtsControllerService.OnTransportCompleted(pState.Army);
-        }
-
-        private static void TryWakeTransportBoat(TransportState pState,
-            double pNow)
-        {
-            if (pState?.Army?.data == null ||
-                pNow < pState.NextBoatWakeRealtime) return;
-            pState.NextBoatWakeRealtime = pNow +
-                                          BoatWakeIntervalSeconds;
+            if (IsLiveBoat(pState?.Boat)) return true;
             Kingdom kingdom;
-            try { kingdom = pState.Army.getKingdom(); }
+            try { kingdom = pState?.Army?.getKingdom(); }
             catch { kingdom = null; }
-            TaxiRequest pendingRequest = FindPendingRequest(pState);
-            if (pendingRequest == null)
-            {
-                if (!pState.LoggedNoRequest)
-                {
-                    pState.LoggedNoRequest = true;
-                    LogPhase(pState, "no_request",
-                        " members=" + pState.Members.Count);
-                }
-                return;
-            }
-            if (ArmyRtsTransportProductionService.TryProvisionAndBind(
-                    kingdom, pendingRequest, out Actor boatActor))
-            {
-                pState.TemporaryBoatIds.Add(boatActor.data.id);
-                pState.LoggedBoatWake = true;
-                LogPhase(pState, "temporary_boat_bound",
-                    " boat=" + boatActor.data.id);
-                return;
-            }
-            LogNoBoatOnce(pState);
+            if (!ArmyRtsTransportProductionService.TryProvisionAtRoute(
+                    kingdom, pState.Route, out Actor boat)) return false;
+            pState.Boat = boat;
+            pState.TemporaryBoatIds.Add(boat.data.id);
+            OwnedTransportBoats[boat.data.id] = boat;
+            LogPhase(pState, "boat_provisioned",
+                " boat=" + boat.data.id);
+            return true;
         }
 
-        private static void ForceEmbarkRoster(TransportState pState,
-            bool pRequestLoading, Actor pAssignedBoat)
+        private static bool BoardRoster(TransportState pState)
         {
-            if (pState?.Army?.data == null || !pRequestLoading ||
-                pAssignedBoat?.data == null) return;
-            foreach (Actor member in pState.Members.Values)
-            {
-                if (!IsValidMember(member, pState.Army) ||
-                    member.is_inside_boat) continue;
-                TaxiRequest request = SafeRequest(member);
-                bool sameBoat = false;
-                try
-                {
-                    sameBoat = request?.hasAssignedBoat() == true &&
-                               ReferenceEquals(request.getBoat()?.actor,
-                                   pAssignedBoat);
-                }
-                catch { }
-                if (!sameBoat) continue;
-                string taskId = member.ai?.task?.id ?? "";
-                if (ArmyRtsTransportRules.IsProtectedVanillaPassengerTask(
-                        taskId)) continue;
-                try
-                {
-                    member.stopSleeping();
-                    member.cancelAllBeh();
-                    member.setTask(VanillaForceEmbarkTaskId,
-                        pClean: true, pCleanJob: false,
-                        pForceAction: true);
-                    ArmyMilitaryMovementPriorityIndex.Register(
-                        member.data.id,
-                        ArmyMilitaryMovementPriorityKind.RtsMember);
-                }
-                catch { }
-            }
-        }
-
-        private static void TeleportRosterToBoat(TransportState pState,
-            Actor pAssignedBoat)
-        {
-            if (pState?.Army?.data == null || pAssignedBoat?.data == null)
-                return;
+            Actor boatActor = pState?.Boat;
+            if (!IsLiveBoat(boatActor)) return false;
             Boat boat;
-            try { boat = pAssignedBoat.getSimpleComponent<Boat>(); }
+            try { boat = boatActor.getSimpleComponent<Boat>(); }
             catch { boat = null; }
-            if (boat == null) return;
-            foreach (Actor member in pState.Members.Values)
-            {
-                if (!IsValidMember(member, pState.Army) ||
-                    member.is_inside_boat) continue;
-                TaxiRequest request = SafeRequest(member);
-                bool sameBoat = false;
-                try
-                {
-                    sameBoat = request?.hasAssignedBoat() == true &&
-                               ReferenceEquals(request.getBoat()?.actor,
-                                   pAssignedBoat);
-                }
-                catch { }
-                if (!sameBoat) continue;
-                try { member.embarkInto(boat); }
-                catch { }
-            }
-        }
-
-        private static void TeleportRosterFromBoat(TransportState pState,
-            Actor pAssignedBoat, WorldTile pLandingTile)
-        {
-            if (pState?.Army?.data == null ||
-                pAssignedBoat?.data == null || pLandingTile?.data == null)
-                return;
-            Boat boat;
-            try { boat = pAssignedBoat.getSimpleComponent<Boat>(); }
-            catch { boat = null; }
-            if (boat == null) return;
-            foreach (Actor member in pState.Members.Values)
-            {
-                if (!IsValidMember(member, pState.Army) ||
-                    !member.is_inside_boat) continue;
-                bool sameBoat;
-                try
-                {
-                    sameBoat = ReferenceEquals(member.inside_boat?.actor,
-                        pAssignedBoat);
-                }
-                catch { sameBoat = false; }
-                if (!sameBoat) continue;
-                try
-                {
-                    member.disembarkTo(boat, pLandingTile);
-                    ArmyMilitaryMovementPriorityIndex.Register(
-                        member.data.id,
-                        ArmyMilitaryMovementPriorityKind.RtsMember);
-                }
-                catch { }
-            }
-        }
-
-        private static TaxiRequest FindPendingRequest(
-            TransportState pState)
-        {
-            if (pState == null) return null;
-            WorldTile target = FindTile(pState.TargetTileId);
-            TaxiRequest best = null;
-            int bestCount = -1;
+            if (boat == null) return false;
+            int valid = 0;
+            int aboard = 0;
             foreach (Actor member in pState.Members.Values)
             {
                 if (!IsValidMember(member, pState.Army)) continue;
-                TaxiRequest request = SafeRequest(member);
-                if (request == null ||
-                    !request.isState(TaxiRequestState.Pending) ||
-                    request.hasAssignedBoat() ||
-                    !SameTile(SafeRequestTarget(request), target))
-                    continue;
-                int count;
-                try { count = request.countActors(); }
-                catch { count = 0; }
-                if (count <= bestCount) continue;
-                best = request;
-                bestCount = count;
+                valid++;
+                bool alreadyAboard = false;
+                try
+                {
+                    alreadyAboard = member.is_inside_boat &&
+                                     ReferenceEquals(
+                                         member.inside_boat, boat);
+                }
+                catch { }
+                if (!alreadyAboard)
+                {
+                    try
+                    {
+                        AWPathMovementBridge.Cancel(member,
+                            AWPathFailureReason.CancelledByNewRequest);
+                        Boat previousBoat = member.inside_boat;
+                        if (previousBoat != null &&
+                            !ReferenceEquals(previousBoat, boat))
+                            previousBoat.removePassenger(member);
+
+                        // Match Cultiway's batch-independent loading handoff.
+                        // Actor.embarkInto calls native stopMovement first,
+                        // which can throw for a newly admitted P0 actor with no
+                        // movement batch yet.
+                        member.data.transportID = boat.actor.data.id;
+                        member.is_inside_boat = true;
+                        member.inside_boat = boat;
+                        boat.addPassenger(member);
+                        AWInsideBoatActorIndex.Notify(member, true);
+                    }
+                    catch { }
+                }
+                try
+                {
+                    if (member.is_inside_boat &&
+                        ReferenceEquals(member.inside_boat, boat)) aboard++;
+                }
+                catch { }
             }
-            return best;
+            return valid > 0 && aboard == valid;
         }
 
-        private static float TileDistance(WorldTile pFirst,
-            WorldTile pSecond)
+        private static bool LandRoster(TransportState pState,
+            WorldTile landingTile, WorldTile pTarget)
         {
-            if (pFirst == null || pSecond == null) return 0f;
-            float deltaX = pFirst.x - pSecond.x;
-            float deltaY = pFirst.y - pSecond.y;
-            return (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
-        }
-
-        private static void LogNoBoatOnce(TransportState pState)
-        {
-            if (pState == null || pState.LoggedNoBoat) return;
-            pState.LoggedNoBoat = true;
-            LogPhase(pState, "no_boat");
-        }
-
-        public static void ReleaseArmy(Army pArmy)
-        {
-            if (pArmy?.data == null) return;
-            if (States.TryGetValue(pArmy.id, out TransportState state))
+            Actor boatActor = pState?.Boat;
+            if (!IsLiveBoat(boatActor) || landingTile?.data == null)
+                return false;
+            Boat boat;
+            try { boat = boatActor.getSimpleComponent<Boat>(); }
+            catch { boat = null; }
+            if (boat == null) return false;
+            try { boat.unloadPassengers(landingTile, false); }
+            catch { }
+            int valid = 0;
+            int landed = 0;
+            foreach (Actor member in pState.Members.Values)
             {
-                var members = new List<Actor>(state.Members.Values);
-                for (int i = 0; i < members.Count; i++)
-                    ReleaseRequest(members[i]);
-                States.Remove(pArmy.id);
-                DestroyTemporaryTransportBoats(state);
-                AWArmyMarchService.OnTransportCancelled(pArmy);
-                ArmyRtsControllerService.OnTransportCancelled(pArmy);
+                if (!IsValidMember(member, pState.Army)) continue;
+                valid++;
+                if (member.is_inside_boat)
+                {
+                    try
+                    {
+                        member.disembarkTo(boat, landingTile);
+                        AWInsideBoatActorIndex.Notify(member, false);
+                        ArmyMilitaryMovementPriorityIndex.Register(
+                            member.data.id,
+                            ArmyMilitaryMovementPriorityKind.RtsMember);
+                    }
+                    catch { }
+                }
+                if (!member.is_inside_boat &&
+                    SameIsland(member.current_tile, pTarget) &&
+                    IsStableLandingTile(member.current_tile)) landed++;
             }
+            return valid > 0 && landed == valid;
+        }
 
-            int count;
-            try { count = pArmy.units?.Count ?? 0; }
-            catch { count = 0; }
-            for (int i = 0; i < count; i++)
+        private static bool DriveActorToTileP0(Actor pActor,
+            WorldTile pTarget, float pCycleElapsed)
+        {
+            if (pActor?.data == null || pTarget?.data == null) return false;
+            if (IsAtTile(pActor, pTarget))
             {
-                Actor actor;
-                try { actor = pArmy.units[i]; }
-                catch { continue; }
-                ReleaseRequest(actor);
+                AWPathMovementBridge.Cancel(pActor,
+                    AWPathFailureReason.CancelledByNewRequest);
+                HoldTransportMember(pActor);
+                return true;
+            }
+            SubmitLockedPathIfNeeded(pActor, pTarget,
+                pPathOnWater: false, out _, out _);
+            DriveOwnedPathP0(pActor, pCycleElapsed);
+            return IsAtTile(pActor, pTarget);
+        }
+
+        private static bool DriveBoatToTileP0(TransportState pState,
+            WorldTile pTarget, float pCycleElapsed)
+        {
+            Actor pBoat = pState?.Boat;
+            if (!IsLiveBoat(pBoat) || pTarget?.data == null) return false;
+            if (IsAtTile(pBoat, pTarget))
+            {
+                AWPathMovementBridge.Cancel(pBoat,
+                    AWPathFailureReason.CancelledByNewRequest);
+                HoldTransportMember(pBoat);
+                return true;
+            }
+            SubmitLockedPathIfNeeded(pBoat, pTarget,
+                pPathOnWater: true, out bool submitted,
+                out ExecuteEvent submitResult);
+            DriveOwnedPathP0(pBoat, pCycleElapsed, pState,
+                submitted ? submitResult.ToString() : "unchanged");
+            return IsAtTile(pBoat, pTarget);
+        }
+
+        private static void SubmitLockedPathIfNeeded(Actor pActor,
+            WorldTile pTarget, bool pPathOnWater,
+            out bool pSubmitted, out ExecuteEvent pSubmitResult)
+        {
+            pSubmitted = false;
+            pSubmitResult = ExecuteEvent.False;
+            if (pActor?.data == null || pTarget?.data == null) return;
+            bool exactTarget = SameTile(pActor.tile_target, pTarget);
+            if (exactTarget && AWPathMovementBridge.HasOwnership(pActor))
+            {
+                pSubmitResult = ExecuteEvent.True;
+                return;
+            }
+            if (AWPathMovementBridge.HasOwnership(pActor))
+                AWPathMovementBridge.Cancel(pActor,
+                    AWPathFailureReason.CancelledByNewRequest);
+            pSubmitted = true;
+            pSubmitResult = pActor.goTo(pTarget, pPathOnWater,
+                pWalkOnBlocks: false, pWalkOnLava: false,
+                pLimitPathfindingRegions: 0);
+        }
+
+        private static void DriveOwnedPathP0(Actor pActor,
+            float pCycleElapsed, TransportState pState = null,
+            string pSubmitResult = "not_applicable")
+        {
+            if (pActor?.data == null) return;
+            try
+            {
+                pActor.updateParallelChecks(pCycleElapsed);
+                bool captureDiagnostic =
+                    CaptureTransportPathDiagnostic(pState, pActor);
+                string pre = captureDiagnostic
+                    ? AWPathMovementBridge.DescribeRuntimeState(pActor)
+                    : string.Empty;
+                if (AWPathMovementBridge.HasOwnership(pActor) &&
+                    !pActor.is_moving)
+                    AWPathMovementBridge.Update(pActor);
+                string postUpdate = captureDiagnostic
+                    ? AWPathMovementBridge.DescribeRuntimeState(pActor)
+                    : string.Empty;
+                pActor.u10_checkSmoothMovement(pCycleElapsed);
+                string postSmooth = captureDiagnostic
+                    ? AWPathMovementBridge.DescribeRuntimeState(pActor)
+                    : string.Empty;
+                if (captureDiagnostic)
+                    ModClass.LogInfo(
+                        "[AW3 RTS transport] phase=boat_path_state" +
+                        " army=" + (pState?.Army?.id ?? -1L) +
+                        " boat=" + pActor.data.id +
+                        " stage=" + StageName(pState.Stage) +
+                        " submit=" + pSubmitResult +
+                        " pre=" + pre +
+                        " post_update=" + postUpdate +
+                        " post_smooth=" + postSmooth);
+                pActor.skipBehaviour();
+                ArmyMilitaryMovementPriorityIndex.MarkProcessed(
+                    pActor.data.id);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "[AW3 RTS transport] phase=p0_move_error actor=" +
+                    pActor.data.id + " error=" +
+                    error.GetType().Name);
             }
         }
 
-        public static void Clear()
+        private static bool CaptureTransportPathDiagnostic(
+            TransportState pState, Actor pActor)
         {
-            var states = new List<TransportState>(States.Values);
-            for (int i = 0; i < states.Count; i++)
-            {
-                foreach (Actor actor in states[i].Members.Values)
-                    ReleaseRequest(actor);
-                DestroyTemporaryTransportBoats(states[i]);
-                AWArmyMarchService.OnTransportCancelled(states[i].Army);
-                ArmyRtsControllerService.OnTransportCancelled(states[i].Army);
-            }
-            States.Clear();
-            TransportStateIds.Clear();
-            ActiveClock.Reset();
-            ArmyRtsTransportProductionService.Clear();
+            if (!AWPerformanceSettings.ArmyRtsDiagnosticsEnabled ||
+                pState == null || pActor?.data == null ||
+                pActor.asset?.is_boat != true) return false;
+            double now;
+            try { now = Time.realtimeSinceStartupAsDouble; }
+            catch { return false; }
+            if (now < pState.NextBoatPathDiagnosticAt) return false;
+            pState.NextBoatPathDiagnosticAt = now +
+                BoatPathDiagnosticIntervalSeconds;
+            return true;
         }
 
-        private static TransportState Begin(Army pArmy, WorldTile pTarget,
-            bool pForceTransport)
+        private static TransportState Begin(Army pArmy,
+            WorldTile pTarget, AWDockRouteCandidate pRoute)
         {
+            if (pArmy?.data == null || pTarget?.data == null ||
+                !pRoute.IsValid) return null;
             ClearMovementForTransport(pArmy);
             var state = new TransportState
             {
                 Army = pArmy,
                 TargetTileId = pTarget.data.tile_id,
-                LastProgressRealtime = CurrentRealtime()
+                Route = pRoute,
+                RouteTopologyRevision =
+                    AWDockTransportService.TopologyRevision,
+                Stage = ArmyRtsTransportP0Stage.RoutePending
             };
             int count;
             try { count = pArmy.units?.Count ?? 0; }
@@ -843,33 +761,220 @@ namespace AncientWarfare3.core.lineage
                 Actor member;
                 try { member = pArmy.units[i]; }
                 catch { continue; }
-                if (IsValidMember(member, pArmy) &&
-                    (member.is_inside_boat ||
-                     pForceTransport ||
-                     !SameIsland(member.current_tile, pTarget)))
+                if (IsValidMember(member, pArmy))
                     state.Members[member.data.id] = member;
             }
-            Actor captain = null;
-            try { captain = pArmy.getCaptain(); }
-            catch { }
-            if (IsValidMember(captain, pArmy) &&
-                (captain.is_inside_boat ||
-                 pForceTransport ||
-                 !SameIsland(captain.current_tile, pTarget)))
+            Actor captain = SafeCaptain(pArmy);
+            if (IsValidMember(captain, pArmy))
                 state.Members[captain.data.id] = captain;
+            if (state.Members.Count == 0) return null;
             States[pArmy.id] = state;
             AWArmyMarchService.OnTransportStarted(pArmy);
-            LogPhase(state, "mission_assigned",
-                " captain_tile=" +
-                (captain?.current_tile?.data?.tile_id ?? -1));
+            LogPhase(state, "route_selected",
+                " source=" + pRoute.Source +
+                " entry=" + pRoute.Entry.LandTileId +
+                " pickup=" + pRoute.Entry.OceanTileId +
+                " destination=" + pRoute.Exit.OceanTileId +
+                " landing=" + pRoute.Exit.LandTileId);
             return state;
+        }
+
+        private static RosterCensus RefreshRosterAndBuildCensus(
+            TransportState pState, WorldTile pTarget)
+        {
+            pState.InvalidMemberIds.Clear();
+            int armyCount;
+            try { armyCount = pState.Army.units?.Count ?? 0; }
+            catch { armyCount = 0; }
+            for (int i = 0; i < armyCount; i++)
+            {
+                Actor member;
+                try { member = pState.Army.units[i]; }
+                catch { continue; }
+                if (IsValidMember(member, pState.Army))
+                    pState.Members[member.data.id] = member;
+            }
+            Boat activeBoat = null;
+            if (IsLiveBoat(pState.Boat))
+                try { activeBoat = pState.Boat.getSimpleComponent<Boat>(); }
+                catch { activeBoat = null; }
+            int valid = 0;
+            int embarked = 0;
+            int aboardCurrentBoat = 0;
+            int landed = 0;
+            foreach (KeyValuePair<long, Actor> pair in pState.Members)
+            {
+                if (!IsValidMember(pair.Value, pState.Army))
+                {
+                    pState.InvalidMemberIds.Add(pair.Key);
+                    continue;
+                }
+                Actor member = pair.Value;
+                valid++;
+                bool insideBoat;
+                try { insideBoat = member.is_inside_boat; }
+                catch { insideBoat = false; }
+                if (insideBoat)
+                {
+                    embarked++;
+                    try
+                    {
+                        if (activeBoat != null && ReferenceEquals(
+                                member.inside_boat, activeBoat))
+                            aboardCurrentBoat++;
+                    }
+                    catch { }
+                }
+                else if (SameIsland(member.current_tile, pTarget) &&
+                         IsStableLandingTile(member.current_tile))
+                    landed++;
+            }
+            for (int i = 0; i < pState.InvalidMemberIds.Count; i++)
+                pState.Members.Remove(pState.InvalidMemberIds[i]);
+            return new RosterCensus(valid, embarked,
+                aboardCurrentBoat, landed);
+        }
+
+        private static void CompleteVoyage(long pArmyId,
+            TransportState pState)
+        {
+            if (pState == null ||
+                !States.TryGetValue(pArmyId, out TransportState current) ||
+                !ReferenceEquals(current, pState)) return;
+            SetStage(pState, ArmyRtsTransportP0Stage.Complete);
+            if (!States.Remove(pArmyId)) return;
+            DestroyTemporaryTransportBoats(pState);
+            AWArmyMarchService.OnTransportCompleted(pState.Army);
+            ArmyRtsControllerService.OnTransportCompleted(pState.Army);
+        }
+
+        public static void ReleaseArmy(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            if (!States.TryGetValue(pArmy.id,
+                    out TransportState state)) return;
+            DisembarkRosterForRelease(state);
+            States.Remove(pArmy.id);
+            foreach (Actor member in state.Members.Values)
+            {
+                if (member?.data == null) continue;
+                try
+                {
+                    AWPathMovementBridge.Cancel(member,
+                        AWPathFailureReason.CancelledByNewRequest);
+                }
+                catch { }
+            }
+            DestroyTemporaryTransportBoats(state);
+            AWArmyMarchService.OnTransportCancelled(pArmy);
+            ArmyRtsControllerService.OnTransportCancelled(pArmy);
+        }
+
+        private static void DisembarkRosterForRelease(
+            TransportState pState)
+        {
+            Actor boatActor = pState?.Boat;
+            if (boatActor?.data == null) return;
+            Boat boat;
+            try { boat = boatActor.getSimpleComponent<Boat>(); }
+            catch { boat = null; }
+            if (boat == null) return;
+
+            WorldTile releaseTile = ResolveEmergencyLandingTile(pState,
+                boatActor.current_tile);
+            if (releaseTile?.data == null) return;
+            try { boat.unloadPassengers(releaseTile, false); }
+            catch { }
+            foreach (Actor member in pState.Members.Values)
+            {
+                if (member?.data == null) continue;
+                bool stillAboard;
+                try
+                {
+                    stillAboard = member.is_inside_boat &&
+                                   ReferenceEquals(member.inside_boat,
+                                       boat);
+                }
+                catch { stillAboard = false; }
+                if (!stillAboard) continue;
+                try
+                {
+                    member.disembarkTo(boat, releaseTile);
+                    AWInsideBoatActorIndex.Notify(member, false);
+                }
+                catch { }
+            }
+            LogPhase(pState, "release_disembarked",
+                " boat=" + boatActor.data.id +
+                " landing=" + releaseTile.data.tile_id);
+        }
+
+        private static WorldTile ResolveEmergencyLandingTile(
+            TransportState pState, WorldTile pBoatTile)
+        {
+            WorldTile entry = FindTile(pState.Route.Entry.LandTileId);
+            WorldTile exit = FindTile(pState.Route.Exit.LandTileId);
+            bool entryValid = IsStableLandingTile(entry);
+            bool exitValid = IsStableLandingTile(exit);
+            float entryDistance = entryValid
+                ? SafeSquaredDistance(pBoatTile, entry)
+                : float.PositiveInfinity;
+            float exitDistance = exitValid
+                ? SafeSquaredDistance(pBoatTile, exit)
+                : float.PositiveInfinity;
+            switch (ArmyRtsTransportRules.SelectEmergencyLanding(
+                        entryValid, entryDistance, exitValid, exitDistance))
+            {
+                case ArmyRtsEmergencyLandingChoice.Entry:
+                    return entry;
+                case ArmyRtsEmergencyLandingChoice.Exit:
+                    return exit;
+            }
+
+            WorldTile capitalTile = null;
+            try
+            {
+                capitalTile = pState.Army.getKingdom()?.capital?.getTile();
+            }
+            catch { }
+            return IsStableLandingTile(capitalTile) ? capitalTile : null;
+        }
+
+        private static float SafeSquaredDistance(WorldTile pFirst,
+            WorldTile pSecond)
+        {
+            if (pFirst?.data == null || pSecond?.data == null)
+                return float.PositiveInfinity;
+            try { return Toolbox.SquaredDistTile(pFirst, pSecond); }
+            catch { return float.PositiveInfinity; }
+        }
+
+        public static void Clear()
+        {
+            var armies = new List<Army>();
+            foreach (TransportState state in States.Values)
+                if (state?.Army != null) armies.Add(state.Army);
+            for (int i = 0; i < armies.Count; i++)
+                ReleaseArmy(armies[i]);
+            States.Clear();
+            OwnedTransportBoats.Clear();
+            TransportStateIds.Clear();
+            ActiveClock.Reset();
+            ArmyRtsTransportProductionService.Clear();
+        }
+
+        internal static void EnsureNativeTaxiRequest(Actor pActor,
+            WorldTile pTarget)
+        {
+            if (OwnsActorTask(pActor) && pActor?.data != null)
+                ArmyMilitaryMovementPriorityIndex.Register(pActor.data.id,
+                    ArmyMilitaryMovementPriorityKind.RtsMember);
         }
 
         private static void ClearMovementForTransport(Army pArmy)
         {
-            if (pArmy?.data == null) return;
             int count;
-            try { count = pArmy.units?.Count ?? 0; }
+            try { count = pArmy?.units?.Count ?? 0; }
             catch { count = 0; }
             for (int i = 0; i < count; i++)
             {
@@ -892,191 +997,15 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static void OpenRequests(TransportState pState,
-            WorldTile pTarget)
-        {
-            if (pState == null || pTarget?.data == null) return;
-            foreach (Actor member in pState.Members.Values)
-                EnsureRequest(member, pTarget);
-            LogPhase(pState, "requested",
-                " members=" + pState.Members.Count);
-        }
-
-        internal static void EnsureNativeTaxiRequest(Actor pActor,
-            WorldTile pTarget)
-        {
-            EnsureRequest(pActor, pTarget);
-        }
-
-        private static void EnsureRequest(Actor pActor,
-            WorldTile pTarget)
-        {
-            if (pActor?.data == null || pTarget?.data == null ||
-                pActor.is_inside_boat) return;
-            TaxiRequest request = SafeRequest(pActor);
-            bool exactTarget = SameTile(SafeRequestTarget(request),
-                pTarget);
-            if (ArmyRtsTransportRules.ShouldReuseRequest(
-                    request != null, exactTarget)) return;
-            if (ArmyRtsTransportRules.ShouldRemoveFromRequest(
-                    request != null, pActor.is_inside_boat,
-                    exactTarget))
-                RemoveActorFromRequest(request, pActor);
-
-            try
-            {
-                TaxiManager.newRequest(pActor, pTarget);
-                request = SafeRequest(pActor);
-                if (SameTile(SafeRequestTarget(request), pTarget))
-                    return;
-
-                RemoveActorFromRequest(request, pActor);
-                TaxiRequest exactRequest = FindExactReusableRequest(
-                    pActor, pTarget);
-                if (exactRequest != null)
-                {
-                    exactRequest.addActor(pActor);
-                    return;
-                }
-                TaxiManager.list.Add(new TaxiRequest(pActor,
-                    pActor.kingdom, pActor.current_tile, pTarget));
-            }
-            catch { }
-        }
-
-        private static void ReleaseRequest(Actor pActor)
+        private static void HoldTransportMember(Actor pActor)
         {
             if (pActor?.data == null || pActor.is_inside_boat) return;
-            TaxiRequest request = SafeRequest(pActor);
-            if (request == null) return;
-            RemoveActorFromRequest(request, pActor);
-        }
-
-        private static void HoldLandedMember(Actor pActor)
-        {
-            if (pActor?.data == null) return;
-            ReleaseRequest(pActor);
             try
             {
-                pActor.clearTileTarget();
-                pActor.beh_tile_target = null;
-                pActor.setNotMoving();
+                pActor.stopMovement();
+                pActor.next_step_position = pActor.current_tile.posV3;
             }
             catch { }
-        }
-
-        private static void RemoveActorFromRequest(TaxiRequest request,
-            Actor pActor)
-        {
-            if (request == null || pActor?.data == null) return;
-            try
-            {
-                request.embarkToBoat(pActor);
-                if (request.countActors() == 0)
-                {
-                    ArmyRtsTransportProductionService.Cancel(request);
-                    TaxiManager.cancelRequest(request);
-                }
-            }
-            catch { }
-        }
-
-        private static TaxiRequest FindExactReusableRequest(Actor pActor,
-            WorldTile pTarget)
-        {
-            if (pActor?.kingdom?.data == null ||
-                pActor.current_tile?.data == null ||
-                pTarget?.data == null) return null;
-            try
-            {
-                for (int i = 0; i < TaxiManager.list.Count; i++)
-                {
-                    TaxiRequest request = TaxiManager.list[i];
-                    if (request == null ||
-                        request.isState(TaxiRequestState.Transporting) ||
-                        request.isState(TaxiRequestState.Finished) ||
-                        !request.isSameKingdom(pActor.kingdom) ||
-                        !SameTile(request.getTileTarget(), pTarget) ||
-                        !SameIsland(request.getTileStart(),
-                            pActor.current_tile)) continue;
-                    return request;
-                }
-            }
-            catch { }
-            return null;
-        }
-
-        private static TaxiRequest SafeRequest(Actor pActor)
-        {
-            if (pActor?.data == null) return null;
-            try { return TaxiManager.getRequestForActor(pActor); }
-            catch { return null; }
-        }
-
-        private static int SafeAssignedBoatTileId(TaxiRequest pRequest)
-        {
-            try
-            {
-                return pRequest?.getBoat()?.actor?.current_tile?.data?.tile_id
-                       ?? -1;
-            }
-            catch { return -1; }
-        }
-
-        private static long SafeAssignedBoatId(TaxiRequest pRequest)
-        {
-            try { return pRequest?.getBoat()?.actor?.data?.id ?? -1L; }
-            catch { return -1L; }
-        }
-
-        private static Actor SafeAssignedBoatActor(TaxiRequest pRequest)
-        {
-            try { return pRequest?.getBoat()?.actor; }
-            catch { return null; }
-        }
-
-        private static int SafeInsideBoatTileId(Actor pActor)
-        {
-            try
-            {
-                return pActor?.inside_boat?.actor?.current_tile?.data?.tile_id
-                       ?? -1;
-            }
-            catch { return -1; }
-        }
-
-        private static long SafeInsideBoatId(Actor pActor)
-        {
-            try { return pActor?.inside_boat?.actor?.data?.id ?? -1L; }
-            catch { return -1L; }
-        }
-
-        private static Actor SafeInsideBoatActor(Actor pActor)
-        {
-            try { return pActor?.inside_boat?.actor; }
-            catch { return null; }
-        }
-
-        private static void DriveBoundBoatP0(Actor pBoat,
-            float pCycleElapsed)
-        {
-            if (pBoat?.data == null || pBoat.isRekt() || !pBoat.isAlive())
-                return;
-            try
-            {
-                pBoat.b4_checkTaskVerifier(pCycleElapsed);
-                pBoat.b5_checkPathMovement(pCycleElapsed);
-                pBoat.b6_updateAI(pCycleElapsed);
-                pBoat.u10_checkSmoothMovement(pCycleElapsed);
-                pBoat.skipBehaviour();
-                ArmyMilitaryMovementPriorityIndex.MarkProcessed(pBoat.data.id);
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("[AW3 RTS transport] phase=p0_boat_error" +
-                    " boat=" + pBoat.data.id + " error=" +
-                    error.GetType().Name);
-            }
         }
 
         private static void DestroyTemporaryTransportBoats(
@@ -1084,24 +1013,70 @@ namespace AncientWarfare3.core.lineage
         {
             if (pState == null) return;
             foreach (long boatId in pState.TemporaryBoatIds)
+            {
+                OwnedTransportBoats.Remove(boatId);
                 ArmyRtsTransportProductionService.
                     DestroyTemporaryTransportBoat(boatId);
+            }
             pState.TemporaryBoatIds.Clear();
+            UnregisterOwnedTransportBoat(pState.Boat);
+            pState.Boat = null;
         }
 
-        private static void CaptureMovementMarker(Actor pActor,
-            int pTileId, ref long pMarkerActorId, ref int pMovementTileId)
+        private static void UnregisterOwnedTransportBoat(Actor pBoat)
         {
-            if (pTileId < 0 || pActor?.data == null ||
-                pActor.data.id >= pMarkerActorId) return;
-            pMarkerActorId = pActor.data.id;
-            pMovementTileId = pTileId;
+            if (pBoat?.data == null) return;
+            long boatId = pBoat.data.id;
+            if (OwnedTransportBoats.TryGetValue(boatId,
+                    out Actor owned) && ReferenceEquals(owned, pBoat))
+                OwnedTransportBoats.Remove(boatId);
         }
 
-        private static WorldTile SafeRequestTarget(TaxiRequest pRequest)
+        private static void SetStage(TransportState pState,
+            ArmyRtsTransportP0Stage pStage)
         {
-            if (pRequest == null) return null;
-            try { return pRequest.getTileTarget(); }
+            if (pState == null || pState.Stage == pStage) return;
+            pState.Stage = pStage;
+            pState.LastPendingDiagnostic = string.Empty;
+            LogPhase(pState, StageName(pStage));
+        }
+
+        private static void LogPending(TransportState pState,
+            string pReason)
+        {
+            if (pState == null || string.IsNullOrEmpty(pReason) ||
+                pState.LastPendingDiagnostic == pReason) return;
+            pState.LastPendingDiagnostic = pReason;
+            LogPhase(pState, "pending", " stage=" +
+                StageName(pState.Stage) + " " + pReason);
+        }
+
+        private static string StageName(ArmyRtsTransportP0Stage pStage)
+        {
+            switch (pStage)
+            {
+                case ArmyRtsTransportP0Stage.AssembleAtEntry:
+                    return "assembling";
+                case ArmyRtsTransportP0Stage.BoatToPickup:
+                    return "boat_to_pickup";
+                case ArmyRtsTransportP0Stage.Boarding:
+                    return "boarding";
+                case ArmyRtsTransportP0Stage.Sailing:
+                    return "sailing";
+                case ArmyRtsTransportP0Stage.Landing:
+                    return "landing";
+                case ArmyRtsTransportP0Stage.Complete:
+                    return "complete";
+                case ArmyRtsTransportP0Stage.Failed:
+                    return "failed";
+                default:
+                    return "route_pending";
+            }
+        }
+
+        private static Actor SafeCaptain(Army pArmy)
+        {
+            try { return pArmy?.getCaptain(); }
             catch { return null; }
         }
 
@@ -1109,21 +1084,41 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
-                bool militaryMember = pActor?.is_profession_warrior == true ||
-                                      ReferenceEquals(
-                                          pArmy?.getCaptain(), pActor);
                 return pActor?.data != null && pArmy?.data != null &&
-                       pActor.army == pArmy && pActor.kingdom?.data != null &&
-                       pActor.current_tile?.data != null &&
-                       militaryMember &&
-                       pActor.isAlive() && !pActor.isRekt();
+                       pActor.army == pArmy &&
+                       pActor.kingdom?.data != null &&
+                       pActor.current_tile?.data != null && pActor.isAlive() &&
+                       !pActor.isRekt();
             }
             catch { return false; }
         }
 
         private static bool IsCaptain(Actor pActor, Army pArmy)
         {
-            try { return ReferenceEquals(pArmy?.getCaptain(), pActor); }
+            return ReferenceEquals(SafeCaptain(pArmy), pActor);
+        }
+
+        private static bool IsLiveBoat(Actor pActor)
+        {
+            try
+            {
+                return pActor?.data != null && pActor.asset?.is_boat == true &&
+                       pActor.isAlive() && !pActor.isRekt() &&
+                       pActor.current_tile?.data != null;
+            }
+            catch { return false; }
+        }
+
+        private static bool IsAtTile(Actor pActor, WorldTile pTile)
+        {
+            if (pActor?.current_tile?.data == null || pTile?.data == null)
+                return false;
+            if (SameTile(pActor.current_tile, pTile)) return true;
+            try
+            {
+                return Toolbox.SquaredDistTile(pActor.current_tile,
+                    pTile) <= 2;
+            }
             catch { return false; }
         }
 
@@ -1161,16 +1156,6 @@ namespace AncientWarfare3.core.lineage
                 : null;
         }
 
-        private static double CurrentRealtime()
-        {
-            try
-            {
-                return ActiveClock.Current(
-                    Time.realtimeSinceStartupAsDouble);
-            }
-            catch { return 0d; }
-        }
-
         private static void LogPhase(TransportState pState,
             string pPhase, string pDetail = "")
         {
@@ -1178,25 +1163,9 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 ModClass.LogInfo("[AW3 RTS transport] phase=" + pPhase +
-                                 " army=" + (pState?.Army?.id ?? -1L) +
-                                 " target_tile=" +
-                                 (pState?.TargetTileId ?? -1) + pDetail);
-            }
-            catch { }
-        }
-
-        private static void LogRejectedVoyage(Army pArmy, Actor pActor,
-            WorldTile pTarget, string pReason)
-        {
-            if (!AWPerformanceSettings.ArmyRtsDiagnosticsEnabled) return;
-            try
-            {
-                ModClass.LogInfo("[AW3 RTS transport] phase=rejected" +
-                    " army=" + (pArmy?.id ?? -1L) +
-                    " captain_tile=" +
-                    (pActor?.current_tile?.data?.tile_id ?? -1) +
-                    " target_tile=" + (pTarget?.data?.tile_id ?? -1) +
-                    " reason=" + (pReason ?? "unknown"));
+                    " army=" + (pState?.Army?.id ?? -1L) +
+                    " target_tile=" +
+                    (pState?.TargetTileId ?? -1) + pDetail);
             }
             catch { }
         }
