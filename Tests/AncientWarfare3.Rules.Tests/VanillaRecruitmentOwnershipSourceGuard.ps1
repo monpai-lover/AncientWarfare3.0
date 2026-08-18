@@ -82,14 +82,14 @@ Require $replenishment 'SyntheticLevyService.CreateBatchAtTile(' `
 Reject $replenishment 'CityReservePoolService.TryReserveWarManpower(' `
     'replenishment must not use the retired city reserve war ledger'
 
-$boatWake = Section $transport 'private static void TryWakeTransportBoat(' `
-    'private static bool TryBindBoat('
+$boatWake = Section $transport 'private static bool EnsureTemporaryBoat(' `
+    'private static void BoardRoster('
 Reject $boatWake 'SafeCityBoats(' `
-    'RTS transport wake must not scan and reuse city boats'
+    'RTS transport provisioning must not scan and reuse city boats'
 Reject $boatWake 'TryBindBoat(' `
-    'RTS transport wake must not bind an existing boat'
-Require $boatWake 'TryProvisionAndBind(' `
-    'RTS transport wake must provision a fresh temporary boat'
+    'RTS transport provisioning must not bind an existing boat'
+Require $boatWake 'TryProvisionAtRoute(' `
+    'RTS transport must provision a fresh boat at the locked route entry'
 Require $transportProduction 'TemporaryBoatIds' `
     'temporary RTS transport boats must be tracked explicitly'
 Require $transportProduction 'DestroyTemporaryTransportBoat(' `
