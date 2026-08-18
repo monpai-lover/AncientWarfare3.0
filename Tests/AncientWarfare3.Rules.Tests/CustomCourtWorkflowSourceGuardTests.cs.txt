@@ -99,7 +99,8 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "_toolPanel.anchoredPosition = new Vector2(-864f, 46f)");
         Contains(window, "_toolPanel.SetAsLastSibling()");
         Contains(window, "_canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f)");
-        Contains(window, "_canvasRect.sizeDelta = new Vector2(contentWidth,");
+        Contains(window,
+            "CustomCourtWorkflowLayoutRules.VisibleCanvasHeight(");
         Contains(window, "_canvasRect.anchoredPosition = new Vector2(-480f, 50f)");
         Contains(window, "CanvasCenterLayout()");
         Contains(window, "_workspaceRect.InverseTransformPoint(");
@@ -156,6 +157,11 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(stringDropdown, "SetOptions(");
         Contains(stringDropdown, "typeof(ScrollRect)");
         Contains(stringDropdown, "typeof(DismissArea)");
+        Contains(stringDropdown, "typeof(Canvas)");
+        Contains(stringDropdown, "typeof(GraphicRaycaster)");
+        Contains(stringDropdown, "overrideSorting = true");
+        Contains(stringDropdown, "sortingOrder = canvas.sortingOrder + 1");
+        Contains(stringDropdown, "private void OnDisable()");
         Contains(stringDropdown, "if (!option.Enabled)");
         Contains(stringDropdown, "_onUnavailable?.Invoke(option)");
         Contains(runtime, "DisplayName(Kingdom kingdom");

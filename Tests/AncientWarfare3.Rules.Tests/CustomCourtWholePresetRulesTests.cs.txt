@@ -12,6 +12,7 @@ internal static class CustomCourtWholePresetRulesTests
         DuplicateOfficeIdsAreNormalizedDeterministically();
         EmptyPresetDoesNotReplaceTheGraph();
         GeneratedLayoutIsDeterministicAndCentered();
+        ShiftedCanvasFitsInsideViewport();
     }
 
     private static void XiaOptionsContainAllHistoricalStages()
@@ -137,6 +138,25 @@ internal static class CustomCourtWholePresetRulesTests
             True(Math.Abs(first.Offices[index].Layout.Y - 700f) <= 300f,
                 "generated card stays near canvas center Y");
         }
+    }
+
+    private static void ShiftedCanvasFitsInsideViewport()
+    {
+        const float viewportHeight = 302f;
+        const float rootOffsetY = -8f;
+        const float canvasOffsetY = 50f;
+        float canvasHeight = CustomCourtWorkflowLayoutRules
+            .VisibleCanvasHeight(viewportHeight, rootOffsetY, canvasOffsetY);
+        Equal(218f, canvasHeight,
+            "shifted canvas height leaves both edges inside the viewport");
+
+        float centerY = rootOffsetY + canvasOffsetY;
+        float halfViewport = viewportHeight * 0.5f;
+        float halfCanvas = canvasHeight * 0.5f;
+        True(centerY + halfCanvas <= halfViewport,
+            "shifted canvas top stays inside the viewport");
+        True(centerY - halfCanvas >= -halfViewport,
+            "shifted canvas bottom stays inside the viewport");
     }
 
     private static CustomCourtTemplate SourceTemplate()

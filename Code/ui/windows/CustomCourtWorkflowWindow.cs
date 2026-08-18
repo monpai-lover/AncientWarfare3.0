@@ -223,7 +223,8 @@ namespace AncientWarfare3.ui.windows
             _canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f);
             _canvasRect.pivot = new Vector2(0.5f, 0.5f);
             _canvasRect.sizeDelta = new Vector2(contentWidth,
-                viewportHeight);
+                CustomCourtWorkflowLayoutRules.VisibleCanvasHeight(
+                    viewportHeight, _root.anchoredPosition.y, 50f));
             _canvasRect.anchoredPosition = new Vector2(-480f, 50f);
             _canvasRect.GetComponent<TreeDragPanHandler>().Setup(_workspaceRect,
                 _canvasRect);

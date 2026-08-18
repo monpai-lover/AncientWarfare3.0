@@ -90,6 +90,7 @@ namespace AncientWarfare3.ui.components
                 Mathf.Max(1f, height));
             Image image = GetComponent<Image>();
             AW_UIStyle.ApplyButton(image, 0.96f);
+            image.raycastTarget = true;
             Button button = GetComponent<Button>();
             button.targetGraphic = image;
             button.onClick.AddListener(ToggleDropdown);
@@ -160,13 +161,19 @@ namespace AncientWarfare3.ui.components
             _openDropdown = this;
 
             _overlay = new GameObject("AWStringDropdownOverlay",
-                typeof(RectTransform), typeof(Image), typeof(DismissArea));
+                typeof(RectTransform), typeof(Canvas),
+                typeof(GraphicRaycaster), typeof(Image),
+                typeof(DismissArea));
             _overlay.transform.SetParent(canvasRect, false);
             RectTransform overlayRect = _overlay.GetComponent<RectTransform>();
             overlayRect.anchorMin = Vector2.zero;
             overlayRect.anchorMax = Vector2.one;
             overlayRect.offsetMin = Vector2.zero;
             overlayRect.offsetMax = Vector2.zero;
+            Canvas overlayCanvas = _overlay.GetComponent<Canvas>();
+            overlayCanvas.overrideSorting = true;
+            overlayCanvas.sortingLayerID = canvas.sortingLayerID;
+            overlayCanvas.sortingOrder = canvas.sortingOrder + 1;
             Image overlayImage = _overlay.GetComponent<Image>();
             overlayImage.color = Color.clear;
             overlayImage.raycastTarget = true;
@@ -177,7 +184,9 @@ namespace AncientWarfare3.ui.components
                 typeof(RectTransform), typeof(Image), typeof(RectMask2D),
                 typeof(ScrollRect)).GetComponent<RectTransform>();
             _popup.SetParent(overlayRect, false);
-            AW_UIStyle.ApplyPanel(_popup.GetComponent<Image>(), 0.98f);
+            Image popupImage = _popup.GetComponent<Image>();
+            AW_UIStyle.ApplyPanel(popupImage, 0.98f);
+            popupImage.raycastTarget = true;
             _scroll = _popup.GetComponent<ScrollRect>();
             _scroll.viewport = _popup;
             _scroll.horizontal = false;
@@ -328,6 +337,11 @@ namespace AncientWarfare3.ui.components
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.Escape)) CloseDropdown();
+        }
+
+        private void OnDisable()
+        {
+            CloseDropdown();
         }
 
         private void OnDestroy()
