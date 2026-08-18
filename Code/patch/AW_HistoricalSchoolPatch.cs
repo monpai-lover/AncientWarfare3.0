@@ -29,6 +29,80 @@ namespace AncientWarfare3.patch
             public City OldCity { get; }
         }
 
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Building), nameof(Building.startDestroyBuilding))]
+        private static void AcademyStartDestroy_Prefix(Building __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            try { HistoricalSchoolAcademyLifecycleService.Capture(__instance); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Academy destruction capture failed: " +
+                                    error.Message);
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Building), nameof(Building.startMakingRuins))]
+        private static void AcademyStartRuin_Prefix(Building __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            try { HistoricalSchoolAcademyLifecycleService.Capture(__instance); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Academy ruin capture failed: " + error.Message);
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Building), nameof(Building.startRemove))]
+        private static void AcademyStartRemove_Prefix(Building __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            try { HistoricalSchoolAcademyLifecycleService.Capture(__instance); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Academy removal capture failed: " + error.Message);
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(Building), nameof(Building.removeBuildingFinal))]
+        private static void AcademyRemoveFinal_Postfix(Building __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            try
+            {
+                HistoricalSchoolAcademyLifecycleService.ConfirmRemoval(__instance);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Academy final removal cleanup failed: " +
+                                    error.Message);
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(Building), nameof(Building.completeConstruction))]
+        private static void AcademyCompleteConstruction_Postfix(Building __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            try
+            {
+                HistoricalSchoolAcademyRepairService.OnConstructionCompleted(__instance);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Academy construction completion failed: " +
+                                    error.Message);
+            }
+        }
+
         [HarmonyPostfix]
         [HarmonyPriority(Priority.Last)]
         [HarmonyPatch(typeof(MapBox), "updateObjectAge")]
@@ -149,8 +223,11 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             long cityId = __instance?.data?.id ?? -1L;
+            HistoricalSchoolAcademyRepairService.CancelCity(cityId);
             HistoricalSchoolAcademyConstructionService.InvalidateCity(cityId);
+            HistoricalSchoolVenueService.ReleaseCityClaims(cityId);
             HistoricalSchoolVenueService.InvalidateCity(cityId);
+            SchoolLandmarkService.MarkDirty(cityId);
             HistoricalSchoolRecruitCandidateCache.InvalidateCity(cityId);
             HistoricalSchoolTravelService.InvalidateCityIndex();
             HistoricalSchoolRuntimeIndex.Instance.SetLivingXiaCity(cityId, false);

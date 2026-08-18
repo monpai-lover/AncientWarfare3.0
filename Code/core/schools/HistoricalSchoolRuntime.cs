@@ -20,10 +20,12 @@ namespace AncientWarfare3.core.schools
             SchoolMembershipService.LoadIndexes();
             HistoricalSchoolStore.ClearLedgerReadCache();
             HistoricalSchoolAcademyConstructionService.ClearRuntime();
+            HistoricalSchoolAcademyLifecycleService.ClearRuntime();
             HistoricalSchoolStore.LoadRuntimeState(
                 out int eligibleYear, out int lastWorldYear);
             HistoricalSchoolScheduler.RestorePersistentState(
                 eligibleYear, lastWorldYear);
+            HistoricalSchoolAcademyRepairService.LoadState();
             HistoricalAffiliationService.LoadState();
             HistoricalSchoolDescentService.LoadState();
             HistoricalAffiliationService.EnsureMembershipAffiliations();
@@ -64,6 +66,8 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolDebateService.ClearRuntime();
             HistoricalSchoolDescentService.ClearRuntime();
             HistoricalSchoolAcademyConstructionService.ClearRuntime();
+            HistoricalSchoolAcademyLifecycleService.ClearRuntime();
+            HistoricalSchoolAcademyRepairService.ClearRuntime();
             HistoricalSchoolRuntimeIndex.Instance.ClearLivingXiaCities();
             _loaded = false;
         }

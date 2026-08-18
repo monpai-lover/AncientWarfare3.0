@@ -394,6 +394,15 @@ if (args.Length == 1 && args[0] == "--school-save-preparation")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--school-academy-repair")
+{
+    HistoricalSchoolAcademyRepairRulesTests.Run();
+    HistoricalSchoolAcademyRepairPersistenceSqlTests.Run();
+    HistoricalSchoolAcademyRepairSourceGuardTests.Run();
+    Console.WriteLine("Historical school academy repair rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--career-cross-layer-slice")
 {
     OfficialCareerCrossLayerPersistenceSqlTests.Run();
@@ -8451,6 +8460,9 @@ True(diplomacyProposalSource.Contains(
         "TryPrepareCoalitionCandidate(pRequester"),
     "bounded diplomacy AI proactively reaches marriage and coalition paths");
 SchoolRuntimePerformanceTests.Run();
+HistoricalSchoolAcademyRepairRulesTests.Run();
+HistoricalSchoolAcademyRepairPersistenceSqlTests.Run();
+HistoricalSchoolAcademyRepairSourceGuardTests.Run();
 
 var foreignCaptainLeaseRule = typeof(ArmyCaptainContinuityRules)
     .GetMethod("ShouldReleaseForeignCaptainLease", new[]

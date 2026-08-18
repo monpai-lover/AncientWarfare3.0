@@ -1,0 +1,129 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.schools;
+
+internal static class HistoricalSchoolAcademyRepairRulesTests
+{
+    public static void Run()
+    {
+        RejectsNonAcademiesAndDeadPhysicalStates();
+        ClearsOnlyMatchingConstructionBinding();
+        RestoresMissingPendingTicketOnce();
+        PrefersOriginalTileBeforeFallback();
+        BoundsAnnualRepairWork();
+        ResolvesCityDestructionAndTransfer();
+        RespectsTheSingleCityConstructionSlot();
+    }
+
+    private static void RespectsTheSingleCityConstructionSlot()
+    {
+        True(HistoricalSchoolAcademyRepairRules.CanStartConstruction(
+            constructionSlotOccupied: false),
+            "academy may start when the city construction slot is free");
+        False(HistoricalSchoolAcademyRepairRules.CanStartConstruction(
+            constructionSlotOccupied: true),
+            "ordinary city construction blocks academy start");
+    }
+
+    private static void RejectsNonAcademiesAndDeadPhysicalStates()
+    {
+        True(HistoricalSchoolAcademyRepairRules.IsLiveAcademy(true, true,
+            true, false, false, false, true, false), "healthy academy is live");
+        False(HistoricalSchoolAcademyRepairRules.IsLiveAcademy(true, false,
+            true, false, false, false, true, false), "non-academy rejected");
+        False(HistoricalSchoolAcademyRepairRules.IsLiveAcademy(true, true,
+            true, true, false, false, true, false), "on-remove rejected");
+        False(HistoricalSchoolAcademyRepairRules.IsLiveAcademy(true, true,
+            true, false, true, false, true, false), "removed rejected");
+        False(HistoricalSchoolAcademyRepairRules.IsLiveAcademy(true, true,
+            true, false, false, true, true, false), "ruin rejected");
+        False(HistoricalSchoolAcademyRepairRules.IsLiveAcademy(true, true,
+            true, false, false, false, false, false), "unusable rejected");
+        False(HistoricalSchoolAcademyRepairRules.IsLiveAcademy(true, true,
+            true, false, false, false, true, true), "abandoned rejected");
+        False(HistoricalSchoolAcademyRepairRules.ShouldCaptureDestruction(
+            false, 1, 2, 3, 4), "ordinary building destruction ignored");
+        True(HistoricalSchoolAcademyRepairRules.ShouldCaptureDestruction(
+            true, 1, 2, 3, 4), "academy destruction captured");
+    }
+
+    private static void ClearsOnlyMatchingConstructionBinding()
+    {
+        True(HistoricalSchoolAcademyRepairRules.ShouldClearConstructionBinding(
+            41, 41), "destroyed academy clears its own construction binding");
+        False(HistoricalSchoolAcademyRepairRules.ShouldClearConstructionBinding(
+            41, 42), "other construction binding is preserved");
+    }
+
+    private static void RestoresMissingPendingTicketOnce()
+    {
+        True(HistoricalSchoolAcademyRepairRules.ShouldRestoreMissingTicket(
+            HistoricalSchoolAcademyPhysicalState.RepairPending, false),
+            "old save pending state recreates missing ticket");
+        True(HistoricalSchoolAcademyRepairRules.ShouldRestoreMissingTicket(
+            HistoricalSchoolAcademyPhysicalState.Rebuilding, false),
+            "old save rebuilding state recreates missing ticket");
+        False(HistoricalSchoolAcademyRepairRules.ShouldRestoreMissingTicket(
+            HistoricalSchoolAcademyPhysicalState.Active, false),
+            "active institution needs no ticket");
+        False(HistoricalSchoolAcademyRepairRules.ShouldRestoreMissingTicket(
+            HistoricalSchoolAcademyPhysicalState.RepairPending, true),
+            "existing ticket remains unique");
+        Equal("school_academy_repair:7:11",
+            HistoricalSchoolAcademyRepairRules.OperationKey(7, 11),
+            "ticket operation key is deterministic");
+    }
+
+    private static void PrefersOriginalTileBeforeFallback()
+    {
+        Equal(HistoricalSchoolAcademyPlacementChoice.OriginalTile,
+            HistoricalSchoolAcademyRepairRules.ChoosePlacement(true, true),
+            "valid original tile wins over fallback");
+        Equal(HistoricalSchoolAcademyPlacementChoice.Fallback,
+            HistoricalSchoolAcademyRepairRules.ChoosePlacement(false, true),
+            "fallback is used only after original tile fails");
+        Equal(HistoricalSchoolAcademyPlacementChoice.None,
+            HistoricalSchoolAcademyRepairRules.ChoosePlacement(false, false),
+            "repair waits when neither placement works");
+    }
+
+    private static void BoundsAnnualRepairWork()
+    {
+        Equal(2, HistoricalSchoolAcademyRepairRules.RepairBudget(9),
+            "large queue uses fixed budget");
+        Equal(1, HistoricalSchoolAcademyRepairRules.RepairBudget(1),
+            "small queue does not overrun");
+        Equal(0, HistoricalSchoolAcademyRepairRules.RepairBudget(0),
+            "empty queue has no work");
+    }
+
+    private static void ResolvesCityDestructionAndTransfer()
+    {
+        Equal(HistoricalSchoolAcademyRepairDisposition.Cancel,
+            HistoricalSchoolAcademyRepairRules.ResolveDisposition(false, false, false),
+            "destroyed city cancels repair");
+        Equal(HistoricalSchoolAcademyRepairDisposition.RebindOwner,
+            HistoricalSchoolAcademyRepairRules.ResolveDisposition(true, true, true),
+            "city transfer rebinds repair authority");
+        Equal(HistoricalSchoolAcademyRepairDisposition.Repair,
+            HistoricalSchoolAcademyRepairRules.ResolveDisposition(true, true, false),
+            "stable city repairs normally");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name + ": expected false");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}
