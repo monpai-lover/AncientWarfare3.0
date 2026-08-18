@@ -116,7 +116,8 @@ namespace AncientWarfare3.core.lineage
             BanditZoneWallPlan zoneWallPlan = null;
             BuildingAsset towerAsset = ResolveTowerAsset(pRuler);
             List<WorldTile> towerTiles = null;
-            bool foundWallableCandidate = false;
+            List<TileZone> wallFallbackInterior = null;
+            BanditZoneWallPlan wallFallbackPlan = null;
             foreach (IReadOnlyList<string> candidateKeys in candidates)
             {
                 if (candidateKeys.Count != 4) continue;
@@ -127,25 +128,33 @@ namespace AncientWarfare3.core.lineage
                         pMother, candidate, strongholdCenter,
                         out BanditZoneWallPlan candidateWall) ||
                     candidateWall.WallPoints.Count == 0) continue;
-                foundWallableCandidate = true;
+                if (wallFallbackInterior == null)
+                {
+                    wallFallbackInterior = candidate;
+                    wallFallbackPlan = candidateWall;
+                }
                 List<WorldTile> candidateTowerTiles =
                     FindGateTowerTiles(candidateWall, strongholdCenter,
                         towerAsset, candidate);
-                if (candidateTowerTiles == null ||
-                    candidateTowerTiles.Count != 4) continue;
+                if (!PeasantRebelBanditStrongholdRules.
+                        CanUseWallCandidate(true,
+                            candidateTowerTiles?.Count ?? 0)) continue;
+                if (candidateTowerTiles?.Count != 4) continue;
                 interior = candidate;
                 zoneWallPlan = candidateWall;
                 towerTiles = candidateTowerTiles;
                 break;
             }
+            if (interior == null && wallFallbackInterior != null)
+            {
+                interior = wallFallbackInterior;
+                zoneWallPlan = wallFallbackPlan;
+                towerTiles = new List<WorldTile>();
+            }
             if (interior == null || zoneWallPlan == null)
             {
-                pFailureKey = foundWallableCandidate
-                    ? "aw_bandit_stronghold_tower_failed"
-                    : "aw_bandit_stronghold_wall_failed";
-                LogPlanFailure(foundWallableCandidate
-                        ? "unbuildable_gate_towers"
-                        : "no_wallable_four_zone_candidate",
+                pFailureKey = "aw_bandit_stronghold_wall_failed";
+                LogPlanFailure("no_wallable_four_zone_candidate",
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
@@ -245,8 +254,7 @@ namespace AncientWarfare3.core.lineage
                 pPlan.CenterZone == null ||
                 pPlan.InteriorZones?.Count != 4 ||
                 pPlan.WallPoints == null || pPlan.WallPoints.Count == 0 ||
-                pPlan.TowerTiles?.Count != 4 ||
-                pPlan.TowerAsset == null) return false;
+                pPlan.TowerTiles == null) return false;
             PeasantRebelBanditStrongholdPlan plan = pPlan;
             var transaction = new Transaction { Plan = plan };
             try
@@ -555,6 +563,28 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        internal static void QueueGuiyiRestorationFall(Kingdom pBandit,
+            Action<City> pOnCompleted)
+        {
+            if (pBandit?.data == null) return;
+            long banditId = pBandit.getID();
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "guiyi_restoration_fall:" + banditId,
+                DeferredWorkClass.CriticalRuntime,
+                () =>
+                {
+                    Kingdom bandit = ResolveKingdom(banditId);
+                    if (bandit?.data == null ||
+                        !PeasantRebelBanditStateStore.TryRead(bandit,
+                            out PeasantRebelBanditStrongholdState state))
+                        return;
+                    City mother = ResolveCity(state.MotherCityId);
+                    if (mother?.data == null ||
+                        !DestroyForOrdinaryGovernment(bandit)) return;
+                    pOnCompleted?.Invoke(mother);
+                });
+        }
+
         private static bool DestroyInheritedStronghold(City pStronghold,
             City pMother)
         {
@@ -588,7 +618,9 @@ namespace AncientWarfare3.core.lineage
                 pMother.recalculateNeighbourZones();
                 pStronghold.recalculateNeighbourZones();
                 if (!pStronghold.isRekt())
-                    World.world.cities.removeObject(pStronghold);
+                    BanditStrongholdCityDisposalService.Schedule(
+                        pStronghold.getID(),
+                        pStronghold.kingdom?.getID() ?? -1L);
                 return true;
             }
             catch (Exception e)
@@ -748,24 +780,13 @@ namespace AncientWarfare3.core.lineage
                     return;
             }
 
-            int population;
-            try { population = stronghold.getPopulationPeople(); }
-            catch { return; }
-            BanditStrongholdFallAction action =
-                PeasantRebelBanditStrongholdRules.ResolveFallAction(
-                    population, pHostileKillerKingdomId,
-                    captureFinished: false);
-            if (action == BanditStrongholdFallAction.QueueFall)
-            {
-                if (pHostileKillerKingdomId <= 0 &&
-                    state.LastHostileKillerKingdomId > 0)
-                {
-                    state.LastHostileKillerKingdomId = -1L;
-                    if (!PeasantRebelBanditStateStore.Write(bandit, state))
-                        return;
-                }
-                QueueFall(pStrongholdCityId, -1L);
-            }
+            PeasantRebelBanditStrongholdPopulationService.
+                EnqueueStronghold(pStrongholdCityId);
+        }
+
+        internal static void QueuePopulationFall(long pStrongholdCityId)
+        {
+            QueueFall(pStrongholdCityId, -1L);
         }
 
         internal static void RestoreRuntime()
@@ -880,6 +901,12 @@ namespace AncientWarfare3.core.lineage
                 if (pRecordSuppressionChronicle &&
                     !RecordSuppressionChronicles(pBandit, pStronghold,
                         suppressor)) return false;
+                if (pRecordSuppressionChronicle && string.Equals(
+                        pState.RouteSubtype,
+                        PeasantRebelGuiyiRules.RouteSubtype,
+                        StringComparison.Ordinal))
+                    PeasantRebelGuiyiService.RecordSuppressed(pBandit,
+                        suppressor, pStronghold);
 
                 WorldTile motherTile = mother.getTile();
                 foreach (Actor actor in pStronghold.units.ToList())
@@ -904,7 +931,9 @@ namespace AncientWarfare3.core.lineage
                 if (!PeasantRebelBanditStateStore.Write(pBandit, pState))
                     return false;
                 if (!pStronghold.isRekt())
-                    World.world.cities.removeObject(pStronghold);
+                    BanditStrongholdCityDisposalService.Schedule(
+                        pStronghold.getID(),
+                        pStronghold.kingdom?.getID() ?? -1L);
                 return true;
             }
             catch (Exception e)
@@ -1384,18 +1413,23 @@ namespace AncientWarfare3.core.lineage
             City pStronghold)
         {
             PeasantRebelBanditStrongholdPlan plan = pTransaction.Plan;
-            if (pStronghold?.data == null || plan?.TowerAsset == null ||
-                plan.TowerTiles.Count != 4)
+            if (pStronghold?.data == null || plan == null)
                 throw new InvalidOperationException(
-                    "gate tower plan is incomplete");
+                    "stronghold tower context is invalid");
+            if (plan.TowerAsset == null || plan.TowerTiles == null ||
+                plan.TowerTiles.Count == 0) return;
             foreach (WorldTile tile in plan.TowerTiles)
             {
                 Building building = World.world.buildings.addBuilding(
                     plan.TowerAsset, tile, pCheckForBuild: true,
                     pSfx: false, pType: BuildPlacingType.Load);
                 if (building?.data == null)
-                    throw new InvalidOperationException(
-                        "native gate tower creation failed");
+                {
+                    ModClass.LogWarning(
+                        "Bandit gate tower creation skipped at " +
+                        (tile == null ? "null" : tile.x + ":" + tile.y));
+                    continue;
+                }
                 building.setKingdom(plan.Context.Bandit);
                 pTransaction.Towers.Add(building);
             }
@@ -1520,8 +1554,9 @@ namespace AncientWarfare3.core.lineage
                     foreach (TileZone zone in
                              pTransaction.Stronghold.zones.ToList())
                         pTransaction.Stronghold.removeZone(zone);
-                    World.world.cities.removeObject(
-                        pTransaction.Stronghold);
+                    BanditStrongholdCityDisposalService.Schedule(
+                        pTransaction.Stronghold.getID(),
+                        pTransaction.Stronghold.kingdom?.getID() ?? -1L);
                 }
                 foreach (City city in pTransaction.ReturnedCities)
                     if (city?.data != null && !city.isRekt() &&

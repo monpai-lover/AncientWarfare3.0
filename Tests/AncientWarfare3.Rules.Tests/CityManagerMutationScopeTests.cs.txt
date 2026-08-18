@@ -1,0 +1,103 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.performance;
+
+internal static class CityManagerMutationScopeTests
+{
+    internal static void Run()
+    {
+        CityManagerMutationScope.Reset();
+        False(CityManagerMutationScope.IsCityUpdateActive,
+            "scope starts inactive");
+
+        CityManagerMutationScope.EnterCityUpdate();
+        CityManagerMutationScope.EnterCityUpdate();
+        True(CityManagerMutationScope.IsCityUpdateActive,
+            "nested city updates remain active");
+
+        CityManagerMutationScope.ExitCityUpdate();
+        True(CityManagerMutationScope.IsCityUpdateActive,
+            "one nested city update remains active");
+
+        CityManagerMutationScope.ExitCityUpdate();
+        False(CityManagerMutationScope.IsCityUpdateActive,
+            "scope closes when the final city update exits");
+
+        CityManagerMutationScope.ExitCityUpdate();
+        False(CityManagerMutationScope.IsCityUpdateActive,
+            "an unmatched exit cannot underflow the scope");
+
+        CityManagerMutationScope.EnterCityUpdate();
+        CityManagerMutationScope.Reset();
+        False(CityManagerMutationScope.IsCityUpdateActive,
+            "world reset clears an interrupted city update scope");
+
+        string root = Directory.GetCurrentDirectory();
+        string patchPath = Path.Combine(root, "Code", "patch",
+            "AW_CityManagerMutationBoundaryPatch.cs");
+        True(File.Exists(patchPath),
+            "city manager update has a mutation boundary patch");
+        string patch = File.Exists(patchPath)
+            ? File.ReadAllText(patchPath)
+            : string.Empty;
+        True(patch.Contains("HarmonyPrefix", StringComparison.Ordinal) &&
+             patch.Contains("nameof(CityManager.update)",
+                 StringComparison.Ordinal) &&
+             patch.Contains("CityManagerMutationScope.EnterCityUpdate()",
+                 StringComparison.Ordinal),
+            "city manager update enters the mutation scope");
+        True(patch.Contains("HarmonyFinalizer", StringComparison.Ordinal) &&
+             patch.Contains("CityManagerMutationScope.ExitCityUpdate()",
+                 StringComparison.Ordinal) &&
+             patch.Contains("return __exception", StringComparison.Ordinal),
+            "city manager update always exits without swallowing errors");
+
+        string disposalPath = Path.Combine(root, "Code", "core", "lineage",
+            "BanditStrongholdCityDisposalService.cs");
+        True(File.Exists(disposalPath),
+            "bandit stronghold city disposal has a dedicated service");
+        string disposal = File.Exists(disposalPath)
+            ? File.ReadAllText(disposalPath)
+            : string.Empty;
+        True(disposal.Contains("CityManagerMutationScope.IsCityUpdateActive",
+                 StringComparison.Ordinal) &&
+             disposal.Contains("ProcessAuthorityCycle()",
+                 StringComparison.Ordinal) &&
+             disposal.Contains("World.world.cities.removeObject(",
+                 StringComparison.Ordinal),
+            "physical stronghold removal is guarded and authority-owned");
+        True(disposal.Contains(
+                "CanDisposeStrongholdCity(",
+                StringComparison.Ordinal) &&
+             disposal.Contains("Pending.Remove(cityId)",
+                 StringComparison.Ordinal),
+            "disposal validates the live city and removes only completed queue items");
+
+        string stronghold = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "PeasantRebelBanditStrongholdService.cs"));
+        False(stronghold.Contains("World.world.cities.removeObject(",
+                StringComparison.Ordinal),
+            "stronghold lifecycle code cannot mutate the live city set directly");
+        True(stronghold.Contains(
+                "BanditStrongholdCityDisposalService.Schedule(",
+                StringComparison.Ordinal),
+            "stronghold lifecycle schedules physical city disposal");
+
+        string authority = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWAuthorityCycleService.cs"));
+        True(authority.Contains(
+                "BanditStrongholdCityDisposalService.ProcessAuthorityCycle()",
+                StringComparison.Ordinal),
+            "the authority boundary drains pending stronghold city disposal");
+    }
+
+    private static void True(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool condition, string message)
+    {
+        True(!condition, message);
+    }
+}

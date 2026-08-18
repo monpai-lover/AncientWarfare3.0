@@ -1,4 +1,7 @@
 key,cz,en,ch
+aw_war_bandit_suppression,剿灭土匪,Bandit Suppression,剿滅土匪
+aw_war_bandit_suppression_desc,母国可立即出兵剿灭其境内土匪 无需宣称 花费或等待,The origin realm may immediately suppress its bandits without a claim cost or delay,母國可立即出兵剿滅其境內土匪 無需宣稱 花費或等待
+aw_hist_goal_bandit_suppression,剿灭土匪,Bandit Suppression,剿滅土匪
 一米_中文名,一米中文名,Chinese Name by Yimi,一米中文名
 aw_actor_name_given,名,Given name,名
 aw_actor_name_family_or_shi,姓/氏,Surname / Shi,姓/氏
@@ -377,5 +380,22 @@ aw_bandit_amnesty_only_origin_may_amnesty,只有母国可以招安该土匪,Only
 aw_bandit_amnesty_amnesty_unavailable,当前无法招安该土匪,This bandit amnesty is currently unavailable,當前無法招安該土匪
 aw_bandit_amnesty_war_failed,无法结束土匪的战争,The bandit's wars could not be ended,無法結束土匪的戰爭
 aw_bandit_amnesty_settlement_failed,招安结算失败,The amnesty settlement failed,招安結算失敗
+aw_bandit_amnesty_settlement_title,土匪招安条件,Bandit Amnesty Terms,土匪招安條件
+aw_bandit_amnesty_reward,许诺赏格,Promised reward,許諾賞格
+aw_bandit_amnesty_reward_none,不许赏格,No reward,不許賞格
+aw_bandit_amnesty_reward_office,授予官职,Grant office,授予官職
+aw_bandit_amnesty_reward_title,授予虚爵,Grant titular rank,授予虛爵
+aw_bandit_amnesty_no_vacant_office,没有符合条件的空缺官职,No eligible vacant office,沒有符合條件的空缺官職
+aw_bandit_amnesty_title_placeholder,输入招安所授虚爵名,Enter the promised titular rank,輸入招安所授虛爵名
+aw_bandit_amnesty_confirm,颁诏招安,Grant amnesty,頒詔招安
+aw_bandit_amnesty_target_missing,招安目标已经失效,The amnesty target is no longer available,招安目標已經失效
+aw_bandit_amnesty_reward_invalid,招安赏格无效,The promised reward is invalid,招安賞格無效
+aw_bandit_amnesty_reward_failed,招安完成但赏格暂未兑现,Amnesty completed but the reward is pending,招安完成但賞格暫未兌現
+aw_bandit_amnesty_persistence_failed,无法保存招安条件,The amnesty terms could not be saved,無法保存招安條件
+aw_guiyi_army,归义军,Guiyi Army,歸義軍
+aw_hist_guiyi_established,起兵复国, rose to restore its ancestral kingdom,起兵復國
+aw_hist_guiyi_suppressed,归义军被剿灭, was suppressed before restoration,歸義軍被剿滅
+aw_hist_guiyi_returned,归还故国, returned the city to its living ancestral kingdom,歸還故國
+aw_hist_guiyi_restored,恢复故国身份, restored the extinct ancestral identity,恢復故國身份
 aw_amnesty_bandit,招安土匪,Amnesty Bandits,招安土匪
 aw_amnesty_bandit_description,由母国招安选中的土匪寨，结束战争并恢复普通政体,The origin realm grants amnesty to the selected bandit stronghold; ending wars and restoring ordinary government,由母國招安選中的土匪寨，結束戰爭並恢復普通政體

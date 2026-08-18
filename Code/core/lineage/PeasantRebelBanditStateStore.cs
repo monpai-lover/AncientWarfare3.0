@@ -44,6 +44,7 @@ namespace AncientWarfare3.core.lineage
                 pKingdom.data.set(
                     LineageKeys.MANDATE_REBEL_BANDIT_STRONGHOLD_STATE,
                     JsonConvert.SerializeObject(pState));
+                PeasantRebelGuiyiService.InvalidateActiveIndex();
                 PeasantRebelBanditPressureService.InvalidateTargetIndex();
                 return true;
             }
@@ -60,6 +61,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             pKingdom.data.set(
                 LineageKeys.MANDATE_REBEL_BANDIT_STRONGHOLD_STATE, "");
+            PeasantRebelGuiyiService.InvalidateActiveIndex();
             PeasantRebelBanditPressureService.InvalidateTargetIndex();
         }
 
@@ -111,6 +113,8 @@ namespace AncientWarfare3.core.lineage
                 new System.Collections.Generic.Dictionary<long, int>();
             pState.InheritedStrongholdCityIds ??=
                 new System.Collections.Generic.List<long>();
+            pState.RouteSubtype ??= "";
+            pState.GuiyiStage ??= "";
             pState.Pressure = System.Math.Max(0, System.Math.Min(
                 PeasantRebelBanditPressureRules.MaximumPressure,
                 pState.Pressure));

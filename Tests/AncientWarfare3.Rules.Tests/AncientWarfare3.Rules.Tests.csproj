@@ -47,6 +47,8 @@
     <Compile Include="PeacetimeCitizenJobRulesTests.cs.txt" />
     <Compile Include="RtsMemberGeneralCombatRegressionTests.cs.txt" />
     <Compile Include="ArmyRtsTransportP0RulesTests.cs.txt" />
+    <Compile Include="CityManagerMutationScopeTests.cs.txt" />
+    <Compile Include="..\..\Code\core\performance\CityManagerMutationScope.cs" Link="Production\CityManagerMutationScope.cs" />
     <Compile Include="PeacetimeWarriorMovementRulesTests.cs.txt" />
     <Compile Include="PeacetimeRtsOwnershipReleaseRulesTests.cs.txt" />
     <Compile Include="WarriorDecisionAndCombatRegressionTests.cs.txt" />
@@ -60,12 +62,16 @@
     <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditAmnestyRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelGuiyiRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdPopulationRules.cs" Link="Production\PeasantRebelBanditStrongholdPopulationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditAnnexationRules.cs" Link="Production\PeasantRebelBanditAnnexationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditSpawnRules.cs" Link="Production\PeasantRebelBanditSpawnRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditZoneWallRules.cs" Link="Production\PeasantRebelBanditZoneWallRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditRaidRules.cs" Link="Production\PeasantRebelBanditRaidRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditAmnestyRules.cs" Link="Production\PeasantRebelBanditAmnestyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelGuiyiRules.cs" Link="Production\PeasantRebelGuiyiRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditAmnestyOffer.cs" Link="Production\PeasantRebelBanditAmnestyOffer.cs" />
     <Compile Include="CultiwayStyleWallGeometryRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\CultiwayStyleWallGeometryRules.cs" Link="Production\CultiwayStyleWallGeometryRules.cs" />
     <Compile Include="CultiwayStyleFrontierWallGeometryRulesTests.cs.txt" />
@@ -946,9 +952,10 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\SyntheticMobilizationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\SyntheticLevyActorUpdateSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\VanillaRecruitmentOwnershipSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\VanillaTaxiBoatCompatibilitySourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\KingdomRestorationPersistenceSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\HistoricalFigureMinisterialUsurpationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\RestorationStateNameSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\HistoricalFigureMinisterialUsurpationSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\DeathSqlHotPathSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\AnnualPolicyHotPathSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\DiplomacyAiToggleSourceGuard.ps1&quot;" />

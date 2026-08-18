@@ -144,6 +144,7 @@ internal static class DiplomaticWarAvailabilityRulesTests
         DeclarationQueueValidationUsesLazyGoalProbes();
         DeclarationUiPreservesAvailabilityReasons();
         DeclarationSubmissionPreservesAuthorityReason();
+        BanditSuppressionUsesImmediateAuthoritativeWarPath();
         EveryKnownDeclarationReasonIsLocalized();
     }
 
@@ -199,7 +200,8 @@ internal static class DiplomaticWarAvailabilityRulesTests
                      "GOAL_FORCE_TRIBUTARY:", "GOAL_INDEPENDENCE:",
                      "GOAL_RESTORE_KINGDOM:",
                      "GOAL_REUNIFY_SUCCESSION:", "GOAL_NO_CB:",
-                     "WarGoalTypeIds.LegacyNoCb:"
+                     "WarGoalTypeIds.LegacyNoCb:",
+                     "GOAL_BANDIT_SUPPRESSION:"
                  })
             True(helper.Contains(goalCase), goalCase + " is selected lazily");
 
@@ -275,7 +277,7 @@ internal static class DiplomaticWarAvailabilityRulesTests
             "private void AddProjectRows(");
         False(reportRows.Contains("if (pReport.can_"),
             "legacy war rows are not removed by target report flags");
-        Equal(9, Count(reportRows, "AddWarRow("),
+        Equal(10, Count(reportRows, "AddWarRow("),
             "legacy window creates every supported war goal row");
     }
 
@@ -326,6 +328,95 @@ internal static class DiplomaticWarAvailabilityRulesTests
             "legacy target window displays the host rejection reason");
     }
 
+    private static void BanditSuppressionUsesImmediateAuthoritativeWarPath()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string goals = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "WarGoalSettlementRules.cs"));
+        string territory = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "WarTerritoryService.cs"));
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "DiplomaticWarDeclarationService.cs"));
+        string content = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "DiplomacyContent.cs"));
+        string decision = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "WarDecisionTargetWindow.cs"));
+        string handler = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "commands", "AW3DiplomacyCommandHandler.cs"));
+
+        True(goals.Contains(
+                "public const string BanditSuppression = \"bandit_suppression\";"),
+            "bandit suppression has a stable goal id");
+        True(territory.Contains(
+                "GOAL_BANDIT_SUPPRESSION = WarGoalTypeIds.BanditSuppression"),
+            "territory service exposes the suppression goal");
+
+        string targetBuilder = Section(territory,
+            "internal static List<WarTargetOption> BuildTargetOptions(",
+            "public static WarTargetOption FindBestTargetOption(");
+        True(targetBuilder.Contains(
+                "PeasantRebelRouteService.IsOriginSuppressionPair("),
+            "only the recorded origin receives the suppression option");
+        True(targetBuilder.Contains(
+                 "PeasantRebelBanditStrongholdService.") &&
+             targetBuilder.Contains("ResolveStronghold(pTarget)"),
+            "suppression targets the active stronghold");
+        True(targetBuilder.Contains("GOAL_BANDIT_SUPPRESSION"),
+            "target builder emits the dedicated suppression option");
+
+        string issue = Section(service,
+            "public static bool TryIssue(Kingdom pAttacker, Kingdom pDefender,",
+            "public static bool Issue(Kingdom pAttacker,");
+        True(issue.Contains("GOAL_BANDIT_SUPPRESSION"),
+            "submission recognizes the immediate suppression goal");
+        True(issue.Contains("TryStartSystemWar("),
+            "suppression starts through the system-war route");
+        True(issue.IndexOf("GOAL_BANDIT_SUPPRESSION",
+                 StringComparison.Ordinal) <
+             issue.IndexOf("DiplomaticWarDeclarationLedgerService.Append(",
+                 StringComparison.Ordinal),
+            "suppression bypasses the delayed declaration ledger");
+
+        string execution = Section(service,
+            "private static ExecutionResult Execute(",
+            "private static bool TryBuildExecutionPlan(");
+        True(execution.Contains("GOAL_BANDIT_SUPPRESSION") &&
+             execution.Contains("return Succeeded();"),
+            "suppression never persists a normal territorial war goal");
+        True(service.Contains(
+                "GOAL_BANDIT_SUPPRESSION => WarDecisionService.WAR_BANDIT_SUPPRESSION"),
+            "suppression maps to its dedicated war type");
+        True(service.Contains(
+                "GOAL_BANDIT_SUPPRESSION => \"bandit_suppression\""),
+            "suppression maps to its dedicated reason");
+
+        True(content.Contains(
+                "WarDecisionService.WAR_BANDIT_SUPPRESSION"),
+            "dedicated suppression war asset is registered");
+        True(decision.Contains(
+                "WarTerritoryService.GOAL_BANDIT_SUPPRESSION"),
+            "legacy war window displays suppression");
+        True(handler.Contains(
+                "WarTerritoryService.BuildTargetOptions(attacker, defender)"),
+            "multiplayer host resolves suppression from authoritative options");
+
+        string[] localeFiles =
+        {
+            Path.Combine(root, "Locales", "others.csv"),
+            Path.Combine(root, "Locales", "war.csv")
+        };
+        string locale = string.Join("\n", Array.ConvertAll(localeFiles,
+            File.ReadAllText));
+        foreach (string key in new[]
+                 {
+                     "aw_war_bandit_suppression",
+                     "aw_war_bandit_suppression_desc",
+                     "war_type_bandit_suppression_war",
+                     "war_name_bandit_suppression_war"
+                 })
+            True(locale.Contains(key + ","), key + " is localized");
+    }
+
     private static void EveryKnownDeclarationReasonIsLocalized()
     {
         string root = Directory.GetCurrentDirectory();
@@ -345,7 +436,9 @@ internal static class DiplomaticWarAvailabilityRulesTests
             "not_suzerain", "missing_restoration_target",
             "missing_reunification_claim", "missing_zhulu_cb",
             "cannot_force_no_cb", "unknown_goal",
-            "war_target_option_changed"
+            "war_target_option_changed",
+            "only_origin_can_suppress_bandit",
+            "missing_bandit_stronghold", "suppression_start_failed"
         };
 
         foreach (string reason in reasons)

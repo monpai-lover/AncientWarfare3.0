@@ -35,6 +35,7 @@ namespace AncientWarfare3.core.lineage
         public const string GOAL_REUNIFY_SUCCESSION =
             WarGoalTypeIds.ReunifySuccession;
         public const string GOAL_NO_CB = WarGoalTypeIds.NoCb;
+        public const string GOAL_BANDIT_SUPPRESSION = WarGoalTypeIds.BanditSuppression;
         public const string GOAL_ZHULU_ANNEXATION =
             ZhuluWarRules.GoalTypeId;
 
@@ -1184,6 +1185,19 @@ namespace AncientWarfare3.core.lineage
             var result = new List<WarTargetOption>();
             if (!IsCivil(pSource) || pTarget?.data == null) return result;
 
+            if (PeasantRebelRouteService.IsOriginSuppressionPair(
+                    pSource, pTarget))
+            {
+                City stronghold = PeasantRebelBanditStrongholdService.
+                    ResolveStronghold(pTarget);
+                if (stronghold?.data != null)
+                    result.Add(MakeOption(pTarget, stronghold,
+                        GOAL_BANDIT_SUPPRESSION,
+                        GoalLabel(GOAL_BANDIT_SUPPRESSION), -1, -1, -1,
+                        null, hasCore: false, hasStrongClaim: false,
+                        hasWeakClaim: false, restorationStrength: 0));
+            }
+
             bool vassalBlocked = IsVassalDecisionOnlyTarget(pSource, pTarget);
             if (pIncludeUnavailable ||
                 (!vassalBlocked && WarDecisionService.HasValidCasusBelli(
@@ -1960,6 +1974,8 @@ namespace AncientWarfare3.core.lineage
                 case GOAL_NO_CB: return T("aw_hist_goal_no_cb");
                 case GOAL_ZHULU_ANNEXATION:
                     return T("aw_hist_goal_zhulu_annexation");
+                case GOAL_BANDIT_SUPPRESSION:
+                    return T("aw_hist_goal_bandit_suppression");
                 default: return T("aw_hist_goal_generic");
             }
         }

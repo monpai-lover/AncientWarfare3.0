@@ -1,5 +1,6 @@
 using AncientWarfare3.core.lineage;
 using System;
+using System.IO;
 
 internal static class ArmyReplenishmentOperationRulesTests
 {
@@ -98,6 +99,24 @@ internal static class ArmyReplenishmentOperationRulesTests
             ArmyReplenishmentOperationRules.ShouldClearIneligibleOperation(
                 hasPersistedOperation: false, canUseReservePool: false),
             "an ineligible army without stale state requires no persistence write");
+
+        string root = Directory.GetCurrentDirectory();
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        int start = controller.IndexOf(
+            "internal static bool CanGenerateWartimeReplacements(",
+            StringComparison.Ordinal);
+        int end = controller.IndexOf(
+            "private static void ClearIneligibleReplenishmentState(", start,
+            StringComparison.Ordinal);
+        string body = start >= 0 && end > start
+            ? controller.Substring(start, end - start)
+            : string.Empty;
+        Equal(false, body.Contains("HasActiveVoyage(",
+                StringComparison.Ordinal) ||
+            body.Contains("HasMilitaryTransportOwnership(",
+                StringComparison.Ordinal),
+            "direct wartime spawning cannot wait for an active voyage to end");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

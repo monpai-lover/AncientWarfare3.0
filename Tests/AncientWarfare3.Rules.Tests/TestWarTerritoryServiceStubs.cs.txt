@@ -3,6 +3,8 @@ namespace AncientWarfare3.core.lineage
     internal static class WarTerritoryService
     {
         public const string GOAL_TAKE_MANDATE = "take_mandate";
+        public const string GOAL_BANDIT_SUPPRESSION =
+            "bandit_suppression";
         public const string GOAL_MANDATE_CONQUEST = "mandate_conquest";
         public const string GOAL_TAKE_CORE_CITY = "take_core_city";
         public const string GOAL_PRESS_CLAIM_CITY = "press_claim_city";

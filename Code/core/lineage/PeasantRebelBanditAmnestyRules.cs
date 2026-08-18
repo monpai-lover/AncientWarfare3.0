@@ -29,5 +29,24 @@ namespace AncientWarfare3.core.lineage
             if (!offeringIsOrigin) return "only_origin_may_amnesty";
             return "amnesty_unavailable";
         }
+
+        public static bool CanSelectOffice(bool officeExists,
+            bool officeVacant, bool leaderEligible)
+        {
+            return officeExists && officeVacant && leaderEligible;
+        }
+
+        public static bool CanAdvance(BanditAmnestySettlementPhase current,
+            BanditAmnestySettlementPhase next)
+        {
+            return current == BanditAmnestySettlementPhase.Prepared &&
+                       next == BanditAmnestySettlementPhase.
+                           TerritorialSettlement ||
+                   current == BanditAmnestySettlementPhase.
+                       TerritorialSettlement &&
+                       next == BanditAmnestySettlementPhase.RewardPending ||
+                   current == BanditAmnestySettlementPhase.RewardPending &&
+                       next == BanditAmnestySettlementPhase.Completed;
+        }
     }
 }

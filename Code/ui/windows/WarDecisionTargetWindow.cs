@@ -183,6 +183,19 @@ namespace AncientWarfare3.ui.windows
             string targetNameRich = RichKingdomName(target);
 
             AddProjectRows(pRows, pSource, pReport, target, targetName, targetNameRich);
+            if (PeasantRebelRouteService.IsOriginSuppressionPair(
+                    pSource, target) &&
+                PeasantRebelBanditStrongholdService.ResolveStronghold(
+                    target)?.data != null)
+                AddWarRow(pRows, pSource, target, pReport,
+                    WarDecisionTargetOrderRules.SortOrder(
+                        WarTerritoryService.GOAL_BANDIT_SUPPRESSION),
+                    AW_L10n.Text("aw_war_bandit_suppression",
+                        "剿灭土匪"),
+                    WarTerritoryService.GOAL_BANDIT_SUPPRESSION,
+                    AW_L10n.Text("aw_war_bandit_suppression_desc",
+                        "母国可立即出兵剿灭其境内土匪，无需宣称、花费或等待。"),
+                    AW_L10n.Text("aw_war_target_action_war", "宣战"));
             AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_TAKE_MANDATE),
                     AW_L10n.Text("aw_war_take_mandate", "\u593A\u53D6\u5929\u547D"),

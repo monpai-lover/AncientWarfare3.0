@@ -61,6 +61,7 @@ namespace AncientWarfare3.core.lineage
 
             CloseIfOwnerChanged(pCity, pNewKingdom);
             TickCity(pCity, pNewKingdom ?? pCity.kingdom, pOldKingdom);
+            PeasantRebelGuiyiService.Schedule(pCity);
         }
 
         public static float GetResentment(City pCity)
@@ -243,6 +244,7 @@ namespace AncientWarfare3.core.lineage
 
             UpdateOccupation(pRow.id, pCity, pOwner, pRow.type, next, resentment, slaveTotal, pLeaderReplaced);
             XiaizationService.OnForeignOccupationTick(pCity, pOwner, pRow.type, next, resentment);
+            PeasantRebelGuiyiService.Schedule(pCity);
 
             RecordMilestoneIfCrossed(pCity, pOwner, old, next, 25);
             RecordMilestoneIfCrossed(pCity, pOwner, old, next, 50);

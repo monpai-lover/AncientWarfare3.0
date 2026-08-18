@@ -13,6 +13,8 @@ namespace AncientWarfare3.core.lineage
         public const string WAR_RESTORATION = "restoration_war";
         public const string WAR_TRIBUTARY = "tributary_war";
         public const string WAR_ZHULU = ZhuluWarRules.WarTypeId;
+        public const string WAR_BANDIT_SUPPRESSION =
+            "bandit_suppression_war";
 
         private const int DEFAULT_CLAIM_YEARS = 30;
         private const int NO_CB_COOLDOWN_YEARS = 20;

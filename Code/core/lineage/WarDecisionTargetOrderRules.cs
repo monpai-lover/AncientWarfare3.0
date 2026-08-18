@@ -6,6 +6,8 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pGoalOrProjectType ?? "")
             {
+                case "bandit_suppression":
+                    return 2;
                 case "fabricate_core":
                     return 0;
                 case "take_mandate":

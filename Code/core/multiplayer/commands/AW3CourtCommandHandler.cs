@@ -25,6 +25,8 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return SubmitCivilServiceRanking(request);
                 case AW3CommandKind.ApplyCustomCourtTemplate:
                     return ApplyCustomCourtTemplate(request);
+                case AW3CommandKind.GrantBanditAmnesty:
+                    return GrantBanditAmnesty(request);
                 default:
                     return Invalid();
             }
@@ -172,6 +174,35 @@ namespace AncientWarfare3.core.multiplayer.commands
                 return AW3CommandResult.Rejected(AW3CommandError.ExecutionFailed,
                     "aw_custom_court_apply_failed", request.CountryId);
             return AW3CommandResult.Success("aw_custom_court_apply_ok",
+                request.CountryId);
+        }
+
+        private static AW3CommandResult GrantBanditAmnesty(
+            AW3CommandRequest request)
+        {
+            Kingdom bandit = FindKingdom(request.CountryId);
+            Kingdom origin = FindKingdom(request.TargetCountryId);
+            if (bandit?.data == null || origin?.data == null)
+                return NotFound("aw_bandit_amnesty_target_missing");
+            if (!TryEnum(request.Key,
+                    out BanditAmnestyRewardKind rewardKind))
+                return Invalid();
+            var offer = new PeasantRebelBanditAmnestyOffer
+            {
+                RewardKind = rewardKind,
+                OfficeId = request.SecondaryKey,
+                TitleText = request.Text,
+                Hereditary = request.BoolValue
+            };
+            if (PeasantRebelBanditAmnestyService.TryAmnesty(bandit,
+                    origin, offer, out string failureKey))
+                return AW3CommandResult.Success(
+                    "aw_bandit_amnesty_success", request.CountryId);
+            return AW3CommandResult.Rejected(
+                AW3CommandError.IllegalTarget,
+                string.IsNullOrEmpty(failureKey)
+                    ? "aw_bandit_amnesty_reward_failed"
+                    : failureKey,
                 request.CountryId);
         }
 

@@ -130,7 +130,13 @@ namespace AncientWarfare3.api.multiplayer
                 Window(AW3WindowKind.CustomCourtWorkflow,
                     "aw_custom_court_workflow", "ui/icons/iconDiplomacy",
                     AW3WindowCategory.Domestic,
-                    AW3WindowContextRequirement.Country)
+                    AW3WindowContextRequirement.Country),
+                Window(AW3WindowKind.BanditAmnestySettlement,
+                    "aw_bandit_amnesty_settlement",
+                    "ui/icons/iconDiplomacy",
+                    AW3WindowCategory.Domestic,
+                    AW3WindowContextRequirement.Country |
+                    AW3WindowContextRequirement.TargetCountry)
             });
 
         private static readonly IReadOnlyList<AW3CommandDescriptor>
@@ -228,7 +234,10 @@ namespace AncientWarfare3.api.multiplayer
                     AW3WindowContextRequirement.TargetCountry |
                     AW3WindowContextRequirement.Actor),
                 Command(AW3CommandKind.ApplyCustomCourtTemplate,
-                    AW3WindowCategory.Domestic, Country())
+                    AW3WindowCategory.Domestic, Country()),
+                Command(AW3CommandKind.GrantBanditAmnesty,
+                    AW3WindowCategory.Domestic, Country() |
+                    AW3WindowContextRequirement.TargetCountry)
             });
 
         public static IReadOnlyList<AW3WindowDescriptor> Windows =>

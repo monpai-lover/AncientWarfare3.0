@@ -102,6 +102,8 @@ task_unit_aw_army_rts_captain_siege_advance,攻城推进,Siege advance,攻城推
 task_unit_aw_army_rts_siege_combat,攻城战斗,Siege combat,攻城戰鬥
 war_type_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
 war_name_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
+war_type_bandit_suppression_war,剿匪战争,Bandit Suppression War,剿匪戰爭
+war_name_bandit_suppression_war,剿匪战争,Bandit Suppression War,剿匪戰爭
 aw_war_goal_zhulu_annexation,逐鹿天下,Contest All Under Heaven,逐鹿天下
 aw_hist_label_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
 aw_zhulu_peace_blocked,逐鹿之战必须打到一方灭亡,Zhulu wars continue until one principal realm is destroyed,逐鹿之戰必須打到一方滅亡

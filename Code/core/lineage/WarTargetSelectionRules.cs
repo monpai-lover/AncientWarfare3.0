@@ -23,6 +23,9 @@ namespace AncientWarfare3.core.lineage
             int score = pPopulation / 2;
             switch (pGoalType)
             {
+                case WarTerritoryService.GOAL_BANDIT_SUPPRESSION:
+                    score += 300;
+                    break;
                 case ZhuluWarRules.GoalTypeId:
                     score += 240;
                     break;

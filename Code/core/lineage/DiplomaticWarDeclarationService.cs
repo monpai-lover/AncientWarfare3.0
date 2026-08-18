@@ -68,6 +68,23 @@ namespace AncientWarfare3.core.lineage
                     out pFailureReason))
                 return false;
 
+            if (goalType ==
+                WarTerritoryService.GOAL_BANDIT_SUPPRESSION)
+            {
+                War war = WarDecisionService.TryStartSystemWar(
+                    pAttacker, pDefender,
+                    WarDecisionService.WAR_BANDIT_SUPPRESSION,
+                    "bandit_suppression");
+                if (war?.data == null)
+                {
+                    pFailureReason = "suppression_start_failed";
+                    return false;
+                }
+                KingdomStrategyRevisionService.MarkChanged(pAttacker.id,
+                    pDefender.id);
+                return true;
+            }
+
             City displayCity = pTargetCity ?? FindDisplayCity(pAttacker,
                 pDefender, goalType);
             int noticeYear = Date.getCurrentYear();
@@ -185,6 +202,12 @@ namespace AncientWarfare3.core.lineage
                 pFailureReason = "invalid_participants";
                 return false;
             }
+            if (pGoalType ==
+                WarTerritoryService.GOAL_BANDIT_SUPPRESSION)
+                return CanQueueCurrentGoal(pAttacker, pDefender,
+                    pGoalType,
+                    WarDecisionService.WAR_BANDIT_SUPPRESSION,
+                    out pFailureReason);
             bool independenceWar = pWarType == "independence_war";
             Kingdom mainDefender =
                 WarDecisionService.ResolveWarMainDefender(pDefender);
@@ -562,6 +585,9 @@ namespace AncientWarfare3.core.lineage
                 pAttacker, pDefender, plan.WarType, plan.ReasonKey,
                 plan.NoCb, plan.SystemWar, out failure);
             if (war?.data == null) return Failed(failure);
+            if (plan.GoalType ==
+                WarTerritoryService.GOAL_BANDIT_SUPPRESSION)
+                return Succeeded();
             if (plan.GoalType == ZhuluWarRules.GoalTypeId)
                 return Succeeded();
             WarGoalCreateResult goalResult =
@@ -621,6 +647,7 @@ namespace AncientWarfare3.core.lineage
                 case WarTerritoryService.GOAL_REUNIFY_SUCCESSION:
                 case ZhuluWarRules.GoalTypeId:
                 case WarTerritoryService.GOAL_NO_CB:
+                case WarTerritoryService.GOAL_BANDIT_SUPPRESSION:
                     break;
                 default:
                     pFailureReason = "unknown_goal";
@@ -737,6 +764,21 @@ namespace AncientWarfare3.core.lineage
                 case WarGoalTypeIds.LegacyNoCb:
                     canForceNoCb = WarDecisionService.CanForceNoCb(pAttacker);
                     break;
+                case WarTerritoryService.GOAL_BANDIT_SUPPRESSION:
+                    if (!PeasantRebelRouteService.IsOriginSuppressionPair(
+                            pAttacker, pDefender))
+                    {
+                        pFailureReason = "only_origin_can_suppress_bandit";
+                        return false;
+                    }
+                    if (PeasantRebelBanditStrongholdService.
+                            ResolveStronghold(pDefender)?.data == null)
+                    {
+                        pFailureReason = "missing_bandit_stronghold";
+                        return false;
+                    }
+                    pFailureReason = "";
+                    return true;
                 default:
                     pFailureReason = "unknown_goal";
                     return false;
@@ -822,7 +864,9 @@ namespace AncientWarfare3.core.lineage
         private static bool IsSystemGoal(string pGoalType)
         {
             return pGoalType == WarTerritoryService.GOAL_TAKE_MANDATE ||
-                   pGoalType == WarTerritoryService.GOAL_MANDATE_CONQUEST;
+                   pGoalType == WarTerritoryService.GOAL_MANDATE_CONQUEST ||
+                   pGoalType ==
+                       WarTerritoryService.GOAL_BANDIT_SUPPRESSION;
         }
 
         internal static string WarTypeForGoal(string pGoalType)
@@ -841,6 +885,7 @@ namespace AncientWarfare3.core.lineage
                 WarTerritoryService.GOAL_REUNIFY_SUCCESSION =>
                     SuccessionDisputeRules.WarTypeId,
                 ZhuluWarRules.GoalTypeId => ZhuluWarRules.WarTypeId,
+                WarTerritoryService.GOAL_BANDIT_SUPPRESSION => WarDecisionService.WAR_BANDIT_SUPPRESSION,
                 _ => WarDecisionService.WAR_NORMAL
             };
         }
@@ -862,6 +907,7 @@ namespace AncientWarfare3.core.lineage
                     "succession_reunification",
                 ZhuluWarRules.GoalTypeId => ZhuluWarRules.GoalTypeId,
                 WarTerritoryService.GOAL_NO_CB => "no_cb",
+                WarTerritoryService.GOAL_BANDIT_SUPPRESSION => "bandit_suppression",
                 _ => ""
             };
         }

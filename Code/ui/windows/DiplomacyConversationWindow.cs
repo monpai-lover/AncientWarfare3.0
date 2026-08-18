@@ -1289,6 +1289,15 @@ namespace AncientWarfare3.ui.windows
                 "unknown_goal" => AW_L10n.Text(
                     "aw_diplomacy_failure_unknown_goal",
                     "The selected war goal is unknown"),
+                "only_origin_can_suppress_bandit" => AW_L10n.Text(
+                    "aw_diplomacy_failure_only_origin_can_suppress_bandit",
+                    "Only the bandit's origin realm may suppress it"),
+                "missing_bandit_stronghold" => AW_L10n.Text(
+                    "aw_diplomacy_failure_missing_bandit_stronghold",
+                    "The bandit stronghold is no longer active"),
+                "suppression_start_failed" => AW_L10n.Text(
+                    "aw_diplomacy_failure_suppression_start_failed",
+                    "The suppression war could not be started"),
                 "no_vassal_relation" => AW_L10n.Text(
                     "aw_diplomacy_failure_no_vassal_relation", "There is no direct subject relationship to end"),
                 "title_too_low" => AW_L10n.Text(

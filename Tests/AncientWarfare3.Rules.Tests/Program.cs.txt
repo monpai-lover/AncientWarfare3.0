@@ -113,12 +113,20 @@ if (args.Length == 1 && args[0] == "--peasant-rebel-routes")
 if (args.Length == 1 && args[0] == "--bandit-stronghold")
 {
     PeasantRebelBanditAmnestyRulesTests.Run();
+    PeasantRebelGuiyiRulesTests.Run();
     PeasantRebelBanditStrongholdRulesTests.Run();
     PeasantRebelBanditAnnexationRulesTests.Run();
     PeasantRebelBanditSpawnRulesTests.Run();
     PeasantRebelBanditZoneWallRulesTests.Run();
     PeasantRebelBanditRaidRulesTests.Run();
     Console.WriteLine("Bandit stronghold and raid rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-city-mutation")
+{
+    CityManagerMutationScopeTests.Run();
+    Console.WriteLine("Bandit city mutation rules passed.");
     return;
 }
 

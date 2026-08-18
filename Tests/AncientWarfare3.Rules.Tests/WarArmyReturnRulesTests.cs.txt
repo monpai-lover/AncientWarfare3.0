@@ -1064,9 +1064,6 @@ internal static class WarArmyReturnRulesTests
         var failures = new List<string>();
         string transportService = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsTransportService.cs"));
-        string nativeRequestRepair = Section(transportService,
-            "private static void EnsureRequest(",
-            "private static void ReleaseRequest(");
 
         string transport = Section(service,
             "internal static bool TryHandleTransport(",
@@ -1075,50 +1072,24 @@ internal static class WarArmyReturnRulesTests
             "SameIsland(pActor.current_tile, pTarget)) return false;";
         int sameIsland = transport.IndexOf(sameIslandFalse,
             StringComparison.Ordinal);
-        int existingTaxiRequest = transport.IndexOf(
-            "HasExactTaxiRequest(pActor, pTarget)",
-            Math.Max(0, sameIsland), StringComparison.Ordinal);
         int transportCall = transport.IndexOf(
             "ArmyRtsTransportService.TryHandleActor(pActor, pTarget,",
-            Math.Max(0, existingTaxiRequest), StringComparison.Ordinal);
-        int nativeTaxiFallback = transport.IndexOf(
-            "ArmyRtsTransportService.EnsureNativeTaxiRequest(" +
-            "pActor, pTarget)",
-            Math.Max(0, transportCall), StringComparison.Ordinal);
-        int transportOwned = transport.IndexOf("return true;",
-            Math.Max(0, nativeTaxiFallback), StringComparison.Ordinal);
+            Math.Max(0, sameIsland), StringComparison.Ordinal);
         Collect(failures,
-            sameIsland >= 0 && existingTaxiRequest > sameIsland &&
-            transportCall > existingTaxiRequest &&
-            nativeTaxiFallback > transportCall &&
-            transportOwned > nativeTaxiFallback &&
-            service.Contains("using life.taxi;",
-                StringComparison.Ordinal) &&
-            transport.Contains("TaxiManager.getRequestForActor(pActor)",
-                StringComparison.Ordinal) &&
-            transport.Contains(
-                "request?.getTileTarget()?.data?.tile_id ==",
-                StringComparison.Ordinal) &&
+            sameIsland >= 0 && transportCall > sameIsland &&
             transportService.Contains(
                 "internal static void EnsureNativeTaxiRequest(",
                 StringComparison.Ordinal) &&
-            transportService.Contains("EnsureRequest(pActor, pTarget);",
+            !service.Contains("using life.taxi;",
                 StringComparison.Ordinal) &&
-            nativeRequestRepair.Contains(
-                "RemoveActorFromRequest(request, pActor);",
+            !transport.Contains("TaxiManager.",
                 StringComparison.Ordinal) &&
-            nativeRequestRepair.Contains("FindExactReusableRequest(",
-                StringComparison.Ordinal) &&
-            nativeRequestRepair.Contains("TaxiManager.list.Add(" +
-                "new TaxiRequest(pActor,",
+            !transport.Contains("EnsureNativeTaxiRequest(",
                 StringComparison.Ordinal) &&
             !transport.Contains(
                 "!SameIsland(pActor.current_tile, pTarget)",
-                StringComparison.Ordinal) &&
-            !transport.Contains(
-                "return ArmyRtsTransportService.TryHandleActor",
                 StringComparison.Ordinal),
-            "cross-island return reuses an exact taxi request, falls back to native taxi when managed transport rejects, and retains movement ownership");
+            "cross-island return delegates directly to the army-level P0 transport owner");
 
         string processing = Section(service,
             "public static void ProcessFrame()",

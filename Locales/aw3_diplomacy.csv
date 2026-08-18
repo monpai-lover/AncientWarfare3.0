@@ -20,6 +20,9 @@ aw_diplomacy_failure_missing_reunification_claim,没有有效的宗统统一继�
 aw_diplomacy_failure_missing_zhulu_cb,不满足逐鹿战争的条件,The conditions for a contest war are not met,不滿足逐鹿戰爭的條件
 aw_diplomacy_failure_cannot_force_no_cb,当前不能发动强制战争,A punitive war cannot currently be forced,當前不能發動強制戰爭
 aw_diplomacy_failure_unknown_goal,无法识别所选战争目标,The selected war goal is unknown,無法識別所選戰爭目標
+aw_diplomacy_failure_only_origin_can_suppress_bandit,只有土匪的原母国可以发动剿匪战争,Only the bandit's origin realm may start a suppression war,只有土匪的原母國可以發動剿匪戰爭
+aw_diplomacy_failure_missing_bandit_stronghold,目标土匪寨已经不存在,The target bandit stronghold is no longer active,目標土匪寨已經不存在
+aw_diplomacy_failure_suppression_start_failed,剿匪战争发动失败,The suppression war could not be started,剿匪戰爭發動失敗
 aw_diplomacy_action_household_offering_desc,从本国贵族宗族的18至33岁女子中选择一人，提供给对方君主为正妻或妾室,Offer an 18-33 year old woman of a domestic noble clan to the other ruler as principal wife or consort,從本國貴族宗族的18至33歲女子中選擇一人，提供給對方君主為正妻或妾室
 aw_diplomatic_marriage Title,宗室婚盟,Royal Marriage,宗室婚盟
 aw_diplomatic_marriage,宗室婚盟,Royal Marriage,宗室婚盟

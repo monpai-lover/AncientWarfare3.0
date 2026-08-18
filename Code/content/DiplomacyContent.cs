@@ -16,6 +16,8 @@ namespace AncientWarfare3.content
             AddWarNameTemplate("war_coup_restoration",
                 "勤王复统之战,讨逆复统之役,宗室复位之战");
             AddWarNameTemplate("war_zhulu", "逐鹿之战,问鼎之战,天下争衡");
+            AddWarNameTemplate("war_bandit_suppression",
+                "剿匪之战,荡寇之战");
 
             AddWarType("aw_normal_war", "war_conquest", "war_type_aw_normal_war", "ui/wars/war_conquest", true);
             AddWarType("reclaim", "war_reclaim", "war_type_reclaim", "ui/wars/war_reclaim", true);
@@ -44,6 +46,11 @@ namespace AncientWarfare3.content
                 pAllianceJoin: ZhuluWarRules.ShouldAllowAllianceJoin(),
                 pRebellion: false,
                 pTotalWar: ZhuluWarRules.ShouldUseVanillaTotalWar());
+            AddWarType(WarDecisionService.WAR_BANDIT_SUPPRESSION,
+                "war_bandit_suppression",
+                "war_type_bandit_suppression_war",
+                "ui/wars/war_rebellion", pAllianceJoin: false,
+                pRebellion: false, pTotalWar: false);
         }
 
         private static void AddWarType(string pId, string pNameTemplate,

@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.lineage
         public const string NoCb = "no_cb_punitive";
         public const string LegacyNoCb = "no_cb";
         public const string ZhuluAnnexation = "zhulu_annexation";
+        public const string BanditSuppression = "bandit_suppression";
     }
 
     public readonly struct WarGoalIdentity : IEquatable<WarGoalIdentity>

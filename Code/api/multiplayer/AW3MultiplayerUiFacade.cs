@@ -83,6 +83,10 @@ namespace AncientWarfare3.api.multiplayer
                     case AW3WindowKind.CustomCourtWorkflow:
                         CustomCourtWorkflowWindow.Open(request.CountryId);
                         break;
+                    case AW3WindowKind.BanditAmnestySettlement:
+                        BanditAmnestySettlementWindow.Open(
+                            request.CountryId, request.TargetCountryId);
+                        break;
                     case AW3WindowKind.CourtAppointment:
                         if (request.ActorId > 0)
                             CourtAppointmentWindow.Open(request.CountryId,

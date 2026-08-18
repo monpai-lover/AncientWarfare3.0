@@ -68,6 +68,9 @@ namespace AncientWarfare3.patch
         {
             if (!__runOriginal) return;
             EmptyCityResettlementService.ObserveResidentRemoved(__instance);
+            if (PeasantRebelBanditStrongholdService.IsStronghold(__instance))
+                PeasantRebelBanditStrongholdPopulationService.
+                    EnqueueStronghold(__instance.getID());
         }
 
         [HarmonyPrefix]

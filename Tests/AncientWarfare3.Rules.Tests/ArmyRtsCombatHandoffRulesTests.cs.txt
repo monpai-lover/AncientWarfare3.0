@@ -442,39 +442,43 @@ internal static class ArmyRtsCombatHandoffRulesTests
         string transportProductionPatch = File.ReadAllText(Path.Combine(
             root, "Code", "patch",
             "AW_ArmyRtsTransportProductionPatch.cs"));
-        Assert(transport.Contains("TaxiRequestState.Loading",
+        Assert(transport.Contains("ArmyRtsTransportP0Stage.Boarding",
                    StringComparison.Ordinal) &&
                transport.Contains(
-                   "ArmyRtsTransportRules.ResolvePassengerTaskAction(",
+                   "member.data.transportID = boat.actor.data.id",
                    StringComparison.Ordinal) &&
-               transport.Contains("\"force_into_a_boat\"",
+               transport.Contains("member.is_inside_boat = true",
                    StringComparison.Ordinal) &&
-               transport.Contains("pClean: true", StringComparison.Ordinal) &&
-               transport.Contains("pCleanJob: false",
+               transport.Contains("boat.addPassenger(member)",
                    StringComparison.Ordinal) &&
-               transport.Contains("pForceAction: true",
+               transport.Contains("ArmyRtsTransportP0Stage.Landing",
                    StringComparison.Ordinal) &&
-               transport.Contains("IsExecutingVanillaPassengerTask(",
-                   StringComparison.Ordinal),
-            "RTS transport must hand loading passengers to the original embark task without restarting active boat work");
-        Assert(transport.Contains("if (hasEmbarkedMember)",
+               transport.Contains("member.disembarkTo(boat, landingTile)",
                    StringComparison.Ordinal) &&
-               transport.Contains("TeleportRosterToBoat(",
+               !transport.Contains("TaxiRequestState.Loading",
                    StringComparison.Ordinal) &&
-               transport.Contains("member.embarkInto(boat)",
-                   StringComparison.Ordinal) &&
-               transport.Contains("TeleportRosterFromBoat(",
-                   StringComparison.Ordinal) &&
-               transport.Contains("member.disembarkTo(boat, pLandingTile)",
+               !transport.Contains("\"force_into_a_boat\"",
                    StringComparison.Ordinal) &&
                !transport.Contains(".spawnOn(", StringComparison.Ordinal),
-            "RTS transport may complete embark after a member has boarded and " +
-            "may recover residual passengers after captain landing, but must " +
-            "not spawn actors");
-        Assert(transportProduction.Contains(
-                "boatActor.setTask(\"boat_transport_go_load\"",
-                StringComparison.Ordinal),
-            "temporary RTS transports must enter the original boat loading task");
+            "RTS transport directly boards and lands the locked roster in P0");
+        int routeProvisionStart = transportProduction.IndexOf(
+            "internal static bool TryProvisionAtRoute(",
+            StringComparison.Ordinal);
+        int routeProvisionEnd = transportProduction.IndexOf(
+            "internal static bool IsTemporaryTransportBoat(",
+            Math.Max(0, routeProvisionStart), StringComparison.Ordinal);
+        string routeProvisionBody = routeProvisionStart >= 0 &&
+            routeProvisionEnd > routeProvisionStart
+            ? transportProduction.Substring(routeProvisionStart,
+                routeProvisionEnd - routeProvisionStart)
+            : string.Empty;
+        Assert(routeProvisionBody.Contains("TemporaryBoatIds[",
+                   StringComparison.Ordinal) &&
+               routeProvisionBody.Contains("boat.taxi_request = null",
+                   StringComparison.Ordinal) &&
+               !routeProvisionBody.Contains("boat_transport_go_load",
+                   StringComparison.Ordinal),
+            "route-owned temporary boats are created without a vanilla taxi task");
         int provisionRouteStart = transportProduction.IndexOf(
             "internal static bool CanProvisionRoute(",
             StringComparison.Ordinal);
@@ -935,7 +939,8 @@ internal static class ArmyRtsCombatHandoffRulesTests
         int advanceStart = controller.IndexOf(
             "private static void AdvanceRoute(", StringComparison.Ordinal);
         int advanceEnd = controller.IndexOf(
-            "private static void LogStrategicRouteFailure(", advanceStart,
+            "private static bool TryActivateStrategicTransport(",
+            advanceStart,
             StringComparison.Ordinal);
         Assert(advanceStart >= 0 && advanceEnd > advanceStart,
             "RTS route advancement section must remain discoverable");
@@ -1080,48 +1085,16 @@ internal static class ArmyRtsCombatHandoffRulesTests
         string p0Body = p0Start >= 0 && p0End > p0Start
             ? postRunner.Substring(p0Start, p0End - p0Start)
             : string.Empty;
-        int passengerTransportCall = p0Body.IndexOf(
-            "TryRunVanillaPassengerTransportP0(",
+        int transportMemberCall = p0Body.IndexOf(
+            "ArmyRtsTransportService.TryDriveMemberP0(",
             StringComparison.Ordinal);
         int ordinaryCombatPreemption = p0Body.IndexOf(
             "HasMilitaryCombatPriority(actor)",
             StringComparison.Ordinal);
-        Assert(passengerTransportCall >= 0 &&
-               ordinaryCombatPreemption > passengerTransportCall,
-            "protected original embark and landing tasks must run before RTS combat can preempt them");
-        int passengerP0Start = postRunner.IndexOf(
-            "private static bool TryRunVanillaPassengerTransportP0(",
-            StringComparison.Ordinal);
-        int passengerP0End = postRunner.IndexOf(
-            "private static void RunMilitaryP0Combat(",
-            Math.Max(0, passengerP0Start), StringComparison.Ordinal);
-        string passengerP0Body = passengerP0Start >= 0 &&
-            passengerP0End > passengerP0Start
-            ? postRunner.Substring(passengerP0Start,
-                passengerP0End - passengerP0Start)
-            : string.Empty;
-        Assert(passengerP0Body.Contains(
-                   "ArmyRtsTransportService.IsExecutingVanillaPassengerTask(actor)",
-                   StringComparison.Ordinal) &&
-               passengerP0Body.Contains(
-                   "ShouldDrivePassengerTaskInMilitaryP0(",
-                   StringComparison.Ordinal) &&
-               passengerP0Body.Contains(
-                   "actor.b4_checkTaskVerifier(cycleElapsed)",
-                   StringComparison.Ordinal) &&
-               passengerP0Body.Contains(
-                   "actor.b5_checkPathMovement(cycleElapsed)",
-                   StringComparison.Ordinal) &&
-               passengerP0Body.Contains(
-                   "actor.b6_updateAI(cycleElapsed)",
-                   StringComparison.Ordinal) &&
-               passengerP0Body.Contains(
-                   "actor.u10_checkSmoothMovement(cycleElapsed)",
-                   StringComparison.Ordinal) &&
-               passengerP0Body.Contains(
-                   "ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId)",
-                   StringComparison.Ordinal),
-            "large-world military P0 must advance the original passenger task pipeline and mark it processed once");
+        Assert(transportMemberCall >= 0 &&
+               ordinaryCombatPreemption > transportMemberCall,
+            "the army-level transport owner advances or freezes each roster " +
+            "member before combat can preempt the voyage");
 
         int currentEnemy = p0Body.IndexOf(
             "actor.b2_checkCurrentEnemyTarget(cycleElapsed)",

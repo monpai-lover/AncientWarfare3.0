@@ -75,8 +75,12 @@ namespace AncientWarfare3.core.lineage
             if (!PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return;
-            MandateRebelService.RunBanditRouteYear(pKingdom);
-            PeasantRebelBanditPressureService.OnKingdomYear(pKingdom);
+            bool guiYi = PeasantRebelGuiyiService.IsGuiyi(pKingdom);
+            if (!guiYi)
+            {
+                MandateRebelService.RunBanditRouteYear(pKingdom);
+                PeasantRebelBanditPressureService.OnKingdomYear(pKingdom);
+            }
             PeasantRebelBanditRaidService.ScheduleYear(pKingdom);
             PeasantRebelBanditWallService.RepairYear(pKingdom,
                 IsOriginSuppressionActive(pKingdom));

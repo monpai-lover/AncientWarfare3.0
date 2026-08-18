@@ -986,15 +986,16 @@ namespace AncientWarfare3.content
             City city = pTile?.zone?.city;
             Kingdom bandit = city?.kingdom;
             Kingdom origin = PeasantRebelRouteService.ResolveOrigin(bandit);
-            if (!PeasantRebelBanditAmnestyService.TryAmnesty(bandit, origin,
-                    out string failureKey))
+            if (bandit?.data == null || origin?.data == null ||
+                !PeasantRebelBanditStrongholdService.
+                    HasActiveStronghold(bandit))
             {
-                Tip(AW_L10n.Text(failureKey,
+                Tip(AW_L10n.Text("aw_bandit_amnesty_unavailable",
                     "Bandit amnesty is unavailable"));
                 return false;
             }
-            Tip(AW_L10n.Text("aw_bandit_amnesty_success",
-                "Bandit stronghold accepted amnesty"));
+            ui.windows.BanditAmnestySettlementWindow.Open(bandit.id,
+                origin.id);
             return true;
         }
 

@@ -126,6 +126,20 @@ namespace AncientWarfare3.core.lineage
                    exteriorCount >= 0;
         }
 
+        public static bool CanUseWallCandidate(bool wallPlanExists,
+            int gateTowerCount)
+        {
+            _ = gateTowerCount;
+            return wallPlanExists;
+        }
+
+        public static bool CanDisposeStrongholdCity(bool cityExists,
+            bool cityIsRekt, int zoneCount, bool expectedOwnerMatches)
+        {
+            return cityExists && !cityIsRekt &&
+                   (expectedOwnerMatches || zoneCount == 0);
+        }
+
         public static bool ShouldRestoreWall(string currentTopTypeId)
         {
             return string.Equals(currentTopTypeId, "wall_wild",

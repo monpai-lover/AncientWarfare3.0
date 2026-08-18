@@ -62,7 +62,8 @@ namespace AncientWarfare3.api.multiplayer
         Supporters = 29,
         VirtualTitles = 30,
         MilitaryGovernorate = 31,
-        CustomCourtWorkflow = 32
+        CustomCourtWorkflow = 32,
+        BanditAmnestySettlement = 33
     }
 
     public enum AW3WindowOpenStatus : byte
@@ -344,7 +345,8 @@ namespace AncientWarfare3.api.multiplayer
         CreateMilitaryGovernorate = 31,
         DesignateMilitaryGovernorateSuccessor = 32,
         ReplaceMilitaryGovernorateGovernor = 33,
-        ApplyCustomCourtTemplate = 34
+        ApplyCustomCourtTemplate = 34,
+        GrantBanditAmnesty = 35
     }
 
     public enum AW3CommandStatus : byte
@@ -656,6 +658,17 @@ namespace AncientWarfare3.api.multiplayer
             reasonKey: Token(migrationMode, nameof(migrationMode)),
             intValue: NonNegative(templateRevision,
                 nameof(templateRevision)));
+
+        public static AW3CommandRequest GrantBanditAmnesty(
+            long banditCountryId, long originCountryId, string rewardKind,
+            string officeId, string titleText, bool hereditary) => Create(
+            AW3CommandKind.GrantBanditAmnesty, banditCountryId,
+            targetCountryId: Positive(originCountryId,
+                nameof(originCountryId)),
+            key: Token(rewardKind, nameof(rewardKind)),
+            secondaryKey: officeId?.Trim() ?? string.Empty,
+            text: titleText?.Trim() ?? string.Empty,
+            boolValue: hereditary);
 
         public static AW3CommandRequest ChangeEra(long countryId,
             string eraName) => Create(AW3CommandKind.ChangeEra, countryId,

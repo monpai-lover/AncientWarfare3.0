@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content;
 using AncientWarfare3.core.performance;
-using life.taxi;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -170,24 +169,8 @@ namespace AncientWarfare3.core.lineage
             if (!TryGetTarget(pActor, out WorldTile activeTarget) ||
                 activeTarget != pTarget ||
                 SameIsland(pActor.current_tile, pTarget)) return false;
-            if (HasExactTaxiRequest(pActor, pTarget)) return true;
-            if (ArmyRtsTransportService.TryHandleActor(pActor, pTarget,
-                    pMayBegin: true)) return true;
-            ArmyRtsTransportService.EnsureNativeTaxiRequest(pActor, pTarget);
-            return true;
-        }
-
-        private static bool HasExactTaxiRequest(Actor pActor,
-            WorldTile pTarget)
-        {
-            if (pActor?.data == null || pTarget?.data == null) return false;
-            try
-            {
-                TaxiRequest request = TaxiManager.getRequestForActor(pActor);
-                return request?.getTileTarget()?.data?.tile_id ==
-                       pTarget.data.tile_id;
-            }
-            catch { return false; }
+            return ArmyRtsTransportService.TryHandleActor(pActor, pTarget,
+                pMayBegin: true);
         }
 
         internal static bool ShouldSuppressCombatPreemption(Actor pActor)

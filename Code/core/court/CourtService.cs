@@ -1313,6 +1313,52 @@ namespace AncientWarfare3.core.court
                     .RoyalAppointmentsUnlocked);
         }
 
+        internal static bool CanPromiseAmnestyOffice(Kingdom pKingdom,
+            Actor pLeader, string pOfficeId)
+        {
+            if (pKingdom?.data == null || pLeader?.data == null ||
+                pKingdom.isRekt() || pLeader.isRekt() ||
+                !pLeader.isAlive() || !pLeader.isAdult() ||
+                !IsManualOfficeInCurrentTier(pKingdom, pOfficeId) ||
+                !CanUseManualAppointment(pKingdom) ||
+                FindActiveOfficeActor(pKingdom, pOfficeId) != null)
+                return false;
+            bool slave = pLeader.hasTrait(LineageKeys.TRAIT_SLAVE);
+            bool madness = pLeader.hasTrait("madness");
+            bool male = pLeader.isSexMale();
+            bool candidate = CourtManualAppointmentRules.CanListCandidate(
+                new CourtManualCandidateFacts(
+                    alive: true, adult: true, domestic: true, slave,
+                    madness, male, royalAsylum: false, king: false,
+                    hasCentralOffice: false,
+                    affiliationAvailable: true));
+            if (!candidate || RoyalGuardService.IsRoyalGuard(pLeader))
+                return false;
+            bool westernProfile = CourtProfileRegistry.For(pKingdom)?.Id ==
+                                  CourtProfileId.Western;
+            bool educated = westernProfile ||
+                HistoricalSchoolEducationService.CanAppoint(pLeader,
+                    pKingdom, CourtOfficeLayer.Central, pOfficeId);
+            return WesternCourtElectionRules.CanUseLocalCandidate(
+                candidate, westernProfile, educated);
+        }
+
+        internal static IReadOnlyList<string>
+            GetPromiseableAmnestyOffices(Kingdom pKingdom, Actor pLeader)
+        {
+            var result = new List<string>();
+            ICourtProfile profile = CourtProfileRegistry.For(pKingdom);
+            string institution = CourtInstitutionService.GetInstitution(
+                pKingdom);
+            foreach (CourtOfficeDefinition office in profile?.Offices ??
+                     Array.Empty<CourtOfficeDefinition>())
+                if (office.Layer == CourtOfficeLayer.Central &&
+                    office.AvailableIn(institution) &&
+                    CanPromiseAmnestyOffice(pKingdom, pLeader, office.Id))
+                    result.Add(office.Id);
+            return result;
+        }
+
         private static bool ReplaceOfficer(Actor pIncumbent, Actor pCandidate,
             Kingdom pKingdom, string pOfficeId, string pSchoolId)
         {

@@ -37,6 +37,8 @@ namespace AncientWarfare3.ui
         public const string DIPLOMATIC_MARRIAGE = "aw_diplomatic_marriage";
         public const string SUPPORTERS = "aw_supporters";
         public const string VIRTUAL_TITLES = "aw_virtual_titles";
+        public const string BANDIT_AMNESTY_SETTLEMENT =
+            "aw_bandit_amnesty_settlement";
         public const string MILITARY_GOVERNORATE =
             "aw_military_governorate_window";
 

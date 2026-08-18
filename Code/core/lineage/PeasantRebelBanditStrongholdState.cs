@@ -58,7 +58,7 @@ namespace AncientWarfare3.core.lineage
 
     internal sealed class PeasantRebelBanditStrongholdState
     {
-        public const int CurrentSchemaVersion = 5;
+        public const int CurrentSchemaVersion = 6;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public BanditStrongholdPhase Phase = BanditStrongholdPhase.None;
@@ -79,5 +79,12 @@ namespace AncientWarfare3.core.lineage
         public Dictionary<long, int> SuppressionExpiryByKingdomId =
             new Dictionary<long, int>();
         public List<long> InheritedStrongholdCityIds = new List<long>();
+        public string RouteSubtype = "";
+        public long GuiyiOccupierKingdomId = -1L;
+        public long GuiyiOriginalKingdomId = -1L;
+        public long GuiyiOriginalCityId = -1L;
+        public long GuiyiRestorationClaimId = -1L;
+        public int GuiyiCreatedYear = -1;
+        public string GuiyiStage = "";
     }
 }

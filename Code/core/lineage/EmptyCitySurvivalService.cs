@@ -10,6 +10,8 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
+                if (BanditStrongholdCityDisposalService.IsPending(
+                        pCity?.getID() ?? -1L)) return false;
                 Kingdom owner = pCity?.kingdom;
                 return EmptyCitySurvivalRules.ShouldSuppressNaturalBorderShrink(
                     pCity?.data != null,
@@ -30,6 +32,8 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
+                if (BanditStrongholdCityDisposalService.IsPending(
+                        pCity?.getID() ?? -1L)) return false;
                 return EmptyCitySurvivalRules.
                     ShouldSuppressAutomaticAbandonedZoneCleanup(
                         pCity?.data != null,
@@ -119,6 +123,8 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldKeepFormalOwner(City pCity)
         {
+            if (BanditStrongholdCityDisposalService.IsPending(
+                    pCity?.getID() ?? -1L)) return false;
             return EmptyCitySurvivalRules.ShouldKeepFormalOwner(
                 WarScoreService.ShouldHoldFrozenOccupation(pCity));
         }

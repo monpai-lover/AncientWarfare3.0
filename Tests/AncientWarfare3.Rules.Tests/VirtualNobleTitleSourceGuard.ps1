@@ -8,7 +8,10 @@ foreach ($needle in @(
     'BeginTransaction',
     'OnActorDying(',
     'GetPrimaryTitle(',
-    'ClearRuntime('
+    'ClearRuntime(',
+    'OnKingdomDestroying(',
+    "END_REASON='kingdom_destroyed'",
+    'ACTIVE=0'
 )) {
     if (-not $source.Contains($needle)) { throw "missing service contract: $needle" }
 }

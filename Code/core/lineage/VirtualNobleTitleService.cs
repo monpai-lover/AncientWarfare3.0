@@ -80,27 +80,16 @@ namespace AncientWarfare3.core.lineage
             out VirtualNobleTitleSnapshot pSnapshot)
         {
             pSnapshot = default;
-            if (!Ready) return VirtualNobleTitleGrantResult.NotReady;
-            if (pKingdom?.data == null || pTarget?.data == null ||
-                pGrantor?.data == null || pKingdom.isRekt() ||
-                pTarget.isRekt() || !pTarget.isAlive() ||
-                pTarget.kingdom != pKingdom)
-                return VirtualNobleTitleGrantResult.InvalidTarget;
-            if (!VirtualNobleTitleRules.IsValidTitle(pText))
-                return VirtualNobleTitleGrantResult.InvalidText;
+            VirtualNobleTitleGrantResult validation = ValidateGrant(
+                pKingdom, pGrantor, pTarget, pText,
+                pAllowForeignTarget: false);
+            if (validation != VirtualNobleTitleGrantResult.Success)
+                return validation;
 
             string title = VirtualNobleTitleRules.NormalizeTitle(pText);
             string key = VirtualNobleTitleRules.NormalizeTitleKey(title);
             try
             {
-                using SQLiteCommand duplicate = new SQLiteCommand(DB);
-                duplicate.CommandText = "SELECT TITLE_ID FROM " + Table +
-                    " WHERE KINGDOM_ID=@k AND NORMALIZED_KEY=@n AND ACTIVE=1 LIMIT 1";
-                duplicate.Parameters.AddWithValue("@k", pKingdom.id);
-                duplicate.Parameters.AddWithValue("@n", key);
-                if (duplicate.ExecuteScalar() != null)
-                    return VirtualNobleTitleGrantResult.Duplicate;
-
                 long titleId = TableIdAllocator.Next(DB, Table, "TITLE_ID");
                 long grantorId = pGrantor.data.id;
                 int year = Date.getCurrentYear();
@@ -156,6 +145,37 @@ namespace AncientWarfare3.core.lineage
             {
                 ModClass.LogWarning("Virtual noble title grant failed: " +
                                     error.Message);
+                return VirtualNobleTitleGrantResult.PersistenceFailed;
+            }
+        }
+
+        internal static VirtualNobleTitleGrantResult ValidateGrant(
+            Kingdom pKingdom, Actor pGrantor, Actor pTarget, string pText,
+            bool pAllowForeignTarget)
+        {
+            if (!Ready) return VirtualNobleTitleGrantResult.NotReady;
+            if (pKingdom?.data == null || pTarget?.data == null ||
+                pGrantor?.data == null || pKingdom.isRekt() ||
+                pTarget.isRekt() || !pTarget.isAlive() ||
+                !pAllowForeignTarget && pTarget.kingdom != pKingdom)
+                return VirtualNobleTitleGrantResult.InvalidTarget;
+            if (!VirtualNobleTitleRules.IsValidTitle(pText))
+                return VirtualNobleTitleGrantResult.InvalidText;
+            string key = VirtualNobleTitleRules.NormalizeTitleKey(pText);
+            try
+            {
+                using SQLiteCommand duplicate = new SQLiteCommand(DB);
+                duplicate.CommandText = "SELECT TITLE_ID FROM " + Table +
+                    " WHERE KINGDOM_ID=@k AND NORMALIZED_KEY=@n" +
+                    " AND ACTIVE=1 LIMIT 1";
+                duplicate.Parameters.AddWithValue("@k", pKingdom.id);
+                duplicate.Parameters.AddWithValue("@n", key);
+                return duplicate.ExecuteScalar() == null
+                    ? VirtualNobleTitleGrantResult.Success
+                    : VirtualNobleTitleGrantResult.Duplicate;
+            }
+            catch
+            {
                 return VirtualNobleTitleGrantResult.PersistenceFailed;
             }
         }

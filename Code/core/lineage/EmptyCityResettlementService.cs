@@ -151,6 +151,8 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
+                if (BanditStrongholdCityDisposalService.IsPending(
+                        pCity?.getID() ?? -1L)) return false;
                 int population = 0;
                 if (pCity != null)
                     foreach (Actor actor in pCity.getUnits())

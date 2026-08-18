@@ -22,6 +22,7 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pKind ?? "")
             {
+                case "bandit_suppression": return "ui/wars/war_rebellion";
                 case "take_mandate": return "ui/Icons/traits/iconTianming";
                 case "zhulu_annexation":
                     return "ui/Icons/traits/iconTianming";

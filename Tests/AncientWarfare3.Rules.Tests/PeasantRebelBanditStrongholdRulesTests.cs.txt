@@ -16,6 +16,10 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         ResolvesSuppressionVictorByConfirmedPrecedence();
         AttributesOnlyLiveCombatAttackers();
         DefersStrongholdFallUntilTheCorrectBoundary();
+        AllowsStrongholdCreationWhenGateTowersCannotBePlaced();
+        DisposesLogicallyEmptyStrongholdsAfterOwnershipChanges();
+        CountsOnlyLivingStrongholdResidents();
+        QueuesEveryTrulyEmptyActiveStronghold();
         RelocatesOnlyOrdinaryResidents();
         ComposesStrongholdNamesAndTitles();
     }
@@ -183,6 +187,67 @@ internal static class PeasantRebelBanditStrongholdRulesTests
                 CanRelocateOrdinaryResident(false, true, false, false,
                     false),
             "a child cannot found or populate the new stronghold");
+    }
+
+    private static void AllowsStrongholdCreationWhenGateTowersCannotBePlaced()
+    {
+        True(PeasantRebelBanditStrongholdRules.CanUseWallCandidate(
+                wallPlanExists: true, gateTowerCount: 0),
+            "a valid wall plan is enough to create the stronghold");
+        True(PeasantRebelBanditStrongholdRules.CanUseWallCandidate(
+                wallPlanExists: true, gateTowerCount: 4),
+            "a complete four-tower plan remains preferred");
+        False(PeasantRebelBanditStrongholdRules.CanUseWallCandidate(
+                wallPlanExists: false, gateTowerCount: 4),
+            "gate towers cannot replace a missing wall plan");
+    }
+
+    private static void DisposesLogicallyEmptyStrongholdsAfterOwnershipChanges()
+    {
+        True(PeasantRebelBanditStrongholdRules.
+                CanDisposeStrongholdCity(true, false, 0, false),
+            "an emptied stronghold is disposable after its owner changes");
+        True(PeasantRebelBanditStrongholdRules.
+                CanDisposeStrongholdCity(true, false, 4, true),
+            "the originally scheduled stronghold remains disposable");
+        False(PeasantRebelBanditStrongholdRules.
+                CanDisposeStrongholdCity(true, false, 4, false),
+            "a populated replacement city with another owner is preserved");
+        False(PeasantRebelBanditStrongholdRules.
+                CanDisposeStrongholdCity(false, false, 0, true),
+            "an absent city needs no disposal call");
+    }
+
+    private static void CountsOnlyLivingStrongholdResidents()
+    {
+        True(PeasantRebelBanditStrongholdPopulationRules.
+                IsLivingResident(true, true, false, false, true),
+            "a living non-boat resident counts toward stronghold population");
+        False(PeasantRebelBanditStrongholdPopulationRules.
+                IsLivingResident(true, false, false, false, true),
+            "a dead actor retained by the native city list does not count");
+        False(PeasantRebelBanditStrongholdPopulationRules.
+                IsLivingResident(true, true, false, true, true),
+            "a boat does not keep a stronghold alive");
+        False(PeasantRebelBanditStrongholdPopulationRules.
+                IsLivingResident(true, true, false, false, false),
+            "an actor already moved to another city does not count");
+    }
+
+    private static void QueuesEveryTrulyEmptyActiveStronghold()
+    {
+        True(PeasantRebelBanditStrongholdPopulationRules.
+                ShouldQueueFall(true, 0),
+            "an active stronghold with no living residents must fall");
+        True(PeasantRebelBanditStrongholdPopulationRules.
+                ShouldQueueFall(true, -1),
+            "a defensive negative count is treated as empty");
+        False(PeasantRebelBanditStrongholdPopulationRules.
+                ShouldQueueFall(true, 1),
+            "one living resident keeps the stronghold active");
+        False(PeasantRebelBanditStrongholdPopulationRules.
+                ShouldQueueFall(false, 0),
+            "an inactive state is not replayed by the population observer");
     }
 
     private static void ComposesStrongholdNamesAndTitles()

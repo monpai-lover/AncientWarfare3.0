@@ -60,6 +60,7 @@ namespace AncientWarfare3.patch
                 !AW3MultiplayerReplicaScope.IsApplying;
             PeasantRebelRouteService.OnKingdomDestroying(pKingdom,
                 pAuthoritative: routeAuthority);
+            PeasantRebelGuiyiService.OnKingdomDestroying(pKingdom);
             if (AW3MultiplayerReplicaScope.IsApplying)
             {
                 __state = default;

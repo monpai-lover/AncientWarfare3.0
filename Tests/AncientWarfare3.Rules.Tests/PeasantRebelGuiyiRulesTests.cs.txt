@@ -1,0 +1,52 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelGuiyiRulesTests
+{
+    internal static void Run()
+    {
+        Assert(PeasantRebelGuiyiRules.CanSpawn(new GuiyiSpawnFacts(
+                cityAlive: true, cityIntegrated: true,
+                occupierIntegrated: false, foreignOccupation: true,
+                loyalty: -51, occupierHasGuiyi: false,
+                strongholdAvailable: true, residentAvailable: true)),
+            "an oppressed integrated-Xia city may raise Guiyi bandits");
+        Assert(!PeasantRebelGuiyiRules.CanSpawn(new GuiyiSpawnFacts(
+                true, true, false, true, -50, false, true, true)),
+            "loyalty must be strictly below minus fifty");
+        Assert(!PeasantRebelGuiyiRules.CanSpawn(new GuiyiSpawnFacts(
+                true, true, false, true, -80, true, true, true)),
+            "each occupier may have only one active Guiyi force");
+        Assert(!PeasantRebelGuiyiRules.CanSpawn(new GuiyiSpawnFacts(
+                true, true, true, true, -80, false, true, true)),
+            "an integrated occupier does not trigger Guiyi resistance");
+        Assert(PeasantRebelGuiyiRules.ResolveObjective(
+                   originalKingdomAlive: true,
+                   originalIdentityArchived: true) ==
+               GuiyiRestorationObjective.ReturnToLivingKingdom,
+            "a living original kingdom receives its city back");
+        Assert(PeasantRebelGuiyiRules.ResolveObjective(
+                   originalKingdomAlive: false,
+                   originalIdentityArchived: true) ==
+               GuiyiRestorationObjective.RestoreExtinctKingdom,
+            "an archived extinct kingdom may be restored");
+        Assert(PeasantRebelGuiyiRules.ResolveObjective(
+                   originalKingdomAlive: false,
+                   originalIdentityArchived: false) ==
+               GuiyiRestorationObjective.None,
+            "missing original identity cannot be restored");
+        Assert(PeasantRebelGuiyiRules.ShouldBeginRestoration(
+                guiYiStrength: 151, occupierStrength: 100,
+                objective: GuiyiRestorationObjective.ReturnToLivingKingdom),
+            "a materially stronger Guiyi force begins restoration");
+        Assert(!PeasantRebelGuiyiRules.ShouldBeginRestoration(
+                guiYiStrength: 150, occupierStrength: 100,
+                objective: GuiyiRestorationObjective.ReturnToLivingKingdom),
+            "equal-to-threshold strength waits rather than rounding up");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}
