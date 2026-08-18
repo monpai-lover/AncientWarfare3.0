@@ -143,16 +143,25 @@ namespace AncientWarfare3.core.court
             int slots = CourtRules.CityOfficeSlots(
                 SafeCityPopulation(pCity), SafeZoneCount(pCity),
                 pKingdom.capital == pCity);
-            int filled = CourtBureauRules.FilledSlots(slots,
-                pCourtEfficiency);
             CitySchoolSnapshot schoolSnapshot =
                 CitySchoolSnapshotService.GetSnapshot(pCity);
             string localSchool = schoolSnapshot?.DominantSchool ??
                                  CourtSchoolId.None;
             if (schoolSnapshot == null)
                 CitySchoolSnapshotService.MarkDirty(pCity);
+            if (!LocalCourtAppointmentService.ReconcileCity(pKingdom, pCity,
+                    slots, pYear, out IReadOnlyList<long> officerActorIds))
+                return false;
+            int filled = officerActorIds.Count;
             float efficiency = CourtBureauRules.BureauEfficiency(slots,
                 filled);
+
+            CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
+                out CustomLocalCourtTemplate localTemplate);
+            pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
+                out string localTemplateId, localTemplate?.Id ?? string.Empty);
+            pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
+                out bool localTemplateManual, false);
 
             pCity.data.get(LineageKeys.CITY_BUREAU_STATE_INITIALIZED,
                 out bool initialized, false);
@@ -170,7 +179,12 @@ namespace AncientWarfare3.core.court
                 new HistoricalSqlColumn("LOCAL_SCHOOL", localSchool ?? ""),
                 new HistoricalSqlColumn("BUREAU_EFFICIENCY",
                     (double)efficiency),
-                new HistoricalSqlColumn("OFFICER_ACTOR_IDS", ""),
+                new HistoricalSqlColumn("OFFICER_ACTOR_IDS",
+                    string.Join(",", officerActorIds)),
+                new HistoricalSqlColumn("LOCAL_TEMPLATE_ID",
+                    localTemplateId ?? ""),
+                new HistoricalSqlColumn("LOCAL_TEMPLATE_MANUAL",
+                    localTemplateManual ? 1 : 0),
                 new HistoricalSqlColumn("LAST_REFRESH_YEAR", pYear),
                 new HistoricalSqlColumn("UPDATED_TIME",
                     LineageService.CurTime())

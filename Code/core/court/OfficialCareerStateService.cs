@@ -208,6 +208,10 @@ namespace AncientWarfare3.core.court
                              existing.OfficeId != (pOfficeId ?? "");
             int termEndYear = pActing
                 ? pYearAfter(currentYear)
+                : freshTerm && pLayer == CourtOfficeLayer.City
+                    ? currentYear + LocalOfficialTermRules.TermLength(
+                        MainAttribute(pActor), (int)Math.Max(0f, merit), age,
+                        pActor.data.id, currentYear)
                 : pOfficeId == CourtOfficeId.WestMayor
                     ? ResolveWesternMayorTermEndYear(pKingdom, currentYear)
                 : freshTerm

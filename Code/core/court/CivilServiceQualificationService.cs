@@ -85,6 +85,9 @@ namespace AncientWarfare3.core.court
             if (!HasExaminationSystem(pKingdom)) return true;
             if (IsAppointmentExempt(pActor, pKingdom, pLayer, pOfficeId))
                 return true;
+            if (pAllowLocalLowerQualification &&
+                pLayer == CourtOfficeLayer.City && pActor.isCityLeader())
+                return true;
             if (!HistoricalSchoolEducationService.CanAppoint(pActor,
                     pKingdom, pLayer, pOfficeId)) return false;
             CivilServiceQualificationRecord qualification =

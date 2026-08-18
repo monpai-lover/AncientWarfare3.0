@@ -1529,7 +1529,8 @@ namespace AncientWarfare3.core.court
         }
 
         private static bool SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity,
-            bool pActing = false, bool pVacancyPromotion = false)
+            bool pActing = false, bool pVacancyPromotion = false,
+            bool pAllowLocalLowerQualification = false)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
             if (!RoyalGuardOfficeRules.CanAcceptOfficeAppointment(
@@ -1553,7 +1554,8 @@ namespace AncientWarfare3.core.court
             string personalSchool = SchoolMembershipService.GetSchool(pActor.data.id);
             OfficialCareerAppointmentResult careerResult = OfficialCareerService.Appoint(
                 pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", personalSchool,
-                pCity, pActing, pVacancyPromotion);
+                pCity, pActing, pVacancyPromotion,
+                pAllowLocalLowerQualification);
             if (!careerResult.IsCommitted)
             {
                 ModClass.LogWarning("Court appointment persistence failed: kingdom=" +
@@ -1589,6 +1591,18 @@ namespace AncientWarfare3.core.court
             return !string.IsNullOrEmpty(officeId) &&
                 SetOfficer(pActor, pKingdom, CourtOfficeLayer.City, officeId,
                 SchoolMembershipService.GetSchool(pActor.data.id), pCity);
+        }
+
+        internal static bool TryAssignLocalOfficer(Actor pActor,
+            Kingdom pKingdom, City pCity, string pOfficeId)
+        {
+            if (pActor?.data == null || pKingdom?.data == null ||
+                pCity?.data == null || pCity.kingdom != pKingdom ||
+                string.IsNullOrEmpty(pOfficeId)) return false;
+            return SetOfficer(pActor, pKingdom, CourtOfficeLayer.City,
+                pOfficeId, SchoolMembershipService.GetSchool(pActor.data.id),
+                pCity, pActing: false, pVacancyPromotion: true,
+                pAllowLocalLowerQualification: true);
         }
 
         internal static bool TryAssignActingCityGovernor(Actor pActor,
