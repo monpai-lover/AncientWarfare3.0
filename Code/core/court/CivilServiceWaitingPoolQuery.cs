@@ -17,6 +17,33 @@ namespace AncientWarfare3.core.court
             IReadOnlyList<long> hostCityIds, int pLimit,
             out IReadOnlyList<long> pActorIds)
         {
+            return TryLoadActorIds(pDb, pCandidateTable, pSessionTable,
+                pArchiveTable, pOfficerTable, pAffiliationTable,
+                hostKingdomId, hostCityIds, pLimit,
+                pIncludeLocalQualifications: false, out pActorIds);
+        }
+
+        public static bool TryLoadLocalActorIds(SQLiteConnection pDb,
+            string pCandidateTable, string pSessionTable,
+            string pArchiveTable, string pOfficerTable,
+            string pAffiliationTable, long hostKingdomId,
+            IReadOnlyList<long> hostCityIds, int pLimit,
+            out IReadOnlyList<long> pActorIds)
+        {
+            return TryLoadActorIds(pDb, pCandidateTable, pSessionTable,
+                pArchiveTable, pOfficerTable, pAffiliationTable,
+                hostKingdomId, hostCityIds, pLimit,
+                pIncludeLocalQualifications: true, out pActorIds);
+        }
+
+        private static bool TryLoadActorIds(SQLiteConnection pDb,
+            string pCandidateTable, string pSessionTable,
+            string pArchiveTable, string pOfficerTable,
+            string pAffiliationTable, long hostKingdomId,
+            IReadOnlyList<long> hostCityIds, int pLimit,
+            bool pIncludeLocalQualifications,
+            out IReadOnlyList<long> pActorIds)
+        {
             var result = new List<long>();
             pActorIds = result;
             if (pDb == null || hostKingdomId < 0L || pLimit <= 0 ||
@@ -53,6 +80,13 @@ namespace AncientWarfare3.core.court
                       "R.LIFECYCLE_STATE=@resident AND " +
                       "R.SERVICE_KINGDOM_ID<0))";
 
+                string qualificationClause = pIncludeLocalQualifications
+                    ? "(C.QUALIFICATION IN ('juren','gongshi','jinshi') OR " +
+                      "C.METROPOLITAN_RESULT='failed' OR " +
+                      "C.PALACE_RESULT='failed' OR " +
+                      "C.NATIONAL_RESULT='failed')"
+                    : "C.QUALIFICATION IN ('gongshi','jinshi')";
+
                 command.CommandText =
                     "SELECT C.ACTOR_ID FROM " + pCandidateTable + " C JOIN " +
                     pSessionTable + " S ON S.ID=C.SESSION_ID JOIN " +
@@ -60,7 +94,7 @@ namespace AncientWarfare3.core.court
                     pAffiliationTable + " R ON R.ACTOR_ID=C.ACTOR_ID " +
                     "WHERE C.KINGDOM_ID=@kingdom AND " +
                     "S.KINGDOM_ID=@kingdom AND S.STATUS='completed' AND " +
-                    "C.QUALIFICATION IN ('gongshi','jinshi') AND " +
+                    qualificationClause + " AND " +
                     "A.IS_ALIVE=1 AND A.SEX=0 AND " +
                     "IFNULL(A.STATUS,'')<>@slave AND " +
                     "NOT EXISTS (SELECT 1 FROM " + pCandidateTable +

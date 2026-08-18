@@ -18,5 +18,17 @@
              Link="Production/LocalOfficialCandidateRules.cs" />
     <Compile Include="../../Code/core/court/OfficialCirculationRules.cs"
              Link="Production/OfficialCirculationRules.cs" />
+    <Compile Include="../../Code/core/court/CivilServiceExamRules.cs"
+             Link="Production/CivilServiceExamRules.cs" />
+    <Compile Include="../../Code/core/court/CivilServiceWaitingPoolQuery.cs"
+             Link="Production/CivilServiceWaitingPoolQuery.cs" />
+    <Compile Include="../../Code/core/lineage/LineageKeys.cs"
+             Link="Production/LineageKeys.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Data.SQLite">
+      <HintPath>../../Assemblies/System.Data.SQLite.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 </Project>

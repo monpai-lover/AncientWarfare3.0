@@ -28,6 +28,20 @@ namespace AncientWarfare3.core.court
                        StringComparison.OrdinalIgnoreCase);
         }
 
+        public static bool AcceptsAppointmentQualification(
+            string pQualification, bool participatedAndFailedHigherStage,
+            bool allowLocalLowerQualification)
+        {
+            bool formal = string.Equals(pQualification, "gongshi",
+                              StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(pQualification, "jinshi",
+                              StringComparison.OrdinalIgnoreCase);
+            if (formal) return true;
+            return allowLocalLowerQualification &&
+                   (IsLocalQualification(pQualification) ||
+                    participatedAndFailedHigherStage);
+        }
+
         public static int Score(int ability, int merit,
             bool sameNativeCity)
         {

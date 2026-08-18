@@ -39,7 +39,8 @@ namespace AncientWarfare3.core.court
 
         public static OfficialCareerAppointmentResult Appoint(Actor pActor, Kingdom pKingdom, string pLayer,
             string pOfficeId, string pSchoolId, City pCity,
-            bool pActing = false, bool pVacancyPromotion = false)
+            bool pActing = false, bool pVacancyPromotion = false,
+            bool pAllowLocalLowerQualification = false)
         {
             SQLiteConnection db = DB;
             if (db == null || pActor?.data == null || pKingdom?.data == null)
@@ -52,7 +53,7 @@ namespace AncientWarfare3.core.court
                 OfficialCareerAppointment appointment = PrepareAppointment(
                     pActor, pKingdom, pLayer, pOfficeId, pSchoolId, pCity,
                     Date.getCurrentYear(), LineageService.CurTime(), pActing,
-                    pVacancyPromotion);
+                    pVacancyPromotion, pAllowLocalLowerQualification);
                 if (appointment == null)
                     return new OfficialCareerAppointmentResult(
                         OfficialCareerPersistenceOutcome.CleanFailure,
@@ -81,7 +82,8 @@ namespace AncientWarfare3.core.court
         internal static OfficialCareerAppointment PrepareAppointment(Actor pActor,
             Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity,
             int pAppointedYear, double pAppointedTime,
-            bool pActing = false, bool pVacancyPromotion = false)
+            bool pActing = false, bool pVacancyPromotion = false,
+            bool pAllowLocalLowerQualification = false)
         {
             if (pActor?.data == null || pKingdom?.data == null) return null;
             if (!RoyalGuardOfficeRules.CanAcceptOfficeAppointment(
@@ -93,7 +95,9 @@ namespace AncientWarfare3.core.court
             }
             else if (!CivilServiceQualificationService.
                          CanReceiveFormalCivilAppointment(pActor, pKingdom,
-                             pLayer, pOfficeId, pVacancyPromotion)) return null;
+                             pLayer, pOfficeId, pVacancyPromotion,
+                             pAllowLocalLowerQualification:
+                             pAllowLocalLowerQualification)) return null;
             return new OfficialCareerAppointment
             {
                 ActorId = pActor.data.id,

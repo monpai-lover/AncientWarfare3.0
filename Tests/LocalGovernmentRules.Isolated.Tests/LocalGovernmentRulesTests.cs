@@ -60,6 +60,18 @@ internal static class LocalGovernmentRulesTests
              LocalOfficialCandidateRules.Score(90, 50,
                  sameNativeCity: false),
             "qualified same-native-city recommendation is material");
+        False(LocalOfficialCandidateRules.AcceptsAppointmentQualification(
+                "juren", participatedAndFailedHigherStage: false,
+                allowLocalLowerQualification: false),
+            "central appointments do not accept local-stage credentials");
+        True(LocalOfficialCandidateRules.AcceptsAppointmentQualification(
+                "juren", participatedAndFailedHigherStage: false,
+                allowLocalLowerQualification: true),
+            "the explicit local path accepts a local-stage credential");
+        True(LocalOfficialCandidateRules.AcceptsAppointmentQualification(
+                "none", participatedAndFailedHigherStage: true,
+                allowLocalLowerQualification: true),
+            "the explicit local path accepts a higher-stage non-finalist");
     }
 
     private static void True(bool pValue, string pMessage)
