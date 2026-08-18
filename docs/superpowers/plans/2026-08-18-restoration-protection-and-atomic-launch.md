@@ -21,9 +21,10 @@
 
 Add tests for `currentYear < protectionUntilYear`, the exact year-10 expiry,
 incoming versus outgoing direction, and the explicit internal-war type allowlist.
-Include external system wars as blocked and independence, general rebellion,
-fief independence, succession, Jingnan, coup restoration, Mandate rebellion,
-and restoration wars as allowed when the restored kingdom is the defender.
+Include external system wars and externally initiated restoration wars as
+blocked. Independence, general rebellion, fief independence, succession,
+Jingnan, coup restoration, and Mandate rebellion remain allowed when the
+restored kingdom is the defender.
 
 - [ ] **Step 2: Run the targeted test and verify the expected failure**
 
@@ -40,7 +41,7 @@ public static bool IsActive(int currentYear, int protectionUntilYear);
 public static int ProtectionUntil(int restorationYear, int durationYears);
 public static bool IsInternalWarType(string warType);
 public static bool ShouldBlockIncoming(bool active, bool protectedDefender,
-    bool internalWar, bool attackerIsDefender);
+    bool internalWar, bool protectedKingdomIsAttacker);
 ```
 
 Use ordinal string comparisons and keep the method free of WorldBox objects.
