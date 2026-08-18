@@ -73,6 +73,21 @@ cache owns only read-model snapshots and never mutates them. Any family
 structure, life-status, identity/title, or world-generation change invalidates
 the matching cache through the existing projection revision/world lifecycle.
 
+### Historical school master load gate
+
+`HistoricalSchoolContent.Init()` does not load runtime school state during mod
+asset registration. The school scheduler remains inert until
+`AWAsyncWorldLifecycle` reaches `Running`. The AW3 restore pipeline, after it
+has installed or created the lineage archive for the current world, remains the
+single owner that calls `HistoricalSchoolRuntime.LoadState()`.
+
+This prevents the old sequence in which mod initialization opened a fresh empty
+runtime database, annual school work ran against it, and the later save archive
+restore added the persisted master on top of an already spawned actor. The
+world-clear path still clears all school runtime state. A pure lifecycle rule
+and a source guard cover both the load gate and the removal of the premature
+initial load call.
+
 ## Error handling
 
 Missing baselines, invalid kingdom IDs, unavailable snapshots, and negative
@@ -89,5 +104,7 @@ must never proceed with an unverified batch.
   the preset dropdown is replaced while JSON import remains a dropdown.
 - Cache rule tests cover same-scope hits, revision/world-generation misses,
   bounded eviction, and actor-not-present fallback.
+- School lifecycle tests cover scheduler suppression before `Running`, restore
+  loading after archive installation, and the absence of the mod-init load call.
 - Full rules tests, adversarial RTS simulation, production build, and source
   deployment verification are run before release.
