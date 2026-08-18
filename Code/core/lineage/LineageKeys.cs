@@ -619,6 +619,10 @@ namespace AncientWarfare3.core.lineage
             "aw_custom_court_instance_overrides";
         public const string CUSTOM_COURT_LEGACY_OFFICES =
             "aw_custom_court_legacy_offices";
+        public const string CITY_LOCAL_COURT_TEMPLATE_ID =
+            "aw_city_local_court_template_id";
+        public const string CITY_LOCAL_COURT_TEMPLATE_MANUAL =
+            "aw_city_local_court_template_manual";
         public const string COURT_CITY_ID = "aw_court_city_id";
         public const string OFFICER_RANK = "aw_officer_rank";
         public const string OFFICER_TRACK = "aw_officer_track";

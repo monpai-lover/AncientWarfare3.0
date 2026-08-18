@@ -12,6 +12,8 @@ namespace AncientWarfare3.core.db
         public string local_school;
         public double bureau_efficiency;
         public string officer_actor_ids;
+        public string local_template_id;
+        public int local_template_manual;
         public int last_refresh_year;
         public double updated_time;
     }

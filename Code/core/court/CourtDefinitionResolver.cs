@@ -60,6 +60,42 @@ namespace AncientWarfare3.core.court
                 .ToList();
         }
 
+        public IReadOnlyList<CourtOfficeDefinition> ResolveLocalGraph(
+            string kingdomId, ICourtProfile builtinProfile,
+            string institutionId, string localTemplateId)
+        {
+            CustomCourtInstance instance;
+            if (_instances != null && _instances.TryGet(kingdomId,
+                    out instance))
+            {
+                CustomLocalCourtTemplate local = instance.ResolvedSnapshot?
+                    .LocalTemplates?.FirstOrDefault(item => item != null &&
+                        string.Equals(item.Id, localTemplateId,
+                            StringComparison.Ordinal));
+                if (local != null)
+                {
+                    List<CustomCourtOffice> offices = (local.Offices ??
+                        new List<CustomCourtOffice>()).Where(item =>
+                        item != null && item.Layer == CourtOfficeLayer.City)
+                        .ToList();
+                    IReadOnlyDictionary<string, int> ranks =
+                        CustomCourtHierarchyLayoutRules.BuildRanks(offices,
+                            local.Edges);
+                    return offices.OrderBy(item => ranks.TryGetValue(item.Id,
+                            out int rank) ? rank : int.MaxValue)
+                        .ThenBy(item => item.Grade)
+                        .ThenBy(item => item.Id, StringComparer.Ordinal)
+                        .Select(item => ToDefinition(item, institutionId))
+                        .ToList();
+                }
+            }
+            if (builtinProfile == null)
+                return Array.Empty<CourtOfficeDefinition>();
+            return builtinProfile.OfficeIdsForInstitution(institutionId)
+                .Select(builtinProfile.FindOffice).Where(item => item != null &&
+                    item.Layer == CourtOfficeLayer.City).ToList();
+        }
+
         private static CourtOfficeDefinition ToDefinition(
             CustomCourtOffice office, string institutionId)
         {

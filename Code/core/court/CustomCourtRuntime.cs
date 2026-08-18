@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.court
@@ -52,6 +53,61 @@ namespace AncientWarfare3.core.court
             if (!TryGetInstance(kingdom, out instance)) return false;
             snapshot = instance?.ResolvedSnapshot;
             return snapshot != null;
+        }
+
+        public static bool TryGetLocalTemplate(Kingdom pKingdom, City pCity,
+            out CustomLocalCourtTemplate pTemplate)
+        {
+            pTemplate = null;
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.kingdom != pKingdom) return false;
+            CustomCourtTemplate snapshot;
+            if (!TryGetSnapshot(pKingdom, out snapshot) ||
+                snapshot.LocalTemplates == null ||
+                snapshot.LocalTemplates.Count == 0) return false;
+
+            pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
+                out string persistedId, string.Empty);
+            pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
+                out bool manual, false);
+            bool military = MilitaryGovernorateStore.TryGetRuntimeProjection(
+                pKingdom, out _, out _);
+            string resolvedId = CustomLocalCourtTemplateRules.ResolveTemplateId(
+                snapshot.LocalTemplates, persistedId, manual, military);
+            pTemplate = snapshot.LocalTemplates.FirstOrDefault(template =>
+                template != null && string.Equals(template.Id, resolvedId,
+                    System.StringComparison.Ordinal));
+            if (pTemplate == null) return false;
+
+            bool validManual = manual && string.Equals(persistedId,
+                resolvedId, System.StringComparison.Ordinal);
+            if (!string.Equals(persistedId, resolvedId,
+                    System.StringComparison.Ordinal))
+                pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
+                    resolvedId);
+            if (manual != validManual)
+                pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
+                    validManual);
+            return true;
+        }
+
+        public static bool TrySetLocalTemplate(Kingdom pKingdom, City pCity,
+            string pTemplateId, bool pManual)
+        {
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.kingdom != pKingdom || string.IsNullOrWhiteSpace(
+                    pTemplateId)) return false;
+            CustomCourtTemplate snapshot;
+            if (!TryGetSnapshot(pKingdom, out snapshot) ||
+                snapshot.LocalTemplates == null ||
+                !snapshot.LocalTemplates.Any(template => template != null &&
+                    string.Equals(template.Id, pTemplateId,
+                        System.StringComparison.Ordinal))) return false;
+            pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
+                pTemplateId);
+            pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
+                pManual);
+            return true;
         }
 
         public static string DisplayName(Kingdom kingdom, string fallback)
