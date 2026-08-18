@@ -168,6 +168,7 @@ namespace AncientWarfare3.core.policy
             _frameAnnualStageTicks = 0L;
             _sampling = RuntimePerformanceDiagnosticRules.ShouldSample(
                 currentMode != 0, _frame);
+            AWSchedulerStageDiagnostics.BeginFrame(_sampling);
             if (_sampling)
             {
                 ResetSample();
@@ -553,6 +554,9 @@ namespace AncientWarfare3.core.policy
             HistoricalSchoolDiagnosticSnapshot schoolDiagnostics =
                 HistoricalSchoolDiagnostics.Snapshot();
             long frameTicks = Elapsed(_sampleFrameStarted);
+            AWSchedulerStageDiagnosticSnapshot schedulerStages =
+                AWSchedulerStageDiagnostics.TakeSnapshot()
+                    .WithFrameTicks(frameTicks);
             long exclusivePathStep =
                 RuntimePerformanceDiagnosticRules.ExclusiveTicks(
                     _pathStepTicks, _pathStepNestedTicks);
@@ -628,6 +632,16 @@ namespace AncientWarfare3.core.policy
                 " kingdom_repair_queue=" + kingdomRepairQueue +
                 " army_count=" + armyCount +
                 " frame_ms=" + Milliseconds(frameTicks) +
+                " scheduler_stage_ms=" +
+                schedulerStages.FormatMilliseconds() +
+                " scheduler_total_ms=" +
+                Milliseconds(schedulerStages.SchedulerTicks) +
+                " scheduler_unaccounted_ms=" +
+                Milliseconds(schedulerStages.UnaccountedTicks) +
+                " scheduler_host_unaccounted_ms=" +
+                Milliseconds(schedulerStages.HostUnaccountedTicks) +
+                " simulation_coordinator=" +
+                AWSimulationCoordinatorThread.Instance.GetDiagnostics() +
                 " worst_frame=" + _worstFrameNumber +
                 " worst_frame_ms=" + Milliseconds(_worstFrameTicks) +
                 " worst_frame_stage=" + _worstFrameStageId +

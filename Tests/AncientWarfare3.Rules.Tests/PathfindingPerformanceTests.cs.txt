@@ -1,11 +1,14 @@
 using System.Threading;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.performance;
 
 internal static class PathfindingPerformanceTests
 {
     public static void Run()
     {
+        SchedulerStageDiagnosticsAccumulateStableSnapshots();
+        ActorTimerWorkUsesBoundedRanges();
         WorkClassesPreserveOperationalCapacityWithFairness();
         RuntimeSubmittersClassifyPathWorkExplicitly();
         RequestKeysMatchWithoutAllocating();
@@ -41,6 +44,49 @@ internal static class PathfindingPerformanceTests
         InitialTraversalPublicationCannotStarveOnLiveDirtyChunks();
         SparseOverlayGenerationAvoidsFullChunkCopy();
         LargeSchedulerPathProgressRules();
+    }
+
+    private static void SchedulerStageDiagnosticsAccumulateStableSnapshots()
+    {
+        AWSchedulerStageDiagnostics.BeginFrame(pSampling: true);
+        long frameStarted = AWSchedulerStageDiagnostics.BeginSchedulerFrame();
+        long actorStarted = AWSchedulerStageDiagnostics.Begin(
+            AWSchedulerStageBucket.Actors);
+        Thread.SpinWait(128);
+        AWSchedulerStageDiagnostics.End(
+            AWSchedulerStageBucket.Actors, actorStarted);
+        AWSchedulerStageDiagnostics.EndSchedulerFrame(frameStarted);
+
+        AWSchedulerStageDiagnosticSnapshot snapshot =
+            AWSchedulerStageDiagnostics.TakeSnapshot().WithFrameTicks(
+                long.MaxValue);
+        Assert(snapshot.Calls[(int)AWSchedulerStageBucket.Actors] == 1,
+            "actor stage diagnostics record one call");
+        Assert(snapshot.TotalTicks > 0L && snapshot.SchedulerTicks > 0L,
+            "scheduler diagnostics retain stage and frame totals");
+        Assert(snapshot.HostUnaccountedTicks >= 0L &&
+               snapshot.UnaccountedTicks >= 0L,
+            "scheduler diagnostics clamp unaccounted time");
+        Assert(snapshot.FormatMilliseconds().Contains("actors:",
+                StringComparison.Ordinal),
+            "actor stage diagnostics expose a stable label");
+
+        AWSchedulerStageDiagnosticSnapshot consumed =
+            AWSchedulerStageDiagnostics.TakeSnapshot();
+        Assert(consumed.Calls[(int)AWSchedulerStageBucket.Actors] == 0,
+            "taking a scheduler snapshot consumes the current frame buckets");
+    }
+
+    private static void ActorTimerWorkUsesBoundedRanges()
+    {
+        string runner = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWCooperativeActorParallelJobRunner.cs"));
+        Assert(runner.Contains("private const int TimerRangeSize = 128;",
+                StringComparison.Ordinal) &&
+               runner.Contains("start += TimerRangeSize",
+                   StringComparison.Ordinal),
+            "actor timer workers partition batches into bounded 128-actor ranges");
     }
 
     private static void RuntimeSubmittersClassifyPathWorkExplicitly()

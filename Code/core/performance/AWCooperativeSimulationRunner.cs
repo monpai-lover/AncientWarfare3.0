@@ -258,6 +258,8 @@ namespace AncientWarfare3.core.performance
                 return;
             }
 
+            long schedulerStarted =
+                AWSchedulerStageDiagnostics.BeginSchedulerFrame();
             try
             {
                 AWFramePriorityGovernor.BeginFrame();
@@ -437,6 +439,11 @@ namespace AncientWarfare3.core.performance
             {
                 Abort();
                 throw;
+            }
+            finally
+            {
+                AWSchedulerStageDiagnostics.EndSchedulerFrame(
+                    schedulerStarted);
             }
         }
 
@@ -1087,6 +1094,20 @@ namespace AncientWarfare3.core.performance
 
         private void ExecuteCurrentStageCore()
         {
+            AWSchedulerStageBucket bucket = GetDiagnosticBucket(_stage);
+            long started = AWSchedulerStageDiagnostics.Begin(bucket);
+            try
+            {
+                ExecuteCurrentStageCoreUnmeasured();
+            }
+            finally
+            {
+                AWSchedulerStageDiagnostics.End(bucket, started);
+            }
+        }
+
+        private void ExecuteCurrentStageCoreUnmeasured()
+        {
             switch (_stage)
             {
                 case SimulationStage.DirtyCleanup:
@@ -1354,6 +1375,52 @@ namespace AncientWarfare3.core.performance
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        private static AWSchedulerStageBucket GetDiagnosticBucket(
+            SimulationStage pStage)
+        {
+            switch (pStage)
+            {
+                case SimulationStage.DirtyCleanup:
+                case SimulationStage.Maintenance:
+                    return AWSchedulerStageBucket.Maintenance;
+                case SimulationStage.MapChunks:
+                case SimulationStage.MapLayersUpdate:
+                case SimulationStage.MapLayersDraw:
+                case SimulationStage.MapModules:
+                    return AWSchedulerStageBucket.Map;
+                case SimulationStage.Cities:
+                    return AWSchedulerStageBucket.Cities;
+                case SimulationStage.ActorsStart:
+                case SimulationStage.Actors:
+                    return AWSchedulerStageBucket.Actors;
+                case SimulationStage.BuildingsStart:
+                case SimulationStage.Buildings:
+                    return AWSchedulerStageBucket.Buildings;
+                case SimulationStage.Armies:
+                    return AWSchedulerStageBucket.Armies;
+                case SimulationStage.Kingdoms:
+                    return AWSchedulerStageBucket.Kingdoms;
+                case SimulationStage.Statuses:
+                    return AWSchedulerStageBucket.Statuses;
+                case SimulationStage.Aw3RtsLogicalPulse:
+                case SimulationStage.Aw3Authority:
+                    return AWSchedulerStageBucket.Aw3Authority;
+                case SimulationStage.Explosions:
+                case SimulationStage.CityZones:
+                case SimulationStage.NutritionTimer:
+                case SimulationStage.WorldTime:
+                case SimulationStage.Taxi:
+                case SimulationStage.MetaHistory:
+                case SimulationStage.AnimationTime:
+                case SimulationStage.EnemyCache:
+                case SimulationStage.ControllableUnit:
+                case SimulationStage.Heat:
+                    return AWSchedulerStageBucket.World;
+                default:
+                    return AWSchedulerStageBucket.OtherVanilla;
             }
         }
 

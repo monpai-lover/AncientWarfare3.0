@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 
@@ -26,6 +27,9 @@ namespace AncientWarfare3.core.performance
         private long _operationStartedAt;
         private long _operationCompletedAt;
         private long _operationWaitTicks;
+        private long _completedOperations;
+        private long _completedWallTicks;
+        private long _completedWaitTicks;
 
         private AWSimulationCoordinatorThread()
         {
@@ -174,8 +178,36 @@ namespace AncientWarfare3.core.performance
                 _operationWaitTicks = 0L;
             }
 
+            Interlocked.Increment(ref _completedOperations);
+            Interlocked.Add(ref _completedWallTicks, result.WallTicks);
+            Interlocked.Add(ref _completedWaitTicks, result.WaitTicks);
             exception?.Throw();
             return result;
+        }
+
+        internal string GetDiagnostics()
+        {
+            bool active;
+            string activeName;
+            lock (_gate)
+            {
+                active = _operationActive;
+                activeName = _operationName;
+            }
+
+            return string.Format(CultureInfo.InvariantCulture,
+                "ops={0} wall={1:0.0}ms wait={2:0.0}ms active={3} name={4}",
+                Interlocked.Read(ref _completedOperations),
+                TicksToMilliseconds(
+                    Interlocked.Read(ref _completedWallTicks)),
+                TicksToMilliseconds(
+                    Interlocked.Read(ref _completedWaitTicks)),
+                active ? 1 : 0, activeName ?? "none");
+        }
+
+        private static double TicksToMilliseconds(long pTicks)
+        {
+            return Math.Max(0L, pTicks) * 1000d / Stopwatch.Frequency;
         }
 
         internal void WaitAndDiscard(WorkTicket pTicket)
