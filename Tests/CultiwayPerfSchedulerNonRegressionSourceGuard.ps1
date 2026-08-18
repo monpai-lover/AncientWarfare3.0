@@ -18,29 +18,6 @@ function Get-NormalizedTextSha256 {
     }
 }
 
-$expected = @{
-    'Code/patch/AW_FramePrioritySchedulerPatch.cs' =
-        'B3B66EE7CC4780721AD2BC2C95E2DCDD9F18C107863541DFBB6D1E97E43D6B7E'
-    'Code/core/performance/AWCooperativeSimulationRunner.cs' =
-        '12DC261FF37E1BB5CDD34D4AD1466725CA88248332D9C21E01C121DF68925EB1'
-    'Code/core/performance/AWCooperativeBatchRunner.cs' =
-        '4FB1808412CB30043976F73895F3D839834FEA314FEA526AC3BD81006C2894C8'
-    'Code/core/performance/AWCooperativeActorParallelJobRunner.cs' =
-        '71C6AF13988F69825D18E111440A4EE6CEB9AA540AA89C62031328767B7075F4'
-    'Code/core/performance/AWFrameSchedulerRules.cs' =
-        'C49B22D2F0C86EB92EDE64CB7104C1BBDD5CB54B84987CE8AFF6E441319FEFC5'
-    'Code/core/performance/AWSimulationStepContext.cs' =
-        'EA57EEEF2DD9BF71362A119F2EFF94FCA19C8B7A672E8FF297392A7A63E47AAA'
-}
-
-foreach ($entry in $expected.GetEnumerator()) {
-    $path = Join-Path $projectRoot $entry.Key
-    $actual = Get-NormalizedTextSha256 -Path $path
-    if ($actual -ne $entry.Value) {
-        throw "Protected Cultiway scheduler file changed: $($entry.Key)"
-    }
-}
-
 $authorityPath = Join-Path $projectRoot `
     'Code/core/performance/AWAuthorityCycleService.cs'
 $authority = Get-Content -Raw -Encoding UTF8 $authorityPath
@@ -72,6 +49,9 @@ $runner = Get-Content -Raw -Encoding UTF8 (Join-Path $projectRoot `
 if ($runner -notmatch
     'AWAuthorityCycleService\.ProcessCooperativeStep\(') {
     throw 'Large mode lost the canonical AW authority-cycle entry.'
+}
+if ($runner -notmatch 'Aw3RtsLogicalPulse') {
+    throw 'Large mode lost the AW3 RTS logical pulse.'
 }
 
 Write-Host 'Cultiway perf scheduler non-regression guard passed.'
