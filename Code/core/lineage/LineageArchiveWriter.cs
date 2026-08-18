@@ -212,14 +212,6 @@ namespace AncientWarfare3.core.lineage
                 false);
             pActor.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID,
                 out long foundedBranchShi, -1);
-            long resolvedFoundedBranchShi = LineageQuery.
-                ResolveOwnedFoundedBranch(pActor.data.id, foundedBranchShi);
-            if (resolvedFoundedBranchShi != foundedBranchShi)
-            {
-                foundedBranchShi = resolvedFoundedBranchShi;
-                pActor.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID,
-                    foundedBranchShi);
-            }
             pActor.data.get(LineageKeys.DEATH_CAUSE, out string deathCause, "");
             var nobleBlood = ResolveNobleBloodSnapshot(pActor, pPrevious,
                 nobleDist);

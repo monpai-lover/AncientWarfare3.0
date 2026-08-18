@@ -926,7 +926,9 @@ namespace AncientWarfare3.core.lineage
                 pReason = "duplicate";
                 return false;
             }
-            if (!IsEligibleCandidate(pCandidate, pSource, out pReason) ||
+            if (!IsEligibleCandidate(pCandidate, pSource,
+                    RulerHouseholdKind.Consort, pDomestic: false,
+                    out pReason) ||
                 query.TryReadActiveByPartner(pCandidate.data.id, out _) ||
                 SafeRelated(pOwner, pCandidate))
             {
@@ -1001,11 +1003,18 @@ namespace AncientWarfare3.core.lineage
             var query = new RulerHouseholdQuery(DB);
             long lineageId = ResolveRulingLineageId(pSource);
             IReadOnlyList<long> ids = query.ReadOfferCandidateIds(
-                pSource.id, lineageId, MaximumPlayerCandidateActors);
+                pKingdomId: pSource.id,
+                pRulingLineageId: lineageId,
+                pExcludedParentId: -1L,
+                pKind: RulerHouseholdKind.Consort,
+                pIncludeSlaves: false,
+                pRequestedLimit: MaximumPlayerCandidateActors);
             for (int index = 0; index < ids.Count; index++)
             {
                 Actor candidate = FindActor(ids[index]);
-                if (!IsEligibleCandidate(candidate, pSource, out _) ||
+                if (!IsEligibleCandidate(candidate, pSource,
+                        RulerHouseholdKind.Consort, pDomestic: false,
+                        out _) ||
                     query.TryReadActiveByPartner(ids[index], out _))
                     continue;
                 result.Add(candidate);
