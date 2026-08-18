@@ -1344,7 +1344,7 @@ namespace AncientWarfare3.core.performance
                     break;
                 case SimulationStage.Aw3RtsLogicalPulse:
                     ArmyRtsSchedulingService.ProcessLogicalPass(
-                        _logicalTicksAdmitted, _cyclePaused);
+                        _logicalTicksAdmitted, _cyclePaused, _cycleMode);
                     Advance(_cycleMode == AWSimulationMode.Large &&
                             _simulationPassesRemaining > 1
                         ? SimulationStage.Complete

@@ -55,7 +55,7 @@ if ($controller -match 'if\s*\(!exact\s*&&\s*!border\s*&&\s*currentZone\s*==\s*n
 }
 
 $scheduler = Read-Source 'Code\core\performance\ArmyRtsSchedulingService.cs'
-Require-Contains $scheduler 'ArmyRtsExecutionBudgetRules.Capture(simulationMode,' 'RTS logical passes must use one stable pending snapshot.'
+Require-Contains $scheduler 'ArmyRtsExecutionBudgetRules.Capture(pSimulationMode,' 'RTS logical passes must use one admitted mode and stable pending snapshot.'
 Require-Contains $scheduler 'ArmyRouteProviderService.ProcessFrame' 'Route planning must retain its independent bounded pulse.'
 if ($scheduler -match 'Process(?:Frame|AuthorityCycle|PendingRecoveries)\s*\(\s*int\.MaxValue') {
     throw 'RTS drains must never use int.MaxValue as a live queue budget.'

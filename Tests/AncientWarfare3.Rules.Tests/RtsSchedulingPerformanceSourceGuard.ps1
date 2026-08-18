@@ -57,7 +57,7 @@ Require-Contains $deferredService 'ShouldStartFrameDrain' 'Deferred work must ga
 Require-Contains $deferredService '_lastDrainFrame' 'Deferred work must retain its last render-frame drain token.'
 
 $scheduler = Get-Content -Raw $schedulerPath
-Require-Contains $scheduler 'ArmyRtsExecutionBudgetRules.Capture(simulationMode,' 'RTS scheduling must capture one mode-aware budget at logical-pass entry.'
+Require-Contains $scheduler 'ArmyRtsExecutionBudgetRules.Capture(pSimulationMode,' 'RTS scheduling must use the mode snapshot captured at logical-pass entry.'
 foreach ($budget in @('budget.FirstOrders', 'budget.AbstractBattles',
         'budget.ControllerArmies', 'budget.ReplenishmentArrivals',
         'budget.WatchdogArmies', 'budget.LifecycleDiscoveries',

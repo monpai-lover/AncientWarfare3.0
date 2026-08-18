@@ -31,6 +31,8 @@ internal static class ArmyRtsSchedulingRulesTests
         string root = Directory.GetCurrentDirectory();
         string service = File.ReadAllText(Path.Combine(root, "Code", "core",
             "performance", "ArmyRtsSchedulingService.cs"));
+        string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeSimulationRunner.cs"));
         Assert(service.Contains("SharedGate", StringComparison.Ordinal),
             "both entry paths share one gate");
         Assert(!service.Contains("NativeGate", StringComparison.Ordinal) &&
@@ -41,9 +43,13 @@ internal static class ArmyRtsSchedulingRulesTests
             "large-step passes expose one RTS pulse boundary");
         Assert(service.Contains("ArmyRtsExecutionBudgetRules.Capture(",
                 StringComparison.Ordinal) &&
-               service.Contains("AWPerformanceSettings.Mode",
+               service.Contains("pSimulationMode",
                    StringComparison.Ordinal),
-            "each RTS pulse captures one mode-aware execution budget");
+            "each RTS pulse uses one admitted mode snapshot for its budget");
+        Assert(runner.Contains(
+                "_logicalTicksAdmitted, _cyclePaused, _cycleMode",
+                StringComparison.Ordinal),
+            "the cooperative runner passes its frozen cycle mode to RTS");
         Assert(service.Contains(
                 "budget.ControllerArmies, budget.ReplenishmentArrivals",
                 StringComparison.Ordinal),

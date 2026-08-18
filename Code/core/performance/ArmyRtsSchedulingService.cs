@@ -19,14 +19,21 @@ namespace AncientWarfare3.core.performance
             bool paused = World.world == null ||
                           World.world.isPaused();
             ProcessCycle(ArmyRtsSchedulerOwner.NativeArmyManager,
-                _nativeCycleToken, paused);
+                _nativeCycleToken, paused, AWPerformanceSettings.Mode);
         }
 
         public static void ProcessLogicalPass(long pCycleToken,
             bool pPaused)
         {
+            ProcessLogicalPass(pCycleToken, pPaused,
+                AWPerformanceSettings.Mode);
+        }
+
+        public static void ProcessLogicalPass(long pCycleToken,
+            bool pPaused, AWSimulationMode pSimulationMode)
+        {
             ProcessCycle(ArmyRtsSchedulerOwner.Aw3Authority,
-                pCycleToken, pPaused);
+                pCycleToken, pPaused, pSimulationMode);
         }
 
         // Compatibility entry used by the authority-cycle dispatcher. Keep
@@ -46,7 +53,8 @@ namespace AncientWarfare3.core.performance
         }
 
         private static void ProcessCycle(ArmyRtsSchedulerOwner pOwner,
-            long pCycleToken, bool pPaused)
+            long pCycleToken, bool pPaused,
+            AWSimulationMode pSimulationMode)
         {
             if (!_sessionStarted)
             {
@@ -58,9 +66,8 @@ namespace AncientWarfare3.core.performance
                 Config.game_loaded, SmoothLoader.isLoading(), pPaused,
                 AW3MultiplayerReplicaScope.IsReplicaSession);
             if (!SharedGate.TryEnter(pOwner, pCycleToken, allowed)) return;
-            AWSimulationMode simulationMode = AWPerformanceSettings.Mode;
             ArmyRtsExecutionBudget budget =
-                ArmyRtsExecutionBudgetRules.Capture(simulationMode,
+                ArmyRtsExecutionBudgetRules.Capture(pSimulationMode,
                     CapturePendingWork());
             CityMilitaryThreatFacts.BeginAuthorityCycle();
             try
@@ -89,9 +96,9 @@ namespace AncientWarfare3.core.performance
                     Measure(RecentFeatureBenchmarkRules.ArmyRtsWatchdogIndex,
                         () => ArmyStallWatchdogService.ProcessFrame(
                             budget.WatchdogArmies,
-                            pForceSample: simulationMode ==
+                            pForceSample: pSimulationMode ==
                                           AWSimulationMode.Large)));
-                if (simulationMode == AWSimulationMode.Large)
+                if (pSimulationMode == AWSimulationMode.Large)
                 {
                     Guard("war_lifecycle", () =>
                         ArmyRtsWarLifecycleService.ProcessAuthorityCycle(
