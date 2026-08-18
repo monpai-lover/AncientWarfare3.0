@@ -86,16 +86,16 @@ namespace AncientWarfare3.core.pathfinding
             if (state == AWPathOwnerState.Aw3)
                 TraversalCache.ProcessPendingBuild();
             if (_maintenanceFrame < long.MaxValue) _maintenanceFrame++;
-            int dirtyTileCount = TraversalCache.DirtyTileCount;
+            int dirtyChunkCount = TraversalCache.DirtyChunkCount;
             if (AWTraversalCacheBudgetRules.ShouldProcessDirty(
-                    _maintenanceFrame, dirtyTileCount))
+                    _maintenanceFrame, dirtyChunkCount))
             {
                 diagnostic = RuntimePerformanceDiagnostic.BeginScope();
                 try
                 {
                     TraversalCache.ProcessDirty(
-                        AWTraversalCacheBudgetRules.DirtyTileBudgetForFrame(
-                            dirtyTileCount));
+                        AWTraversalCacheBudgetRules.DirtyChunkBudgetForFrame(
+                            dirtyChunkCount));
                 }
                 finally
                 {

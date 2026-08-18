@@ -105,10 +105,6 @@ namespace AncientWarfare3.patch
                 core.lineage.DeferredRuntimeWorkService.FlushPersistent();
                 string deathArchiveError = string.Empty;
                 string asyncWriteError = string.Empty;
-                bool successionWritesAccepted =
-                    SuccessionPreparationService.PreparePendingPersistenceForSave();
-                bool rulerDeathWritesAccepted =
-                    CivilServiceExamService.PreparePendingRulerDeathPersistenceForSave();
                 HistoricalSchoolSavePreparationResult preparation =
                     HistoricalSchoolSavePreparation.Run(
                         HistoricalSchoolDescentService.
@@ -116,7 +112,7 @@ namespace AncientWarfare3.patch
                         SchoolMembershipService.FlushDeathRetriesForSave,
                         NobleRankService.
                             FlushPendingDeathSuccessionsForSave,
-                        SchoolGuestOfficeService.FlushPendingForSave,
+                        HistoricalSchoolWriteBufferService.FlushForSave,
                         HistoricalSchoolActivityQueue.
                             FlushPendingPersistenceForSave,
                         () =>
@@ -133,19 +129,8 @@ namespace AncientWarfare3.patch
                                 ResolveSaveTimeoutSeconds(5,
                                     ActorDeathArchiveService.PendingCount)),
                             out deathArchiveError),
-                        () =>
-                        {
-                            successionWritesAccepted =
-                                SuccessionPreparationService.PreparePendingPersistenceForSave();
-                            rulerDeathWritesAccepted =
-                                CivilServiceExamService.PreparePendingRulerDeathPersistenceForSave();
-                            bool flushed = HistoricalWriteService.FlushForSave(
-                                TimeSpan.FromSeconds(5), out asyncWriteError);
-                            return successionWritesAccepted &&
-                                   rulerDeathWritesAccepted && flushed &&
-                                   !SuccessionPreparationService.HasPendingPersistence &&
-                                   !CivilServiceExamService.HasPendingRulerDeathPersistence;
-                        },
+                        () => HistoricalWriteService.FlushForSave(
+                            TimeSpan.FromSeconds(5), out asyncWriteError),
                         HistoricalSchoolRuntime.FlushPendingStateForSave);
                 if (!preparation.AllResolved)
                 {

@@ -168,7 +168,7 @@ namespace AncientWarfare3.core.performance
             int pathWorkers = PathfindingWorkerCount(pProcessorCount);
             int armyRouteWorkers = 0;
             int actorPathWorkers = pathWorkers;
-            int foregroundParallelism = Math.Max(1, total - pathWorkers);
+            int foregroundParallelism = ForegroundParallelism(pProcessorCount);
             return new AWPathWorkerAllocation(total, actorPathWorkers,
                 armyRouteWorkers, foregroundParallelism);
         }

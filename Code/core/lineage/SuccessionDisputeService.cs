@@ -1027,10 +1027,15 @@ namespace AncientWarfare3.core.lineage
         {
             if (pRow == null || pKingdom?.data == null ||
                 pClaimant?.data == null) return false;
-            return HeirService.StoreSelectedHeir(pKingdom, pClaimant,
-                string.IsNullOrEmpty(pRow.ClaimantMode)
-                    ? SuccessionMode.COLLATERAL_RESTORE
-                    : pRow.ClaimantMode);
+            try
+            {
+                HeirService.StoreSelectedHeir(pKingdom, pClaimant,
+                    string.IsNullOrEmpty(pRow.ClaimantMode)
+                        ? SuccessionMode.COLLATERAL_RESTORE
+                        : pRow.ClaimantMode);
+                return HeirService.IsCurrentHeir(pKingdom, pClaimant);
+            }
+            catch { return false; }
         }
 
         private static void SettleReunification(

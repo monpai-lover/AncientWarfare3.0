@@ -10,7 +10,10 @@ namespace AncientWarfare3.core.pathfinding
 
         internal bool Register(AWDockEndpoint pDock)
         {
-            if (!pDock.IsValid) return false;
+            // The registry stores physical dock portals only. Shore
+            // fallbacks (Id == 0) live in the transport service's separate
+            // endpoint list and must not pollute the portal index.
+            if (!pDock.IsDockPortal) return false;
             _docks[pDock.Id] = pDock;
             return true;
         }

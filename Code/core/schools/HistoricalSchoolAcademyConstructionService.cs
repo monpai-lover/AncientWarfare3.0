@@ -69,7 +69,30 @@ namespace AncientWarfare3.core.schools
             LastPlacementAttemptYear.Remove(pCityId);
         }
 
+        public static void OnAcademyRemoved(City pCity, Building pAcademy)
+        {
+            long cityId = pCity?.data?.id ?? -1L;
+            long buildingId = pAcademy?.data?.id ?? -1L;
+            if (cityId < 0 || buildingId < 0) return;
+            if (StartedAcademies.TryGetValue(cityId, out Building started) &&
+                (ReferenceEquals(started, pAcademy) ||
+                 started?.data?.id == buildingId))
+                StartedAcademies.Remove(cityId);
+            PlacementAttempts.Remove(cityId);
+            LastPlacementAttemptYear.Remove(cityId);
+            long constructionId = pCity.under_construction_building?.data?.id ?? -1L;
+            if (HistoricalSchoolAcademyRepairRules.ShouldClearConstructionBinding(
+                    buildingId, constructionId))
+                pCity.under_construction_building = null;
+        }
+
         public static Building TryStart(City pCity)
+        {
+            return TryStartCore(pCity, null);
+        }
+
+        private static Building TryStartCore(City pCity,
+            WorldTile pPreferredTile)
         {
             BuildingAsset asset = SchoolAcademyBuildingContent.Asset ??
                                   AssetManager.buildings.get(
@@ -112,7 +135,11 @@ namespace AncientWarfare3.core.schools
                     ? previousAttempt
                     : 0;
                 PlacementAttempts[cityId] = attempt == int.MaxValue ? 0 : attempt + 1;
-                WorldTile placement = FindPlacement(pCity, asset, attempt);
+                WorldTile placement = pPreferredTile != null &&
+                                      CanBuildAt(pCity, asset,
+                                          pPreferredTile)
+                    ? pPreferredTile
+                    : FindPlacement(pCity, asset, attempt);
                 bool academyAppeared =
                     HistoricalSchoolAcademyService.HasLiveAcademy(pCity);
                 if (!SchoolAcademyConstructionRules.ShouldStart(
@@ -164,6 +191,27 @@ namespace AncientWarfare3.core.schools
             return asset != null &&
                    (asset.id == SchoolAcademyBuildingContent.BuildingId ||
                     asset.type == SchoolAcademyBuildingContent.BuildingTypeId);
+        }
+
+        public static bool CanStartAt(City pCity, WorldTile pTile)
+        {
+            if (!IsValidCity(pCity)) return false;
+            BuildingAsset asset = SchoolAcademyBuildingContent.Asset ??
+                AssetManager.buildings.get(
+                    SchoolAcademyBuildingContent.BuildingId);
+            return asset != null &&
+                   !HistoricalSchoolAcademyService.HasLiveAcademy(pCity) &&
+                   CanBuildAt(pCity, asset, pTile);
+        }
+
+        public static Building TryStartAt(City pCity, WorldTile pTile)
+        {
+            // The normal constructor owns placement bookkeeping and all
+            // duplicate/construction guards. Fall back to it when a saved
+            // tile is no longer buildable instead of bypassing those guards.
+            return CanStartAt(pCity, pTile)
+                ? TryStartCore(pCity, pTile)
+                : null;
         }
 
         private static bool IsStartedAcademyAlive(Building pBuilding, City pCity)

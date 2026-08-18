@@ -44,7 +44,6 @@ namespace AncientWarfare3.core.performance
             DynasticMaleLineContinuityService.Reset();
             EnclosedUnownedZoneRepairService.Reset();
             EmptyCityResettlementService.Reset();
-            KingdomExtinctionQueue.ClearRuntime();
             WarScoreService.ClearPendingCityOccupations();
             CivilServiceExamService.ClearRuntime();
             WesternCourtElectionService.Reset();
@@ -62,9 +61,9 @@ namespace AncientWarfare3.core.performance
             ZhuluAgeDirectorService.Reset();
             AWLocalizedNameMigrationService.Reset();
             WesternLineageMigrationService.Reset();
-            IntegratedCultureNamingMigrationService.Reset();
-            NameIntegrationMaterializationService.Reset();
             KingdomInstitutionalXiaizationService.Reset();
+            ReigningRoyalLineageIndex.Reset();
+            SuccessionDisputePersistenceService.Reset();
             ActorDeathArchiveService.Reset();
         }
 
@@ -79,10 +78,10 @@ namespace AncientWarfare3.core.performance
 
             WesternCourtElectionService.ProcessAuthorityCycle();
             AccessionIdentityService.ProcessDeferredInstallations();
+            ReigningRoyalLineageIndex.ProcessAuthorityCycle();
+            SuccessionDisputePersistenceService.ProcessAuthorityCycle();
             AWLocalizedNameMigrationService.ProcessAuthorityCycle();
             WesternLineageMigrationService.ProcessAuthorityCycle();
-            IntegratedCultureNamingMigrationService.ProcessAuthorityCycle();
-            NameIntegrationMaterializationService.ProcessAuthorityCycle();
             KingdomInstitutionalXiaizationService.ProcessAuthorityCycle();
             DynasticMaleLineContinuityService.ProcessAuthorityCycle();
             NobleHeirPregnancyService.ProcessAuthorityCycle();
@@ -110,6 +109,7 @@ namespace AncientWarfare3.core.performance
                 WarForceEliminationSettlementService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.MonthKingdomPolicyIndex,
                 KingdomDecisionMonthlyService.ProcessAuthorityCycle);
+            TemporaryLevyService.ProcessLegacyMigration();
             Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                 CityReservePoolService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
@@ -135,7 +135,8 @@ namespace AncientWarfare3.core.performance
 
         private static void DrainDeferredAuthorityWork()
         {
-            int itemLimit = AuthorityDeferredDrainRules.ResolveItemLimit(
+            int itemLimit = DeferredRuntimeWorkRules.
+                ResolveItemsPerAuthorityFrame(
                 DeferredRuntimeWorkService.PendingCount);
             if (itemLimit <= 0) return;
             DeferredRuntimeWorkService.DrainFrame(pMilliseconds: 1.0,
@@ -146,6 +147,26 @@ namespace AncientWarfare3.core.performance
         {
             WarParticipantEntrySourceService.Instance.
                 FlushPendingSources(32);
+        }
+
+        // The cooperative runner is retained as the owner of the staged
+        // simulation. This compatibility surface delegates to the existing
+        // authority pass and never reintroduces removed migration stages.
+        public static bool ProcessCooperativeStep(long pCycleToken,
+            bool pCyclePaused)
+        {
+            ProcessCooperativeCycle(pCycleToken, pCyclePaused);
+            return true;
+        }
+
+        public static void AbortCooperativeCycle()
+        {
+            CooperativeGate.Reset();
+        }
+
+        public static string GetCooperativePhaseName()
+        {
+            return "aw3.authority";
         }
 
         private static void Measure(int pIndex, System.Action pAction)

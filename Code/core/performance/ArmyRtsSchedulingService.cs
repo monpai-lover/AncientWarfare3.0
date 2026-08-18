@@ -29,6 +29,14 @@ namespace AncientWarfare3.core.performance
                 pCycleToken, pPaused);
         }
 
+        // Compatibility entry used by the authority-cycle dispatcher. Keep
+        // one owner/token path so a logical pass cannot run twice.
+        public static void ProcessAw3Authority(long pCycleToken,
+            bool pPaused)
+        {
+            ProcessLogicalPass(pCycleToken, pPaused);
+        }
+
         public static void Reset()
         {
             SharedGate.Reset();

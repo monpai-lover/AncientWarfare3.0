@@ -149,7 +149,10 @@ namespace AncientWarfare3.core.pathfinding
         {
             return ageTicks >= 0L && maximumAgeTicks >= 0L &&
                    ageTicks <= maximumAgeTicks &&
-                   pExisting.Equals(pRequested);
+                   pExisting.ActorId == pRequested.ActorId &&
+                   pExisting.Request.Equals(pRequested.Request) &&
+                   pExisting.WorldGeneration == pRequested.WorldGeneration &&
+                   pExisting.InsideBoat == pRequested.InsideBoat;
         }
 
         public static int ClampCompletedCapacity(int pCapacity)
@@ -242,6 +245,8 @@ namespace AncientWarfare3.core.pathfinding
     public static class AWPathLifecycleRules
     {
         private const string CityFoodTaskId = "try_to_eat_city_food";
+        private const float VanillaEmptyVectorX = -100000f;
+        private const float VanillaEmptyVectorY = -10000f;
 
         public const int MaximumConsecutivePriorityRequests = 8;
         public const double AcceptedNoProgressTimeoutSeconds = 30d;
@@ -249,6 +254,33 @@ namespace AncientWarfare3.core.pathfinding
         public const double EssentialTravelWaitingPollSeconds = 0.15d;
         public const double NormalWaitingPollSeconds = 0.25d;
         public const int MaximumSmoothPathStepsPerUpdate = 24;
+
+        public static bool IsValidMovementTarget(float pX, float pY)
+        {
+            if (float.IsNaN(pX) || float.IsNaN(pY) ||
+                float.IsInfinity(pX) || float.IsInfinity(pY))
+                return false;
+            return pX != VanillaEmptyVectorX || pY != VanillaEmptyVectorY;
+        }
+
+        public static bool IsInsideMap(float pX, float pY,
+            float pWidth, float pHeight)
+        {
+            if (float.IsNaN(pX) || float.IsNaN(pY) ||
+                float.IsNaN(pWidth) || float.IsNaN(pHeight) ||
+                float.IsInfinity(pX) || float.IsInfinity(pY) ||
+                float.IsInfinity(pWidth) || float.IsInfinity(pHeight))
+                return false;
+            return pWidth > 0f && pHeight > 0f &&
+                   pX >= 0f && pY >= 0f && pX < pWidth && pY < pHeight;
+        }
+
+        public static bool ShouldReportMovementAnomaly(bool currentOutside,
+            bool nextOutside, bool nextTargetEmpty, bool actorMoving)
+        {
+            return currentOutside || nextOutside ||
+                   nextTargetEmpty && actorMoving;
+        }
 
         public static bool ShouldServeNormalQueue(int pPriorityCount,
             int pNormalCount, int pConsecutivePriorityRequests)
@@ -271,6 +303,12 @@ namespace AncientWarfare3.core.pathfinding
         {
             return largeSchedulerEnabled && hasCustomPathState &&
                    !hasVanillaLocalPath && !hasVanillaGlobalPath;
+        }
+
+        public static bool ShouldAdvanceSmoothMovement(bool actorMoving,
+            bool nextStepValid)
+        {
+            return actorMoving && nextStepValid;
         }
 
         public static bool ShouldExpirePendingRequest(double startedAt,

@@ -31,7 +31,9 @@ namespace AncientWarfare3.core.pathfinding
 
         public int GenerationId => (_overlayGeneration ?? _current)?.Id ?? -1;
         public long SourceRevision => _sourceRevision;
+        internal long TopologySourceRevision => _sourceRevision;
         public int DirtyChunkCount => _dirtyChunks.Count;
+        public int DirtyTileCount => DirtyChunkCount;
         public int PendingOverlayChunkCount => _overlay.Count;
 
         public int StartRegion(int pTileId)
@@ -487,7 +489,7 @@ namespace AncientWarfare3.core.pathfinding
             }
             var next = new AWTraversalGeneration(++_generationId,
                 pResult.Width, pResult.Height, pResult.ChunkSize,
-                pResult.Chunks);
+                pResult.Chunks, pResult.RegionTopology);
             AWTraversalGeneration previous = _current;
             _overlayBuildScheduled = false;
             _current = next;

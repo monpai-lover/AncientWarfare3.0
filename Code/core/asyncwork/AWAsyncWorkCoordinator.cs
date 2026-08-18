@@ -434,6 +434,7 @@ namespace AncientWarfare3.core.asyncwork
                         completion.Error);
                     continue;
                 }
+                long commitStarted = Stopwatch.GetTimestamp();
                 try
                 {
                     commit.Commit(completion.Result);
@@ -444,7 +445,18 @@ namespace AncientWarfare3.core.asyncwork
                     _diagnostics.RecordFaulted();
                     NotifyFault(commit, AWAsyncFaultPhase.Commit, error);
                 }
+                finally
+                {
+                    _diagnostics.RecordMainThreadCommit(commit.Key,
+                        commit.Lane,
+                        Stopwatch.GetTimestamp() - commitStarted);
+                }
             }
+        }
+
+        public AWAsyncCommitTimingSnapshot TakeMainThreadCommitTiming()
+        {
+            return _diagnostics.TakeMainThreadCommitTiming();
         }
 
         public AWAsyncDiagnosticsSnapshot SnapshotDiagnostics()
@@ -683,77 +695,130 @@ namespace AncientWarfare3.core.asyncwork
 
         private void WorkerLoop()
         {
+            // Keep the raw thread entry point bounded. Any exception escaping
+            // queue bookkeeping or a worker-side commit would otherwise
+            // terminate the process without reaching the mod logger.
             while (true)
             {
-                WorkerItem item;
-                lock (_gate)
-                {
-                    if (_shutdownRequested) return;
-                    if (!TryTakeNextLocked(out item))
-                    {
-                        item = null;
-                    }
-                    else
-                    {
-                        _activeWorkerCount++;
-                    }
-                }
-                if (item == null)
-                {
-                    _workSignal.Wait(100);
-                    continue;
-                }
-
-                object result = null;
-                Exception error = null;
+                bool workerCounted = false;
                 try
                 {
-                    result = item.Execute(item.Token);
+                    if (!RunWorkerIteration(ref workerCounted)) return;
                 }
-                catch (Exception caught)
+                catch (Exception error)
                 {
-                    error = caught;
+                    ReportWorkerLoopFault(error);
+                    if (workerCounted) ReleaseFaultedWorkerSlot();
                 }
+            }
+        }
 
-                var completion = new Completion
-                {
-                    Id = item.Id,
-                    Stamp = item.Stamp,
-                    Result = result,
-                    Error = error
-                };
-                if (item.CommitOnWorker)
-                {
-                    RunWorkerCommit(item, result, error);
-                    lock (_gate)
-                    {
-                        _activeWorkerCount--;
-                        if (_activeWorkerCount == 0)
-                            DisposeRetiredCancellationsLocked();
-                        Monitor.PulseAll(_gate);
-                    }
-                    continue;
-                }
+        private void ReportWorkerLoopFault(Exception pError)
+        {
+            try
+            {
+                _diagnostics.RecordFaulted();
+                AncientWarfare3.ModClass.LogWarning(
+                    "[AW3 async worker] unhandled worker fault: " + pError);
+            }
+            catch
+            {
+            }
+        }
+
+        private void ReleaseFaultedWorkerSlot()
+        {
+            try
+            {
                 lock (_gate)
                 {
-                    if (item.Stamp.WorldGeneration != _worldGeneration)
-                    {
-                        _activeWorkerCount--;
-                        if (_activeWorkerCount == 0)
-                            DisposeRetiredCancellationsLocked();
-                        Monitor.PulseAll(_gate);
-                        continue;
-                    }
-                    while (!_shutdownRequested &&
-                           item.Stamp.WorldGeneration == _worldGeneration &&
-                           !_completions.TryEnqueue(completion))
-                        Monitor.Wait(_gate, 50);
-                    _activeWorkerCount--;
+                    if (_activeWorkerCount > 0) _activeWorkerCount--;
                     if (_activeWorkerCount == 0)
                         DisposeRetiredCancellationsLocked();
                     Monitor.PulseAll(_gate);
                 }
             }
+            catch
+            {
+            }
+        }
+
+        // Returns false when the worker should exit its loop.
+        private bool RunWorkerIteration(ref bool pWorkerCounted)
+        {
+            WorkerItem item;
+            lock (_gate)
+            {
+                if (_shutdownRequested) return false;
+                if (!TryTakeNextLocked(out item))
+                {
+                    item = null;
+                }
+                else
+                {
+                    _activeWorkerCount++;
+                    pWorkerCounted = true;
+                }
+            }
+            if (item == null)
+            {
+                _workSignal.Wait(100);
+                return true;
+            }
+
+            object result = null;
+            Exception error = null;
+            try
+            {
+                result = item.Execute(item.Token);
+            }
+            catch (Exception caught)
+            {
+                error = caught;
+            }
+
+            var completion = new Completion
+            {
+                Id = item.Id,
+                Stamp = item.Stamp,
+                Result = result,
+                Error = error
+            };
+            if (item.CommitOnWorker)
+            {
+                RunWorkerCommit(item, result, error);
+                lock (_gate)
+                {
+                    _activeWorkerCount--;
+                    pWorkerCounted = false;
+                    if (_activeWorkerCount == 0)
+                        DisposeRetiredCancellationsLocked();
+                    Monitor.PulseAll(_gate);
+                }
+                return true;
+            }
+            lock (_gate)
+            {
+                if (item.Stamp.WorldGeneration != _worldGeneration)
+                {
+                    _activeWorkerCount--;
+                    pWorkerCounted = false;
+                    if (_activeWorkerCount == 0)
+                        DisposeRetiredCancellationsLocked();
+                    Monitor.PulseAll(_gate);
+                    return true;
+                }
+                while (!_shutdownRequested &&
+                       item.Stamp.WorldGeneration == _worldGeneration &&
+                       !_completions.TryEnqueue(completion))
+                    Monitor.Wait(_gate, 50);
+                _activeWorkerCount--;
+                pWorkerCounted = false;
+                if (_activeWorkerCount == 0)
+                    DisposeRetiredCancellationsLocked();
+                Monitor.PulseAll(_gate);
+            }
+            return true;
         }
 
         private void RunWorkerCommit(WorkerItem pItem, object pResult,

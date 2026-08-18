@@ -8,14 +8,13 @@ namespace AncientWarfare3.core.pathfinding
     public static class AWTraversalCacheBudgetRules
     {
         public const int DirtyPublishIntervalFrames = 4;
+        public const int DirtyTileBudget = 128;
         public const int DirtyChunkBudget = 8;
         public const int AverageDirtyChunkBudgetPerFrame =
             DirtyChunkBudget / DirtyPublishIntervalFrames;
         public const int ConsistencySweepIntervalFrames = 16;
         public const int ConsistencyTileBudget = 16;
-        public const int MaximumDirtyTilesPerFrame = AverageDirtyChunkBudgetPerFrame *
-                                                    AWTraversalGeneration.DefaultChunkSize *
-                                                    AWTraversalGeneration.DefaultChunkSize;
+        public const int MaximumDirtyTilesPerFrame = DirtyTileBudget;
 
         public static bool ShouldProcessDirty(long frame, int dirtyChunkCount)
         {
@@ -27,6 +26,13 @@ namespace AncientWarfare3.core.pathfinding
         public static int DirtyChunkBudgetForFrame(int dirtyChunkCount)
         {
             return Math.Min(DirtyChunkBudget, Math.Max(0, dirtyChunkCount));
+        }
+
+        // Compatibility surface for callers that still report tile counts;
+        // the runtime scheduler uses the chunk-specific method above.
+        public static int DirtyTileBudgetForFrame(int dirtyTileCount)
+        {
+            return Math.Min(DirtyTileBudget, Math.Max(0, dirtyTileCount));
         }
 
         public static bool ShouldRunConsistencySweep(long frame)
@@ -46,14 +52,17 @@ namespace AncientWarfare3.core.pathfinding
         private readonly int _neighbor5;
         private readonly int _neighbor6;
         private readonly int _neighbor7;
+        private readonly bool _hasType;
 
         public AWTileTraversalSnapshot(int pId, int pX, int pY, bool ground = false,
             bool block = false, bool liquid = false, bool ocean = false, bool lava = false,
             bool fire = false, bool damageUnits = false, float terrainDamage = 0f,
             float walkMultiplier = 1f, bool goodForBoat = false, int oceanComponent = -1,
-            int regionId = -1, int islandId = -1, int[] pNeighbors = null)
+            int regionId = -1, int islandId = -1, int[] pNeighbors = null,
+            bool hasType = true)
         {
             Exists = pId >= 0;
+            _hasType = Exists && hasType;
             Id = pId;
             X = pX;
             Y = pY;
@@ -82,6 +91,7 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         public bool Exists { get; }
+        public bool HasType => _hasType;
         public int Id { get; }
         public int X { get; }
         public int Y { get; }
@@ -123,7 +133,7 @@ namespace AncientWarfare3.core.pathfinding
             return new AWTileTraversalSnapshot(Id, X, Y, Ground, Block,
                 Liquid, Ocean, Lava, Fire, DamageUnits, TerrainDamage,
                 WalkMultiplier, GoodForBoat, pComponent, RegionId, IslandId,
-                neighbors);
+                neighbors, HasType);
         }
 
         private static int Neighbor(int[] pNeighbors, int pIndex)
@@ -141,7 +151,7 @@ namespace AncientWarfare3.core.pathfinding
             bool pDiesInLava, bool pBurning, bool pStartsInLiquid, bool pStartsInWater,
             float pHealth, float pMaxHealth, float pStamina, float pMaxStamina,
             float pMovementSpeed, float pWaterDamage, float pStaminaRegeneration,
-            bool pIsMilitary = false)
+            bool pIsMilitary = false, bool pHasFastSwimming = false)
         {
             CanFly = pCanFly;
             IsBoat = pIsBoat;
@@ -161,6 +171,7 @@ namespace AncientWarfare3.core.pathfinding
             WaterDamage = Math.Max(0f, pWaterDamage);
             StaminaRegeneration = Math.Max(0f, pStaminaRegeneration);
             IsMilitary = pIsMilitary;
+            HasFastSwimming = pHasFastSwimming;
         }
 
         public bool CanFly { get; }
@@ -181,6 +192,7 @@ namespace AncientWarfare3.core.pathfinding
         public float WaterDamage { get; }
         public float StaminaRegeneration { get; }
         public bool IsMilitary { get; }
+        public bool HasFastSwimming { get; }
 
         public static AWActorTraversalProfile CreateWalker(float health, float stamina, float speed)
         {
@@ -196,11 +208,15 @@ namespace AncientWarfare3.core.pathfinding
         private readonly AWTileTraversalSnapshot[][] _chunks;
         private readonly IReadOnlyDictionary<int,
             AWTileTraversalSnapshot[]> _overlayChunks;
+        private static long _nextIdentity;
+        private readonly long _identity;
+        private readonly AWRegionTopologySnapshot _regionTopology;
         private AWTraversalGeneration _baseGeneration;
         private int _references = 1;
 
         internal AWTraversalGeneration(int pId, int pWidth, int pHeight, int pChunkSize,
-            AWTileTraversalSnapshot[][] pChunks)
+            AWTileTraversalSnapshot[][] pChunks,
+            AWRegionTopologySnapshot pRegionTopology = null)
         {
             Id = pId;
             Width = Math.Max(0, pWidth);
@@ -209,6 +225,9 @@ namespace AncientWarfare3.core.pathfinding
             ChunksWide = Math.Max(1, (Width + ChunkSize - 1) / ChunkSize);
             _chunks = pChunks ?? Array.Empty<AWTileTraversalSnapshot[]>();
             _overlayChunks = null;
+            _identity = Interlocked.Increment(ref _nextIdentity);
+            _regionTopology = pRegionTopology ?? AWRegionTopologySnapshot.Build(
+                _chunks, Width, Height, ChunkSize);
         }
 
         private AWTraversalGeneration(int pId, AWTraversalGeneration pBase,
@@ -222,6 +241,8 @@ namespace AncientWarfare3.core.pathfinding
             ChunkSize = pBase.ChunkSize;
             ChunksWide = pBase.ChunksWide;
             _chunks = Array.Empty<AWTileTraversalSnapshot[]>();
+            _identity = Interlocked.Increment(ref _nextIdentity);
+            _regionTopology = pBase.RegionTopology;
             if (pOverlays == null || pOverlays.Count == 0)
                 _overlayChunks = null;
             else
@@ -243,6 +264,8 @@ namespace AncientWarfare3.core.pathfinding
         public int ChunksWide { get; }
         public int TileCount => Width * Height;
         public int ReferenceCount => Math.Max(0, Volatile.Read(ref _references));
+        internal long Identity => _identity;
+        internal AWRegionTopologySnapshot RegionTopology => _regionTopology;
 
         public AWTraversalGeneration Retain()
         {

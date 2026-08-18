@@ -83,6 +83,25 @@ namespace AncientWarfare3.core.lineage
             _capitalRepairInProgress = false;
         }
 
+        internal static void EnsureRoyalClanAfterNativeAccession(
+            Kingdom pKingdom, Actor pActor)
+        {
+            if (pKingdom?.data == null || pActor?.data == null ||
+                pKingdom.king != pActor) return;
+            try
+            {
+                if (pActor.clan?.data == null)
+                    World.world?.clans?.newClan(pActor,
+                        pAddDefaultTraits: true);
+                pKingdom.trySetRoyalClan();
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Native royal house repair failed for actor " +
+                                    pActor.data.id + ": " + exception.Message);
+            }
+        }
+
         internal static void OnKingRemoved(Kingdom pKingdom, Actor pActor)
         {
             if (pKingdom?.data == null || pActor?.data == null) return;

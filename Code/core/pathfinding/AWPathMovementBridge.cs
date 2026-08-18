@@ -25,6 +25,8 @@ namespace AncientWarfare3.core.pathfinding
         private static readonly AWPathOwnershipIndex OwnedActors =
             new AWPathOwnershipIndex();
 
+        internal static int ActorGateCount => 0;
+
         public static ExecuteEvent Submit(Actor pActor, WorldTile pTarget, bool pPathOnWater,
             bool pWalkOnBlocks, bool pWalkOnLava, int pLimitPathfindingRegions)
         {
@@ -414,6 +416,43 @@ namespace AncientWarfare3.core.pathfinding
             return pActor?.data != null && HasOwnedPathState(pActor.data.id);
         }
 
+        internal static string DescribeRuntimeState(Actor pActor)
+        {
+            if (pActor?.data == null) return "actor_invalid";
+            try
+            {
+                long actorId = pActor.data.id;
+                AWPathFinder finder = AWPathfindingBootstrap.Finder;
+                AWPathPollResult poll = finder == null
+                    ? new AWPathPollResult(AWPathPollKind.NoRequest)
+                    : finder.Poll(actorId);
+                bool hasRetry = RetryContexts.TryGetValue(actorId,
+                    out RetryContext retry);
+                double retryDue = hasRetry && retry.Pending
+                    ? retry.DueTime : 0d;
+                double remaining = retryDue > 0d
+                    ? Math.Max(0d, retryDue - Time.realtimeSinceStartupAsDouble)
+                    : 0d;
+                return "poll=" + poll.Kind +
+                    ",failure=" + poll.FailureReason +
+                    ",retry=" + hasRetry +
+                    ",retry_pending=" + (hasRetry && retry.Pending) +
+                    ",retry_remaining=" + remaining.ToString("0.###") +
+                    ",worker_waiting=" + (finder != null &&
+                        finder.IsWaitingForWorker(actorId)) +
+                    ",worker_running=" + (finder != null &&
+                        finder.IsWorkerRunning(actorId)) +
+                    ",owned=" + HasOwnedPathState(actorId) +
+                    ",current=" + (pActor.current_tile?.data?.tile_id ?? -1) +
+                    ",target=" + (pActor.tile_target?.data?.tile_id ?? -1) +
+                    ",moving=" + pActor.is_moving;
+            }
+            catch (Exception error)
+            {
+                return "diagnostic_error=" + error.GetType().Name;
+            }
+        }
+
         internal static bool ShouldPollNow(Actor pActor)
         {
             if (pActor?.data == null) return true;
@@ -445,6 +484,145 @@ namespace AncientWarfare3.core.pathfinding
         private static bool HasOwnedPathState(long pActorId)
         {
             return OwnedActors.Contains(pActorId);
+        }
+
+        // Compatibility surface for the cooperative actor runner. The
+        // movement bridge remains the single owner of path polling; callers
+        // prepare a serial commit whenever native actor state is involved.
+        internal enum AWParallelPathMovementResult
+        {
+            NoPath,
+            Handled,
+            RequiresSerial
+        }
+
+        internal enum AWParallelSmoothMovementResult
+        {
+            Handled,
+            RequiresSerial
+        }
+
+        internal enum AWPreparedSmoothMovementKind : byte
+        {
+            None,
+            Calibration,
+            VanillaPath,
+            CustomPath,
+            StopMovement
+        }
+
+        internal readonly struct AWPreparedPathMovement
+        {
+            internal AWPreparedPathMovement(Actor pActor, bool pVanilla)
+            {
+                Vanilla = pVanilla;
+                Poll = default;
+                Cursor = default;
+                ActorId = pActor?.data?.id ?? -1L;
+                CurrentTileId = pActor?.current_tile?.data?.tile_id ?? -1;
+                TargetTileId = pActor?.tile_target?.data?.tile_id ?? -1;
+                LocalPathIndex = pActor?.current_path_index ?? -1;
+                HadGlobalPath = pActor?.current_path_global != null;
+            }
+
+            internal AWPreparedPathMovement(AWPathPollResult pPoll,
+                AWPathFinder.ReadyPathCursor pCursor)
+            {
+                Vanilla = false;
+                Poll = pPoll;
+                Cursor = pCursor;
+                ActorId = -1L;
+                CurrentTileId = -1;
+                TargetTileId = -1;
+                LocalPathIndex = -1;
+                HadGlobalPath = false;
+            }
+
+            internal bool Vanilla { get; }
+            internal AWPathPollResult Poll { get; }
+            internal AWPathFinder.ReadyPathCursor Cursor { get; }
+            internal long ActorId { get; }
+            internal int CurrentTileId { get; }
+            internal int TargetTileId { get; }
+            internal int LocalPathIndex { get; }
+            internal bool HadGlobalPath { get; }
+        }
+
+        internal readonly struct AWPreparedSmoothMovement
+        {
+            internal AWPreparedSmoothMovement(
+                AWPreparedSmoothMovementKind pKind,
+                float pWalkedDistance = 0f,
+                AWPathPollResult pPoll = default,
+                AWPathFinder.ReadyPathCursor pCursor = default)
+            {
+                Kind = pKind;
+                WalkedDistance = pWalkedDistance;
+                Poll = pPoll;
+                Cursor = pCursor;
+            }
+
+            internal AWPreparedSmoothMovementKind Kind { get; }
+            internal float WalkedDistance { get; }
+            internal AWPathPollResult Poll { get; }
+            internal AWPathFinder.ReadyPathCursor Cursor { get; }
+        }
+
+        internal static AWParallelPathMovementResult
+            TryRunParallelSafePathMovement(Actor pActor,
+                out AWPreparedPathMovement pPrepared)
+        {
+            pPrepared = default;
+            if (pActor?.data == null) return AWParallelPathMovementResult.NoPath;
+            pPrepared = new AWPreparedPathMovement(pActor, pVanilla: true);
+            return AWParallelPathMovementResult.RequiresSerial;
+        }
+
+        internal static PreparedNativePathCommitDecision
+            CommitPreparedPathMovement(Actor pActor,
+            AWPreparedPathMovement pPrepared)
+        {
+            if (pActor?.data == null) return PreparedNativePathCommitDecision.Drop;
+            if (pPrepared.Vanilla) pActor.updatePathMovement();
+            else Update(pActor);
+            return PreparedNativePathCommitDecision.Commit;
+        }
+
+        internal static AWParallelSmoothMovementResult
+            TryRunParallelSafeSmoothMovement(Actor pActor, float pElapsed,
+                out AWPreparedSmoothMovement pPrepared)
+        {
+            pPrepared = default;
+            if (pActor?.data == null || pActor._update_done || pActor.is_immovable)
+                return AWParallelSmoothMovementResult.Handled;
+            pPrepared = new AWPreparedSmoothMovement(
+                AWPreparedSmoothMovementKind.VanillaPath);
+            return AWParallelSmoothMovementResult.RequiresSerial;
+        }
+
+        internal static void CommitPreparedSmoothMovement(Actor pActor,
+            float pElapsed, AWPreparedSmoothMovement pPrepared)
+        {
+            if (pActor?.data == null) return;
+            if (pPrepared.Kind == AWPreparedSmoothMovementKind.VanillaPath)
+                pActor.updatePathMovement();
+            else if (pPrepared.Kind == AWPreparedSmoothMovementKind.CustomPath)
+                Update(pActor);
+            if (pActor.is_moving)
+                UpdateSmoothMovement(pActor, pElapsed,
+                    pPrepared.WalkedDistance);
+        }
+
+        private static bool HasArmyMarchState(Actor pActor)
+        {
+            try
+            {
+                return AWArmyMarchService.HasSerialMarchState(pActor);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public static bool ShouldUseCustomSmoothMovement(Actor pActor)

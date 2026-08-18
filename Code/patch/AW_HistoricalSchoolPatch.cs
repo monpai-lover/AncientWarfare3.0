@@ -35,7 +35,11 @@ namespace AncientWarfare3.patch
         private static void AcademyStartDestroy_Prefix(Building __instance)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
-            try { HistoricalSchoolAcademyLifecycleService.Capture(__instance); }
+            try
+            {
+                HistoricalSchoolAcademyLifecycleService.Capture(__instance);
+                HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
+            }
             catch (Exception error)
             {
                 ModClass.LogWarning("Academy destruction capture failed: " +
@@ -49,7 +53,11 @@ namespace AncientWarfare3.patch
         private static void AcademyStartRuin_Prefix(Building __instance)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
-            try { HistoricalSchoolAcademyLifecycleService.Capture(__instance); }
+            try
+            {
+                HistoricalSchoolAcademyLifecycleService.Capture(__instance);
+                HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
+            }
             catch (Exception error)
             {
                 ModClass.LogWarning("Academy ruin capture failed: " + error.Message);
@@ -62,7 +70,11 @@ namespace AncientWarfare3.patch
         private static void AcademyStartRemove_Prefix(Building __instance)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
-            try { HistoricalSchoolAcademyLifecycleService.Capture(__instance); }
+            try
+            {
+                HistoricalSchoolAcademyLifecycleService.Capture(__instance);
+                HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
+            }
             catch (Exception error)
             {
                 ModClass.LogWarning("Academy removal capture failed: " + error.Message);
@@ -231,30 +243,6 @@ namespace AncientWarfare3.patch
             HistoricalSchoolRecruitCandidateCache.InvalidateCity(cityId);
             HistoricalSchoolTravelService.InvalidateCityIndex();
             HistoricalSchoolRuntimeIndex.Instance.SetLivingXiaCity(cityId, false);
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(Building), "startDestroyBuilding")]
-        private static void AcademyStartDestroy_Prefix(Building __instance)
-        {
-            if (AW3MultiplayerReplicaScope.IsApplying) return;
-            HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(Building), "startMakingRuins")]
-        private static void AcademyStartRuins_Prefix(Building __instance)
-        {
-            if (AW3MultiplayerReplicaScope.IsApplying) return;
-            HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(Building), "startRemove")]
-        private static void AcademyStartRemove_Prefix(Building __instance)
-        {
-            if (AW3MultiplayerReplicaScope.IsApplying) return;
-            HistoricalSchoolAcademyConstructionService.RequestRebuild(__instance);
         }
 
         [HarmonyPrefix]

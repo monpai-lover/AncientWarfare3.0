@@ -296,7 +296,38 @@ namespace AncientWarfare3.core.pathfinding
             _queueSignal.Dispose();
         }
 
+        // Raw background thread entry point. Keep restart attempts bounded so
+        // a persistent queue or generator fault cannot become a hot loop or
+        // escape the thread boundary and terminate the process.
         private void WorkerLoop()
+        {
+            const int MaximumRestarts = 8;
+            for (int restart = 0; ; restart++)
+            {
+                try
+                {
+                    RunWorkerLoop();
+                    return;
+                }
+                catch (Exception error)
+                {
+                    try
+                    {
+                        AncientWarfare3.ModClass.LogWarning(
+                            "[AW3 path worker] unhandled worker fault " +
+                            "(restart " + restart + " of " +
+                            MaximumRestarts + "): " + error);
+                    }
+                    catch
+                    {
+                    }
+                    if (Volatile.Read(ref _stopping) != 0) return;
+                    if (restart >= MaximumRestarts) return;
+                }
+            }
+        }
+
+        private void RunWorkerLoop()
         {
             try
             {
