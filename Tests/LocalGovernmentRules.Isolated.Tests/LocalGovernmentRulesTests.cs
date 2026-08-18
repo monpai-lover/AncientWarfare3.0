@@ -72,6 +72,106 @@ internal static class LocalGovernmentRulesTests
                 "none", participatedAndFailedHigherStage: true,
                 allowLocalLowerQualification: true),
             "the explicit local path accepts a higher-stage non-finalist");
+
+        var legacy = new CustomCourtTemplate
+        {
+            SchemaVersion = 1,
+            Id = "legacy_court",
+            Offices = new List<CustomCourtOffice>
+            {
+                Office("minister", CourtOfficeLayer.Central),
+                Office("governor", CourtOfficeLayer.City),
+                Office("constable", CourtOfficeLayer.City)
+            },
+            Edges = new List<CustomCourtEdge>
+            {
+                Edge("governor", "constable"),
+                Edge("minister", "governor")
+            }
+        };
+        CustomCourtTemplate upgraded =
+            CustomLocalCourtTemplateRules.UpgradeLegacy(legacy);
+        Equal(2, upgraded.SchemaVersion,
+            "legacy custom courts upgrade to the local-template schema");
+        Equal(1, upgraded.Offices.Count,
+            "city offices leave the central template during migration");
+        Equal(1, upgraded.LocalTemplates.Count,
+            "legacy city offices form one default local template");
+        Equal(2, upgraded.LocalTemplates[0].Offices.Count,
+            "all legacy city offices migrate together");
+        Equal(1, upgraded.LocalTemplates[0].Edges.Count,
+            "local internal edges migrate with their offices");
+        Equal(1, upgraded.ArchivedCrossLayerEdges.Count,
+            "legacy cross-layer edges remain archived for round trips");
+        Equal(CustomCourtTemplateValidationError.None,
+            CustomCourtTemplateRules.Validate(upgraded),
+            "the upgraded multi-template package passes formal validation");
+        var legacyJsonSource = new CustomCourtTemplate
+        {
+            SchemaVersion = 1,
+            Id = "legacy_json",
+            Offices = new List<CustomCourtOffice>
+            {
+                Office("minister", CourtOfficeLayer.Central),
+                Office("governor", CourtOfficeLayer.City)
+            }
+        };
+        string legacyJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+            legacyJsonSource);
+        True(CustomCourtTemplateJsonCodec.TryImport(legacyJson,
+                out CustomCourtTemplate importedLegacy,
+                out CustomCourtTemplateValidationError importError),
+            "schema-one custom court JSON upgrades during import");
+        Equal(CustomCourtTemplateValidationError.None, importError,
+            "legacy import reports no validation error after migration");
+        Equal(2, importedLegacy.SchemaVersion,
+            "legacy JSON is returned in the current schema");
+        string legacyInstanceJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+            new CustomCourtInstance
+            {
+                SchemaVersion = 1,
+                KingdomId = "7",
+                TemplateId = "legacy_json",
+                TemplateRevision = 1,
+                InstanceRevision = 1,
+                ResolvedSnapshot = legacyJsonSource
+            });
+        True(CustomCourtInstanceCodec.TryImport(legacyInstanceJson,
+                out CustomCourtInstance importedInstance),
+            "saved custom-court instances migrate embedded legacy snapshots");
+        Equal(2, importedInstance.ResolvedSnapshot.SchemaVersion,
+            "the restored instance exposes a current local-template package");
+
+        var civil = LocalTemplate("civil", "民州",
+            CustomLocalCourtDefaultKind.CivilDefault);
+        var military = LocalTemplate("military", "军府",
+            CustomLocalCourtDefaultKind.MilitaryDefault);
+        var manual = LocalTemplate("special", "都护府",
+            CustomLocalCourtDefaultKind.ManualOnly);
+        var templates = new List<CustomLocalCourtTemplate>
+            { manual, military, civil };
+        Equal("civil", CustomLocalCourtTemplateRules.ResolveTemplateId(
+                templates, persistedTemplateId: "",
+                manualOverride: false, militaryCity: false),
+            "civil cities select the civil default");
+        Equal("military", CustomLocalCourtTemplateRules.ResolveTemplateId(
+                templates, persistedTemplateId: "civil",
+                manualOverride: false, militaryCity: true),
+            "military facts can replace an automatic civil binding");
+        Equal("special", CustomLocalCourtTemplateRules.ResolveTemplateId(
+                templates, persistedTemplateId: "special",
+                manualOverride: true, militaryCity: false),
+            "manual city template selection wins over automatic defaults");
+        Equal("民州", CustomLocalCourtTemplateRules.CityTypeName(civil,
+                useEnglish: false),
+            "the local city type is the selected template name");
+        False(CustomLocalCourtTemplateRules.CanDeleteTemplate(
+                "civil", replacementTemplateId: "", inUseCityCount: 3),
+            "an in-use local template cannot be deleted without replacement");
+        True(CustomLocalCourtTemplateRules.CanDeleteTemplate(
+                "civil", replacementTemplateId: "military",
+                inUseCityCount: 3),
+            "an in-use local template can be atomically rebound");
     }
 
     private static void True(bool pValue, string pMessage)
@@ -89,5 +189,40 @@ internal static class LocalGovernmentRulesTests
         if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
             throw new InvalidOperationException(
                 $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+
+    private static CustomCourtOffice Office(string pId, string pLayer)
+    {
+        return new CustomCourtOffice
+        {
+            Id = pId,
+            Layer = pLayer,
+            Grade = 10,
+            Slots = 1
+        };
+    }
+
+    private static CustomCourtEdge Edge(string pFrom, string pTo)
+    {
+        return new CustomCourtEdge
+        {
+            FromOfficeId = pFrom,
+            ToOfficeId = pTo,
+            Kind = CustomCourtEdgeKind.Management
+        };
+    }
+
+    private static CustomLocalCourtTemplate LocalTemplate(string pId,
+        string pChineseName, CustomLocalCourtDefaultKind pKind)
+    {
+        return new CustomLocalCourtTemplate
+        {
+            Id = pId,
+            Name = new CustomCourtLocalizedText
+                { Chinese = pChineseName, English = pId },
+            DefaultKind = pKind,
+            Offices = new List<CustomCourtOffice>
+                { Office(pId + "_leader", CourtOfficeLayer.City) }
+        };
     }
 }

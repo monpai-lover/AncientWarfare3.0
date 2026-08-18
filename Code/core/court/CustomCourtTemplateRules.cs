@@ -8,7 +8,8 @@ namespace AncientWarfare3.core.court
 {
     public static class CustomCourtTemplateRules
     {
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion =
+            CustomLocalCourtTemplateRules.CurrentSchemaVersion;
         public const int MaximumOffices = 128;
         public const int MaximumEdges = 512;
 
@@ -36,7 +37,10 @@ namespace AncientWarfare3.core.court
             if (!IsValidTemplateId(template.Id))
                 return CustomCourtTemplateValidationError.InvalidTemplateId;
             if (template.Revision < 1 || template.Offices == null ||
-                template.Offices.Count == 0 || template.Offices.Count > MaximumOffices)
+                template.Offices.Count > MaximumOffices ||
+                template.LocalTemplates == null ||
+                template.LocalTemplates.Count >
+                CustomLocalCourtTemplateRules.MaximumTemplates)
                 return CustomCourtTemplateValidationError.MissingOffice;
 
             var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -46,10 +50,81 @@ namespace AncientWarfare3.core.court
                     ValidateOffice(office, ids);
                 if (error != CustomCourtTemplateValidationError.None)
                     return error;
+                if (office.Layer == CourtOfficeLayer.City)
+                    return CustomCourtTemplateValidationError.InvalidOfficeLayer;
             }
 
-            return ValidateGraph(template.Offices.Select(item => item.Id),
-                template.Edges);
+            CustomCourtTemplateValidationError graphError =
+                template.Offices.Count == 0
+                    ? template.Edges == null || template.Edges.Count == 0
+                        ? CustomCourtTemplateValidationError.None
+                        : CustomCourtTemplateValidationError.DanglingOffice
+                    : ValidateGraph(template.Offices.Select(item => item.Id),
+                        template.Edges);
+            if (graphError != CustomCourtTemplateValidationError.None)
+                return graphError;
+
+            var localIds = new HashSet<string>(StringComparer.Ordinal);
+            var localNames = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (CustomLocalCourtTemplate local in template.LocalTemplates)
+            {
+                CustomCourtTemplateValidationError localError =
+                    ValidateLocalTemplate(local, localIds, localNames);
+                if (localError != CustomCourtTemplateValidationError.None)
+                    return localError;
+            }
+            if (template.Offices.Count == 0 && template.LocalTemplates.Count == 0)
+                return CustomCourtTemplateValidationError.MissingOffice;
+            return ValidateArchivedEdges(template.ArchivedCrossLayerEdges);
+        }
+
+        private static CustomCourtTemplateValidationError ValidateLocalTemplate(
+            CustomLocalCourtTemplate pTemplate, ISet<string> pTemplateIds,
+            ISet<string> pTemplateNames)
+        {
+            if (pTemplate == null || !IsValidTemplateId(pTemplate.Id))
+                return CustomCourtTemplateValidationError.InvalidTemplateId;
+            if (pTemplateIds != null && !pTemplateIds.Add(pTemplate.Id))
+                return CustomCourtTemplateValidationError.InvalidTemplateId;
+            if (pTemplate.Name == null || pTemplate.Name.IsEmpty)
+                return CustomCourtTemplateValidationError.InvalidTemplateId;
+            string nameKey = (pTemplate.Name.Chinese ?? "").Trim() + "\n" +
+                             (pTemplate.Name.English ?? "").Trim();
+            if (pTemplateNames != null && !pTemplateNames.Add(nameKey))
+                return CustomCourtTemplateValidationError.InvalidTemplateId;
+            if (!Enum.IsDefined(typeof(CustomLocalCourtDefaultKind),
+                    pTemplate.DefaultKind) || pTemplate.Offices == null ||
+                pTemplate.Offices.Count == 0 ||
+                pTemplate.Offices.Count > MaximumOffices)
+                return CustomCourtTemplateValidationError.MissingOffice;
+
+            var officeIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (CustomCourtOffice office in pTemplate.Offices)
+            {
+                CustomCourtTemplateValidationError officeError =
+                    ValidateOffice(office, officeIds);
+                if (officeError != CustomCourtTemplateValidationError.None)
+                    return officeError;
+                if (office.Layer != CourtOfficeLayer.City)
+                    return CustomCourtTemplateValidationError.InvalidOfficeLayer;
+            }
+            return ValidateGraph(pTemplate.Offices.Select(office => office.Id),
+                pTemplate.Edges);
+        }
+
+        private static CustomCourtTemplateValidationError ValidateArchivedEdges(
+            IReadOnlyCollection<CustomCourtEdge> pEdges)
+        {
+            if (pEdges == null) return CustomCourtTemplateValidationError.None;
+            if (pEdges.Count > MaximumEdges)
+                return CustomCourtTemplateValidationError.InvalidEdge;
+            foreach (CustomCourtEdge edge in pEdges)
+                if (edge == null || !IsValidOfficeId(edge.FromOfficeId) ||
+                    !IsValidOfficeId(edge.ToOfficeId) ||
+                    !Enum.IsDefined(typeof(CustomCourtEdgeKind), edge.Kind))
+                    return CustomCourtTemplateValidationError.InvalidEdge;
+            return CustomCourtTemplateValidationError.None;
         }
 
         public static CustomCourtTemplateValidationError ValidateOffice(

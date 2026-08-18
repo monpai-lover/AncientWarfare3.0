@@ -30,6 +30,10 @@ namespace AncientWarfare3.core.court
             {
                 instance = JsonConvert.DeserializeObject<CustomCourtInstance>(
                     json, Settings);
+                if (instance?.ResolvedSnapshot != null)
+                    instance.ResolvedSnapshot =
+                        CustomLocalCourtTemplateRules.UpgradeLegacy(
+                            instance.ResolvedSnapshot);
                 return instance != null &&
                     instance.SchemaVersion == 1 &&
                     CustomCourtInstanceRules.IsValidKingdomId(
