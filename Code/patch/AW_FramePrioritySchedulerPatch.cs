@@ -221,7 +221,7 @@ namespace AncientWarfare3.patch
 
             AWFramePriorityGovernor.MarkFault(__exception);
             Config.paused = true;
-            ModClass.LogWarning(
+            ModClass.LogError(
                 "AW MapBox.Update failed; scheduler stopped and game paused: " +
                 __exception);
             return __exception;
@@ -357,7 +357,7 @@ namespace AncientWarfare3.patch
             {
                 AWFramePriorityGovernor.MarkFault(error);
                 Config.paused = true;
-                ModClass.LogWarning(
+                ModClass.LogError(
                     "AW native authority cycle failed; game paused: " +
                     error);
             }
@@ -1411,7 +1411,7 @@ namespace AncientWarfare3.patch
 
             AWFramePriorityGovernor.MarkFault(pError);
             Config.paused = true;
-            ModClass.LogWarning(
+            ModClass.LogError(
                 "AW background simulation/presentation boundary failed; " +
                 "game paused: " + pError);
         }

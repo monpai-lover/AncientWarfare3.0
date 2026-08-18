@@ -19,7 +19,7 @@ namespace AncientWarfare3.patch
             {
                 AWFramePriorityGovernor.MarkFault(error);
                 Config.paused = true;
-                ModClass.LogWarning(
+                ModClass.LogError(
                     "AW native Army RTS scheduling failed; game paused: " +
                     error);
             }
