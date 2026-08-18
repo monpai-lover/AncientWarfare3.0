@@ -1,0 +1,110 @@
+using System.IO;
+
+internal static class RestorationProtectionWarGateSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string decisions = Read(root, "Code", "core", "lineage",
+            "WarDecisionService.cs");
+        string protection = Read(root, "Code", "core", "lineage",
+            "RestorationProtectionService.cs");
+        string patch = Read(root, "Code", "patch", "AW_WarPatch.cs");
+        string declaration = Read(root, "Code", "core", "lineage",
+            "DiplomaticWarDeclarationService.cs");
+
+        string startWar = Slice(decisions,
+            "private static War StartWar(",
+            "internal static Kingdom ResolveWarMainDefender(");
+        string finalGate = Slice(decisions,
+            "public static bool ShouldBlockWarStart(",
+            "private static War StartWar(");
+
+        True(protection.Contains("ShouldBlockIncomingWar("),
+            "runtime service exposes one incoming-war authority");
+        True(protection.Contains("Date.getCurrentYear()"),
+            "runtime gate evaluates the current game year");
+        True(protection.Contains("IsInternalWarType(pWarType)"),
+            "runtime gate preserves explicit internal war types");
+        True(protection.Contains("IsOriginSuppressionPair("),
+            "runtime gate preserves peasant origin suppression");
+
+        int startProtection = startWar.IndexOf(
+            "RestorationProtectionService.ShouldBlockIncomingWar(",
+            StringComparison.Ordinal);
+        int startEngine = startWar.IndexOf(
+            "World.world.diplomacy.startWar(",
+            StringComparison.Ordinal);
+        True(startProtection >= 0 && startProtection < startEngine,
+            "AW3 authority blocks protected incoming wars before engine start");
+        True(startWar.Contains(
+                "pFailureReason = \"restoration_protection\";"),
+            "AW3 authority reports the restoration protection reason");
+
+        int finalProtection = finalGate.IndexOf(
+            "RestorationProtectionService.ShouldBlockIncomingWar(",
+            StringComparison.Ordinal);
+        int allowedBypass = finalGate.IndexOf("IsAw3AllowedWarStart",
+            StringComparison.Ordinal);
+        True(finalProtection >= 0 && finalProtection < allowedBypass,
+            "vanilla gate checks restoration protection before AW3 bypass");
+
+        True(decisions.Contains("_internalWarStartDepth"),
+            "internal system-war intent survives into Harmony gates");
+        True(startWar.Contains("_internalWarStartDepth++;"),
+            "internal system-war scope opens around engine start");
+        True(startWar.Contains(
+                 "_internalWarStartDepth = Mathf.Max(0,") &&
+             startWar.Contains("_internalWarStartDepth - 1);"),
+            "internal system-war scope always closes");
+
+        Equal(2, Count(patch,
+                "WarDecisionService.ShouldBlockWarStart("),
+            "both vanilla war entry points use the final gate");
+        True(declaration.Contains(
+                "WarDecisionService.TryStartNotifiedWarWithResult("),
+            "pending declarations revalidate through the authority gate");
+    }
+
+    private static string Read(string root, params string[] parts)
+    {
+        return File.ReadAllText(Path.Combine(
+            new[] { root }.Concat(parts).ToArray()));
+    }
+
+    private static string Slice(string source, string start, string end)
+    {
+        int from = source.IndexOf(start, StringComparison.Ordinal);
+        int to = source.IndexOf(end, from < 0 ? 0 : from,
+            StringComparison.Ordinal);
+        if (from < 0 || to <= from)
+            throw new InvalidOperationException(
+                "Could not extract source section: " + start);
+        return source.Substring(from, to - from);
+    }
+
+    private static int Count(string source, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(value, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

@@ -20,6 +20,7 @@ namespace AncientWarfare3.core.lineage
         private const int NO_CB_COOLDOWN_YEARS = 20;
 
         [ThreadStatic] private static int _allowWarStartDepth;
+        [ThreadStatic] private static int _internalWarStartDepth;
 
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
@@ -27,6 +28,8 @@ namespace AncientWarfare3.core.lineage
         private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
 
         public static bool IsAw3AllowedWarStart => _allowWarStartDepth > 0;
+        private static bool IsInternalWarStart =>
+            _internalWarStartDepth > 0;
 
         public static bool CanStartCivilWar(Kingdom pAttacker, Kingdom pDefender, string pWarType,
             out string pReason)
@@ -338,6 +341,15 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldBlockWarStart(Kingdom pAttacker, Kingdom pDefender, WarTypeAsset pType)
         {
+            string type = pType?.id ?? "";
+            if (RestorationProtectionService.ShouldBlockIncomingWar(
+                    pAttacker, pDefender, type,
+                    IsInternalWarStart))
+            {
+                LogBlockedWar(pAttacker, pDefender,
+                    "restoration_protection");
+                return true;
+            }
             if (TributaryProtectionService.IsProtectedPair(
                     pAttacker, pDefender))
             {
@@ -351,7 +363,6 @@ namespace AncientWarfare3.core.lineage
                     pAttacker, pDefender)) return false;
             if (IsAw3AllowedWarStart) return false;
             if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender)) return false;
-            string type = pType?.id ?? "";
             if (string.IsNullOrEmpty(type)) return false;
             if (!IsVanillaNormalWar(type)) return false;
             LogBlockedWar(pAttacker, pDefender, type);
@@ -370,6 +381,14 @@ namespace AncientWarfare3.core.lineage
                 pFailureReason = "invalid_participants";
                 return null;
             }
+            string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (RestorationProtectionService.ShouldBlockIncomingWar(
+                    pAttacker, pDefender, type,
+                    pTreatyExemptInternalWar))
+            {
+                pFailureReason = "restoration_protection";
+                return null;
+            }
             if (TributaryProtectionService.IsProtectedPair(
                     pAttacker, pDefender))
             {
@@ -380,7 +399,6 @@ namespace AncientWarfare3.core.lineage
                     pDefender, out bool routeBypass,
                     out pFailureReason)) return null;
             Kingdom declaredDefender = pDefender;
-            string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
             bool revalidateMutableEligibility =
                 DiplomaticWarDeclarationLedgerRules
                     .ShouldRevalidateMutableEligibility(pCasusBelliLocked);
@@ -396,6 +414,14 @@ namespace AncientWarfare3.core.lineage
             if (!IsCivilKingdom(mainDefender) || mainDefender == pAttacker)
             {
                 pFailureReason = "invalid_main_defender";
+                return null;
+            }
+            if (mainDefender != declaredDefender &&
+                RestorationProtectionService.ShouldBlockIncomingWar(
+                    pAttacker, mainDefender, type,
+                    pTreatyExemptInternalWar))
+            {
+                pFailureReason = "restoration_protection";
                 return null;
             }
             try
@@ -448,6 +474,8 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 _allowWarStartDepth++;
+                if (pTreatyExemptInternalWar)
+                    _internalWarStartDepth++;
                 using IDisposable zhuluDeclaration =
                     type == ZhuluWarRules.WarTypeId
                         ? ZhuluWarDeclarationScope.Open(pDefender)
@@ -477,6 +505,9 @@ namespace AncientWarfare3.core.lineage
             }
             finally
             {
+                if (pTreatyExemptInternalWar)
+                    _internalWarStartDepth = Mathf.Max(0,
+                        _internalWarStartDepth - 1);
                 _allowWarStartDepth = Mathf.Max(0, _allowWarStartDepth - 1);
             }
         }

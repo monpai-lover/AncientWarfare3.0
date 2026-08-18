@@ -27,5 +27,24 @@ namespace AncientWarfare3.core.lineage
             return RestorationProtectionRules.IsActive(pCurrentYear,
                 GetProtectionUntilYear(pKingdom));
         }
+
+        internal static bool ShouldBlockIncomingWar(Kingdom pAttacker,
+            Kingdom pDefender, string pWarType, bool pInternalSystemWar)
+        {
+            if (pAttacker?.data == null || pDefender?.data == null ||
+                pAttacker == pDefender) return false;
+            bool internalWar = pInternalSystemWar ||
+                               RestorationProtectionRules.
+                                   IsInternalWarType(pWarType) ||
+                               PeasantRebelRouteService.
+                                   IsOriginSuppressionPair(
+                                       pAttacker, pDefender);
+            return RestorationProtectionRules.ShouldBlockIncoming(
+                protectionActive: IsActive(pDefender,
+                    Date.getCurrentYear()),
+                protectedDefender: true,
+                internalWar: internalWar,
+                protectedKingdomIsAttacker: false);
+        }
     }
 }
