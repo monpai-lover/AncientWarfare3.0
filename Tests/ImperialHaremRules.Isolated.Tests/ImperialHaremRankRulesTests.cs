@@ -22,6 +22,13 @@ internal static class ImperialHaremRankRulesTests
             "commoner is not principal wife by default");
         True(RulerHouseholdRankRules.KeepsSeatAfterAge(36),
             "age does not revoke rank");
+
+        int commoner = RulerHouseholdRankRules.ConsortScore(
+            attributeScore: 92, lineagePriority: 0, noble: false);
+        int noble = RulerHouseholdRankRules.ConsortScore(
+            attributeScore: 61, lineagePriority: 0, noble: true);
+        True(commoner > noble,
+            "attributes outrank noble status for consorts");
     }
 
     private static void True(bool pValue, string pMessage)

@@ -134,10 +134,12 @@ namespace AncientWarfare3.core.lineage
             var result = new List<long>(limit);
             if (pKingdomId < 0L || limit == 0) return result;
             string candidateClassWhere = pKind ==
-                RulerHouseholdKind.PrincipalWife || !pIncludeSlaves
+                RulerHouseholdKind.PrincipalWife
                 ? "STATUS='noble' AND LINEAGE_ID>=0 AND SHI_ID>=0"
-                : "((STATUS='noble' AND LINEAGE_ID>=0 AND SHI_ID>=0) " +
-                  "OR STATUS='slave_lineage')";
+                : pIncludeSlaves
+                    ? "(IFNULL(STATUS,'') NOT IN ('slave','slave_lineage') " +
+                      "OR STATUS='slave_lineage')"
+                    : "IFNULL(STATUS,'') NOT IN ('slave','slave_lineage')";
             using var command = new SQLiteCommand(
                 "SELECT ID FROM ActorArchive INDEXED BY " +
                 "idx_ActorArchive_kingdom_alive_birth WHERE " +

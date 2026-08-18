@@ -289,6 +289,12 @@ namespace AncientWarfare3.core.lineage
                 if (!preview.Available) continue;
                 ActorArchiveTableItem archive =
                     LineageArchiveReader.ReadRow(ids[i]);
+                RulerHouseholdCandidateClass candidateClass =
+                    ResolveCandidateClass(candidate);
+                bool memberOfRulingLineage = rulingLineageId >= 0L &&
+                    archive?.lineage_id == rulingLineageId;
+                bool directChild = IsDirectChildOfRuler(candidate,
+                    pSource.king);
                 pool.Candidates.Add(new RulerHouseholdOfferCandidate
                 {
                     ActorId = ids[i],
@@ -296,29 +302,20 @@ namespace AncientWarfare3.core.lineage
                     ActorName = candidate?.getName() ??
                                 archive?.display_name ?? "",
                     Age = SafeAge(candidate),
-                    MemberOfRulingLineage = rulingLineageId >= 0L &&
-                        archive?.lineage_id == rulingLineageId,
-                    DirectChildOfRuler = IsDirectChildOfRuler(candidate,
-                        pSource.king),
-                    CandidateClass = ResolveCandidateClass(candidate),
+                    MemberOfRulingLineage = memberOfRulingLineage,
+                    DirectChildOfRuler = directChild,
+                    CandidateClass = candidateClass,
+                    AttributeScore = HouseholdAttributeScore(candidate),
+                    LineagePriority =
+                        RulerHouseholdRules.HouseholdCandidatePriority(
+                            memberOfRulingLineage, directChild,
+                            candidateClass),
                     LineageLabel = AncestryDisplayRules.FormatLineageLabel(
                         archive?.city_name, archive?.clan_name)
                 });
             }
             pool.Candidates.Sort((left, right) =>
-            {
-                int priority = RulerHouseholdRules.HouseholdCandidatePriority(
-                        left.MemberOfRulingLineage,
-                        left.DirectChildOfRuler,
-                        left.CandidateClass).CompareTo(
-                    RulerHouseholdRules.HouseholdCandidatePriority(
-                            right.MemberOfRulingLineage,
-                            right.DirectChildOfRuler,
-                            right.CandidateClass));
-                if (priority != 0) return priority;
-                int age = left.Age.CompareTo(right.Age);
-                return age != 0 ? age : left.ActorId.CompareTo(right.ActorId);
-            });
+                CompareHouseholdCandidates(left, right, pKind));
             pool.Reason = pool.Candidates.Count > 0
                 ? ""
                 : "no_household_candidate";
@@ -351,32 +348,29 @@ namespace AncientWarfare3.core.lineage
                 if (actor?.data == null) continue;
                 actor.data.get(LineageKeys.LINEAGE_ID,
                     out long actorLineageId, -1L);
+                RulerHouseholdCandidateClass candidateClass =
+                    ResolveCandidateClass(actor);
+                bool memberOfRulingLineage = rulingLineageId >= 0L &&
+                                             actorLineageId == rulingLineageId;
+                bool directChild = IsDirectChildOfRuler(actor,
+                    pSource.king);
                 candidates.Add(new RulerHouseholdOfferCandidate
                 {
                     ActorId = actor.data.id,
                     Actor = actor,
                     Age = SafeAge(actor),
-                    MemberOfRulingLineage = rulingLineageId >= 0L &&
-                                             actorLineageId == rulingLineageId,
-                    DirectChildOfRuler = IsDirectChildOfRuler(actor,
-                        pSource.king),
-                    CandidateClass = ResolveCandidateClass(actor)
+                    MemberOfRulingLineage = memberOfRulingLineage,
+                    DirectChildOfRuler = directChild,
+                    CandidateClass = candidateClass,
+                    AttributeScore = HouseholdAttributeScore(actor),
+                    LineagePriority =
+                        RulerHouseholdRules.HouseholdCandidatePriority(
+                            memberOfRulingLineage, directChild,
+                            candidateClass)
                 });
             }
             candidates.Sort((left, right) =>
-            {
-                int priority = RulerHouseholdRules.HouseholdCandidatePriority(
-                        left.MemberOfRulingLineage,
-                        left.DirectChildOfRuler,
-                        left.CandidateClass).CompareTo(
-                    RulerHouseholdRules.HouseholdCandidatePriority(
-                        right.MemberOfRulingLineage,
-                        right.DirectChildOfRuler,
-                        right.CandidateClass));
-                if (priority != 0) return priority;
-                int age = left.Age.CompareTo(right.Age);
-                return age != 0 ? age : left.ActorId.CompareTo(right.ActorId);
-            });
+                CompareHouseholdCandidates(left, right, pKind));
             for (int index = 0; index < candidates.Count; index++)
             {
                 RulerHouseholdOfferPreview preview = PrepareOffer(pSource,
@@ -1025,13 +1019,25 @@ namespace AncientWarfare3.core.lineage
                     -1L);
                 right.data.get(LineageKeys.LINEAGE_ID, out long rightLineage,
                     -1L);
-                int priority = RulerHouseholdRules.HouseholdCandidatePriority(
-                    leftLineage == lineageId,
-                    IsDirectChildOfRuler(left, pSource.king)).CompareTo(
+                RulerHouseholdCandidateClass leftClass =
+                    ResolveCandidateClass(left);
+                RulerHouseholdCandidateClass rightClass =
+                    ResolveCandidateClass(right);
+                int leftPriority =
+                    RulerHouseholdRules.HouseholdCandidatePriority(
+                        leftLineage == lineageId,
+                        IsDirectChildOfRuler(left, pSource.king), leftClass);
+                int rightPriority =
                     RulerHouseholdRules.HouseholdCandidatePriority(
                         rightLineage == lineageId,
-                        IsDirectChildOfRuler(right, pSource.king)));
-                if (priority != 0) return priority;
+                        IsDirectChildOfRuler(right, pSource.king), rightClass);
+                int score = RulerHouseholdRankRules.ConsortScore(
+                        HouseholdAttributeScore(right), rightPriority,
+                        rightClass == RulerHouseholdCandidateClass.Noble)
+                    .CompareTo(RulerHouseholdRankRules.ConsortScore(
+                        HouseholdAttributeScore(left), leftPriority,
+                        leftClass == RulerHouseholdCandidateClass.Noble));
+                if (score != 0) return score;
                 int age = SafeAge(left).CompareTo(SafeAge(right));
                 return age != 0 ? age : left.data.id.CompareTo(right.data.id);
             });
@@ -1107,6 +1113,50 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pActor?.data == null ? -1 : pActor.getAge(); }
             catch { return -1; }
+        }
+
+        private static int CompareHouseholdCandidates(
+            RulerHouseholdOfferCandidate pLeft,
+            RulerHouseholdOfferCandidate pRight,
+            RulerHouseholdKind pKind)
+        {
+            int priority;
+            if (pKind == RulerHouseholdKind.Consort)
+            {
+                priority = RulerHouseholdRankRules.ConsortScore(
+                        pRight.AttributeScore, pRight.LineagePriority,
+                        pRight.CandidateClass ==
+                        RulerHouseholdCandidateClass.Noble)
+                    .CompareTo(RulerHouseholdRankRules.ConsortScore(
+                        pLeft.AttributeScore, pLeft.LineagePriority,
+                        pLeft.CandidateClass ==
+                        RulerHouseholdCandidateClass.Noble));
+            }
+            else
+            {
+                priority = pLeft.LineagePriority.CompareTo(
+                    pRight.LineagePriority);
+            }
+            if (priority != 0) return priority;
+            int age = pLeft.Age.CompareTo(pRight.Age);
+            return age != 0
+                ? age
+                : pLeft.ActorId.CompareTo(pRight.ActorId);
+        }
+
+        private static int HouseholdAttributeScore(Actor pActor)
+        {
+            return (int)Math.Round(
+                SafeStat(pActor, "intelligence") +
+                SafeStat(pActor, "diplomacy") +
+                SafeStat(pActor, "stewardship") +
+                SafeStat(pActor, "warfare"));
+        }
+
+        private static float SafeStat(Actor pActor, string pStat)
+        {
+            try { return pActor?.stats?[pStat] ?? 0f; }
+            catch { return 0f; }
         }
     }
 }

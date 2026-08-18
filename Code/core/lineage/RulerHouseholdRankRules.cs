@@ -37,6 +37,15 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static int ConsortScore(int attributeScore,
+            int lineagePriority, bool noble)
+        {
+            int attributes = Math.Max(0, Math.Min(10000, attributeScore));
+            int lineage = Math.Max(0, Math.Min(3, lineagePriority));
+            return attributes * 100 + (3 - lineage) * 2 +
+                   (noble ? 1 : 0);
+        }
+
         public static string NextEmptySeat(ISet<string> pUsed,
             bool pPrincipal)
         {
