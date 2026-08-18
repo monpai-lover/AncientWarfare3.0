@@ -9,6 +9,7 @@ internal static class PathfindingPerformanceTests
     {
         SchedulerStageDiagnosticsAccumulateStableSnapshots();
         ActorTimerWorkUsesBoundedRanges();
+        ActorPostEnemyCacheKeepsPreparationAndCommitBoundaries();
         WorkClassesPreserveOperationalCapacityWithFairness();
         RuntimeSubmittersClassifyPathWorkExplicitly();
         RequestKeysMatchWithoutAllocating();
@@ -87,6 +88,57 @@ internal static class PathfindingPerformanceTests
                runner.Contains("start += TimerRangeSize",
                    StringComparison.Ordinal),
             "actor timer workers partition batches into bounded 128-actor ranges");
+    }
+
+    private static void ActorPostEnemyCacheKeepsPreparationAndCommitBoundaries()
+    {
+        string actorPost = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWCooperativeActorPostRunner.cs"));
+        int beginPreparation = actorPost.IndexOf(
+            "BeginEnemySearchPreparation();",
+            StringComparison.Ordinal);
+        int workerAdmission = actorPost.IndexOf(
+            "searchTicket = AWSimulationWorkerPool.Instance.BeginIndexed(",
+            beginPreparation < 0 ? 0 : beginPreparation,
+            StringComparison.Ordinal);
+        Assert(beginPreparation >= 0 && workerAdmission > beginPreparation,
+            "enemy cache preparation precedes enemy-search worker admission");
+        Assert(actorPost.Contains(
+                "AWEnemyPresenceCache.BeginPreparation();",
+                StringComparison.Ordinal),
+            "enemy-search preparation activates the scoped enemy cache");
+        Assert(actorPost.Contains(
+                "public void Abort()", StringComparison.Ordinal) &&
+               actorPost.Contains(
+                   "AWEnemyPresenceCache.EndPreparation();",
+                   StringComparison.Ordinal),
+            "actor-post abort releases preparation cache state");
+        Assert(actorPost.Contains(
+                "stage = PostStage.CommitEnemySearch;",
+                StringComparison.Ordinal) &&
+               actorPost.Contains(
+                   "workItems[i].Commit();", StringComparison.Ordinal),
+            "enemy search mutates actors only through ordered commit work");
+
+        string cachePatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_EnemyFinderCachePatch.cs"));
+        Assert(cachePatch.Contains(
+                "AWEnemyPresenceCache", StringComparison.Ordinal) &&
+               cachePatch.Contains(
+                   ".ClearNegativeKeys(", StringComparison.Ordinal),
+            "cleared enemy containers release kingdom negative cache keys");
+
+        string diagnostics = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "RuntimePerformanceDiagnostic.cs"));
+        Assert(diagnostics.Contains(
+                "enemy_presence_cache=", StringComparison.Ordinal) &&
+               diagnostics.Contains(
+                   "AWEnemyPresenceCache.GetDiagnostics()",
+                   StringComparison.Ordinal),
+            "runtime diagnostics expose enemy-presence cache effectiveness");
     }
 
     private static void RuntimeSubmittersClassifyPathWorkExplicitly()

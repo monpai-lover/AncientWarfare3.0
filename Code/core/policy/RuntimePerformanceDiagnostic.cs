@@ -661,6 +661,8 @@ namespace AncientWarfare3.core.policy
                 " enemy_search_candidates=" +
                 actorPostDiagnostics.Candidates +
                 " enemy_search_empty=" + actorPostDiagnostics.Empty +
+                " enemy_presence_cache=" +
+                AWEnemyPresenceCache.GetDiagnostics() +
                 " actor_ai_ms=" + Milliseconds(_actorAiTicks) +
                 " actor_ai_calls=" + _actorAiCalls +
                 " actor_task=" + actorTaskId +
