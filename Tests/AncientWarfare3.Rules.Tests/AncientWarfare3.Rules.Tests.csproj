@@ -38,10 +38,12 @@
     <Compile Include="CivilServiceCenturySimulationSqlTests.cs.txt" />
     <Compile Include="HistoricalSchoolEliteEnrollmentRulesTests.cs.txt" />
     <Compile Include="HistoricalSchoolSavePreparationTests.cs.txt" />
+    <Compile Include="HistoricalSchoolDeathRuntimeRulesTests.cs.txt" />
     <Compile Include="HistoricalSchoolEducationCandidateSqlTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CivilServiceExamCandidatePoolQuery.cs" Link="Production\CivilServiceExamCandidatePoolQuery.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolEliteEnrollmentRules.cs" Link="Production\HistoricalSchoolEliteEnrollmentRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolSavePreparation.cs" Link="Production\HistoricalSchoolSavePreparation.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolDeathRuntimeRules.cs" Link="Production\HistoricalSchoolDeathRuntimeRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolEducationCandidateQuery.cs" Link="Production\HistoricalSchoolEducationCandidateQuery.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceForeignResidentQualificationQuery.cs" Link="Production\CivilServiceForeignResidentQualificationQuery.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceFormalCandidateQuery.cs" Link="Production\CivilServiceFormalCandidateQuery.cs" />

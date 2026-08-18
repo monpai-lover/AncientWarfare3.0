@@ -413,8 +413,27 @@ namespace AncientWarfare3.core.schools
             var pending = new PendingSchoolDeath(pActor, current, affiliation, master,
                 wasQualifiedTeacher, city, year, city?.data?.id ?? -1L, cause,
                 WorldTime());
+            QuarantineDeadMembership(pActor, current, year);
             QueueDeathRetry(pending, pDestroy);
             return SchoolDeathOutcome.Failed;
+        }
+
+        private static void QuarantineDeadMembership(Actor pActor,
+            SchoolMembershipRecord pMembership, int pYear)
+        {
+            if (pMembership == null) return;
+            RequestLeaderElection(pMembership);
+            if (Memberships.CloseExpected(pMembership.ActorId,
+                    pMembership.MembershipId, pYear, "death_pending", out _))
+                HistoricalSchoolRevisionService.ApplyMembershipChange(
+                    pMembership, null);
+            HistoricalSchoolRuntimeIndex.Instance.Remove(pMembership.ActorId);
+            try { Project(pActor, CourtSchoolId.None); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Pending school death projection failed: " +
+                                    error.Message);
+            }
         }
 
         private static SchoolDeathOutcome PersistPendingDeath(PendingSchoolDeath pending,
@@ -485,16 +504,18 @@ namespace AncientWarfare3.core.schools
                                  pending.RuntimeCity;
             try
             {
-                if (!Memberships.CloseExpected(pActor.data.id, current.MembershipId,
-                        pending.DeathYear,
-                        "death", out _))
+                SchoolMembershipRecord active =
+                    Memberships.GetActive(pActor.data.id);
+                if (active != null &&
+                    !Memberships.CloseExpected(pActor.data.id, current.MembershipId,
+                        pending.DeathYear, "death", out _))
                 {
                     ModClass.LogWarning(
                         "Committed school death membership adopt failed: actor=" +
                         pActor.data.id + " membership=" + current.MembershipId);
                     ReloadMembershipAfterCommittedDeath();
                 }
-                else
+                else if (active != null)
                 {
                     RequestLeaderElection(current);
                     HistoricalSchoolRevisionService.ApplyMembershipChange(current, null);
@@ -1260,6 +1281,14 @@ namespace AncientWarfare3.core.schools
             var duplicates = new List<SchoolMembershipRecord>();
             foreach (SchoolMembershipRecord record in HistoricalSchoolStore.LoadActiveMemberships())
             {
+                Actor actor = FindActor(record.ActorId);
+                bool actorLookupReady = World.world?.units != null;
+                HistoricalSchoolMembershipLoadAction loadAction =
+                    HistoricalSchoolDeathRuntimeRules.ResolveLoadAction(
+                        record.Active, actorLookupReady, actor?.data != null,
+                        actor?.isAlive() == true, actor == null || actor.isRekt());
+                if (loadAction == HistoricalSchoolMembershipLoadAction.Ignore)
+                    continue;
                 if (!Memberships.TryJoin(record))
                 {
                     duplicates.Add(record);
@@ -1267,6 +1296,8 @@ namespace AncientWarfare3.core.schools
                 }
                 HistoricalSchoolRevisionService.ApplyMembershipChange(null, record);
                 RefreshRuntimeIndex(record.ActorId);
+                if (loadAction == HistoricalSchoolMembershipLoadAction.QueueDeath)
+                    OnDeath(actor, pDestroy: true);
             }
             foreach (SchoolMembershipRecord duplicate in duplicates)
                 HistoricalSchoolStore.CloseMembership(duplicate, Date.getCurrentYear(),

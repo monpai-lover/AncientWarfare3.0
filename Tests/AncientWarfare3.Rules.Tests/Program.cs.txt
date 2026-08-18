@@ -29,6 +29,13 @@ if (args.Length == 1 && args[0] == "--school-save-preparation")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--school-death-runtime")
+{
+    HistoricalSchoolDeathRuntimeRulesTests.Run();
+    Console.WriteLine("Historical school death runtime rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--career-cross-layer-slice")
 {
     OfficialCareerCrossLayerPersistenceSqlTests.Run();

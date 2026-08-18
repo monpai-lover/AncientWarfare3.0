@@ -93,6 +93,10 @@ namespace AncientWarfare3.core.lineage
             ActorKingdomRepairSource source = ActorKingdomRepairSource.None;
             try
             {
+                if (!ActorKingdomSafetyRules.ShouldRepairActor(
+                        pActor?.data != null, pActor?.isAlive() == true,
+                        pActor == null || pActor.isRekt()))
+                    return true;
                 City city = pActor?.city;
                 Kingdom cityKingdom = city?.kingdom;
                 bool cityKingdomIsRekt = city == null || city.isRekt() ||
