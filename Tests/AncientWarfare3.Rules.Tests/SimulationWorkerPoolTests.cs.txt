@@ -10,6 +10,7 @@ internal static class SimulationWorkerPoolTests
         RejectsConcurrentOperations();
         PropagatesWorkerExceptionsAndRemainsReusable();
         AlternatingOperationsDoNotReuseWorkerWakeups();
+        AlternatingExtremeLoadsExecuteEveryIndexOnce();
     }
 
     private static void DispatchGenerationCanOnlyBeConsumedOnce()
@@ -163,6 +164,26 @@ internal static class SimulationWorkerPoolTests
                 "asynchronous operation executes its item");
             Equal(asynchronous.ScheduledItems, asynchronous.ExecutedItems,
                 "asynchronous result remains complete");
+        }
+    }
+
+    private static void AlternatingExtremeLoadsExecuteEveryIndexOnce()
+    {
+        const int passes = 256;
+        for (int pass = 0; pass < passes; pass++)
+        {
+            int count = (pass & 1) == 0 ? 1 : 4096;
+            int[] visits = new int[count];
+            AWSimulationWorkerPool.WorkResult result =
+                AWSimulationWorkerPool.Instance.RunIndexed(0, count,
+                    index => Interlocked.Increment(ref visits[index]));
+            Equal(count, result.ScheduledItems,
+                "extreme alternating load keeps scheduled count exact");
+            Equal(count, result.ExecutedItems,
+                "extreme alternating load keeps executed count exact");
+            for (int index = 0; index < count; index++)
+                Equal(1, visits[index],
+                    "extreme alternating load executes each index once");
         }
     }
 

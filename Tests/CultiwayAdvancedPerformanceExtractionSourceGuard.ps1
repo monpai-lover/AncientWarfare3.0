@@ -72,9 +72,23 @@ Forbid-Contains $hasOwnership 'OpenReadyCursor(' `
 
 Require-Contains $workerPool 'AWSimulationWorkerDispatchGate' `
     'Persistent workers must retain generation-gated dispatch.'
+Require-Contains $workerPool '_dispatchGate.Assign(' `
+    'Worker dispatch must publish an operation generation.'
+Require-Contains $workerPool '_dispatchGate.Consume(' `
+    'Worker wakeups must consume exactly one generation token.'
+Require-Contains $workerPool '_activeGeneration' `
+    'Worker participation must remain bound to the active generation.'
 Require-Contains $workerPool `
     'result.ExecutedItems != result.ScheduledItems' `
     'Persistent workers must reject incomplete operations.'
+Require-Contains $workerPool `
+    'Simulation worker did not execute all scheduled work:' `
+    'Incomplete worker operations must remain a hard failure.'
+
+$workerLoop = Get-MethodBlock $workerPool `
+    'private void WorkerLoop(object pState)'
+Require-Contains $workerLoop '_dispatchGate.Consume(workerIndex)' `
+    'A signaled worker must consume a generation before executing work.'
 
 if ($failures.Count -gt 0) {
     Write-Output "Cultiway advanced extraction guard failures: $($failures.Count)"
