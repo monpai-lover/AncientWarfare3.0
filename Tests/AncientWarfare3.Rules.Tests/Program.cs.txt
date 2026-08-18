@@ -8532,6 +8532,8 @@ if (recruitmentPriorityRule != null)
 
 PathfindingPerformanceTests.Run();
 SimulationWorkerPoolTests.Run();
+TableIdAllocatorSqlTests.Run();
+BulkEraseKingdomDisposalRulesTests.Run();
 PathfindingMigrationRulesTests.Run();
 AWPathSessionTests.Run();
 AWDockRouteRegistryTests.Run();

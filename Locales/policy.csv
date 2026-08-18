@@ -1,18 +1,18 @@
-key,cz,en
-InPlanning,策划中,In Planning
-InProgress,执行中,In Progress
-Completed,已完成,Completed
-start_slaves,开启奴隶制,Start Slavery
-start_slaves_desc,推动奴隶制改革\n更高的生产力，更多的士兵人口,Higher productivity， more soldiers
-control_slaves,强化奴隶控制,Enforce Slavery
-control_slaves_desc,防止奴隶暴动\n更多的奴隶人口，但届时暴动强度更大,More slaves， but Stronger rebellions
-name_integration,姓氏合流,Family，Clan Name Integration
-name_integration_desc,让姓氏归一\n从此不分姓氏,Integration between two name types
-kingdom_yearname,改元,Change Year Name
-kingdom_yearname_desc,更换年号\n旧年号使用已久是时候换一个了,It's time to change it
-change_capital,迁都,Change Capital
-change_capital_desc,迁改都城\n换一个新国都,It's time to change it
-title_upgrade,提升爵位,Title Promotion
-title_upgrade_desc,上表请奏\n提升爵位,It's time to change it
-start_halfaristocrat,开使从奴隶制向封建制过度,Change Slavery to Semi-Aristocrat
-start_halfaristocrat_desc,奴隶制已经不能满足我们了\n我们需要更高的生产力，更多的人口,Higher productivity， more population
+key,cz,en,ch
+InPlanning,策划中,In Planning,策劃中
+InProgress,执行中,In Progress,執行中
+Completed,已完成,Completed,已完成
+start_slaves,开启奴隶制,Start Slavery,開啟奴隸制
+start_slaves_desc,推动奴隶制改革\n更高的生产力，更多的士兵人口,Higher productivity， more soldiers,推動奴隸制改革\n更高的生產力，更多的士兵人口
+control_slaves,强化奴隶控制,Enforce Slavery,強化奴隸控制
+control_slaves_desc,防止奴隶暴动\n更多的奴隶人口，但届时暴动强度更大,More slaves， but Stronger rebellions,防止奴隸暴動\n更多的奴隸人口，但屆時暴動強度更大
+name_integration,姓氏合流,Family，Clan Name Integration,姓氏合流
+name_integration_desc,让姓氏归一\n从此不分姓氏,Integration between two name types,讓姓氏歸一\n從此不分姓氏
+kingdom_yearname,改元,Change Year Name,改元
+kingdom_yearname_desc,更换年号\n旧年号使用已久是时候换一个了,It's time to change it,更換年號\n舊年號使用已久是時候換一個了
+change_capital,迁都,Change Capital,遷都
+change_capital_desc,迁改都城\n换一个新国都,It's time to change it,遷改都城\n換一個新國都
+title_upgrade,提升爵位,Title Promotion,提升爵位
+title_upgrade_desc,上表请奏\n提升爵位,It's time to change it,上表請奏\n提升爵位
+start_halfaristocrat,开使从奴隶制向封建制过度,Change Slavery to Semi-Aristocrat,開始從奴隸制向封建制過渡
+start_halfaristocrat_desc,奴隶制已经不能满足我们了\n我们需要更高的生产力，更多的人口,Higher productivity， more population,奴隸制已經不能滿足我們了\n我們需要更高的生產力，更多的人口

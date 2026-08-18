@@ -32,6 +32,8 @@ aw_policy_progress,进度,Progress,進度
 aw_policy_remaining,剩余,Remaining,剩餘
 aw_policy_yearly_gain,年增长,Yearly Gain,年增長
 aw_policy_estimated_years,预计年数,Estimated Years,預計年數
+aw_policy_monthly_gain,月增长,Monthly Gain,月增長
+aw_policy_estimated_months,预计月数,Estimated Months,預計月數
 aw_policy_missing,未满足,Missing,未滿足
 aw_policy_tech_prereq,科技前置,Tech Prerequisite,科技前置
 aw_policy_policy_prereq,国策前置,Policy Prerequisite,國策前置

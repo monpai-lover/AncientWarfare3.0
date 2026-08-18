@@ -1,0 +1,159 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using AncientWarfare3.core.lineage;
+
+internal static class BulkEraseKingdomDisposalRulesTests
+{
+    internal static void Run()
+    {
+        ForcedRemovalWaitsForCorpses();
+        VanillaLiveReferenceGate();
+        PatchConsultsTheGate();
+        WarCacheGuardSurvivesConcurrentMisses();
+        Console.WriteLine("BulkEraseKingdomDisposalRulesTests passed.");
+    }
+
+    // 批量擦除小人:同一帧内大量尸体 + 城池归零。原版靠
+    // KingdomManager.updateDirtyUnits() 对每个 dying 单位调
+    // kingdom.preserveAlive() 挡住 Dispose;AW3 强制移除必须尊重它,
+    // 否则 Kingdom.Dispose() 把 asset 置 null,尸体下一帧渲染时
+    // Kingdom.getColor() 抛 NullReferenceException。
+    private static void ForcedRemovalWaitsForCorpses()
+    {
+        Equal(false, KingdomExtinctionRules.ShouldForceImmediateRemoval(
+                isCivilization: true, cityIndexStable: true,
+                liveCityCount: 0, vanillaLiveReferencesCleared: false),
+            "a zero-city civilization still referenced by corpses is not disposed this frame");
+
+        Equal(true, KingdomExtinctionRules.ShouldForceImmediateRemoval(
+                isCivilization: true, cityIndexStable: true,
+                liveCityCount: 0, vanillaLiveReferencesCleared: true),
+            "a zero-city civilization with no live references left is removed immediately");
+
+        Equal(false, KingdomExtinctionRules.ShouldForceImmediateRemoval(
+                isCivilization: true, cityIndexStable: false,
+                liveCityCount: 0, vanillaLiveReferencesCleared: true),
+            "a dirty city index still cannot trigger premature realm removal");
+
+        Equal(false, KingdomExtinctionRules.ShouldForceImmediateRemoval(
+                isCivilization: false, cityIndexStable: true,
+                liveCityCount: 0, vanillaLiveReferencesCleared: true),
+            "wild realms are never force-removed");
+    }
+
+    private static void VanillaLiveReferenceGate()
+    {
+        Equal(true, KingdomExtinctionRules.AreVanillaLiveReferencesCleared(
+                forcePreserveAlive: false, unitCount: 0, buildingCount: 0,
+                hasActiveProjectiles: false),
+            "no preserve-alive flag, no units, no buildings and no projectiles means disposal is safe");
+
+        Equal(false, KingdomExtinctionRules.AreVanillaLiveReferencesCleared(
+                forcePreserveAlive: true, unitCount: 0, buildingCount: 0,
+                hasActiveProjectiles: false),
+            "preserve-alive set by a dying actor blocks disposal");
+
+        Equal(false, KingdomExtinctionRules.AreVanillaLiveReferencesCleared(
+                forcePreserveAlive: false, unitCount: 3, buildingCount: 0,
+                hasActiveProjectiles: false),
+            "surviving units block disposal");
+
+        Equal(false, KingdomExtinctionRules.AreVanillaLiveReferencesCleared(
+                forcePreserveAlive: false, unitCount: 0, buildingCount: 2,
+                hasActiveProjectiles: false),
+            "standing buildings block disposal");
+
+        Equal(false, KingdomExtinctionRules.AreVanillaLiveReferencesCleared(
+                forcePreserveAlive: false, unitCount: 0, buildingCount: 0,
+                hasActiveProjectiles: true),
+            "projectiles in flight block disposal");
+    }
+
+    // Kingdom / Actor 是 Unity 类型,进不了 rules 测试工程,所以这里改为
+    // 检查补丁确实把闸门接到了规则上(源码断言)。
+    private static void PatchConsultsTheGate()
+    {
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_KingdomExtinctionPatch.cs"));
+        Equal(true, patch.Contains("VanillaLiveReferencesCleared(__instance)"),
+            "the extinction patch feeds vanilla's live-reference gate into the removal decision");
+        Equal(true, patch.Contains("_force_preserve_alive") &&
+                    patch.Contains("hasActiveProjectiles"),
+            "the gate reads vanilla preserve-alive and projectile state rather than city count alone");
+
+        string cachePatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_KingdomCheckCachePatch.cs"));
+        Equal(true, cachePatch.Contains("KingdomCheckCacheGuard.TryRead") &&
+                    cachePatch.Contains("KingdomCheckCacheGuard.Publish"),
+            "both kingdom relation caches route reads and writes through the guard");
+        Equal(true, cachePatch.Contains("nameof(KingdomCheckCache.clear)"),
+            "vanilla cache clear is guarded too, since reads are unsafe concurrent with a clear");
+    }
+
+    // 复现:多个工作线程同时 miss 同一对王国。原版 isInWarWith 用
+    // dict.Add,第二个线程会抛 "same key has already been added"。
+    private static void WarCacheGuardSurvivesConcurrentMisses()
+    {
+        for (int round = 0; round < 40; round++)
+        {
+            var dict = new Dictionary<long, bool>();
+            const long hash = 651334743L;
+            int workers = Math.Max(4, Environment.ProcessorCount);
+            var ready = new ManualResetEventSlim(false);
+            var results = new bool[workers];
+            var failures = new List<Exception>();
+            var failureGate = new object();
+
+            var tasks = new Task[workers];
+            for (int i = 0; i < workers; i++)
+            {
+                int index = i;
+                tasks[i] = Task.Run(() =>
+                {
+                    ready.Wait();
+                    try
+                    {
+                        if (KingdomCheckCacheGuard.TryRead(dict, hash,
+                                out bool cached))
+                        {
+                            results[index] = cached;
+                            return;
+                        }
+                        results[index] = KingdomCheckCacheGuard.Publish(
+                            dict, hash, true);
+                    }
+                    catch (Exception error)
+                    {
+                        lock (failureGate) failures.Add(error);
+                    }
+                });
+            }
+
+            ready.Set();
+            Task.WaitAll(tasks);
+
+            if (failures.Count > 0)
+                throw new Exception(
+                    "concurrent kingdom relation cache misses must not throw: " +
+                    failures[0].GetType().Name + ": " + failures[0].Message);
+
+            Equal(1, dict.Count,
+                "the guarded cache holds exactly one entry per kingdom pair");
+            for (int i = 0; i < workers; i++)
+                Equal(true, results[i],
+                    "every worker observes the same cached relation value");
+        }
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new Exception("FAIL: " + pMessage + " (expected " +
+                pExpected + ", got " + pActual + ")");
+    }
+}

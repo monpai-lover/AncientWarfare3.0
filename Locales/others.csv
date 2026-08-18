@@ -263,17 +263,17 @@ aw_relation_older_sister,姐,Older Sister,姐
 aw_relation_younger_sister,妹,Younger Sister,妹
 succession_collateral_restore,恢复宗统,Collateral restoration,恢復宗統
 person_collateral_restore,恢复宗统,Collateral restoration,恢復宗統
-aw_rename_visible_clan,改氏,Rename,Rename
-aw_rename_visible_clan_placeholder,新氏,New clan,New clan
-aw_rename_visible_clan_hint,改当前氏支树全部成员,Whole branch tree,Whole branch tree
-aw_rename_visible_clan_invalid,请输入有效氏名,Enter a valid clan name,Enter a valid clan name
-aw_rename_visible_clan_none,没有可更新节点,No visible nodes updated,No visible nodes updated
-aw_rename_visible_surname,改姓,Rename surname,Rename surname
-aw_rename_visible_surname_placeholder,新姓,New surname,New surname
-aw_rename_visible_surname_hint,改当前人物及父系后代的姓,Current person and patrilineal descendants,Current person and patrilineal descendants
-aw_rename_visible_surname_invalid,请输入有效姓氏,Enter a valid surname,Enter a valid surname
-aw3_rename_visible_surname_none,没有可更新人物,No people updated,No people updated
-aw_confirm,确定,OK,OK
+aw_rename_visible_clan,改氏,Rename,改氏
+aw_rename_visible_clan_placeholder,新氏,New clan,新氏
+aw_rename_visible_clan_hint,改当前氏支树全部成员,Whole branch tree,改當前氏支樹全部成員
+aw_rename_visible_clan_invalid,请输入有效氏名,Enter a valid clan name,請輸入有效氏名
+aw_rename_visible_clan_none,没有可更新节点,No visible nodes updated,沒有可更新節點
+aw_rename_visible_surname,改姓,Rename surname,改姓
+aw_rename_visible_surname_placeholder,新姓,New surname,新姓
+aw_rename_visible_surname_hint,改当前人物及父系后代的姓,Current person and patrilineal descendants,改當前人物及父系後代的姓
+aw_rename_visible_surname_invalid,请输入有效姓氏,Enter a valid surname,請輸入有效姓氏
+aw3_rename_visible_surname_none,没有可更新人物,No people updated,沒有可更新人物
+aw_confirm,确定,OK,確定
 aw_war_goal_take_mandate,夺取天命,Seize Mandate,奪取天命
 aw_war_take_mandate,夺取天命,Seize Mandate,奪取天命
 aw_war_take_mandate_desc,对当前天命国发动天命战争，胜利后转移天命,Start a Mandate war against the current Mandate realm and transfer the Mandate on victory,對當前天命國發動天命戰爭，勝利後轉移天命

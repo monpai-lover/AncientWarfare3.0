@@ -94,10 +94,14 @@ static void ValidateAllScenarioResult(string scenario,
                 "land reservations distribute armies across fronts");
             Check.Equal(0, result.RepeatedOccupiedTargets,
                 "land armies never reassault a cleared occupied city");
+            // Replenish 不在此列：ShouldEnterReplenishment 要求
+            // wartimeRecovery，而 land 是「开战即出发」路径
+            // (ShouldSkipInitialRally)，本就不该进补员态。补员覆盖由
+            // rally-recruitment 的 PartialBattleRecruits 断言承担。
             RequireVisitedStates(result, ArmyRtsState.Rally,
                 ArmyRtsState.March, ArmyRtsState.Deploy,
                 ArmyRtsState.Assault, ArmyRtsState.Pursue,
-                ArmyRtsState.Hold, ArmyRtsState.Replenish);
+                ArmyRtsState.Hold);
             break;
         case "ownership":
             Check.Equal(maxActiveTicks, result.Ticks,
@@ -452,8 +456,7 @@ static void RunLandProbe(int seed)
         ArmyRtsState.Deploy,
         ArmyRtsState.Assault,
         ArmyRtsState.Pursue,
-        ArmyRtsState.Hold,
-        ArmyRtsState.Replenish);
+        ArmyRtsState.Hold);
     Console.WriteLine(
         $"PASS land seed={seed} ticks={result.Ticks} " +
         $"objectives={result.CompletedObjectives} " +
